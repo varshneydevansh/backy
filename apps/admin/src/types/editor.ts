@@ -39,6 +39,10 @@ export type ElementType =
   | 'icon'
   | 'form'
   | 'input'
+  | 'textarea'
+  | 'select'
+  | 'checkbox'
+  | 'radio'
   | 'spacer'
   | 'columns'
   | 'map'
@@ -46,7 +50,8 @@ export type ElementType =
   | 'embed'    // For iframes/embeds
   | 'list'     // For bullet/numbered lists
   | 'link'     // For hyperlinks
-  | 'quote';   // For blockquotes
+  | 'quote'    // For blockquotes
+  | 'comment'; // For comment/thread blocks
 
 /** Base element interface */
 export interface CanvasElement {
@@ -79,8 +84,8 @@ export interface CanvasElement {
   // Parent element ID (for grouped/nested elements)
   parentId?: string;
 
-  // Child element IDs (for containers)
-  children?: string[];
+  // Child elements (for nested container/form blocks)
+  children?: CanvasElement[];
 
   // Animation config (for GSAP/interaction animations)
   animation?: AnimationConfig | null;
@@ -165,6 +170,7 @@ export interface ElementProps {
   // Common media/context fields
   scope?: 'global' | 'page' | 'post';
   scopeTargetId?: string | null;
+  name?: string;
 
   // Rich text marks
   fontSize?: string | number;
@@ -173,7 +179,10 @@ export interface ElementProps {
   src?: string;
   alt?: string;
   icon?: string;
+  options?: string[];
+  checked?: boolean;
   value?: unknown;
+  defaultValue?: string;
   inputType?: 'text' | 'password' | 'email' | 'number' | 'tel' | 'url' | 'search' | 'textarea';
   rows?: number;
   cols?: number;
@@ -182,6 +191,29 @@ export interface ElementProps {
   listIndent?: number;
   width?: number | string;
   height?: number | string;
+
+  // Form workflow fields
+  notificationEmail?: string;
+  notificationWebhook?: string;
+  moderationMode?: 'manual' | 'auto-approve';
+  enableCaptcha?: boolean;
+
+  // Contact-share mapping
+  contactShareEnabled?: boolean;
+  contactShareNameField?: string;
+  contactShareEmailField?: string;
+  contactSharePhoneField?: string;
+  contactShareNotesField?: string;
+  contactShareDedupeByEmail?: boolean;
+
+  // Comment block settings
+  commentTitle?: string;
+  commentModerationMode?: 'manual' | 'auto-approve';
+  commentAllowGuests?: boolean;
+  commentRequireName?: boolean;
+  commentRequireEmail?: boolean;
+  commentAllowReplies?: boolean;
+  commentSortOrder?: 'newest' | 'oldest';
 }
 
 export interface ComponentDefinition {

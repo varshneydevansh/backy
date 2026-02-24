@@ -5,6 +5,9 @@ import type {
   FormDefinition,
   FormSubmission,
   MediaItem,
+  Contact,
+  CommentReportReason,
+  CommentStatus,
 } from '@backy-cms/core';
 
 interface PageMeta {
@@ -123,6 +126,80 @@ interface Pagination {
   offset: number;
   hasMore: boolean;
 }
+
+interface SubmissionValidationDetail {
+  field: string;
+  message: string;
+}
+
+interface SpamCheckResult {
+  status: FormSubmission['status'];
+  flags: string[];
+  errors?: string;
+}
+
+interface ContactShareOverride {
+  enabled?: boolean;
+  nameField?: string;
+  emailField?: string;
+  phoneField?: string;
+  notesField?: string;
+  dedupeByEmail?: boolean;
+}
+
+interface SubmissionRateState {
+  total: number;
+  lastSubmissionAt: number | null;
+}
+
+interface CommentSpamResult {
+  ok: boolean;
+  status: 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked';
+  flags: string[];
+  errors?: string;
+}
+
+const AUDIT_EVENT_STATUSES = ['queued', 'succeeded', 'failed', 'received'] as const;
+type AuditEventStatus = (typeof AUDIT_EVENT_STATUSES)[number];
+type WebhookEventKind =
+  | 'form-submission'
+  | 'contact-shared'
+  | 'contact-status'
+  | 'comment-submitted'
+  | 'comment-status'
+  | 'comment-reported';
+
+interface AuditEvent {
+  id: string;
+  siteId: string;
+  kind: WebhookEventKind;
+  formId: string | null;
+  commentId: string | null;
+  contactId: string | null;
+  submissionId: string | null;
+  target: string;
+  status: AuditEventStatus;
+  statusCode?: number;
+  requestId?: string;
+  reason?: string;
+  actor?: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  error?: string;
+}
+
+const COMMENT_REPORT_REASONS: CommentReportReason[] = [
+  'spam',
+  'harassment',
+  'abuse',
+  'hate-speech',
+  'off-topic',
+  'copyright',
+  'privacy',
+  'other',
+];
+
+const DEFAULT_COMMENT_FILTER_STATUS: CommentStatus | 'all' = 'pending';
 
 const nowIso = new Date().toISOString();
 
@@ -681,6 +758,14 @@ const FORM_LIBRARY: FormDefinition[] = [
     successRedirectUrl: null,
     enableHoneypot: true,
     enableCaptcha: false,
+    moderationMode: 'manual',
+    contactShare: {
+      enabled: true,
+      nameField: 'name',
+      emailField: 'email',
+      notesField: 'message',
+      dedupeByEmail: true,
+    },
     createdBy: 'admin',
     updatedBy: 'admin',
     createdAt: nowIso,
@@ -704,6 +789,13 @@ const COMMENT_LIST: Comment[] = [
     reviewedBy: null,
     reviewedAt: nowIso,
     rejectionReason: null,
+    reportCount: 0,
+    reportReasons: [],
+    blockReason: null,
+    blockedBy: null,
+    blockedAt: null,
+    requestId: null,
+    ipHash: null,
     createdAt: nowIso,
     updatedAt: nowIso,
   },
@@ -722,15 +814,41 @@ const COMMENT_LIST: Comment[] = [
     reviewedBy: null,
     reviewedAt: nowIso,
     rejectionReason: null,
+    reportCount: 0,
+    reportReasons: [],
+    blockReason: null,
+    blockedBy: null,
+    blockedAt: null,
+    requestId: null,
+    ipHash: null,
     createdAt: nowIso,
     updatedAt: nowIso,
   },
 ];
 
 const FORM_SUBMISSIONS: FormSubmission[] = [];
+const CONTACT_LIST: Contact[] = [];
+const COMMENT_REPORT_BLOCKLIST = new Map<
+  string,
+  { type: 'email' | 'ip'; value: string; reason: string; actor?: string; requestId?: string; createdAt: string; }
+>();
+const SUBMISSION_RATE_WINDOWS = new Map<string, SubmissionRateState>();
+const SUBMISSION_SIGNATURE_WINDOW_MS = 10 * 60 * 1000;
+const SUBMISSION_RATE_WINDOW_MS = 60 * 1000;
+const SUBMISSION_RATE_LIMIT = 8;
+const FORM_SUBMISSION_SIGNATURES = new Map<string, number[]>();
+const FORM_SUBMISSION_MIN_FILL_MS = 900;
+const COMMENT_RATE_WINDOWS = new Map<string, SubmissionRateState>();
+const COMMENT_SIGNATURE_WINDOW_MS = 5 * 60 * 1000;
+const COMMENT_RATE_WINDOW_MS = 45 * 1000;
+const COMMENT_RATE_LIMIT = 12;
+const COMMENT_SIGNATURES = new Map<string, number[]>();
+const COMMENT_MIN_FILL_MS = 900;
+const AUDIT_EVENTS: AuditEvent[] = [];
 
 let commentStore: Comment[] = [...COMMENT_LIST];
 let formSubmissions: FormSubmission[] = [...FORM_SUBMISSIONS];
+let contactStore: Contact[] = [...CONTACT_LIST];
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -751,6 +869,493 @@ function getPagination(total: number, limit: number, offset: number): Pagination
 
 function normalizeIdentifier(value: string) {
   return value.trim().toLowerCase();
+}
+
+function normalizeReportReason(raw: string | null | undefined): string | null {
+  const normalized = (raw || '').trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (COMMENT_REPORT_REASONS.includes(normalized as CommentReportReason)) {
+    return normalized as CommentReportReason;
+  }
+
+  if (normalized === 'off topic' || normalized === 'off-topic' || normalized === 'offtopic') {
+    return 'off-topic';
+  }
+
+  if (normalized === 'hate' || normalized === 'hatespeech') {
+    return 'hate-speech';
+  }
+
+  if (normalized === 'abusive' || normalized === 'threat') {
+    return 'abuse';
+  }
+
+  if (normalized === 'other') {
+    return 'other';
+  }
+
+  return 'other';
+}
+
+function getCommentBlockKey(siteId: string, kind: 'email' | 'ip', value: string) {
+  return `${siteId}:${kind}:${normalizeIdentifier(value)}`;
+}
+
+function isCommentBlockedByIdentity(siteId: string, params: { email?: string | null; ipHash?: string | null }) {
+  const blockedEmailKey = params.email
+    ? COMMENT_REPORT_BLOCKLIST.get(getCommentBlockKey(siteId, 'email', params.email))
+    : null;
+
+  if (blockedEmailKey) {
+    return blockedEmailKey;
+  }
+
+  if (params.ipHash) {
+    const blockedIp = COMMENT_REPORT_BLOCKLIST.get(getCommentBlockKey(siteId, 'ip', params.ipHash));
+    if (blockedIp) {
+      return blockedIp;
+    }
+  }
+
+  return null;
+}
+
+function getRequestKey(siteId: string, formId: string, ipHash?: string | null) {
+  return `${siteId}:${formId}:${ipHash || 'anonymous'}`;
+}
+
+function getCommentRequestKey(
+  siteId: string,
+  targetType: CommentTargetType,
+  targetId: string,
+  ipHash?: string | null,
+) {
+  return `${siteId}:${targetType}:${targetId}:${ipHash || 'anonymous'}`;
+}
+
+function sanitizeString(value: unknown): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'on' : '';
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => sanitizeString(item))
+      .filter(Boolean)
+      .join(',');
+  }
+
+  return '';
+}
+
+function getValueAsString(values: Record<string, unknown>, key: string): string {
+  return sanitizeString(values[key] || '');
+}
+
+function evaluateValidationRule(
+  fieldLabel: string,
+  fieldType: string,
+  rule: { type: string; value?: string | number; message?: string },
+  value: unknown,
+): SubmissionValidationDetail | null {
+  const trimmed = sanitizeString(value);
+
+  if (rule.type === 'required') {
+    if (trimmed.length === 0) {
+      return {
+        field: fieldLabel,
+        message: rule.message || `${fieldLabel} is required`,
+      };
+    }
+    return null;
+  }
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (rule.type === 'minLength') {
+    const minLength = Number(rule.value);
+    if (Number.isFinite(minLength) && trimmed.length < minLength) {
+      return {
+        field: fieldLabel,
+        message:
+          rule.message || `${fieldLabel} must be at least ${minLength} characters`,
+      };
+    }
+    return null;
+  }
+
+  if (rule.type === 'maxLength') {
+    const maxLength = Number(rule.value);
+    if (Number.isFinite(maxLength) && trimmed.length > maxLength) {
+      return {
+        field: fieldLabel,
+        message:
+          rule.message || `${fieldLabel} must be no more than ${maxLength} characters`,
+      };
+    }
+    return null;
+  }
+
+  if (rule.type === 'pattern') {
+    if (!rule.value) {
+      return null;
+    }
+
+    try {
+      const regex = new RegExp(String(rule.value));
+      if (!regex.test(trimmed)) {
+        return {
+          field: fieldLabel,
+          message: rule.message || `${fieldLabel} format is invalid`,
+        };
+      }
+    } catch {
+      return {
+        field: fieldLabel,
+        message: `${fieldLabel} validation pattern is invalid`,
+      };
+    }
+    return null;
+  }
+
+  if (rule.type === 'min' || rule.type === 'max') {
+    const numeric = Number(trimmed);
+    const compare = Number(rule.value);
+
+    if (!Number.isFinite(numeric) || !Number.isFinite(compare)) {
+      return null;
+    }
+
+    if (rule.type === 'min' && numeric < compare) {
+      return {
+        field: fieldLabel,
+        message: rule.message || `${fieldLabel} must be at least ${compare}`,
+      };
+    }
+
+    if (rule.type === 'max' && numeric > compare) {
+      return {
+        field: fieldLabel,
+        message: rule.message || `${fieldLabel} must be no more than ${compare}`,
+      };
+    }
+    return null;
+  }
+
+  if (fieldType === 'email' && trimmed.length > 0) {
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(trimmed)) {
+      return {
+        field: fieldLabel,
+        message: `${fieldLabel} must be a valid email`,
+      };
+    }
+  }
+
+  return null;
+}
+
+function validateSubmissionValues(
+  form: FormDefinition,
+  values: Record<string, unknown>,
+): SubmissionValidationDetail[] {
+  const details: SubmissionValidationDetail[] = [];
+
+  if (!form.fields || form.fields.length === 0) {
+    return details;
+  }
+
+  form.fields.forEach((field) => {
+    const fieldLabel = field.label || field.key;
+    const fieldValue = values[field.key];
+    const sanitized = sanitizeString(fieldValue);
+
+    if (field.required && sanitized.length === 0) {
+      details.push({
+        field: fieldLabel,
+        message: `${fieldLabel} is required`,
+      });
+      return;
+    }
+
+    if (!field.validation || field.validation.length === 0) {
+      if (field.type === 'email' && sanitized.length > 0) {
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailPattern.test(sanitized)) {
+          details.push({
+            field: fieldLabel,
+            message: `${fieldLabel} must be a valid email`,
+          });
+        }
+      }
+      return;
+    }
+
+    for (const validation of field.validation) {
+      const violation = evaluateValidationRule(
+        fieldLabel,
+        field.type || 'text',
+        validation,
+        fieldValue,
+      );
+
+      if (violation) {
+        details.push(violation);
+      }
+    }
+  });
+
+  return details;
+}
+
+function makeSubmissionSignature(values: Record<string, unknown>) {
+  return Object.keys(values)
+    .sort()
+    .map((key) => `${key}=${sanitizeString(values[key])}`)
+    .join('&');
+}
+
+function checkSubmissionSpamSignals(
+  form: FormDefinition,
+  body: {
+    honeypot?: string;
+    ipHash?: string | null;
+    requestId?: string | null;
+    startedAt?: string | number | null;
+  },
+  values: Record<string, unknown>,
+): SpamCheckResult {
+  const flags: string[] = [];
+  const now = Date.now();
+
+  if (form.enableHoneypot && sanitizeString(body.honeypot).length > 0) {
+    return {
+      status: 'spam',
+      flags: ['honeypot'],
+      errors: 'Spam signal detected: honeypot',
+    };
+  }
+
+  const startedAt = typeof body.startedAt === 'number'
+    ? body.startedAt
+    : body.startedAt
+      ? Date.parse(String(body.startedAt))
+      : NaN;
+
+  if (Number.isFinite(startedAt) && now - startedAt < FORM_SUBMISSION_MIN_FILL_MS) {
+    flags.push('timing');
+    return {
+      status: 'spam',
+      flags,
+      errors: 'Submission rejected: too quick to be a human response.',
+    };
+  }
+
+  const key = getRequestKey(form.siteId, form.id, body.ipHash);
+  const rateState = SUBMISSION_RATE_WINDOWS.get(key) || {
+    total: 0,
+    lastSubmissionAt: null,
+  };
+
+  const windowStarted = rateState.lastSubmissionAt !== null
+    ? now - rateState.lastSubmissionAt <= SUBMISSION_RATE_WINDOW_MS
+    : false;
+  if (!windowStarted) {
+    rateState.total = 0;
+    rateState.lastSubmissionAt = now;
+  }
+
+  rateState.total += 1;
+  SUBMISSION_RATE_WINDOWS.set(key, rateState);
+
+  if (rateState.total > SUBMISSION_RATE_LIMIT) {
+    flags.push('rate-limit');
+    return {
+      status: 'spam',
+      flags,
+      errors: `Too many submissions. Please wait ${Math.max(10, Math.round(SUBMISSION_RATE_WINDOW_MS / 1000))} seconds.`,
+    };
+  }
+
+  const signature = makeSubmissionSignature(values) || `empty-${now}`;
+  const signatureKey = `${key}:signature:${signature}`;
+  const signatures = FORM_SUBMISSION_SIGNATURES.get(signatureKey) || [];
+  const activeSignatures = signatures.filter((value) => now - value <= SUBMISSION_SIGNATURE_WINDOW_MS);
+  if (activeSignatures.length > 0) {
+    activeSignatures.push(now);
+    FORM_SUBMISSION_SIGNATURES.set(signatureKey, activeSignatures);
+    flags.push('duplicate');
+    return {
+      status: 'spam',
+      flags,
+      errors: 'Duplicate submission blocked.',
+    };
+  }
+
+  activeSignatures.push(now);
+  FORM_SUBMISSION_SIGNATURES.set(signatureKey, activeSignatures);
+
+  return { status: form.moderationMode === 'auto-approve' ? 'approved' : 'pending', flags };
+}
+
+function checkCommentSpamSignals(
+  params: {
+    siteId: string;
+    targetType: CommentTargetType;
+    targetId: string;
+    content: string;
+    authorEmail?: string | null;
+    honeypot?: string;
+    ipHash?: string | null;
+    startedAt?: string | number | null;
+    rateLimitBypass?: boolean;
+  },
+): CommentSpamResult {
+  const flags: string[] = [];
+  const now = Date.now();
+  const normalizedContent = sanitizeString(params.content);
+
+  if (!normalizedContent.length) {
+    return {
+      ok: false,
+      status: 'rejected',
+      flags: ['validation'],
+      errors: 'Comment content is required.',
+    };
+  }
+
+  const blockedActor = isCommentBlockedByIdentity(params.siteId, {
+    email: params.authorEmail,
+    ipHash: params.ipHash,
+  });
+
+  if (blockedActor) {
+    return {
+      ok: false,
+      status: 'blocked',
+      flags: ['blocked-actor'],
+      errors: `User blocked: ${blockedActor.reason}`,
+    };
+  }
+
+  if (normalizedContent.length > 5000) {
+    return {
+      ok: false,
+      status: 'rejected',
+      flags: ['validation'],
+      errors: 'Comment content is too long.',
+    };
+  }
+
+  if (params.rateLimitBypass) {
+    return {
+      ok: true,
+      status: 'approved',
+      flags: [],
+    };
+  }
+
+  if (params.honeypot && sanitizeString(params.honeypot).length > 0) {
+    flags.push('honeypot');
+    return {
+      ok: false,
+      status: 'spam',
+      flags,
+      errors: 'Spam signal detected: honeypot.',
+    };
+  }
+
+  const startedAt = typeof params.startedAt === 'number'
+    ? params.startedAt
+    : params.startedAt
+      ? Date.parse(String(params.startedAt))
+      : NaN;
+
+  if (Number.isFinite(startedAt) && now - startedAt < COMMENT_MIN_FILL_MS) {
+    flags.push('timing');
+    return {
+      ok: false,
+      status: 'spam',
+      flags,
+      errors: 'Submission rejected: too quick to be a human response.',
+    };
+  }
+
+  const key = getCommentRequestKey(params.siteId, params.targetType, params.targetId, params.ipHash);
+  const rateState = COMMENT_RATE_WINDOWS.get(key) || {
+    total: 0,
+    lastSubmissionAt: null,
+  };
+
+  const isWithinWindow = rateState.lastSubmissionAt !== null
+    ? now - rateState.lastSubmissionAt <= COMMENT_RATE_WINDOW_MS
+    : false;
+
+  if (!isWithinWindow) {
+    rateState.total = 0;
+    rateState.lastSubmissionAt = now;
+  }
+
+  rateState.total += 1;
+  COMMENT_RATE_WINDOWS.set(key, rateState);
+
+  if (rateState.total > COMMENT_RATE_LIMIT) {
+    flags.push('rate-limit');
+    return {
+      ok: false,
+      status: 'spam',
+      flags,
+      errors: `Too many comments. Please wait ${Math.max(10, Math.round(COMMENT_RATE_WINDOW_MS / 1000))} seconds.`,
+    };
+  }
+
+  const signature = makeSubmissionSignature({ commentContent: normalizedContent, content: normalizedContent });
+  const signatureKey = `${key}:signature:${signature}`;
+  const signatures = COMMENT_SIGNATURES.get(signatureKey) || [];
+  const activeSignatures = signatures.filter((value) => now - value <= COMMENT_SIGNATURE_WINDOW_MS);
+
+  if (activeSignatures.length > 0) {
+    activeSignatures.push(now);
+    COMMENT_SIGNATURES.set(signatureKey, activeSignatures);
+    flags.push('duplicate');
+    return {
+      ok: false,
+      status: 'spam',
+      flags,
+      errors: 'Duplicate comment blocked.',
+    };
+  }
+
+  activeSignatures.push(now);
+  COMMENT_SIGNATURES.set(signatureKey, activeSignatures);
+
+  return {
+    ok: true,
+    status: 'pending',
+    flags,
+  };
+}
+
+function parseShareValue(values: Record<string, unknown>, key?: string | null): string | null {
+  if (!key) {
+    return null;
+  }
+
+  const parsed = sanitizeString(values[key]);
+  return parsed.length > 0 ? parsed : null;
 }
 
 export function getSites(params: { includeUnpublished?: boolean } = {}): StoreSite[] {
@@ -950,6 +1555,460 @@ export function getFormById(siteId: string, formId: string): FormDefinition | un
   return form ? clone(form) : undefined;
 }
 
+export function validateAndClassifyFormSubmission(
+  form: FormDefinition,
+  values: Record<string, unknown>,
+  body: {
+    honeypot?: string;
+    ipHash?: string | null;
+    requestId?: string | null;
+    rateLimitBypass?: boolean;
+    startedAt?: string | number | null;
+  } = {},
+): {
+  ok: boolean;
+  status: FormSubmission['status'];
+  validation: SubmissionValidationDetail[];
+  spamFlags: string[];
+  spamMessage?: string;
+} {
+  const validation = validateSubmissionValues(form, values);
+
+  if (validation.length > 0) {
+    return {
+      ok: false,
+      status: 'rejected',
+      validation,
+      spamFlags: ['validation'],
+      spamMessage: 'Validation failed',
+    };
+  }
+
+  if (body.rateLimitBypass) {
+    return {
+      ok: true,
+      status: form.moderationMode === 'auto-approve' ? 'approved' : 'pending',
+      validation,
+      spamFlags: [],
+    };
+  }
+
+  const spamCheck = checkSubmissionSpamSignals(form, body, values);
+  return {
+    ok: spamCheck.status !== 'spam',
+    status: spamCheck.status,
+    validation,
+    spamFlags: spamCheck.flags,
+    spamMessage: spamCheck.errors,
+  };
+}
+
+export function validateAndClassifyComment(params: {
+  siteId: string;
+  targetType: CommentTargetType;
+  targetId: string;
+  content: string;
+  moderationMode: 'manual' | 'auto-approve';
+  authorEmail?: string;
+  honeypot?: string;
+  ipHash?: string | null;
+  requestId?: string;
+  startedAt?: string | number | null;
+  rateLimitBypass?: boolean;
+}): {
+  ok: boolean;
+  status: Comment['status'];
+  spamFlags: string[];
+  spamMessage?: string;
+} {
+  const spamCheck = checkCommentSpamSignals({
+    siteId: params.siteId,
+    targetType: params.targetType,
+    targetId: params.targetId,
+    authorEmail: params.authorEmail,
+    content: params.content,
+    honeypot: params.honeypot,
+    ipHash: params.ipHash,
+    startedAt: params.startedAt,
+    rateLimitBypass: params.rateLimitBypass,
+  });
+
+  return {
+    ok: spamCheck.ok,
+    status: spamCheck.ok
+      ? (params.moderationMode === 'auto-approve' ? 'approved' : 'pending')
+      : spamCheck.status,
+    spamFlags: spamCheck.flags,
+    spamMessage: spamCheck.errors,
+  };
+}
+
+export function buildContactShareFromSubmission(
+  siteId: string,
+  formId: string,
+  values: Record<string, unknown>,
+  submissionMeta: {
+    status: FormSubmission['status'];
+    pageId?: string | null;
+    postId?: string | null;
+    ipHash?: string | null;
+    sourceSubmissionId?: string;
+    requestId?: string;
+  },
+  contactShareOverride?: ContactShareOverride,
+): Contact | null {
+  const form = getFormById(siteId, formId);
+  if (!form) {
+    return null;
+  }
+
+  const resolvedShare: ContactShareOverride = {
+    enabled:
+      contactShareOverride?.enabled !== undefined
+        ? contactShareOverride.enabled
+        : form.contactShare?.enabled ?? false,
+    nameField: contactShareOverride?.nameField || form.contactShare?.nameField,
+    emailField: contactShareOverride?.emailField || form.contactShare?.emailField,
+    phoneField: contactShareOverride?.phoneField || form.contactShare?.phoneField,
+    notesField: contactShareOverride?.notesField || form.contactShare?.notesField,
+    dedupeByEmail: contactShareOverride?.dedupeByEmail ?? form.contactShare?.dedupeByEmail,
+  };
+
+  if (!resolvedShare.enabled) {
+    return null;
+  }
+
+  const name = parseShareValue(values, resolvedShare.nameField);
+  const email = parseShareValue(values, resolvedShare.emailField);
+  const phone = parseShareValue(values, resolvedShare.phoneField);
+  const notes = parseShareValue(values, resolvedShare.notesField);
+
+  if (!email && !name && !phone) {
+    return null;
+  }
+
+  const hasContactIdentity = name || email || phone;
+  if (!hasContactIdentity) {
+    return null;
+  }
+
+  const dedupeByEmail = resolvedShare.dedupeByEmail !== false;
+  const normalizedEmail = email ? normalizeIdentifier(email) : null;
+  const existingByEmail = dedupeByEmail && normalizedEmail
+    ? contactStore.find(
+        (contact) =>
+          contact.siteId === siteId &&
+          contact.formId === formId &&
+          normalizeIdentifier(contact.email || '') === normalizedEmail,
+      )
+    : null;
+
+  const payload: Contact = {
+    id: existingByEmail ? existingByEmail.id : `contact-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    siteId,
+    formId,
+    pageId: submissionMeta.pageId ?? null,
+    postId: submissionMeta.postId ?? null,
+    name: name ?? existingByEmail?.name ?? null,
+    email: email ?? existingByEmail?.email ?? null,
+    phone: phone ?? existingByEmail?.phone ?? null,
+    notes: [existingByEmail?.notes, notes].filter((value) => value).join(existingByEmail?.notes ? '\n' : ''),
+    sourceValues: values,
+    status: 'new',
+    sourceSubmissionId: submissionMeta.sourceSubmissionId,
+    requestId: submissionMeta.requestId,
+    sourceIpHash: submissionMeta.ipHash || null,
+    createdAt: existingByEmail ? existingByEmail.createdAt : new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (existingByEmail) {
+    const merged = {
+      ...existingByEmail,
+      ...payload,
+      notes: [existingByEmail.notes, notes].filter((value) => value).join(existingByEmail.notes ? '\n' : ''),
+      status: submissionMeta.status === 'spam' ? existingByEmail.status : 'new',
+      updatedAt: new Date().toISOString(),
+    };
+
+    contactStore = contactStore.map((item) => (item.id === existingByEmail.id ? merged : item));
+    return clone(merged);
+  }
+
+  if (submissionMeta.status === 'spam') {
+    return null;
+  }
+
+  contactStore = [payload, ...contactStore];
+  return clone(payload);
+}
+
+export function trackWebhookEvent(event: {
+  kind: WebhookEventKind;
+  siteId?: string;
+  formId?: string;
+  commentId?: string;
+  contactId?: string;
+  submissionId?: string;
+  target: string;
+  status: AuditEventStatus;
+  statusCode?: number;
+  requestId?: string;
+  reason?: string;
+  actor?: string;
+  metadata?: Record<string, unknown>;
+  error?: string;
+}) {
+  const entry: AuditEvent = {
+    id: `event-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    kind: event.kind,
+    siteId: event.siteId || 'site-demo',
+    formId: event.formId || null,
+    commentId: event.commentId || null,
+    contactId: event.contactId || null,
+    submissionId: event.submissionId || null,
+    target: event.target,
+    status: event.status,
+    reason: event.reason,
+    actor: event.actor,
+    metadata: event.metadata || {},
+    statusCode: event.statusCode,
+    requestId: event.requestId,
+    error: event.error,
+    createdAt: new Date().toISOString(),
+  };
+  AUDIT_EVENTS.unshift(entry);
+}
+
+export function listAuditEvents(
+  siteId: string,
+  params: {
+    kind?: WebhookEventKind | 'all';
+    requestId?: string;
+    formId?: string;
+    commentId?: string;
+    contactId?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+): { events: AuditEvent[]; count: number; pagination: Pagination } {
+  const {
+    kind,
+    requestId,
+    formId,
+    commentId,
+    contactId,
+    limit = 100,
+    offset = 0,
+  } = params;
+
+  let filtered = AUDIT_EVENTS.filter((event) => event.siteId === siteId);
+
+  if (kind && kind !== 'all') {
+    filtered = filtered.filter((event) => event.kind === kind);
+  }
+
+  if (requestId) {
+    filtered = filtered.filter((event) => event.requestId === requestId);
+  }
+
+  if (formId) {
+    filtered = filtered.filter((event) => event.formId === formId);
+  }
+
+  if (commentId) {
+    filtered = filtered.filter((event) => event.commentId === commentId);
+  }
+
+  if (contactId) {
+    filtered = filtered.filter((event) => event.contactId === contactId);
+  }
+
+  const paginated = filtered.slice(offset, offset + limit);
+
+  return {
+    events: clone(paginated),
+    count: filtered.length,
+    pagination: getPagination(filtered.length, limit, offset),
+  };
+}
+
+export function blockCommentIdentity(params: {
+  siteId: string;
+  reason: string;
+  actor?: string;
+  requestId?: string;
+  email?: string | null;
+  ipHash?: string | null;
+}) {
+  if (params.email) {
+    COMMENT_REPORT_BLOCKLIST.set(getCommentBlockKey(params.siteId, 'email', params.email), {
+      type: 'email',
+      value: normalizeIdentifier(params.email),
+      reason: params.reason,
+      actor: params.actor,
+      requestId: params.requestId,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  if (params.ipHash) {
+    COMMENT_REPORT_BLOCKLIST.set(getCommentBlockKey(params.siteId, 'ip', params.ipHash), {
+      type: 'ip',
+      value: normalizeIdentifier(params.ipHash),
+      reason: params.reason,
+      actor: params.actor,
+      requestId: params.requestId,
+      createdAt: new Date().toISOString(),
+    });
+  }
+}
+
+export function getCommentReportReasons(): CommentReportReason[] {
+  return [...COMMENT_REPORT_REASONS];
+}
+
+function normalizeCommentSearch(value: string | null | undefined): string {
+  return (value || '').trim().toLowerCase();
+}
+
+export function reportComment(params: {
+  commentId: string;
+  siteId: string;
+  reason?: string | null;
+  actor?: string;
+  requestId?: string;
+}): Comment | undefined {
+  const comment = commentStore.find(
+    (item) => item.id === params.commentId && item.siteId === params.siteId,
+  );
+
+  if (!comment) {
+    return undefined;
+  }
+
+  const normalizedReason = normalizeReportReason(params.reason || null);
+  const reportCount = (comment.reportCount || 0) + 1;
+  const reportReasons = new Set(comment.reportReasons || []);
+  if (normalizedReason) {
+    reportReasons.add(normalizedReason);
+  }
+
+  comment.reportCount = reportCount;
+  comment.reportReasons = Array.from(reportReasons);
+  comment.reviewedBy = params.actor || null;
+  comment.reviewedAt = new Date().toISOString();
+  comment.updatedAt = comment.reviewedAt;
+
+  if (reportCount >= 3 && comment.status === 'approved') {
+    comment.status = 'spam';
+  }
+
+  commentStore = commentStore.map((item) => (item.id === comment.id ? comment : item));
+
+  trackWebhookEvent({
+    kind: 'comment-reported',
+    siteId: params.siteId,
+    commentId: comment.id,
+    target: `comment:${comment.id}`,
+    status: 'succeeded',
+    requestId: params.requestId,
+    reason: normalizedReason || 'other',
+    actor: params.actor,
+    metadata: {
+      authorName: comment.authorName,
+      targetType: comment.targetType,
+      targetId: comment.targetId,
+      reportCount: comment.reportCount,
+      reportReasons: comment.reportReasons,
+    },
+  });
+
+  return clone(comment);
+}
+
+export function bulkUpdateCommentStatus(params: {
+  siteId: string;
+  commentIds: string[];
+  status: Comment['status'];
+  reviewedBy?: string | null;
+  rejectionReason?: string | null;
+  blockReason?: string | null;
+  actor?: string | null;
+  requestId?: string;
+}): { updated: Comment[]; missingIds: string[] } {
+  const ids = Array.from(new Set(params.commentIds.map((id) => id.trim()).filter(Boolean)));
+  if (ids.length === 0) {
+    return { updated: [], missingIds: [] };
+  }
+
+  const missingIds = new Set(ids);
+  const reviewer = params.actor || params.reviewedBy || 'admin';
+  const normalizedBlockReason = normalizeReportReason(params.blockReason || null);
+  const updated: Comment[] = [];
+
+  commentStore = commentStore.map((comment) => {
+    if (comment.siteId !== params.siteId || !ids.includes(comment.id)) {
+      return comment;
+    }
+
+    missingIds.delete(comment.id);
+    comment.status = params.status;
+    comment.reviewedBy = reviewer;
+    comment.reviewedAt = new Date().toISOString();
+    comment.updatedAt = comment.reviewedAt;
+    const resolvedRequestId = params.requestId || comment.requestId || undefined;
+
+    if (params.status === 'blocked') {
+      comment.blockReason = normalizedBlockReason || 'manual-block';
+      comment.blockedBy = reviewer;
+      comment.blockedAt = comment.reviewedAt;
+      comment.rejectionReason = params.rejectionReason ?? null;
+
+      blockCommentIdentity({
+        siteId: params.siteId,
+        reason: comment.blockReason || 'manual-block',
+        actor: reviewer,
+        requestId: resolvedRequestId,
+        email: comment.authorEmail,
+        ipHash: comment.ipHash,
+      });
+    } else if (params.status !== 'rejected' && params.status !== 'spam') {
+      comment.blockReason = null;
+      comment.blockedBy = null;
+      comment.blockedAt = null;
+      comment.rejectionReason = null;
+    } else if (params.status === 'rejected' || params.status === 'spam') {
+      comment.rejectionReason = params.rejectionReason ?? null;
+    }
+
+    updated.push(comment);
+    trackWebhookEvent({
+      kind: 'comment-status',
+      siteId: params.siteId,
+      commentId: comment.id,
+      target: `comment:${comment.id}`,
+      status: 'succeeded',
+      requestId: resolvedRequestId,
+      reason: params.status,
+      actor: reviewer,
+      metadata: {
+        targetType: comment.targetType,
+        targetId: comment.targetId,
+        status: params.status,
+        blockReason: comment.blockReason,
+      },
+    });
+
+    return comment;
+  });
+
+  return {
+    updated: clone(updated),
+    missingIds: Array.from(missingIds),
+  };
+}
+
 export function createFormSubmission(record: {
   siteId: string;
   formId: string;
@@ -959,6 +2018,9 @@ export function createFormSubmission(record: {
   ipHash?: string | null;
   userAgent?: string | null;
   requestId?: string;
+  status?: FormSubmission['status'];
+  reviewedBy?: string | null;
+  adminNotes?: string | null;
 }): FormSubmission {
   const submission: FormSubmission = {
     id: `submission-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -970,7 +2032,10 @@ export function createFormSubmission(record: {
     ipHash: record.ipHash,
     userAgent: record.userAgent,
     requestId: record.requestId,
-    status: 'pending',
+    status: record.status || 'pending',
+    reviewedBy: record.reviewedBy || null,
+    reviewedAt: record.status && record.status !== 'pending' ? new Date().toISOString() : null,
+    adminNotes: record.adminNotes || null,
     submittedAt: new Date().toISOString(),
   };
 
@@ -978,8 +2043,17 @@ export function createFormSubmission(record: {
   return clone(submission);
 }
 
-export function listFormSubmissions(formId: string, limit = 20, offset = 0): { data: FormSubmission[]; pagination: Pagination } {
-  const records = formSubmissions.filter((submission) => submission.formId === formId);
+export function listFormSubmissions(
+  formId: string,
+  params: { status?: FormSubmission['status']; requestId?: string; limit?: number; offset?: number } = {},
+): { data: FormSubmission[]; pagination: Pagination } {
+  const { status, requestId, limit = 20, offset = 0 } = params;
+
+  const records = formSubmissions
+    .filter((submission) => submission.formId === formId)
+    .filter((submission) => (status ? submission.status === status : true))
+    .filter((submission) => (requestId ? submission.requestId === requestId : true));
+
   const paginated = records.slice(offset, offset + limit);
 
   return {
@@ -988,31 +2062,264 @@ export function listFormSubmissions(formId: string, limit = 20, offset = 0): { d
   };
 }
 
-export function getCommentsByTarget(
+export function listFormContacts(
+  formId: string,
+  params: { status?: Contact['status']; requestId?: string; limit?: number; offset?: number } = {},
+): { contacts: Contact[]; count: number; pagination: Pagination } {
+  const { status, requestId, limit = 20, offset = 0 } = params;
+  const records = contactStore
+    .filter((contact) => contact.formId === formId)
+    .filter((contact) => (status ? contact.status === status : true))
+    .filter((contact) => (requestId ? contact.requestId === requestId : true));
+
+  const paginated = records.slice(offset, offset + limit);
+
+  return {
+    contacts: clone(paginated),
+    count: records.length,
+    pagination: getPagination(records.length, limit, offset),
+  };
+}
+
+export function getContactById(contactId: string): Contact | undefined {
+  const contact = contactStore.find((item) => item.id === contactId);
+  return contact ? clone(contact) : undefined;
+}
+
+export function getSubmissionById(submissionId: string): FormSubmission | undefined {
+  const submission = formSubmissions.find((item) => item.id === submissionId);
+  return submission ? clone(submission) : undefined;
+}
+
+export function updateFormSubmissionStatus(
+  submissionId: string,
+  updates: {
+    status: FormSubmission['status'];
+    reviewedBy?: string | null;
+    adminNotes?: string | null;
+  },
+): FormSubmission | undefined {
+  const submission = formSubmissions.find((item) => item.id === submissionId);
+  if (!submission) return undefined;
+
+  submission.status = updates.status;
+  submission.reviewedBy = updates.reviewedBy ?? null;
+  submission.adminNotes = updates.adminNotes ?? null;
+  submission.reviewedAt = new Date().toISOString();
+  submission.updatedAt = submission.reviewedAt;
+
+  formSubmissions = formSubmissions.map((item) => (item.id === submission.id ? submission : item));
+  return clone(submission);
+}
+
+export function updateContactStatus(
+  contactId: string,
+  updates: {
+    status: Contact['status'];
+  },
+): Contact | undefined {
+  const contact = contactStore.find((item) => item.id === contactId);
+  if (!contact) return undefined;
+
+  contact.status = updates.status;
+  contact.updatedAt = new Date().toISOString();
+
+  contactStore = contactStore.map((item) => (item.id === contact.id ? contact : item));
+  return clone(contact);
+}
+
+function normalizeCommentStatus(status?: string): 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked' | 'all' {
+  if (status === 'pending' || status === 'approved' || status === 'rejected' || status === 'spam' || status === 'blocked' || status === 'all') {
+    return status;
+  }
+
+  return 'all';
+}
+
+export function listComments(
   siteId: string,
   params: {
-    targetType: CommentTargetType;
-    targetId: string;
-    status?: 'pending' | 'approved' | 'rejected' | 'spam';
+    targetType?: CommentTargetType | 'all';
+    targetId?: string;
+    status?: 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked' | 'all';
+    requestId?: string;
+    q?: string;
+    parentOnly?: boolean;
+    parentId?: string | null;
+    sort?: 'newest' | 'oldest';
     limit?: number;
     offset?: number;
-  },
+  } = {},
 ): { comments: Comment[]; count: number; pagination: Pagination } {
-  const { targetType, targetId, status = 'approved', limit = 20, offset = 0 } = params;
+  const {
+    targetType,
+    targetId,
+    status: rawStatus,
+    requestId,
+    q,
+    parentOnly = false,
+    parentId,
+    sort = 'newest',
+    limit = 20,
+    offset = 0,
+  } = params;
 
-  const filtered = commentStore
-    .filter((comment) => comment.siteId === siteId)
-    .filter((comment) => comment.targetType === targetType)
-    .filter((comment) => comment.targetId === targetId)
-    .filter((comment) => comment.status === status);
+  const status = normalizeCommentStatus(rawStatus);
+  const normalizedRequestId = requestId ? requestId.trim() : '';
+  const normalizedQuery = normalizeCommentSearch(q || '');
+  const normalizedParentId = typeof parentId === 'string' && parentId.length > 0 ? parentId : null;
 
-  const paginated = filtered.slice(offset, offset + limit);
+  let filtered = commentStore.filter((comment) => comment.siteId === siteId);
+
+  if (targetType && targetType !== 'all') {
+    filtered = filtered.filter((comment) => comment.targetType === targetType);
+  }
+
+  if (targetId) {
+    filtered = filtered.filter((comment) => comment.targetId === targetId);
+  }
+
+  if (normalizedRequestId) {
+    filtered = filtered.filter((comment) => comment.requestId === normalizedRequestId);
+  }
+
+  if (normalizedQuery) {
+    filtered = filtered.filter((comment) => {
+      const haystack = [
+        comment.content,
+        comment.authorName,
+        comment.authorEmail,
+        comment.authorWebsite,
+      ]
+        .filter(Boolean)
+        .map((value) => (value || '').toLowerCase())
+        .join(' ');
+      return haystack.includes(normalizedQuery);
+    });
+  }
+
+  if (status !== 'all') {
+    filtered = filtered.filter((comment) => comment.status === status);
+  }
+
+  if (parentOnly) {
+    filtered = filtered.filter((comment) =>
+      normalizedParentId ? comment.parentId === normalizedParentId : comment.parentId == null,
+    );
+  }
+
+  const sorted = [...filtered].sort((a, b) =>
+    sort === 'oldest'
+      ? new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+
+  const paginated = sorted.slice(offset, offset + limit);
 
   return {
     comments: clone(paginated),
     count: filtered.length,
     pagination: getPagination(filtered.length, limit, offset),
   };
+}
+
+export function getCommentsByTarget(
+  siteId: string,
+  params: {
+    targetType: CommentTargetType;
+    targetId: string;
+    status?: 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked' | 'all';
+    limit?: number;
+    offset?: number;
+  },
+): { comments: Comment[]; count: number; pagination: Pagination } {
+  return listComments(siteId, {
+    ...params,
+    status: params.status || 'approved',
+    sort: 'newest',
+  });
+}
+
+export function getCommentById(commentId: string): Comment | undefined {
+  const comment = commentStore.find((item) => item.id === commentId);
+  return comment ? clone(comment) : undefined;
+}
+
+export function updateCommentStatus(
+  commentId: string,
+  updates: {
+    status: Comment['status'];
+    reviewedBy?: string | null;
+    rejectionReason?: string | null;
+    blockReason?: string | null;
+    actor?: string | null;
+    requestId?: string;
+  },
+): Comment | undefined {
+  const comment = commentStore.find((item) => item.id === commentId);
+  if (!comment) return undefined;
+
+  const resolvedRequestId = updates.requestId || comment.requestId || undefined;
+  comment.status = updates.status;
+  comment.reviewedBy = updates.reviewedBy ?? updates.actor ?? null;
+  comment.rejectionReason = updates.rejectionReason ?? null;
+  comment.reviewedAt = new Date().toISOString();
+  comment.updatedAt = comment.reviewedAt;
+
+  if (updates.status === 'blocked') {
+    comment.blockReason = updates.blockReason
+      ? normalizeReportReason(updates.blockReason) || updates.blockReason
+      : 'manual-block';
+    comment.blockedBy = comment.reviewedBy;
+    comment.blockedAt = comment.reviewedAt;
+
+    blockCommentIdentity({
+      siteId: comment.siteId,
+      reason: comment.blockReason || 'manual-block',
+      actor: comment.reviewedBy || undefined,
+      requestId: resolvedRequestId,
+      email: comment.authorEmail,
+      ipHash: comment.ipHash,
+    });
+  } else if (updates.status !== 'rejected' && updates.status !== 'spam') {
+    comment.blockReason = null;
+    comment.blockedBy = null;
+    comment.blockedAt = null;
+  }
+
+  trackWebhookEvent({
+    kind: 'comment-status',
+    siteId: comment.siteId,
+    commentId: comment.id,
+    target: `comment:${comment.id}`,
+    status: 'succeeded',
+    requestId: resolvedRequestId,
+    reason: updates.status,
+    actor: comment.reviewedBy || undefined,
+    metadata: {
+      targetType: comment.targetType,
+      targetId: comment.targetId,
+      status: updates.status,
+    },
+  });
+
+  commentStore = commentStore.map((item) => (item.id === comment.id ? comment : item));
+  return clone(comment);
+}
+
+export function listCommentReplies(siteId: string, params: {
+  targetType: CommentTargetType;
+  targetId: string;
+  parentId: string;
+}): Comment[] {
+  const replies = commentStore.filter(
+    (comment) =>
+      comment.siteId === siteId &&
+      comment.targetType === params.targetType &&
+      comment.targetId === params.targetId &&
+      comment.parentId === params.parentId,
+  );
+  return clone(replies);
 }
 
 export function createComment(params: {
@@ -1026,6 +2333,8 @@ export function createComment(params: {
   userId?: string | null;
   status?: Comment['status'];
   parentId?: string | null;
+  requestId?: string;
+  ipHash?: string | null;
 }): Comment {
   const comment: Comment = {
     id: `comment-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -1042,11 +2351,36 @@ export function createComment(params: {
     reviewedBy: null,
     reviewedAt: null,
     rejectionReason: null,
+    blockReason: null,
+    blockedBy: null,
+    blockedAt: null,
+    reportCount: 0,
+    reportReasons: [],
+    requestId: params.requestId || null,
+    ipHash: params.ipHash || null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
 
   commentStore = [comment, ...commentStore];
+  trackWebhookEvent({
+    kind: 'comment-submitted',
+    siteId: comment.siteId,
+    commentId: comment.id,
+    target: `comment:${comment.id}`,
+    status: 'succeeded',
+    requestId: comment.requestId || undefined,
+    reason: comment.status,
+    metadata: {
+      targetType: comment.targetType,
+      targetId: comment.targetId,
+      status: comment.status,
+      parentId: comment.parentId,
+      hasAuthorEmail: Boolean(comment.authorEmail),
+      hasAuthorWebsite: Boolean(comment.authorWebsite),
+    },
+  });
+
   return clone(comment);
 }
 

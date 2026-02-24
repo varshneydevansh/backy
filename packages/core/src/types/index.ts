@@ -837,6 +837,33 @@ export interface FormDefinition {
   enableHoneypot?: boolean;
   enableCaptcha?: boolean;
 
+  /** Optional webhook URL invoked on form submission */
+  notificationWebhook?: string | null;
+
+  /** Auto-approval / moderation mode */
+  moderationMode?: 'manual' | 'auto-approve';
+
+  /** Optional contact conversion mapping for lead share */
+  contactShare?: {
+    /** Enable lead generation from this form */
+    enabled: boolean;
+
+    /** Name of field in submission payload */
+    nameField?: string;
+
+    /** Email of field in submission payload */
+    emailField?: string;
+
+    /** Phone number of field in submission payload */
+    phoneField?: string;
+
+    /** Message/notes field for contact enrichment */
+    notesField?: string;
+
+    /** Deduplicate contacts by email by default */
+    dedupeByEmail?: boolean;
+  };
+
   /** Who can access this form config */
   createdBy?: string | null;
   updatedBy?: string | null;
@@ -867,12 +894,24 @@ export interface FormSubmission {
   status: 'pending' | 'approved' | 'rejected' | 'spam';
   reviewedBy?: string | null;
   reviewedAt?: string | null;
+  adminNotes?: string | null;
 
   submittedAt: string;
 }
 
 /** Comment status */
-export type CommentStatus = 'pending' | 'approved' | 'rejected' | 'spam';
+export type CommentStatus = 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked';
+
+/** Allowed report/block reason taxonomy for moderation and analytics. */
+export type CommentReportReason =
+  | 'spam'
+  | 'harassment'
+  | 'abuse'
+  | 'hate-speech'
+  | 'off-topic'
+  | 'copyright'
+  | 'privacy'
+  | 'other';
 
 /** Comment target entity types */
 export type CommentTargetType = 'page' | 'post';
@@ -906,8 +945,50 @@ export interface Comment {
   reviewedBy?: string | null;
   reviewedAt?: string | null;
   rejectionReason?: string | null;
+  blockReason?: CommentReportReason | string | null;
+  blockedBy?: string | null;
+  blockedAt?: string | null;
+  reportCount?: number;
+  reportReasons?: CommentReportReason[];
+  requestId?: string | null;
+  ipHash?: string | null;
 
   /** Timestamps */
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Contact/lead capture entry for form -> CRM handoff flows. */
+export interface Contact {
+  /** Unique identifier */
+  id: string;
+
+  /** Owning site */
+  siteId: string;
+
+  /** Source form */
+  formId: string;
+
+  /** Optional context where it was submitted */
+  pageId?: string | null;
+  postId?: string | null;
+
+  /** Identity fields */
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  notes?: string | null;
+
+  /** Optional raw payload */
+  sourceValues?: Record<string, unknown>;
+
+  /** Lead lifecycle */
+  status: 'new' | 'contacted' | 'qualified' | 'archived';
+
+  /** Audit */
+  sourceSubmissionId?: string;
+  requestId?: string | null;
+  sourceIpHash?: string | null;
   createdAt: string;
   updatedAt: string;
 }

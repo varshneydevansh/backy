@@ -578,6 +578,12 @@ Rules:
 - threaded replies optional in phase 2.
 - public comment count API should be cache-safe.
 
+Execution status (2026-02-24):
+- Anti-bot fields (`requestId`, `startedAt`, `honeypot`) are now sent from the comment renderer and checked in both page/post comment submit routes.
+- Shared store now includes comment classification with validation, timing, honeypot, duplicate and rate-limit checks.
+- Parent-thread integrity is now validated in API routes before comment creation.
+- Remaining for parity: public comment export/report pipeline, block-level spam tuning, and bulk moderation actions.
+
 ### 13.4 What frontend should expect from page/blog render APIs
 
 Core public read contract:

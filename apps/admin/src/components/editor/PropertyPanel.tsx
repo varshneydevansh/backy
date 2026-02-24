@@ -290,7 +290,13 @@ function ContentProperties({ element, onChange, onOpenMedia, onOpenEmoji }: Cont
   const hasLinkContent = element.type === 'link';
   const hasButtonContent = element.type === 'button';
   const hasInputContent = element.type === 'input';
+  const hasFormFieldContent = ['input', 'textarea', 'select', 'checkbox', 'radio'].includes(element.type);
+  const hasFormContent = element.type === 'form';
+  const hasCommentContent = element.type === 'comment';
   const hasListContent = element.type === 'list';
+  const fieldOptionsText = Array.isArray(element.props.options)
+    ? element.props.options.join('\n')
+    : '';
   const listItems = getListItemsFromProps(element.props);
 
   return (
@@ -538,9 +544,50 @@ function ContentProperties({ element, onChange, onOpenMedia, onOpenEmoji }: Cont
         </div>
       )}
 
-      {/* Input Properties */}
-      {hasInputContent && (
+      {/* Form Field Properties */}
+      {hasFormFieldContent && (
         <div className="space-y-2">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Field Label
+            </label>
+            <input
+              type="text"
+              value={element.props.label || ''}
+              onChange={(e) => onChange({ label: e.target.value })}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Full name"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Field Name (submission key)
+            </label>
+            <input
+              type="text"
+              value={element.props.name || ''}
+              onChange={(e) => onChange({ name: e.target.value })}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="name, email, message"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id={`required-${element.id}`}
+              checked={Boolean(element.props.required)}
+              onChange={(e) => onChange({ required: e.target.checked })}
+            />
+            <label htmlFor={`required-${element.id}`} className="text-xs text-muted-foreground">
+              Required field
+            </label>
+          </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
               Placeholder
@@ -556,26 +603,155 @@ function ContentProperties({ element, onChange, onOpenMedia, onOpenEmoji }: Cont
               placeholder="Enter placeholder text"
             />
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">
-              Input Type
-            </label>
-            <select
-              value={element.props.inputType || 'text'}
-              onChange={(e) => onChange({ inputType: e.target.value })}
-              className={cn(
-                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-                'focus:outline-none focus:ring-2 focus:ring-ring'
-              )}
-            >
-              <option value="text">Text</option>
-              <option value="email">Email</option>
-              <option value="password">Password</option>
-              <option value="number">Number</option>
-              <option value="tel">Phone</option>
-              <option value="url">URL</option>
-            </select>
-          </div>
+
+          {element.type === 'input' && (
+            <>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Input Type
+                </label>
+                <select
+                  value={element.props.inputType || 'text'}
+                  onChange={(e) => onChange({ inputType: e.target.value })}
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                >
+                  <option value="text">Text</option>
+                  <option value="email">Email</option>
+                  <option value="password">Password</option>
+                  <option value="number">Number</option>
+                  <option value="tel">Phone</option>
+                  <option value="url">URL</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Validation Pattern (regex)
+                </label>
+                <input
+                  type="text"
+                  value={(element.props.pattern as string) || ''}
+                  onChange={(e) => onChange({ pattern: e.target.value })}
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                  placeholder="e.g. ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Min length
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={(element.props.minLength as number) || ''}
+                    onChange={(e) => onChange({ min: Number(e.target.value) })}
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
+                    )}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Max length
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={(element.props.maxLength as number) || ''}
+                    onChange={(e) => onChange({ max: Number(e.target.value) })}
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
+                    )}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {element.type === 'textarea' && (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Rows
+                  </label>
+                  <input
+                    type="number"
+                    min={2}
+                    value={element.props.rows || 4}
+                    onChange={(e) =>
+                      onChange({ rows: e.target.value ? Number(e.target.value) : 4 })
+                    }
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
+                    )}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Max Length
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={(element.props.maxLength as number) || ''}
+                    onChange={(e) => onChange({ maxLength: e.target.value ? Number(e.target.value) : 0 })}
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
+                    )}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {(element.type === 'select' || element.type === 'checkbox' || element.type === 'radio') && (
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Options (one per line)
+              </label>
+              <textarea
+                value={fieldOptionsText}
+                onChange={(event) => onChange({
+                  options: event.target.value.split('\n').map((value) => value.trim()).filter(Boolean),
+                })}
+                rows={4}
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background resize-none',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder={'Option A\nOption B'}
+              />
+            </div>
+          )}
+
+          {(element.type === 'checkbox' || element.type === 'radio') && (
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Default Value / option
+              </label>
+              <input
+                type="text"
+                value={element.props.value || ''}
+                onChange={(e) => onChange({ value: e.target.value })}
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="first option"
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -726,7 +902,8 @@ function ContentProperties({ element, onChange, onOpenMedia, onOpenEmoji }: Cont
       )}
 
       {/* Form Properties */}
-      {element.type === 'form' && (
+      {/* Form Container Properties */}
+      {hasFormContent && (
         <div className="space-y-2">
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
@@ -818,20 +995,193 @@ function ContentProperties({ element, onChange, onOpenMedia, onOpenEmoji }: Cont
             />
             Enable spam protection (honeypot)
           </label>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Moderation mode
+            </label>
+            <select
+              value={element.props.moderationMode || 'manual'}
+              onChange={(e) => onChange({ moderationMode: e.target.value as 'manual' | 'auto-approve' })}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              <option value="manual">Manual review</option>
+              <option value="auto-approve">Auto-approve</option>
+            </select>
+          </div>
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
-              checked={Boolean(element.props.required)}
-              onChange={(e) => onChange({ required: e.target.checked })}
+              checked={Boolean(element.props.contactShareEnabled)}
+              onChange={(e) => onChange({ contactShareEnabled: e.target.checked })}
             />
-            Require manual review for submissions
+            Enable lead/share capture on approve
           </label>
+          {Boolean(element.props.contactShareEnabled) && (
+            <>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Name field key
+                </label>
+                <input
+                  type="text"
+                  value={element.props.contactShareNameField || ''}
+                  onChange={(e) => onChange({ contactShareNameField: e.target.value })}
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                  placeholder="name"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Email field key
+                </label>
+                <input
+                  type="text"
+                  value={element.props.contactShareEmailField || ''}
+                  onChange={(e) => onChange({ contactShareEmailField: e.target.value })}
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                  placeholder="email"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Phone field key
+                </label>
+                <input
+                  type="text"
+                  value={element.props.contactSharePhoneField || ''}
+                  onChange={(e) => onChange({ contactSharePhoneField: e.target.value })}
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                  placeholder="phone"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Notes field key
+                </label>
+                <input
+                  type="text"
+                  value={element.props.contactShareNotesField || ''}
+                  onChange={(e) => onChange({ contactShareNotesField: e.target.value })}
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                  placeholder="message"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={element.props.contactShareDedupeByEmail !== false}
+                  onChange={(e) => onChange({ contactShareDedupeByEmail: e.target.checked })}
+                />
+                Deduplicate contacts by email
+              </label>
+            </>
+          )}
           <p className="text-xs text-muted-foreground">
             Note: Drag input + button elements into the form area
           </p>
           <p className="text-xs text-muted-foreground">
             Tip: Point action URL to your API/edge handler for comment, lead, or order capture.
           </p>
+        </div>
+      )}
+
+      {/* Comment Block Properties */}
+      {hasCommentContent && (
+        <div className="space-y-2">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Block Title
+            </label>
+            <input
+              type="text"
+              value={element.props.commentTitle || ''}
+              onChange={(e) => onChange({ commentTitle: e.target.value })}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Comments"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Moderation mode
+            </label>
+            <select
+              value={element.props.commentModerationMode || 'manual'}
+              onChange={(e) => onChange({ commentModerationMode: e.target.value as 'manual' | 'auto-approve' })}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              <option value="manual">Manual review</option>
+              <option value="auto-approve">Auto-approve</option>
+            </select>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={element.props.commentRequireName !== false}
+              onChange={(e) => onChange({ commentRequireName: e.target.checked })}
+            />
+            Require comment author name
+          </label>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={element.props.commentRequireEmail || false}
+              onChange={(e) => onChange({ commentRequireEmail: e.target.checked })}
+            />
+            Require author email
+          </label>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={element.props.commentAllowGuests !== false}
+              onChange={(e) => onChange({ commentAllowGuests: e.target.checked })}
+            />
+            Allow guests
+          </label>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={element.props.commentAllowReplies !== false}
+              onChange={(e) => onChange({ commentAllowReplies: e.target.checked })}
+            />
+            Allow replies
+          </label>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Sort order
+            </label>
+            <select
+              value={element.props.commentSortOrder || 'newest'}
+              onChange={(e) => onChange({ commentSortOrder: e.target.value as 'newest' | 'oldest' })}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+            </select>
+          </div>
         </div>
       )}
 

@@ -20,6 +20,7 @@ export interface Site {
     description: string;
     customDomain: string | null;
     status: 'published' | 'draft' | 'archived';
+    publicSiteId?: string;
     pageCount: number;
     lastUpdated: string;
 }
@@ -113,6 +114,7 @@ const INITIAL_SITES: Site[] = [
         slug: 'portfolio',
         description: 'Personal design portfolio showcasing my latest work.',
         customDomain: 'portfolio.design',
+        publicSiteId: 'site-demo',
         status: 'published',
         pageCount: 5,
         lastUpdated: new Date().toISOString(),
@@ -123,6 +125,7 @@ const INITIAL_SITES: Site[] = [
         slug: 'tech-blog',
         description: 'Weekly articles about web development.',
         customDomain: null,
+        publicSiteId: 'site-cook',
         status: 'draft',
         pageCount: 12,
         lastUpdated: new Date(Date.now() - 86400000).toISOString(),

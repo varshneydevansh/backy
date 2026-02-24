@@ -127,6 +127,158 @@ export function CanvasEditor({
   const [canvasScale, setCanvasScale] = useState(1);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
 
+  const canAcceptNestedDrop = (elementType: CanvasElement['type']): boolean => {
+    return elementType === 'form' ||
+      elementType === 'box' ||
+      elementType === 'container' ||
+      elementType === 'section' ||
+      elementType === 'columns';
+  };
+
+  const walkTreeMaxZ = (nodes: CanvasElement[]): number =>
+    nodes.reduce((max, item) => {
+      const self = item.zIndex || 0;
+      const childrenMax = item.children?.length ? walkTreeMaxZ(item.children) : 0;
+      return Math.max(max, self, childrenMax);
+    }, 0);
+
+  const findElementById = (items: CanvasElement[], targetId: string): CanvasElement | null => {
+    for (const item of items) {
+      if (item.id === targetId) {
+        return item;
+      }
+
+      if (item.children?.length) {
+        const found = findElementById(item.children, targetId);
+        if (found) {
+          return found;
+        }
+      }
+    }
+
+    return null;
+  };
+
+  const updateElementById = (
+    items: CanvasElement[],
+    targetId: string,
+    update: (node: CanvasElement) => CanvasElement,
+  ): { elements: CanvasElement[]; updated: boolean } => {
+    let updated = false;
+
+    const next = items.map((item) => {
+      if (item.id === targetId) {
+        updated = true;
+        return update(item);
+      }
+
+      if (!item.children?.length) {
+        return item;
+      }
+
+      const childResult = updateElementById(item.children, targetId, update);
+      if (!childResult.updated) {
+        return item;
+      }
+
+      updated = true;
+      return {
+        ...item,
+        children: childResult.elements,
+      };
+    });
+
+    return { elements: next, updated };
+  };
+
+  const insertElementAsChild = (
+    items: CanvasElement[],
+    parentId: string,
+    child: CanvasElement,
+  ): { elements: CanvasElement[]; updated: boolean } => {
+    let updated = false;
+
+    const next = items.map((item) => {
+      if (item.id === parentId) {
+        updated = true;
+        return {
+          ...item,
+          children: [...(item.children || []), child],
+        };
+      }
+
+      if (!item.children?.length) {
+        return item;
+      }
+
+      const childResult = insertElementAsChild(item.children, parentId, child);
+      if (!childResult.updated) {
+        return item;
+      }
+
+      updated = true;
+      return {
+        ...item,
+        children: childResult.elements,
+      };
+    });
+
+    return { elements: next, updated };
+  };
+
+  const removeElementById = (
+    items: CanvasElement[],
+    targetId: string,
+  ): { elements: CanvasElement[]; updated: boolean; removedParentId?: string | null } => {
+    const walk = (nodes: CanvasElement[], parentId: string | null): {
+      elements: CanvasElement[];
+      updated: boolean;
+      removedParentId?: string | null;
+    } => {
+      let updated = false;
+      let removedParentId: string | null | undefined;
+
+      const next = nodes.reduce<CanvasElement[]>((acc, item) => {
+        if (item.id === targetId) {
+          updated = true;
+          removedParentId = parentId;
+          return acc;
+        }
+
+        if (!item.children?.length) {
+          acc.push(item);
+          return acc;
+        }
+
+        const childResult = walk(item.children, item.id);
+        if (!childResult.updated) {
+          acc.push(item);
+          return acc;
+        }
+
+        updated = true;
+        removedParentId = childResult.removedParentId ?? parentId;
+        acc.push({
+          ...item,
+          children: childResult.elements,
+        });
+        return acc;
+      }, []);
+
+      return { elements: next, updated, removedParentId };
+    };
+
+    const removed = walk(items, null);
+    if (!removed.updated) {
+      return { ...removed, removedParentId: undefined };
+    }
+
+    return {
+      ...removed,
+      removedParentId: removed.removedParentId === null ? null : removed.removedParentId,
+    };
+  };
+
   // Sync changes to parent
   useEffect(() => {
     if (onChange) {
@@ -187,7 +339,7 @@ export function CanvasEditor({
    */
   const handleCopy = useCallback(() => {
     if (selectedId) {
-      const el = elements.find((e) => e.id === selectedId);
+      const el = findElementById(elements, selectedId);
       if (el) {
         setClipboardElement(el);
         // Optional: Show toast or feedback
@@ -198,7 +350,7 @@ export function CanvasEditor({
   const normalizePastedElement = useCallback(
     (sourceElement: CanvasElement, x = 20, y = 20): CanvasElement => {
       const clone = JSON.parse(JSON.stringify(sourceElement)) as CanvasElement;
-      const highestZ = elements.reduce((max, item) => Math.max(max, item.zIndex || 1), 1);
+    const highestZ = Math.max(walkTreeMaxZ(elements), 0);
 
       return {
         ...clone,
@@ -217,25 +369,39 @@ export function CanvasEditor({
   const handlePaste = useCallback(() => {
     if (clipboardElement) {
       const newElement = normalizePastedElement(clipboardElement);
-      const newElements = [...elements, newElement];
-      updateElementsWithHistory(newElements);
+      const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
+      const canNest = selectedElement && canAcceptNestedDrop(selectedElement.type);
+      const newElements = canNest
+        ? insertElementAsChild(elements, selectedElement.id, newElement)
+        : { elements: [...elements, newElement], updated: false };
+
+      const nextElements = canNest && newElements.updated ? newElements.elements : newElements.elements;
+
+      updateElementsWithHistory(nextElements);
       setSelectedId(newElement.id);
     }
   }, [clipboardElement, elements, normalizePastedElement, updateElementsWithHistory]);
 
   const handleDuplicate = useCallback(() => {
     if (!selectedId) return;
-    const selectedElement = elements.find((element) => element.id === selectedId);
+    const selectedElement = findElementById(elements, selectedId);
     if (!selectedElement) return;
 
     const duplicate = normalizePastedElement(selectedElement);
-    const newElements = [...elements, duplicate];
-    updateElementsWithHistory(newElements);
+    const canNest = canAcceptNestedDrop(selectedElement.type);
+    const duplicated = canNest
+      ? insertElementAsChild(elements, selectedElement.id, duplicate)
+      : { elements: [...elements, duplicate], updated: false };
+    const nextElements = duplicated.updated || !canNest
+      ? duplicated.elements
+      : [...elements, duplicate];
+
+    updateElementsWithHistory(nextElements);
     setSelectedId(duplicate.id);
   }, [elements, normalizePastedElement, selectedId, updateElementsWithHistory]);
 
   // Get selected element
-  const selectedElement = elements.find((el) => el.id === selectedId) || null;
+  const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
 
   /**
    * Handle element selection
@@ -258,10 +424,16 @@ export function CanvasEditor({
     (updates: Partial<CanvasElement>) => {
       if (!selectedId) return;
 
-      const updatedElements = elements.map((el) =>
-        el.id === selectedId ? { ...el, ...updates } : el
-      );
-      updateElementsWithHistory(updatedElements);
+      const result = updateElementById(elements, selectedId, (element) => ({
+        ...element,
+        ...updates,
+      }));
+
+      if (!result.updated) {
+        return;
+      }
+
+      updateElementsWithHistory(result.elements);
     },
     [selectedId, elements, updateElementsWithHistory]
   );
@@ -294,10 +466,19 @@ export function CanvasEditor({
 
         // Create new element
         const newElement = createCanvasElement(item.type, x, y);
-        const newElements = [...elements, newElement];
+        const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
+        const isNested = selectedElement && canAcceptNestedDrop(selectedElement.type);
+        const normalized = normalizePastedElement(newElement);
+        const result = isNested
+          ? insertElementAsChild(elements, selectedElement.id, normalized)
+          : { elements: [...elements, normalized], updated: false };
+
+        const newElements = result.updated || !isNested
+          ? result.elements
+          : [...elements, normalized];
 
         updateElementsWithHistory(newElements);
-        setSelectedId(newElement.id);
+        setSelectedId(normalized.id);
       } catch (err) {
         console.error('Failed to drop element:', err);
       }
@@ -310,9 +491,11 @@ export function CanvasEditor({
    */
   const deleteElement = useCallback(() => {
     if (!selectedId) return;
-    const newElements = elements.filter((el) => el.id !== selectedId);
-    updateElementsWithHistory(newElements);
-    setSelectedId(null);
+    const result = removeElementById(elements, selectedId);
+    if (!result.updated) return;
+
+    updateElementsWithHistory(result.elements);
+    setSelectedId(result.removedParentId || null);
   }, [selectedId, elements, updateElementsWithHistory]);
 
   /**

@@ -45,7 +45,8 @@ export type KnownElementType =
   | 'html'
   | 'map'
   | 'box'
-  | 'quote';
+  | 'quote'
+  | 'comment';
 
 /** Canvas element structure */
 export interface CanvasElement {
@@ -99,6 +100,29 @@ export interface ThemeConfig {
   customCSS?: string;
 }
 
+interface CommentItem {
+  id: string;
+  content: string;
+  status: 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked';
+  authorName: string | null;
+  authorEmail: string | null;
+  authorWebsite: string | null;
+  parentId: string | null;
+  createdAt: string;
+  requestId?: string | null;
+  reportCount?: number;
+  reportReasons?: string[];
+}
+
+interface CommentFormPayload {
+  moderationMode: 'manual' | 'auto-approve';
+  requireName: boolean;
+  requireEmail: boolean;
+  allowGuests: boolean;
+  allowReplies: boolean;
+  sort: 'newest' | 'oldest';
+}
+
 interface ElementRendererContext {
   isPreview?: boolean;
   siteId?: string;
@@ -126,6 +150,35 @@ function getLength(value: unknown, fallback = ''): string {
 
 function getBoolean(value: unknown): boolean {
   return Boolean(value);
+}
+
+function parseCommentPayload(props: Record<string, unknown>): CommentFormPayload {
+  const moderationValue = getNameClass(props.commentModerationMode);
+
+  return {
+    moderationMode: moderationValue === 'auto-approve' ? 'auto-approve' : 'manual',
+    requireName: props.commentRequireName !== false,
+    requireEmail: props.commentRequireEmail === true,
+    allowGuests: props.commentAllowGuests !== false,
+    allowReplies: props.commentAllowReplies !== false,
+    sort: getNameClass(props.commentSortOrder) === 'oldest' ? 'oldest' : 'newest',
+  };
+}
+
+function getCommentApiPath(siteId?: string, pageId?: string, postId?: string): string {
+  if (!siteId) {
+    return '';
+  }
+
+  if (pageId) {
+    return `/api/sites/${siteId}/pages/${pageId}/comments`;
+  }
+
+  if (postId) {
+    return `/api/sites/${siteId}/blog/${postId}/comments`;
+  }
+
+  return '';
 }
 
 function getSafeTag(value: unknown): keyof JSX.IntrinsicElements {
@@ -239,6 +292,72 @@ const sanitizeText = (value: unknown): string => {
 
   return '';
 };
+
+const buildContactShareOverride = (props: Record<string, unknown>) => {
+  const hasAnySetting =
+    typeof props.contactShareEnabled === 'boolean' ||
+    typeof props.contactShareNameField === 'string' ||
+    typeof props.contactShareEmailField === 'string' ||
+    typeof props.contactSharePhoneField === 'string' ||
+    typeof props.contactShareNotesField === 'string' ||
+    props.contactShareDedupeByEmail !== undefined;
+
+  if (!hasAnySetting) {
+    return undefined;
+  }
+
+  return {
+    enabled:
+      typeof props.contactShareEnabled === 'boolean' ? props.contactShareEnabled : undefined,
+    nameField:
+      typeof props.contactShareNameField === 'string' ? props.contactShareNameField : undefined,
+    emailField:
+      typeof props.contactShareEmailField === 'string' ? props.contactShareEmailField : undefined,
+    phoneField:
+      typeof props.contactSharePhoneField === 'string' ? props.contactSharePhoneField : undefined,
+    notesField:
+      typeof props.contactShareNotesField === 'string' ? props.contactShareNotesField : undefined,
+    dedupeByEmail:
+      typeof props.contactShareDedupeByEmail === 'boolean' ? props.contactShareDedupeByEmail : undefined,
+  };
+};
+
+const buildCommentThreads = (comments: CommentItem[]) => {
+  const map = new Map<string, CommentItem & { replies?: CommentItem[] }>();
+  const roots: (CommentItem & { replies?: CommentItem[] })[] = [];
+
+  comments.forEach((comment) => {
+    map.set(comment.id, { ...comment, replies: [] });
+  });
+
+  map.forEach((comment) => {
+    if (!comment.parentId) {
+      roots.push(comment);
+      return;
+    }
+
+    const parent = map.get(comment.parentId);
+    if (!parent) {
+      roots.push(comment);
+      return;
+    }
+
+    parent.replies = [...(parent.replies || []), comment];
+  });
+
+  return roots;
+};
+
+const DEFAULT_COMMENT_REPORT_REASONS = [
+  'spam',
+  'harassment',
+  'abuse',
+  'hate-speech',
+  'off-topic',
+  'copyright',
+  'privacy',
+  'other',
+];
 
 const normalizeEmbedUrl = (raw: unknown): string => {
   const source = sanitizeText(raw);
@@ -643,6 +762,11 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
   const { props, styles, children } = element;
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [submitMessage, setSubmitMessage] = useState('');
+  const [submitMeta, setSubmitMeta] = useState<{
+    status: string;
+    submissionId?: string;
+  } | null>(null);
+  const startedAtRef = useRef<number>(Date.now());
 
   const formId = typeof props.formId === 'string' ? props.formId : undefined;
   const configuredAction =
@@ -656,6 +780,8 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
   const successMessage =
     getNameClass((props as { successMessage?: unknown }).successMessage) ||
     'Thanks. Your message was sent.';
+  const contactShareOverride = buildContactShareOverride(props as Record<string, unknown>);
+  const requestId = useRef<string>(`f-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     if (isPreview) {
@@ -677,6 +803,7 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
 
     const formData = new FormData(event.currentTarget);
     const values: Record<string, unknown> = {};
+    const startedAt = startedAtRef.current;
 
     formData.forEach((value, key) => {
       const normalized = key;
@@ -699,6 +826,9 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
     const body = {
       values,
       ...(enableHoneypot ? { honeypot: getNameClass(values.honeypot) } : {}),
+      ...(contactShareOverride ? { contactShareOverride } : {}),
+      startedAt,
+      requestId: requestId.current,
       ...(pageId ? { pageId } : {}),
       ...(postId ? { postId } : {}),
     };
@@ -738,14 +868,28 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
         return;
       }
 
-      const responseMessage =
-        typeof (responseBody as { message?: string })?.message === 'string'
-          ? (responseBody as { message?: string }).message
-          : successMessage;
-
       setSubmitState('success');
-      setSubmitMessage(responseMessage || 'Thanks. Your message was sent.');
-      if (successRedirectUrl) {
+      const status = getNameClass(responseBody?.status) || 'approved';
+      const serverMessage = getNameClass(responseBody?.message);
+      setSubmitMeta({
+        status,
+        submissionId: getNameClass(responseBody?.submission?.id) || getNameClass(responseBody?.submissionId),
+      });
+
+      setSubmitMessage(
+        serverMessage
+          || (status === 'approved'
+            ? successMessage
+            : status === 'pending'
+              ? 'Submission received. It is pending review.'
+              : 'Submission accepted.'),
+      );
+
+      if (status === 'pending' && !successRedirectUrl) {
+        return;
+      }
+
+      if (status === 'approved' && successRedirectUrl) {
         window.location.assign(successRedirectUrl);
       }
       event.currentTarget.reset();
@@ -802,8 +946,478 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
         ))}
       </form>
       {submitMessage ? <p style={{ marginTop: '8px' }}>{submitMessage}</p> : null}
+      {submitMeta?.submissionId ? (
+        <p style={{ marginTop: '4px', fontSize: '12px', color: '#475569' }}>
+          Submission ID: {submitMeta.submissionId}
+        </p>
+      ) : null}
       {submitState === 'submitting' ? <p style={{ marginTop: '8px' }}>Submitting…</p> : null}
     </>
+  );
+}
+
+/**
+ * Render a comment thread block
+ */
+function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: ElementRendererProps) {
+  const { props, styles } = element;
+  const [comments, setComments] = useState<CommentItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [submitMessage, setSubmitMessage] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
+  const [content, setContent] = useState('');
+  const [authorName, setAuthorName] = useState('');
+  const [authorEmail, setAuthorEmail] = useState('');
+  const [authorWebsite, setAuthorWebsite] = useState('');
+  const [replyToId, setReplyToId] = useState<string | null>(null);
+  const [replyContent, setReplyContent] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [reportReasons, setReportReasons] = useState<string[]>([...DEFAULT_COMMENT_REPORT_REASONS]);
+  const [reportReasonByCommentId, setReportReasonByCommentId] = useState<Record<string, string>>({});
+  const [reportingCommentId, setReportingCommentId] = useState<string | null>(null);
+  const requestIdRef = useRef<string>(`c-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`);
+  const startedAtRef = useRef<number>(Date.now());
+
+  const commentApiPath = getCommentApiPath(siteId, pageId, postId);
+  const policy = parseCommentPayload(props as Record<string, unknown>);
+
+  useEffect(() => {
+    requestIdRef.current = `c-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`;
+    startedAtRef.current = Date.now();
+  }, [siteId, pageId, postId]);
+
+  const fetchComments = async () => {
+    if (!commentApiPath || isPreview) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setLoadError('');
+
+      const query = new URLSearchParams({
+        status: 'approved',
+        sort: policy.sort,
+      });
+
+      const response = await fetch(`${commentApiPath}?${query.toString()}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-backy-preview': isPreview ? '1' : '0',
+        },
+      });
+    const payload = (await response.json().catch(() => null)) as {
+      comments?: CommentItem[];
+      error?: string;
+      details?: Record<string, string>;
+      message?: string;
+    } | null;
+      if (!response.ok) {
+        const errorMessage =
+          (typeof payload?.error === 'string' && payload.error)
+          || (typeof payload?.message === 'string' && payload.message)
+          || 'Unable to load comments.';
+        setLoadError(errorMessage);
+        return;
+      }
+
+      const nextComments = Array.isArray(payload?.comments) ? payload.comments : [];
+      const sorted = [...nextComments].sort((a, b) =>
+        policy.sort === 'oldest'
+          ? new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      setComments(sorted);
+    } catch {
+      setLoadError('Unable to load comments.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadReportReasons = async () => {
+    if (!siteId) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/sites/${siteId}/comments/report-reasons`);
+      const payload = (await response.json().catch(() => null)) as { reasons?: string[] } | null;
+      if (!response.ok) {
+        return;
+      }
+
+      if (Array.isArray(payload?.reasons)) {
+        const nextReasons = payload.reasons
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .filter((value) => value.length > 0);
+        if (nextReasons.length > 0) {
+          setReportReasons(nextReasons);
+        }
+      }
+    } catch {
+      // fallback to defaults
+    }
+  };
+
+  const reportComment = async (commentId: string) => {
+    if (!commentId || isPreview || !siteId) {
+      return;
+    }
+
+    const availableReasons = reportReasons.length > 0 ? reportReasons : [...DEFAULT_COMMENT_REPORT_REASONS];
+    const reason = reportReasonByCommentId[commentId] || availableReasons[0];
+    if (!reason) {
+      setSubmitMessage('Please choose a reason before reporting.');
+      return;
+    }
+
+    setSubmitMessage('');
+    setStatusMessage('');
+    setReportingCommentId(commentId);
+
+    try {
+      const response = await fetch(`/api/sites/${siteId}/comments/${commentId}/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason,
+          actor: 'public',
+          requestId: requestIdRef.current,
+        }),
+      });
+
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) {
+        setSubmitMessage(
+          typeof payload?.error === 'string' && payload.error.length > 0 ? payload.error : 'Unable to report comment.',
+        );
+        return;
+      }
+
+      setStatusMessage('Report submitted.');
+      await fetchComments();
+    } catch {
+      setSubmitMessage('Unable to report comment right now.');
+    } finally {
+      setReportingCommentId(null);
+    }
+  };
+
+  const postComment = async (payload: {
+    content: string;
+    authorName?: string;
+    authorEmail?: string;
+    authorWebsite?: string;
+    parentId?: string | null;
+  }) => {
+    if (!commentApiPath || isPreview) {
+      return;
+    }
+
+    setSubmitMessage('');
+    setStatusMessage('');
+
+    if (!payload.content.trim()) {
+      setSubmitMessage('Comment content is required.');
+      return;
+    }
+
+    if (policy.requireName && !payload.authorName?.trim()) {
+      setSubmitMessage('Name is required.');
+      return;
+    }
+
+    if (policy.requireEmail && !payload.authorEmail?.trim()) {
+      setSubmitMessage('Email is required.');
+      return;
+    }
+
+    if (payload.parentId && !policy.allowReplies) {
+      setSubmitMessage('Replies are disabled for this thread.');
+      return;
+    }
+
+    startedAtRef.current = Date.now();
+    requestIdRef.current = `c-${Math.random().toString(36).slice(2, 10)}-${startedAtRef.current}`;
+
+    const requestBody = {
+      ...payload,
+      requestId: requestIdRef.current,
+      startedAt: startedAtRef.current,
+      honeypot: '',
+      moderationMode: policy.moderationMode,
+      commentModerationMode: policy.moderationMode,
+      commentRequireName: policy.requireName,
+      commentRequireEmail: policy.requireEmail,
+      commentAllowGuests: policy.allowGuests,
+      commentAllowReplies: policy.allowReplies,
+    };
+
+    if (!policy.allowGuests) {
+      setSubmitMessage('Guest posting is disabled for this comment block.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const response = await fetch(commentApiPath, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const payloadResponse = await response.json().catch(() => null);
+      if (!response.ok) {
+        const details = (payloadResponse as { error?: string; details?: Record<string, string> } | null)?.error;
+        setSubmitMessage(details || 'Unable to submit comment.');
+        return;
+      }
+
+      setStatusMessage(
+        (payloadResponse as { message?: string })?.message || (policy.moderationMode === 'auto-approve'
+          ? 'Comment posted.'
+          : 'Comment submitted for review.'),
+      );
+
+      if (payload.parentId) {
+        setReplyContent((previous) => ({ ...previous, [payload.parentId as string]: '' }));
+        setReplyToId(null);
+      } else {
+        setContent('');
+        setAuthorName('');
+        setAuthorEmail('');
+        setAuthorWebsite('');
+      }
+
+      await fetchComments();
+    } catch {
+      setSubmitMessage('Failed to submit comment. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const submitTopLevel = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void postComment({
+      content,
+      authorName,
+      authorEmail,
+      authorWebsite,
+      parentId: null,
+    });
+  };
+
+  const submitReply = (parentId: string, event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = replyContent[parentId] || '';
+    if (!value.trim()) {
+      setSubmitMessage('Reply content is required.');
+      return;
+    }
+    void postComment({
+      content: value,
+      parentId,
+      authorName,
+      authorEmail,
+      authorWebsite,
+    });
+  };
+
+  useEffect(() => {
+    void loadReportReasons();
+    void fetchComments();
+  }, [commentApiPath, policy.sort, isPreview, siteId]);
+
+  const renderCommentTree = (nodes: (CommentItem & { replies?: CommentItem[] })[]) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {nodes.map((comment) => {
+        const hasReplies = comment.replies && comment.replies.length > 0;
+        const replyTargetContent = replyContent[comment.id] || '';
+        const showReplyForm = replyToId === comment.id;
+        const reasons = reportReasons.length > 0 ? reportReasons : [...DEFAULT_COMMENT_REPORT_REASONS];
+        const selectedReason = reportReasonByCommentId[comment.id] || reasons[0];
+        const currentReportCount = comment.reportCount || 0;
+        const reasonsText = comment.reportReasons?.length ? `(${comment.reportReasons.join(', ')})` : '';
+
+        return (
+          <div key={comment.id} style={{ borderLeft: '2px solid #e2e8f0', paddingLeft: '12px' }}>
+            <p style={{ margin: 0, fontWeight: 600, color: '#1e293b' }}>
+              {comment.authorName || 'Anonymous'}
+            </p>
+            <p style={{ marginTop: '4px', marginBottom: '4px' }}>{comment.content}</p>
+            <p style={{ margin: '0', fontSize: '12px', color: '#64748b' }}>
+              {comment.requestId || 'No requestId'} • reports: {currentReportCount} {reasonsText}
+            </p>
+            <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
+              {new Date(comment.createdAt).toLocaleString()}
+            </p>
+            {policy.allowReplies ? (
+              <button
+                type="button"
+                onClick={() => setReplyToId(showReplyForm ? null : comment.id)}
+                style={{ marginTop: '4px', fontSize: '12px', border: 'none', color: '#2563eb', background: 'transparent' }}
+              >
+                {showReplyForm ? 'Cancel reply' : 'Reply'}
+              </button>
+            ) : null}
+            {showReplyForm ? (
+              <form onSubmit={(event) => submitReply(comment.id, event)} style={{ marginTop: '8px' }}>
+                <textarea
+                  name={`reply-${comment.id}`}
+                  value={replyTargetContent}
+                  onChange={(event) =>
+                    setReplyContent((previous) => ({ ...previous, [comment.id]: event.target.value }))
+                  }
+                  rows={3}
+                  style={{ width: '100%', marginBottom: '6px' }}
+                  placeholder="Write a reply"
+                  disabled={isSubmitting}
+                />
+                <button
+                  type="submit"
+                  style={{ padding: '8px 12px', border: 'none', borderRadius: '6px', background: '#3b82f6', color: '#fff' }}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Submitting…' : 'Post reply'}
+                </button>
+              </form>
+            ) : null}
+            {hasReplies ? (
+              <div style={{ marginTop: '8px' }}>
+                {renderCommentTree(comment.replies || [])}
+              </div>
+            ) : null}
+            <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#334155' }}>
+                <span>Report</span>
+                <select
+                  value={selectedReason}
+                  onChange={(event) =>
+                    setReportReasonByCommentId((previous) => ({
+                      ...previous,
+                      [comment.id]: event.target.value,
+                    }))
+                  }
+                  disabled={isSubmitting}
+                  style={{ padding: '4px 6px' }}
+                >
+                  {reasons.map((reason) => (
+                    <option key={`${comment.id}-${reason}`} value={reason}>
+                      {reason}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => void reportComment(comment.id)}
+                style={{ padding: '8px 12px', border: 'none', borderRadius: '6px', background: '#dc2626', color: '#fff' }}
+                disabled={isSubmitting || reportingCommentId === comment.id}
+              >
+                {reportingCommentId === comment.id ? 'Reporting…' : 'Report'}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const roots = buildCommentThreads(comments);
+
+  return (
+    <section style={{ ...styles }}>
+      <h4 style={{ margin: '0 0 12px' }}>{props.commentTitle || 'Comments'}</h4>
+      {isPreview ? (
+        <p style={{ color: '#64748b', fontSize: '12px' }}>
+          Preview mode: comment thread data is not refreshed.
+        </p>
+      ) : null}
+      {loading ? <p>Loading comments…</p> : null}
+      {loadError ? <p style={{ color: '#b91c1c' }}>{loadError}</p> : null}
+      {submitMessage ? <p style={{ color: '#b91c1c' }}>{submitMessage}</p> : null}
+      {statusMessage ? <p style={{ color: '#166534' }}>{statusMessage}</p> : null}
+
+      <div>
+        {renderCommentTree(roots as (CommentItem & { replies?: CommentItem[] })[])}
+      </div>
+
+      <form onSubmit={submitTopLevel} style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <textarea
+          placeholder="Write a comment"
+          value={content}
+          onChange={(event) => setContent(event.target.value)}
+          rows={4}
+          disabled={isPreview || isSubmitting}
+          style={{ width: '100%' }}
+        />
+        {policy.requireName ? (
+          <input
+            type="text"
+            value={authorName}
+            onChange={(event) => setAuthorName(event.target.value)}
+            placeholder="Your name"
+            disabled={isPreview || isSubmitting}
+            style={{ width: '100%' }}
+          />
+        ) : (
+          <input
+            type="text"
+            value={authorName}
+            onChange={(event) => setAuthorName(event.target.value)}
+            placeholder="Your name (optional)"
+            disabled={isPreview || isSubmitting}
+            style={{ width: '100%' }}
+          />
+        )}
+        {policy.requireEmail ? (
+          <input
+            type="email"
+            value={authorEmail}
+            onChange={(event) => setAuthorEmail(event.target.value)}
+            placeholder="Email"
+            disabled={isPreview || isSubmitting}
+            style={{ width: '100%' }}
+          />
+        ) : (
+          <input
+            type="email"
+            value={authorEmail}
+            onChange={(event) => setAuthorEmail(event.target.value)}
+            placeholder="Email (optional)"
+            disabled={isPreview || isSubmitting}
+            style={{ width: '100%' }}
+          />
+        )}
+        <input
+          type="text"
+          value={authorWebsite}
+          onChange={(event) => setAuthorWebsite(event.target.value)}
+          placeholder="Website (optional)"
+          disabled={isPreview || isSubmitting}
+          style={{ width: '100%' }}
+        />
+        <button
+          type="submit"
+          style={{
+            alignSelf: 'flex-start',
+            padding: '8px 12px',
+            border: 'none',
+            borderRadius: '6px',
+            background: '#3b82f6',
+            color: '#fff',
+          }}
+          disabled={isPreview || isSubmitting}
+        >
+          {isSubmitting ? 'Submitting…' : 'Post comment'}
+        </button>
+      </form>
+    </section>
   );
 }
 
@@ -1039,6 +1653,7 @@ const ELEMENT_RENDERERS: Record<
   map: MapElement,
   box: ContainerElement,
   quote: QuoteElement,
+  comment: CommentThreadElement,
 };
 
 /**

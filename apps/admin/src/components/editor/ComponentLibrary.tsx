@@ -33,6 +33,9 @@ import {
   Columns,
   MapPin,
   AlignLeft,
+  MessageSquare,
+  CheckSquare,
+  Circle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ComponentLibraryItem } from '@/types/editor';
@@ -217,6 +220,12 @@ function LibraryItem({ item, onDragStart }: LibraryItemProps) {
         return MapPin;
       case 'AlignLeft':
         return AlignLeft;
+      case 'MessageSquare':
+        return MessageSquare;
+      case 'CheckSquare':
+        return CheckSquare;
+      case 'Circle':
+        return Circle;
       default:
         return Square;
     }

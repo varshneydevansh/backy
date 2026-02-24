@@ -196,6 +196,17 @@ It explicitly excludes:
 6. public response:
    1. only approved comments served by default
 
+### 7.4 Progress note (2026-02-24)
+
+1. Forms + comments hardening pass in progress
+   1. anti-spam/rate baseline for comments is now implemented in shared store (`apps/public/src/lib/backyStore.ts`)
+   2. both page/post comment POST routes now classify submissions (honeypot, timing threshold, duplicate, and per-target rate limit)
+   3. comment thread renderer now sends request metadata (`requestId`, `startedAt`, and honeypot placeholder) with each submission payload
+2. remaining comment parity items before Wix-level parity
+   1. bulk moderation actions and moderation filters in admin
+   2. user report/blocking flows and reason taxonomy
+   3. comment moderation queue analytics + export
+
 ## 8) Architecture and code consolidation
 
 ### 8.1 Shared contracts

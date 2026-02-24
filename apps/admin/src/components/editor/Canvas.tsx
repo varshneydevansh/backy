@@ -16,6 +16,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
+import { createCanvasElement } from '@/components/editor/editorCatalog';
 import { RichTextBlock } from './blocks/RichTextBlock';
 import {
   extractListItemsFromSlate,
@@ -58,6 +59,156 @@ const sanitizeText = (value: unknown): string => {
   return '';
 };
 
+interface TreeUpdateResult {
+  elements: CanvasElement[];
+  updated: boolean;
+}
+
+interface TreeResultWithParent {
+  elements: CanvasElement[];
+  updated: boolean;
+  removedParentId?: string | null;
+}
+
+const findElementById = (elements: CanvasElement[], targetId: string): CanvasElement | null => {
+  for (const element of elements) {
+    if (element.id === targetId) {
+      return element;
+    }
+
+    if (element.children?.length) {
+      const found = findElementById(element.children, targetId);
+      if (found) {
+        return found;
+      }
+    }
+  }
+
+  return null;
+};
+
+const updateElementById = (
+  elements: CanvasElement[],
+  targetId: string,
+  update: (element: CanvasElement) => CanvasElement,
+): TreeUpdateResult => {
+  let updated = false;
+
+  const next = elements.map((element) => {
+    if (element.id === targetId) {
+      updated = true;
+      return update(element);
+    }
+
+    if (!element.children?.length) {
+      return element;
+    }
+
+    const nextChildren = updateElementById(element.children, targetId, update);
+    if (!nextChildren.updated) {
+      return element;
+    }
+
+    updated = true;
+    return {
+      ...element,
+      children: nextChildren.elements,
+    };
+  });
+
+  return { elements: next, updated };
+};
+
+const insertElementAsChild = (
+  elements: CanvasElement[],
+  parentId: string,
+  child: CanvasElement,
+): TreeUpdateResult => {
+  let inserted = false;
+
+  const next = elements.map((element) => {
+    if (element.id === parentId) {
+      inserted = true;
+      return {
+        ...element,
+        children: [...(element.children || []), child],
+      };
+    }
+
+    if (!element.children?.length) {
+      return element;
+    }
+
+    const nested = insertElementAsChild(element.children, parentId, child);
+    if (!nested.updated) {
+      return element;
+    }
+
+    inserted = true;
+    return {
+      ...element,
+      children: nested.elements,
+    };
+  });
+
+  return { elements: next, updated: inserted };
+};
+
+const removeElementById = (
+  elements: CanvasElement[],
+  targetId: string,
+): TreeResultWithParent => {
+  let removedParentId: string | null | undefined;
+
+  const walk = (nodes: CanvasElement[], parentId: string | null): TreeUpdateResult => {
+    let updated = false;
+
+    const nextNodes = nodes.reduce<CanvasElement[]>((acc, element) => {
+      if (element.id === targetId) {
+        removedParentId = parentId;
+        updated = true;
+        return acc;
+      }
+
+      if (!element.children?.length) {
+        acc.push(element);
+        return acc;
+      }
+
+      const nextChildren = walk(element.children, element.id);
+      if (!nextChildren.updated) {
+        acc.push(element);
+        return acc;
+      }
+
+      updated = true;
+      acc.push({
+        ...element,
+        children: nextChildren.elements,
+      });
+      return acc;
+    }, []);
+
+    return {
+      elements: nextNodes,
+      updated,
+    };
+  };
+
+  const result = walk(elements, null);
+  return {
+    ...result,
+    removedParentId,
+  };
+};
+
+const canAcceptNestedDrop = (elementType: CanvasElement['type']): boolean => {
+  return elementType === 'form' ||
+    elementType === 'box' ||
+    elementType === 'container' ||
+    elementType === 'section' ||
+    elementType === 'columns';
+};
 const normalizeEmbedUrl = (raw: unknown): string => {
   const source = sanitizeText(raw);
   if (!source) {
@@ -278,7 +429,7 @@ export function Canvas({
       e.stopPropagation();
       onSelect(elementId);
 
-      const element = elements.find((el) => el.id === elementId);
+      const element = findElementById(elements, elementId);
       if (!element) return;
 
       setDragState({
@@ -302,7 +453,7 @@ export function Canvas({
       e.stopPropagation();
       e.preventDefault();
 
-      const element = elements.find((el) => el.id === elementId);
+      const element = findElementById(elements, elementId);
       if (!element) return;
 
       setResizeState({
@@ -367,11 +518,13 @@ export function Canvas({
         newHeight = Math.round(newHeight / 10) * 10;
 
         onElementsChange(
-          elements.map((el) =>
-            el.id === resizeState.elementId
-              ? { ...el, x: newX, y: newY, width: newWidth, height: newHeight }
-              : el
-          )
+          updateElementById(elements, resizeState.elementId, (element) => ({
+            ...element,
+            x: newX,
+            y: newY,
+            width: newWidth,
+            height: newHeight,
+          })).elements
         );
         return;
       }
@@ -389,15 +542,78 @@ export function Canvas({
         const snappedY = Math.round(newY / 10) * 10;
 
         onElementsChange(
-          elements.map((el) =>
-            el.id === dragState.elementId
-              ? { ...el, x: snappedX, y: snappedY }
-              : el
-          )
+          updateElementById(elements, dragState.elementId, (element) => ({
+            ...element,
+            x: snappedX,
+            y: snappedY,
+          })).elements
         );
       }
     },
     [dragState, resizeState, elements, isPreview, onElementsChange]
+  );
+
+  const handleCanvasElementDrop = useCallback(
+    (event: React.DragEvent, forcedParentId?: string) => {
+      event.preventDefault();
+
+      try {
+        const rawData = event.dataTransfer.getData('application/json');
+        const item = JSON.parse(rawData) as { type: string };
+
+        const parsedX = event.clientX - (canvasRef.current?.getBoundingClientRect().left || 0);
+        const parsedY = event.clientY - (canvasRef.current?.getBoundingClientRect().top || 0);
+        const toNumber = (value: number) => Math.round(Math.max(0, value / 10) * 10);
+
+        if (forcedParentId) {
+          const parent = findElementById(elements, forcedParentId);
+          const isDropTarget = parent && canAcceptNestedDrop(parent.type);
+
+          const dropHost = canvasRef.current?.querySelector<HTMLElement>(
+            `[data-element-id="${forcedParentId}"]`
+          );
+
+          if (isDropTarget && dropHost) {
+            const hostRect = dropHost.getBoundingClientRect();
+            const child = createCanvasElement(item.type, toNumber(event.clientX - hostRect.left), toNumber(event.clientY - hostRect.top));
+            const withChild = insertElementAsChild(elements, forcedParentId, child);
+
+            if (withChild.updated) {
+              onElementsChange(withChild.elements);
+              onSelect(child.id);
+            }
+
+            return;
+          }
+        }
+
+        const rootElement = createCanvasElement(
+          item.type,
+          toNumber(parsedX),
+          toNumber(parsedY)
+        );
+
+        onElementsChange([...elements, rootElement]);
+        onSelect(rootElement.id);
+      } catch (error) {
+        console.error('Failed to drop element:', error);
+      }
+    },
+    [elements, onElementsChange, onSelect]
+  );
+
+  const handleElementPropsUpdate = useCallback(
+    (elementId: string, updates: Partial<CanvasElement['props']>) => {
+      const next = updateElementById(elements, elementId, (element) => ({
+        ...element,
+        props: { ...element.props, ...updates },
+      }));
+
+      if (next.updated) {
+        onElementsChange(next.elements);
+      }
+    },
+    [elements, onElementsChange]
   );
 
   /**
@@ -515,10 +731,9 @@ export function Canvas({
             e.stopPropagation();
             onSelect(element.id);
           }}
-          onUpdate={(updates) => {
-            onElementsChange(elements.map(el => el.id === element.id ? { ...el, props: { ...el.props, ...updates } } : el));
-          }}
-
+          onUpdate={handleElementPropsUpdate}
+          onDrop={(event) => handleCanvasElementDrop(event, element.id)}
+          canAcceptNestedDrop={canAcceptNestedDrop(element.type)}
           isEditing={editingId === element.id}
           onDoubleClick={() => handleDoubleClick(element.id)}
         />
@@ -555,6 +770,8 @@ interface CanvasElementComponentProps {
   onResizeStart: (e: React.MouseEvent, handle: 'nw' | 'ne' | 'sw' | 'se') => void;
   onClick: (e: React.MouseEvent) => void;
   onUpdate: (updates: Partial<CanvasElement['props']>) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  canAcceptNestedDrop?: boolean;
   isEditing: boolean;
   onDoubleClick: () => void;
 }
@@ -567,6 +784,8 @@ function CanvasElementComponent({
   onResizeStart,
   onClick,
   onUpdate,
+  onDrop,
+  canAcceptNestedDrop,
   isEditing,
   onDoubleClick,
 }: CanvasElementComponentProps) {
@@ -931,6 +1150,16 @@ function CanvasElementComponent({
       case 'form':
         return (
           <div
+            onDragOver={(e) => {
+              if (!isPreview && onDrop && canAcceptNestedDrop) {
+                e.preventDefault();
+              }
+            }}
+            onDrop={(e) => {
+              if (!isPreview && onDrop) {
+                onDrop(e);
+              }
+            }}
             style={{
               ...sharedStyle,
               width: '100%',
@@ -954,6 +1183,27 @@ function CanvasElementComponent({
             <div style={{ ...sharedStyle, fontSize: 12, color: sharedStyle.color ?? '#6b7280' }}>
               Drag form elements here (inputs, buttons)
             </div>
+            <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+            {children?.map((child) => (
+                <CanvasElementComponent
+                  key={child.id}
+                  element={child}
+                  isSelected={child.id === selectedId}
+                  isPreview={isPreview}
+                  onPointerDown={(event) => onPointerDown(event, child.id)}
+                  onResizeStart={(event, handle) => onResizeStart(event, child.id, handle)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelect(child.id);
+                  }}
+                  onUpdate={(updates) => onUpdate(child.id, updates)}
+                  onDoubleClick={() => onDoubleClick(child.id)}
+                  onDrop={(event) => onDrop?.(event)}
+                  canAcceptNestedDrop={canAcceptNestedDrop(child.type)}
+                />
+              ))}
+            </div>
+
             {!isPreview && (
               <div style={{
                 flex: 1,
@@ -1184,7 +1434,7 @@ interface SelectionInfoProps {
 }
 
 function SelectionInfo({ elements, selectedId }: SelectionInfoProps) {
-  const element = elements.find((el) => el.id === selectedId);
+  const element = findElementById(elements, selectedId);
   if (!element) return null;
 
   return (
