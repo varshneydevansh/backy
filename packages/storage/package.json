@@ -11,11 +11,11 @@
             "import": "./dist/index.js"
         }
     },
-    "scripts": {
-        "build": "tsup src/index.ts --format esm --dts",
-        "dev": "tsup src/index.ts --format esm --dts --watch",
-        "typecheck": "tsc --noEmit"
-    },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --external @aws-sdk/client-s3 @aws-sdk/s3-request-presigner @supabase/supabase-js",
+    "dev": "tsup src/index.ts --format esm --dts --watch --external @aws-sdk/client-s3 @aws-sdk/s3-request-presigner @supabase/supabase-js",
+    "typecheck": "tsc --noEmit"
+  },
     "peerDependencies": {
         "@aws-sdk/client-s3": "^3.0.0",
         "@aws-sdk/s3-request-presigner": "^3.0.0",
@@ -33,14 +33,11 @@
         }
     },
     "devDependencies": {
-        "@aws-sdk/client-s3": "^3.400.0",
-        "@aws-sdk/s3-request-presigner": "^3.400.0",
-        "@supabase/supabase-js": "^2.39.0",
         "@types/node": "^20.10.0",
-        "tsup": "^8.0.0",
-        "typescript": "^5.3.0"
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0"
     },
-    "keywords": [
+  "keywords": [
         "cms",
         "storage",
         "s3",

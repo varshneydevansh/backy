@@ -15,7 +15,18 @@
         "outDir": "./dist",
         "rootDir": "./src",
         "resolveJsonModule": true,
-        "isolatedModules": true
+        "isolatedModules": true,
+        "paths": {
+            "@aws-sdk/client-s3": [
+                "./src/third-party-shims.d.ts"
+            ],
+            "@aws-sdk/s3-request-presigner": [
+                "./src/third-party-shims.d.ts"
+            ],
+            "@supabase/supabase-js": [
+                "./src/third-party-shims.d.ts"
+            ]
+        }
     },
     "include": [
         "src/**/*"

@@ -11,6 +11,8 @@
  * @license MIT
  */
 
+/// <reference path="./third-party-shims.d.ts" />
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 

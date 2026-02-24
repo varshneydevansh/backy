@@ -21,6 +21,20 @@ import type { Database } from '../types';
 type SiteRow = Database['public']['Tables']['sites']['Row'];
 type SiteInsert = Database['public']['Tables']['sites']['Insert'];
 type SiteUpdate = Database['public']['Tables']['sites']['Update'];
+type SupabaseQueryError = {
+  message: string;
+  code?: string;
+};
+
+type SupabaseQueryResult<T> = {
+  data?: T;
+  error?: SupabaseQueryError | null;
+  count?: number | null;
+};
+
+function asQueryResult<T>(value: unknown): SupabaseQueryResult<T> {
+  return value as SupabaseQueryResult<T>;
+}
 
 // ============================================
 // READ QUERIES
@@ -40,11 +54,13 @@ type SiteUpdate = Database['public']['Tables']['sites']['Update'];
 export async function getSitesByTeam(teamId: string): Promise<SiteRow[]> {
   const supabase = getSupabaseClient();
 
-  const { data, error } = await supabase
-    .from('sites')
-    .select('*')
-    .eq('team_id', teamId)
-    .order('created_at', { ascending: false });
+  const { data, error } = asQueryResult<SiteRow[]>(
+    await supabase
+      .from('sites')
+      .select('*')
+      .eq('team_id', teamId)
+      .order('created_at', { ascending: false })
+  );
 
   if (error) {
     throw new Error(`Failed to fetch sites: ${error.message}`);
@@ -70,11 +86,13 @@ export async function getSitesByTeam(teamId: string): Promise<SiteRow[]> {
 export async function getSiteById(siteId: string): Promise<SiteRow | null> {
   const supabase = getSupabaseClient();
 
-  const { data, error } = await supabase
-    .from('sites')
-    .select('*')
-    .eq('id', siteId)
-    .single();
+  const { data, error } = asQueryResult<SiteRow>(
+    await supabase
+      .from('sites')
+      .select('*')
+      .eq('id', siteId)
+      .single()
+  );
 
   if (error) {
     if (error.code === 'PGRST116') {
@@ -83,7 +101,7 @@ export async function getSiteById(siteId: string): Promise<SiteRow | null> {
     throw new Error(`Failed to fetch site: ${error.message}`);
   }
 
-  return data;
+  return data || null;
 }
 
 /**
@@ -99,13 +117,13 @@ export async function getSiteBySlug(
 ): Promise<SiteRow | null> {
   const supabase = getSupabaseClient();
 
-  let query = supabase.from('sites').select('*').eq('slug', slug);
-
-  if (teamId) {
-    query = query.eq('team_id', teamId);
-  }
-
-  const { data, error } = await query.single();
+  const { data, error } = teamId
+    ? (asQueryResult<SiteRow>(
+        await supabase.from('sites').select('*').eq('slug', slug).eq('team_id', teamId).single()
+      ))
+    : (asQueryResult<SiteRow>(
+        await supabase.from('sites').select('*').eq('slug', slug).single()
+      ));
 
   if (error) {
     if (error.code === 'PGRST116') {
@@ -114,7 +132,7 @@ export async function getSiteBySlug(
     throw new Error(`Failed to fetch site: ${error.message}`);
   }
 
-  return data;
+  return data || null;
 }
 
 /**
@@ -126,12 +144,14 @@ export async function getSiteBySlug(
 export async function getSiteByDomain(domain: string): Promise<SiteRow | null> {
   const supabase = getSupabaseClient();
 
-  const { data, error } = await supabase
-    .from('sites')
-    .select('*')
-    .eq('custom_domain', domain)
-    .eq('domain_status', 'active')
-    .single();
+  const { data, error } = asQueryResult<SiteRow>(
+    await supabase
+      .from('sites')
+      .select('*')
+      .eq('custom_domain', domain)
+      .eq('domain_status', 'active')
+      .single()
+  );
 
   if (error) {
     if (error.code === 'PGRST116') {
@@ -140,7 +160,7 @@ export async function getSiteByDomain(domain: string): Promise<SiteRow | null> {
     throw new Error(`Failed to fetch site: ${error.message}`);
   }
 
-  return data;
+  return data || null;
 }
 
 /**
@@ -156,16 +176,22 @@ export async function searchSites(
 ): Promise<SiteRow[]> {
   const supabase = getSupabaseClient();
 
-  let query = supabase
-    .from('sites')
-    .select('*')
-    .ilike('name', `%${search}%`);
-
-  if (teamId) {
-    query = query.eq('team_id', teamId);
-  }
-
-  const { data, error } = await query.order('name');
+  const { data, error } = teamId
+    ? (asQueryResult<SiteRow[]>(
+        await supabase
+          .from('sites')
+          .select('*')
+          .ilike('name', `%${search}%`)
+          .eq('team_id', teamId)
+          .order('name')
+      ))
+    : (asQueryResult<SiteRow[]>(
+        await supabase
+          .from('sites')
+          .select('*')
+          .ilike('name', `%${search}%`)
+          .order('name')
+      ));
 
   if (error) {
     throw new Error(`Failed to search sites: ${error.message}`);
@@ -196,11 +222,9 @@ export async function searchSites(
 export async function createSite(site: SiteInsert): Promise<SiteRow> {
   const supabase = getSupabaseClient();
 
-  const { data, error } = await supabase
-    .from('sites')
-    .insert(site)
-    .select()
-    .single();
+  const { data, error } = asQueryResult<SiteRow>(
+    await supabase.from('sites').insert(site).select().single()
+  );
 
   if (error) {
     throw new Error(`Failed to create site: ${error.message}`);
@@ -234,12 +258,14 @@ export async function updateSite(
 ): Promise<SiteRow> {
   const supabase = getSupabaseClient();
 
-  const { data, error } = await supabase
-    .from('sites')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', siteId)
-    .select()
-    .single();
+  const { data, error } = asQueryResult<SiteRow>(
+    await supabase
+      .from('sites')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', siteId)
+      .select()
+      .single()
+  );
 
   if (error) {
     throw new Error(`Failed to update site: ${error.message}`);
@@ -266,7 +292,9 @@ export async function updateSite(
 export async function deleteSite(siteId: string): Promise<boolean> {
   const supabase = getSupabaseClient();
 
-  const { error } = await supabase.from('sites').delete().eq('id', siteId);
+  const { error } = asQueryResult<unknown>(
+    await supabase.from('sites').delete().eq('id', siteId)
+  );
 
   if (error) {
     throw new Error(`Failed to delete site: ${error.message}`);
@@ -324,37 +352,47 @@ export async function getSiteStats(siteId: string): Promise<{
   const supabase = getSupabaseClient();
 
   // Get page count
-  const { count: pageCount, error: pageError } = await supabase
-    .from('pages')
-    .select('*', { count: 'exact', head: true })
-    .eq('site_id', siteId);
+  const { count: pageCount, error: pageError } = asQueryResult<unknown>(
+    await supabase
+      .from('pages')
+      .select('*', { count: 'exact', head: true })
+      .eq('site_id', siteId)
+  );
 
   if (pageError) {
     throw new Error(`Failed to get page count: ${pageError.message}`);
   }
 
   // Get post count
-  const { count: postCount, error: postError } = await supabase
-    .from('blog_posts')
-    .select('*', { count: 'exact', head: true })
-    .eq('site_id', siteId);
+  const { count: postCount, error: postError } = asQueryResult<unknown>(
+    await supabase
+      .from('blog_posts')
+      .select('*', { count: 'exact', head: true })
+      .eq('site_id', siteId)
+  );
 
   if (postError) {
     throw new Error(`Failed to get post count: ${postError.message}`);
   }
 
   // Get media stats
-  const { data: mediaData, error: mediaError } = await supabase
-    .from('media')
-    .select('size_bytes')
-    .eq('site_id', siteId);
+  const { data: mediaData, error: mediaError } = asQueryResult<
+    Array<{ size_bytes?: number }>
+  >(
+    await supabase
+      .from('media')
+      .select('size_bytes')
+      .eq('site_id', siteId)
+  );
 
   if (mediaError) {
     throw new Error(`Failed to get media stats: ${mediaError.message}`);
   }
 
   const mediaCount = mediaData?.length || 0;
-  const totalMediaSize = mediaData?.reduce((sum, m) => sum + (m.size_bytes || 0), 0) || 0;
+  const totalMediaSize =
+    mediaData?.reduce((sum: number, m: { size_bytes?: number }) => sum + (m.size_bytes || 0), 0) ||
+    0;
 
   return {
     pageCount: pageCount || 0,

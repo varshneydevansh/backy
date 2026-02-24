@@ -38,6 +38,10 @@ interface ActiveEditorContextType {
     outdentList: () => void;
     /** Insert plain text at current selection */
     insertText: (text: string) => void;
+    /** Insert a link node at current selection */
+    insertLink: (url: string) => void;
+    /** Insert an image node at current selection */
+    insertImage: (url: string) => void;
     /** Check if mark is active */
     isMarkActive: (format: string) => boolean;
     /** Store current selection */
@@ -56,6 +60,8 @@ const ActiveEditorContext = createContext<ActiveEditorContextType>({
     indentList: () => { },
     outdentList: () => { },
     insertText: () => { },
+    insertLink: () => { },
+    insertImage: () => { },
     isMarkActive: () => false,
     storeSelection: () => { },
 });
@@ -127,6 +133,49 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
             storedSelection.current = activeEditor.selection;
         } catch (e) {
             console.warn('insertText failed:', e);
+        }
+    }, [activeEditor, focusAndRestore]);
+
+    const insertImage = useCallback((url: string) => {
+        if (!activeEditor || !url) {
+            return;
+        }
+
+        try {
+            if (!focusAndRestore()) return;
+            Transforms.insertNodes(
+                activeEditor as any,
+                {
+                    type: 'img',
+                    url,
+                    children: [{ text: '' }],
+                } as any
+            );
+            storedSelection.current = activeEditor.selection;
+        } catch (e) {
+            console.warn('insertImage failed:', e);
+        }
+    }, [activeEditor, focusAndRestore]);
+
+    const insertLink = useCallback((url: string) => {
+        if (!activeEditor || !url) {
+            return;
+        }
+
+        try {
+            if (!focusAndRestore()) return;
+            if (!activeEditor.selection || !Range.isRange(activeEditor.selection)) return;
+
+            Transforms.wrapNodes(
+                activeEditor as any,
+                { type: 'a', url, children: [] } as any,
+                {
+                    split: true,
+                }
+            );
+            storedSelection.current = activeEditor.selection;
+        } catch (e) {
+            console.warn('insertLink failed:', e);
         }
     }, [activeEditor, focusAndRestore]);
 
@@ -346,6 +395,8 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
             indentList,
             outdentList,
             insertText,
+            insertLink,
+            insertImage,
             isMarkActive,
             storeSelection,
         }}>

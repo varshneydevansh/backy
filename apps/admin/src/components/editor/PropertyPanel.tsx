@@ -37,6 +37,16 @@ import {
   getListItemsFromProps,
 } from './listUtils';
 
+const toNumber = (value: unknown, fallback = 0): number => {
+  const parsed = typeof value === 'number'
+    ? value
+    : typeof value === 'string'
+      ? parseFloat(value)
+      : fallback;
+
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 // ============================================
 // TYPES
 // ============================================
@@ -153,12 +163,17 @@ export function PropertyPanel({
         </PropertySection>
 
         {/* Style Section */}
-    <PropertySection
+      <PropertySection
           title="Style"
           icon={Palette}
           isExpanded={expandedSections.includes('style')}
           onToggle={() => toggleSection('style')}
         >
+          {/**
+            * Rich text elements now use the inline canvas editor toolbar for
+            * selected text (bold/italic/highlight/size/font/etc). Keep the
+            * style panel focused on structural styles and non-text components.
+           */}
           <StyleProperties
             element={element}
             onChange={updateProps}
@@ -301,11 +316,9 @@ function ContentProperties({ element, onChange, onOpenMedia, onOpenEmoji }: Cont
 
   return (
     <div className="space-y-3">
-      {/* Text Content - Rich Text Formatting Panel */}
+      {/* Rich Text Controls */}
       {hasTextContent && (
-        <RichTextFormatting
-          onOpenMediaLibrary={() => onOpenMedia('src')}
-        />
+        <RichTextFormatting />
       )}
 
       {/* Image Source */}
@@ -643,34 +656,34 @@ function ContentProperties({ element, onChange, onOpenMedia, onOpenEmoji }: Cont
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">
-                    Min length
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={(element.props.minLength as number) || ''}
-                    onChange={(e) => onChange({ min: Number(e.target.value) })}
-                    className={cn(
-                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-                      'focus:outline-none focus:ring-2 focus:ring-ring'
-                    )}
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Min length
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={(element.props.minLength as number) || ''}
+                onChange={(e) => onChange({ minLength: Number(e.target.value) })}
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
                   />
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">
-                    Max length
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={(element.props.maxLength as number) || ''}
-                    onChange={(e) => onChange({ max: Number(e.target.value) })}
-                    className={cn(
-                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-                      'focus:outline-none focus:ring-2 focus:ring-ring'
-                    )}
-                  />
+                Max length
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={(element.props.maxLength as number) || ''}
+                onChange={(e) => onChange({ maxLength: Number(e.target.value) })}
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+              />
                 </div>
               </div>
             </>
@@ -1492,16 +1505,6 @@ interface StylePropertiesProps {
 }
 
 function StyleProperties({ element, onChange, supportsTextStyles = false }: StylePropertiesProps) {
-  const toNumber = (value: unknown, fallback = 0): number => {
-    const parsed = typeof value === 'number'
-      ? value
-      : typeof value === 'string'
-        ? parseFloat(value)
-        : fallback;
-
-    return Number.isFinite(parsed) ? parsed : fallback;
-  };
-
   // Common Google Fonts (free to use)
   const fontFamilies = [
     { value: 'inherit', label: 'Default (Inherit)' },

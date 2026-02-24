@@ -11,11 +11,11 @@
             "import": "./dist/index.js"
         }
     },
-    "scripts": {
-        "build": "tsup src/index.ts --format esm --dts",
-        "dev": "tsup src/index.ts --format esm --dts --watch",
-        "typecheck": "tsc --noEmit"
-    },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --external @supabase/supabase-js",
+    "dev": "tsup src/index.ts --format esm --dts --watch --external @supabase/supabase-js",
+    "typecheck": "tsc --noEmit"
+  },
     "dependencies": {
         "jose": "^5.2.0"
     },
@@ -28,12 +28,11 @@
         }
     },
     "devDependencies": {
-        "@supabase/supabase-js": "^2.0.0",
         "@types/node": "^20.10.0",
-        "tsup": "^8.0.0",
-        "typescript": "^5.3.0"
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0"
     },
-    "keywords": [
+  "keywords": [
         "cms",
         "auth",
         "oauth",

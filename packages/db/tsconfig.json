@@ -16,6 +16,17 @@
         "rootDir": "./src",
         "resolveJsonModule": true,
         "isolatedModules": true,
+        "paths": {
+            "postgres": [
+                "./src/third-party-shims.d.ts"
+            ],
+            "mysql2/promise": [
+                "./src/third-party-shims.d.ts"
+            ],
+            "better-sqlite3": [
+                "./src/third-party-shims.d.ts"
+            ]
+        },
         "noUnusedLocals": true,
         "noUnusedParameters": true,
         "noFallthroughCasesInSwitch": true

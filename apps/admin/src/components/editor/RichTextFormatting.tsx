@@ -11,7 +11,7 @@
 import { useActiveEditor } from './ActiveEditorContext';
 import { cn } from '@/lib/utils';
 import {
- Bold,
+  Bold,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -25,16 +25,20 @@ import {
   Type,
   Eraser,
   Smile,
+  Link,
+  Image,
 } from 'lucide-react';
 import { useState } from 'react';
 
 interface RichTextFormattingProps {
     onOpenMediaLibrary?: () => void;
     onOpenLinkModal?: () => void;
-    onOpenEmoji?: () => void;
 }
 
-export function RichTextFormatting(_props: RichTextFormattingProps) {
+export function RichTextFormatting({
+  onOpenMediaLibrary,
+  onOpenLinkModal,
+}: RichTextFormattingProps) {
     const {
       activeEditor,
       toggleMark,
@@ -47,6 +51,8 @@ export function RichTextFormatting(_props: RichTextFormattingProps) {
       indentList,
       outdentList,
       insertText,
+      insertLink,
+      insertImage,
     } = useActiveEditor();
 
     const canApply = !!activeEditor;
@@ -95,6 +101,43 @@ export function RichTextFormatting(_props: RichTextFormattingProps) {
         if (!canApply) return;
         run(() => insertText(emoji));
         setShowEmojiPalette(false);
+    };
+
+    const applyOrOpenLinkAction = () => {
+      if (!canApply) return;
+      storeSelection();
+      if (onOpenLinkModal) {
+        onOpenLinkModal();
+        return;
+      }
+
+      const url = window.prompt('Insert link URL for selected text:');
+      if (!url) return;
+      const trimmed = url.trim();
+      if (!trimmed) return;
+      insertLink(trimmed);
+    };
+
+    const applyOrOpenMediaAction = () => {
+      if (!canApply) return;
+      storeSelection();
+
+      if (onOpenMediaLibrary) {
+        onOpenMediaLibrary();
+        return;
+      }
+
+      const url = window.prompt('Insert image URL:');
+      if (!url) return;
+      const trimmed = url.trim();
+      if (!trimmed) return;
+      insertImage(trimmed);
+    };
+
+    const openEmojiPicker = () => {
+      if (!canApply) return;
+      storeSelection();
+      setShowEmojiPalette((prev) => !prev);
     };
 
     return (
@@ -372,8 +415,7 @@ export function RichTextFormatting(_props: RichTextFormattingProps) {
               type="button"
               onMouseDown={(e) => {
                 e.preventDefault();
-                if (!canApply) return;
-                setShowEmojiPalette((prev) => !prev);
+                openEmojiPicker();
               }}
               className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
               title="Insert emoji"
@@ -399,6 +441,30 @@ export function RichTextFormatting(_props: RichTextFormattingProps) {
               ))}
             </div>
           ) : null}
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              applyOrOpenMediaAction();
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            title="Insert image"
+            disabled={!canApply}
+          >
+            <Image className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              applyOrOpenLinkAction();
+            }}
+            className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
+            title="Insert link"
+            disabled={!canApply}
+          >
+            <Link className="w-4 h-4" />
+          </button>
         </div>
 
         {!canApply && (

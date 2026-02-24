@@ -11,6 +11,8 @@
  * @license MIT
  */
 
+/// <reference path="./third-party-shims.d.ts" />
+
 import { drizzle } from 'drizzle-orm/postgres-js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { MySql2Database } from 'drizzle-orm/mysql2';
@@ -93,7 +95,14 @@ export async function createPostgresAdapter(
     }
 
     // Dynamic import to keep package size small
-    const postgres = await import('postgres');
+    const postgres = (await import('postgres').catch(() => {
+        throw new Error(
+            'postgres package is not installed. Install "postgres" to enable PostgreSQL adapter functionality.'
+        );
+    })) as {
+        default: (connectionString: string, options?: unknown) => unknown;
+    };
+
     const client = postgres.default(config.url);
     const db = drizzle(client, { schema, logger: config.logging });
 
@@ -103,7 +112,7 @@ export async function createPostgresAdapter(
 
         async isConnected(): Promise<boolean> {
             try {
-                await client`SELECT 1`;
+                await (client as any)`SELECT 1`;
                 return true;
             } catch {
                 return false;
@@ -111,7 +120,7 @@ export async function createPostgresAdapter(
         },
 
         async close(): Promise<void> {
-            await client.end();
+            await (client as any).end();
         },
     };
 }
@@ -130,9 +139,38 @@ export async function createMySQLAdapter(
     }
 
     const { drizzle } = await import('drizzle-orm/mysql2');
-    const mysql = await import('mysql2/promise');
 
-    const pool = mysql.createPool(config.url);
+    const mysqlModule = (await import('mysql2/promise').catch((_error) => {
+        throw new Error(
+            'mysql2/promise package is not installed. Install "mysql2" to enable MySQL adapter functionality.'
+        );
+    })) as {
+        createPool?: (
+            config: string | Record<string, unknown>,
+            options?: Record<string, unknown>
+        ) => {
+            getConnection: () => Promise<{ release: () => void }>;
+            end: () => Promise<void>;
+        };
+        default?: {
+            createPool?: (
+                config: string | Record<string, unknown>,
+                options?: Record<string, unknown>
+            ) => {
+                getConnection: () => Promise<{ release: () => void }>;
+                end: () => Promise<void>;
+            };
+        };
+    };
+
+    const createPool = mysqlModule.createPool || mysqlModule.default?.createPool;
+    if (!createPool) {
+        throw new Error(
+            'mysql2/promise package does not expose a createPool function. Install a compatible mysql2 version.'
+        );
+    }
+
+    const pool = createPool(config.url);
     const db = drizzle(pool, { schema, mode: 'default' });
 
     return {
@@ -167,7 +205,11 @@ export async function createSQLiteAdapter(
     const dbPath = config.path || ':memory:';
 
     const { drizzle } = await import('drizzle-orm/better-sqlite3');
-    const Database = (await import('better-sqlite3')).default;
+    const Database = (await import('better-sqlite3').catch((_error) => {
+        throw new Error(
+            'better-sqlite3 package is not installed. Install "better-sqlite3" to enable SQLite adapter functionality.'
+        );
+    })).default;
 
     const sqlite = new Database(dbPath);
     const db = drizzle(sqlite, { schema });
@@ -235,7 +277,7 @@ export async function createDatabaseAdapter(
 
 // ==========================================================================
 // SINGLETON (Optional - for apps that need a single instance)
-// ==========================================================================
+// ========================================================================== 
 
 let globalAdapter: DatabaseAdapter | null = null;
 

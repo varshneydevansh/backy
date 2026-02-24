@@ -2,8 +2,8 @@ import { FormEvent, useEffect, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   ArrowLeft,
-  CircleCheck,
-  CircleMinus,
+  CheckCircle,
+  MinusCircle,
   CircleSlash,
   Download,
   ExternalLink,
@@ -1221,7 +1221,7 @@ function EditSitePage() {
                                     disabled={actionBusyId === submission.id}
                                     className="text-xs px-2 py-1 rounded-md border hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-1"
                                   >
-                                    <CircleCheck className="w-3.5 h-3.5" />
+                                    <CheckCircle className="w-3.5 h-3.5" />
                                     Approve
                                   </button>
                                   <button
@@ -1229,7 +1229,7 @@ function EditSitePage() {
                                     disabled={actionBusyId === submission.id}
                                     className="text-xs px-2 py-1 rounded-md border hover:bg-rose-50 hover:text-rose-700 flex items-center gap-1"
                                   >
-                                    <CircleMinus className="w-3.5 h-3.5" />
+                                    <MinusCircle className="w-3.5 h-3.5" />
                                     Reject
                                   </button>
                                   <button
@@ -1439,7 +1439,7 @@ function EditSitePage() {
                       disabled={!state.selectedCommentIds.length || actionBusyId === 'bulk-comment'}
                       className="text-xs px-2 py-1 rounded-md border hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-1"
                     >
-                      <CircleCheck className="w-3.5 h-3.5" />
+                      <CheckCircle className="w-3.5 h-3.5" />
                       Approve selected
                     </button>
                     <button
@@ -1448,7 +1448,7 @@ function EditSitePage() {
                       disabled={!state.selectedCommentIds.length || actionBusyId === 'bulk-comment'}
                       className="text-xs px-2 py-1 rounded-md border hover:bg-rose-50 hover:text-rose-700 flex items-center gap-1"
                     >
-                      <CircleMinus className="w-3.5 h-3.5" />
+                      <MinusCircle className="w-3.5 h-3.5" />
                       Reject selected
                     </button>
                     <button
@@ -1544,7 +1544,7 @@ function EditSitePage() {
                               disabled={actionBusyId === comment.id}
                               className="text-xs px-2 py-1 rounded-md border hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-1"
                             >
-                              <CircleCheck className="w-3.5 h-3.5" />
+                              <CheckCircle className="w-3.5 h-3.5" />
                               Approve
                             </button>
                             <button
@@ -1553,7 +1553,7 @@ function EditSitePage() {
                               disabled={actionBusyId === comment.id}
                               className="text-xs px-2 py-1 rounded-md border hover:bg-rose-50 hover:text-rose-700 flex items-center gap-1"
                             >
-                              <CircleMinus className="w-3.5 h-3.5" />
+                              <MinusCircle className="w-3.5 h-3.5" />
                               Reject
                             </button>
                             <button

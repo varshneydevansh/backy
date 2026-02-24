@@ -13,6 +13,8 @@
  * @license MIT
  */
 
+/// <reference path="./third-party-shims.d.ts" />
+
 import { createHash, randomUUID } from 'crypto';
 import { existsSync, mkdirSync, unlinkSync, writeFileSync, readFileSync } from 'fs';
 import { join, dirname, extname, basename } from 'path';
@@ -182,9 +184,17 @@ export interface StorageAdapter {
  */
 export async function createS3Adapter(config: S3Config): Promise<StorageAdapter> {
     // Dynamic import to avoid bundling if not used
-    const { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command } =
-        await import('@aws-sdk/client-s3');
-    const { getSignedUrl: getS3SignedUrl } = await import('@aws-sdk/s3-request-presigner');
+    const s3Module = await import('@aws-sdk/client-s3').catch(() => {
+        throw new Error(
+            'AWS SDK v3 clients are not installed. Install "@aws-sdk/client-s3" and "@aws-sdk/s3-request-presigner" to enable S3 storage integration.'
+        );
+    });
+    const { getSignedUrl: getS3SignedUrl } = await import('@aws-sdk/s3-request-presigner').catch(() => {
+        throw new Error(
+            '@aws-sdk/s3-request-presigner is required to generate signed URLs.'
+        );
+    });
+    const { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command } = s3Module;
 
     const client = new S3Client({
         region: config.region,
@@ -257,7 +267,7 @@ export async function createS3Adapter(config: S3Config): Promise<StorageAdapter>
                 })
             );
 
-            return (response.Contents || []).map((item) => ({
+            return (response.Contents || []).map((item: { Key?: string; Size?: number; LastModified?: Date }) => ({
                 path: item.Key || '',
                 size: item.Size || 0,
                 lastModified: item.LastModified || new Date(),
@@ -285,7 +295,11 @@ export async function createS3Adapter(config: S3Config): Promise<StorageAdapter>
 export async function createSupabaseAdapter(
     config: SupabaseConfig
 ): Promise<StorageAdapter> {
-    const { createClient } = await import('@supabase/supabase-js');
+    const { createClient } = await import('@supabase/supabase-js').catch(() => {
+        throw new Error(
+            '@supabase/supabase-js is required for Supabase storage adapter.'
+        );
+    });
     const supabase = createClient(config.url, config.key);
     const storage = supabase.storage.from(config.bucket);
 
@@ -337,10 +351,17 @@ export async function createSupabaseAdapter(
             const { data, error } = await storage.list(prefix);
             if (error) throw new Error(`List failed: ${error.message}`);
 
-            return (data || []).map((item) => ({
+            return (data || []).map((
+                item: {
+                    name: string;
+                    updated_at?: string;
+                    created_at?: string;
+                    metadata?: { size?: number; mimetype?: string };
+                }
+            ) => ({
                 path: `${prefix}/${item.name}`,
                 size: item.metadata?.size || 0,
-                lastModified: new Date(item.updated_at || item.created_at),
+                lastModified: new Date(item.updated_at || item.created_at || new Date().toISOString()),
                 mimeType: item.metadata?.mimetype,
             }));
         },
@@ -349,7 +370,7 @@ export async function createSupabaseAdapter(
             const dir = dirname(path);
             const name = basename(path);
             const { data } = await storage.list(dir, { search: name });
-            return (data || []).some((item) => item.name === name);
+            return (data || []).some((item: { name: string }) => item.name === name);
         },
     };
 }
@@ -423,8 +444,8 @@ export function createLocalAdapter(config: LocalConfig): StorageAdapter {
 
             const files = readdirSync(fullPath, { withFileTypes: true });
             return files
-                .filter((f) => f.isFile())
-                .map((f) => {
+                .filter((f: { isFile: () => boolean; name: string }) => f.isFile())
+                .map((f: { isFile: () => boolean; name: string }) => {
                     const filePath = join(fullPath, f.name);
                     const stat = statSync(filePath);
                     return {
@@ -489,15 +510,28 @@ export async function createStorageAdapter(
 let globalStorage: StorageAdapter | null = null;
 
 /**
- * Get or create the global storage adapter
+ * Create or reuse a global storage adapter instance.
  */
-export async function getStorage(config?: StorageConfig): Promise<StorageAdapter> {
-    if (globalStorage) return globalStorage;
+export async function getStorageAdapter(
+    config?: StorageConfig
+): Promise<StorageAdapter> {
+    if (globalStorage) {
+        return globalStorage;
+    }
 
     if (!config) {
-        throw new Error('Storage not initialized. Call getStorage(config) first.');
+        throw new Error('Storage not initialized. Call getStorageAdapter(config) first.');
     }
 
     globalStorage = await createStorageAdapter(config);
     return globalStorage;
+}
+
+/**
+ * Create a reset storage instance
+ */
+export async function resetStorageAdapter(): Promise<void> {
+    if (globalStorage) {
+        globalStorage = null;
+    }
 }

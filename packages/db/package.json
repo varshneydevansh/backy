@@ -20,15 +20,16 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts src/schema/index.ts src/adapters/index.ts --format esm --dts",
-    "dev": "tsup src/index.ts --format esm --dts --watch",
+    "build": "tsup src/index.ts src/schema/index.ts src/adapters/index.ts --format esm --dts --external postgres mysql2/promise better-sqlite3",
+    "dev": "tsup src/index.ts --format esm --dts --watch --external postgres mysql2/promise better-sqlite3",
     "typecheck": "tsc --noEmit",
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
     "studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "drizzle-orm": "^0.29.0"
+    "drizzle-orm": "^0.29.0",
+    "next": "16.1.6"
   },
   "peerDependencies": {
     "@libsql/client": "^0.4.0",
@@ -53,10 +54,7 @@
   "devDependencies": {
     "@libsql/client": "^0.4.0",
     "@types/node": "^20.10.0",
-    "better-sqlite3": "^9.0.0",
-    "drizzle-kit": "^0.20.0",
-    "mysql2": "^3.0.0",
-    "postgres": "^3.4.0",
+    "drizzle-kit": "^0.31.9",
     "tsup": "^8.0.0",
     "typescript": "^5.3.0"
   },

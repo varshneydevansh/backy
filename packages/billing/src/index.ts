@@ -12,6 +12,8 @@
  * Provides hooks for subscription management, usage tracking, and payments.
  */
 
+/// <reference path="./third-party-shims.d.ts" />
+
 // ==========================================================================
 // TYPES
 // ==========================================================================
@@ -130,9 +132,86 @@ export interface StripeConfig {
     priceIds: Record<string, string>;
 }
 
+interface StripePrice {
+    id: string;
+    product: string | { id: string; name: string; metadata: Record<string, string> };
+    unit_amount: number | null;
+    currency: string;
+    recurring?: { interval?: 'month' | 'year' | string };
+}
+
+interface StripePaymentMethodItem {
+    id: string;
+    card?: {
+        last4?: string;
+        brand?: string;
+        exp_month?: number;
+        exp_year?: number;
+    };
+}
+
+interface StripeInvoice {
+    id: string;
+    amount_due?: number;
+    currency?: string;
+    status?: 'draft' | 'open' | 'paid' | 'void' | 'uncollectible';
+    status_transitions?: { paid_at?: number | null };
+    due_date?: number | null;
+    invoice_pdf?: string;
+}
+
+interface StripeSubscription {
+    id: string;
+    customer: string;
+    items: {
+        data: Array<{
+            id: string;
+            price: { id: string };
+        }>;
+    };
+    status: 'active' | 'canceled' | 'past_due' | 'trialing' | 'paused';
+    current_period_start: number;
+    current_period_end: number;
+    cancel_at_period_end: boolean;
+}
+
+interface StripeSession {
+    id: string;
+    url?: string | null;
+}
+
+interface StripeCustomer {
+    id: string;
+    invoice_settings?: {
+        default_payment_method?: string | null;
+    };
+}
+
+interface StripeList<T> {
+    data: T[];
+}
+
+interface StripePricesResponse {
+    data: StripePrice[];
+}
+
+interface StripePaymentMethodsResponse {
+    data: StripePaymentMethodItem[];
+}
+
+interface StripeInvoicesResponse {
+    data: StripeInvoice[];
+}
+
 export async function createStripeAdapter(config: StripeConfig): Promise<BillingAdapter> {
     // Dynamically import Stripe
-    const Stripe = await import('stripe').then((m) => m.default);
+    const Stripe = await import('stripe')
+        .then((m) => m.default)
+        .catch(() => {
+            throw new Error(
+                'stripe package is not installed. Install "stripe" to enable billing integration.'
+            );
+        });
     const stripe = new Stripe(config.secretKey, { apiVersion: '2023-10-16' });
 
     return {
@@ -140,10 +219,33 @@ export async function createStripeAdapter(config: StripeConfig): Promise<Billing
             const prices = await stripe.prices.list({
                 active: true,
                 expand: ['data.product'],
-            });
+            }) as StripePricesResponse;
 
-            return prices.data.map((price) => {
-                const product = price.product as { name: string; metadata: Record<string, string> };
+            return prices.data.map((price: StripePrice) => {
+                const product =
+                    typeof price.product === 'string'
+                        ? {
+                              id: price.product,
+                              name: price.product,
+                              metadata: {},
+                          }
+                        : price.product;
+
+                const rawFeatures = product.metadata?.features || '[]';
+                const rawSites = product.metadata?.sites || '1';
+                const rawPages = product.metadata?.pages || '10';
+                const rawStorage = product.metadata?.storage || '1';
+                const rawBandwidth = product.metadata?.bandwidth || '10';
+                const rawTeamMembers = product.metadata?.teamMembers || '1';
+                const rawCustomDomains = product.metadata?.customDomains || '0';
+
+                let parsedFeatures: string[] = [];
+                try {
+                    parsedFeatures = JSON.parse(rawFeatures);
+                } catch {
+                    parsedFeatures = [];
+                }
+
                 return {
                     id: price.id,
                     name: product.name,
@@ -151,14 +253,14 @@ export async function createStripeAdapter(config: StripeConfig): Promise<Billing
                     price: (price.unit_amount || 0) / 100,
                     currency: price.currency.toUpperCase(),
                     interval: price.recurring?.interval === 'year' ? 'year' : 'month',
-                    features: JSON.parse(product.metadata.features || '[]'),
+                    features: parsedFeatures,
                     limits: {
-                        sites: parseInt(product.metadata.sites || '1'),
-                        pages: parseInt(product.metadata.pages || '10'),
-                        storage: parseInt(product.metadata.storage || '1'),
-                        bandwidth: parseInt(product.metadata.bandwidth || '10'),
-                        teamMembers: parseInt(product.metadata.teamMembers || '1'),
-                        customDomains: parseInt(product.metadata.customDomains || '0'),
+                        sites: parseInt(rawSites, 10),
+                        pages: parseInt(rawPages, 10),
+                        storage: parseInt(rawStorage, 10),
+                        bandwidth: parseInt(rawBandwidth, 10),
+                        teamMembers: parseInt(rawTeamMembers, 10),
+                        customDomains: parseInt(rawCustomDomains, 10),
                     },
                 };
             });
@@ -169,7 +271,7 @@ export async function createStripeAdapter(config: StripeConfig): Promise<Billing
                 customer: teamId,
                 status: 'all',
                 limit: 1,
-            });
+            }) as StripeList<StripeSubscription>;
 
             const sub = subscriptions.data[0];
             if (!sub) return null;
@@ -182,32 +284,33 @@ export async function createStripeAdapter(config: StripeConfig): Promise<Billing
                 currentPeriodStart: new Date(sub.current_period_start * 1000),
                 currentPeriodEnd: new Date(sub.current_period_end * 1000),
                 cancelAtPeriodEnd: sub.cancel_at_period_end,
-                trialEnd: sub.trial_end ? new Date(sub.trial_end * 1000) : undefined,
+                trialEnd: undefined,
             };
         },
 
-        async createCheckoutSession(teamId, planId, options) {
+        async createCheckoutSession(teamId: string, planId: string, options?: { successUrl?: string; cancelUrl?: string }) {
             const session = await stripe.checkout.sessions.create({
                 customer: teamId,
                 mode: 'subscription',
                 line_items: [{ price: planId, quantity: 1 }],
+                return_url: options?.successUrl || `${process.env.APP_URL}/billing`,
                 success_url: options?.successUrl || `${process.env.APP_URL}/billing/success`,
                 cancel_url: options?.cancelUrl || `${process.env.APP_URL}/billing`,
-            });
+            }) as StripeSession;
 
             return { url: session.url || '' };
         },
 
-        async createPortalSession(teamId) {
+        async createPortalSession(teamId: string) {
             const session = await stripe.billingPortal.sessions.create({
                 customer: teamId,
                 return_url: `${process.env.APP_URL}/billing`,
-            });
+            }) as StripeSession;
 
-            return { url: session.url };
+            return { url: session.url || '' };
         },
 
-        async cancelSubscription(subscriptionId, atPeriodEnd = true) {
+        async cancelSubscription(subscriptionId: string, atPeriodEnd = true) {
             if (atPeriodEnd) {
                 await stripe.subscriptions.update(subscriptionId, {
                     cancel_at_period_end: true,
@@ -217,14 +320,14 @@ export async function createStripeAdapter(config: StripeConfig): Promise<Billing
             }
         },
 
-        async resumeSubscription(subscriptionId) {
+        async resumeSubscription(subscriptionId: string) {
             await stripe.subscriptions.update(subscriptionId, {
                 cancel_at_period_end: false,
             });
         },
 
-        async updateSubscription(subscriptionId, planId) {
-            const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        async updateSubscription(subscriptionId: string, planId: string) {
+            const subscription = await stripe.subscriptions.retrieve(subscriptionId) as StripeSubscription;
             const updated = await stripe.subscriptions.update(subscriptionId, {
                 items: [
                     {
@@ -233,11 +336,11 @@ export async function createStripeAdapter(config: StripeConfig): Promise<Billing
                     },
                 ],
                 proration_behavior: 'always_invoice',
-            });
+            }) as StripeSubscription;
 
             return {
                 id: updated.id,
-                teamId: updated.customer as string,
+                teamId: updated.customer,
                 planId,
                 status: updated.status as Subscription['status'],
                 currentPeriodStart: new Date(updated.current_period_start * 1000),
@@ -246,7 +349,7 @@ export async function createStripeAdapter(config: StripeConfig): Promise<Billing
             };
         },
 
-        async getUsage(teamId): Promise<UsageRecord[]> {
+        async getUsage(teamId: string): Promise<UsageRecord[]> {
             // This would typically come from your own database
             // tracking usage against the plan limits
             return [
@@ -257,45 +360,48 @@ export async function createStripeAdapter(config: StripeConfig): Promise<Billing
             ];
         },
 
-        async recordUsage(teamId, metric, value) {
-            // Store usage in your database
-            console.log(`Recording usage for ${teamId}: ${metric} = ${value}`);
+        async recordUsage(_teamId: string, _metric: string, _value: number): Promise<void> {
+            void _teamId;
+            void _metric;
+            void _value;
+            return;
         },
 
-        async getPaymentMethods(teamId): Promise<PaymentMethod[]> {
+        async getPaymentMethods(teamId: string): Promise<PaymentMethod[]> {
             const methods = await stripe.paymentMethods.list({
                 customer: teamId,
                 type: 'card',
-            });
+            }) as StripePaymentMethodsResponse;
 
-            const customer = await stripe.customers.retrieve(teamId);
+            const customer = await stripe.customers.retrieve(teamId) as StripeCustomer;
             const defaultMethodId =
-                typeof customer !== 'string' && !customer.deleted
-                    ? (customer.invoice_settings?.default_payment_method as string)
+                customer.invoice_settings?.default_payment_method &&
+                typeof customer.invoice_settings.default_payment_method === 'string'
+                    ? customer.invoice_settings.default_payment_method
                     : null;
 
-            return methods.data.map((pm) => ({
+            return methods.data.map((pm: StripePaymentMethodItem) => ({
                 id: pm.id,
                 type: 'card',
                 last4: pm.card?.last4,
                 brand: pm.card?.brand,
                 expiryMonth: pm.card?.exp_month,
                 expiryYear: pm.card?.exp_year,
-                isDefault: pm.id === defaultMethodId,
+                isDefault: pm.id === (defaultMethodId || ''),
             }));
         },
 
-        async getInvoices(teamId, limit = 10): Promise<Invoice[]> {
+        async getInvoices(teamId: string, limit = 10): Promise<Invoice[]> {
             const invoices = await stripe.invoices.list({
                 customer: teamId,
                 limit,
-            });
+            }) as StripeInvoicesResponse;
 
-            return invoices.data.map((inv) => ({
+            return invoices.data.map((inv: StripeInvoice) => ({
                 id: inv.id,
                 amount: (inv.amount_due || 0) / 100,
-                currency: inv.currency.toUpperCase(),
-                status: inv.status as Invoice['status'],
+                currency: (inv.currency || 'usd').toUpperCase(),
+                status: (inv.status || 'draft') as Invoice['status'],
                 paidAt: inv.status_transitions?.paid_at
                     ? new Date(inv.status_transitions.paid_at * 1000)
                     : undefined,

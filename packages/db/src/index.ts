@@ -23,6 +23,7 @@
  * const sites = await db.db.select().from(schema.sites);
  * ```
  */
+/// <reference path="./third-party-shims.d.ts" />
 
 // Schema exports
 export * from './schema';

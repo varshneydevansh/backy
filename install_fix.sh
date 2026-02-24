@@ -22,9 +22,14 @@ rm -rf packages/database/node_modules
 rm -rf packages/core/node_modules
 
 # 2. Fresh Install
-echo "📦 Running fresh npm install..."
-# Since dependencies are now in root package.json, a standard install should work
-npm install --legacy-peer-deps
+echo "📦 Running fresh npm install (primary path: no install scripts for native addons)..."
+npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+
+if [ $? -ne 0 ]; then
+  echo "⚠️  Primary install failed; retrying while omitting optional deps."
+  echo "📦 Running npm install --legacy-peer-deps --ignore-scripts --omit=optional --no-audit --no-fund"
+  npm install --legacy-peer-deps --ignore-scripts --omit=optional --no-audit --no-fund
+fi
 
 echo "✅ Fix complete! dependencies should now be available in root node_modules."
 echo "Please run 'npm run dev' to verify."

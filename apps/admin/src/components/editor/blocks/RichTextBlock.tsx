@@ -24,8 +24,12 @@ export function RichTextBlock({
     onBlur,
     style,
 }: RichTextBlockProps) {
-    const { setActiveEditor, clearActiveEditor } = useActiveEditor();
+    const { setActiveEditor, clearActiveEditor, storeSelection } = useActiveEditor();
     const editorRef = useRef<PlateEditor | null>(null);
+    const handleBlur = useCallback(() => {
+        storeSelection();
+        onBlur?.();
+    }, [storeSelection, onBlur]);
 
     // Ensure content is valid Slate JSON
     const initialValue = useMemo(() => {
@@ -49,6 +53,12 @@ export function RichTextBlock({
         setActiveEditor(editorRef.current);
     }, [setActiveEditor]);
 
+    const handleTextBlockMouseDown = useCallback(() => {
+        if (!isEditable || !editorRef.current) return;
+        setActiveEditor(editorRef.current);
+        storeSelection();
+    }, [isEditable, setActiveEditor, storeSelection]);
+
     // Keep active editor in context only while this editor is editable
     useEffect(() => {
         if (!isEditable || !editorRef.current) {
@@ -67,19 +77,20 @@ export function RichTextBlock({
         <div
             className={cn("h-full w-full", className)}
             style={style}
+            onMouseDown={handleTextBlockMouseDown}
             onDoubleClick={() => {
                 // Allow bubbling to parent to trigger "Edit Mode"
             }}
         >
             <BackyEditor
-                value={initialValue}
+            value={initialValue}
             onChange={onChange}
             readOnly={!isEditable}
             placeholder={placeholder}
-            onBlur={onBlur}
+            onBlur={handleBlur}
             onFocus={handleFocus}
             onEditorReady={handleEditorReady}
-            showPortalToolbar={isEditable}
+            showPortalToolbar={false}
             className={cn(
                 // Critical: pointer-events-none when NOT editable to allow Dragging from parent
                 !isEditable && "pointer-events-none"

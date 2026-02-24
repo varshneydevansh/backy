@@ -121,6 +121,7 @@ Legend:
 - ✅ list markdown shortcuts for `-`, `*`, `+`, `1.` and list-specific Enter/Tab handling are now wired in editor key handling
 - ✅ active text editor registration now persists only for editable blocks, preventing toolbar target flicker from read-only fields
 - ✅ rich-text quick actions (format/alignment/list/emoji) now consistently target the active editable text block
+- ⚠️ Right-side text property pane still misses full parity for selected text ranges (e.g., mixed font family/size/color updates, inline link targets, and emoji insertion context)
 - ✅ selection boundary hit-testing improved for canvas elements by using pointer-capture selection and resize-handle exclusion (keeps dragging/selection reliable while preserving edit targets)
 - ✅ non-preview interaction safety pass added: button/link/input/video/embed/map now pass pointer events to wrapper so element selection/dragging is not blocked by child widgets
 - ✅ list editing now supports marker-level control (`disc`, `circle`, `square`, `decimal`, alpha, roman) from list content panel and renderer
@@ -425,11 +426,16 @@ Use this file as the persistent baseline before any implementation pass.
   - Canvas zoom, panning, rulers, snap-to-guides.
   - Component rename/labels and searchable component library.
   - Empty-state guidance and contextual first-run hints.
-- Visual quality issues to fix:
-  - Inconsistent controls density and spacing around toolbar sections.
-  - Property panel state reset and selection sync reliability.
-  - Preview/edit mode transitions with visible state indicators.
-  - Font/color updates not always reflected across all related components in real-time.
+  - Visual quality issues to fix:
+    - Inconsistent controls density and spacing around toolbar sections.
+    - Property panel state reset and selection sync reliability.
+    - Preview/edit mode transitions with visible state indicators.
+    - Font/color updates not always reflected across all related components in real-time.
+    - Right-pane rich text formatting must preserve selected text range while applying toolbar actions:
+      - Keep active text selection in canvas context when focus moves into the property panel.
+      - Apply font family/size and color operations to current range only, not whole block.
+      - Keep toolbar actions functional when opening media/link/emoji sub-actions without dropping selection.
+      - Preserve selection when toggling between properties and when opening action drawers in the right pane.
 
 ### 9.2 Media/asset UX gaps
 - Missing drag/upload UX quality:

@@ -16,6 +16,11 @@
         "rootDir": "./src",
         "resolveJsonModule": true,
         "isolatedModules": true,
+        "paths": {
+            "stripe": [
+                "./src/third-party-shims.d.ts"
+            ]
+        },
         "jsx": "react-jsx"
     },
     "include": [

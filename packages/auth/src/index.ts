@@ -13,6 +13,7 @@
  * @license MIT
  */
 
+/// <reference path="./third-party-shims.d.ts" />
 import { SignJWT, jwtVerify } from 'jose';
 import { randomBytes, createHash } from 'crypto';
 
@@ -134,17 +135,17 @@ export interface AuthAdapter {
     /**
      * Sign out (invalidate session)
      */
-    signOut(token: string): Promise<void>;
+    signOut(token?: string): Promise<void>;
 
     /**
      * Get current session from token
      */
-    getSession(token: string): Promise<Session | null>;
+    getSession(token?: string): Promise<Session | null>;
 
     /**
      * Refresh an expired token
      */
-    refreshToken(refreshToken: string): Promise<Session>;
+    refreshToken(refreshToken?: string): Promise<Session>;
 
     /**
      * Initiate OAuth flow - returns redirect URL
@@ -559,33 +560,96 @@ export async function createSupabaseAuthAdapter(
         throw new Error('Supabase configuration required');
     }
 
-    const { createClient } = await import('@supabase/supabase-js');
-    const supabase = createClient(config.supabase.url, config.supabase.key);
+    const supabaseConfig = config.supabase;
+
+    const { createClient } = await import('@supabase/supabase-js').catch(() => {
+        throw new Error(
+            '@supabase/supabase-js is required to use the Supabase auth adapter.'
+        );
+    });
+    const supabase = createClient(supabaseConfig.url, supabaseConfig.key);
+    const supabaseAuth: Record<string, any> = supabase.auth as Record<string, any>;
+    const providerMap: Record<OAuthProvider, string> = {
+        google: 'google',
+        github: 'github',
+        microsoft: 'azure',
+    };
+
+    type SupabaseAuthSession = {
+        access_token: string;
+        refresh_token: string;
+        expires_at?: number | null;
+    };
+
+    type SupabaseAuthUser = {
+        id: string;
+        email?: string | null;
+        user_metadata?: {
+            full_name?: string | null;
+            avatar_url?: string | null;
+        } | null;
+        email_confirmed_at?: string | null;
+    };
+
+    type SupabaseAuthResponse = {
+        data?: {
+            session?: SupabaseAuthSession | null;
+            user?: SupabaseAuthUser | null;
+        };
+        error?: {
+            message?: string;
+        };
+    };
+
+    const toSession = (session: SupabaseAuthSession, user: SupabaseAuthUser): Session => ({
+        accessToken: session.access_token,
+        refreshToken: session.refresh_token,
+        expiresAt: session.expires_at || 0,
+        user: {
+            id: user.id,
+            email: user.email || '',
+            name: user.user_metadata?.full_name || undefined,
+            avatarUrl: user.user_metadata?.avatar_url || undefined,
+            emailVerified: !!user.email_confirmed_at,
+        },
+    });
+
+    const getSession = async (): Promise<Session | null> => {
+        const { data: currentSession, error } = (await supabaseAuth.getSession()) as SupabaseAuthResponse;
+        const session = currentSession?.session;
+        if (error || !session) return null;
+
+        const { data: currentUser } = (await supabaseAuth.getUser()) as {
+            data?: { user?: SupabaseAuthUser | null };
+            error?: { message?: string };
+        };
+        const user = currentUser?.user;
+        if (!user) return null;
+
+        return toSession(session, user);
+    };
 
     return {
         type: 'supabase',
 
         async signIn(email: string, password: string): Promise<Session> {
-            const { data, error } = await supabase.auth.signInWithPassword({
+            const { data: authData, error } = (await supabaseAuth.signInWithPassword({
                 email,
                 password,
-            });
+            })) as {
+                data?: {
+                    session?: SupabaseAuthSession | null;
+                    user?: SupabaseAuthUser | null;
+                };
+                error?: { message?: string };
+            };
 
             if (error) throw new Error(error.message);
-            if (!data.session || !data.user) throw new Error('Login failed');
+            const session = authData?.session;
+            const user = authData?.user;
+            if (!session || !user) throw new Error('Login failed');
 
-            return {
-                accessToken: data.session.access_token,
-                refreshToken: data.session.refresh_token,
-                expiresAt: data.session.expires_at || 0,
-                user: {
-                    id: data.user.id,
-                    email: data.user.email || '',
-                    name: data.user.user_metadata?.full_name,
-                    avatarUrl: data.user.user_metadata?.avatar_url,
-                    emailVerified: !!data.user.email_confirmed_at,
-                },
-            };
+            return toSession(session, user);
         },
 
         async signUp(
@@ -593,106 +657,116 @@ export async function createSupabaseAuthAdapter(
             password: string,
             metadata?: UserMetadata
         ): Promise<Session> {
-            const { data, error } = await supabase.auth.signUp({
+            const { data: authData, error } = (await supabaseAuth.signUp({
                 email,
                 password,
                 options: { data: metadata },
-            });
+            })) as {
+                data?: {
+                    session?: SupabaseAuthSession | null;
+                    user?: SupabaseAuthUser | null;
+                };
+                error?: { message?: string };
+            };
 
             if (error) throw new Error(error.message);
-            if (!data.session || !data.user) throw new Error('Signup failed');
+            const session = authData?.session;
+            const user = authData?.user;
+            if (!session || !user) throw new Error('Signup failed');
 
-            return {
-                accessToken: data.session.access_token,
-                refreshToken: data.session.refresh_token,
-                expiresAt: data.session.expires_at || 0,
-                user: {
-                    id: data.user.id,
-                    email: data.user.email || '',
-                    name: data.user.user_metadata?.full_name,
-                    avatarUrl: data.user.user_metadata?.avatar_url,
-                },
-            };
+            return toSession(session, user);
         },
 
         async signOut(): Promise<void> {
-            const { error } = await supabase.auth.signOut();
+            const { error } = (await supabaseAuth.signOut()) as {
+                error?: { message: string };
+            };
             if (error) throw new Error(error.message);
         },
 
         async getSession(): Promise<Session | null> {
-            const { data, error } = await supabase.auth.getSession();
-            if (error || !data.session) return null;
-
-            const { data: userData } = await supabase.auth.getUser();
-
-            return {
-                accessToken: data.session.access_token,
-                refreshToken: data.session.refresh_token,
-                expiresAt: data.session.expires_at || 0,
-                user: {
-                    id: userData.user?.id || '',
-                    email: userData.user?.email || '',
-                    name: userData.user?.user_metadata?.full_name,
-                    avatarUrl: userData.user?.user_metadata?.avatar_url,
-                },
-            };
+            return getSession();
         },
 
         async refreshToken(): Promise<Session> {
-            const { data, error } = await supabase.auth.refreshSession();
-            if (error) throw new Error(error.message);
-            if (!data.session || !data.user) throw new Error('Refresh failed');
-
-            return {
-                accessToken: data.session.access_token,
-                refreshToken: data.session.refresh_token,
-                expiresAt: data.session.expires_at || 0,
-                user: {
-                    id: data.user.id,
-                    email: data.user.email || '',
-                    name: data.user.user_metadata?.full_name,
-                },
+            const { data: authData, error } = (await supabaseAuth.refreshSession()) as {
+                data?: {
+                    session?: SupabaseAuthSession | null;
+                    user?: SupabaseAuthUser | null;
+                };
+                error?: { message?: string };
             };
+            if (error) throw new Error(error.message);
+            const session = authData?.session;
+            const user = authData?.user;
+            if (!session || !user) throw new Error('Refresh failed');
+
+            return toSession(session, user);
         },
 
-        getOAuthUrl(provider: OAuthProvider): string {
+        getOAuthUrl(
+            provider: OAuthProvider,
+            state?: string
+        ): string {
             // Supabase handles OAuth redirects differently
             // Return the Supabase OAuth URL
             const redirectTo = config.oauth?.find((c) => c.provider === provider)?.redirectUri;
-            const { data } = supabase.auth.signInWithOAuth({
-                provider,
-                options: { redirectTo },
+            const providerName = providerMap[provider];
+            const baseUrl = new URL('/auth/v1/authorize', supabaseConfig.url);
+
+            const params = new URLSearchParams({
+                provider: providerName,
+                redirect_to: redirectTo || '',
+                flow_type: 'pkce',
             });
-            return data.url || '';
+
+            if (state) {
+                params.set('state', state);
+            }
+
+            return `${baseUrl.toString()}?${params.toString()}`;
         },
 
-        async handleOAuthCallback(): Promise<Session> {
+        async handleOAuthCallback(
+            _provider: OAuthProvider,
+            _code: string
+        ): Promise<Session> {
+            void _provider;
+            void _code;
             // Supabase handles this automatically via URL hash
-            const session = await this.getSession();
+            const session = await getSession();
             if (!session) throw new Error('OAuth callback failed');
             return session;
         },
 
         async verifyToken(): Promise<AuthUser | null> {
-            const { data } = await supabase.auth.getUser();
-            if (!data.user) return null;
+            const { data } = (await supabaseAuth.getUser()) as {
+                data?: { user?: SupabaseAuthUser | null };
+                error?: { message?: string };
+            };
+            if (!data || !data.user) return null;
+            const { user } = data;
 
             return {
-                id: data.user.id,
-                email: data.user.email || '',
-                name: data.user.user_metadata?.full_name,
-                avatarUrl: data.user.user_metadata?.avatar_url,
+                id: user.id,
+                email: user.email || '',
+                name: user.user_metadata?.full_name || undefined,
+                avatarUrl: user.user_metadata?.avatar_url || undefined,
+                emailVerified: !!user.email_confirmed_at,
             };
         },
 
         async resetPassword(email: string): Promise<void> {
-            const { error } = await supabase.auth.resetPasswordForEmail(email);
+            const { error } = (await supabaseAuth.resetPasswordForEmail(email)) as {
+                error?: { message: string };
+            };
             if (error) throw new Error(error.message);
         },
 
         async updatePassword(_token: string, newPassword: string): Promise<void> {
-            const { error } = await supabase.auth.updateUser({ password: newPassword });
+            const { error } = (await supabaseAuth.updateUser({ password: newPassword })) as {
+                error?: { message: string };
+            };
             if (error) throw new Error(error.message);
         },
     };
@@ -726,7 +800,7 @@ export async function createAuthAdapter(
 ): Promise<AuthAdapter> {
     switch (config.type) {
         case 'supabase':
-            return createSupabaseAuthAdapter(config);
+            return await createSupabaseAuthAdapter(config);
         default:
             throw new Error(
                 `Auth type ${config.type} requires createOAuthAdapter with database callbacks`

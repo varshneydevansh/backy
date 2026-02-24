@@ -209,6 +209,10 @@ const canAcceptNestedDrop = (elementType: CanvasElement['type']): boolean => {
     elementType === 'section' ||
     elementType === 'columns';
 };
+
+const isTextEditableElement = (type: CanvasElement['type']): boolean => {
+  return type === 'text' || type === 'heading' || type === 'paragraph' || type === 'quote' || type === 'list';
+};
 const normalizeEmbedUrl = (raw: unknown): string => {
   const source = sanitizeText(raw);
   if (!source) {
@@ -329,6 +333,14 @@ const buildSharedElementStyle = (element: CanvasElement): CSSProperties => {
   };
 };
 
+const getCommentModeLabel = (value: unknown): 'manual' | 'auto-approve' => {
+  return value === 'auto-approve' ? 'auto-approve' : 'manual';
+};
+
+const getCommentModeColor = (mode: unknown): string => {
+  return getCommentModeLabel(mode) === 'auto-approve' ? '#0f766e' : '#374151';
+};
+
 // ============================================
 // TYPES
 // ============================================
@@ -421,23 +433,38 @@ export function Canvas({
   const handleMouseDown = useCallback(
     (e: React.MouseEvent | React.PointerEvent, elementId: string) => {
       if (isPreview) return;
+      const eventTarget = getTargetElement(e.target);
+      const hitElementId = eventTarget?.closest?.('[data-element-id]')?.getAttribute('data-element-id');
+      if (hitElementId && hitElementId !== elementId) {
+        return;
+      }
       if (isInteractiveHandle(e.target)) return;
 
       if ('button' in e && e.button !== 0) return;
-      if (editingId === elementId) return;
+
+      const clickedElement = findElementById(elements, elementId);
+      if (!clickedElement) return;
 
       e.stopPropagation();
       onSelect(elementId);
 
-      const element = findElementById(elements, elementId);
-      if (!element) return;
+      const isTextElement = isTextEditableElement(clickedElement.type);
+      if (isTextElement && editingId === elementId) {
+        // Keep the caret active while the text element is in edit mode.
+        // Dragging will be available after this element is deselected.
+        return;
+      }
+
+      if (editingId) {
+        setEditingId(null);
+      }
 
       setDragState({
         elementId,
         startX: e.clientX,
         startY: e.clientY,
-        initialX: element.x,
-        initialY: element.y,
+        initialX: clickedElement.x,
+        initialY: clickedElement.y,
       });
     },
     [elements, editingId, isInteractiveHandle, isPreview, onSelect]
@@ -682,9 +709,26 @@ export function Canvas({
 
   const handleDoubleClick = useCallback((elementId: string) => {
     if (!isPreview) {
-      setEditingId(elementId);
+      setEditingId((current) => (current === elementId ? current : elementId));
     }
   }, [isPreview]);
+
+  const handleCanvasKeyDown = useCallback((event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      setEditingId((current) => (current ? null : current));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isPreview) {
+      return;
+    }
+
+    window.addEventListener('keydown', handleCanvasKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleCanvasKeyDown);
+    };
+  }, [handleCanvasKeyDown, isPreview]);
 
   return (
     <div
@@ -720,22 +764,25 @@ export function Canvas({
 
       {/* Canvas Elements */}
       {elements.map((element) => (
-        <CanvasElementComponent
-          key={element.id}
-          element={element}
-          isSelected={element.id === selectedId}
-          isPreview={isPreview}
-          onPointerDown={(e) => handleMouseDown(e, element.id)}
-          onResizeStart={(e, handle) => handleResizeStart(e, element.id, handle)}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect(element.id);
-          }}
-          onUpdate={handleElementPropsUpdate}
-          onDrop={(event) => handleCanvasElementDrop(event, element.id)}
-          canAcceptNestedDrop={canAcceptNestedDrop(element.type)}
-          isEditing={editingId === element.id}
-          onDoubleClick={() => handleDoubleClick(element.id)}
+          <CanvasElementComponent
+            key={element.id}
+            element={element}
+            isSelected={element.id === selectedId}
+            isPreview={isPreview}
+            onPointerDown={(e) => handleMouseDown(e, element.id)}
+            onResizeStart={(e, handle) => handleResizeStart(e, element.id, handle)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(element.id);
+            }}
+            onSelectElement={onSelect}
+            onUpdate={(updates) => handleElementPropsUpdate(element.id, updates)}
+            onUpdateElement={handleElementPropsUpdate}
+            onDrop={(event) => handleCanvasElementDrop(event, element.id)}
+            canAcceptNestedDrop={canAcceptNestedDrop(element.type)}
+            isEditing={editingId === element.id}
+            onStopEditing={() => setEditingId(null)}
+            onDoubleClick={() => handleDoubleClick(element.id)}
         />
       ))}
 
@@ -769,11 +816,14 @@ interface CanvasElementComponentProps {
   onPointerDown: (e: React.PointerEvent) => void;
   onResizeStart: (e: React.MouseEvent, handle: 'nw' | 'ne' | 'sw' | 'se') => void;
   onClick: (e: React.MouseEvent) => void;
+  onSelectElement: (elementId: string) => void;
   onUpdate: (updates: Partial<CanvasElement['props']>) => void;
+  onUpdateElement: (elementId: string, updates: Partial<CanvasElement['props']>) => void;
   onDrop?: (e: React.DragEvent) => void;
   canAcceptNestedDrop?: boolean;
   isEditing: boolean;
   onDoubleClick: () => void;
+  onStopEditing?: () => void;
 }
 
 function CanvasElementComponent({
@@ -783,11 +833,14 @@ function CanvasElementComponent({
   onPointerDown,
   onResizeStart,
   onClick,
+  onSelectElement,
   onUpdate,
+  onUpdateElement,
   onDrop,
   canAcceptNestedDrop,
   isEditing,
   onDoubleClick,
+  onStopEditing,
 }: CanvasElementComponentProps) {
   const p = element.props as Record<string, any>;
   const sharedStyle = buildSharedElementStyle(element);
@@ -799,14 +852,14 @@ function CanvasElementComponent({
         // We use Tiptap for both states to ensure WYSIWYG consistency if possible,
         // but for performance "Preview" might just be a read-only Tiptap.
 
-        return (
-          <div
-            style={{ ...sharedStyle, width: '100%', height: '100%' }}
-            onMouseDown={(e) => {
-              if (isEditing) e.stopPropagation();
-            }}
-            onDoubleClick={onDoubleClick}
-          >
+      return (
+        <div
+          style={{ ...sharedStyle, width: '100%', height: '100%' }}
+          onMouseDown={(e) => {
+            if (isEditing) e.stopPropagation();
+          }}
+          onDoubleClick={onDoubleClick}
+        >
             <RichTextBlock
               key={`text-${element.id}`}
               content={p.content}
@@ -828,15 +881,15 @@ function CanvasElementComponent({
         );
 
       case 'heading':
-        return (
-          <div
-            style={{ ...sharedStyle, width: '100%', height: '100%' }}
-            onMouseDown={(e) => {
-              if (isEditing) e.stopPropagation();
-            }}
+      return (
+        <div
+          style={{ ...sharedStyle, width: '100%', height: '100%' }}
+          onMouseDown={(e) => {
+            if (isEditing) e.stopPropagation();
+          }}
           onDoubleClick={onDoubleClick}
         >
-          <RichTextBlock
+            <RichTextBlock
             key={`heading-${element.id}`}
             content={p.content}
             onChange={(val) => onUpdate({ content: val })}
@@ -1114,13 +1167,13 @@ function CanvasElementComponent({
 
       case 'quote':
         return (
-          <div
+        <div
             style={{ ...sharedStyle, width: '100%', height: '100%' }}
             onMouseDown={(e) => {
               if (isEditing) e.stopPropagation();
             }}
-          onDoubleClick={onDoubleClick}
-        >
+            onDoubleClick={onDoubleClick}
+          >
             <RichTextBlock
               key={`quote-${element.id}`}
               content={p.content}
@@ -1184,7 +1237,7 @@ function CanvasElementComponent({
               Drag form elements here (inputs, buttons)
             </div>
             <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-            {children?.map((child) => (
+            {element.children?.map((child) => (
                 <CanvasElementComponent
                   key={child.id}
                   element={child}
@@ -1194,13 +1247,15 @@ function CanvasElementComponent({
                   onResizeStart={(event, handle) => onResizeStart(event, child.id, handle)}
                   onClick={(event) => {
                     event.stopPropagation();
-                    onSelect(child.id);
+                    onSelectElement(child.id);
                   }}
-                  onUpdate={(updates) => onUpdate(child.id, updates)}
-                  onDoubleClick={() => onDoubleClick(child.id)}
-                  onDrop={(event) => onDrop?.(event)}
-                  canAcceptNestedDrop={canAcceptNestedDrop(child.type)}
-                />
+                  onUpdate={(updates) => onUpdateElement(child.id, updates)}
+                  onUpdateElement={onUpdateElement}
+                onStopEditing={onStopEditing}
+                onDoubleClick={() => onDoubleClick(child.id)}
+                onDrop={(event) => onDrop?.(event)}
+                canAcceptNestedDrop={canAcceptNestedDrop(child.type)}
+              />
               ))}
             </div>
 
@@ -1221,15 +1276,82 @@ function CanvasElementComponent({
           </div>
         );
 
-      case 'paragraph':
+      case 'comment':
         return (
           <div
-            style={{ ...sharedStyle, width: '100%', height: '100%' }}
-            onMouseDown={(e) => {
-              if (isEditing) e.stopPropagation();
+            style={{
+              ...sharedStyle,
+              width: '100%',
+              height: '100%',
+              backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#ffffff',
+              borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 8),
+              border: sharedStyle.border ?? `1px dashed ${p.borderColor ?? '#d1d5db'}`,
+              padding: sharedStyle.padding ?? 12,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+              overflow: 'auto',
             }}
-            onDoubleClick={onDoubleClick}
           >
+            <h4 style={{
+              margin: 0,
+              color: getCommentModeColor(p.commentModerationMode),
+              fontFamily: p.fontFamily || sharedStyle.fontFamily || 'inherit',
+              fontSize: p.fontSize || 18,
+              fontWeight: p.fontWeight || 600,
+            }}>
+              {p.commentTitle || 'Comments'}
+            </h4>
+            <p style={{
+              margin: 0,
+              color: '#6b7280',
+              fontSize: 12,
+            }}>
+              Moderation: {p.commentModerationMode || 'manual'} • Replies: {p.commentAllowReplies === false ? 'off' : 'on'}
+            </p>
+            <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
+              Add fields and post on a public page that uses this comment element.
+            </p>
+            <textarea
+              placeholder="Write a comment..."
+              readOnly
+              value=""
+              style={{
+                minHeight: 64,
+                resize: 'none',
+                width: '100%',
+                padding: 8,
+                borderRadius: 6,
+                border: '1px solid #e5e7eb',
+              }}
+            />
+            <button
+              type="button"
+              style={{
+                alignSelf: 'flex-start',
+                border: `1px solid ${p.borderColor || '#d1d5db'}`,
+                borderRadius: 6,
+                padding: '6px 12px',
+                background: p.backgroundColor || '#f3f4f6',
+                color: p.color || '#374151',
+                cursor: 'pointer',
+                fontSize: 12,
+              }}
+            >
+              Post Comment (public)
+            </button>
+          </div>
+        );
+
+      case 'paragraph':
+      return (
+        <div
+          style={{ ...sharedStyle, width: '100%', height: '100%' }}
+          onMouseDown={(e) => {
+            if (isEditing) e.stopPropagation();
+          }}
+          onDoubleClick={onDoubleClick}
+        >
             <RichTextBlock
               key={`paragraph-${element.id}`}
               content={p.content}
@@ -1242,7 +1364,7 @@ function CanvasElementComponent({
                 fontFamily: p.fontFamily || sharedStyle.fontFamily || 'inherit',
                 fontSize: p.fontSize ?? sharedStyle.fontSize ?? 16,
                 fontWeight: p.fontWeight ?? sharedStyle.fontWeight ?? 'normal',
-                color: p.color || sharedStyle.color || '#374151',
+                color: p.color ?? sharedStyle.color ?? '#374151',
                 lineHeight: p.lineHeight ?? sharedStyle.lineHeight ?? 1.6,
                 textAlign: p.textAlign || sharedStyle.textAlign || 'left',
               }}
@@ -1361,12 +1483,13 @@ function CanvasElementComponent({
   };
 
   return (
-    <div
+      <div
       className={cn(
         'absolute',
         !isPreview && !isEditing && 'cursor-move select-none',
         isSelected && !isPreview && 'ring-2 ring-primary ring-offset-2'
       )}
+      data-element-id={element.id}
       style={{
         boxSizing: 'border-box',
         left: element.x,
