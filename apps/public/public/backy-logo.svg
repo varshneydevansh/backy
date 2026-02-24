@@ -1,0 +1,17 @@
+<svg width="640" height="640" viewBox="0 0 640 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgrad" x1="0" y1="0" x2="640" y2="640" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <clipPath id="r">
+      <rect x="72" y="72" width="496" height="496" rx="72" ry="72"/>
+    </clipPath>
+  </defs>
+  <rect x="0" y="0" width="640" height="640" rx="80" fill="#0f172a"/>
+  <rect x="72" y="72" width="496" height="496" rx="72" fill="url(#bgrad)"/>
+  <g clip-path="url(#r)">
+    <path d="M180 170h88l72 145 72-145h88l-118 220 120 220h-88l-74-145-74 145h-88l120-220-118-220z" fill="#ffffff"/>
+  </g>
+  <text x="320" y="560" text-anchor="middle" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="90" font-weight="800" letter-spacing="1">Backy</text>
+</svg>

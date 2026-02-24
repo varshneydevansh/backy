@@ -1,0 +1,52 @@
+{
+    "name": "@backy/storage",
+    "version": "1.0.0",
+    "description": "Backy CMS storage layer - S3, Supabase, Local filesystem adapters",
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        }
+    },
+    "scripts": {
+        "build": "tsup src/index.ts --format esm --dts",
+        "dev": "tsup src/index.ts --format esm --dts --watch",
+        "typecheck": "tsc --noEmit"
+    },
+    "peerDependencies": {
+        "@aws-sdk/client-s3": "^3.0.0",
+        "@aws-sdk/s3-request-presigner": "^3.0.0",
+        "@supabase/supabase-js": "^2.0.0"
+    },
+    "peerDependenciesMeta": {
+        "@aws-sdk/client-s3": {
+            "optional": true
+        },
+        "@aws-sdk/s3-request-presigner": {
+            "optional": true
+        },
+        "@supabase/supabase-js": {
+            "optional": true
+        }
+    },
+    "devDependencies": {
+        "@aws-sdk/client-s3": "^3.400.0",
+        "@aws-sdk/s3-request-presigner": "^3.400.0",
+        "@supabase/supabase-js": "^2.39.0",
+        "@types/node": "^20.10.0",
+        "tsup": "^8.0.0",
+        "typescript": "^5.3.0"
+    },
+    "keywords": [
+        "cms",
+        "storage",
+        "s3",
+        "supabase",
+        "upload"
+    ],
+    "author": "Backy Team",
+    "license": "MIT"
+}

@@ -1,0 +1,74 @@
+{
+  "name": "@backy/db",
+  "version": "1.0.0",
+  "description": "Backy CMS database layer with Drizzle ORM - supports PostgreSQL, MySQL, SQLite",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema/index.d.ts",
+      "import": "./dist/schema/index.js"
+    },
+    "./adapters": {
+      "types": "./dist/adapters/index.d.ts",
+      "import": "./dist/adapters/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/schema/index.ts src/adapters/index.ts --format esm --dts",
+    "dev": "tsup src/index.ts --format esm --dts --watch",
+    "typecheck": "tsc --noEmit",
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
+    "studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.29.0"
+  },
+  "peerDependencies": {
+    "@libsql/client": "^0.4.0",
+    "better-sqlite3": "^9.0.0",
+    "mysql2": "^3.0.0",
+    "postgres": "^3.4.0"
+  },
+  "peerDependenciesMeta": {
+    "@libsql/client": {
+      "optional": true
+    },
+    "better-sqlite3": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    },
+    "postgres": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@libsql/client": "^0.4.0",
+    "@types/node": "^20.10.0",
+    "better-sqlite3": "^9.0.0",
+    "drizzle-kit": "^0.20.0",
+    "mysql2": "^3.0.0",
+    "postgres": "^3.4.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0"
+  },
+  "keywords": [
+    "cms",
+    "database",
+    "drizzle",
+    "orm",
+    "postgres",
+    "mysql",
+    "sqlite"
+  ],
+  "author": "Backy Team",
+  "license": "MIT"
+}

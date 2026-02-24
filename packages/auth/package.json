@@ -1,0 +1,47 @@
+{
+    "name": "@backy/auth",
+    "version": "1.0.0",
+    "description": "Backy CMS authentication layer - Email/Password and OAuth SSO (Google, GitHub, Microsoft)",
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        }
+    },
+    "scripts": {
+        "build": "tsup src/index.ts --format esm --dts",
+        "dev": "tsup src/index.ts --format esm --dts --watch",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "jose": "^5.2.0"
+    },
+    "peerDependencies": {
+        "@supabase/supabase-js": "^2.0.0"
+    },
+    "peerDependenciesMeta": {
+        "@supabase/supabase-js": {
+            "optional": true
+        }
+    },
+    "devDependencies": {
+        "@supabase/supabase-js": "^2.0.0",
+        "@types/node": "^20.10.0",
+        "tsup": "^8.0.0",
+        "typescript": "^5.3.0"
+    },
+    "keywords": [
+        "cms",
+        "auth",
+        "oauth",
+        "sso",
+        "google",
+        "github",
+        "microsoft"
+    ],
+    "author": "Backy Team",
+    "license": "MIT"
+}

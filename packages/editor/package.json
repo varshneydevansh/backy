@@ -1,0 +1,36 @@
+{
+    "name": "@backy-cms/editor",
+    "version": "1.0.0",
+    "main": "src/index.tsx",
+    "types": "src/index.tsx",
+    "license": "MIT",
+    "scripts": {
+        "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "peerDependencies": {
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0"
+    },
+    "dependencies": {
+        "@udecode/plate": "latest",
+        "@udecode/plate-alignment": "^49.0.0",
+        "@udecode/plate-autoformat": "^48.0.0",
+        "@udecode/plate-font": "^48.0.0",
+        "@udecode/plate-indent": "^49.0.0",
+        "@udecode/plate-line-height": "^48.0.0",
+        "@udecode/plate-selection": "^48.0.5",
+        "@udecode/plate-table": "^48.0.6",
+        "clsx": "^2.1.0",
+        "lucide-react": "^0.300.0",
+        "slate": "^0.94.0",
+        "slate-history": "^0.93.0",
+        "slate-react": "^0.98.0",
+        "tailwind-merge": "^2.2.0"
+    },
+    "devDependencies": {
+        "@types/react": "^18.2.0",
+        "@types/react-dom": "^18.2.0",
+        "typescript": "^5.0.0"
+    }
+}
