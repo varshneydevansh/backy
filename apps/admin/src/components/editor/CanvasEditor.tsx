@@ -11,7 +11,7 @@
  * @license MIT
  */
 
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import {
   ArrowLeft,
   Save,
@@ -35,11 +35,13 @@ import {
   DEFAULT_CANVAS_SIZE,
   createCanvasElement,
 } from '@/components/editor/editorCatalog';
+import { buildCustomFontFaces, buildGoogleFontImportUrl, getFontFamilyOptions } from '@/components/editor/fontCatalog';
 import type {
   CanvasElement,
   CanvasSize,
   ComponentLibraryItem,
 } from '@/types/editor';
+import { useStore } from '@/stores/mockStore';
 
 export interface CanvasEditorProps {
   initialElements: CanvasElement[];
@@ -82,27 +84,39 @@ export function CanvasEditor({
   mediaContext,
   onChange,
 }: CanvasEditorProps) {
+  const media = useStore((state) => state.media);
+  const fontOptions = useMemo(() => getFontFamilyOptions(media), [media]);
+
   // Load fonts
   useEffect(() => {
-    const fonts = [
-      'Inter', 'Roboto', 'Open Sans', 'Lato', 'Poppins',
-      'Montserrat', 'Playfair Display', 'Merriweather',
-      'Georgia', 'Fira Code', 'Arial', 'Helvetica'
-    ];
+    const googleFontsUrl = buildGoogleFontImportUrl(fontOptions);
+    const link = document.getElementById('backy-editor-fonts') as HTMLLinkElement | null;
 
-    // Check if fonts are already loaded
-    if (document.getElementById('backy-editor-fonts')) return;
+    if (googleFontsUrl) {
+      if (!link) {
+        const newLink = document.createElement('link');
+        newLink.id = 'backy-editor-fonts';
+        newLink.rel = 'stylesheet';
+        newLink.href = googleFontsUrl;
+        document.head.appendChild(newLink);
+      } else if (link.href !== googleFontsUrl) {
+        link.href = googleFontsUrl;
+      }
+    } else if (link) {
+      link.remove();
+    }
 
-    const link = document.createElement('link');
-    link.id = 'backy-editor-fonts';
-    link.rel = 'stylesheet';
-    link.href = `https://fonts.googleapis.com/css2?${fonts.map(f => `family=${f.replace(' ', '+')}:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&`).join('')}display=swap`;
-    document.head.appendChild(link);
+    const customFontStyleId = 'backy-editor-custom-fonts';
+    const existingStyle = document.getElementById(customFontStyleId) as HTMLStyleElement | null;
+    const styleEl = existingStyle || document.createElement('style');
+    styleEl.id = customFontStyleId;
+    styleEl.dataset.generatedBy = 'backy-cms';
+    styleEl.textContent = buildCustomFontFaces(fontOptions);
 
-    return () => {
-      // Optional: cleanup
-    };
-  }, []);
+    if (!existingStyle) {
+      document.head.appendChild(styleEl);
+    }
+  }, [fontOptions]);
 
   // Canvas state
   const [elements, setElements] = useState<CanvasElement[]>(initialElements);

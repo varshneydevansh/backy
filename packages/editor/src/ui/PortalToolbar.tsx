@@ -9,7 +9,6 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { useEditorRef } from '@udecode/plate/react';
 import { Editor, Transforms, Element as SlateElement, Range } from 'slate';
-import { ReactEditor } from 'slate-react';
 import { useState } from 'react';
 import {
     Bold, Italic, Underline, Strikethrough, Code,
@@ -53,18 +52,13 @@ const toggleList = (editor: any, format: 'ul' | 'ol') => {
 };
 
 const runWithSelection = (editor: any, action: () => void) => {
-    ReactEditor.focus(editor);
-    const previousSelection = editor.selection;
-    const canRestoreSelection = previousSelection && Range.isRange(previousSelection);
-
-    if (!editor.selection || !Range.isRange(editor.selection)) {
-        if (canRestoreSelection) {
-            Transforms.select(editor, previousSelection);
-        } else {
-            const start = Editor.start(editor, []);
-            Transforms.select(editor, start);
-        }
+    if (!editor || !editor.selection || !Editor.isEditor(editor) || !('selection' in editor)) {
+        return;
     }
+    if (!Range.isRange(editor.selection)) {
+        return;
+    }
+
     action();
 };
 

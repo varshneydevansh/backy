@@ -21,12 +21,14 @@ import { BaseAutoformatPlugin } from '@udecode/plate-autoformat';
 import { FloatingToolbar } from './ui/FloatingToolbar';
 import { AdvancedToolbar } from './ui/AdvancedToolbar';
 import { PortalToolbar, PORTAL_TOOLBAR_CONTAINER_ID } from './ui/PortalToolbar';
+import { ColorPicker } from './ui/ColorPicker';
 
 import { cn } from './utils';
 
 // Re-export for use in PropertyPanel
 export { AdvancedToolbar } from './ui/AdvancedToolbar';
 export { PORTAL_TOOLBAR_CONTAINER_ID } from './ui/PortalToolbar';
+export { ColorPicker } from './ui/ColorPicker';
 export type { PlateEditor } from '@udecode/plate/react';
 
 export type BackyEditorProps = {
@@ -46,6 +48,12 @@ export type BackyEditorProps = {
     onFocus?: (event: React.FocusEvent) => void;
     /** Optional key handler for editor keyboard shortcuts */
     onKeyDown?: (event: React.KeyboardEvent) => void;
+    /** Optional mouse-down handler inside editor content */
+    onMouseDown?: (event: React.MouseEvent) => void;
+    /** Optional mouse-up handler inside editor content */
+    onMouseUp?: (event: React.MouseEvent) => void;
+    /** Optional key-up handler inside editor content */
+    onKeyUp?: (event: React.KeyboardEvent) => void;
 };
 
 const isListContainer = (node: unknown): node is SlateElement & { type: 'ul' | 'ol' } => {
@@ -71,11 +79,14 @@ export const BackyEditor = ({
     className,
     placeholder,
     onBlur,
-        showToolbar = false,
+    showToolbar = false,
     showPortalToolbar = false,
     onEditorReady,
     onFocus,
     onKeyDown,
+    onMouseUp,
+    onKeyUp,
+    onMouseDown,
 }: BackyEditorProps) => {
 
     const plugins = useMemo(() => [
@@ -328,6 +339,14 @@ export const BackyEditor = ({
 
     const renderLeaf = (props: any) => {
         const { attributes, children, leaf } = props;
+        const formatFontFamily = (value?: string) => {
+            const raw = (value || '').trim();
+            if (!raw) return raw;
+            if (raw === 'inherit') return raw;
+            if (raw.includes(',')) return raw;
+            if (raw.includes(' ')) return `"${raw}"`;
+            return raw;
+        };
         const style: React.CSSProperties = {
             ...props.style,
         };
@@ -357,7 +376,7 @@ export const BackyEditor = ({
         }
 
         if (leaf.code) style.fontFamily = 'monospace';
-        if (leaf.fontFamily) style.fontFamily = leaf.fontFamily;
+        if (leaf.fontFamily) style.fontFamily = formatFontFamily(leaf.fontFamily);
         if (leaf.fontSize) style.fontSize = leaf.fontSize;
         if (leaf.color) style.color = leaf.color;
         if (leaf.backgroundColor) style.backgroundColor = leaf.backgroundColor;
@@ -505,19 +524,22 @@ export const BackyEditor = ({
             >
                 {showToolbar && !readOnly && <AdvancedToolbar className="sticky top-0 z-10" />}
                 {showPortalToolbar && !readOnly && <PortalToolbar />}
-                <FloatingToolbar />
+                {showToolbar && !readOnly && <FloatingToolbar />}
 
                 <div className="flex-1 overflow-y-auto p-1">
-                <PlateContent
-                    placeholder={placeholder ?? "Type..."}
-                    onBlur={onBlur}
-                    onFocus={onFocus}
-                    onKeyDown={handleKeyDown}
-                    renderLeaf={renderLeaf}
-                    renderElement={renderElement}
-                />
-            </div>
-        </Plate>
+                    <PlateContent
+                        placeholder={placeholder ?? "Type..."}
+                        onBlur={onBlur}
+                        onFocus={onFocus}
+                        onKeyDown={handleKeyDown}
+                        onMouseUp={onMouseUp}
+                        onMouseDown={onMouseDown}
+                        onKeyUp={onKeyUp}
+                        renderLeaf={renderLeaf}
+                        renderElement={renderElement}
+                    />
+                </div>
+            </Plate>
         </div>
     );
 };

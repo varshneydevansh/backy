@@ -13,7 +13,7 @@
  * @license MIT
  */
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Type,
   Palette,
@@ -29,6 +29,7 @@ import { PORTAL_TOOLBAR_CONTAINER_ID } from '@backy-cms/editor';
 // import { RichTextEditor } from './RichTextEditor';
 import { MediaLibraryModal, type MediaContext } from './MediaLibraryModal';
 import { EmojiPickerModal } from './EmojiPickerModal';
+import { getFontFamilyOptions, toFontFamilyStyle } from './fontCatalog';
 import { RichTextFormatting } from './RichTextFormatting';
 import { AnimationBuilder, type AnimationConfig } from './AnimationBuilder';
 import type { CanvasElement, ElementProps } from '@/types/editor';
@@ -36,6 +37,7 @@ import {
   buildListContentFromItems,
   getListItemsFromProps,
 } from './listUtils';
+import { useStore } from '@/stores/mockStore';
 
 const toNumber = (value: unknown, fallback = 0): number => {
   const parsed = typeof value === 'number'
@@ -91,7 +93,7 @@ export function PropertyPanel({
 
   if (!element) {
     return (
-      <div className="w-72 bg-card border-l border-border flex flex-col h-full">
+      <div className="w-[clamp(18rem,24vw,30rem)] min-w-[18rem] max-w-[30rem] shrink-0 bg-card border-l border-border flex flex-col h-full min-h-0">
         <div className="p-4 border-b border-border">
           <h2 className="font-semibold">Properties</h2>
         </div>
@@ -120,7 +122,7 @@ export function PropertyPanel({
   };
 
   return (
-    <div className="w-72 bg-card border-l border-border flex flex-col h-full">
+      <div className="w-[clamp(18rem,24vw,30rem)] min-w-[18rem] max-w-[30rem] shrink-0 bg-card border-l border-border flex flex-col h-full min-h-0" key={element.id}>
       {/* Header */}
       <div className="p-4 border-b border-border">
         <h2 className="font-semibold">Properties</h2>
@@ -131,7 +133,7 @@ export function PropertyPanel({
       <div id={PORTAL_TOOLBAR_CONTAINER_ID} className="px-3 pt-3" />
 
       {/* Properties */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2 pb-2">
         {/* Content Section */}
         <PropertySection
           title="Content"
@@ -142,6 +144,7 @@ export function PropertyPanel({
           <ContentProperties
             element={element}
             onChange={updateProps}
+            elementId={element.id}
             onOpenMedia={(field, mode = 'library') => {
               setMediaField(field);
               setMediaOpenTab(mode);
@@ -163,21 +166,29 @@ export function PropertyPanel({
         </PropertySection>
 
         {/* Style Section */}
-      <PropertySection
+        <PropertySection
           title="Style"
           icon={Palette}
           isExpanded={expandedSections.includes('style')}
           onToggle={() => toggleSection('style')}
         >
           {/**
-            * Rich text elements now use the inline canvas editor toolbar for
-            * selected text (bold/italic/highlight/size/font/etc). Keep the
-            * style panel focused on structural styles and non-text components.
-           */}
+            * Keep element-level styling available for text components while inline
+            * toolbar operations target selected text in the editor.
+          */}
           <StyleProperties
             element={element}
             onChange={updateProps}
-            supportsTextStyles={['text', 'heading', 'paragraph', 'quote', 'button', 'link', 'list', 'icon'].includes(element.type)}
+            supportsTextStyles={[
+              'text',
+              'heading',
+              'paragraph',
+              'quote',
+              'list',
+              'button',
+              'link',
+              'icon',
+            ].includes(element.type)}
           />
         </PropertySection>
 
@@ -296,9 +307,16 @@ interface ContentPropertiesProps {
   onChange: (updates: Partial<ElementProps>) => void;
   onOpenMedia: (field: 'src' | 'video', mode?: 'library' | 'upload') => void;
   onOpenEmoji: () => void;
+  elementId?: string;
 }
 
-function ContentProperties({ element, onChange, onOpenMedia, onOpenEmoji }: ContentPropertiesProps) {
+function ContentProperties({
+  element,
+  onChange,
+  onOpenMedia,
+  onOpenEmoji,
+  elementId,
+}: ContentPropertiesProps) {
   const hasTextContent = ['text', 'heading', 'paragraph', 'quote', 'list'].includes(element.type);
   const hasImageContent = element.type === 'image';
   const hasVideoContent = element.type === 'video';
@@ -313,12 +331,15 @@ function ContentProperties({ element, onChange, onOpenMedia, onOpenEmoji }: Cont
     ? element.props.options.join('\n')
     : '';
   const listItems = getListItemsFromProps(element.props);
+  useEffect(() => {
+    // BackyTextProperties diagnostics disabled.
+  }, [element.id, element.type, elementId, hasTextContent, hasImageContent, hasVideoContent, hasLinkContent, hasButtonContent, onChange]);
 
   return (
     <div className="space-y-3">
       {/* Rich Text Controls */}
       {hasTextContent && (
-        <RichTextFormatting />
+        <RichTextFormatting elementId={elementId} />
       )}
 
       {/* Image Source */}
@@ -1505,24 +1526,8 @@ interface StylePropertiesProps {
 }
 
 function StyleProperties({ element, onChange, supportsTextStyles = false }: StylePropertiesProps) {
-  // Common Google Fonts (free to use)
-  const fontFamilies = [
-    { value: 'inherit', label: 'Default (Inherit)' },
-    { value: 'Inter, sans-serif', label: 'Inter' },
-    { value: 'Roboto, sans-serif', label: 'Roboto' },
-    { value: 'Open Sans, sans-serif', label: 'Open Sans' },
-    { value: 'Lato, sans-serif', label: 'Lato' },
-    { value: 'Poppins, sans-serif', label: 'Poppins' },
-    { value: 'Montserrat, sans-serif', label: 'Montserrat' },
-    { value: 'Playfair Display, serif', label: 'Playfair Display' },
-    { value: 'Merriweather, serif', label: 'Merriweather' },
-    { value: 'Georgia, serif', label: 'Georgia' },
-    { value: 'Times New Roman, serif', label: 'Times New Roman' },
-    { value: 'Courier New, monospace', label: 'Courier New' },
-    { value: 'Fira Code, monospace', label: 'Fira Code' },
-    { value: 'Arial, sans-serif', label: 'Arial' },
-    { value: 'Helvetica, sans-serif', label: 'Helvetica' },
-  ];
+  const media = useStore((state) => state.media);
+  const fontFamilies = useMemo(() => getFontFamilyOptions(media), [media]);
 
   return (
     <div className="space-y-3">
@@ -1548,7 +1553,11 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
                 )}
               >
                 {fontFamilies.map(font => (
-                  <option key={font.value} value={font.value} style={{ fontFamily: font.value }}>
+                  <option
+                    key={font.value}
+                    value={font.value}
+                    style={{ fontFamily: toFontFamilyStyle(font.value) }}
+                  >
                     {font.label}
                   </option>
                 ))}
@@ -1569,7 +1578,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Note: Google Fonts need to be loaded in your frontend
+              Note: Google Fonts and uploaded font files (woff/woff2/ttf/otf) are available.
             </p>
           </div>
 

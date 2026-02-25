@@ -1,592 +1,432 @@
- ⚡devanshvarshney ❯❯ npm run dev                                                 
-
-> backy-cms@1.0.0 dev
-> turbo run dev
-
-╭───────────────────────────────────────────────────────────────────────────╮
-│                                                                           │
-│                     Update available v2.8.1 ≫ v2.8.10                     │
-│    Changelog: https://github.com/vercel/turborepo/releases/tag/v2.8.10    │
-│             Run "npx @turbo/codemod@latest update" to update              │
-│                                                                           │
-│          Follow @turborepo for updates: https://x.com/turborepo           │
-╰───────────────────────────────────────────────────────────────────────────╯
-• turbo 2.8.1
-• Packages in scope: @backy-cms/admin, @backy-cms/core, @backy-cms/database, @backy-cms/editor, @backy/auth, @backy/billing, @backy/db, @backy/public, @backy/storage
-• Running dev in 9 packages
-• Remote caching disabled
-@backy-cms/database:dev: cache bypass, force executing 4cc98459a01295ee
-@backy/storage:dev: cache bypass, force executing 6682e6b5edfa71f1
-@backy/auth:dev: cache bypass, force executing 7b6b10628e02bcc7
-@backy/db:dev: cache bypass, force executing ecb11b40b2ddd898
-@backy/public:dev: cache bypass, force executing 8f008b6fda38c926
-@backy/billing:dev: cache bypass, force executing 1e6009961993aff9
-@backy-cms/admin:dev: cache bypass, force executing a1e2411f086adb09
-@backy-cms/core:dev: cache bypass, force executing ad465e85cd753d30
-@backy-cms/database:dev: 
-@backy-cms/database:dev: > @backy-cms/database@1.0.0 dev
-@backy-cms/database:dev: > tsup src/index.ts --format cjs,esm --dts --watch --external @supabase/supabase-js
-@backy-cms/database:dev: 
-@backy/storage:dev: 
-@backy/storage:dev: > @backy/storage@1.0.0 dev
-@backy/storage:dev: > tsup src/index.ts --format esm --dts --watch
-@backy/storage:dev: 
-@backy/auth:dev: 
-@backy/auth:dev: > @backy/auth@1.0.0 dev
-@backy/auth:dev: > tsup src/index.ts --format esm --dts --watch
-@backy/auth:dev: 
-@backy/public:dev: 
-@backy/public:dev: > @backy/public@1.0.0 dev
-@backy/public:dev: > next dev -p 3001
-@backy/public:dev: 
-@backy/db:dev: 
-@backy/db:dev: > @backy/db@1.0.0 dev
-@backy/db:dev: > tsup src/index.ts --format esm --dts --watch
-@backy/db:dev: 
-@backy-cms/admin:dev: 
-@backy-cms/admin:dev: > @backy-cms/admin@1.0.0 dev
-@backy-cms/admin:dev: > vite
-@backy-cms/admin:dev: 
-@backy/billing:dev: 
-@backy/billing:dev: > @backy/billing@1.0.0 dev
-@backy/billing:dev: > tsup src/index.ts --format esm --dts --watch
-@backy/billing:dev: 
-@backy-cms/core:dev: 
-@backy-cms/core:dev: > @backy-cms/core@1.0.0 dev
-@backy-cms/core:dev: > tsup src/index.ts --format cjs,esm --dts --watch
-@backy-cms/core:dev: 
-CLI Building entry: src/index.ts
-@backy-cms/database:dev: CLI tsup v8.5.1
-@backy-cms/database:dev: CLI Running in watch mode
-@backy-cms/database:dev: CLI Target: node16
-@backy-cms/database:dev: CJS Build start
-@backy-cms/database:dev: ESM Build start
-CLI Building entry: src/index.ts
-@backy/billing:dev: CLI Using tsconfig: tsconfig.json
-@backy/billing:dev: CLI tsup v8.5.1
-@backy/billing:dev: CLI Running in watch mode
-@backy/billing:dev: CLI Target: es2022
-@backy/billing:dev: ESM Build start
-CLI Building entry: src/index.ts
-@backy/storage:dev: CLI Using tsconfig: tsconfig.json
-@backy/storage:dev: CLI tsup v8.5.1
-@backy/storage:dev: CLI Running in watch mode
-CLI Building entry: src/index.ts
-@backy/db:dev: CLI Using tsconfig: tsconfig.json
-@backy/db:dev: CLI tsup v8.5.1
-@backy/db:dev: CLI Running in watch mode
-@backy/storage:dev: CLI Target: es2022
-@backy/storage:dev: ESM Build start
-@backy/db:dev: CLI Target: es2022
-@backy/db:dev: ESM Build start
-CLI Building entry: src/index.ts
-@backy-cms/core:dev: CLI Using tsconfig: tsconfig.json
-@backy-cms/core:dev: CLI tsup v8.5.1
-@backy-cms/core:dev: CLI Running in watch mode
-@backy-cms/core:dev: CLI Target: es2022
-@backy-cms/core:dev: CJS Build start
-@backy-cms/core:dev: ESM Build start
-CLI Building entry: src/index.ts
-@backy/auth:dev: CLI Using tsconfig: tsconfig.json
-@backy/auth:dev: CLI tsup v8.5.1
-@backy/auth:dev: CLI Running in watch mode
-@backy/auth:dev: CLI Target: es2022
-@backy/auth:dev: ESM Build start
-@backy-cms/database:dev: DTS Build start
-@backy/billing:dev: ESM dist/index.js 8.63 KB
-@backy/billing:dev: ESM ⚡️ Build success in 356ms
-@backy/auth:dev: ESM dist/index.js 12.61 KB
-@backy/auth:dev: ESM ⚡️ Build success in 179ms
-@backy/auth:dev: CLI Watching for changes in "."
-@backy/auth:dev: CLI Ignoring changes in "**/{.git,node_modules}/**" | "dist"
-@backy/billing:dev: CLI Watching for changes in "."
-@backy/billing:dev: CLI Ignoring changes in "**/{.git,node_modules}/**" | "dist"
-@backy-cms/core:dev: ESM dist/index.mjs 6.62 KB
-@backy-cms/core:dev: ESM ⚡️ Build success in 198ms
-@backy-cms/database:dev: CJS dist/index.js 9.18 KB
-@backy-cms/database:dev: CJS ⚡️ Build success in 564ms
-@backy-cms/database:dev: ESM dist/index.mjs 7.53 KB
-@backy-cms/database:dev: ESM ⚡️ Build success in 565ms
-@backy-cms/core:dev: CJS dist/index.js 8.37 KB
-@backy/storage:dev: ESM dist/index.js 8.25 KB
-@backy-cms/database:dev: CLI Watching for changes in "."
-@backy-cms/database:dev: CLI Ignoring changes in "**/{.git,node_modules}/**" | "dist"
-@backy/storage:dev: ESM ⚡️ Build success in 340ms
-@backy/db:dev: ESM dist/index.js 15.01 KB
-@backy/db:dev: ESM ⚡️ Build success in 330ms
-@backy-cms/core:dev: CJS ⚡️ Build success in 205ms
-@backy/storage:dev: CLI Watching for changes in "."
-@backy/storage:dev: CLI Ignoring changes in "**/{.git,node_modules}/**" | "dist"
-@backy/db:dev: CLI Watching for changes in "."
-@backy/db:dev: CLI Ignoring changes in "**/{.git,node_modules}/**" | "dist"
-@backy-cms/core:dev: CLI Watching for changes in "."
-@backy-cms/core:dev: CLI Ignoring changes in "**/{.git,node_modules}/**" | "dist"
-@backy/billing:dev: DTS Build start
-@backy/storage:dev: DTS Build start
-  ▲ Next.js 14.2.35
-@backy/public:dev:   - Local:        http://localhost:3001
-@backy/public:dev: 
-@backy/public:dev:  ✓ Starting...
-@backy/auth:dev: DTS Build start
-@backy-cms/core:dev: DTS Build start
-@backy/db:dev: DTS Build start
-
-@backy-cms/admin:dev:   VITE v5.4.21  ready in 2058 ms
-@backy-cms/admin:dev: 
-@backy-cms/admin:dev:   ➜  Local:   http://localhost:5173/
-@backy-cms/admin:dev:   ➜  Network: http://192.168.0.104:5173/
-@backy-cms/admin:dev:   ➜  press h + enter to show help
-@backy-cms/database:dev: src/client.ts(14,46): error TS2792: Cannot find module '@supabase/supabase-js'. Did you mean to set the 'moduleResolution' option to 'nodenext', or to add aliases to the 'paths' option?
-@backy-cms/database:dev: src/client.ts(157,37): error TS2792: Cannot find module '@supabase/supabase-js'. Did you mean to set the 'moduleResolution' option to 'nodenext', or to add aliases to the 'paths' option?
-@backy-cms/database:dev: 
-@backy-cms/database:dev: DTS Build failed
-@backy-cms/database:dev: Error: error occurred in dts build
-@backy-cms/database:dev:     at Worker.<anonymous> (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/index.js:1545:26)
-@backy-cms/database:dev:     at Worker.emit (node:events:518:28)
-@backy-cms/database:dev:     at MessagePort.<anonymous> (node:internal/worker:268:53)
-@backy-cms/database:dev:     at [nodejs.internal.kHybridDispatch] (node:internal/event_target:827:20)
-@backy-cms/database:dev:     at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
-@backy-cms/database:dev: RollupError: [plugin dts] src/client.ts: Failed to compile. Check the logs above.
-@backy-cms/database:dev:     at getRollupError (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/parseAst.js:287:41)
-@backy-cms/database:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/parseAst.js:283:42)
-@backy-cms/database:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/rollup.js:913:32)
-@backy-cms/database:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/rollup.js:22504:42)
-@backy-cms/database:dev:     at generateDtsFromTs (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:6429:22)
-@backy-cms/database:dev:     at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:6436:59
-@backy-cms/database:dev:     at _nullishCoalesce (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:1:472)
-@backy-cms/database:dev:     at Object.transform (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:6436:18)
-@backy-cms/database:dev:     at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/rollup.js:3392:40
-@backy/billing:dev: src/index.ts(135,33): error TS2307: Cannot find module 'stripe' or its corresponding type declarations.
-@backy/billing:dev: src/index.ts(145,37): error TS7006: Parameter 'price' implicitly has an 'any' type.
-@backy/billing:dev: src/index.ts(277,38): error TS7006: Parameter 'pm' implicitly has an 'any' type.
-@backy/billing:dev: src/index.ts(294,39): error TS7006: Parameter 'inv' implicitly has an 'any' type.
-@backy/billing:dev: 
-@backy/billing:dev: DTS Build failed
-@backy/billing:dev: RollupError: [plugin dts] src/index.ts: Failed to compile. Check the logs above.
-@backy/billing:dev:     at getRollupError (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/parseAst.js:287:41)
-@backy/billing:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/parseAst.js:283:42)
-@backy/billing:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/rollup.js:913:32)
-@backy/billing:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/rollup.js:22504:42)
-@backy/billing:dev:     at generateDtsFromTs (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:6429:22)
-@backy/billing:dev:     at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:6436:59
-@backy/billing:dev:     at _nullishCoalesce (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:1:472)
-@backy/billing:dev:     at Object.transform (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:6436:18)
-@backy/billing:dev:     at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/rollup.js:3392:40
-@backy/billing:dev: Error: error occurred in dts build
-@backy/billing:dev:     at Worker.<anonymous> (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/index.js:1545:26)
-@backy/billing:dev:     at Worker.emit (node:events:518:28)
-@backy/billing:dev:     at MessagePort.<anonymous> (node:internal/worker:268:53)
-@backy/billing:dev:     at [nodejs.internal.kHybridDispatch] (node:internal/event_target:827:20)
-@backy/billing:dev:     at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
-@backy-cms/core:dev: DTS ⚡️ Build success in 1734ms
-@backy/storage:dev: src/index.ts(186,22): error TS2307: Cannot find module '@aws-sdk/client-s3' or its corresponding type declarations.
-@backy/storage:dev: src/index.ts(187,59): error TS2307: Cannot find module '@aws-sdk/s3-request-presigner' or its corresponding type declarations.
-@backy/storage:dev: src/index.ts(247,55): error TS2307: Cannot find module '@aws-sdk/client-s3' or its corresponding type declarations.
-@backy/storage:dev: src/index.ts(260,51): error TS7006: Parameter 'item' implicitly has an 'any' type.
-@backy/storage:dev: 
-@backy/storage:dev: DTS Build failed
-@backy/storage:dev: Error: error occurred in dts build
-@backy/storage:dev:     at Worker.<anonymous> (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/index.js:1545:26)
-@backy/storage:dev:     at Worker.emit (node:events:518:28)
-@backy/storage:dev:     at MessagePort.<anonymous> (node:internal/worker:268:53)
-@backy/storage:dev:     at [nodejs.internal.kHybridDispatch] (node:internal/event_target:827:20)
-@backy/storage:dev:     at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
-@backy/storage:dev: RollupError: [plugin dts] src/index.ts: Failed to compile. Check the logs above.
-@backy/storage:dev:     at getRollupError (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/parseAst.js:287:41)
-@backy/storage:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/parseAst.js:283:42)
-@backy/storage:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/rollup.js:913:32)
-@backy/storage:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/rollup.js:22504:42)
-@backy/storage:dev:     at generateDtsFromTs (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:6429:22)
-@backy/storage:dev:     at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:6436:59
-@backy/storage:dev:     at _nullishCoalesce (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:1:472)
-@backy/storage:dev:     at Object.transform (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:6436:18)
-@backy/storage:dev:     at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/rollup.js:3392:40
-@backy/auth:dev: src/index.ts(663,21): error TS2339: Property 'data' does not exist on type 'Promise<OAuthResponse>'.
-@backy/auth:dev: src/index.ts(664,17): error TS2322: Type 'OAuthProvider' is not assignable to type 'Provider'.
-@backy/auth:dev:   Type '"microsoft"' is not assignable to type 'Provider'.
-@backy/auth:dev: src/index.ts(672,40): error TS2339: Property 'getSession' does not exist on type 'AuthAdapter | PromiseLike<AuthAdapter>'.
-@backy/auth:dev:   Property 'getSession' does not exist on type 'PromiseLike<AuthAdapter>'.
-@backy/auth:dev: 
-@backy/auth:dev: DTS Build failed
-@backy/auth:dev: RollupError: [plugin dts] src/index.ts: Failed to compile. Check the logs above.
-@backy/auth:dev:     at getRollupError (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/parseAst.js:287:41)
-@backy/auth:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/parseAst.js:283:42)
-@backy/auth:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/rollup.js:913:32)
-@backy/auth:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/rollup.js:22504:42)
-@backy/auth:dev:     at generateDtsFromTs (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:6429:22)
-@backy/auth:dev:     at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:6436:59
-@backy/auth:dev:     at _nullishCoalesce (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:1:472)
-@backy/auth:dev:     at Object.transform (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:6436:18)
-@backy/auth:dev:     at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/rollup.js:3392:40
-@backy/auth:dev: Error: error occurred in dts build
-@backy/auth:dev:     at Worker.<anonymous> (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/index.js:1545:26)
-@backy/auth:dev:     at Worker.emit (node:events:518:28)
-@backy/auth:dev:     at MessagePort.<anonymous> (node:internal/worker:268:53)
-@backy/auth:dev:     at [nodejs.internal.kHybridDispatch] (node:internal/event_target:827:20)
-@backy/auth:dev:     at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
-@backy/db:dev: src/adapters/index.ts(96,35): error TS2307: Cannot find module 'postgres' or its corresponding type declarations.
-@backy/db:dev: src/adapters/index.ts(133,32): error TS2307: Cannot find module 'mysql2/promise' or its corresponding type declarations.
-@backy/db:dev: src/adapters/index.ts(170,36): error TS2307: Cannot find module 'better-sqlite3' or its corresponding type declarations.
-@backy/db:dev: 
-@backy/db:dev: DTS Build failed
-@backy/db:dev: Error: error occurred in dts build
-@backy/db:dev:     at Worker.<anonymous> (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/index.js:1545:26)
-@backy/db:dev:     at Worker.emit (node:events:518:28)
-@backy/db:dev:     at MessagePort.<anonymous> (node:internal/worker:268:53)
-@backy/db:dev:     at [nodejs.internal.kHybridDispatch] (node:internal/event_target:827:20)
-@backy/db:dev:     at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
-@backy/db:dev: RollupError: [plugin dts] src/adapters/index.ts: Failed to compile. Check the logs above.
-@backy/db:dev:     at getRollupError (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/parseAst.js:287:41)
-@backy/db:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/parseAst.js:283:42)
-@backy/db:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/rollup.js:913:32)
-@backy/db:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/rollup.js:22504:42)
-@backy/db:dev:     at generateDtsFromTs (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:6429:22)
-@backy/db:dev:     at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:6436:59
-@backy/db:dev:     at _nullishCoalesce (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:1:472)
-@backy/db:dev:     at Object.transform (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/tsup/dist/rollup.js:6436:18)
-@backy/db:dev:     at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/rollup/dist/shared/rollup.js:3392:40
-@backy/public:dev:  ✓ Ready in 2.9s
-1:27:30 am [vite] hmr update /src/components/editor/RichTextFormatting.tsx, /src/index.css
-1:27:31 am [vite] Internal server error: /Users/devanshvarshney/Downloads/Scythian /backy-cms/apps/admin/src/components/editor/RichTextFormatting.tsx: Adjacent JSX elements must be wrapped in an enclosing tag. Did you want a JSX fragment <>...</>? (295:8)
-@backy-cms/admin:dev: 
-@backy-cms/admin:dev:   293 |                 </div>
-@backy-cms/admin:dev:   294 |             </noscript>
-@backy-cms/admin:dev: > 295 |         </div>
-@backy-cms/admin:dev:       |         ^
-@backy-cms/admin:dev:   296 |     );
-@backy-cms/admin:dev:   297 |     */
-@backy-cms/admin:dev:   298 | }
-@backy-cms/admin:dev:   Plugin: vite:react-babel
-@backy-cms/admin:dev:   File: /Users/devanshvarshney/Downloads/Scythian /backy-cms/apps/admin/src/components/editor/RichTextFormatting.tsx:295:8
-@backy-cms/admin:dev:   293|                  </div>
-@backy-cms/admin:dev:   294|              </noscript>
-@backy-cms/admin:dev:   295|          </div>
-@backy-cms/admin:dev:      |          ^
-@backy-cms/admin:dev:   296|      );
-@backy-cms/admin:dev:   297|      */
-@backy-cms/admin:dev:       at constructor (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:365:19)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.raise (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:6599:19)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseElementAt (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4742:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseElement (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4749:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprAtom (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4762:19)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprSubscripts (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11081:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseUpdate (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11066:21)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnary (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11046:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnary (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9837:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10899:61)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprOps (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10904:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeConditional (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10881:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssign (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10831:21)
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9775:39
-@backy-cms/admin:dev:       at TypeScriptParserMixin.tryParse (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:6907:20)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssign (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9775:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExpressionBase (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10784:23)
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10780:39
-@backy-cms/admin:dev:       at TypeScriptParserMixin.allowInAnd (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12421:16)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExpression (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10780:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseStatementContent (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12895:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseStatementContent (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9508:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseStatementLike (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12767:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseModuleItem (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12744:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseBlockOrModuleBlockBody (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:13316:36)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseBlockBody (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:13309:10)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseProgram (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12622:10)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseTopLevel (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12612:25)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parse (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:14488:25)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parse (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10126:18)
-@backy-cms/admin:dev:       at parse (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:14522:38)
-@backy-cms/admin:dev:       at parser (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/core/lib/parser/index.js:41:34)
-@backy-cms/admin:dev:       at parser.next (<anonymous>)
-@backy-cms/admin:dev:       at normalizeFile (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/core/lib/transformation/normalize-file.js:64:37)
-@backy-cms/admin:dev:       at normalizeFile.next (<anonymous>)
-@backy-cms/admin:dev:       at run (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/core/lib/transformation/index.js:22:50)
-@backy-cms/admin:dev:       at run.next (<anonymous>)
-@backy-cms/admin:dev:       at transform (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/core/lib/transform.js:22:33)
-@backy-cms/admin:dev:       at transform.next (<anonymous>)
-@backy-cms/admin:dev:       at step (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/gensync/index.js:261:32)
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/gensync/index.js:273:13
-@backy-cms/admin:dev:       at async.call.result.err.err (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/gensync/index.js:223:11)
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/gensync/index.js:189:28
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/core/lib/gensync-utils/async.js:67:7
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/gensync/index.js:113:33
-@backy-cms/admin:dev:       at step (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/gensync/index.js:287:14)
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/gensync/index.js:273:13
-@backy-cms/admin:dev:       at async.call.result.err.err (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/gensync/index.js:223:11)
-1:27:34 am [vite] hmr update /src/components/editor/blocks/RichTextBlock.tsx, /src/index.css
-1:27:36 am [vite] hmr update /@fs/Users/devanshvarshney/Downloads/Scythian /backy-cms/packages/editor/src/ui/PortalToolbar.tsx
-@backy-cms/admin:dev: 1:27:45 am [vite] Pre-transform error: /Users/devanshvarshney/Downloads/Scythian /backy-cms/apps/admin/src/components/editor/RichTextFormatting.tsx: Adjacent JSX elements must be wrapped in an enclosing tag. Did you want a JSX fragment <>...</>? (295:8)
-@backy-cms/admin:dev: 
-@backy-cms/admin:dev:   293 |                 </div>
-@backy-cms/admin:dev:   294 |             </noscript>
-@backy-cms/admin:dev: > 295 |         </div>
-@backy-cms/admin:dev:       |         ^
-@backy-cms/admin:dev:   296 |     );
-@backy-cms/admin:dev:   297 |     */
-@backy-cms/admin:dev:   298 | }
-1:28:54 am [vite] hmr update /src/components/ui/StatusBadge.tsx, /src/index.css
-1:29:29 am [vite] hmr update /@fs/Users/devanshvarshney/Downloads/Scythian /backy-cms/packages/editor/src/index.tsx
-1:30:16 am [vite] hmr update /@fs/Users/devanshvarshney/Downloads/Scythian /backy-cms/packages/editor/src/index.tsx (x2)
-1:30:21 am [vite] hmr update /@fs/Users/devanshvarshney/Downloads/Scythian /backy-cms/packages/editor/src/index.tsx (x3)
-1:30:27 am [vite] hmr update /@fs/Users/devanshvarshney/Downloads/Scythian /backy-cms/packages/editor/src/index.tsx (x4)
-1:33:50 am [vite] hmr update /src/components/editor/Canvas.tsx, /src/index.css
-1:33:52 am [vite] hmr update /src/components/editor/PropertyPanel.tsx, /src/index.css
-@backy-cms/admin:dev: 1:33:52 am [vite] Pre-transform error: /Users/devanshvarshney/Downloads/Scythian /backy-cms/apps/admin/src/components/editor/RichTextFormatting.tsx: Adjacent JSX elements must be wrapped in an enclosing tag. Did you want a JSX fragment <>...</>? (295:8)
-@backy-cms/admin:dev: 
-@backy-cms/admin:dev:   293 |                 </div>
-@backy-cms/admin:dev:   294 |             </noscript>
-@backy-cms/admin:dev: > 295 |         </div>
-@backy-cms/admin:dev:       |         ^
-@backy-cms/admin:dev:   296 |     );
-@backy-cms/admin:dev:   297 |     */
-@backy-cms/admin:dev:   298 | }
-1:33:52 am [vite] Internal server error: /Users/devanshvarshney/Downloads/Scythian /backy-cms/apps/admin/src/components/editor/RichTextFormatting.tsx: Adjacent JSX elements must be wrapped in an enclosing tag. Did you want a JSX fragment <>...</>? (295:8)
-@backy-cms/admin:dev: 
-@backy-cms/admin:dev:   293 |                 </div>
-@backy-cms/admin:dev:   294 |             </noscript>
-@backy-cms/admin:dev: > 295 |         </div>
-@backy-cms/admin:dev:       |         ^
-@backy-cms/admin:dev:   296 |     );
-@backy-cms/admin:dev:   297 |     */
-@backy-cms/admin:dev:   298 | }
-@backy-cms/admin:dev:   Plugin: vite:react-babel
-@backy-cms/admin:dev:   File: /Users/devanshvarshney/Downloads/Scythian /backy-cms/apps/admin/src/components/editor/RichTextFormatting.tsx:295:8
-@backy-cms/admin:dev:   293|                  </div>
-@backy-cms/admin:dev:   294|              </noscript>
-@backy-cms/admin:dev:   295|          </div>
-@backy-cms/admin:dev:      |          ^
-@backy-cms/admin:dev:   296|      );
-@backy-cms/admin:dev:   297|      */
-@backy-cms/admin:dev:       at constructor (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:365:19)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.raise (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:6599:19)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseElementAt (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4742:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseElement (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4749:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprAtom (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4762:19)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprSubscripts (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11081:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseUpdate (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11066:21)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnary (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11046:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnary (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9837:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10899:61)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprOps (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10904:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeConditional (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10881:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssign (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10831:21)
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9775:39
-@backy-cms/admin:dev:       at TypeScriptParserMixin.tryParse (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:6907:20)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssign (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9775:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExpressionBase (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10784:23)
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10780:39
-@backy-cms/admin:dev:       at TypeScriptParserMixin.allowInAnd (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12421:16)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExpression (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10780:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseStatementContent (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12895:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseStatementContent (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9508:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseStatementLike (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12767:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseModuleItem (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12744:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseBlockOrModuleBlockBody (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:13316:36)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseBlockBody (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:13309:10)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseProgram (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12622:10)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseTopLevel (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12612:25)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parse (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:14488:25)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parse (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10126:18)
-@backy-cms/admin:dev:       at parse (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:14522:38)
-@backy-cms/admin:dev:       at parser (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/core/lib/parser/index.js:41:34)
-@backy-cms/admin:dev:       at parser.next (<anonymous>)
-@backy-cms/admin:dev:       at normalizeFile (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/core/lib/transformation/normalize-file.js:64:37)
-@backy-cms/admin:dev:       at normalizeFile.next (<anonymous>)
-@backy-cms/admin:dev:       at run (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/core/lib/transformation/index.js:22:50)
-@backy-cms/admin:dev:       at run.next (<anonymous>)
-@backy-cms/admin:dev:       at transform (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/core/lib/transform.js:22:33)
-@backy-cms/admin:dev:       at transform.next (<anonymous>)
-@backy-cms/admin:dev:       at step (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/gensync/index.js:261:32)
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/gensync/index.js:273:13
-@backy-cms/admin:dev:       at async.call.result.err.err (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/gensync/index.js:223:11)
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/gensync/index.js:189:28
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/core/lib/gensync-utils/async.js:67:7
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/gensync/index.js:113:33
-@backy-cms/admin:dev:       at step (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/gensync/index.js:287:14)
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/gensync/index.js:273:13
-@backy-cms/admin:dev:       at async.call.result.err.err (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/gensync/index.js:223:11)
-1:33:53 am [vite] hmr update /src/components/editor/Canvas.tsx, /src/index.css
-1:40:41 am [vite] hmr update /src/components/editor/Canvas.tsx, /src/index.css (x2)
-1:40:49 am [vite] hmr update /src/components/editor/Canvas.tsx, /src/index.css (x3)
-1:40:55 am [vite] hmr update /src/components/editor/Canvas.tsx, /src/index.css (x4)
-1:40:58 am [vite] hmr update /src/components/editor/Canvas.tsx, /src/index.css (x5)
-1:41:00 am [vite] hmr update /src/components/editor/Canvas.tsx, /src/index.css (x6)
-1:41:00 am [vite] Internal server error: /Users/devanshvarshney/Downloads/Scythian /backy-cms/apps/admin/src/components/editor/Canvas.tsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (881:50)
-@backy-cms/admin:dev: 
-@backy-cms/admin:dev:   879 |               justifyContent: 'center',
-@backy-cms/admin:dev:   880 |               fontSize: p.size ?? 24,
-@backy-cms/admin:dev: > 881 |               color: p.color || sharedStyle.color ?? '#374151',
-@backy-cms/admin:dev:       |                                                   ^
-@backy-cms/admin:dev:   882 |             }}
-@backy-cms/admin:dev:   883 |           >
-@backy-cms/admin:dev:   884 |             {p.icon ?? '★'}
-@backy-cms/admin:dev:   Plugin: vite:react-babel
-@backy-cms/admin:dev:   File: /Users/devanshvarshney/Downloads/Scythian /backy-cms/apps/admin/src/components/editor/Canvas.tsx:881:50
-@backy-cms/admin:dev:   879|                justifyContent: 'center',
-@backy-cms/admin:dev:   880|                fontSize: p.size ?? 24,
-@backy-cms/admin:dev:   881|                color: p.color || sharedStyle.color ?? '#374151',
-@backy-cms/admin:dev:      |                                                    ^
-@backy-cms/admin:dev:   882|              }}
-@backy-cms/admin:dev:   883|            >
-@backy-cms/admin:dev:       at constructor (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:365:19)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.raise (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:6599:19)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprOp (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10951:22)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprOp (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9306:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprOps (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10908:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeConditional (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10881:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssign (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10831:21)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssign (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9786:20)
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10800:39
-@backy-cms/admin:dev:       at TypeScriptParserMixin.allowInAnd (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12426:12)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssignAllowIn (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10800:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12493:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseObjectProperty (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11950:83)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseObjPropValue (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11978:100)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseObjPropValue (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9744:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parsePropertyDefinition (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11915:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseObjectLike (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11832:21)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprAtom (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11339:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprAtom (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4764:20)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprSubscripts (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11081:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseUpdate (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11066:21)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnary (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11046:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnary (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9837:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10899:61)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprOps (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10904:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeConditional (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10881:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssign (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10831:21)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssign (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9786:20)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExpressionBase (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10784:23)
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10780:39
-@backy-cms/admin:dev:       at TypeScriptParserMixin.allowInAnd (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12426:12)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExpression (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10780:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseExpressionContainer (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4632:31)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseAttributeValue (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4604:21)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseAttribute (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4653:38)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseOpeningElementAfterName (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4667:28)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseOpeningElementAfterName (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10043:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseOpeningElementAt (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4662:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseElementAt (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4686:33)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseElement (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4749:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprAtom (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4759:19)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprSubscripts (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11081:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseUpdate (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11066:21)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnary (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11046:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnary (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9837:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10899:61)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprOps (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10904:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeConditional (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10881:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssign (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10831:21)
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9775:39
-1:41:08 am [vite] hmr update /src/components/editor/blocks/RichTextBlock.tsx, /src/index.css
-1:41:10 am [vite] page reload src/types/editor.ts
-@backy-cms/admin:dev: 1:41:10 am [vite] Pre-transform error: /Users/devanshvarshney/Downloads/Scythian /backy-cms/apps/admin/src/components/editor/Canvas.tsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (881:50)
-@backy-cms/admin:dev: 
-@backy-cms/admin:dev:   879 |               justifyContent: 'center',
-@backy-cms/admin:dev:   880 |               fontSize: p.size ?? 24,
-@backy-cms/admin:dev: > 881 |               color: p.color || sharedStyle.color ?? '#374151',
-@backy-cms/admin:dev:       |                                                   ^
-@backy-cms/admin:dev:   882 |             }}
-@backy-cms/admin:dev:   883 |           >
-@backy-cms/admin:dev:   884 |             {p.icon ?? '★'}
-1:41:10 am [vite] Internal server error: /Users/devanshvarshney/Downloads/Scythian /backy-cms/apps/admin/src/components/editor/Canvas.tsx: Nullish coalescing operator(??) requires parens when mixing with logical operators. (881:50)
-@backy-cms/admin:dev: 
-@backy-cms/admin:dev:   879 |               justifyContent: 'center',
-@backy-cms/admin:dev:   880 |               fontSize: p.size ?? 24,
-@backy-cms/admin:dev: > 881 |               color: p.color || sharedStyle.color ?? '#374151',
-@backy-cms/admin:dev:       |                                                   ^
-@backy-cms/admin:dev:   882 |             }}
-@backy-cms/admin:dev:   883 |           >
-@backy-cms/admin:dev:   884 |             {p.icon ?? '★'}
-@backy-cms/admin:dev:   Plugin: vite:react-babel
-@backy-cms/admin:dev:   File: /Users/devanshvarshney/Downloads/Scythian /backy-cms/apps/admin/src/components/editor/Canvas.tsx:881:50
-@backy-cms/admin:dev:   879|                justifyContent: 'center',
-@backy-cms/admin:dev:   880|                fontSize: p.size ?? 24,
-@backy-cms/admin:dev:   881|                color: p.color || sharedStyle.color ?? '#374151',
-@backy-cms/admin:dev:      |                                                    ^
-@backy-cms/admin:dev:   882|              }}
-@backy-cms/admin:dev:   883|            >
-@backy-cms/admin:dev:       at constructor (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:365:19)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.raise (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:6599:19)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprOp (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10951:22)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprOp (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9306:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprOps (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10908:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeConditional (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10881:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssign (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10831:21)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssign (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9786:20)
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10800:39
-@backy-cms/admin:dev:       at TypeScriptParserMixin.allowInAnd (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12426:12)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssignAllowIn (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10800:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssignAllowInOrVoidPattern (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12493:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseObjectProperty (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11950:83)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseObjPropValue (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11978:100)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseObjPropValue (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9744:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parsePropertyDefinition (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11915:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseObjectLike (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11832:21)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprAtom (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11339:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprAtom (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4764:20)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprSubscripts (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11081:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseUpdate (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11066:21)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnary (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11046:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnary (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9837:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10899:61)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprOps (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10904:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeConditional (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10881:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssign (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10831:21)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssign (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9786:20)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExpressionBase (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10784:23)
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10780:39
-@backy-cms/admin:dev:       at TypeScriptParserMixin.allowInAnd (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:12426:12)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExpression (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10780:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseExpressionContainer (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4632:31)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseAttributeValue (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4604:21)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseAttribute (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4653:38)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseOpeningElementAfterName (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4667:28)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseOpeningElementAfterName (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10043:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseOpeningElementAt (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4662:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseElementAt (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4686:33)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.jsxParseElement (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4749:17)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprAtom (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:4759:19)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprSubscripts (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11081:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseUpdate (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11066:21)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnary (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:11046:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnary (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9837:18)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeUnaryOrPrivate (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10899:61)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseExprOps (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10904:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeConditional (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10881:23)
-@backy-cms/admin:dev:       at TypeScriptParserMixin.parseMaybeAssign (/Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:10831:21)
-@backy-cms/admin:dev:       at /Users/devanshvarshney/Downloads/Scythian /backy-cms/node_modules/@babel/parser/lib/index.js:9775:39
-@backy-cms/admin:dev: 
-@backy/auth:dev:     at [nodejs.internal.kHybridDispatch] (node:internal/event_target:827:20)
-@backy/auth:dev:     at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
-@backy/auth:dev: RollupError: [plugin dts] src/index.ts: Failed to compile. Check the logs above.
-@backy/auth:dev:     at getRollupError (/Users/devanshvarshney/Downloads/Scythian /backy/node_modules/rollup/dist/shared/parseAst.js:287:41)
-@backy/auth:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy/node_modules/rollup/dist/shared/parseAst.js:283:42)
-@backy/auth:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy/node_modules/rollup/dist/shared/rollup.js:913:32)
-@backy/auth:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy/node_modules/rollup/dist/shared/rollup.js:22504:42)
-@backy/auth:dev:     at generateDtsFromTs (/Users/devanshvarshney/Downloads/Scythian /backy/node_modules/tsup/dist/rollup.js:6429:22)
-@backy/auth:dev:     at /Users/devanshvarshney/Downloads/Scythian /backy/node_modules/tsup/dist/rollup.js:6436:59
-@backy/auth:dev:     at _nullishCoalesce (/Users/devanshvarshney/Downloads/Scythian /backy/node_modules/tsup/dist/rollup.js:1:472)
-@backy/auth:dev:     at Object.transform (/Users/devanshvarshney/Downloads/Scythian /backy/node_modules/tsup/dist/rollup.js:6436:18)
-@backy/auth:dev:     at /Users/devanshvarshney/Downloads/Scythian /backy/node_modules/rollup/dist/shared/rollup.js:3392:40
-@backy/db:dev: src/adapters/index.ts(96,35): error TS2307: Cannot find module 'postgres' or its corresponding type declarations.
-@backy/db:dev: src/adapters/index.ts(133,32): error TS2307: Cannot find module 'mysql2/promise' or its corresponding type declarations.
-@backy/db:dev: src/adapters/index.ts(170,36): error TS2307: Cannot find module 'better-sqlite3' or its corresponding type declarations.
-@backy/db:dev: 
-@backy/db:dev: DTS Build failed
-@backy/db:dev: Error: error occurred in dts build
-@backy/db:dev:     at Worker.<anonymous> (/Users/devanshvarshney/Downloads/Scythian /backy/node_modules/tsup/dist/index.js:1545:26)
-@backy/db:dev:     at Worker.emit (node:events:518:28)
-@backy/db:dev:     at MessagePort.<anonymous> (node:internal/worker:268:53)
-@backy/db:dev:     at [nodejs.internal.kHybridDispatch] (node:internal/event_target:827:20)
-@backy/db:dev:     at MessagePort.<anonymous> (node:internal/per_context/messageport:23:28)
-@backy/db:dev: RollupError: [plugin dts] src/adapters/index.ts: Failed to compile. Check the logs above.
-@backy/db:dev:     at getRollupError (/Users/devanshvarshney/Downloads/Scythian /backy/node_modules/rollup/dist/shared/parseAst.js:287:41)
-@backy/db:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy/node_modules/rollup/dist/shared/parseAst.js:283:42)
-@backy/db:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy/node_modules/rollup/dist/shared/rollup.js:913:32)
-@backy/db:dev:     at Object.error (/Users/devanshvarshney/Downloads/Scythian /backy/node_modules/rollup/dist/shared/rollup.js:22504:42)
-@backy/db:dev:     at generateDtsFromTs (/Users/devanshvarshney/Downloads/Scythian /backy/node_modules/tsup/dist/rollup.js:6429:22)
-@backy/db:dev:     at /Users/devanshvarshney/Downloads/Scythian /backy/node_modules/tsup/dist/rollup.js:6436:59
-@backy/db:dev:     at _nullishCoalesce (/Users/devanshvarshney/Downloads/Scythian /backy/node_modules/tsup/dist/rollup.js:1:472)
-@backy/db:dev:     at Object.transform (/Users/devanshvarshney/Downloads/Scythian /backy/node_modules/tsup/dist/rollup.js:6436:18)
-@backy/db:dev:     at /Users/devanshvarshney/Downloads/Scythian /backy/node_modules/rollup/dist/shared/rollup.js:3392:40
-@backy/public:dev:  ✓ Ready in 2.5s
+react-dom.development.js:29895 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: 'mlzlfevd-tfrnqvl', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: 'mlzlfevd-tfrnqvl', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: 'mlzlfevd-tfrnqvl-text', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: 'mlzlfevd-tfrnqvl-text', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: 'mm0hbaze-o57b408', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: 'mm0hbaze-o57b408', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: 'mm0hjavw-u589vft', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: 'mm0hjavw-u589vft', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: 'mlzlfevd-tfrnqvl', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: 'mlzlfevd-tfrnqvl-text', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: 'mm0hbaze-o57b408', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: 'mm0hjavw-u589vft', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: 'mlzlfevd-tfrnqvl', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: 'mlzlfevd-tfrnqvl', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: 'mlzlfevd-tfrnqvl-text', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: 'mlzlfevd-tfrnqvl-text', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: 'mm0hbaze-o57b408', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: 'mm0hbaze-o57b408', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: 'mm0hjavw-u589vft', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: 'mm0hjavw-u589vft', isEditable: false}
+Canvas.tsx:394 [BackyTextProperties][Canvas] handleMouseDown started drag {elementId: 'mm0hb98y-cie0fqk', x: 447.60546875, y: 824.6796875, selectedId: null, editingId: null}
+PropertyPanel.tsx:335 [BackyTextProperties][PropertyPanel][ContentProperties] {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', hasTextContent: true, hasImageContent: false, hasVideoContent: false, …}
+PropertyPanel.tsx:335 [BackyTextProperties][PropertyPanel][ContentProperties] {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', hasTextContent: true, hasImageContent: false, hasVideoContent: false, …}
+Canvas.tsx:394 [BackyTextProperties][Canvas] element onClick {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', selectedId: 'mm0hb98y-cie0fqk', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] handleMouseDown started drag {elementId: 'mm0hb98y-cie0fqk', x: 587.609375, y: 791.69140625, selectedId: null, editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] element onClick {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', selectedId: 'mm0hb98y-cie0fqk', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] handleMouseDown started drag {elementId: 'mm0hb98y-cie0fqk', x: 587.609375, y: 791.69140625, selectedId: null, editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] element onClick {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', selectedId: 'mm0hb98y-cie0fqk', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', previousEditingId: null, selectedId: 'mm0hb98y-cie0fqk', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement missing-focus-target {elementId: 'mm0hb98y-cie0fqk', attempts: 0, selectedId: 'mm0hb98y-cie0fqk', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', previousEditingId: null, selectedId: 'mm0hb98y-cie0fqk', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement missing-focus-target {elementId: 'mm0hb98y-cie0fqk', attempts: 0, selectedId: 'mm0hb98y-cie0fqk', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] handleCanvasDoubleClick {clickedId: 'mm0hb98y-cie0fqk', selectedId: 'mm0hb98y-cie0fqk', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', previousEditingId: null, selectedId: 'mm0hb98y-cie0fqk', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement missing-focus-target {elementId: 'mm0hb98y-cie0fqk', attempts: 0, selectedId: 'mm0hb98y-cie0fqk', editingId: null}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready editable {elementId: undefined, isEditable: true, hasSelection: false, selectionRange: null}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready editable {elementId: undefined, isEditable: true, hasSelection: false, selectionRange: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hb98y-cie0fqk', attempts: 1, selectedId: 'mm0hb98y-cie0fqk', editingId: null}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] focus {elementId: undefined, isEditable: true, selection: null}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: 'mlzlfevd-tfrnqvl', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: 'mlzlfevd-tfrnqvl-text', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: 'mm0hbaze-o57b408', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: 'mm0hjavw-u589vft', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: 'mlzlfevd-tfrnqvl', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: 'mlzlfevd-tfrnqvl', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: 'mlzlfevd-tfrnqvl-text', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: 'mlzlfevd-tfrnqvl-text', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready editable {elementId: undefined, isEditable: true, hasSelection: false, selectionRange: null}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: 'mm0hbaze-o57b408', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: 'mm0hbaze-o57b408', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: 'mm0hjavw-u589vft', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: 'mm0hjavw-u589vft', isEditable: false}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hb98y-cie0fqk', attempts: 1, selectedId: 'mm0hb98y-cie0fqk', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hb98y-cie0fqk', attempts: 1, selectedId: 'mm0hb98y-cie0fqk', editingId: null}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-down {elementId: undefined, isEditable: true, hasSelection: false}
+PropertyPanel.tsx:335 [BackyTextProperties][PropertyPanel][ContentProperties] {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', hasTextContent: true, hasImageContent: false, hasVideoContent: false, …}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-up {elementId: undefined, isEditable: true, hasSelection: true}
+Canvas.tsx:394 [BackyTextProperties][Canvas] element onClick {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-down {elementId: undefined, isEditable: true, hasSelection: true}
+PropertyPanel.tsx:335 [BackyTextProperties][PropertyPanel][ContentProperties] {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', hasTextContent: true, hasImageContent: false, hasVideoContent: false, …}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-up {elementId: undefined, isEditable: true, hasSelection: true}
+Canvas.tsx:394 [BackyTextProperties][Canvas] element onClick {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+PropertyPanel.tsx:335 [BackyTextProperties][PropertyPanel][ContentProperties] {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', hasTextContent: true, hasImageContent: false, hasVideoContent: false, …}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] key-up {elementId: undefined, isEditable: true, hasSelection: true}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] key-up {elementId: undefined, isEditable: true, hasSelection: true}
+PropertyPanel.tsx:335 [BackyTextProperties][PropertyPanel][ContentProperties] {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', hasTextContent: true, hasImageContent: false, hasVideoContent: false, …}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] key-up {elementId: undefined, isEditable: true, hasSelection: true}
+PropertyPanel.tsx:335 [BackyTextProperties][PropertyPanel][ContentProperties] {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', hasTextContent: true, hasImageContent: false, hasVideoContent: false, …}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] key-up {elementId: undefined, isEditable: true, hasSelection: true}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] key-up {elementId: undefined, isEditable: true, hasSelection: true}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] key-up {elementId: undefined, isEditable: true, hasSelection: true}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] content-property.font-family-change {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'unknown', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] content-property.click {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'unknown', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.requested {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] activateTextEditor.start {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] activateTextEditor.host-query {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] activateTextEditor.dispatch-dblclick {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', previousEditingId: 'mm0hb98y-cie0fqk', selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hb98y-cie0fqk', attempts: 0, selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] focus {elementId: undefined, isEditable: true, selection: {…}}
+Canvas.tsx:394 [BackyTextProperties][Canvas] handleCanvasDoubleClick {clickedId: 'mm0hb98y-cie0fqk', selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', previousEditingId: 'mm0hb98y-cie0fqk', selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hb98y-cie0fqk', attempts: 0, selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] activateTextEditor.dispatch-window-event {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+Canvas.tsx:394 [BackyTextProperties][Canvas] handleExternalEditRequest {eventType: 'backy-open-text-editor', elementId: 'mm0hb98y-cie0fqk', selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', previousEditingId: 'mm0hb98y-cie0fqk', selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hb98y-cie0fqk', attempts: 0, selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.polling {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-timeout {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] content-property.font-family-change {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] content-property.click {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.requested {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] activateTextEditor.start {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] activateTextEditor.host-query {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] activateTextEditor.dispatch-dblclick {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', previousEditingId: 'mm0hb98y-cie0fqk', selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hb98y-cie0fqk', attempts: 0, selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] focus {elementId: undefined, isEditable: true, selection: {…}}
+Canvas.tsx:394 [BackyTextProperties][Canvas] handleCanvasDoubleClick {clickedId: 'mm0hb98y-cie0fqk', selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', previousEditingId: 'mm0hb98y-cie0fqk', selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hb98y-cie0fqk', attempts: 0, selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] activateTextEditor.dispatch-window-event {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+Canvas.tsx:394 [BackyTextProperties][Canvas] handleExternalEditRequest {eventType: 'backy-open-text-editor', elementId: 'mm0hb98y-cie0fqk', selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hb98y-cie0fqk', elementType: 'paragraph', previousEditingId: 'mm0hb98y-cie0fqk', selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hb98y-cie0fqk', attempts: 0, selectedId: 'mm0hb98y-cie0fqk', editingId: 'mm0hb98y-cie0fqk'}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.polling {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hb98y-cie0fqk', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: undefined, isEditable: false}
+Canvas.tsx:394 [BackyTextProperties][Canvas] handleMouseDown started drag {elementId: 'mm0hbaze-o57b408', x: 643.29296875, y: 533.5625, selectedId: null, editingId: null}
+PropertyPanel.tsx:335 [BackyTextProperties][PropertyPanel][ContentProperties] {elementId: 'mm0hbaze-o57b408', elementType: 'quote', hasTextContent: true, hasImageContent: false, hasVideoContent: false, …}
+PropertyPanel.tsx:335 [BackyTextProperties][PropertyPanel][ContentProperties] {elementId: 'mm0hbaze-o57b408', elementType: 'quote', hasTextContent: true, hasImageContent: false, hasVideoContent: false, …}
+PropertyPanel.tsx:335 [BackyTextProperties][PropertyPanel][ContentProperties] {elementId: 'mm0hbaze-o57b408', elementType: 'quote', hasTextContent: true, hasImageContent: false, hasVideoContent: false, …}
+Canvas.tsx:394 [BackyTextProperties][Canvas] element onClick {elementId: 'mm0hbaze-o57b408', elementType: 'quote', selectedId: 'mm0hbaze-o57b408', editingId: null}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] content-property.font-family-change {elementId: 'mm0hbaze-o57b408', requestedAction: 'unknown', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] content-property.click {elementId: 'mm0hbaze-o57b408', requestedAction: 'unknown', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.requested {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] activateTextEditor.start {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] activateTextEditor.host-query {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] activateTextEditor.dispatch-dblclick {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hbaze-o57b408', elementType: 'quote', previousEditingId: null, selectedId: 'mm0hbaze-o57b408', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement missing-focus-target {elementId: 'mm0hbaze-o57b408', attempts: 0, selectedId: 'mm0hbaze-o57b408', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] handleCanvasDoubleClick {clickedId: 'mm0hbaze-o57b408', selectedId: 'mm0hbaze-o57b408', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hbaze-o57b408', elementType: 'quote', previousEditingId: null, selectedId: 'mm0hbaze-o57b408', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement missing-focus-target {elementId: 'mm0hbaze-o57b408', attempts: 0, selectedId: 'mm0hbaze-o57b408', editingId: null}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] activateTextEditor.dispatch-window-event {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+Canvas.tsx:394 [BackyTextProperties][Canvas] handleExternalEditRequest {eventType: 'backy-open-text-editor', elementId: 'mm0hbaze-o57b408', selectedId: 'mm0hbaze-o57b408', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hbaze-o57b408', elementType: 'quote', previousEditingId: null, selectedId: 'mm0hbaze-o57b408', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement missing-focus-target {elementId: 'mm0hbaze-o57b408', attempts: 0, selectedId: 'mm0hbaze-o57b408', editingId: null}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.polling {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: true, …}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready editable {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: false, selectionRange: null}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready editable {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: false, selectionRange: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hbaze-o57b408', attempts: 1, selectedId: 'mm0hbaze-o57b408', editingId: null}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] focus {elementId: 'mm0hbaze-o57b408', isEditable: true, selection: null}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: 'mlzlfevd-tfrnqvl', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: 'mlzlfevd-tfrnqvl-text', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: undefined, isEditable: true}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: 'mm0hbaze-o57b408', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unmount-cleanup {elementId: 'mm0hjavw-u589vft', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: 'mlzlfevd-tfrnqvl', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: 'mlzlfevd-tfrnqvl', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: 'mlzlfevd-tfrnqvl-text', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: 'mlzlfevd-tfrnqvl-text', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: undefined, isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready editable {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: false, selectionRange: null}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] editor-ready readOnly {elementId: 'mm0hjavw-u589vft', isEditable: false}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] unregister-when-readOnly {elementId: 'mm0hjavw-u589vft', isEditable: false}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hbaze-o57b408', attempts: 1, selectedId: 'mm0hbaze-o57b408', editingId: null}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hbaze-o57b408', attempts: 1, selectedId: 'mm0hbaze-o57b408', editingId: null}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}actionName: "fontFamily"activeEditorElementId: nullattempts: 57canInteract: trueelementId: "mm0hbaze-o57b408"expectedElementId: "mm0hbaze-o57b408"hasSelection: falserequestedAction: "fontFamily"selectionRevision: 58[[Prototype]]: Object
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}actionName: "fontFamily"activeEditorElementId: nullattempts: 58canInteract: trueelementId: "mm0hbaze-o57b408"expectedElementId: "mm0hbaze-o57b408"hasSelection: falserequestedAction: "fontFamily"selectionRevision: 58[[Prototype]]: Object
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-target-mismatch {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.poll-timeout {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: null, canInteract: true, hasSelection: false, …}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-down {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: false}
+PropertyPanel.tsx:335 [BackyTextProperties][PropertyPanel][ContentProperties] {elementId: 'mm0hbaze-o57b408', elementType: 'quote', hasTextContent: true, hasImageContent: false, hasVideoContent: false, …}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-up {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+Canvas.tsx:394 [BackyTextProperties][Canvas] element onClick {elementId: 'mm0hbaze-o57b408', elementType: 'quote', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-down {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-up {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+Canvas.tsx:394 [BackyTextProperties][Canvas] element onClick {elementId: 'mm0hbaze-o57b408', elementType: 'quote', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hbaze-o57b408', elementType: 'quote', previousEditingId: 'mm0hbaze-o57b408', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hbaze-o57b408', attempts: 0, selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hbaze-o57b408', elementType: 'quote', previousEditingId: 'mm0hbaze-o57b408', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hbaze-o57b408', attempts: 0, selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] handleCanvasDoubleClick {clickedId: 'mm0hbaze-o57b408', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hbaze-o57b408', elementType: 'quote', previousEditingId: 'mm0hbaze-o57b408', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hbaze-o57b408', attempts: 0, selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-down {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+PropertyPanel.tsx:335 [BackyTextProperties][PropertyPanel][ContentProperties] {elementId: 'mm0hbaze-o57b408', elementType: 'quote', hasTextContent: true, hasImageContent: false, hasVideoContent: false, …}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-up {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+Canvas.tsx:394 [BackyTextProperties][Canvas] element onClick {elementId: 'mm0hbaze-o57b408', elementType: 'quote', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-down {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+PropertyPanel.tsx:335 [BackyTextProperties][PropertyPanel][ContentProperties] {elementId: 'mm0hbaze-o57b408', elementType: 'quote', hasTextContent: true, hasImageContent: false, hasVideoContent: false, …}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-up {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+Canvas.tsx:394 [BackyTextProperties][Canvas] element onClick {elementId: 'mm0hbaze-o57b408', elementType: 'quote', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hbaze-o57b408', elementType: 'quote', previousEditingId: 'mm0hbaze-o57b408', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hbaze-o57b408', attempts: 0, selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hbaze-o57b408', elementType: 'quote', previousEditingId: 'mm0hbaze-o57b408', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hbaze-o57b408', attempts: 0, selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] handleCanvasDoubleClick {clickedId: 'mm0hbaze-o57b408', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hbaze-o57b408', elementType: 'quote', previousEditingId: 'mm0hbaze-o57b408', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hbaze-o57b408', attempts: 0, selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-down {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] focus {elementId: 'mm0hbaze-o57b408', isEditable: true, selection: {…}}
+PropertyPanel.tsx:335 [BackyTextProperties][PropertyPanel][ContentProperties] {elementId: 'mm0hbaze-o57b408', elementType: 'quote', hasTextContent: true, hasImageContent: false, hasVideoContent: false, …}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-up {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+Canvas.tsx:394 [BackyTextProperties][Canvas] element onClick {elementId: 'mm0hbaze-o57b408', elementType: 'quote', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-down {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-up {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+Canvas.tsx:394 [BackyTextProperties][Canvas] element onClick {elementId: 'mm0hbaze-o57b408', elementType: 'quote', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-down {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+PropertyPanel.tsx:335 [BackyTextProperties][PropertyPanel][ContentProperties] {elementId: 'mm0hbaze-o57b408', elementType: 'quote', hasTextContent: true, hasImageContent: false, hasVideoContent: false, …}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-up {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+Canvas.tsx:394 [BackyTextProperties][Canvas] element onClick {elementId: 'mm0hbaze-o57b408', elementType: 'quote', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-down {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-up {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+Canvas.tsx:394 [BackyTextProperties][Canvas] element onClick {elementId: 'mm0hbaze-o57b408', elementType: 'quote', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-down {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+PropertyPanel.tsx:335 [BackyTextProperties][PropertyPanel][ContentProperties] {elementId: 'mm0hbaze-o57b408', elementType: 'quote', hasTextContent: true, hasImageContent: false, hasVideoContent: false, …}
+RichTextBlock.tsx:33 [BackyTextProperties][RichTextBlock] mouse-up {elementId: 'mm0hbaze-o57b408', isEditable: true, hasSelection: true}
+Canvas.tsx:394 [BackyTextProperties][Canvas] element onClick {elementId: 'mm0hbaze-o57b408', elementType: 'quote', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hbaze-o57b408', elementType: 'quote', previousEditingId: 'mm0hbaze-o57b408', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hbaze-o57b408', attempts: 0, selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hbaze-o57b408', elementType: 'quote', previousEditingId: 'mm0hbaze-o57b408', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hbaze-o57b408', attempts: 0, selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] handleCanvasDoubleClick {clickedId: 'mm0hbaze-o57b408', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement activating {elementId: 'mm0hbaze-o57b408', elementType: 'quote', previousEditingId: 'mm0hbaze-o57b408', selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+Canvas.tsx:394 [BackyTextProperties][Canvas] requestEditForElement focus {elementId: 'mm0hbaze-o57b408', attempts: 0, selectedId: 'mm0hbaze-o57b408', editingId: 'mm0hbaze-o57b408'}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] content-property.font-family-change {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: 'mm0hbaze-o57b408', canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] content-property.click {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: 'mm0hbaze-o57b408', canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.requested {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: 'mm0hbaze-o57b408', canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runOrActivateTextEditor.direct-execute {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: 'mm0hbaze-o57b408', canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runForRangeSelection.state {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: 'mm0hbaze-o57b408', canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runForRangeSelection.execute {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: 'mm0hbaze-o57b408', canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runForRangeSelection.state {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: 'mm0hbaze-o57b408', canInteract: true, hasSelection: true, …}
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runForRangeSelection.execute {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: 'mm0hbaze-o57b408', canInteract: true, hasSelection: true, …}
+ActiveEditorContext.tsx:222  focusAndRestore error: Error: Cannot resolve a DOM node from Slate node: {"children":[{"type":"blockquote","children":[{"text":"Quote"},{"text":" ","fontFamily":"Playfair Display, serif"},{"text":"text","fontFamily":"Merriweather, serif"},{"text":" here..."}],"id":"JvwNEg70Nj","align":"center"}],"operations":[],"selection":{"anchor":{"path":[0,2],"offset":0},"focus":{"path":[0,2],"offset":4}},"marks":null,"history":{"redos":[],"undos":[]},"meta":{"key":"fvDollWzQ04zdEnxmlzpK","isFallback":false,"pluginList":[{"key":"root","__apiExtensions":[],"__configuration":null,"__extensions":[],"__selectorExtensions":[],"api":{},"dependencies":[],"editor":{},"handlers":{},"inject":{},"node":{"type":"root"},"options":{},"override":{"components":{}},"parser":{},"parsers":{},"plugins":[{"key":"debug","__apiExtensions":[{"isPluginSpecific":false}],"__configuration":null,"__extensions":[],"__selectorExtensions":[],"api":{},"dependencies":[],"editor":{},"handlers":{},"inject":{},"node":{"type":"debug"},"options":{"isProduction":false,"logger":{},"logLevel":"log","throwErrors":true},"override":{},"parser":{},"parsers":{},"plugins":[],"priority":100,"render":{},"rules":{},"shortcuts":{},"transforms":{}},{"key":"slateExtension","__apiExtensions":[{"isPluginSpecific":false,"isTransform":true},{"isPluginSpecific":false},{"isPluginSpecific":false,"isTransform":true},{"isOverride":true,"isPluginSpecific":false,"isTransform":true}],"__configuration":null,"__extensions":[],"__selectorExtensions":[],"api":{},"dependencies":[],"editor":{},"handlers":{},"inject":{},"node":{"type":"slateExtension"},"options":{},"override":{},"parser":{},"parsers":{},"plugins":[],"priority":100,"render":{},"rules":{},"shortcuts":{},"transforms":{}},{"key":"dom","__apiExtensions":[{"isPluginSpecific":false},{"isPluginSpecific":false,"isTransform":true},{"isOverride":true,"isPluginSpecific":false,"isTransform":true},{"isOverride":true,"isPluginSpecific":false,"isTransform":true}],"__configuration":null,"__extensions":[],"__selectorExtensions":[],"api":{},"dependencies":[],"editor":{},"handlers":{},"inject":{},"node":{"type":"dom"},"options":{"scrollMode":"last","scrollOperations":{"insert_node":true,"insert_text":true},"scrollOptions":{"scrollMode":"if-needed"}},"override":{},"parser":{},"parsers":{},"plugins":[],"priority":100,"render":{},"rules":{},"shortcuts":{},"transforms":{}},{"key":"history","__apiExtensions":[],"__configuration":null,"__extensions":[],"__selectorExtensions":[],"api":{},"dependencies":[],"editor":{},"handlers":{},"inject":{},"node":{"type":"history"},"options":{},"override":{},"parser":{},"parsers":{},"plugins":[],"priority":100,"render":{},"rules":{},"shortcuts":{},"transforms":{}},{"key":"override","__apiExtensions":[{"isOverride":true,"isPluginSpecific":false,"isTransform":true},{"isOverride":true,"isPluginSpecific":false,"isTransform":true},{"isOverride":true,"isPluginSpecific":false,"isTransform":true},{"isOverride":true,"isPluginSpecific":false,"isTransform":true},{"isOverride":true,"isPluginSpecific":false,"isTransform":true}],"__configuration":null,"__extensions":[],"__selectorExtensions":[],"api":{},"dependencies":[],"editor":{},"handlers":{},"inject":{},"node":{"type":"override"},"options":{},"override":{},"parser":{},"parsers":{},"plugins":[],"priority":100,"render":{},"rules":{},"shortcuts":{},"transforms":{}},{"key":"parser","__apiExtensions":[{"isOverride":true,"isPluginSpecific":false,"isTransform":true}],"__configuration":null,"__extensions":[],"__selectorExtensions":[],"api":{},"dependencies":[],"editor":{},"handlers":{},"inject":{},"node":{"type":"parser"},"options":{},"override":{},"parser":{},"parsers":{},"plugins":[],"priority":100,"render":{},"rules":{},"shortcuts":{},"transforms":{}},{"key":"length","__apiExtensions":[{"isOverride":true,"isPluginSpecific":false,"isTransform":true}],"__configuration":null,"__extensions":[],"__selectorExtensions":[],"api":{},"dependencies":[],"editor":{},"handlers":{},"inject":{},"node":{"type":"length"},"options":{},"override":{},"parser":{},"parsers":{},"plugins":[],"priority":100,"render":{},"rules":{},"shortcuts":{},"transforms":{}},{"key":"html","__apiExtensions":[{"isPluginSpecific":true}],"__configuration":null,"__extensions":[],"__selectorExtensions":[],"api":{},"dependencies":[],"editor":{},"handlers":{},"inject":{},"node":{"type":"html"},"options":{},"override":{},"parser":{"format":"text/html"},"parsers":{},"plugins":[],"priority":100,"render":{},"rules":{},"shortcuts":{},"transforms":{}},{"key":"ast","__apiExtensions":[],"__configuration":null,"__extensions":[],"__selectorExtensions":[],"api":{},"dependencies":[],"editor":{},"handlers":{},"inject":{},"node":{"type":"ast"},"options":{},"override":{},"parser":{"format":"application/x-slate-fragment"},"parsers":{},"plugins":[],"priority":100,"render":{},"rules":{},"shortcuts":{},"transforms":{}},{"key":"nodeId","__apiExtensions":[{"isOverride":true,"isPluginSpecific":false,"isTransform":true}],"__extensions":[],"__selectorExtensions":[],"api":    at Object.toDOMNode (react-editor.ts:552:13)
+    at Object.focus (react-editor.ts:433:28)
+    at ActiveEditorContext.tsx:188:19
+    at ActiveEditorContext.tsx:229:12
+    at ActiveEditorContext.tsx:488:12
+    at RichTextFormatting.tsx:382:7
+    at RichTextFormatting.tsx:300:7
+    at RichTextFormatting.tsx:314:5
+    at RichTextFormatting.tsx:376:5
+    at RichTextFormatting.tsx:509:9
+(anonymous) @ ActiveEditorContext.tsx:222
+(anonymous) @ ActiveEditorContext.tsx:229
+(anonymous) @ ActiveEditorContext.tsx:488
+(anonymous) @ RichTextFormatting.tsx:382
+(anonymous) @ RichTextFormatting.tsx:300
+(anonymous) @ RichTextFormatting.tsx:314
+(anonymous) @ RichTextFormatting.tsx:376
+(anonymous) @ RichTextFormatting.tsx:509
+(anonymous) @ RichTextFormatting.tsx:300
+(anonymous) @ RichTextFormatting.tsx:314
+(anonymous) @ RichTextFormatting.tsx:504
+(anonymous) @ RichTextFormatting.tsx:150
+(anonymous) @ RichTextFormatting.tsx:231
+(anonymous) @ RichTextFormatting.tsx:503
+onChange @ RichTextFormatting.tsx:850
+callCallback2 @ react-dom.development.js:4164
+invokeGuardedCallbackDev @ react-dom.development.js:4213
+invokeGuardedCallback @ react-dom.development.js:4277
+invokeGuardedCallbackAndCatchFirstError @ react-dom.development.js:4291
+executeDispatch @ react-dom.development.js:9041
+processDispatchQueueItemsInOrder @ react-dom.development.js:9073
+processDispatchQueue @ react-dom.development.js:9086
+dispatchEventsForPlugins @ react-dom.development.js:9097
+(anonymous) @ react-dom.development.js:9288
+batchedUpdates$1 @ react-dom.development.js:26179
+batchedUpdates @ react-dom.development.js:3991
+dispatchEventForPluginEventSystem @ react-dom.development.js:9287
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ react-dom.development.js:6465
+dispatchEvent @ react-dom.development.js:6457
+dispatchDiscreteEvent @ react-dom.development.js:6430
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runForRangeSelection.restore-cursor {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: 'mm0hbaze-o57b408', canInteract: true, hasSelection: true, …}activeEditorElementId: "mm0hbaze-o57b408"canInteract: trueelementId: "mm0hbaze-o57b408"hasSelection: truerequestedAction: "fontFamily"selectionRevision: 93[[Prototype]]: Object
+RichTextFormatting.tsx:84 [BackyTextProperties][RichTextFormatting] runForRangeSelection.restore-cursor {elementId: 'mm0hbaze-o57b408', requestedAction: 'fontFamily', activeEditorElementId: 'mm0hbaze-o57b408', canInteract: true, hasSelection: true, …}activeEditorElementId: "mm0hbaze-o57b408"canInteract: trueelementId: "mm0hbaze-o57b408"hasSelection: truerequestedAction: "fontFamily"selectionRevision: 93[[Prototype]]: Object

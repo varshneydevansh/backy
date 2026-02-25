@@ -362,6 +362,8 @@ interface CanvasProps {
   isPreview?: boolean;
 }
 
+const EDITOR_ACTIVATION_EVENT = 'backy-open-text-editor';
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -388,17 +390,124 @@ export function Canvas({
 }: CanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const debugTextInteraction = useCallback((..._args: unknown[]) => {
+  }, []);
+
   const getTargetElement = useCallback((target: EventTarget | null) => {
     if (!target) return null;
     if (target instanceof Element) return target;
+    if (target instanceof Text) {
+      return target.parentElement;
+    }
     return null;
   }, []);
+
+  useEffect(() => {
+    if (isPreview) {
+      setEditingId(null);
+      return;
+    }
+
+    if (!selectedId) {
+      setEditingId(null);
+    }
+  }, [isPreview, selectedId]);
 
   const isInteractiveHandle = useCallback((target: EventTarget | null) => {
     const element = getTargetElement(target);
     if (!element) return false;
     return !!element.closest('[data-role="canvas-resize-handle"]');
   }, [getTargetElement]);
+
+  const isTextEditorInteraction = useCallback((target: EventTarget | null) => {
+    const element = getTargetElement(target);
+    if (!element) return false;
+
+    const editorHost = element.closest('[data-backy-text-editor]');
+    if (!editorHost) {
+      return false;
+    }
+
+    return editorHost.getAttribute('data-backy-text-editor-editable') === 'true';
+  }, [getTargetElement]);
+
+  const requestEditForElement = useCallback((elementId: string | null) => {
+    if (!elementId || isPreview) {
+      debugTextInteraction('requestEditForElement blocked', {
+        elementId,
+        reason: !elementId ? 'missing-element-id' : 'preview-mode',
+      });
+      return;
+    }
+
+    const element = findElementById(elements, elementId);
+    if (!element) {
+      debugTextInteraction('requestEditForElement element-missing', { elementId });
+      return;
+    }
+
+    if (!isTextEditableElement(element.type)) {
+      debugTextInteraction('requestEditForElement blocked', {
+        elementId,
+        elementType: element.type,
+        reason: 'not-a-text-element',
+      });
+      return;
+    }
+
+    debugTextInteraction('requestEditForElement activating', {
+      elementId,
+      elementType: element.type,
+      previousEditingId: editingId,
+    });
+
+    onSelect(elementId);
+    setEditingId((current) => (current === elementId ? current : elementId));
+
+    let attempts = 0;
+    const maxAttempts = 18;
+    const focusEditable = () => {
+      const host = canvasRef.current?.querySelector<HTMLElement>(
+        `[data-element-id="${elementId}"] [data-backy-text-editor][data-backy-text-editor-editable="true"]`
+      );
+
+      const editableHost = host?.querySelector<HTMLElement>('[contenteditable="true"]')
+        || host?.querySelector<HTMLElement>('[role="textbox"][contenteditable="true"]')
+        || host?.querySelector<HTMLElement>('[role="textbox"]')
+        || host?.querySelector<HTMLElement>('[contenteditable]');
+      const focusTarget = editableHost || host;
+
+      if (!focusTarget) {
+        debugTextInteraction('requestEditForElement missing-focus-target', { elementId, attempts });
+      }
+
+      if (focusTarget && 'focus' in focusTarget) {
+        debugTextInteraction('requestEditForElement focus', { elementId, attempts });
+        focusTarget.focus();
+        return;
+      }
+
+      if (attempts >= maxAttempts) {
+        const fallbackHost = canvasRef.current?.querySelector<HTMLElement>(`[data-element-id="${elementId}"]`);
+        if (fallbackHost) {
+          debugTextInteraction('requestEditForElement fallback-focus', { elementId, attempts });
+          fallbackHost.focus();
+        }
+        return;
+      }
+
+      attempts += 1;
+      window.requestAnimationFrame(focusEditable);
+    };
+
+    focusEditable();
+  }, [debugTextInteraction, elements, editingId, isPreview, onSelect]);
+
+  const handleExternalEditRequest = useCallback((event: Event) => {
+    const elementId = (event as CustomEvent<{ elementId?: string }>)?.detail?.elementId;
+    debugTextInteraction('handleExternalEditRequest', { eventType: event.type, elementId });
+    requestEditForElement(elementId || null);
+  }, [requestEditForElement]);
 
   // Drag state for moving elements
   const [dragState, setDragState] = useState<{
@@ -433,27 +542,31 @@ export function Canvas({
   const handleMouseDown = useCallback(
     (e: React.MouseEvent | React.PointerEvent, elementId: string) => {
       if (isPreview) return;
-      const eventTarget = getTargetElement(e.target);
-      const hitElementId = eventTarget?.closest?.('[data-element-id]')?.getAttribute('data-element-id');
-      if (hitElementId && hitElementId !== elementId) {
+      if ('button' in e && e.button !== 0) return;
+
+      if (isTextEditorInteraction(e.target)) {
+        debugTextInteraction('handleMouseDown ignored for text editor interaction', {
+          elementId,
+          target: (e.target as Element | null)?.tagName,
+        });
         return;
       }
-      if (isInteractiveHandle(e.target)) return;
 
-      if ('button' in e && e.button !== 0) return;
+      const eventTarget = getTargetElement(e.target);
+      const hitElementId = eventTarget?.closest?.('[data-element-id]')?.getAttribute('data-element-id');
+
+      if (hitElementId && hitElementId !== elementId) {
+        debugTextInteraction('handleMouseDown hit-child mismatch', { elementId, hitElementId });
+        return;
+      }
 
       const clickedElement = findElementById(elements, elementId);
       if (!clickedElement) return;
 
-      e.stopPropagation();
-      onSelect(elementId);
+      if (isInteractiveHandle(e.target)) return;
+      debugTextInteraction('handleMouseDown started drag', { elementId, x: e.clientX, y: e.clientY });
 
-      const isTextElement = isTextEditableElement(clickedElement.type);
-      if (isTextElement && editingId === elementId) {
-        // Keep the caret active while the text element is in edit mode.
-        // Dragging will be available after this element is deselected.
-        return;
-      }
+      onSelect(elementId);
 
       if (editingId) {
         setEditingId(null);
@@ -467,7 +580,7 @@ export function Canvas({
         initialY: clickedElement.y,
       });
     },
-    [elements, editingId, isInteractiveHandle, isPreview, onSelect]
+    [elements, editingId, isInteractiveHandle, isTextEditorInteraction, isPreview, onSelect]
   );
 
   /**
@@ -700,24 +813,52 @@ export function Canvas({
   /**
    * Handle canvas click to deselect
    */
-  const handleCanvasClick = useCallback(() => {
+  const handleCanvasClick = useCallback((event: React.MouseEvent) => {
+    const eventTarget = getTargetElement(event.target);
+    if (isTextEditorInteraction(eventTarget)) {
+      debugTextInteraction('handleCanvasClick skipped in text editor', {
+        targetTag: (eventTarget as Element | null)?.tagName,
+      });
+      return;
+    }
+
     if (!isPreview) {
       onSelect(null);
       setEditingId(null);
     }
-  }, [isPreview, onSelect]);
+  }, [isPreview, isTextEditorInteraction, onSelect]);
+
+  const handleCanvasDoubleClick = useCallback((event: React.MouseEvent) => {
+    const eventTarget = getTargetElement(event.target);
+    if (!eventTarget) {
+      return;
+    }
+
+    const clickedId = eventTarget.closest?.('[data-element-id]')?.getAttribute('data-element-id');
+    debugTextInteraction('handleCanvasDoubleClick', { clickedId });
+    requestEditForElement(clickedId || null);
+  }, [getTargetElement, requestEditForElement]);
 
   const handleDoubleClick = useCallback((elementId: string) => {
-    if (!isPreview) {
-      setEditingId((current) => (current === elementId ? current : elementId));
+    if (isPreview) {
+      return;
     }
-  }, [isPreview]);
+
+    requestEditForElement(elementId);
+  }, [isPreview, requestEditForElement]);
 
   const handleCanvasKeyDown = useCallback((event: KeyboardEvent) => {
     if (event.key === 'Escape') {
       setEditingId((current) => (current ? null : current));
     }
   }, []);
+
+  useEffect(() => {
+    window.addEventListener(EDITOR_ACTIVATION_EVENT, handleExternalEditRequest);
+    return () => {
+      window.removeEventListener(EDITOR_ACTIVATION_EVENT, handleExternalEditRequest);
+    };
+  }, [handleExternalEditRequest]);
 
   useEffect(() => {
     if (isPreview) {
@@ -747,6 +888,7 @@ export function Canvas({
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       onClick={handleCanvasClick}
+      onDoubleClick={handleCanvasDoubleClick}
     >
       {/* Grid Background */}
       {!isPreview && (
@@ -773,6 +915,10 @@ export function Canvas({
             onResizeStart={(e, handle) => handleResizeStart(e, element.id, handle)}
             onClick={(e) => {
               e.stopPropagation();
+              debugTextInteraction('element onClick', {
+                elementId: element.id,
+                elementType: element.type,
+              });
               onSelect(element.id);
             }}
             onSelectElement={onSelect}
@@ -855,13 +1001,14 @@ function CanvasElementComponent({
       return (
         <div
           style={{ ...sharedStyle, width: '100%', height: '100%' }}
+          onDoubleClick={onDoubleClick}
           onMouseDown={(e) => {
             if (isEditing) e.stopPropagation();
           }}
-          onDoubleClick={onDoubleClick}
         >
             <RichTextBlock
               key={`text-${element.id}`}
+              elementId={element.id}
               content={p.content}
               onChange={(val) => onUpdate({ content: val })}
               isEditable={isEditing && !isPreview}
@@ -884,13 +1031,14 @@ function CanvasElementComponent({
       return (
         <div
           style={{ ...sharedStyle, width: '100%', height: '100%' }}
+          onDoubleClick={onDoubleClick}
           onMouseDown={(e) => {
             if (isEditing) e.stopPropagation();
           }}
-          onDoubleClick={onDoubleClick}
         >
             <RichTextBlock
             key={`heading-${element.id}`}
+            elementId={element.id}
             content={p.content}
             onChange={(val) => onUpdate({ content: val })}
               isEditable={isEditing && !isPreview}
@@ -1127,13 +1275,14 @@ function CanvasElementComponent({
         return (
           <div
             style={{ ...sharedStyle, width: '100%', height: '100%' }}
+            onDoubleClick={onDoubleClick}
             onMouseDown={(e) => {
               if (isEditing) e.stopPropagation();
             }}
-            onDoubleClick={onDoubleClick}
           >
             <RichTextBlock
               key={`list-${element.id}`}
+              elementId={element.id}
               content={listValue}
               onChange={(val) =>
                 onUpdate({
@@ -1169,13 +1318,14 @@ function CanvasElementComponent({
         return (
         <div
             style={{ ...sharedStyle, width: '100%', height: '100%' }}
+            onDoubleClick={onDoubleClick}
             onMouseDown={(e) => {
               if (isEditing) e.stopPropagation();
             }}
-            onDoubleClick={onDoubleClick}
           >
             <RichTextBlock
               key={`quote-${element.id}`}
+              elementId={element.id}
               content={p.content}
               onChange={(val) => onUpdate({ content: val })}
               isEditable={isEditing && !isPreview}
@@ -1347,13 +1497,14 @@ function CanvasElementComponent({
       return (
         <div
           style={{ ...sharedStyle, width: '100%', height: '100%' }}
+          onDoubleClick={onDoubleClick}
           onMouseDown={(e) => {
             if (isEditing) e.stopPropagation();
           }}
-          onDoubleClick={onDoubleClick}
         >
             <RichTextBlock
               key={`paragraph-${element.id}`}
+              elementId={element.id}
               content={p.content}
               onChange={(val) => onUpdate({ content: val })}
               isEditable={isEditing && !isPreview}
@@ -1482,6 +1633,8 @@ function CanvasElementComponent({
     }
   };
 
+  const isTextElement = isTextEditableElement(element.type);
+
   return (
       <div
       className={cn(
@@ -1490,6 +1643,8 @@ function CanvasElementComponent({
         isSelected && !isPreview && 'ring-2 ring-primary ring-offset-2'
       )}
       data-element-id={element.id}
+      data-backy-text-editor={isTextElement ? 'true' : undefined}
+      data-backy-text-editor-editable={String(isTextElement && isEditing && !isPreview)}
       style={{
         boxSizing: 'border-box',
         left: element.x,
@@ -1501,7 +1656,12 @@ function CanvasElementComponent({
         ...sharedStyle,
         opacity: sharedStyle.opacity ?? 1,
       }}
-      onPointerDownCapture={onPointerDown}
+      onPointerDownCapture={(event) => {
+        if (isEditing && isTextElement) {
+          return;
+        }
+        onPointerDown(event);
+      }}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
     >
