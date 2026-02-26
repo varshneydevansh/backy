@@ -16,9 +16,11 @@ import {
   ArrowLeft,
   Save,
   Eye,
+  Scissors,
   Monitor,
   Tablet,
   Smartphone,
+  RefreshCw,
   Undo,
   Redo,
   Settings,
@@ -43,6 +45,37 @@ import type {
 } from '@/types/editor';
 import { useStore } from '@/stores/mockStore';
 
+const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
+  'text',
+  'heading',
+  'paragraph',
+  'image',
+  'button',
+  'container',
+  'section',
+  'header',
+  'footer',
+  'nav',
+  'divider',
+  'video',
+  'icon',
+  'form',
+  'input',
+  'textarea',
+  'select',
+  'checkbox',
+  'radio',
+  'spacer',
+  'columns',
+  'map',
+  'box',
+  'embed',
+  'list',
+  'link',
+  'quote',
+  'comment',
+];
+
 export interface CanvasEditorProps {
   initialElements: CanvasElement[];
   initialSettings: PageSettings;
@@ -65,6 +98,90 @@ export interface CanvasEditorProps {
     size?: CanvasSize
   ) => void;
 }
+
+const normalizeTypeToken = (value: string): string => {
+  return typeof value === 'string' ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
+};
+
+const normalizeElementType = (value: string): CanvasElement['type'] => {
+  const normalized = normalizeTypeToken(value);
+
+  if (!normalized) {
+    return 'text';
+  }
+
+  if (
+    normalized === 'textinput'
+    || normalized === 'textinputfield'
+    || normalized === 'textfield'
+    || normalized === 'textinputfield'
+    || normalized === 'textfields'
+    || normalized === 'inputfield'
+    || normalized === 'textinputfield'
+    || normalized === 'textinput'
+  ) {
+    return 'input';
+  }
+
+  if (
+    normalized === 'multiline'
+    || normalized === 'multilinetext'
+    || normalized === 'multilinetextinput'
+    || normalized === 'textarea'
+    || normalized === 'textareafield'
+  ) {
+    return 'textarea';
+  }
+
+  if (
+    normalized === 'dropdown'
+    || normalized === 'select'
+    || normalized === 'dropdownselector'
+    || normalized === 'dropdowninputs'
+    || normalized === 'dropdownselector'
+  ) {
+    return 'select';
+  }
+
+  if (
+    normalized === 'radio'
+    || normalized === 'radiobutton'
+    || normalized === 'radiobuttons'
+    || normalized === 'radioinput'
+  ) {
+    return 'radio';
+  }
+
+  if (
+    normalized === 'checkbox'
+    || normalized === 'checkboxes'
+    || normalized === 'checkboxinput'
+    || normalized === 'checkboxinputs'
+    || normalized === 'checkinput'
+  ) {
+    return 'checkbox';
+  }
+
+  if (normalized.includes('dropdown')) {
+    return 'select';
+  }
+
+  if (normalized.includes('select')) {
+    return 'select';
+  }
+
+  if (normalized.includes('textinput') || normalized.includes('textfield')) {
+    return 'input';
+  }
+
+  if (normalized.includes('checkbox')) {
+    return 'checkbox';
+  }
+
+  return KNOWN_CANVAS_ELEMENT_TYPES.includes(normalized as CanvasElement['type'])
+    ? (normalized as CanvasElement['type'])
+    : 'text';
+};
 
 // ============================================
 // COMPONENT
@@ -125,9 +242,14 @@ export function CanvasEditor({
   const [breakpoint, setBreakpoint] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [isPreview, setIsPreview] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const changeSequenceRef = useRef(0);
 
   // Undo/Redo State
-  const [history, setHistory] = useState<CanvasElement[][]>([initialElements]);
+  const [history, setHistory] = useState<Array<{ elements: CanvasElement[]; selectedId: string | null }>>([
+    { elements: initialElements, selectedId: null },
+  ]);
   const [historyIndex, setHistoryIndex] = useState(0);
 
   // Settings State
@@ -142,12 +264,32 @@ export function CanvasEditor({
   const canvasViewportRef = useRef<HTMLDivElement>(null);
 
   const canAcceptNestedDrop = (elementType: CanvasElement['type']): boolean => {
-    return elementType === 'form' ||
-      elementType === 'box' ||
-      elementType === 'container' ||
-      elementType === 'section' ||
-      elementType === 'columns';
+    const normalizedType = normalizeElementType(elementType);
+
+    return normalizedType === 'form' ||
+      normalizedType === 'box' ||
+      normalizedType === 'container' ||
+      normalizedType === 'section' ||
+      normalizedType === 'header' ||
+      normalizedType === 'footer' ||
+      normalizedType === 'nav' ||
+      normalizedType === 'columns';
   };
+
+  const cloneElements = useCallback((nodes: CanvasElement[]) => (
+    JSON.parse(JSON.stringify(nodes)) as CanvasElement[]
+  ), []);
+
+  const getInitialElements = useCallback(() => cloneElements(initialElements), [cloneElements, initialElements]);
+
+  const getInitialSettings = useCallback(() => (
+    JSON.parse(JSON.stringify(initialSettings)) as PageSettings
+  ), [initialSettings]);
+
+  const markChanges = useCallback(() => {
+    changeSequenceRef.current += 1;
+    setHasUnsavedChanges(true);
+  }, []);
 
   const walkTreeMaxZ = (nodes: CanvasElement[]): number =>
     nodes.reduce((max, item) => {
@@ -156,7 +298,7 @@ export function CanvasEditor({
       return Math.max(max, self, childrenMax);
     }, 0);
 
-  const findElementById = (items: CanvasElement[], targetId: string): CanvasElement | null => {
+  const findElementById = useCallback((items: CanvasElement[], targetId: string): CanvasElement | null => {
     for (const item of items) {
       if (item.id === targetId) {
         return item;
@@ -171,7 +313,7 @@ export function CanvasEditor({
     }
 
     return null;
-  };
+  }, []);
 
   const updateElementById = (
     items: CanvasElement[],
@@ -300,12 +442,40 @@ export function CanvasEditor({
     }
   }, [elements, pageSettings, onChange, size]);
 
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      return;
+    }
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+      return '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      return;
+    }
+
+    if (!findElementById(elements, selectedId)) {
+      setSelectedId(null);
+    }
+  }, [elements, selectedId, findElementById]);
+
   /**
    * Add current state to history
    */
-  const addToHistory = useCallback((newElements: CanvasElement[]) => {
+  const addToHistory = useCallback((newElements: CanvasElement[], selectedSnapshot: string | null = selectedId) => {
     const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(newElements);
+    newHistory.push({
+      elements: newElements,
+      selectedId: selectedSnapshot,
+    });
 
     // Limit history size to 50
     if (newHistory.length > 50) {
@@ -315,7 +485,7 @@ export function CanvasEditor({
     setHistory(newHistory);
     // Since we just sliced and pushed, the index is the last one
     setHistoryIndex(newHistory.length - 1);
-  }, [history, historyIndex]);
+  }, [history, historyIndex, selectedId]);
 
   /**
    * Undo
@@ -323,10 +493,17 @@ export function CanvasEditor({
   const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
       const newIndex = historyIndex - 1;
+      const targetState = history[newIndex];
       setHistoryIndex(newIndex);
-      setElements(history[newIndex]);
+      setElements(targetState.elements);
+      setSelectedId(
+        targetState.selectedId && findElementById(targetState.elements, targetState.selectedId)
+          ? targetState.selectedId
+          : null
+      );
+      markChanges();
     }
-  }, [historyIndex, history]);
+  }, [findElementById, history, historyIndex, markChanges]);
 
   /**
    * Redo
@@ -334,19 +511,26 @@ export function CanvasEditor({
   const handleRedo = useCallback(() => {
     if (historyIndex < history.length - 1) {
       const newIndex = historyIndex + 1;
+      const targetState = history[newIndex];
       setHistoryIndex(newIndex);
-      setElements(history[newIndex]);
+      setElements(targetState.elements);
+      setSelectedId(
+        targetState.selectedId && findElementById(targetState.elements, targetState.selectedId)
+          ? targetState.selectedId
+          : null
+      );
+      markChanges();
     }
-  }, [historyIndex, history]);
+  }, [findElementById, history, historyIndex, markChanges]);
 
   /**
    * Wrapper for updating elements with history
    */
-  const updateElementsWithHistory = useCallback((newElements: CanvasElement[]) => {
+  const updateElementsWithHistory = useCallback((newElements: CanvasElement[], selectedSnapshot: string | null = selectedId) => {
     setElements(newElements);
-    addToHistory(newElements);
-    setHasUnsavedChanges(true);
-  }, [addToHistory]);
+    addToHistory(newElements, selectedSnapshot);
+    markChanges();
+  }, [addToHistory, markChanges, selectedId]);
 
   /**
    * Copy
@@ -364,11 +548,12 @@ export function CanvasEditor({
   const normalizePastedElement = useCallback(
     (sourceElement: CanvasElement, x = 20, y = 20): CanvasElement => {
       const clone = JSON.parse(JSON.stringify(sourceElement)) as CanvasElement;
-    const highestZ = Math.max(walkTreeMaxZ(elements), 0);
+      const highestZ = Math.max(walkTreeMaxZ(elements), 0);
 
       return {
         ...clone,
         id: generateId(),
+        type: normalizeElementType(clone.type),
         x: sourceElement.x + x,
         y: sourceElement.y + y,
         zIndex: highestZ + 1,
@@ -391,10 +576,9 @@ export function CanvasEditor({
 
       const nextElements = canNest && newElements.updated ? newElements.elements : newElements.elements;
 
-      updateElementsWithHistory(nextElements);
-      setSelectedId(newElement.id);
+      updateElementsWithHistory(nextElements, newElement.id);
     }
-  }, [clipboardElement, elements, normalizePastedElement, updateElementsWithHistory]);
+  }, [clipboardElement, elements, normalizePastedElement, selectedId, updateElementsWithHistory]);
 
   const handleDuplicate = useCallback(() => {
     if (!selectedId) return;
@@ -410,8 +594,7 @@ export function CanvasEditor({
       ? duplicated.elements
       : [...elements, duplicate];
 
-    updateElementsWithHistory(nextElements);
-    setSelectedId(duplicate.id);
+    updateElementsWithHistory(nextElements, duplicate.id);
   }, [elements, normalizePastedElement, selectedId, updateElementsWithHistory]);
 
   // Get selected element
@@ -435,7 +618,7 @@ export function CanvasEditor({
    * Handle element update from property panel
    */
   const handleElementUpdate = useCallback(
-    (updates: Partial<CanvasElement>) => {
+    (updates: { [key: string]: unknown }) => {
       if (!selectedId) return;
 
       const result = updateElementById(elements, selectedId, (element) => ({
@@ -456,9 +639,7 @@ export function CanvasEditor({
    * Handle drag start from component library
    */
   const handleDragStart = useCallback((item: ComponentLibraryItem) => {
-    // Store the item type for drop handling
-    // This would be used with a proper drag-and-drop library
-    console.log('Dragging:', item.type);
+    // Placeholder for drag analytics/hooks.
   }, []);
 
   /**
@@ -471,6 +652,7 @@ export function CanvasEditor({
       try {
         const data = e.dataTransfer.getData('application/json');
         const item: ComponentLibraryItem = JSON.parse(data);
+        const normalizedType = normalizeElementType(item.type);
 
         // Calculate drop position relative to canvas
         const canvas = e.currentTarget as HTMLDivElement;
@@ -479,7 +661,7 @@ export function CanvasEditor({
         const y = e.clientY - rect.top;
 
         // Create new element
-        const newElement = createCanvasElement(item.type, x, y);
+        const newElement = createCanvasElement(normalizedType, x, y);
         const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
         const isNested = selectedElement && canAcceptNestedDrop(selectedElement.type);
         const normalized = normalizePastedElement(newElement);
@@ -491,13 +673,12 @@ export function CanvasEditor({
           ? result.elements
           : [...elements, normalized];
 
-        updateElementsWithHistory(newElements);
-        setSelectedId(normalized.id);
+        updateElementsWithHistory(newElements, normalized.id);
       } catch (err) {
         console.error('Failed to drop element:', err);
       }
     },
-    [elements, updateElementsWithHistory]
+    [elements, selectedId, updateElementsWithHistory]
   );
 
   /**
@@ -508,26 +689,107 @@ export function CanvasEditor({
     const result = removeElementById(elements, selectedId);
     if (!result.updated) return;
 
-    updateElementsWithHistory(result.elements);
-    setSelectedId(result.removedParentId || null);
+    updateElementsWithHistory(result.elements, result.removedParentId || null);
   }, [selectedId, elements, updateElementsWithHistory]);
+
+  const handleCut = useCallback(() => {
+    if (!selectedId) return;
+
+    const selectedElement = findElementById(elements, selectedId);
+    if (!selectedElement) return;
+
+    setClipboardElement(selectedElement);
+
+    const result = removeElementById(elements, selectedId);
+    if (!result.updated) {
+      return;
+    }
+
+    const parentSelection = result.removedParentId || null;
+    setSelectedId(parentSelection);
+    updateElementsWithHistory(result.elements, parentSelection);
+  }, [elements, findElementById, selectedId, updateElementsWithHistory]);
 
   /**
    * Handle save
    */
-  /**
-   * Handle save
-   */
-  const handleSaveWrapper = useCallback(() => {
-    onSave(elements, pageSettings, size);
+  const handleSaveWrapper = useCallback(async (settingsOverride?: PageSettings, silent = false) => {
+    if (isSaving) {
+      return;
+    }
+
+    const saveSequence = changeSequenceRef.current;
+    setIsSaving(true);
+    try {
+      const nextSettings = settingsOverride ?? pageSettings;
+      await Promise.resolve(onSave(elements, nextSettings, size));
+      if (changeSequenceRef.current === saveSequence) {
+        setHasUnsavedChanges(false);
+      }
+    } catch {
+      setHasUnsavedChanges(true);
+      if (!silent) {
+        alert('Unable to save page. Please try again.');
+      } else {
+        console.error('Auto-save failed');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  }, [elements, isSaving, onSave, pageSettings, size]);
+
+  const handleTogglePublish = useCallback(async () => {
+    const nextSettings: PageSettings = {
+      ...pageSettings,
+      status: pageSettings.status === 'published' ? 'draft' : 'published',
+    };
+    setPageSettings(nextSettings);
+    markChanges();
+    await handleSaveWrapper(nextSettings, true);
+  }, [handleSaveWrapper, pageSettings, markChanges]);
+
+  const handleReload = useCallback(() => {
+    if (isSaving) {
+      return;
+    }
+
+    if (hasUnsavedChanges) {
+      const shouldReload = window.confirm(
+        'You have unsaved changes. Reload will discard your current edits. Continue?'
+      );
+      if (!shouldReload) {
+        return;
+      }
+    }
+
+    const nextElements = getInitialElements();
+    const nextSettings = getInitialSettings();
+
+    setElements(nextElements);
+    setPageSettings(nextSettings);
+    setSize(initialSize || DEFAULT_CANVAS_SIZE);
+    setBreakpoint('desktop');
+    setSelectedId(null);
+    setClipboardElement(null);
+    setHistory([{ elements: nextElements, selectedId: null }]);
+    setHistoryIndex(0);
     setHasUnsavedChanges(false);
-  }, [elements, pageSettings, onSave, size]);
+    changeSequenceRef.current += 1;
+    if (onChange) {
+      onChange(nextElements, nextSettings, initialSize || DEFAULT_CANVAS_SIZE);
+    }
+  }, [getInitialElements, getInitialSettings, hasUnsavedChanges, initialSize, isSaving, onChange]);
 
   /**
    * Keyboard shortcuts
    */
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isSaving && ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's')) {
+        e.preventDefault();
+        return;
+      }
+
       const key = e.key.toLowerCase();
       // Ignore if typing in an input or textarea
       if (
@@ -576,6 +838,13 @@ export function CanvasEditor({
         return;
       }
 
+      // Ctrl+X / Cmd+X (Cut)
+      if ((e.ctrlKey || e.metaKey) && key === 'x') {
+        e.preventDefault();
+        handleCut();
+        return;
+      }
+
       // Ctrl+V / Cmd+V (Paste)
       if ((e.ctrlKey || e.metaKey) && key === 'v') {
         e.preventDefault();
@@ -593,7 +862,18 @@ export function CanvasEditor({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
 
-  }, [deleteElement, handleSaveWrapper, handleUndo, handleRedo, handleCopy, handlePaste, handleDuplicate, isPreview]);
+  }, [
+    deleteElement,
+    handleSaveWrapper,
+    handleUndo,
+    handleRedo,
+    handleCopy,
+    handleCut,
+    handlePaste,
+    handleDuplicate,
+    isPreview,
+    isSaving,
+  ]);
 
 
 
@@ -603,10 +883,41 @@ export function CanvasEditor({
   const handleBreakpointChange = useCallback(
     (bp: 'desktop' | 'tablet' | 'mobile') => {
       setBreakpoint(bp);
-      setSize(BREAKPOINT_CANVAS_SIZE[bp]);
+      const nextSize = BREAKPOINT_CANVAS_SIZE[bp];
+      setSize(nextSize);
+      markChanges();
+      if (onChange) {
+        onChange(elements, pageSettings, nextSize);
+      }
     },
-    []
+    [elements, pageSettings, onChange, markChanges]
   );
+
+  useEffect(() => {
+    if (!hasUnsavedChanges || isSaving) {
+      return;
+    }
+
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+    }
+
+    autosaveTimeoutRef.current = window.setTimeout(() => {
+      void handleSaveWrapper(undefined, true);
+    }, 2000);
+
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+      }
+    };
+  }, [handleSaveWrapper, hasUnsavedChanges, isSaving]);
+
+  useEffect(() => () => {
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     const container = canvasViewportRef.current;
@@ -717,24 +1028,79 @@ export function CanvasEditor({
           {/* Right */}
           <div className="flex items-center gap-2">
             {/* Undo/Redo */}
-            {/* Undo/Redo */}
             <button
               type="button"
               onClick={handleUndo}
               disabled={historyIndex <= 0}
-              className="p-2 rounded-lg hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
               title="Undo (Ctrl+Z)"
+              aria-label="Undo"
             >
-              <Undo className="w-4 h-4" />
+              <Undo className="w-4 h-4 inline-block mr-1" />
+              Undo
             </button>
             <button
               type="button"
               onClick={handleRedo}
               disabled={historyIndex >= history.length - 1}
-              className="p-2 rounded-lg hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
               title="Redo (Ctrl+Shift+Z)"
+              aria-label="Redo"
             >
-              <Redo className="w-4 h-4" />
+              <Redo className="w-4 h-4 inline-block mr-1" />
+              Redo
+            </button>
+
+            {/* Clipboard actions */}
+            <button
+              type="button"
+              onClick={handleCopy}
+              disabled={!selectedId}
+              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Copy (Ctrl+C)"
+              aria-label="Copy"
+            >
+              Copy
+            </button>
+            <button
+              type="button"
+              onClick={handleCut}
+              disabled={!selectedId}
+              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Cut (Ctrl+X)"
+              aria-label="Cut"
+            >
+              <Scissors className="w-4 h-4 inline-block mr-1" />
+              Cut
+            </button>
+            <button
+              type="button"
+              onClick={handlePaste}
+              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent"
+              title="Paste (Ctrl+V)"
+              aria-label="Paste"
+            >
+              Paste
+            </button>
+            <button
+              type="button"
+              onClick={handleDuplicate}
+              disabled={!selectedId}
+              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Duplicate (Ctrl+D)"
+              aria-label="Duplicate"
+            >
+              Duplicate
+            </button>
+            <button
+              type="button"
+              onClick={deleteElement}
+              disabled={!selectedId}
+              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Delete (Delete)"
+              aria-label="Delete"
+            >
+              Delete
             </button>
 
             <div className="w-px h-6 bg-border mx-1" />
@@ -756,30 +1122,72 @@ export function CanvasEditor({
 
             {/* Settings */}
             {!hideSettings && (
-              <button
-                type="button"
-                onClick={() => setIsSettingsOpen(true)}
-                className="p-2 rounded-lg hover:bg-accent"
-                title="Page settings"
+            <button
+              type="button"
+              onClick={() => setIsSettingsOpen(true)}
+              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent"
+              title="Page settings"
+                aria-label="Page settings"
               >
                 <Settings className="w-4 h-4" />
+                <span className="ml-1">Settings</span>
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={handleReload}
+              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent"
+              title="Reload page from last saved state"
+              aria-label="Reload page"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span className="ml-1">Reload</span>
+            </button>
 
             <div className="w-px h-6 bg-border mx-1" />
 
             {/* Save */}
-            {/* Save */}
             {!hideSave && (
-              <button
-                type="button"
-                onClick={handleSaveWrapper}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm bg-primary text-primary-foreground hover:bg-primary/90"
-                title="Save Page (Ctrl+S)"
-              >
-                <Save className="w-4 h-4" />
-                Save
-              </button>
+              <>
+                {mode === 'page' && (
+                  <button
+                    type="button"
+                    onClick={handleTogglePublish}
+                    disabled={isSaving}
+                    className={cn(
+                      'px-2 py-1.5 rounded-lg text-sm font-medium',
+                      pageSettings.status === 'published'
+                        ? 'bg-amber-500 text-white hover:bg-amber-500/90'
+                        : 'bg-emerald-600 text-white hover:bg-emerald-600/90',
+                      isSaving ? 'opacity-70 cursor-not-allowed' : '',
+                    )}
+                    title={
+                      pageSettings.status === 'published'
+                        ? 'Set page back to draft'
+                        : 'Publish page'
+                    }
+                    aria-label={
+                      pageSettings.status === 'published'
+                        ? 'Unpublish page'
+                        : 'Publish page'
+                    }
+                  >
+                    {pageSettings.status === 'published' ? 'Unpublish' : 'Publish'}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSaveWrapper}
+                  disabled={isSaving}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-70 disabled:cursor-not-allowed"
+                  title="Save Page (Ctrl+S)"
+                >
+                  <Save className="w-4 h-4" />
+                  {isSaving ? 'Saving...' : 'Save'}
+                </button>
+              </>
             )}
 
           </div>
@@ -814,6 +1222,7 @@ export function CanvasEditor({
                   size={size}
                   onSizeChange={(newSize) => {
                     setSize(newSize);
+                    markChanges();
                     if (onChange) {
                       onChange(elements, pageSettings, newSize);
                     }
@@ -841,7 +1250,7 @@ export function CanvasEditor({
           settings={pageSettings}
           onSave={(newSettings) => {
             setPageSettings(newSettings);
-            setHasUnsavedChanges(true);
+            markChanges();
           }}
         />
       </div>

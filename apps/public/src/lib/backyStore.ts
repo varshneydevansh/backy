@@ -2,6 +2,7 @@ import { DEFAULT_THEME } from '@backy-cms/core';
 import type {
   Comment,
   CommentTargetType,
+  FormFieldDefinition,
   FormDefinition,
   FormSubmission,
   MediaItem,
@@ -936,6 +937,474 @@ function getCommentRequestKey(
   return `${siteId}:${targetType}:${targetId}:${ipHash || 'anonymous'}`;
 }
 
+function normalizeFormElementType(value: string): string {
+  const normalized = typeof value === 'string'
+    ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
+    : '';
+
+  if (!normalized) {
+    return '';
+  }
+
+  if (
+    normalized === 'dropdown'
+    || normalized === 'dropdownselector'
+    || normalized === 'dropdownselect'
+    || normalized.includes('dropdow')
+  ) {
+    return 'select';
+  }
+
+  if (
+    normalized === 'multiline'
+    || normalized === 'multilinetext'
+    || normalized === 'multilinetextinput'
+    || normalized === 'textarea'
+    || normalized === 'textareafield'
+  ) {
+    return 'textarea';
+  }
+
+  if (
+    normalized === 'textinput'
+    || normalized === 'textinputfield'
+    || normalized === 'textfield'
+    || normalized === 'textareafield'
+    || normalized === 'inputfield'
+    || normalized.includes('textinput')
+    || normalized.includes('textfield')
+  ) {
+    return 'input';
+  }
+
+  if (
+    normalized === 'radioinput'
+    || normalized === 'radio'
+    || normalized === 'radioinputfield'
+    || normalized === 'radiofield'
+    || normalized.includes('radioinput')
+    || normalized.includes('radiobutton')
+  ) {
+    return 'radio';
+  }
+
+  if (
+    normalized === 'checkboxinput'
+    || normalized === 'checkbox'
+    || normalized === 'checkboxinputfield'
+    || normalized === 'checkboxfield'
+    || normalized === 'checkboxes'
+    || normalized.includes('checkboxinput')
+    || normalized.includes('checkboxbutton')
+  ) {
+    return 'checkbox';
+  }
+
+  return normalized.includes('select') ? 'select' : normalized;
+}
+
+function getFormFieldType(
+  node: CanvasElement,
+): FormFieldDefinition['type'] {
+  const normalizedType = normalizeFormElementType(node.type);
+
+  if (normalizedType === 'textarea') {
+    return 'textarea';
+  }
+
+  if (normalizedType === 'select') {
+    return 'select';
+  }
+
+  if (normalizedType === 'checkbox') {
+    return 'checkbox';
+  }
+
+  if (normalizedType === 'radio') {
+    return 'radio';
+  }
+
+  const raw = sanitizeString(node.props.inputType || node.props.type || normalizedType).toLowerCase();
+  if (raw === 'email') return 'email';
+  if (raw === 'number') return 'number';
+  if (raw === 'date') return 'date';
+  if (raw === 'tel') return 'tel';
+  if (raw === 'url') return 'url';
+  if (raw === 'file') return 'file';
+  if (raw === 'password' || raw === 'text' || raw === 'search' || raw === 'hidden') {
+    return 'text';
+  }
+
+  return 'text';
+}
+
+function ensureUniqueFieldKey(base: string, usedKeys: Set<string>): string {
+  const raw = sanitizeString(base) || `field_${usedKeys.size + 1}`;
+  const normalized = raw
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_\-]/gi, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  const safeBase = normalized.length > 0 ? normalized : `field_${usedKeys.size + 1}`;
+  let key = safeBase;
+  let suffix = 1;
+
+  while (usedKeys.has(key)) {
+    suffix += 1;
+    key = `${safeBase}_${suffix}`;
+  }
+
+  usedKeys.add(key);
+  return key;
+}
+
+function parseNumberValue(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  const normalized = sanitizeString(value);
+  if (!normalized) {
+    return undefined;
+  }
+
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function parseFieldOptions(rawOptions: unknown): string[] {
+  if (!rawOptions) {
+    return [];
+  }
+
+  if (Array.isArray(rawOptions)) {
+    return rawOptions
+      .map((option) => {
+        if (typeof option === 'string') {
+          return option.trim();
+        }
+
+        if (option && typeof option === 'object' && 'value' in option) {
+          return sanitizeString((option as { value?: unknown }).value).trim();
+        }
+
+        if (option && typeof option === 'object' && 'label' in option) {
+          return sanitizeString((option as { label?: unknown }).label).trim();
+        }
+
+        return '';
+      })
+      .filter((option) => option.length > 0);
+  }
+
+  if (typeof rawOptions === 'string') {
+    return rawOptions
+      .split(/[\n,]/)
+      .map((option) => option.trim())
+      .filter((option) => option.length > 0);
+  }
+
+  return [];
+}
+
+function parseOptionValue(value: unknown): string {
+  return sanitizeString(value).toLowerCase();
+}
+
+function normalizeFieldOptions(rawOptions: unknown): string[] {
+  return parseFieldOptions(rawOptions)
+    .map(parseOptionValue)
+    .filter(Boolean);
+}
+
+function parseSubmissionValues(value: unknown): string[] {
+  if (value === null || value === undefined) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => parseSubmissionValues(entry)).filter(Boolean);
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return [`${value}`];
+  }
+
+  if (typeof value === 'boolean') {
+    return [value ? 'on' : 'off'];
+  }
+
+  return sanitizeString(value).split(',').map((entry) => entry.trim()).filter(Boolean);
+}
+
+function buildDynamicValidationRules(
+  fieldType: FormFieldDefinition['type'],
+  props: Record<string, unknown>,
+): FormFieldDefinition['validation'] {
+  const rules: NonNullable<FormFieldDefinition['validation']> = [];
+  const minLength = parseNumberValue(props.minLength);
+  const maxLength = parseNumberValue(props.maxLength);
+  const minValue = parseNumberValue(props.min);
+  const maxValue = parseNumberValue(props.max);
+  const pattern = sanitizeString(props.pattern);
+
+  if (typeof minLength === 'number' && fieldType !== 'checkbox') {
+    rules.push({
+      type: 'minLength',
+      value: minLength,
+      message: `${fieldType} should be at least ${minLength} characters`,
+    });
+  }
+
+  if (typeof maxLength === 'number' && fieldType !== 'checkbox') {
+    rules.push({
+      type: 'maxLength',
+      value: maxLength,
+      message: `${fieldType} should be no more than ${maxLength} characters`,
+    });
+  }
+
+  if (typeof minValue === 'number') {
+    rules.push({
+      type: 'min',
+      value: minValue,
+      message: `${fieldType} should be at least ${minValue}`,
+    });
+  }
+
+  if (typeof maxValue === 'number') {
+    rules.push({
+      type: 'max',
+      value: maxValue,
+      message: `${fieldType} should be no more than ${maxValue}`,
+    });
+  }
+
+  if (pattern.length > 0) {
+    rules.push({
+      type: 'pattern',
+      value: pattern,
+      message: `${fieldType} format is invalid`,
+    });
+  }
+
+  return rules.length > 0 ? rules : undefined;
+}
+
+function buildDynamicFieldFromElement(
+  node: CanvasElement,
+  usedKeys: Set<string>,
+  index: number,
+): FormFieldDefinition | null {
+  const fieldType = getFormFieldType(node);
+  const labelCandidate = sanitizeString(node.props.label);
+  const nameCandidate = sanitizeString(node.props.name);
+  const keyCandidate = sanitizeString(node.props.key);
+  const fallback = sanitizeString(node.props.fieldKey);
+  const requestedKey = [
+    nameCandidate,
+    keyCandidate,
+    fallback,
+    `${normalizeFormElementType(node.type)}_${index}`,
+  ]
+    .find((value) => value.length > 0) || `field_${index}`;
+
+  const key = ensureUniqueFieldKey(requestedKey, usedKeys);
+
+  return {
+    key,
+    label: labelCandidate.length > 0 ? labelCandidate : key,
+    type: fieldType,
+    required: node.props.required === true
+      || sanitizeString(node.props.required).toLowerCase() === 'true'
+      || sanitizeString(node.props.required).toLowerCase() === 'required',
+    placeholder: sanitizeString(node.props.placeholder),
+    helpText: sanitizeString(node.props.helpText),
+    defaultValue: node.props.defaultValue !== undefined
+      ? sanitizeString(node.props.defaultValue)
+      : sanitizeString(node.props.value),
+    options: ['select', 'checkbox', 'radio'].includes(fieldType)
+      ? parseFieldOptions(node.props.options)
+      : undefined,
+    validation: buildDynamicValidationRules(fieldType, node.props),
+  };
+}
+
+function collectFormFieldsFromChildren(nodes: CanvasElement[], usedKeys: Set<string>): FormFieldDefinition[] {
+  const fields: FormFieldDefinition[] = [];
+
+  const visit = (items: CanvasElement[]) => {
+    items.forEach((node, index) => {
+      const normalizedType = normalizeFormElementType(node.type);
+      if (['input', 'textarea', 'select', 'checkbox', 'radio'].includes(normalizedType)) {
+        const field = buildDynamicFieldFromElement(node, usedKeys, fields.length + index + 1);
+        if (field) {
+          fields.push(field);
+        }
+      }
+
+      if (node.children && node.children.length > 0) {
+        visit(node.children);
+      }
+    });
+  };
+
+  visit(nodes);
+  return fields;
+}
+
+function buildFormDefinitionFromCanvas(
+  formElement: CanvasElement,
+  context: {
+    siteId: string;
+    pageId?: string;
+    postId?: string;
+  },
+): FormDefinition | null {
+  const props = formElement.props as Record<string, unknown>;
+  const fields = collectFormFieldsFromChildren(formElement.children || [], new Set<string>());
+  const resolvedFormId = sanitizeString(props.formId).length > 0 ? sanitizeString(props.formId) : formElement.id;
+  if (!resolvedFormId.length) {
+    return null;
+  }
+
+  const moderationMode = sanitizeString(props.moderationMode) === 'auto-approve'
+    ? 'auto-approve'
+    : 'manual';
+
+  const enabledContactShare = props.contactShareEnabled === true
+    || sanitizeString(props.contactShareEnabled).toLowerCase() === 'true';
+
+  return {
+    id: resolvedFormId,
+    siteId: context.siteId,
+    pageId: context.pageId || null,
+    postId: context.postId || null,
+    name: sanitizeString(props.formName).length > 0 ? sanitizeString(props.formName) : resolvedFormId,
+    title: sanitizeString(props.formTitle) || `Form ${resolvedFormId}`,
+    description: sanitizeString(props.formDescription),
+    audience: 'public',
+    isActive: props.formActive !== false && sanitizeString(props.formActive).toLowerCase() !== 'false',
+    fields,
+    notificationEmail: sanitizeString(props.notificationEmail),
+    successRedirectUrl: sanitizeString(props.successRedirectUrl || props.redirectUrl),
+    successMessage: sanitizeString(props.successMessage),
+    enableHoneypot: props.enableHoneypot === true
+      ? true
+      : props.enableHoneypot === false
+        ? false
+        : sanitizeString(props.enableHoneypot).toLowerCase() === 'true'
+        ? true
+        : undefined,
+    enableCaptcha: props.enableCaptcha === true
+      ? true
+      : props.enableCaptcha === false
+        ? false
+        : sanitizeString(props.enableCaptcha).toLowerCase() === 'true'
+          ? true
+          : undefined,
+    moderationMode,
+    contactShare: enabledContactShare
+      ? {
+          enabled: true,
+          nameField: sanitizeString(props.contactShareNameField),
+          emailField: sanitizeString(props.contactShareEmailField),
+          phoneField: sanitizeString(props.contactSharePhoneField),
+          notesField: sanitizeString(props.contactShareNotesField),
+          dedupeByEmail: props.contactShareDedupeByEmail !== false && sanitizeString(props.contactShareDedupeByEmail).toLowerCase() !== 'false',
+        }
+      : undefined,
+    createdBy: 'admin',
+    updatedBy: 'admin',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+}
+
+function listCanvasFormsFromContent(
+  nodes: CanvasElement[],
+  siteId: string,
+  context: { pageId?: string; postId?: string },
+): FormDefinition[] {
+  const forms: FormDefinition[] = [];
+
+  const walk = (items: CanvasElement[]) => {
+    items.forEach((item) => {
+      if (normalizeFormElementType(item.type) === 'form') {
+        const form = buildFormDefinitionFromCanvas(item, {
+          siteId,
+          pageId: context.pageId,
+          postId: context.postId,
+        });
+
+        if (form) {
+          forms.push(form);
+        }
+      }
+
+      if (item.children && item.children.length > 0) {
+        walk(item.children);
+      }
+    });
+  };
+
+  walk(nodes);
+  return forms;
+}
+
+function getDynamicFormsBySite(siteId: string): FormDefinition[] {
+  const pages = PAGE_LIST.filter((page) => page.siteId === siteId);
+  const blogPosts = BLOG_POSTS.filter((post) => post.siteId === siteId);
+
+  const pageForms = pages.flatMap((page) => {
+    const elements = page.content?.elements || [];
+    return listCanvasFormsFromContent(elements, siteId, { pageId: page.id });
+  });
+
+  const postForms = blogPosts.flatMap((post) => {
+    const content = post.content as Record<string, unknown>;
+    const candidate = content && typeof content === 'object' && Array.isArray((content as { elements?: unknown }).elements)
+      ? (content as { elements: CanvasElement[] }).elements
+      : [];
+
+    return listCanvasFormsFromContent(candidate, siteId, { postId: post.id });
+  });
+
+  return [...pageForms, ...postForms];
+}
+
+function mergeFormDefinitions(
+  staticForms: FormDefinition[],
+  dynamicForms: FormDefinition[],
+): FormDefinition[] {
+  const merged = new Map<string, FormDefinition>();
+
+  staticForms.forEach((form) => {
+    merged.set(normalizeIdentifier(form.id), form);
+  });
+
+  dynamicForms.forEach((form) => {
+    merged.set(normalizeIdentifier(form.id), form);
+  });
+
+  return Array.from(merged.values());
+}
+
+function matchesFormContextFilter(
+  form: FormDefinition,
+  filters: { pageId?: string; postId?: string },
+): boolean {
+  const pageIdMatch = !filters.pageId
+    || !form.pageId
+    || normalizeIdentifier(form.pageId) === normalizeIdentifier(filters.pageId);
+  const postIdMatch = !filters.postId
+    || !form.postId
+    || normalizeIdentifier(form.postId) === normalizeIdentifier(filters.postId);
+
+  return pageIdMatch && postIdMatch;
+}
+
 function sanitizeString(value: unknown): string {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return String(value);
@@ -1082,11 +1551,59 @@ function validateSubmissionValues(
     const fieldLabel = field.label || field.key;
     const fieldValue = values[field.key];
     const sanitized = sanitizeString(fieldValue);
+    const normalizedAllowedOptions = normalizeFieldOptions(field.options);
+    const submittedValues = parseSubmissionValues(fieldValue).map(sanitizeString);
+    const normalizedSubmittedValues = submittedValues.map((value) => value.toLowerCase());
 
     if (field.required && sanitized.length === 0) {
       details.push({
         field: fieldLabel,
         message: `${fieldLabel} is required`,
+      });
+      return;
+    }
+
+    if ((field.type === 'select' || field.type === 'radio') && normalizedSubmittedValues.length > 0) {
+      const selectedValue = normalizedSubmittedValues[0] || '';
+      const matched = normalizedAllowedOptions.includes(selectedValue);
+      if (!matched) {
+        details.push({
+          field: fieldLabel,
+          message: `${fieldLabel} value is not a valid option`,
+        });
+      }
+    }
+
+    if ((field.type === 'checkbox') && normalizedSubmittedValues.length > 0 && normalizedAllowedOptions.length > 0) {
+      const invalid = normalizedSubmittedValues.filter((value) => !normalizedAllowedOptions.includes(value));
+      if (invalid.length > 0) {
+        details.push({
+          field: fieldLabel,
+          message: `${fieldLabel} has invalid option selections`,
+        });
+      }
+    }
+
+    if (field.type === 'select' && field.required && normalizedAllowedOptions.length === 0) {
+      details.push({
+        field: fieldLabel,
+        message: `${fieldLabel} has no available options`,
+      });
+      return;
+    }
+
+    if (field.type === 'radio' && submittedValues.length > 0 && normalizedAllowedOptions.length === 0) {
+      details.push({
+        field: fieldLabel,
+        message: `${fieldLabel} has no available options`,
+      });
+      return;
+    }
+
+    if (field.type === 'checkbox' && normalizedAllowedOptions.length === 0 && field.required && sanitized.length > 0) {
+      details.push({
+        field: fieldLabel,
+        message: `${fieldLabel} has no available options`,
       });
       return;
     }
@@ -1536,20 +2053,17 @@ export function getMediaList(
 }
 
 export function listFormsBySite(siteId: string, filters: { pageId?: string; postId?: string } = {}): FormDefinition[] {
-  const { pageId, postId } = filters;
-  return clone(
-    FORM_LIBRARY.filter(
-      (form) =>
-        form.siteId === siteId &&
-        (!pageId || form.pageId === pageId || !form.pageId) &&
-        (!postId || form.postId === postId || !form.postId),
-    ),
+  const staticForms = FORM_LIBRARY.filter(
+    (form) => form.siteId === siteId && matchesFormContextFilter(form, filters),
   );
+  const dynamicForms = getDynamicFormsBySite(siteId).filter((form) => matchesFormContextFilter(form, filters));
+
+  return clone(mergeFormDefinitions(staticForms, dynamicForms));
 }
 
 export function getFormById(siteId: string, formId: string): FormDefinition | undefined {
-  const form = FORM_LIBRARY.find(
-    (item) => item.siteId === siteId && normalizeIdentifier(item.id) === normalizeIdentifier(formId),
+  const form = listFormsBySite(siteId).find(
+    (item) => normalizeIdentifier(item.id) === normalizeIdentifier(formId),
   );
 
   return form ? clone(form) : undefined;
@@ -2146,6 +2660,7 @@ export function listComments(
     q?: string;
     parentOnly?: boolean;
     parentId?: string | null;
+    commentThreadId?: string;
     sort?: 'newest' | 'oldest';
     limit?: number;
     offset?: number;
@@ -2159,6 +2674,7 @@ export function listComments(
     q,
     parentOnly = false,
     parentId,
+    commentThreadId,
     sort = 'newest',
     limit = 20,
     offset = 0,
@@ -2181,6 +2697,10 @@ export function listComments(
 
   if (normalizedRequestId) {
     filtered = filtered.filter((comment) => comment.requestId === normalizedRequestId);
+  }
+
+  if (commentThreadId) {
+    filtered = filtered.filter((comment) => comment.commentThreadId === commentThreadId);
   }
 
   if (normalizedQuery) {
@@ -2228,6 +2748,7 @@ export function getCommentsByTarget(
   params: {
     targetType: CommentTargetType;
     targetId: string;
+    commentThreadId?: string;
     status?: 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked' | 'all';
     limit?: number;
     offset?: number;
@@ -2326,6 +2847,7 @@ export function createComment(params: {
   siteId: string;
   targetType: CommentTargetType;
   targetId: string;
+  commentThreadId?: string;
   content: string;
   authorName?: string;
   authorEmail?: string;
@@ -2341,6 +2863,7 @@ export function createComment(params: {
     siteId: params.siteId,
     targetType: params.targetType,
     targetId: params.targetId,
+    commentThreadId: params.commentThreadId || undefined,
     authorName: params.authorName || null,
     authorEmail: params.authorEmail || null,
     authorWebsite: params.authorWebsite || null,

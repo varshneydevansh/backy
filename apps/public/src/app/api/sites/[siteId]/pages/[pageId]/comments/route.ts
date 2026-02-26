@@ -47,12 +47,19 @@ function parseBoolean(raw: unknown): boolean | undefined {
     return raw;
   }
 
-  if (raw === 'true' || raw === '1') {
-    return true;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return raw !== 0;
   }
 
-  if (raw === 'false' || raw === '0') {
-    return false;
+  if (typeof raw === 'string') {
+    const normalized = raw.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes') {
+      return true;
+    }
+
+    if (normalized === 'false' || normalized === '0' || normalized === 'off' || normalized === 'no') {
+      return false;
+    }
   }
 
   return undefined;
@@ -99,6 +106,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const parentOnly = searchParams.get('parentOnly') === 'true';
     const parentId = searchParams.get('parentId');
     const sort = parseSort(searchParams.get('sort'));
+    const commentThreadId = parseTextInput(searchParams.get('commentThreadId'));
     const limit = parseInt(searchParams.get('limit') || '20', 10);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
 
@@ -116,6 +124,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const comments = getCommentsByTarget(site.id, {
       targetType: 'page',
       targetId: pageId,
+      commentThreadId: commentThreadId || undefined,
       status,
       limit: Number.isFinite(limit) ? limit : 20,
       offset: Number.isFinite(offset) ? offset : 0,
@@ -162,6 +171,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const content = parseTextInput(body.content);
+
+    if (content.length === 0) {
+      return NextResponse.json(
+        {
+          error: 'Validation failed',
+          details: { content: 'Comment content is required' },
+        },
+        { status: 422 },
+      );
+    }
+
     const moderation = parseModerationMode(
       (body as { commentModerationMode?: unknown }).commentModerationMode ??
       (body as { moderationMode?: unknown }).moderationMode ??
@@ -171,6 +191,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const allowReplies = parseBoolean((body as { commentAllowReplies?: unknown }).commentAllowReplies);
     const requireName = parseBoolean((body as { commentRequireName?: unknown }).commentRequireName);
     const requireEmail = parseBoolean((body as { commentRequireEmail?: unknown }).commentRequireEmail);
+    const userId = parseTextInput(
+      (body as { userId?: unknown }).userId || (body as { commentUserId?: unknown }).commentUserId,
+    );
     const finalAllowGuests = allowGuests !== false;
     const finalAllowReplies = allowReplies !== false;
     const finalRequireName = requireName !== false;
@@ -180,19 +203,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const authorEmail = parseTextInput(body.authorEmail);
     const authorWebsite = parseTextInput(body.authorWebsite);
     const parentId = typeof body.parentId === 'string' ? body.parentId : null;
+    const commentThreadId = parseTextInput(
+      (body as { commentThreadId?: unknown }).commentThreadId || (body as { threadId?: unknown }).threadId,
+    );
     const requestId = generateRequestId(parseTextInput(body.requestId) || undefined);
     const startedAt = parseStartedAt(body.startedAt);
     const honeypot = parseTextInput(body.honeypot);
     const rateLimitBypass = parseBoolean(body.rateLimitBypass) === true;
     const ipHash = extractIpHash(request);
 
-    if (finalAllowGuests === false && !authorName && !authorEmail) {
+    if (!finalAllowGuests && !userId) {
       return NextResponse.json(
         {
           error: 'Validation failed',
-          details: {
-            authorName: 'A valid identity is required for this comment block',
-          },
+          details: { authorName: 'Guests are disabled for this comment block.' },
         },
         { status: 403 },
       );
@@ -228,8 +252,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    let parent: ReturnType<typeof getCommentById> | undefined;
     if (parentId) {
-      const parent = getCommentById(parentId);
+      parent = getCommentById(parentId);
       if (!parent || parent.siteId !== site.id || parent.targetType !== 'page' || parent.targetId !== pageId) {
         return NextResponse.json(
           {
@@ -239,7 +264,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           { status: 422 },
         );
       }
+
+      if (parent.commentThreadId && parent.commentThreadId !== commentThreadId) {
+        return NextResponse.json(
+          {
+            error: 'Validation failed',
+            details: { parentId: 'The selected parent comment belongs to a different thread.' },
+          },
+          { status: 422 },
+        );
+      }
     }
+
+    const resolvedCommentThreadId = commentThreadId || parent?.commentThreadId || undefined;
 
     const classification = validateAndClassifyComment({
       siteId: site.id,
@@ -275,6 +312,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       authorName,
       authorEmail,
       authorWebsite,
+      commentThreadId: resolvedCommentThreadId,
+      userId,
       parentId,
       requestId,
       ipHash,

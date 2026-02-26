@@ -138,6 +138,59 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
     description: 'Container box for grouping elements',
   },
   {
+    type: 'section',
+    name: 'Section',
+    icon: 'Box',
+    category: 'layout',
+    defaultProps: {
+      backgroundColor: '#f9fafb',
+      borderRadius: 0,
+      padding: 16,
+    },
+    defaultSize: { width: 1200, height: 280 },
+    description: 'Full-width section for major page blocks',
+  },
+  {
+    type: 'header',
+    name: 'Header',
+    icon: 'Square',
+    category: 'layout',
+    defaultProps: {
+      backgroundColor: '#ffffff',
+      borderColor: '#e5e7eb',
+      padding: 16,
+    },
+    defaultSize: { width: 1200, height: 120 },
+    description: 'Reusable page header block',
+  },
+  {
+    type: 'nav',
+    name: 'Navigation',
+    icon: 'Menu',
+    category: 'layout',
+    defaultProps: {
+      backgroundColor: 'transparent',
+      color: '#111827',
+      padding: 16,
+      navItems: ['Home', 'About', 'Contact'],
+    },
+    defaultSize: { width: 1200, height: 72 },
+    description: 'Navigation container for page menu items',
+  },
+  {
+    type: 'footer',
+    name: 'Footer',
+    icon: 'Box',
+    category: 'layout',
+    defaultProps: {
+      backgroundColor: '#111827',
+      color: '#ffffff',
+      padding: 24,
+    },
+    defaultSize: { width: 1200, height: 180 },
+    description: 'Reusable page footer block',
+  },
+  {
     type: 'divider',
     name: 'Divider',
     icon: 'Minus',
@@ -227,7 +280,7 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
   },
   {
     type: 'input',
-    name: 'Input',
+    name: 'Text input field',
     icon: 'FormInput',
     category: 'form',
     defaultProps: {
@@ -242,7 +295,7 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
   },
   {
     type: 'textarea',
-    name: 'Textarea',
+    name: 'Multi-line text input',
     icon: 'FormInput',
     category: 'form',
     defaultProps: {
@@ -258,7 +311,7 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
   },
   {
     type: 'select',
-    name: 'Select',
+    name: 'Dropdown selector',
     icon: 'List',
     category: 'form',
     defaultProps: {
@@ -274,7 +327,7 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
   },
   {
     type: 'checkbox',
-    name: 'Checkbox',
+    name: 'Checkbox inputs',
     icon: 'CheckSquare',
     category: 'form',
     defaultProps: {
@@ -288,7 +341,7 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
   },
   {
     type: 'radio',
-    name: 'Radio',
+    name: 'Radio inputs',
     icon: 'Circle',
     category: 'form',
     defaultProps: {

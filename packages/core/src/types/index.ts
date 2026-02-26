@@ -927,6 +927,7 @@ export interface Comment {
   /** Comment target */
   targetType: CommentTargetType;
   targetId: string;
+  commentThreadId?: string;
 
   /** Author identity */
   authorName?: string | null;

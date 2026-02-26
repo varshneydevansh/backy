@@ -74,12 +74,23 @@ export interface MediaAsset {
   targetPostIds?: string[];
 }
 
+export type DeliveryMode = 'managed-hosting' | 'custom-frontend';
+
+export interface AppSettings {
+  deliveryMode: DeliveryMode;
+  apiKeys: {
+    publicApiKey: string;
+    adminApiKey: string;
+  };
+}
+
 interface AppState {
     sites: Site[];
     pages: Page[];
     posts: BlogPost[];
     users: User[];
     media: MediaAsset[];
+    settings: AppSettings;
 
     // Actions
     addSite: (site: Omit<Site, 'id' | 'pageCount' | 'lastUpdated'>) => void;
@@ -101,6 +112,10 @@ interface AppState {
 
     addMedia: (media: Omit<MediaAsset, 'id'>) => void;
     deleteMedia: (id: string) => void;
+
+    setDeliveryMode: (mode: DeliveryMode) => void;
+    updateSettings: (updates: Partial<AppSettings>) => void;
+    regenerateApiKeys: () => void;
 }
 
 // ============================================
@@ -216,6 +231,17 @@ const INITIAL_MEDIA: MediaAsset[] = [
   },
 ];
 
+const createApiKey = (kind: 'public' | 'admin') =>
+  `${kind === 'public' ? 'pk' : 'sk'}_live_${generateId()}`;
+
+const INITIAL_SETTINGS: AppSettings = {
+  deliveryMode: 'managed-hosting',
+  apiKeys: {
+    publicApiKey: createApiKey('public'),
+    adminApiKey: createApiKey('admin'),
+  },
+};
+
 // ============================================
 // STORE
 // ============================================
@@ -228,6 +254,7 @@ export const useStore = create<AppState>()(
             posts: INITIAL_POSTS,
             users: INITIAL_USERS,
             media: INITIAL_MEDIA,
+            settings: INITIAL_SETTINGS,
 
             // Site Actions
             addSite: (site) => set((state) => ({
@@ -313,6 +340,39 @@ export const useStore = create<AppState>()(
             deleteMedia: (id) => set((state) => ({
                 media: state.media.filter((item) => item.id !== id),
             })),
+
+            setDeliveryMode: (mode) =>
+              set((state) => ({
+                settings: {
+                  ...state.settings,
+                  deliveryMode: mode,
+                },
+              })),
+
+            updateSettings: (updates) =>
+              set((state) => ({
+                settings: {
+                  ...state.settings,
+                  ...updates,
+                  apiKeys: updates.apiKeys
+                    ? {
+                        ...state.settings.apiKeys,
+                        ...updates.apiKeys,
+                      }
+                    : state.settings.apiKeys,
+                },
+              })),
+
+            regenerateApiKeys: () =>
+              set((state) => ({
+                settings: {
+                  ...state.settings,
+                  apiKeys: {
+                    publicApiKey: createApiKey('public'),
+                    adminApiKey: createApiKey('admin'),
+                  },
+                },
+              })),
         }),
         {
             name: 'backy-db',

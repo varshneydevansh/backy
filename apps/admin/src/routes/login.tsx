@@ -11,11 +11,16 @@
  * @license MIT
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/lib/utils';
+
+const DEMO_ACCOUNTS = [
+  { email: 'admin@backy.io', password: 'admin123', label: 'Admin' },
+  { email: 'editor@backy.io', password: 'editor123', label: 'Editor' },
+];
 
 // ============================================
 // ROUTE DEFINITION
@@ -36,7 +41,13 @@ export const Route = createFileRoute('/login')({
  */
 function LoginPage() {
   const navigate = useNavigate();
-  const { signIn, isLoading, error, clearError } = useAuthStore();
+  const { signIn, isLoading, error, clearError, user } = useAuthStore();
+
+  useEffect(() => {
+    if (user) {
+      navigate({ to: '/' });
+    }
+  }, [user, navigate]);
 
   // Form state
   const [email, setEmail] = useState('');
@@ -221,18 +232,29 @@ function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-sm text-muted-foreground mt-8">
-          Don't have an account?{' '}
-          <a
-            href="#"
-            className="text-primary hover:underline"
-            onClick={(e) => {
-              e.preventDefault();
-              alert('Contact your admin to create an account');
-            }}
-          >
-            Contact admin
-          </a>
+          Demo accounts for local testing:
         </p>
+        <div className="mt-2 space-y-2">
+          {DEMO_ACCOUNTS.map((account) => (
+            <button
+              key={account.email}
+              type="button"
+              className={cn(
+                'w-full text-left px-3 py-2 rounded-lg border bg-card text-sm',
+                'hover:bg-muted transition-colors'
+              )}
+              onClick={() => {
+                setEmail(account.email);
+                setPassword(account.password);
+              }}
+            >
+              <span className="font-medium">{account.label}</span>{' '}
+              <span className="text-muted-foreground">
+                ({account.email} / {account.password})
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

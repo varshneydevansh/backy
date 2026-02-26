@@ -203,11 +203,16 @@ const removeElementById = (
 };
 
 const canAcceptNestedDrop = (elementType: CanvasElement['type']): boolean => {
-  return elementType === 'form' ||
-    elementType === 'box' ||
-    elementType === 'container' ||
-    elementType === 'section' ||
-    elementType === 'columns';
+  const normalizedType = normalizeCanvasElementType(elementType);
+
+  return normalizedType === 'form' ||
+    normalizedType === 'box' ||
+    normalizedType === 'container' ||
+    normalizedType === 'section' ||
+    normalizedType === 'header' ||
+    normalizedType === 'footer' ||
+    normalizedType === 'nav' ||
+    normalizedType === 'columns';
 };
 
 const isTextEditableElement = (type: CanvasElement['type']): boolean => {
@@ -294,6 +299,50 @@ const normalizeMapUrl = (addressOrUrl: unknown): string => {
   return `https://www.google.com/maps?q=${encodeURIComponent(source)}&output=embed`;
 };
 
+const parseFormOptions = (value: unknown): string[] => {
+  if (!Array.isArray(value) && typeof value !== 'string') {
+    return [];
+  }
+
+  const values = Array.isArray(value)
+    ? value
+    : value.split(/\r?\n/);
+
+  return values
+    .map((option) => {
+      if (typeof option === 'string') {
+        return option.trim();
+      }
+
+      if (option && typeof option === 'object' && 'value' in option) {
+        const optionValue = (option as { value?: unknown }).value;
+        if (typeof optionValue === 'string') {
+          return optionValue.trim();
+        }
+
+        if (typeof optionValue === 'number' && Number.isFinite(optionValue)) {
+          return `${optionValue}`.trim();
+        }
+      }
+
+      if (option && typeof option === 'object' && 'label' in option) {
+        const label = (option as { label?: unknown }).label;
+        if (typeof label === 'string') {
+          return label.trim();
+        }
+
+        if (typeof label === 'number' && Number.isFinite(label)) {
+          return `${label}`.trim();
+        }
+      }
+
+      return '';
+    })
+    .filter((option): option is string => typeof option === 'string')
+    .map((option) => option.trim())
+    .filter(Boolean);
+};
+
 const buildSharedElementStyle = (element: CanvasElement): CSSProperties => {
   const p = element.props as Record<string, any>;
   const savedStyles = element.styles || {};
@@ -339,6 +388,88 @@ const getCommentModeLabel = (value: unknown): 'manual' | 'auto-approve' => {
 
 const getCommentModeColor = (mode: unknown): string => {
   return getCommentModeLabel(mode) === 'auto-approve' ? '#0f766e' : '#374151';
+};
+
+const parseBooleanSetting = (value: unknown, fallback: boolean): boolean => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value !== 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes') {
+      return true;
+    }
+
+    if (normalized === 'false' || normalized === '0' || normalized === 'off' || normalized === 'no') {
+      return false;
+    }
+  }
+
+  return fallback;
+};
+
+const formatFieldLabel = (value: unknown): string => {
+  return typeof value === 'string' ? value.trim() : '';
+};
+
+const formatHelpText = (value: unknown): string => {
+  return typeof value === 'string' ? value.trim() : '';
+};
+
+const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
+
+  if (!normalized) {
+    return 'text';
+  }
+
+  if (
+    normalized === 'textinput'
+    || normalized === 'textinputfield'
+    || normalized === 'textfield'
+    || normalized === 'textfield'
+    || normalized === 'inputfield'
+  ) {
+    return 'input';
+  }
+
+  if (
+    normalized === 'multiline'
+    || normalized === 'multilinetext'
+    || normalized === 'multilinetextinput'
+    || normalized === 'textarea'
+    || normalized === 'textareafield'
+  ) {
+    return 'textarea';
+  }
+
+  if (normalized === 'radio' || normalized === 'radiobutton' || normalized === 'radiobuttons' || normalized === 'radioinput') {
+    return 'radio';
+  }
+
+  if (
+    normalized === 'checkbox'
+    || normalized === 'checkboxes'
+    || normalized === 'checkboxinput'
+    || normalized === 'checkboxinputs'
+  ) {
+    return 'checkbox';
+  }
+
+  if (normalized.includes('dropdown') || normalized.includes('select')) {
+    return 'select';
+  }
+
+  if (normalized.includes('textinput') || normalized.includes('textfield')) {
+    return 'input';
+  }
+
+  return normalized as CanvasElement['type'] || 'text';
 };
 
 // ============================================
@@ -700,6 +831,7 @@ export function Canvas({
       try {
         const rawData = event.dataTransfer.getData('application/json');
         const item = JSON.parse(rawData) as { type: string };
+        const normalizedType = normalizeCanvasElementType(item.type);
 
         const parsedX = event.clientX - (canvasRef.current?.getBoundingClientRect().left || 0);
         const parsedY = event.clientY - (canvasRef.current?.getBoundingClientRect().top || 0);
@@ -715,7 +847,11 @@ export function Canvas({
 
           if (isDropTarget && dropHost) {
             const hostRect = dropHost.getBoundingClientRect();
-            const child = createCanvasElement(item.type, toNumber(event.clientX - hostRect.left), toNumber(event.clientY - hostRect.top));
+            const child = createCanvasElement(
+              normalizedType as CanvasElement['type'],
+              toNumber(event.clientX - hostRect.left),
+              toNumber(event.clientY - hostRect.top),
+            );
             const withChild = insertElementAsChild(elements, forcedParentId, child);
 
             if (withChild.updated) {
@@ -728,7 +864,7 @@ export function Canvas({
         }
 
         const rootElement = createCanvasElement(
-          item.type,
+          normalizedType as CanvasElement['type'],
           toNumber(parsedX),
           toNumber(parsedY)
         );
@@ -743,7 +879,7 @@ export function Canvas({
   );
 
   const handleElementPropsUpdate = useCallback(
-    (elementId: string, updates: Partial<CanvasElement['props']>) => {
+    (elementId: string, updates: { [key: string]: unknown }) => {
       const next = updateElementById(elements, elementId, (element) => ({
         ...element,
         props: { ...element.props, ...updates },
@@ -910,6 +1046,7 @@ export function Canvas({
             key={element.id}
             element={element}
             isSelected={element.id === selectedId}
+            selectedId={selectedId}
             isPreview={isPreview}
             onPointerDown={(e) => handleMouseDown(e, element.id)}
             onResizeStart={(e, handle) => handleResizeStart(e, element.id, handle)}
@@ -925,7 +1062,6 @@ export function Canvas({
             onUpdate={(updates) => handleElementPropsUpdate(element.id, updates)}
             onUpdateElement={handleElementPropsUpdate}
             onDrop={(event) => handleCanvasElementDrop(event, element.id)}
-            canAcceptNestedDrop={canAcceptNestedDrop(element.type)}
             isEditing={editingId === element.id}
             onStopEditing={() => setEditingId(null)}
             onDoubleClick={() => handleDoubleClick(element.id)}
@@ -958,15 +1094,15 @@ export function Canvas({
 interface CanvasElementComponentProps {
   element: CanvasElement;
   isSelected: boolean;
+  selectedId: string | null;
   isPreview: boolean;
-  onPointerDown: (e: React.PointerEvent) => void;
+  onPointerDown: (e: React.PointerEvent, elementId?: string) => void;
   onResizeStart: (e: React.MouseEvent, handle: 'nw' | 'ne' | 'sw' | 'se') => void;
   onClick: (e: React.MouseEvent) => void;
   onSelectElement: (elementId: string) => void;
-  onUpdate: (updates: Partial<CanvasElement['props']>) => void;
-  onUpdateElement: (elementId: string, updates: Partial<CanvasElement['props']>) => void;
-  onDrop?: (e: React.DragEvent) => void;
-  canAcceptNestedDrop?: boolean;
+  onUpdate: (updates: { [key: string]: unknown }) => void;
+  onUpdateElement: (elementId: string, updates: { [key: string]: unknown }) => void;
+  onDrop?: (e: React.DragEvent, forcedParentId?: string) => void;
   isEditing: boolean;
   onDoubleClick: () => void;
   onStopEditing?: () => void;
@@ -975,6 +1111,7 @@ interface CanvasElementComponentProps {
 function CanvasElementComponent({
   element,
   isSelected,
+  selectedId,
   isPreview,
   onPointerDown,
   onResizeStart,
@@ -983,16 +1120,60 @@ function CanvasElementComponent({
   onUpdate,
   onUpdateElement,
   onDrop,
-  canAcceptNestedDrop,
   isEditing,
   onDoubleClick,
   onStopEditing,
-}: CanvasElementComponentProps) {
+  }: CanvasElementComponentProps) {
   const p = element.props as Record<string, any>;
   const sharedStyle = buildSharedElementStyle(element);
+  const childElements = element.children || [];
+  const resolvedSelectedId = selectedId ?? null;
+
+  const renderChildren = () => (
+    <>
+      {childElements.map((child) => (
+        <CanvasElementComponent
+          key={child.id}
+          element={child}
+          isSelected={child.id === resolvedSelectedId}
+          selectedId={resolvedSelectedId}
+          isPreview={isPreview}
+          onPointerDown={(event) => onPointerDown(event, child.id)}
+          onResizeStart={(event, handle) => onResizeStart(event, child.id, handle)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelectElement(child.id);
+          }}
+          onUpdate={(updates) => onUpdateElement(child.id, updates)}
+          onUpdateElement={onUpdateElement}
+          onDrop={(event, forcedParentId) => onDrop?.(event, forcedParentId)}
+          isEditing={false}
+          onDoubleClick={() => onDoubleClick(child.id)}
+          onStopEditing={onStopEditing}
+        />
+      ))}
+    </>
+  );
+
+  const containerDropHandlers = isPreview
+    ? {}
+    : {
+        onDragOver: (event: React.DragEvent) => {
+          if (canAcceptNestedDrop(element.type)) {
+            event.preventDefault();
+          }
+        },
+        onDrop: (event: React.DragEvent) => {
+          if (onDrop) {
+            onDrop(event, element.id);
+          }
+        },
+      };
 
   const renderContent = () => {
-    switch (element.type) {
+    const resolvedType = normalizeCanvasElementType(element.type);
+
+    switch (resolvedType) {
       case 'text':
         // V2 Hybrid: If editing, show Tiptap. Else show Preview.
         // We use Tiptap for both states to ensure WYSIWYG consistency if possible,
@@ -1100,8 +1281,13 @@ function CanvasElementComponent({
 
       case 'box':
       case 'container':
+      case 'section':
+      case 'header':
+      case 'footer':
+      case 'nav':
         return (
           <div
+            {...containerDropHandlers}
             style={{
               ...sharedStyle,
               width: '100%',
@@ -1109,8 +1295,26 @@ function CanvasElementComponent({
               backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#f3f4f6',
               borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 0),
               border: sharedStyle.border ?? 'none',
+              position: 'relative',
             }}
-          />
+          >
+            {renderChildren()}
+            {!isPreview && !childElements.length && (
+              <div style={{
+                width: '100%',
+                height: '100%',
+                border: sharedStyle.border ?? '1px dashed #d1d5db',
+                borderRadius: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#9ca3af',
+                fontSize: 12,
+              }}>
+                Drop components here
+              </div>
+            )}
+          </div>
         );
 
       case 'video':
@@ -1203,26 +1407,276 @@ function CanvasElementComponent({
         );
 
       case 'input':
-        return (
-          <input
-            type={p.inputType ?? 'text'}
-            placeholder={p.placeholder ?? 'Enter text...'}
-            value={p.value ?? ''}
-            disabled={!isPreview}
-            style={{
-              ...sharedStyle,
+        {
+          const fieldLabel = formatFieldLabel(p.label);
+          const helpText = formatHelpText(p.helpText);
+          return (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
               width: '100%',
               height: '100%',
-              padding: sharedStyle.padding ?? '8px 12px',
-              fontSize: p.fontSize ?? sharedStyle.fontSize ?? 14,
-              border: sharedStyle.border ?? `1px solid ${p.borderColor ?? '#d1d5db'}`,
-              borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 4),
-              backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#ffffff',
-              pointerEvents: isPreview ? 'auto' : 'none',
             }}
-            readOnly
-          />
-        );
+            >
+              {fieldLabel ? (
+                <label
+                  style={{
+                    color: p.color ?? sharedStyle.color ?? '#374151',
+                    fontWeight: 500,
+                  }}
+                >
+                  {fieldLabel}
+                  {p.required ? ' *' : ''}
+                </label>
+              ) : null}
+              <input
+                type={p.inputType ?? 'text'}
+                placeholder={p.placeholder ?? 'Enter text...'}
+                value={p.value ?? ''}
+                disabled={!isPreview}
+                required={Boolean(p.required)}
+                name={typeof p.name === 'string' ? p.name : undefined}
+                style={{
+                  ...sharedStyle,
+                  width: '100%',
+                  height: '100%',
+                  padding: sharedStyle.padding ?? '8px 12px',
+                  fontSize: p.fontSize ?? sharedStyle.fontSize ?? 14,
+                  border: sharedStyle.border ?? `1px solid ${p.borderColor ?? '#d1d5db'}`,
+                  borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 4),
+                  backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#ffffff',
+                  pointerEvents: isPreview ? 'auto' : 'none',
+                }}
+                readOnly
+              />
+              {helpText ? (
+                <p style={{
+                  margin: 0,
+                  fontSize: 11,
+                  lineHeight: 1.4,
+                  color: p.color ? `${p.color}cc` : '#6b7280',
+                }}
+                >
+                  {helpText}
+                </p>
+              ) : null}
+            </div>
+          );
+        }
+
+      case 'textarea':
+        {
+          const fieldLabel = formatFieldLabel(p.label);
+          const helpText = formatHelpText(p.helpText);
+          return (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              width: '100%',
+              height: '100%',
+            }}
+            >
+              {fieldLabel ? (
+                <label
+                  style={{
+                    color: p.color ?? sharedStyle.color ?? '#374151',
+                    fontWeight: 500,
+                  }}
+                >
+                  {fieldLabel}
+                  {p.required ? ' *' : ''}
+                </label>
+              ) : null}
+              <textarea
+                rows={Number(p.rows) || 4}
+                placeholder={p.placeholder ?? 'Enter text...'}
+                value={p.value ?? ''}
+                disabled={!isPreview}
+                required={Boolean(p.required)}
+                name={typeof p.name === 'string' ? p.name : undefined}
+                style={{
+                  ...sharedStyle,
+                  width: '100%',
+                  height: '100%',
+                  padding: sharedStyle.padding ?? '8px 12px',
+                  fontSize: p.fontSize ?? sharedStyle.fontSize ?? 14,
+                  border: sharedStyle.border ?? `1px solid ${p.borderColor ?? '#d1d5db'}`,
+                  borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 4),
+                  backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#ffffff',
+                  pointerEvents: isPreview ? 'auto' : 'none',
+                  resize: 'none',
+                }}
+                readOnly
+              />
+              {helpText ? (
+                <p style={{
+                  margin: 0,
+                  fontSize: 11,
+                  lineHeight: 1.4,
+                  color: p.color ? `${p.color}cc` : '#6b7280',
+                }}
+                >
+                  {helpText}
+                </p>
+              ) : null}
+            </div>
+          );
+        }
+
+      case 'select':
+        const selectOptions = parseFormOptions(p.options);
+        {
+          const fieldLabel = formatFieldLabel(p.label);
+          const helpText = formatHelpText(p.helpText);
+          return (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              width: '100%',
+              height: '100%',
+            }}
+            >
+              {fieldLabel ? (
+                <label
+                  style={{
+                    color: p.color ?? sharedStyle.color ?? '#374151',
+                    fontWeight: 500,
+                  }}
+                >
+                  {fieldLabel}
+                  {p.required ? ' *' : ''}
+                </label>
+              ) : null}
+              <select
+                value={p.value ?? p.defaultValue ?? selectOptions[0] ?? ''}
+                disabled={!isPreview}
+                required={Boolean(p.required)}
+                style={{
+                  ...sharedStyle,
+                  width: '100%',
+                  height: '100%',
+                  padding: sharedStyle.padding ?? '8px 12px',
+                  fontSize: p.fontSize ?? sharedStyle.fontSize ?? 14,
+                  color: p.color ?? sharedStyle.color ?? '#374151',
+                  backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#ffffff',
+                  border: sharedStyle.border ?? `1px solid ${p.borderColor ?? '#d1d5db'}`,
+                  borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 4),
+                  pointerEvents: isPreview ? 'auto' : 'none',
+                }}
+              >
+                {selectOptions.length ? (
+                  selectOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">No options</option>
+                )}
+              </select>
+              {helpText ? (
+                <p style={{
+                  margin: 0,
+                  fontSize: 11,
+                  lineHeight: 1.4,
+                  color: p.color ? `${p.color}cc` : '#6b7280',
+                }}
+                >
+                  {helpText}
+                </p>
+              ) : null}
+            </div>
+          );
+        }
+
+      case 'checkbox':
+      case 'radio':
+        {
+          const fieldLabel = formatFieldLabel(p.label);
+          const helpText = formatHelpText(p.helpText);
+          const optionItems = parseFormOptions(p.options);
+          return (
+            <div
+              style={{
+                ...sharedStyle,
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+                boxSizing: 'border-box',
+              }}
+            >
+              {fieldLabel ? (
+                <label style={{
+                  color: p.color ?? sharedStyle.color ?? '#374151',
+                  fontWeight: 500,
+                }}
+                >
+                  {fieldLabel}
+                  {p.required ? ' *' : ''}
+                </label>
+              ) : null}
+              <div style={{
+                ...sharedStyle,
+                width: '100%',
+                height: '100%',
+                padding: sharedStyle.padding ?? '8px 12px',
+                color: p.color ?? sharedStyle.color ?? '#374151',
+                backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#ffffff',
+                border: sharedStyle.border ?? `1px solid ${p.borderColor ?? '#d1d5db'}`,
+                borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 4),
+                flexDirection: 'column',
+                gap: 8,
+                boxSizing: 'border-box',
+              }}
+              >
+                {(optionItems.length ? optionItems : ['Option A']).map((option, optionIndex) => {
+                  const isChecked = element.type === 'radio'
+                    ? p.value === option
+                    : Array.isArray(p.value)
+                      ? p.value.includes(option)
+                      : p.value === option;
+
+                  return (
+                    <label
+                      key={`${element.id}-${option}-${optionIndex}`}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: p.fontSize ?? 14 }}
+                    >
+                      <input
+                        type={element.type}
+                        name={element.type === 'radio' ? `${element.id}-group` : undefined}
+                        value={option}
+                        checked={Boolean(isChecked)}
+                        readOnly
+                        onChange={() => {}}
+                        style={{
+                          pointerEvents: isPreview ? 'auto' : 'none',
+                        }}
+                      />
+                      <span>{option}</span>
+                    </label>
+                  );
+                })}
+                {helpText ? (
+                  <p style={{
+                    margin: 0,
+                    marginTop: 6,
+                    fontSize: 11,
+                    lineHeight: 1.4,
+                    color: p.color ? `${p.color}cc` : '#6b7280',
+                  }}
+                  >
+                    {helpText}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          );
+        }
 
       case 'link':
         return (
@@ -1354,13 +1808,13 @@ function CanvasElementComponent({
         return (
           <div
             onDragOver={(e) => {
-              if (!isPreview && onDrop && canAcceptNestedDrop) {
+              if (!isPreview && onDrop && canAcceptNestedDrop(element.type)) {
                 e.preventDefault();
               }
             }}
             onDrop={(e) => {
               if (!isPreview && onDrop) {
-                onDrop(e);
+                onDrop(e, element.id);
               }
             }}
             style={{
@@ -1370,6 +1824,7 @@ function CanvasElementComponent({
               backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#ffffff',
               borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 8),
               border: sharedStyle.border ?? `1px solid ${p.borderColor ?? '#e5e7eb'}`,
+              position: 'relative',
               padding: sharedStyle.padding ?? 16,
               display: 'flex',
               flexDirection: 'column',
@@ -1387,26 +1842,7 @@ function CanvasElementComponent({
               Drag form elements here (inputs, buttons)
             </div>
             <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-            {element.children?.map((child) => (
-                <CanvasElementComponent
-                  key={child.id}
-                  element={child}
-                  isSelected={child.id === selectedId}
-                  isPreview={isPreview}
-                  onPointerDown={(event) => onPointerDown(event, child.id)}
-                  onResizeStart={(event, handle) => onResizeStart(event, child.id, handle)}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onSelectElement(child.id);
-                  }}
-                  onUpdate={(updates) => onUpdateElement(child.id, updates)}
-                  onUpdateElement={onUpdateElement}
-                onStopEditing={onStopEditing}
-                onDoubleClick={() => onDoubleClick(child.id)}
-                onDrop={(event) => onDrop?.(event)}
-                canAcceptNestedDrop={canAcceptNestedDrop(child.type)}
-              />
-              ))}
+              {renderChildren()}
             </div>
 
             {!isPreview && (
@@ -1426,7 +1862,17 @@ function CanvasElementComponent({
           </div>
         );
 
-      case 'comment':
+      case 'comment': {
+        const commentRequireName = parseBooleanSetting(p.commentRequireName, true);
+        const commentRequireEmail = parseBooleanSetting(p.commentRequireEmail, false);
+        const commentAllowGuests = parseBooleanSetting(p.commentAllowGuests, true);
+        const commentAllowReplies = parseBooleanSetting(p.commentAllowReplies, true);
+        const commentModerationMode = getCommentModeLabel(p.commentModerationMode);
+        const commentSortOrder = String(p.commentSortOrder || 'newest').toLowerCase() === 'oldest'
+          ? 'Oldest first'
+          : 'Newest first';
+        const guestCommentingEnabled = commentAllowGuests;
+
         return (
           <div
             style={{
@@ -1445,53 +1891,215 @@ function CanvasElementComponent({
           >
             <h4 style={{
               margin: 0,
-              color: getCommentModeColor(p.commentModerationMode),
+              color: getCommentModeColor(commentModerationMode),
               fontFamily: p.fontFamily || sharedStyle.fontFamily || 'inherit',
               fontSize: p.fontSize || 18,
               fontWeight: p.fontWeight || 600,
             }}>
               {p.commentTitle || 'Comments'}
             </h4>
-            <p style={{
-              margin: 0,
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
               color: '#6b7280',
               fontSize: 12,
             }}>
-              Moderation: {p.commentModerationMode || 'manual'} • Replies: {p.commentAllowReplies === false ? 'off' : 'on'}
-            </p>
-            <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
-              Add fields and post on a public page that uses this comment element.
-            </p>
-            <textarea
-              placeholder="Write a comment..."
-              readOnly
-              value=""
-              style={{
-                minHeight: 64,
-                resize: 'none',
-                width: '100%',
-                padding: 8,
+              <span>
+                Moderation: {commentModerationMode}
+              </span>
+              <span>•</span>
+              <span>Replies: {commentAllowReplies ? 'on' : 'off'}</span>
+              <span>•</span>
+              <span>Guests: {commentAllowGuests ? 'on' : 'off'}</span>
+              <span>•</span>
+              <span>Name required: {commentRequireName ? 'on' : 'off'}</span>
+              <span>•</span>
+              <span>Email required: {commentRequireEmail ? 'on' : 'off'}</span>
+              <span>•</span>
+              <span>Sort: {commentSortOrder}</span>
+            </div>
+
+            {!guestCommentingEnabled ? (
+              <p style={{
+                margin: 0,
+                border: '1px dashed #fde68a',
                 borderRadius: 6,
-                border: '1px solid #e5e7eb',
-              }}
-            />
-            <button
-              type="button"
-              style={{
-                alignSelf: 'flex-start',
-                border: `1px solid ${p.borderColor || '#d1d5db'}`,
-                borderRadius: 6,
-                padding: '6px 12px',
-                background: p.backgroundColor || '#f3f4f6',
-                color: p.color || '#374151',
-                cursor: 'pointer',
+                background: '#fffbeb',
+                color: '#92400e',
+                padding: '8px 10px',
                 fontSize: 12,
+              }}>
+                Guest posting is disabled. Enable Allow guests in this comment block to test public submissions.
+              </p>
+            ) : null}
+
+            <form
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}
+              onSubmit={(event) => event.preventDefault()}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 12, color: '#374151' }}>
+                  {commentRequireName ? 'Name *' : 'Name'}
+                </label>
+                <input
+                  type="text"
+                  placeholder={commentRequireName ? 'Your name' : 'Your name (optional)'}
+                  readOnly
+                  disabled={!guestCommentingEnabled}
+                  style={{
+                    borderRadius: 6,
+                    border: '1px solid #e5e7eb',
+                    padding: '8px 10px',
+                    fontSize: 13,
+                    background: guestCommentingEnabled ? '#ffffff' : '#f9fafb',
+                    color: '#111827',
+                  }}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 12, color: '#374151' }}>
+                  {commentRequireEmail ? 'Email *' : 'Email'}
+                </label>
+                <input
+                  type="email"
+                  placeholder={commentRequireEmail ? 'name@example.com' : 'name@example.com (optional)'}
+                  readOnly
+                  disabled={!guestCommentingEnabled}
+                  style={{
+                    borderRadius: 6,
+                    border: '1px solid #e5e7eb',
+                    padding: '8px 10px',
+                    fontSize: 13,
+                    background: guestCommentingEnabled ? '#ffffff' : '#f9fafb',
+                    color: '#111827',
+                  }}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 12, color: '#374151' }}>Website</label>
+                <input
+                  type="text"
+                  placeholder="https://your-website.com (optional)"
+                  readOnly
+                  disabled={!guestCommentingEnabled}
+                  style={{
+                    borderRadius: 6,
+                    border: '1px solid #e5e7eb',
+                    padding: '8px 10px',
+                    fontSize: 13,
+                    background: guestCommentingEnabled ? '#ffffff' : '#f9fafb',
+                    color: '#111827',
+                  }}
+                />
+              </div>
+              <label style={{ fontSize: 12, color: '#374151' }}>
+                Comment *
+              </label>
+              <textarea
+                placeholder="Write a comment..."
+                readOnly
+                value=""
+                rows={4}
+                disabled={!guestCommentingEnabled}
+                style={{
+                  minHeight: 72,
+                  resize: 'none',
+                  width: '100%',
+                  borderRadius: 6,
+                  border: '1px solid #e5e7eb',
+                  padding: 8,
+                  fontSize: 13,
+                  background: guestCommentingEnabled ? '#ffffff' : '#f9fafb',
+                  color: '#111827',
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                <button
+                  type="button"
+                  style={{
+                    alignSelf: 'flex-start',
+                    border: `1px solid ${p.borderColor || '#d1d5db'}`,
+                    borderRadius: 6,
+                    padding: '6px 12px',
+                    background: guestCommentingEnabled ? (p.backgroundColor || '#f3f4f6') : '#f3f4f6',
+                    color: guestCommentingEnabled ? (p.color || '#374151') : '#9ca3af',
+                    cursor: guestCommentingEnabled ? 'pointer' : 'not-allowed',
+                    fontSize: 12,
+                  }}
+                  disabled={!guestCommentingEnabled}
+                >
+                  Post comment
+                </button>
+                <span style={{ fontSize: 12, color: '#6b7280' }}>
+                  Sort: {commentSortOrder}
+                </span>
+              </div>
+            </form>
+
+            <div
+              style={{
+                marginTop: 8,
+                borderTop: '1px solid #e5e7eb',
+                paddingTop: 12,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
               }}
             >
-              Post Comment (public)
-            </button>
+              <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#374151' }}>
+                Preview thread
+              </p>
+              <div style={{
+                background: '#ffffff',
+                border: '1px solid #e5e7eb',
+                borderRadius: 6,
+                padding: 10,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+                color: '#1f2937',
+              }}>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Alex</p>
+                  <p style={{ margin: '4px 0', fontSize: 12 }}>
+                    Great layout. Clean and very usable right away.
+                  </p>
+                  <p style={{ margin: 0, fontSize: 11, color: '#6b7280' }}>2h ago</p>
+                  <button
+                    type="button"
+                    style={{ marginTop: 6, fontSize: 11, border: 'none', color: '#2563eb', background: 'transparent' }}
+                    disabled={!commentAllowReplies}
+                  >
+                    Reply
+                  </button>
+                </div>
+
+                {commentAllowReplies ? (
+                  <div style={{
+                    marginLeft: 16,
+                    paddingLeft: 12,
+                    borderLeft: '2px solid #e5e7eb',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                  }}>
+                    <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Taylor</p>
+                    <p style={{ margin: '4px 0', fontSize: 12 }}>
+                      Thanks! I agree, this feels like a real CMS comment thread.
+                    </p>
+                    <p style={{ margin: 0, fontSize: 11, color: '#6b7280' }}>1h ago</p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
           </div>
         );
+      }
 
       case 'paragraph':
       return (
@@ -1544,18 +2152,21 @@ function CanvasElementComponent({
 
       case 'columns':
         const columnCount = p.columns ?? 2;
+        const safeColumnCount = Math.max(1, Math.floor(Number(columnCount) || 1));
         return (
           <div
+            {...containerDropHandlers}
             style={{
               ...sharedStyle,
               width: '100%',
               height: '100%',
+              position: 'relative',
               display: 'grid',
-              gridTemplateColumns: `repeat(${columnCount}, 1fr)`,
+              gridTemplateColumns: `repeat(${safeColumnCount}, 1fr)`,
               gap: toCssLength(p.gap ?? 16),
             }}
           >
-            {Array.from({ length: columnCount }).map((_, i) => (
+            {Array.from({ length: safeColumnCount }).map((_, i) => (
               <div
                 key={i}
                 style={{
@@ -1564,9 +2175,13 @@ function CanvasElementComponent({
                   border: isPreview ? 'none' : '1px dashed #d1d5db',
                   borderRadius: 4,
                   minHeight: 50,
+                  position: 'relative',
+                  width: '100%',
+                  height: '100%',
                 }}
               />
             ))}
+            {renderChildren()}
           </div>
         );
 
@@ -1633,7 +2248,7 @@ function CanvasElementComponent({
     }
   };
 
-  const isTextElement = isTextEditableElement(element.type);
+  const isTextElement = isTextEditableElement(normalizeCanvasElementType(element.type) as CanvasElement['type']);
 
   return (
       <div
@@ -1660,7 +2275,7 @@ function CanvasElementComponent({
         if (isEditing && isTextElement) {
           return;
         }
-        onPointerDown(event);
+        onPointerDown(event, element.id);
       }}
       onClick={onClick}
       onDoubleClick={onDoubleClick}

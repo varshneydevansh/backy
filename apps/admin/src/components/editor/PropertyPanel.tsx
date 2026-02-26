@@ -49,6 +49,108 @@ const toNumber = (value: unknown, fallback = 0): number => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const parseBooleanSetting = (value: unknown, fallback = false): boolean => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value !== 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes') {
+      return true;
+    }
+
+    if (normalized === 'false' || normalized === '0' || normalized === 'off' || normalized === 'no') {
+      return false;
+    }
+  }
+
+  return fallback;
+};
+
+const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
+
+  if (!normalized) {
+    return 'text';
+  }
+
+  if (
+    normalized === 'textinput'
+    || normalized === 'textinputfield'
+    || normalized === 'textfield'
+    || normalized === 'textfield'
+    || normalized === 'inputfield'
+  ) {
+    return 'input';
+  }
+
+  if (
+    normalized === 'multiline'
+    || normalized === 'multilinetext'
+    || normalized === 'multilinetextinput'
+    || normalized === 'textarea'
+    || normalized === 'textareafield'
+  ) {
+    return 'textarea';
+  }
+
+  if (normalized === 'radio' || normalized === 'radiobutton' || normalized === 'radioinput' || normalized === 'radioinputs') {
+    return 'radio';
+  }
+
+  if (normalized === 'checkbox' || normalized === 'checkboxes' || normalized === 'checkboxinput' || normalized === 'checkboxinputs') {
+    return 'checkbox';
+  }
+
+  if (normalized.includes('dropdown') || normalized.includes('select')) {
+    return 'select';
+  }
+
+  if (normalized.includes('textinput') || normalized.includes('textfield')) {
+    return 'input';
+  }
+
+  const knownTypes: CanvasElement['type'][] = [
+    'text',
+    'heading',
+    'paragraph',
+    'image',
+    'button',
+    'container',
+    'section',
+    'header',
+    'footer',
+    'nav',
+    'divider',
+    'video',
+    'icon',
+    'form',
+    'input',
+    'textarea',
+    'select',
+    'checkbox',
+    'radio',
+    'spacer',
+    'columns',
+    'map',
+    'box',
+    'embed',
+    'list',
+    'link',
+    'quote',
+    'comment',
+  ];
+
+  return knownTypes.includes(normalized as CanvasElement['type'])
+    ? (normalized as CanvasElement['type'])
+    : 'text';
+};
+
 // ============================================
 // TYPES
 // ============================================
@@ -317,16 +419,17 @@ function ContentProperties({
   onOpenEmoji,
   elementId,
 }: ContentPropertiesProps) {
-  const hasTextContent = ['text', 'heading', 'paragraph', 'quote', 'list'].includes(element.type);
-  const hasImageContent = element.type === 'image';
-  const hasVideoContent = element.type === 'video';
-  const hasLinkContent = element.type === 'link';
-  const hasButtonContent = element.type === 'button';
-  const hasInputContent = element.type === 'input';
-  const hasFormFieldContent = ['input', 'textarea', 'select', 'checkbox', 'radio'].includes(element.type);
-  const hasFormContent = element.type === 'form';
-  const hasCommentContent = element.type === 'comment';
-  const hasListContent = element.type === 'list';
+  const normalizedType = normalizeCanvasElementType(element.type);
+  const hasTextContent = ['text', 'heading', 'paragraph', 'quote', 'list'].includes(normalizedType);
+  const hasImageContent = normalizedType === 'image';
+  const hasVideoContent = normalizedType === 'video';
+  const hasLinkContent = normalizedType === 'link';
+  const hasButtonContent = normalizedType === 'button';
+  const hasInputContent = normalizedType === 'input';
+  const hasFormFieldContent = ['input', 'textarea', 'select', 'checkbox', 'radio'].includes(normalizedType);
+  const hasFormContent = normalizedType === 'form';
+  const hasCommentContent = normalizedType === 'comment';
+  const hasListContent = normalizedType === 'list';
   const fieldOptionsText = Array.isArray(element.props.options)
     ? element.props.options.join('\n')
     : '';
@@ -338,9 +441,9 @@ function ContentProperties({
   return (
     <div className="space-y-3">
       {/* Rich Text Controls */}
-      {hasTextContent && (
-        <RichTextFormatting elementId={elementId} />
-      )}
+        {hasTextContent && (
+          <RichTextFormatting elementId={elementId} />
+        )}
 
       {/* Image Source */}
       {hasImageContent && (
@@ -637,8 +740,23 @@ function ContentProperties({
               placeholder="Enter placeholder text"
             />
           </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Help Text
+            </label>
+            <input
+              type="text"
+              value={element.props.helpText || ''}
+              onChange={(e) => onChange({ helpText: e.target.value })}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Optional helper text"
+            />
+          </div>
 
-          {element.type === 'input' && (
+          {normalizedType === 'input' && (
             <>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">
@@ -656,6 +774,7 @@ function ContentProperties({
                   <option value="email">Email</option>
                   <option value="password">Password</option>
                   <option value="number">Number</option>
+                  <option value="date">Date</option>
                   <option value="tel">Phone</option>
                   <option value="url">URL</option>
                 </select>
@@ -710,7 +829,7 @@ function ContentProperties({
             </>
           )}
 
-          {element.type === 'textarea' && (
+          {normalizedType === 'textarea' && (
             <>
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -745,11 +864,41 @@ function ContentProperties({
                     )}
                   />
                 </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Min Length
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={(element.props.minLength as number) || ''}
+                    onChange={(e) => onChange({ minLength: e.target.value ? Number(e.target.value) : 0 })}
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
+                    )}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Default Value
+                </label>
+                <input
+                  type="text"
+                  value={element.props.defaultValue || ''}
+                  onChange={(e) => onChange({ defaultValue: e.target.value })}
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                  placeholder="Default text"
+                />
               </div>
             </>
           )}
 
-          {(element.type === 'select' || element.type === 'checkbox' || element.type === 'radio') && (
+          {(normalizedType === 'select' || normalizedType === 'checkbox' || normalizedType === 'radio') && (
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">
                 Options (one per line)
@@ -769,14 +918,32 @@ function ContentProperties({
             </div>
           )}
 
-          {(element.type === 'checkbox' || element.type === 'radio') && (
+          {normalizedType === 'select' && (
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Default selected option
+              </label>
+              <input
+                type="text"
+                value={element.props.defaultValue || ''}
+                onChange={(e) => onChange({ defaultValue: e.target.value })}
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="Option value"
+              />
+            </div>
+          )}
+
+          {(normalizedType === 'checkbox' || normalizedType === 'radio') && (
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">
                 Default Value / option
               </label>
               <input
                 type="text"
-                value={element.props.value || ''}
+                value={(element.props.value || element.props.defaultValue || '') as string}
                 onChange={(e) => onChange({ value: e.target.value })}
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
@@ -952,6 +1119,21 @@ function ContentProperties({
                 'focus:outline-none focus:ring-2 focus:ring-ring'
               )}
               placeholder="Contact Form"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Form Id
+            </label>
+            <input
+              type="text"
+              value={element.props.formId || ''}
+              onChange={(e) => onChange({ formId: e.target.value })}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="form-contact"
             />
           </div>
           <div>
@@ -1171,7 +1353,7 @@ function ContentProperties({
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
-              checked={element.props.commentRequireName !== false}
+              checked={parseBooleanSetting(element.props.commentRequireName, true)}
               onChange={(e) => onChange({ commentRequireName: e.target.checked })}
             />
             Require comment author name
@@ -1179,7 +1361,7 @@ function ContentProperties({
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
-              checked={element.props.commentRequireEmail || false}
+              checked={parseBooleanSetting(element.props.commentRequireEmail, false)}
               onChange={(e) => onChange({ commentRequireEmail: e.target.checked })}
             />
             Require author email
@@ -1187,7 +1369,7 @@ function ContentProperties({
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
-              checked={element.props.commentAllowGuests !== false}
+              checked={parseBooleanSetting(element.props.commentAllowGuests, true)}
               onChange={(e) => onChange({ commentAllowGuests: e.target.checked })}
             />
             Allow guests
@@ -1195,7 +1377,7 @@ function ContentProperties({
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
-              checked={element.props.commentAllowReplies !== false}
+              checked={parseBooleanSetting(element.props.commentAllowReplies, true)}
               onChange={(e) => onChange({ commentAllowReplies: e.target.checked })}
             />
             Allow replies

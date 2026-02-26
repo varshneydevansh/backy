@@ -28,6 +28,9 @@ export type KnownElementType =
   | 'button'
   | 'link'
   | 'container'
+  | 'header'
+  | 'footer'
+  | 'nav'
   | 'section'
   | 'columns'
   | 'spacer'
@@ -123,6 +126,324 @@ interface CommentFormPayload {
   sort: 'newest' | 'oldest';
 }
 
+interface CommentIdentity {
+  userId?: string;
+  name?: string;
+  email?: string;
+  website?: string;
+}
+
+function readCommentIdentityFromBackyAuthStorage(): CommentIdentity | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem('backy-auth-storage');
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      state?: {
+        user?: {
+          id?: unknown;
+          email?: unknown;
+          fullName?: unknown;
+          name?: unknown;
+          userId?: unknown;
+        };
+      };
+      user?: {
+        id?: unknown;
+        email?: unknown;
+        fullName?: unknown;
+        name?: unknown;
+        userId?: unknown;
+      };
+    };
+
+    const user = parsed?.state?.user || parsed?.user;
+    if (!user || typeof user !== 'object') {
+      return null;
+    }
+
+    const userId = parseStringValue((user as { id?: unknown }).id || (user as { userId?: unknown }).userId);
+    const email = parseStringValue((user as { email?: unknown }).email);
+    const fullName = parseStringValue((user as { fullName?: unknown }).fullName);
+    const name = parseStringValue((user as { name?: unknown }).name);
+
+    if (!userId && !email && !name && !fullName) {
+      return null;
+    }
+
+    return {
+      userId: userId || undefined,
+      name: fullName || name || undefined,
+      email: email || undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function extractApiErrorMessage(
+  payload: unknown,
+  fallback: string,
+): string {
+  if (!payload || typeof payload !== 'object') {
+    return fallback;
+  }
+
+  const raw = payload as {
+    error?: unknown;
+    message?: unknown;
+    details?: unknown;
+  };
+
+  if (typeof raw.error === 'string' && raw.error.length > 0 && raw.error !== 'Validation failed') {
+    return raw.error;
+  }
+
+  const details = raw.details;
+  if (details && typeof details === 'object') {
+    const candidates = Object.values(details).filter(
+      (value): value is string => typeof value === 'string' && value.length > 0,
+    );
+    if (candidates.length > 0) {
+      return candidates[0];
+    }
+  }
+
+  if (typeof raw.message === 'string' && raw.message.length > 0) {
+    return raw.message;
+  }
+
+  if (typeof raw.error === 'string' && raw.error.length > 0) {
+    return raw.error;
+  }
+
+  return fallback;
+}
+
+function parseStringValue(raw: unknown): string {
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
+function readCommentIdentityFromStorage(): CommentIdentity | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem('backy-comment-identity');
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      userId?: unknown;
+      id?: unknown;
+      name?: unknown;
+      email?: unknown;
+      website?: unknown;
+    };
+
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+
+    const userId = parseStringValue(parsed.userId) || parseStringValue(parsed.id);
+    const name = parseStringValue(parsed.name);
+    const email = parseStringValue(parsed.email);
+    const website = parseStringValue(parsed.website);
+
+    if (!userId && !name && !email && !website) {
+      return null;
+    }
+
+    return {
+      userId: userId || undefined,
+      name: name || undefined,
+      email: email || undefined,
+      website: website || undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readCommentIdentityFromQuery(): CommentIdentity | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const userId = parseStringValue(searchParams.get('backyCommentUserId') || searchParams.get('commentUserId'));
+  const name = parseStringValue(searchParams.get('backyCommentUserName') || searchParams.get('name'));
+  const email = parseStringValue(searchParams.get('backyCommentUserEmail') || searchParams.get('email'));
+  const website = parseStringValue(
+    searchParams.get('backyCommentUserWebsite') || searchParams.get('website'),
+  );
+
+  if (!userId && !name && !email && !website) {
+    return null;
+  }
+
+  return {
+    userId: userId || undefined,
+    name: name || undefined,
+    email: email || undefined,
+    website: website || undefined,
+  };
+}
+
+function readCommentIdentity(): CommentIdentity | null {
+  const queryIdentity = readCommentIdentityFromQuery();
+  if (queryIdentity) {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('backy-comment-identity', JSON.stringify(queryIdentity));
+    }
+    return queryIdentity;
+  }
+
+  const storedIdentity = readCommentIdentityFromStorage();
+  const authIdentity = readCommentIdentityFromBackyAuthStorage();
+
+  if (!storedIdentity && !authIdentity) {
+    return null;
+  }
+
+  if (!storedIdentity) {
+    return authIdentity;
+  }
+
+  const mergedIdentity: CommentIdentity = {
+    userId: storedIdentity.userId || authIdentity?.userId,
+    name: storedIdentity.name || authIdentity?.name,
+    email: storedIdentity.email || authIdentity?.email,
+    website: storedIdentity.website || authIdentity?.website,
+  };
+
+  if (typeof window !== 'undefined' && (mergedIdentity.userId || mergedIdentity.name || mergedIdentity.email || mergedIdentity.website)) {
+    window.localStorage.setItem('backy-comment-identity', JSON.stringify(mergedIdentity));
+  }
+
+  return mergedIdentity;
+}
+
+const normalizeRendererType = (value: string): KnownElementType => {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
+
+  if (!normalized) {
+    return 'text';
+  }
+
+  if (
+    normalized === 'textinput'
+    || normalized === 'textinputfield'
+    || normalized === 'textfield'
+    || normalized === 'textfield'
+    || normalized === 'inputfield'
+  ) {
+    return 'input';
+  }
+
+  if (
+    normalized === 'multiline'
+    || normalized === 'multilinetext'
+    || normalized === 'multilinetextinput'
+    || normalized === 'textarea'
+    || normalized === 'textareafield'
+  ) {
+    return 'textarea';
+  }
+
+  if (normalized === 'radio' || normalized === 'radiobutton' || normalized === 'radioinput' || normalized === 'radioinputs') {
+    return 'radio';
+  }
+
+  if (
+    normalized === 'checkbox'
+    || normalized === 'checkboxes'
+    || normalized === 'checkboxinput'
+    || normalized === 'checkboxinputs'
+  ) {
+    return 'checkbox';
+  }
+
+  if (normalized.includes('dropdown') || normalized.includes('select')) {
+    return 'select';
+  }
+
+  if (normalized.includes('textinput') || normalized.includes('textfield')) {
+    return 'input';
+  }
+
+  const knownTypes: KnownElementType[] = [
+    'text',
+    'heading',
+    'paragraph',
+    'image',
+    'video',
+    'button',
+    'link',
+    'container',
+    'header',
+    'footer',
+    'nav',
+    'section',
+    'columns',
+    'spacer',
+    'divider',
+    'icon',
+    'form',
+    'input',
+    'textarea',
+    'select',
+    'checkbox',
+    'radio',
+    'list',
+    'table',
+    'embed',
+    'html',
+    'map',
+    'box',
+    'quote',
+    'comment',
+  ];
+
+  return knownTypes.includes(normalized as KnownElementType)
+    ? (normalized as KnownElementType)
+    : 'text';
+};
+
+const normalizeInputType = (value: unknown): string => {
+  const inputType = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (inputType === 'email' || inputType === 'number' || inputType === 'date' || inputType === 'tel') {
+    return inputType;
+  }
+  if (inputType === 'url') {
+    return 'url';
+  }
+  if (inputType === 'file') {
+    return 'file';
+  }
+  if (inputType === 'hidden' || inputType === 'password' || inputType === 'search') {
+    return 'text';
+  }
+  if (inputType === 'text') {
+    return 'text';
+  }
+
+  return 'text';
+};
+
+interface FormValidationDetail {
+  field: string;
+  message: string;
+}
+
 interface ElementRendererContext {
   isPreview?: boolean;
   siteId?: string;
@@ -152,15 +473,38 @@ function getBoolean(value: unknown): boolean {
   return Boolean(value);
 }
 
+function parseBooleanSetting(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value !== 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes') {
+      return true;
+    }
+
+    if (normalized === 'false' || normalized === '0' || normalized === 'off' || normalized === 'no') {
+      return false;
+    }
+  }
+
+  return fallback;
+}
+
 function parseCommentPayload(props: Record<string, unknown>): CommentFormPayload {
   const moderationValue = getNameClass(props.commentModerationMode);
 
   return {
     moderationMode: moderationValue === 'auto-approve' ? 'auto-approve' : 'manual',
-    requireName: props.commentRequireName !== false,
-    requireEmail: props.commentRequireEmail === true,
-    allowGuests: props.commentAllowGuests !== false,
-    allowReplies: props.commentAllowReplies !== false,
+    requireName: parseBooleanSetting(props.commentRequireName, true),
+    requireEmail: parseBooleanSetting(props.commentRequireEmail, false),
+    allowGuests: parseBooleanSetting(props.commentAllowGuests, true),
+    allowReplies: parseBooleanSetting(props.commentAllowReplies, true),
     sort: getNameClass(props.commentSortOrder) === 'oldest' ? 'oldest' : 'newest',
   };
 }
@@ -206,23 +550,99 @@ function getTypographyStyle(props: Record<string, unknown>): React.CSSProperties
 }
 
 function parseOptionValues(raw: unknown): string[] {
+  const values = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(/\r?\n/) : [];
+  const parsed = values
+    .map((item) => {
+      if (typeof item === 'string') {
+        return item.trim();
+      }
+
+      if (item && typeof item === 'object' && 'value' in item) {
+        const value = (item as { value?: unknown }).value;
+        return typeof value === 'string' ? value.trim() : getNameClass(value);
+      }
+
+      if (item && typeof item === 'object' && 'label' in item) {
+        const label = (item as { label?: unknown }).label;
+        return typeof label === 'string' ? label.trim() : getNameClass(label);
+      }
+
+      return getNameClass(item);
+    })
+    .filter((item) => item.length > 0)
+    .map((item) => item.trim());
+
+  return Array.from(new Set(parsed.filter((item) => item.length > 0)));
+}
+
+function parseFormValidationDetails(raw: unknown): FormValidationDetail[] {
   if (!Array.isArray(raw)) {
     return [];
   }
 
   return raw
     .map((item) => {
-      if (typeof item === 'string') {
-        return item;
+      if (!item || typeof item !== 'object') {
+        return null;
       }
 
-      if (item && typeof item === 'object' && 'value' in item) {
-        return (item as { value?: unknown }).value as string;
+      const detail = item as { field?: unknown; message?: unknown; code?: unknown };
+      const field = parseAttributeString(detail.field);
+      const message = parseAttributeString(detail.message);
+
+      if (!field || !message) {
+        return null;
       }
 
-      return String(item);
+      return { field, message };
     })
-    .filter((item) => item.trim().length > 0);
+    .filter((detail): detail is FormValidationDetail => Boolean(detail));
+}
+
+function parseAttributeString(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${value}`;
+  }
+
+  return undefined;
+}
+
+function parseNumericAttribute(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  const raw = parseAttributeString(value);
+  if (!raw) {
+    return undefined;
+  }
+
+  const parsed = Number.parseFloat(raw);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function toFormInputValueList(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw
+      .flatMap((entry) => (typeof entry === 'string' ? entry.split(',') : [getNameClass(entry)]))
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+
+  const rawText = parseAttributeString(raw);
+  if (!rawText) {
+    return [];
+  }
+
+  return rawText
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
 }
 
 function getNameClass(value: unknown): string {
@@ -762,6 +1182,7 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
   const { props, styles, children } = element;
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [submitMessage, setSubmitMessage] = useState('');
+  const [submitValidation, setSubmitValidation] = useState<FormValidationDetail[]>([]);
   const [submitMeta, setSubmitMeta] = useState<{
     status: string;
     submissionId?: string;
@@ -769,9 +1190,12 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
   const startedAtRef = useRef<number>(Date.now());
 
   const formId = typeof props.formId === 'string' ? props.formId : undefined;
+  const fallbackFormId = getNameClass(formId || element.id).trim();
+  const resolvedFormId = fallbackFormId.length > 0 ? fallbackFormId : `form-${Math.random().toString(36).slice(2, 8)}`;
   const configuredAction =
-    (typeof props.action as string) || (typeof props.actionUrl as string) ||
-    (siteId && formId ? `/api/sites/${siteId}/forms/${formId}/submissions` : undefined);
+    (typeof props.action as string) ||
+    (typeof props.actionUrl as string) ||
+    (siteId && resolvedFormId ? `/api/sites/${siteId}/forms/${resolvedFormId}/submissions` : undefined);
 
   const isBackyAction = Boolean(siteId && configuredAction?.startsWith('/api/'));
   const method = ((props.method as string) || 'POST').toUpperCase();
@@ -800,6 +1224,7 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
     event.preventDefault();
     setSubmitState('submitting');
     setSubmitMessage('');
+    setSubmitValidation([]);
 
     const formData = new FormData(event.currentTarget);
     const values: Record<string, unknown> = {};
@@ -860,6 +1285,7 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
 
       if (!response.ok) {
         setSubmitState('error');
+        setSubmitValidation(parseFormValidationDetails(responseBody?.validation));
         setSubmitMessage(
           typeof responseBody?.message === 'string'
             ? responseBody.message
@@ -869,6 +1295,7 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
       }
 
       setSubmitState('success');
+      setSubmitValidation([]);
       const status = getNameClass(responseBody?.status) || 'approved';
       const serverMessage = getNameClass(responseBody?.message);
       setSubmitMeta({
@@ -946,6 +1373,15 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
         ))}
       </form>
       {submitMessage ? <p style={{ marginTop: '8px' }}>{submitMessage}</p> : null}
+      {submitValidation.length > 0 ? (
+        <ul style={{ marginTop: '8px', marginBottom: '0', paddingLeft: '20px', color: '#b91c1c' }}>
+          {submitValidation.map((detail, idx) => (
+            <li key={`${detail.field}-${idx}`}>
+              {detail.field}: {detail.message}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {submitMeta?.submissionId ? (
         <p style={{ marginTop: '4px', fontSize: '12px', color: '#475569' }}>
           Submission ID: {submitMeta.submissionId}
@@ -976,15 +1412,43 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
   const [reportReasons, setReportReasons] = useState<string[]>([...DEFAULT_COMMENT_REPORT_REASONS]);
   const [reportReasonByCommentId, setReportReasonByCommentId] = useState<Record<string, string>>({});
   const [reportingCommentId, setReportingCommentId] = useState<string | null>(null);
+  const [commenterIdentity, setCommenterIdentity] = useState<CommentIdentity | null>(readCommentIdentity());
   const requestIdRef = useRef<string>(`c-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`);
   const startedAtRef = useRef<number>(Date.now());
 
   const commentApiPath = getCommentApiPath(siteId, pageId, postId);
   const policy = parseCommentPayload(props as Record<string, unknown>);
+  const canSubmitAsSignedIn = Boolean(commenterIdentity?.userId);
+  const canSubmitComments = policy.allowGuests || canSubmitAsSignedIn;
+  const canSubmitReplies = policy.allowReplies && canSubmitComments;
 
   useEffect(() => {
     requestIdRef.current = `c-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`;
     startedAtRef.current = Date.now();
+
+    const syncIdentity = () => {
+      const identity = readCommentIdentity();
+      setCommenterIdentity(identity);
+
+      if (identity?.name) {
+        setAuthorName((current) => current || identity.name || '');
+      }
+      if (identity?.email) {
+        setAuthorEmail((current) => current || identity.email || '');
+      }
+      if (identity?.website) {
+        setAuthorWebsite((current) => current || identity.website || '');
+      }
+    };
+
+    syncIdentity();
+    window.addEventListener('storage', syncIdentity);
+    window.addEventListener('popstate', syncIdentity);
+
+    return () => {
+      window.removeEventListener('storage', syncIdentity);
+      window.removeEventListener('popstate', syncIdentity);
+    };
   }, [siteId, pageId, postId]);
 
   const fetchComments = async () => {
@@ -999,6 +1463,7 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
       const query = new URLSearchParams({
         status: 'approved',
         sort: policy.sort,
+        commentThreadId: element.id,
       });
 
       const response = await fetch(`${commentApiPath}?${query.toString()}`, {
@@ -1007,18 +1472,14 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
           'x-backy-preview': isPreview ? '1' : '0',
         },
       });
-    const payload = (await response.json().catch(() => null)) as {
-      comments?: CommentItem[];
-      error?: string;
-      details?: Record<string, string>;
-      message?: string;
-    } | null;
+      const payload = (await response.json().catch(() => null)) as {
+        comments?: CommentItem[];
+        error?: string;
+        details?: Record<string, string>;
+        message?: string;
+      } | null;
       if (!response.ok) {
-        const errorMessage =
-          (typeof payload?.error === 'string' && payload.error)
-          || (typeof payload?.message === 'string' && payload.message)
-          || 'Unable to load comments.';
-        setLoadError(errorMessage);
+        setLoadError(extractApiErrorMessage(payload, 'Unable to load comments.'));
         return;
       }
 
@@ -1090,9 +1551,7 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
 
       const payload = await response.json().catch(() => null) as { error?: string } | null;
       if (!response.ok) {
-        setSubmitMessage(
-          typeof payload?.error === 'string' && payload.error.length > 0 ? payload.error : 'Unable to report comment.',
-        );
+        setSubmitMessage(extractApiErrorMessage(payload, 'Unable to report comment.'));
         return;
       }
 
@@ -1124,12 +1583,21 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
       return;
     }
 
-    if (policy.requireName && !payload.authorName?.trim()) {
+    const resolvedAuthorName = payload.authorName?.trim() || commenterIdentity?.name || '';
+    const resolvedAuthorEmail = payload.authorEmail?.trim() || commenterIdentity?.email || '';
+    const resolvedAuthorWebsite = payload.authorWebsite?.trim() || commenterIdentity?.website || '';
+
+    if (!canSubmitComments) {
+      setSubmitMessage('Guest posting is disabled for this comment thread. Sign in is required for this form.');
+      return;
+    }
+
+    if (policy.requireName && !resolvedAuthorName) {
       setSubmitMessage('Name is required.');
       return;
     }
 
-    if (policy.requireEmail && !payload.authorEmail?.trim()) {
+    if (policy.requireEmail && !resolvedAuthorEmail) {
       setSubmitMessage('Email is required.');
       return;
     }
@@ -1139,11 +1607,17 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
       return;
     }
 
+    if (payload.parentId && !canSubmitComments) {
+      setSubmitMessage('You need to sign in to reply in this thread.');
+      return;
+    }
+
     startedAtRef.current = Date.now();
     requestIdRef.current = `c-${Math.random().toString(36).slice(2, 10)}-${startedAtRef.current}`;
 
     const requestBody = {
       ...payload,
+      commentThreadId: element.id,
       requestId: requestIdRef.current,
       startedAt: startedAtRef.current,
       honeypot: '',
@@ -1153,12 +1627,11 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
       commentRequireEmail: policy.requireEmail,
       commentAllowGuests: policy.allowGuests,
       commentAllowReplies: policy.allowReplies,
+      userId: commenterIdentity?.userId,
+      authorName: resolvedAuthorName,
+      authorEmail: resolvedAuthorEmail,
+      authorWebsite: resolvedAuthorWebsite,
     };
-
-    if (!policy.allowGuests) {
-      setSubmitMessage('Guest posting is disabled for this comment block.');
-      return;
-    }
 
     try {
       setIsSubmitting(true);
@@ -1172,8 +1645,7 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
 
       const payloadResponse = await response.json().catch(() => null);
       if (!response.ok) {
-        const details = (payloadResponse as { error?: string; details?: Record<string, string> } | null)?.error;
-        setSubmitMessage(details || 'Unable to submit comment.');
+        setSubmitMessage(extractApiErrorMessage(payloadResponse, 'Unable to submit comment.'));
         return;
       }
 
@@ -1256,11 +1728,12 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
             <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
               {new Date(comment.createdAt).toLocaleString()}
             </p>
-            {policy.allowReplies ? (
+            {policy.allowReplies && canSubmitReplies ? (
               <button
                 type="button"
                 onClick={() => setReplyToId(showReplyForm ? null : comment.id)}
                 style={{ marginTop: '4px', fontSize: '12px', border: 'none', color: '#2563eb', background: 'transparent' }}
+                disabled={isSubmitting || !canSubmitComments}
               >
                 {showReplyForm ? 'Cancel reply' : 'Reply'}
               </button>
@@ -1276,12 +1749,12 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
                   rows={3}
                   style={{ width: '100%', marginBottom: '6px' }}
                   placeholder="Write a reply"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !canSubmitComments}
                 />
                 <button
                   type="submit"
                   style={{ padding: '8px 12px', border: 'none', borderRadius: '6px', background: '#3b82f6', color: '#fff' }}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !canSubmitComments}
                 >
                   {isSubmitting ? 'Submitting…' : 'Post reply'}
                 </button>
@@ -1348,12 +1821,17 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
       </div>
 
       <form onSubmit={submitTopLevel} style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {!canSubmitComments ? (
+              <p style={{ margin: 0, color: '#b91c1c' }}>
+                Guest posting is disabled for this comment thread. Sign in is required for this form.
+              </p>
+            ) : null}
         <textarea
           placeholder="Write a comment"
           value={content}
           onChange={(event) => setContent(event.target.value)}
           rows={4}
-          disabled={isPreview || isSubmitting}
+          disabled={isPreview || isSubmitting || !canSubmitComments}
           style={{ width: '100%' }}
         />
         {policy.requireName ? (
@@ -1362,7 +1840,7 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
             value={authorName}
             onChange={(event) => setAuthorName(event.target.value)}
             placeholder="Your name"
-            disabled={isPreview || isSubmitting}
+            disabled={isPreview || isSubmitting || !canSubmitComments}
             style={{ width: '100%' }}
           />
         ) : (
@@ -1371,7 +1849,7 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
             value={authorName}
             onChange={(event) => setAuthorName(event.target.value)}
             placeholder="Your name (optional)"
-            disabled={isPreview || isSubmitting}
+            disabled={isPreview || isSubmitting || !canSubmitComments}
             style={{ width: '100%' }}
           />
         )}
@@ -1381,7 +1859,7 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
             value={authorEmail}
             onChange={(event) => setAuthorEmail(event.target.value)}
             placeholder="Email"
-            disabled={isPreview || isSubmitting}
+            disabled={isPreview || isSubmitting || !canSubmitComments}
             style={{ width: '100%' }}
           />
         ) : (
@@ -1390,7 +1868,7 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
             value={authorEmail}
             onChange={(event) => setAuthorEmail(event.target.value)}
             placeholder="Email (optional)"
-            disabled={isPreview || isSubmitting}
+            disabled={isPreview || isSubmitting || !canSubmitComments}
             style={{ width: '100%' }}
           />
         )}
@@ -1399,7 +1877,7 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
           value={authorWebsite}
           onChange={(event) => setAuthorWebsite(event.target.value)}
           placeholder="Website (optional)"
-          disabled={isPreview || isSubmitting}
+          disabled={isPreview || isSubmitting || !canSubmitComments}
           style={{ width: '100%' }}
         />
         <button
@@ -1412,7 +1890,7 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
             background: '#3b82f6',
             color: '#fff',
           }}
-          disabled={isPreview || isSubmitting}
+          disabled={isPreview || isSubmitting || !canSubmitComments}
         >
           {isSubmitting ? 'Submitting…' : 'Post comment'}
         </button>
@@ -1427,12 +1905,15 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
 function InputElement({ element }: ElementRendererProps) {
   const { props, styles } = element;
   const inputType =
-    getNameClass(props.inputType) || (getNameClass(props.type) || 'text');
+    normalizeInputType(getNameClass(props.inputType) || getNameClass(props.type));
+  const fieldName = getNameClass(props.name) || `field-${element.id}`;
+  const minLength = parseNumericAttribute(props.minLength);
+  const maxLength = parseNumericAttribute(props.maxLength);
 
   return (
     <input
       type={inputType || 'text'}
-      name={getNameClass(props.name)}
+      name={fieldName}
       placeholder={getNameClass(props.placeholder)}
       required={getBoolean(props.required)}
       min={getNameClass(props.min)}
@@ -1440,6 +1921,8 @@ function InputElement({ element }: ElementRendererProps) {
       step={getNameClass(props.step)}
       pattern={getNameClass(props.pattern)}
       disabled={getBoolean(props.disabled)}
+      minLength={Number.isFinite(minLength) ? minLength : undefined}
+      maxLength={maxLength}
       defaultValue={getNameClass(props.defaultValue)}
       style={{
         padding: '12px 16px',
@@ -1458,14 +1941,22 @@ function InputElement({ element }: ElementRendererProps) {
  */
 function TextareaElement({ element }: ElementRendererProps) {
   const { props, styles } = element;
+  const rows = typeof props.rows === 'number' && Number.isFinite(props.rows)
+    ? props.rows
+    : parseNumericAttribute(props.rows) ?? 5;
+  const minLength = parseNumericAttribute(props.minLength);
+  const maxLength = parseNumericAttribute(props.maxLength);
+  const fieldName = getNameClass(props.name) || `field-${element.id}`;
 
   return (
     <textarea
-      name={getNameClass(props.name)}
+      name={fieldName}
       placeholder={getNameClass(props.placeholder)}
       required={getBoolean(props.required)}
-      rows={typeof props.rows === 'number' ? props.rows : 5}
+      rows={Number.isFinite(rows) ? rows : 5}
       defaultValue={getNameClass(props.defaultValue)}
+      minLength={Number.isFinite(minLength) ? minLength : undefined}
+      maxLength={maxLength}
       style={{
         padding: '12px 16px',
         border: getNameClass(props.border) || '1px solid #d1d5db',
@@ -1485,11 +1976,14 @@ function TextareaElement({ element }: ElementRendererProps) {
 function SelectElement({ element }: ElementRendererProps) {
   const { props, styles } = element;
   const options = parseOptionValues(props.options);
+  const name = getNameClass(props.name) || `field-${element.id}`;
+  const defaultValue = parseAttributeString(props.defaultValue);
 
   return (
     <select
-      name={getNameClass(props.name)}
+      name={name}
       required={getBoolean(props.required)}
+      defaultValue={defaultValue || ''}
       style={{
         padding: '12px 16px',
         border: getNameClass(props.border) || '1px solid #d1d5db',
@@ -1512,13 +2006,19 @@ function SelectElement({ element }: ElementRendererProps) {
 /**
  * Render checkbox list and single checkbox/radio inputs
  */
-function CheckboxOrRadioElement({ element }: ElementRendererProps) {
+function CheckboxOrRadioElement({ element, isPreview }: ElementRendererProps) {
   const { props, styles, children } = element;
   const inputType = element.type === 'checkbox' ? 'checkbox' : 'radio';
-  const name = getNameClass(props.name);
+  const name = getNameClass(props.name) || `field-${element.id}`;
   const options = parseOptionValues(props.options);
+  const defaultValues = toFormInputValueList(
+    props.defaultValue !== undefined ? props.defaultValue : props.value
+  );
+  const defaultSet = new Set(defaultValues);
+  const required = getBoolean(props.required);
 
   if (inputType === 'radio') {
+    const defaultValue = defaultValues[0] || getNameClass(props.value) || '';
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', ...styles }}>
         {options.length === 0 ? (
@@ -1526,8 +2026,9 @@ function CheckboxOrRadioElement({ element }: ElementRendererProps) {
             <input
               type="radio"
               name={name}
-              value={getNameClass(props.value) || 'on'}
-              required={getBoolean(props.required)}
+              value={defaultValue || 'on'}
+              required={required}
+              defaultChecked={defaultSet.has(defaultValue)}
             />
             {getNameClass(props.label) || 'Option'}
           </label>
@@ -1537,7 +2038,13 @@ function CheckboxOrRadioElement({ element }: ElementRendererProps) {
               key={`${element.id}-${option}`}
               style={{ display: 'inline-flex', gap: '10px', alignItems: 'center' }}
             >
-              <input type="radio" name={name} value={option} />
+              <input
+                type="radio"
+                name={name}
+                value={option}
+                required={required}
+                defaultChecked={defaultSet.has(option)}
+              />
               <span>{option}</span>
             </label>
           ))
@@ -1546,7 +2053,7 @@ function CheckboxOrRadioElement({ element }: ElementRendererProps) {
           <ElementRenderer
             key={child.id}
             element={child}
-            isPreview={Boolean(children)}
+            isPreview={Boolean(isPreview)}
           />
         ))}
       </div>
@@ -1555,41 +2062,44 @@ function CheckboxOrRadioElement({ element }: ElementRendererProps) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', ...styles }}>
-      {options.length === 0 ? (
-        <label style={{ display: 'inline-flex', gap: '10px', alignItems: 'center' }}>
-          <input
-            type="checkbox"
-            name={name}
-            value={getNameClass(props.value) || 'on'}
-            required={getBoolean(props.required)}
-          />
-          {getNameClass(props.label) || 'Option'}
-        </label>
-      ) : (
-        options.map((option) => (
-          <label
-            key={`${element.id}-${option}`}
-            style={{ display: 'inline-flex', gap: '10px', alignItems: 'center' }}
-          >
+        {options.length === 0 ? (
+          <label style={{ display: 'inline-flex', gap: '10px', alignItems: 'center' }}>
             <input
               type="checkbox"
               name={name}
-              value={option}
+              value={getNameClass(props.value) || 'on'}
+              required={required}
+              defaultChecked={defaultSet.has(getNameClass(props.value) || 'on')}
             />
-            <span>{option}</span>
+            {getNameClass(props.label) || 'Option'}
           </label>
-        ))
-      )}
-      {children?.map((child) => (
-        <ElementRenderer
-          key={child.id}
-          element={child}
-          isPreview={Boolean(children)}
-        />
-      ))}
-    </div>
-  );
-}
+        ) : (
+          options.map((option) => (
+            <label
+              key={`${element.id}-${option}`}
+              style={{ display: 'inline-flex', gap: '10px', alignItems: 'center' }}
+            >
+              <input
+                type="checkbox"
+                name={name}
+                value={option}
+                defaultChecked={defaultSet.has(option)}
+                required={option === options[0] && required}
+              />
+              <span>{option}</span>
+            </label>
+          ))
+        )}
+        {children?.map((child) => (
+          <ElementRenderer
+            key={child.id}
+            element={child}
+            isPreview={Boolean(isPreview)}
+          />
+        ))}
+      </div>
+    );
+  }
 
 /**
  * Map element renderer
@@ -1635,6 +2145,9 @@ const ELEMENT_RENDERERS: Record<
   button: ButtonElement,
   link: LinkElement,
   container: ContainerElement,
+  header: ContainerElement,
+  footer: ContainerElement,
+  nav: ContainerElement,
   section: ContainerElement,
   columns: ContainerElement,
   spacer: SpacerElement,
@@ -1660,7 +2173,7 @@ const ELEMENT_RENDERERS: Record<
  * Main element renderer - routes to specific element renderers
  */
 export function ElementRenderer({ element, isPreview, siteId, pageId, postId }: ElementRendererProps) {
-  const normalizedType = element.type as KnownElementType;
+  const normalizedType = normalizeRendererType(element.type);
   const Renderer = ELEMENT_RENDERERS[normalizedType];
 
   if (!Renderer) {

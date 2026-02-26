@@ -11,19 +11,22 @@
  * @license MIT
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import {
   Palette,
   Globe,
-  Mail,
   Shield,
   Database,
   Bell,
   Save,
   Check,
+  Code,
+  Server,
+  ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useStore, type DeliveryMode } from '@/stores/mockStore';
 
 // ============================================
 // ROUTE DEFINITION
@@ -41,9 +44,141 @@ const TABS = [
   { id: 'general', name: 'General', icon: Globe },
   { id: 'appearance', name: 'Appearance', icon: Palette },
   { id: 'seo', name: 'SEO', icon: Database },
+  { id: 'delivery', name: 'Delivery', icon: Code },
   { id: 'notifications', name: 'Notifications', icon: Bell },
   { id: 'security', name: 'Security', icon: Shield },
 ];
+
+type ApiEndpoint = {
+  method: string;
+  path: string;
+  description: string;
+};
+
+const DELIVERY_OPTIONS: Array<{
+  id: DeliveryMode;
+  title: string;
+  description: string;
+}> = [
+  {
+    id: 'managed-hosting',
+    title: 'Managed rendering (Backy-generated pages)',
+    description:
+      'Backy generates pages and site output for you. Publish in the editor and serve from Backy.',
+  },
+  {
+    id: 'custom-frontend',
+    title: 'Custom frontend (headless API mode)',
+    description:
+      'Use your own frontend and consume Backy public APIs for pages, forms, and comments.',
+  },
+];
+
+const PUBLIC_API_ENDPOINTS: ApiEndpoint[] = [
+  {
+    method: 'GET',
+    path: '/sites/:identifier',
+    description: 'Resolve a site by slug, custom domain, or identifier.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/pages?path=/',
+    description: 'Resolve page content by path (published only).',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/blog/posts?status=published',
+    description: 'List published blog posts.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/blog/posts/:slug',
+    description: 'Fetch a single published blog post by slug.',
+  },
+  {
+    method: 'POST',
+    path: '/sites/:siteId/forms/:formId/submissions',
+    description: 'Submit form payloads with optional anti-spam metadata.',
+  },
+  {
+    method: 'POST',
+    path: '/sites/:siteId/forms/:formId/contacts',
+    description: 'Submit contact-share payloads.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/pages/:pageId/comments?status=approved',
+    description: 'Read approved page comments.',
+  },
+  {
+    method: 'POST',
+    path: '/sites/:siteId/pages/:pageId/comments',
+    description: 'Submit a page comment.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/blog/:postId/comments?status=approved',
+    description: 'Read approved blog post comments.',
+  },
+  {
+    method: 'POST',
+    path: '/sites/:siteId/blog/:postId/comments',
+    description: 'Submit a blog post comment.',
+  },
+];
+
+const ADMIN_API_ENDPOINTS: ApiEndpoint[] = [
+  {
+    method: 'GET',
+    path: '/sites',
+    description: 'List sites for the authenticated admin workspace.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/pages',
+    description: 'Read pages for site management.',
+  },
+  {
+    method: 'POST',
+    path: '/sites/:siteId/pages',
+    description: 'Create or update page payloads.',
+  },
+  {
+    method: 'PATCH',
+    path: '/sites/:siteId/pages/:pageId',
+    description: 'Patch page settings, content, or status.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/forms',
+    description: 'List forms and review submissions.',
+  },
+];
+
+function getEnvValue(key: string): string {
+  const env =
+    (import.meta as unknown as { env?: Record<string, string | undefined> }).env ??
+    {};
+  return env[key]?.trim() ?? '';
+}
+
+function getApiBase(kind: 'public' | 'admin'): string {
+  const publicFallback =
+    getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
+    getEnvValue('VITE_PUBLIC_API_URL') ||
+    getEnvValue('VITE_API_BASE_URL') ||
+    (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+  const adminFallback =
+    getEnvValue('VITE_BACKY_ADMIN_API_BASE_URL') ||
+    getEnvValue('VITE_ADMIN_API_URL') ||
+    publicFallback;
+  const base = kind === 'admin' ? adminFallback : publicFallback;
+  return `${base.replace(/\/api$/, '').replace(/\/$/, '')}/api${kind === 'admin' ? '/admin' : ''}`;
+}
+
+function buildCopyText(base: string, path: string): string {
+  return `${base}${path}`;
+}
 
 // ============================================
 // COMPONENT
@@ -51,9 +186,20 @@ const TABS = [
 
 function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general');
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('managed-hosting');
   const [saved, setSaved] = useState(false);
+  const persistedDeliveryMode = useStore((state) => state.settings.deliveryMode);
+  const updateSettings = useStore((state) => state.updateSettings);
+  const publicApiKey = useStore((state) => state.settings.apiKeys.publicApiKey);
+  const adminApiKey = useStore((state) => state.settings.apiKeys.adminApiKey);
+  const regenerateApiKeys = useStore((state) => state.regenerateApiKeys);
+
+  useEffect(() => {
+    setDeliveryMode(persistedDeliveryMode);
+  }, [persistedDeliveryMode]);
 
   const handleSave = () => {
+    updateSettings({ deliveryMode });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -117,8 +263,17 @@ function SettingsPage() {
         {activeTab === 'general' && <GeneralSettings />}
         {activeTab === 'appearance' && <AppearanceSettings />}
         {activeTab === 'seo' && <SEOSettings />}
+        {activeTab === 'delivery' && (
+          <DeliveryModeSettings value={deliveryMode} onChange={setDeliveryMode} />
+        )}
         {activeTab === 'notifications' && <NotificationSettings />}
-        {activeTab === 'security' && <SecuritySettings />}
+        {activeTab === 'security' && (
+          <SecuritySettings
+            publicApiKey={publicApiKey}
+            adminApiKey={adminApiKey}
+            onRegenerateKeys={regenerateApiKeys}
+          />
+        )}
       </div>
     </div>
   );
@@ -382,6 +537,188 @@ function SEOSettings() {
 }
 
 // ============================================
+// DELIVERY + API SETTINGS
+// ============================================
+
+function EndpointBlock({
+  title,
+  baseUrl,
+  endpoints,
+  copiedEndpoint,
+  onCopy,
+}: {
+  title: string;
+  baseUrl: string;
+  endpoints: ApiEndpoint[];
+  copiedEndpoint: string;
+  onCopy: (url: string) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border p-4">
+      <h4 className="font-medium mb-3">{title}</h4>
+      <ul className="space-y-3 text-sm">
+        {endpoints.map((endpoint) => {
+          const fullUrl = buildCopyText(baseUrl, endpoint.path);
+          return (
+            <li
+              key={`${title}-${endpoint.method}-${endpoint.path}`}
+              className="rounded-lg border border-border px-3 py-2"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-mono text-xs text-foreground">
+                    <span className="inline-flex items-center rounded bg-muted px-2 py-0.5 mr-2 font-bold">
+                      {endpoint.method}
+                    </span>
+                    {fullUrl}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {endpoint.description}
+                  </p>
+                </div>
+                <button
+                  onClick={() => onCopy(fullUrl)}
+                  className={cn(
+                    'text-xs px-2 py-1 rounded border border-border hover:bg-accent transition-colors',
+                    copiedEndpoint === fullUrl
+                      ? 'text-emerald-600 font-medium'
+                      : 'text-foreground'
+                  )}
+                >
+                  {copiedEndpoint === fullUrl ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function DeliveryModeSettings({
+  value,
+  onChange,
+}: {
+  value: DeliveryMode;
+  onChange: (next: DeliveryMode) => void;
+}) {
+  const [copiedEndpoint, setCopiedEndpoint] = useState('');
+  const publicApiBase = getApiBase('public');
+  const adminApiBase = getApiBase('admin');
+  const publicHostBase = publicApiBase.replace(/\/api$/, '');
+  const publicSiteBase = `${publicHostBase}/sites`;
+
+  const copyEndpoint = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedEndpoint(url);
+      setTimeout(() => {
+        setCopiedEndpoint((current) => (current === url ? '' : current));
+      }, 1200);
+    } catch {
+      setCopiedEndpoint('');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div id="managed">
+        <h3 className="text-lg font-semibold mb-4">Delivery Mode</h3>
+        <div className="grid gap-3">
+          {DELIVERY_OPTIONS.map((option) => (
+            <label
+              key={option.id}
+              className={cn(
+                'flex items-start gap-3 rounded-xl border border-border p-4 cursor-pointer transition-colors',
+                value === option.id
+                  ? 'bg-primary/5 border-primary'
+                  : 'hover:bg-accent/40'
+              )}
+            >
+              <input
+                type="radio"
+                name="delivery-mode"
+                value={option.id}
+                checked={value === option.id}
+                onChange={() => onChange(option.id)}
+                className="mt-1"
+              />
+              <div>
+                <p className="font-medium">{option.title}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {option.description}
+                </p>
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-muted/40 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="font-medium">How this setting affects delivery</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {value === 'managed-hosting'
+                ? `Pages are rendered and served by Backy at ${publicSiteBase}/[:site]/[path].`
+                : 'Use API endpoints to run your own custom frontend stack.'}
+            </p>
+          </div>
+          <a
+            href={value === 'managed-hosting' ? '#managed' : '#api'}
+            className="text-xs text-primary inline-flex items-center gap-1 hover:underline"
+          >
+            {value === 'managed-hosting' ? 'Managed docs' : 'API docs'}
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
+      </div>
+
+      <div id="api" className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Server className="w-4 h-4 text-foreground" />
+          <h3 className="text-lg font-semibold">API Access</h3>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Your frontend can consume these contracts directly.
+          Reference contract: <code>specs/backy-api-contracts.md</code>
+        </p>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <EndpointBlock
+            title="Public read + interaction"
+            baseUrl={publicApiBase}
+            endpoints={PUBLIC_API_ENDPOINTS}
+            copiedEndpoint={copiedEndpoint}
+            onCopy={copyEndpoint}
+          />
+          <EndpointBlock
+            title="Admin write + management"
+            baseUrl={adminApiBase}
+            endpoints={ADMIN_API_ENDPOINTS}
+            copiedEndpoint={copiedEndpoint}
+            onCopy={copyEndpoint}
+          />
+        </div>
+      </div>
+
+      {value === 'custom-frontend' && (
+        <div className="rounded-xl border border-dashed border-border p-4 text-sm">
+          <p className="font-medium">Getting started with custom frontend</p>
+          <p className="text-muted-foreground mt-1">
+            1) Fetch site context from <code>{`${publicApiBase}/sites/:identifier`}</code>.
+            2) Load page payload from
+            <code>{`${publicApiBase}/sites/:siteId/pages?path=/...`}</code>.
+            3) Render using shared public contract keys only.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
 // NOTIFICATION SETTINGS
 // ============================================
 
@@ -436,7 +773,16 @@ function NotificationSettings() {
 // SECURITY SETTINGS
 // ============================================
 
-function SecuritySettings() {
+function SecuritySettings({
+  publicApiKey,
+  adminApiKey,
+  onRegenerateKeys,
+}: {
+  publicApiKey: string;
+  adminApiKey: string;
+  onRegenerateKeys: () => void;
+}) {
+
   return (
     <div className="space-y-6">
       <div>
@@ -506,13 +852,23 @@ function SecuritySettings() {
               <div>
                 <p className="font-medium">Public API Key</p>
                 <p className="text-sm text-muted-foreground font-mono mt-1">
-                  bk_live_xxxxxxxxxxxx
+                  {publicApiKey}
                 </p>
               </div>
-              <button className="text-sm text-primary hover:underline">
+              <button
+                type="button"
+                onClick={onRegenerateKeys}
+                className="text-sm text-primary hover:underline"
+              >
                 Regenerate
               </button>
             </div>
+          </div>
+          <div className="p-4 bg-muted rounded-lg">
+            <p className="font-medium">Admin API Key</p>
+            <p className="text-sm text-muted-foreground font-mono mt-1">
+              {adminApiKey}
+            </p>
           </div>
         </div>
       </div>

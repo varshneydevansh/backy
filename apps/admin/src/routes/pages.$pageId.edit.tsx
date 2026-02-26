@@ -9,7 +9,7 @@
 import { useMemo } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
-import type { CanvasElement } from '@/types/editor';
+import type { CanvasElement, CanvasSize } from '@/types/editor';
 import { PageSettings } from '@/components/editor/PageSettingsModal';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
@@ -89,7 +89,7 @@ function PageEditorRoute() {
   const handleSave = async (
     elements: CanvasElement[],
     settings: PageSettings,
-    canvasSize = initialCanvasSize
+    canvasSize: CanvasSize = initialCanvasSize
   ) => {
     // Save to Store
     updatePage(pageId, {
@@ -99,10 +99,6 @@ function PageEditorRoute() {
       status: settings.status,
       meta: settings.meta,
     });
-
-    console.log('Saved Page', { pageId, elementsCount: elements.length });
-    // Optional: Toast notification
-    alert('Page saved!');
   };
 
   const handleBack = () => {
