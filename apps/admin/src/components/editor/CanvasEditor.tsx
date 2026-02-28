@@ -251,6 +251,7 @@ export function CanvasEditor({
     { elements: initialElements, selectedId: null },
   ]);
   const [historyIndex, setHistoryIndex] = useState(0);
+  const historyIndexRef = useRef(0);
 
   // Settings State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -314,6 +315,10 @@ export function CanvasEditor({
 
     return null;
   }, []);
+
+  useEffect(() => {
+    historyIndexRef.current = historyIndex;
+  }, [historyIndex]);
 
   const updateElementById = (
     items: CanvasElement[],
@@ -471,21 +476,25 @@ export function CanvasEditor({
    * Add current state to history
    */
   const addToHistory = useCallback((newElements: CanvasElement[], selectedSnapshot: string | null = selectedId) => {
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push({
-      elements: newElements,
-      selectedId: selectedSnapshot,
+    setHistory((prevHistory) => {
+      const baseIndex = Math.max(0, Math.min(historyIndexRef.current, prevHistory.length - 1));
+      const nextHistory = prevHistory.slice(0, baseIndex + 1);
+      nextHistory.push({
+        elements: newElements,
+        selectedId: selectedSnapshot,
+      });
+
+      // Limit history size to 50
+      if (nextHistory.length > 50) {
+        nextHistory.shift();
+      }
+
+      const nextIndex = nextHistory.length - 1;
+      setHistoryIndex(nextIndex);
+      historyIndexRef.current = nextIndex;
+      return nextHistory;
     });
-
-    // Limit history size to 50
-    if (newHistory.length > 50) {
-      newHistory.shift();
-    }
-
-    setHistory(newHistory);
-    // Since we just sliced and pushed, the index is the last one
-    setHistoryIndex(newHistory.length - 1);
-  }, [history, historyIndex, selectedId]);
+  }, [selectedId]);
 
   /**
    * Undo
@@ -495,6 +504,7 @@ export function CanvasEditor({
       const newIndex = historyIndex - 1;
       const targetState = history[newIndex];
       setHistoryIndex(newIndex);
+      historyIndexRef.current = newIndex;
       setElements(targetState.elements);
       setSelectedId(
         targetState.selectedId && findElementById(targetState.elements, targetState.selectedId)
@@ -513,6 +523,7 @@ export function CanvasEditor({
       const newIndex = historyIndex + 1;
       const targetState = history[newIndex];
       setHistoryIndex(newIndex);
+      historyIndexRef.current = newIndex;
       setElements(targetState.elements);
       setSelectedId(
         targetState.selectedId && findElementById(targetState.elements, targetState.selectedId)
@@ -526,10 +537,31 @@ export function CanvasEditor({
   /**
    * Wrapper for updating elements with history
    */
-  const updateElementsWithHistory = useCallback((newElements: CanvasElement[], selectedSnapshot: string | null = selectedId) => {
-    setElements(newElements);
-    addToHistory(newElements, selectedSnapshot);
-    markChanges();
+  const updateElementsWithHistory = useCallback((
+    nextElementsOrFn:
+      | CanvasElement[]
+      | ((current: CanvasElement[]) => CanvasElement[]),
+    selectedSnapshot: string | null = selectedId,
+  ) => {
+    let didUpdate = false;
+
+    setElements((currentElements) => {
+      const nextElements = typeof nextElementsOrFn === 'function'
+        ? nextElementsOrFn(currentElements)
+        : nextElementsOrFn;
+
+      if (nextElements === currentElements) {
+        return currentElements;
+      }
+
+      didUpdate = true;
+      addToHistory(nextElements, selectedSnapshot);
+      return nextElements;
+    });
+
+    if (didUpdate) {
+      markChanges();
+    }
   }, [addToHistory, markChanges, selectedId]);
 
   /**
@@ -620,19 +652,21 @@ export function CanvasEditor({
   const handleElementUpdate = useCallback(
     (updates: { [key: string]: unknown }) => {
       if (!selectedId) return;
+      const selectedElementId = selectedId;
+      updateElementsWithHistory((currentElements) => {
+        const result = updateElementById(currentElements, selectedElementId, (element) => ({
+          ...element,
+          ...updates,
+        }));
 
-      const result = updateElementById(elements, selectedId, (element) => ({
-        ...element,
-        ...updates,
-      }));
+        if (!result.updated) {
+          return currentElements;
+        }
 
-      if (!result.updated) {
-        return;
-      }
-
-      updateElementsWithHistory(result.elements);
+        return result.elements;
+      }, selectedElementId);
     },
-    [selectedId, elements, updateElementsWithHistory]
+    [selectedId, updateElementsWithHistory]
   );
 
   /**

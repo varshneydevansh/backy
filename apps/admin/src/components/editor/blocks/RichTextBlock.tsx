@@ -3,6 +3,34 @@ import { cn } from '@/lib/utils';
 import { BackyEditor, PlateEditor } from '@backy-cms/editor';
 import { useActiveEditor } from '../ActiveEditorContext';
 
+const makeContentFingerprint = (value: unknown): string => {
+  if (value === undefined) {
+    return 'u';
+  }
+
+  if (value === null) {
+    return 'n';
+  }
+
+  if (typeof value === 'string') {
+    return `s:${value}`;
+  }
+
+  if (Array.isArray(value)) {
+    try {
+      return `a:${JSON.stringify(value)}`;
+    } catch {
+      return 'a:[unserializable]';
+    }
+  }
+
+  try {
+    return `o:${JSON.stringify(value)}`;
+  } catch {
+    return `o:${typeof value}`;
+  }
+};
+
 interface RichTextBlockProps {
     content: any; // JSON or HTML
     onChange: (content: any) => void;
@@ -76,6 +104,10 @@ export function RichTextBlock({
         // Fallback for string content or empty
         return [{ type: defaultType, children: [{ text: typeof content === 'string' ? content : '' }] }];
     }, [content, defaultType]);
+
+    const contentFingerprint = useMemo(() => makeContentFingerprint(content), [content]);
+    const editorReadMode = isEditable ? 'editable' : 'readonly';
+    const editorRevision = isEditable ? elementId || 'text' : `${contentFingerprint}:${content?.length || 0}`;
 
     // Handle editor registration/unregistration
     const handleEditorReady = useCallback((editor: PlateEditor) => {
@@ -193,7 +225,7 @@ export function RichTextBlock({
             }}
         >
             <BackyEditor
-                key={isEditable ? 'editable' : 'readonly'}
+                key={`${editorReadMode}-${elementId || 'text'}-${editorRevision}`}
                 value={initialValue}
                 onChange={onChange}
                 readOnly={!isEditable}

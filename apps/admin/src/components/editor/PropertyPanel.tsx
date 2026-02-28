@@ -13,7 +13,7 @@
  * @license MIT
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Type,
   Palette,
@@ -35,6 +35,7 @@ import { AnimationBuilder, type AnimationConfig } from './AnimationBuilder';
 import type { CanvasElement, ElementProps } from '@/types/editor';
 import {
   buildListContentFromItems,
+  normalizeListContent,
   getListItemsFromProps,
 } from './listUtils';
 import { useStore } from '@/stores/mockStore';
@@ -149,6 +150,67 @@ const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
   return knownTypes.includes(normalized as CanvasElement['type'])
     ? (normalized as CanvasElement['type'])
     : 'text';
+};
+
+const resolveRichTextType = (normalizedType: string, props: ElementProps): string => {
+  if (normalizedType === 'heading') {
+    if (typeof props.level === 'string' && props.level) {
+      return props.level;
+    }
+    return 'h2';
+  }
+
+  if (normalizedType === 'list') {
+    return props.listType === 'number' || props.listType === 'ordered' || props.listType === 'decimal'
+      ? 'ol'
+      : 'ul';
+  }
+
+  if (normalizedType === 'quote') {
+    return 'blockquote';
+  }
+
+  if (normalizedType === 'paragraph') {
+    return 'p';
+  }
+
+  if (normalizedType === 'text') {
+    return 'p';
+  }
+
+  return 'p';
+};
+
+const normalizeTextElementContent = (rawContent: unknown, normalizedType: string, props: ElementProps): unknown[] => {
+  if (normalizedType === 'list') {
+    return normalizeListContent({
+      content: rawContent,
+      items: props.items,
+      listType: props.listType,
+    });
+  }
+
+  if (Array.isArray(rawContent)) {
+    return rawContent;
+  }
+
+  const fallbackType = resolveRichTextType(normalizedType, props);
+
+  if (typeof rawContent === 'string') {
+    return [
+      {
+        type: fallbackType,
+        children: [{ text: rawContent }],
+      },
+    ];
+  }
+
+  return [
+    {
+      type: fallbackType,
+      children: [{ text: '' }],
+    },
+  ];
 };
 
 // ============================================
@@ -420,6 +482,7 @@ function ContentProperties({
   elementId,
 }: ContentPropertiesProps) {
   const normalizedType = normalizeCanvasElementType(element.type);
+  const textElementContent = normalizeTextElementContent(element.props.content, normalizedType, element.props);
   const hasTextContent = ['text', 'heading', 'paragraph', 'quote', 'list'].includes(normalizedType);
   const hasImageContent = normalizedType === 'image';
   const hasVideoContent = normalizedType === 'video';
@@ -434,15 +497,27 @@ function ContentProperties({
     ? element.props.options.join('\n')
     : '';
   const listItems = getListItemsFromProps(element.props);
+  const updateTextContent = useCallback((content: unknown) => {
+    onChange({
+      props: {
+        ...element.props,
+        content: content as ElementProps['content'],
+      },
+    });
+  }, [element.props, onChange]);
   useEffect(() => {
     // BackyTextProperties diagnostics disabled.
   }, [element.id, element.type, elementId, hasTextContent, hasImageContent, hasVideoContent, hasLinkContent, hasButtonContent, onChange]);
 
   return (
-    <div className="space-y-3">
+      <div className="space-y-3">
       {/* Rich Text Controls */}
         {hasTextContent && (
-          <RichTextFormatting elementId={elementId} />
+          <RichTextFormatting
+            elementId={elementId}
+            elementContent={textElementContent}
+            onElementContentChange={updateTextContent}
+          />
         )}
 
       {/* Image Source */}

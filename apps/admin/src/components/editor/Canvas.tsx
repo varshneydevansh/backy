@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
 import { createCanvasElement } from '@/components/editor/editorCatalog';
 import { RichTextBlock } from './blocks/RichTextBlock';
+import { useActiveEditor } from './ActiveEditorContext';
 import {
   extractListItemsFromSlate,
   getListTypeFromSlate,
@@ -521,6 +522,7 @@ export function Canvas({
 }: CanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const { clearActiveEditor } = useActiveEditor();
   const debugTextInteraction = useCallback((..._args: unknown[]) => {
   }, []);
 
@@ -536,13 +538,15 @@ export function Canvas({
   useEffect(() => {
     if (isPreview) {
       setEditingId(null);
+      clearActiveEditor();
       return;
     }
 
     if (!selectedId) {
       setEditingId(null);
+      clearActiveEditor();
     }
-  }, [isPreview, selectedId]);
+  }, [clearActiveEditor, isPreview, selectedId]);
 
   const isInteractiveHandle = useCallback((target: EventTarget | null) => {
     const element = getTargetElement(target);
@@ -675,14 +679,6 @@ export function Canvas({
       if (isPreview) return;
       if ('button' in e && e.button !== 0) return;
 
-      if (isTextEditorInteraction(e.target)) {
-        debugTextInteraction('handleMouseDown ignored for text editor interaction', {
-          elementId,
-          target: (e.target as Element | null)?.tagName,
-        });
-        return;
-      }
-
       const eventTarget = getTargetElement(e.target);
       const hitElementId = eventTarget?.closest?.('[data-element-id]')?.getAttribute('data-element-id');
 
@@ -695,6 +691,27 @@ export function Canvas({
       if (!clickedElement) return;
 
       if (isInteractiveHandle(e.target)) return;
+
+      if (isTextEditorInteraction(e.target)) {
+        debugTextInteraction('handleMouseDown ignored for text editor interaction', {
+          elementId,
+          target: (e.target as Element | null)?.tagName,
+        });
+        return;
+      }
+
+      if (isTextEditableElement(clickedElement.type)) {
+        debugTextInteraction('handleMouseDown text-element-select-only', {
+          elementId: clickedElement.id,
+          elementType: clickedElement.type,
+        });
+        clearActiveEditor();
+        if (editingId) {
+          setEditingId(null);
+        }
+        onSelect(elementId);
+        return;
+      }
       debugTextInteraction('handleMouseDown started drag', { elementId, x: e.clientX, y: e.clientY });
 
       onSelect(elementId);
@@ -702,6 +719,7 @@ export function Canvas({
       if (editingId) {
         setEditingId(null);
       }
+      clearActiveEditor();
 
       setDragState({
         elementId,
@@ -711,7 +729,7 @@ export function Canvas({
         initialY: clickedElement.y,
       });
     },
-    [elements, editingId, isInteractiveHandle, isTextEditorInteraction, isPreview, onSelect]
+    [clearActiveEditor, elements, editingId, isInteractiveHandle, isTextEditorInteraction, isPreview, onSelect]
   );
 
   /**
@@ -951,6 +969,11 @@ export function Canvas({
    */
   const handleCanvasClick = useCallback((event: React.MouseEvent) => {
     const eventTarget = getTargetElement(event.target);
+    const clickedElementId = eventTarget?.closest?.('[data-element-id]')?.getAttribute('data-element-id');
+    if (clickedElementId) {
+      return;
+    }
+
     if (isTextEditorInteraction(eventTarget)) {
       debugTextInteraction('handleCanvasClick skipped in text editor', {
         targetTag: (eventTarget as Element | null)?.tagName,
@@ -961,8 +984,9 @@ export function Canvas({
     if (!isPreview) {
       onSelect(null);
       setEditingId(null);
+      clearActiveEditor();
     }
-  }, [isPreview, isTextEditorInteraction, onSelect]);
+  }, [clearActiveEditor, isPreview, isTextEditorInteraction, onSelect]);
 
   const handleCanvasDoubleClick = useCallback((event: React.MouseEvent) => {
     const eventTarget = getTargetElement(event.target);
@@ -985,9 +1009,10 @@ export function Canvas({
 
   const handleCanvasKeyDown = useCallback((event: KeyboardEvent) => {
     if (event.key === 'Escape') {
-      setEditingId((current) => (current ? null : current));
+      setEditingId(null);
+      clearActiveEditor();
     }
-  }, []);
+  }, [clearActiveEditor]);
 
   useEffect(() => {
     window.addEventListener(EDITOR_ACTIVATION_EVENT, handleExternalEditRequest);
@@ -1175,18 +1200,14 @@ function CanvasElementComponent({
 
     switch (resolvedType) {
       case 'text':
-        // V2 Hybrid: If editing, show Tiptap. Else show Preview.
-        // We use Tiptap for both states to ensure WYSIWYG consistency if possible,
-        // but for performance "Preview" might just be a read-only Tiptap.
-
-      return (
-        <div
-          style={{ ...sharedStyle, width: '100%', height: '100%' }}
-          onDoubleClick={onDoubleClick}
-          onMouseDown={(e) => {
-            if (isEditing) e.stopPropagation();
-          }}
-        >
+        return (
+          <div
+            style={{ ...sharedStyle, width: '100%', height: '100%' }}
+            onDoubleClick={onDoubleClick}
+            onMouseDown={(e) => {
+              if (isEditing) e.stopPropagation();
+            }}
+          >
             <RichTextBlock
               key={`text-${element.id}`}
               elementId={element.id}

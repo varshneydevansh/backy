@@ -15,6 +15,31 @@ Backy should be a production-oriented, open-source backend that enables:
 The working implementation roadmap is maintained in:
 - [specs/backy-wix-canva-cms-v1-roadmap.md](specs/backy-wix-canva-cms-v1-roadmap.md)
 
+**Authoritative phase status and roadmap:**
+- [specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v1.md](specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v1.md)
+- [specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v2.md](specs/phase-docs/backy-headless-cms-platform-phase-roadmap-v2.md)
+- [specs/backy-full-parity-roadmap-spec.md](specs/backy-full-parity-roadmap-spec.md)
+- [specs/phase-docs/backy-phase-a-j-completion-spec.md](specs/phase-docs/backy-phase-a-j-completion-spec.md)
+- [specs/phase-docs/backy-alpha-vs-numeric-phase-progress-2026-02-27.md](specs/phase-docs/backy-alpha-vs-numeric-phase-progress-2026-02-27.md)
+
+## 1.2 Phase A/B/C status snapshot (2026-02-27)
+- **Phase A:** partial completion.
+  - Done: contracts hardened for form/comment payloads, comment anti-abuse policy shape added, public auth bridge.
+  - Open: admin/public store boundary hardening, and route-level RBAC migration.
+  - Update: route/session guard now uses selector-backed auth capability gates (`canEdit`, `canAdminister`) and admin-only navigation items are hidden from non-admin roles.
+- **Phase B:** in-progress completion.
+  - Done: selection and interaction improvements, render stability, property panel upgrades.
+  - Done: undo/redo completion, copy/duplicate/delete determinism, save/publish/reload persistence flow hardening, and read-only editor action gating.
+  - Latest close-out: duplicate placement is now deterministic sibling insertion; page save fallback uses editor canvas size instead of stale initial.
+  - Open: nested multi-select command stack cases and full revision graph integration.
+  - In this pass: move/resize history commits now occur on interaction end for deterministic undo/redo while keeping live drags responsive.
+  - Latest pass: read-only editor gating now blocks mutation actions in non-editor roles.
+- **Phase C:** complete for parity-grade comment moderation.
+  - Done: form/comment compatibility, moderation status updates, comment blocklist CRUD, report reason APIs, analytics/report/export parity, and strict anti-abuse policy validation.
+  - In progress: finalize operator-only anti-abuse preset ergonomics and large-scope moderation safety UX.
+  - Progress in this pass: status/thread/request/parent filtering is aligned across list/export/analytics/block views; JSX parser errors in moderation view have been resolved; route-level admin write gates were added for non-edit roles; and policy validation errors now flow to admin UI.
+- **Custom frontend target:** `backy-public` is the contract boundary for replacement UI surfaces; custom frontends should never require admin internals.
+
 The goal is parity with “Wix-like editor + WordPress-like content model” for self-hosted or Vercel-hosted backends.
 
 ---
