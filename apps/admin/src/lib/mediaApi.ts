@@ -14,6 +14,7 @@ interface ApiMediaItem {
   scope?: MediaScope;
   scopeTargetId?: string | null;
   visibility?: MediaVisibility;
+  folderId?: string | null;
   altText?: string | null;
   caption?: string | null;
   tags?: string[];
@@ -63,6 +64,35 @@ interface ApiDeleteResponse {
   };
 }
 
+interface ApiMediaFolder {
+  id: string;
+  siteId: string;
+  parentId: string | null;
+  name: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
+interface ApiMediaFolderListResponse {
+  success: boolean;
+  data?: {
+    folders: ApiMediaFolder[];
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiMediaFolderResponse {
+  success: boolean;
+  data?: {
+    folder: ApiMediaFolder;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 export interface MediaUploadOptions {
   siteId?: string;
   scope?: MediaScope;
@@ -80,6 +110,7 @@ export interface MediaListOptions {
   type?: 'image' | 'video' | 'audio' | 'document' | 'font' | 'other';
   search?: string;
   tag?: string;
+  folderId?: string | null;
   pageId?: string;
   postId?: string;
   limit?: number;
@@ -90,9 +121,17 @@ export interface MediaUpdateInput {
   altText?: string | null;
   caption?: string | null;
   tags?: string[];
+  folderId?: string | null;
   scope?: MediaScope;
   scopeTargetId?: string | null;
   visibility?: MediaVisibility;
+}
+
+export interface MediaFolder {
+  id: string;
+  name: string;
+  parentId: string | null;
+  sortOrder: number;
 }
 
 const getEnvValue = (key: string): string => {
@@ -141,6 +180,7 @@ const toMediaAsset = (item: ApiMediaItem): MediaAsset => ({
   altText: item.altText || null,
   caption: item.caption || null,
   tags: item.tags || [],
+  folderId: item.folderId || null,
   scope: item.scope || 'global',
   scopeTargetId: item.scopeTargetId || null,
   visibility: item.visibility || 'public',
@@ -158,6 +198,7 @@ export async function listMedia(options: MediaListOptions = {}): Promise<MediaAs
   if (options.type) query.set('type', options.type);
   if (options.search) query.set('search', options.search);
   if (options.tag) query.set('tag', options.tag);
+  if (options.folderId !== undefined) query.set('folderId', options.folderId || '');
   if (options.pageId) query.set('pageId', options.pageId);
   if (options.postId) query.set('postId', options.postId);
   if (options.limit) query.set('limit', `${options.limit}`);
@@ -170,6 +211,52 @@ export async function listMedia(options: MediaListOptions = {}): Promise<MediaAs
   }
 
   return payload.data.media.map(toMediaAsset);
+}
+
+const toMediaFolder = (folder: ApiMediaFolder): MediaFolder => ({
+  id: folder.id,
+  name: folder.name,
+  parentId: folder.parentId,
+  sortOrder: folder.sortOrder,
+});
+
+export async function listMediaFolders(siteId = getDefaultMediaSiteId()): Promise<MediaFolder[]> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/media/folders`);
+  const payload = await response.json() as ApiMediaFolderListResponse;
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load media folders');
+  }
+
+  return payload.data.folders.map(toMediaFolder);
+}
+
+export async function createMediaFolder(name: string, siteId = getDefaultMediaSiteId()): Promise<MediaFolder> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/media/folders`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ name }),
+  });
+  const payload = await response.json() as ApiMediaFolderResponse;
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to create media folder');
+  }
+
+  return toMediaFolder(payload.data.folder);
+}
+
+export async function deleteMediaFolder(folderId: string, siteId = getDefaultMediaSiteId()): Promise<void> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/media/folders/${folderId}`, {
+    method: 'DELETE',
+  });
+  const payload = await response.json() as ApiDeleteResponse;
+
+  if (!response.ok || !payload.success || !payload.data?.deleted) {
+    throw new Error(payload.error?.message || 'Unable to delete media folder');
+  }
 }
 
 export async function uploadMedia(file: File, options: MediaUploadOptions = {}): Promise<MediaAsset> {

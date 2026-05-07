@@ -4,10 +4,20 @@
 
 import { useCallback, useEffect, useState, type DragEvent } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
-import { Edit3, File, Image as ImageIcon, Save, Trash2, Upload, X } from 'lucide-react';
+import { Edit3, File, Folder, FolderPlus, Image as ImageIcon, Save, Trash2, Upload, X } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { deleteMediaFromBackend, getDefaultMediaSiteId, listMedia, updateMedia, uploadMedia } from '@/lib/mediaApi';
+import {
+  createMediaFolder,
+  deleteMediaFolder,
+  deleteMediaFromBackend,
+  getDefaultMediaSiteId,
+  listMedia,
+  listMediaFolders,
+  updateMedia,
+  uploadMedia,
+  type MediaFolder,
+} from '@/lib/mediaApi';
 import { cn } from '@/lib/utils';
 import { useStore, type MediaAsset } from '@/stores/mockStore';
 
@@ -24,12 +34,17 @@ function MediaPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | MediaAsset['type']>('all');
   const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'public' | 'private'>('all');
+  const [folders, setFolders] = useState<MediaFolder[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null | undefined>(undefined);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MediaAsset | null>(null);
   const [metadataForm, setMetadataForm] = useState({
     name: '',
     altText: '',
     caption: '',
     tags: '',
+    folderId: '',
     visibility: 'public' as 'public' | 'private',
   });
   const files = useStore((state) => state.media);
@@ -50,6 +65,7 @@ function MediaPage() {
         search: searchQuery.trim() || undefined,
         type: typeFilter === 'file' ? 'document' : typeFilter === 'all' ? undefined : typeFilter,
         visibility: visibilityFilter === 'all' ? undefined : visibilityFilter,
+        folderId: selectedFolderId,
       });
       setMedia(backendFiles);
     } catch (loadError) {
@@ -57,11 +73,34 @@ function MediaPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [searchQuery, setMedia, siteId, typeFilter, visibilityFilter]);
+  }, [searchQuery, selectedFolderId, setMedia, siteId, typeFilter, visibilityFilter]);
 
   useEffect(() => {
     void loadLibrary();
   }, [loadLibrary]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFolders = async () => {
+      try {
+        const backendFolders = await listMediaFolders(siteId);
+        if (!cancelled) {
+          setFolders(backendFolders);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : 'Unable to load media folders.');
+        }
+      }
+    };
+
+    void loadFolders();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [siteId]);
 
   const openMetadataEditor = (asset: MediaAsset) => {
     setSelectedAsset(asset);
@@ -70,6 +109,7 @@ function MediaPage() {
       altText: asset.altText || '',
       caption: asset.caption || '',
       tags: (asset.tags || []).join(', '),
+      folderId: asset.folderId || '',
       visibility: asset.visibility || 'public',
     });
   };
@@ -187,6 +227,7 @@ function MediaPage() {
         altText: metadataForm.altText,
         caption: metadataForm.caption,
         tags: metadataForm.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
+        folderId: metadataForm.folderId || null,
         visibility: metadataForm.visibility,
       }, siteId);
       setMedia(files.map((file) => file.id === updated.id ? updated : file));
@@ -195,6 +236,47 @@ function MediaPage() {
       setError(saveError instanceof Error ? saveError.message : 'Unable to update media metadata.');
     } finally {
       setIsSavingMetadata(false);
+    }
+  };
+
+  const handleCreateFolder = async () => {
+    const name = newFolderName.trim();
+    if (!name) {
+      return;
+    }
+
+    setIsCreatingFolder(true);
+    setError(null);
+
+    try {
+      const folder = await createMediaFolder(name, siteId);
+      setFolders((current) => [...current, folder].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)));
+      setSelectedFolderId(folder.id);
+      setNewFolderName('');
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Unable to create folder.');
+    } finally {
+      setIsCreatingFolder(false);
+    }
+  };
+
+  const handleDeleteFolder = async (folderId: string) => {
+    const folder = folders.find((item) => item.id === folderId);
+    if (!folder || !confirm(`Delete folder "${folder.name}"? Media inside it will move to root.`)) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await deleteMediaFolder(folderId, siteId);
+      setFolders((current) => current.filter((item) => item.id !== folderId));
+      setMedia(files.map((file) => file.folderId === folderId ? { ...file, folderId: null } : file));
+      if (selectedFolderId === folderId) {
+        setSelectedFolderId(undefined);
+      }
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete folder.');
     }
   };
 
@@ -306,6 +388,84 @@ function MediaPage() {
         </select>
       </div>
 
+      <div className="mb-6 rounded-xl border border-border bg-card p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 font-semibold">
+            <Folder className="h-4 w-4" />
+            <span>Folders</span>
+          </div>
+          <div className="flex min-w-0 flex-1 justify-end gap-2">
+            <input
+              type="text"
+              value={newFolderName}
+              onChange={(event) => setNewFolderName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  void handleCreateFolder();
+                }
+              }}
+              className="w-full max-w-xs rounded-lg border bg-background px-3 py-2 text-sm"
+              placeholder="New folder name"
+            />
+            <button
+              type="button"
+              disabled={isCreatingFolder || !newFolderName.trim()}
+              onClick={() => void handleCreateFolder()}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+            >
+              <FolderPlus className="h-4 w-4" />
+              Add
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setSelectedFolderId(undefined)}
+            className={cn(
+              'rounded-lg border px-3 py-2 text-sm',
+              selectedFolderId === undefined ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
+            )}
+          >
+            All media
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedFolderId(null)}
+            className={cn(
+              'rounded-lg border px-3 py-2 text-sm',
+              selectedFolderId === null ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
+            )}
+          >
+            Root
+          </button>
+          {folders.map((folder) => (
+            <div key={folder.id} className="inline-flex overflow-hidden rounded-lg border border-border">
+              <button
+                type="button"
+                onClick={() => setSelectedFolderId(folder.id)}
+                className={cn(
+                  'px-3 py-2 text-sm',
+                  selectedFolderId === folder.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+                )}
+              >
+                {folder.name}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteFolder(folder.id)}
+                className="border-l border-border px-2 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                title="Delete folder"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {isLoading ? (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {Array.from({ length: 10 }).map((_, index) => (
@@ -353,6 +513,11 @@ function MediaPage() {
               <div className="p-3">
                 <p className="font-medium text-sm truncate" title={file.name}>{file.name}</p>
                 <p className="text-xs text-muted-foreground">{file.size} · {file.visibility || 'public'}</p>
+                {file.folderId && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {folders.find((folder) => folder.id === file.folderId)?.name || 'Folder'}
+                  </p>
+                )}
               </div>
             </div>
           ))}
@@ -431,6 +596,20 @@ function MediaPage() {
                     className="w-full rounded-lg border bg-background px-3 py-2"
                     placeholder="hero, product, brand"
                   />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Folder</label>
+                  <select
+                    value={metadataForm.folderId}
+                    onChange={(event) => setMetadataForm((current) => ({ ...current, folderId: event.target.value }))}
+                    className="w-full rounded-lg border bg-background px-3 py-2"
+                  >
+                    <option value="">Root</option>
+                    {folders.map((folder) => (
+                      <option key={folder.id} value={folder.id}>{folder.name}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>

@@ -71,6 +71,7 @@ export interface MediaAsset {
   altText?: string | null;
   caption?: string | null;
   tags?: string[];
+  folderId?: string | null;
   scope?: MediaScope;
   scopeTargetId?: string | null;
   visibility?: MediaVisibility;
