@@ -157,6 +157,26 @@
         "count": { "type": "integer", "minimum": 0 }
       },
       "required": ["id", "targetType", "targetId", "endpoint", "moderationMode"]
+    },
+    "navigationItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["page", "post", "dynamicItem", "external"] },
+        "pageId": { "type": "string" },
+        "label": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
+        "slug": { "type": "string" },
+        "path": { "type": "string", "minLength": 1 },
+        "status": { "$ref": "#/$defs/status" },
+        "isHomepage": { "type": "boolean" },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/navigationItem" }
+        }
+      },
+      "required": ["id", "type", "label", "path", "children"]
     }
   },
   "properties": {
@@ -194,6 +214,17 @@
             }
           },
           "required": ["type", "path", "status", "canonical"]
+        },
+        "navigation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "primary": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/navigationItem" }
+            }
+          },
+          "required": ["primary"]
         },
         "content": {
           "type": "object",
@@ -286,7 +317,7 @@
           "$ref": "editable-map.schema.json"
         }
       },
-      "required": ["site", "route", "content", "assets", "interactions", "seo", "dataBindings", "editableMap"]
+      "required": ["site", "navigation", "route", "content", "assets", "interactions", "seo", "dataBindings", "editableMap"]
     }
   },
   "required": ["success", "requestId", "data"]

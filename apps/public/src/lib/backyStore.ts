@@ -100,6 +100,19 @@ interface StorePage {
   scheduledAt: string | null;
 }
 
+interface SiteNavigationItem {
+  id: string;
+  type: 'page';
+  pageId: string;
+  label: string;
+  title: string;
+  slug: string;
+  path: string;
+  status: StorePage['status'];
+  isHomepage: boolean;
+  children: SiteNavigationItem[];
+}
+
 interface StoreBlogPost {
   id: string;
   siteId: string;
@@ -2880,6 +2893,35 @@ export function getPageSummary(siteId: string, options: { includeUnpublished?: b
   );
 }
 
+export function getSiteNavigation(
+  siteId: string,
+  options: { includeUnpublished?: boolean } = {},
+): { primary: SiteNavigationItem[] } {
+  const pages = getPageSummary(siteId, options);
+  const primary = pages
+    .map((page) => ({
+      id: `nav_${page.id}`,
+      type: 'page' as const,
+      pageId: page.id,
+      label: page.title,
+      title: page.title,
+      slug: page.slug,
+      path: getCanonicalPathForPage(page),
+      status: page.status,
+      isHomepage: page.isHomepage,
+      children: [],
+    }))
+    .sort((a, b) => {
+      if (a.isHomepage !== b.isHomepage) {
+        return a.isHomepage ? -1 : 1;
+      }
+
+      return a.label.localeCompare(b.label) || a.path.localeCompare(b.path);
+    });
+
+  return { primary };
+}
+
 export function getPageBySlug(
   siteId: string,
   slug: string,
@@ -4936,7 +4978,7 @@ export function createComment(params: {
   return clone(comment);
 }
 
-export function getCanonicalPathForPage(page: StorePage | null): string {
+export function getCanonicalPathForPage(page: Pick<StorePage, 'isHomepage' | 'slug'> | null): string {
   if (!page) {
     return '/';
   }
@@ -4954,4 +4996,4 @@ export function getMediaById(siteId: string, id: string): MediaItem | undefined 
   return item ? clone(item) : undefined;
 }
 
-export { type ContentRevision, type Pagination, type StoreBlogPost, type StorePage, type StoreSettings, type StoreSite, type StoreUser };
+export { type ContentRevision, type Pagination, type SiteNavigationItem, type StoreBlogPost, type StorePage, type StoreSettings, type StoreSite, type StoreUser };

@@ -223,6 +223,21 @@ try {
     assert(update.json?.data?.page?.title === 'Updated Admin Contract Page', `${update.url} expected updated title`);
     assert(update.json?.data?.page?.status === 'published', `${update.url} expected published status`);
 
+    const publicNavigation = await request(`/api/sites/${createdSiteId}/navigation`);
+    assert(publicNavigation.response.status === 200, `${publicNavigation.url} expected 200, got ${publicNavigation.response.status}`);
+    assert(publicNavigation.json?.success === true, `${publicNavigation.url} expected success envelope`);
+    assert(
+      publicNavigation.json?.data?.navigation?.primary?.some((item) => item.pageId === createdPageId && item.path === `/${pageSlug}`),
+      `${publicNavigation.url} missing created page navigation item`,
+    );
+
+    const renderPayload = await request(`/api/sites/${createdSiteId}/render?path=/${pageSlug}`);
+    assert(renderPayload.response.status === 200, `${renderPayload.url} expected 200, got ${renderPayload.response.status}`);
+    assert(
+      renderPayload.json?.data?.navigation?.primary?.some((item) => item.pageId === createdPageId && item.path === `/${pageSlug}`),
+      `${renderPayload.url} missing render navigation manifest`,
+    );
+
     const remove = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, { method: 'DELETE' });
     assert(remove.response.status === 200, `${remove.url} expected 200, got ${remove.response.status}`);
     assert(remove.json?.data?.deleted === true, `${remove.url} expected deleted true`);

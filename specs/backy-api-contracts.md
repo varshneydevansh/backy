@@ -61,10 +61,17 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Public media catalog for custom frontends.
   - Current implementation only returns `visibility=public` catalog items, even if a caller asks for private media.
 
+- `GET /api/sites/:siteId/navigation`
+  - Public navigation contract for external frontends.
+  - Returns `{ success, requestId, data: { site, navigation: { primary } } }`.
+  - Navigation items include page id, label/title, slug, canonical path, status, homepage flag, and child arrays.
+  - Current implementation derives primary navigation from publishable pages in the runtime content adapter. Production completion still needs editable menus, nested page hierarchy, redirects, locale-aware paths, and custom/external links.
+
 ### 2.2 Render payload
 Public page payload should include:
 - `content` in shared editor schema
 - `themeTokens`
+- `navigation`
 - `meta` (title/description/keywords/og/canonical/noindex/nofollow)
 - `assets.media`
 - `assets.forms`

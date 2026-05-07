@@ -2,6 +2,7 @@ import {
   getCanonicalPathForPage,
   getMediaList,
   listFormsBySite,
+  getSiteNavigation,
   type StorePage,
   type StoreSite,
 } from './backyStore';
@@ -203,6 +204,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
   const canonical = page.isHomepage ? '/' : page.meta.canonical || getCanonicalPathForPage(page);
   const actions = collectElementActions(elements);
   const bindings = collectElementBindings(elements);
+  const navigation = getSiteNavigation(site.id);
 
   return {
     success: true,
@@ -217,6 +219,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
         assetsBaseUrl: '',
         themeTokens: buildThemeTokens(site),
       },
+      navigation,
       route: {
         type: 'page',
         path: options.path,

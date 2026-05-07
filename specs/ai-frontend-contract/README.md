@@ -29,6 +29,7 @@ The rule is simple: a custom frontend can look completely different from the Bac
 
 3. Fetch supporting data.
    - media: `GET /api/sites/:siteId/media`
+   - navigation: `GET /api/sites/:siteId/navigation`
    - blog: `GET /api/sites/:siteId/blog`
    - blog categories: `GET /api/sites/:siteId/blog/categories`
    - blog tags: `GET /api/sites/:siteId/blog/tags`
@@ -63,6 +64,22 @@ Backy should expose one public render payload:
       "name": "Demo Site",
       "locale": "en",
       "themeTokens": {}
+    },
+    "navigation": {
+      "primary": [
+        {
+          "id": "nav_page_123",
+          "type": "page",
+          "pageId": "page_123",
+          "label": "About",
+          "title": "About",
+          "slug": "about",
+          "path": "/about",
+          "status": "published",
+          "isHomepage": false,
+          "children": []
+        }
+      ]
     },
     "route": {
       "type": "page",
