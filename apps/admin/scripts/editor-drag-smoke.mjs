@@ -688,6 +688,116 @@ const assertFontMediaPicker = async (client) => {
   return state;
 };
 
+const assertGroupingControls = async (client) => {
+  const state = await evaluate(client, `(() => {
+    const groupButton = document.querySelector('[data-testid="editor-group-selection"]');
+    const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
+    return {
+      hasGroupButton: Boolean(groupButton),
+      hasUngroupButton: Boolean(ungroupButton),
+      groupDisabled: groupButton instanceof HTMLButtonElement ? groupButton.disabled : null,
+      ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
+    };
+  })()`);
+
+  assert(state?.hasGroupButton, `Group control missing from editor toolbar: ${JSON.stringify(state)}`);
+  assert(state?.hasUngroupButton, `Ungroup control missing from editor toolbar: ${JSON.stringify(state)}`);
+  return state;
+};
+
+const testLayerGrouping = async (client, elementIds) => {
+  assert(elementIds.length >= 2, 'Layer grouping test needs at least two elements');
+  const [firstId, secondId] = elementIds;
+  const before = await readEditorElementState(client, [firstId, secondId]);
+
+  await evaluate(client, `(() => {
+    if (!document.querySelector('[data-layer-id="${firstId}"]')) {
+      const layersButton = Array.from(document.querySelectorAll('button')).find((button) => (
+        (button.textContent || '').trim() === 'Layers'
+      ));
+      layersButton?.click();
+    }
+    return true;
+  })()`);
+
+  let layersReady = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    layersReady = await evaluate(client, `(() => ({
+      first: Boolean(document.querySelector('[data-layer-id="${firstId}"]')),
+      second: Boolean(document.querySelector('[data-layer-id="${secondId}"]')),
+      body: document.body?.innerText?.slice(0, 300) || '',
+    }))()`);
+    if (layersReady.first && layersReady.second) {
+      break;
+    }
+    await sleep(100);
+  }
+
+  assert(layersReady?.first && layersReady?.second, `Layer rows did not render for grouping: ${JSON.stringify(layersReady)}`);
+
+  const selected = await evaluate(client, `(() => {
+
+    const first = document.querySelector('[data-layer-id="${firstId}"]');
+    const second = document.querySelector('[data-layer-id="${secondId}"]');
+    if (!first || !second) {
+      return { ok: false, reason: 'missing-layer-item' };
+    }
+
+    first.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    second.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+
+    return {
+      ok: true,
+      selectedLayers: Array.from(document.querySelectorAll('[data-layer-selected="true"]')).map((node) => node.getAttribute('data-layer-id')),
+      groupDisabled: document.querySelector('[data-testid="editor-group-selection"]') instanceof HTMLButtonElement
+        ? document.querySelector('[data-testid="editor-group-selection"]').disabled
+        : null,
+    };
+  })()`);
+
+  await sleep(250);
+  const ready = await evaluate(client, `(() => {
+    const groupButton = document.querySelector('[data-testid="editor-group-selection"]');
+    const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
+    return {
+      selectedLayers: Array.from(document.querySelectorAll('[data-layer-selected="true"]')).map((node) => node.getAttribute('data-layer-id')),
+      hasMultiSelection: Boolean(multiSelection),
+      groupDisabled: groupButton instanceof HTMLButtonElement ? groupButton.disabled : null,
+    };
+  })()`);
+
+  assert(selected?.ok, `Unable to select layers for grouping: ${JSON.stringify(selected)}`);
+  assert(ready.hasMultiSelection, `Layer multi-selection did not reach inspector: ${JSON.stringify(ready)}`);
+  assert(ready.groupDisabled === false, `Group button did not enable for sibling layers: ${JSON.stringify(ready)}`);
+
+  await evaluate(client, `document.querySelector('[data-testid="editor-group-selection"]')?.click()`);
+  await sleep(250);
+  const grouped = await evaluate(client, `(() => {
+    const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
+    const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
+    return {
+      hasSelection: Boolean(selected),
+      selectedText: selected?.textContent || '',
+      ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
+    };
+  })()`);
+
+  assert(grouped.hasSelection, `Grouped selection was not shown in inspector: ${JSON.stringify(grouped)}`);
+  assert(grouped.ungroupDisabled === false, `Ungroup button did not enable after grouping: ${JSON.stringify(grouped)}`);
+
+  await evaluate(client, `document.querySelector('[data-testid="editor-ungroup-selection"]')?.click()`);
+  await sleep(250);
+  const after = await readEditorElementState(client, [firstId, secondId]);
+  assertElementState(after, before, 'group/ungroup roundtrip');
+
+  return {
+    selected: ready,
+    grouped,
+    before,
+    after,
+  };
+};
+
 const dragSelectionHandle = async (client, elementId, deltaX, deltaY) => {
   await selectElement(client, elementId);
   const before = await getElementBox(client, elementId);
@@ -952,6 +1062,11 @@ const main = async () => {
         };
     const inspector = await assertInspectorSelection(client, EDITOR_PATH ? 'home-heading' : 'smoke-heading');
     const fontPicker = await assertFontMediaPicker(client);
+    const groupingControls = await assertGroupingControls(client);
+    const grouping = await testLayerGrouping(
+      client,
+      EDITOR_PATH ? ['home-heading', 'home-cta'] : ['smoke-heading', 'smoke-image'],
+    );
 
     let persistedState = null;
     let reloadedState = null;
@@ -1029,6 +1144,8 @@ const main = async () => {
       keyboard,
       inspector,
       fontPicker,
+      groupingControls,
+      grouping,
       postSaveInspector,
       persistedState,
       reloadedState,

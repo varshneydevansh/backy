@@ -22,6 +22,7 @@ import {
   ArrowLeft,
   Save,
   Eye,
+  Group,
   Layers,
   SlidersHorizontal,
   Scissors,
@@ -35,6 +36,7 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  Ungroup,
 } from 'lucide-react';
 import { cn, generateId } from '@/lib/utils';
 import { Canvas } from '@/components/editor/Canvas';
@@ -312,6 +314,7 @@ export function CanvasEditor({
   // Canvas state
   const [elements, setElements] = useState<CanvasElement[]>(initialElements);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [size, setSize] = useState<CanvasSize>(initialSize || DEFAULT_CANVAS_SIZE);
   const [breakpoint, setBreakpoint] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [rightPanel, setRightPanel] = useState<'properties' | 'layers'>('properties');
@@ -427,6 +430,27 @@ export function CanvasEditor({
 
       if (item.children?.length) {
         const found = findElementById(item.children, targetId);
+        if (found) {
+          return found;
+        }
+      }
+    }
+
+    return null;
+  }, []);
+
+  const findElementEntry = useCallback((
+    items: CanvasElement[],
+    targetId: string,
+    parentId: string | null = null,
+  ): { element: CanvasElement; parentId: string | null } | null => {
+    for (const item of items) {
+      if (item.id === targetId) {
+        return { element: item, parentId };
+      }
+
+      if (item.children?.length) {
+        const found = findElementEntry(item.children, targetId, item.id);
         if (found) {
           return found;
         }
@@ -620,6 +644,8 @@ export function CanvasEditor({
   }, [hasUnsavedChanges]);
 
   useEffect(() => {
+    setSelectedIds((current) => current.filter((id) => !!findElementById(elements, id)));
+
     if (!selectedId) {
       return;
     }
@@ -628,6 +654,16 @@ export function CanvasEditor({
       setSelectedId(null);
     }
   }, [elements, selectedId, findElementById]);
+
+  useEffect(() => {
+    setSelectedIds((current) => {
+      if (!selectedId) {
+        return current.length ? [] : current;
+      }
+
+      return current.includes(selectedId) ? current : [selectedId];
+    });
+  }, [selectedId]);
 
   /**
    * Add current state to history
@@ -787,11 +823,15 @@ export function CanvasEditor({
   }, [elements, normalizePastedElement, selectedId, updateElementsWithHistory]);
 
   const handleLayerSelect = useCallback((ids: string[]) => {
-    setSelectedId(ids[0] ?? null);
-    if (ids.length > 0) {
+    const nextIds = ids.filter((id) => !!findElementById(elements, id));
+    setSelectedIds(nextIds);
+    setSelectedId(nextIds[0] ?? null);
+    if (nextIds.length === 1) {
       setRightPanel('properties');
+    } else if (nextIds.length > 1) {
+      setRightPanel('layers');
     }
-  }, []);
+  }, [elements, findElementById]);
 
   const handleLayerReorder = useCallback((fromIndex: number, toIndex: number) => {
     updateElementsWithHistory((currentElements) => {
@@ -860,8 +900,187 @@ export function CanvasEditor({
     updateElementsWithHistory([...elements, duplicate], duplicate.id);
   }, [elements, findElementById, normalizePastedElement, updateElementsWithHistory]);
 
+  const handleGroupSelected = useCallback(() => {
+    const selectedSet = new Set(selectedIds);
+    const entries = selectedIds
+      .map((id) => findElementEntry(elements, id))
+      .filter((entry): entry is { element: CanvasElement; parentId: string | null } => !!entry);
+
+    if (entries.length < 2) {
+      return;
+    }
+
+    const parentId = entries[0].parentId;
+    if (!entries.every((entry) => entry.parentId === parentId && !entry.element.locked)) {
+      return;
+    }
+
+    const groupId = generateId();
+    const makeGroupedSiblings = (siblings: CanvasElement[]): CanvasElement[] => {
+      const selectedSiblings = siblings.filter((item) => selectedSet.has(item.id));
+      if (selectedSiblings.length !== entries.length) {
+        return siblings;
+      }
+
+      const minX = Math.min(...selectedSiblings.map((item) => item.x));
+      const minY = Math.min(...selectedSiblings.map((item) => item.y));
+      const maxX = Math.max(...selectedSiblings.map((item) => item.x + item.width));
+      const maxY = Math.max(...selectedSiblings.map((item) => item.y + item.height));
+      const group: CanvasElement = {
+        id: groupId,
+        type: 'box',
+        name: 'Group',
+        x: minX,
+        y: minY,
+        width: Math.max(1, maxX - minX),
+        height: Math.max(1, maxY - minY),
+        zIndex: Math.max(...selectedSiblings.map((item) => item.zIndex || 1)),
+        visible: true,
+        props: {
+          backgroundColor: 'transparent',
+          borderRadius: 0,
+          borderWidth: 0,
+          padding: 0,
+        },
+        children: selectedSiblings.map((item, index) => ({
+          ...item,
+          parentId: groupId,
+          x: item.x - minX,
+          y: item.y - minY,
+          zIndex: index + 1,
+        })),
+      };
+
+      let inserted = false;
+      return siblings.reduce<CanvasElement[]>((next, item) => {
+        if (!selectedSet.has(item.id)) {
+          next.push(item);
+          return next;
+        }
+
+        if (!inserted) {
+          next.push(group);
+          inserted = true;
+        }
+
+        return next;
+      }, []);
+    };
+
+    const updateParentChildren = (nodes: CanvasElement[]): CanvasElement[] => {
+      if (parentId === null) {
+        return makeGroupedSiblings(nodes);
+      }
+
+      return nodes.map((item) => {
+        if (item.id === parentId) {
+          return {
+            ...item,
+            children: makeGroupedSiblings(item.children || []),
+          };
+        }
+
+        if (!item.children?.length) {
+          return item;
+        }
+
+        return {
+          ...item,
+          children: updateParentChildren(item.children),
+        };
+      });
+    };
+
+    updateElementsWithHistory((currentElements) => updateParentChildren(currentElements), groupId);
+    setSelectedIds([groupId]);
+    setSelectedId(groupId);
+    setRightPanel('properties');
+  }, [elements, findElementEntry, selectedIds, updateElementsWithHistory]);
+
+  const handleUngroupSelected = useCallback(() => {
+    if (!selectedId) {
+      return;
+    }
+
+    const entry = findElementEntry(elements, selectedId);
+    if (!entry?.element.children?.length || entry.element.locked) {
+      return;
+    }
+
+    const parentId = entry.parentId;
+    const children = entry.element.children;
+    const expandedIds = children.map((child) => child.id);
+    const expandSiblings = (siblings: CanvasElement[]): CanvasElement[] => (
+      siblings.flatMap((item) => {
+        if (item.id !== selectedId) {
+          return [item];
+        }
+
+        return children.map((child, index) => {
+          const nextChild: CanvasElement = {
+            ...child,
+            x: item.x + child.x,
+            y: item.y + child.y,
+            zIndex: (item.zIndex || 1) + index,
+          };
+
+          if (parentId) {
+            nextChild.parentId = parentId;
+          } else {
+            delete nextChild.parentId;
+          }
+
+          return nextChild;
+        });
+      })
+    );
+
+    const updateParentChildren = (nodes: CanvasElement[]): CanvasElement[] => {
+      if (parentId === null) {
+        return expandSiblings(nodes);
+      }
+
+      return nodes.map((item) => {
+        if (item.id === parentId) {
+          return {
+            ...item,
+            children: expandSiblings(item.children || []),
+          };
+        }
+
+        if (!item.children?.length) {
+          return item;
+        }
+
+        return {
+          ...item,
+          children: updateParentChildren(item.children),
+        };
+      });
+    };
+
+    const nextSelectedId = expandedIds[0] ?? null;
+    updateElementsWithHistory((currentElements) => updateParentChildren(currentElements), nextSelectedId);
+    setSelectedIds(nextSelectedId ? [nextSelectedId] : []);
+    setSelectedId(nextSelectedId);
+    setRightPanel('layers');
+  }, [elements, findElementEntry, selectedId, updateElementsWithHistory]);
+
   // Get selected element
   const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
+  const selectedEntries = useMemo(
+    () => selectedIds
+      .map((id) => findElementEntry(elements, id))
+      .filter((entry): entry is { element: CanvasElement; parentId: string | null } => !!entry),
+    [elements, findElementEntry, selectedIds],
+  );
+  const selectedParentId = selectedEntries[0]?.parentId ?? null;
+  const canGroupSelected = selectedEntries.length > 1
+    && selectedEntries.every((entry) => entry.parentId === selectedParentId && !entry.element.locked);
+  const canUngroupSelected = selectedEntries.length === 1
+    && !selectedEntries[0].element.locked
+    && canAcceptNestedDrop(selectedEntries[0].element.type)
+    && Boolean(selectedEntries[0].element.children?.length);
   const canAlignSelected = !!selectedElement && !selectedElement.locked;
   const selectedElementLabel = selectedElement
     ? normalizeElementType(selectedElement.type)
@@ -1584,6 +1803,30 @@ export function CanvasEditor({
             >
               Duplicate
             </button>
+            <button
+              type="button"
+              onClick={handleGroupSelected}
+              disabled={!canGroupSelected}
+              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Group selected layers"
+              aria-label="Group selected layers"
+              data-testid="editor-group-selection"
+            >
+              <Group className="w-4 h-4 inline-block mr-1" />
+              Group
+            </button>
+            <button
+              type="button"
+              onClick={handleUngroupSelected}
+              disabled={!canUngroupSelected}
+              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Ungroup selected element"
+              aria-label="Ungroup selected element"
+              data-testid="editor-ungroup-selection"
+            >
+              <Ungroup className="w-4 h-4 inline-block mr-1" />
+              Ungroup
+            </button>
 
             <div className="w-px h-6 bg-slate-200 mx-1" />
 
@@ -1990,9 +2233,36 @@ export function CanvasEditor({
 
                 <div
                   className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
-                  data-testid={selectedElement ? 'editor-inspector-selection' : 'editor-inspector-empty'}
+                  data-testid={selectedIds.length > 1 ? 'editor-inspector-multi-selection' : selectedElement ? 'editor-inspector-selection' : 'editor-inspector-empty'}
                 >
-                  {selectedElement ? (
+                  {selectedIds.length > 1 ? (
+                    <>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-slate-950">
+                            {selectedIds.length} layers selected
+                          </div>
+                          <div className="truncate text-xs text-slate-500">
+                            Unlocked sibling selection
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleGroupSelected}
+                          disabled={!canGroupSelected}
+                          className="inline-flex shrink-0 items-center gap-1 rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                        >
+                          <Group className="h-3.5 w-3.5" />
+                          Group
+                        </button>
+                      </div>
+                      {!canGroupSelected && (
+                        <div className="mt-2 text-[11px] font-medium text-amber-700">
+                          Select unlocked sibling layers to create a group.
+                        </div>
+                      )}
+                    </>
+                  ) : selectedElement ? (
                     <>
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
@@ -2014,6 +2284,16 @@ export function CanvasEditor({
                           )}
                         </div>
                       </div>
+                      {canUngroupSelected && (
+                        <button
+                          type="button"
+                          onClick={handleUngroupSelected}
+                          className="mt-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                        >
+                          <Ungroup className="h-3.5 w-3.5" />
+                          Ungroup
+                        </button>
+                      )}
                       <div className="mt-2 grid grid-cols-4 gap-1 text-[11px] font-medium text-slate-500">
                         <span className="rounded bg-white px-2 py-1 tabular-nums">X {Math.round(selectedElement.x)}</span>
                         <span className="rounded bg-white px-2 py-1 tabular-nums">Y {Math.round(selectedElement.y)}</span>
@@ -2034,7 +2314,7 @@ export function CanvasEditor({
                 {rightPanel === 'layers' ? (
                   <LayersPanel
                     elements={elements}
-                    selectedIds={selectedId ? [selectedId] : []}
+                    selectedIds={selectedIds}
                     onSelect={handleLayerSelect}
                     onReorder={handleLayerReorder}
                     onVisibilityToggle={handleLayerVisibilityToggle}

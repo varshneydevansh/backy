@@ -163,6 +163,8 @@ function LayerItem({
     return (
         <div
             className={`layer-item ${isSelected ? 'selected' : ''} ${isHidden ? 'hidden' : ''} ${isLocked ? 'locked' : ''}`}
+            data-layer-id={element.id}
+            data-layer-selected={isSelected ? 'true' : 'false'}
             style={{
                 display: 'flex',
                 alignItems: 'center',
