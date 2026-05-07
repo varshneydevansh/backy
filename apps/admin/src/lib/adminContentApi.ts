@@ -210,6 +210,26 @@ export async function deleteSite(siteId: string): Promise<void> {
   }
 }
 
+export async function updateSite(siteId: string, input: Partial<SiteCreateInput>): Promise<Site> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      ...input,
+      isPublished: input.status === 'published',
+    }),
+  });
+  const payload = await readJson<ApiSiteResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to save site');
+  }
+
+  return toStoreSite(payload.data.site);
+}
+
 export async function listPages(siteId: string): Promise<Page[]> {
   const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages?includeUnpublished=true`);
   const payload = await readJson<ApiListPagesResponse>(response);

@@ -18,6 +18,10 @@ import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { cn } from '@/lib/utils';
+import {
+  deleteSite as deleteSiteFromApi,
+  updateSite as updateSiteFromApi,
+} from '@/lib/adminContentApi';
 import type {
   Comment,
   Contact,
@@ -161,6 +165,7 @@ function EditSitePage() {
   });
 
   const [isLoading, setIsLoading] = useState(false);
+  const [siteSettingsError, setSiteSettingsError] = useState<string | null>(null);
   const [submissionStatus, setSubmissionStatus] = useState<SubmissionStatusFilter>('pending');
   const [contactStatus, setContactStatus] = useState<ContactStatusFilter>('all');
   const [commentStatus, setCommentStatus] = useState<CommentStatusFilter>('pending');
@@ -870,21 +875,41 @@ function EditSitePage() {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    setSiteSettingsError(null);
 
-    updateSite(siteId, {
+    const nextSite = {
       name: formData.name,
       slug: formData.slug,
       customDomain: formData.customDomain || null,
       description: formData.description,
       status: formData.status,
-    });
+    };
 
-    navigate({ to: '/sites' });
+    try {
+      const savedSite = await updateSiteFromApi(siteApiId || siteId, nextSite);
+      updateSite(siteId, savedSite);
+      navigate({ to: '/sites' });
+    } catch (error) {
+      updateSite(siteId, nextSite);
+      setSiteSettingsError(error instanceof Error
+        ? `${error.message}. Changes were kept locally in this browser.`
+        : 'Backend save failed. Changes were kept locally in this browser.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (confirm('Are you sure you want to delete this site? This action cannot be undone.')) {
+      setSiteSettingsError(null);
+
+      try {
+        await deleteSiteFromApi(siteApiId || siteId);
+      } catch (error) {
+        setSiteSettingsError(error instanceof Error ? error.message : 'Unable to delete site');
+        return;
+      }
+
       deleteSite(siteId);
       navigate({ to: '/sites' });
     }
@@ -941,6 +966,12 @@ function EditSitePage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          {siteSettingsError && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {siteSettingsError}
+            </div>
+          )}
+
           <div className="bg-card border border-border rounded-xl p-6 space-y-6 shadow-sm">
             <div>
               <label className="block text-sm font-medium mb-2">Site Name</label>
@@ -999,7 +1030,7 @@ function EditSitePage() {
           <div className="flex items-center justify-between pt-4">
             <button
               type="button"
-              onClick={handleDelete}
+              onClick={() => void handleDelete()}
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
             >
               <Trash2 className="w-4 h-4" />
