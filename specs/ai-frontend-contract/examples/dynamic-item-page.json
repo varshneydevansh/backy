@@ -48,6 +48,33 @@
         }
       }
     },
+    "navigation": {
+      "primary": [
+        {
+          "id": "nav_home",
+          "type": "page",
+          "pageId": "page_home",
+          "label": "Home",
+          "title": "Home",
+          "slug": "home",
+          "path": "/",
+          "status": "published",
+          "isHomepage": true,
+          "children": []
+        },
+        {
+          "id": "nav_team",
+          "type": "dynamicItem",
+          "label": "Team",
+          "title": "Team",
+          "slug": "team",
+          "path": "/team/devansh",
+          "status": "published",
+          "isHomepage": false,
+          "children": []
+        }
+      ]
+    },
     "route": {
       "type": "dynamicItem",
       "path": "/team/devansh",

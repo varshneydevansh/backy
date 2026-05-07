@@ -1,3 +1,8 @@
+import type {
+  BackyContentDocument as CoreBackyContentDocument,
+  BackyContentElement,
+} from '@backy-cms/core/content-contract';
+
 export interface BackyClientOptions {
   baseUrl: string;
   siteId?: string;
@@ -100,29 +105,8 @@ export interface BackyNavigationItem {
   [key: string]: unknown;
 }
 
-export interface BackyElement {
-  id: string;
-  type: string;
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  zIndex?: number;
-  props?: Record<string, unknown>;
-  children?: BackyElement[];
-  [key: string]: unknown;
-}
-
-export interface BackyContentDocument {
-  schemaVersion: string;
-  id: string;
-  kind: 'page' | 'post' | 'template' | 'dynamicItem';
-  title?: string;
-  locale?: string;
-  version?: string;
-  elements: BackyElement[];
-  [key: string]: unknown;
-}
+export type BackyElement = BackyContentElement & Record<string, unknown>;
+export type BackyContentDocument = CoreBackyContentDocument & Record<string, unknown>;
 
 export interface BackyMediaAsset {
   id: string;

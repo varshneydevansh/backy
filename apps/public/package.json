@@ -9,6 +9,7 @@
         "start": "next start -p 3001",
         "lint": "next lint",
         "typecheck": "tsc --noEmit",
+        "test:ai-contract-examples": "node scripts/validate-ai-contract-examples.mjs",
         "test:preview-contract": "node scripts/preview-contract-smoke.mjs",
         "test:admin-contract": "node scripts/admin-contract-smoke.mjs"
     },

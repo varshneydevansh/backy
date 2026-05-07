@@ -49,6 +49,34 @@
         }
       }
     },
+    "navigation": {
+      "primary": [
+        {
+          "id": "nav_home",
+          "type": "page",
+          "pageId": "page_home",
+          "label": "Home",
+          "title": "Home",
+          "slug": "home",
+          "path": "/",
+          "status": "published",
+          "isHomepage": true,
+          "children": []
+        },
+        {
+          "id": "nav_blog",
+          "type": "page",
+          "pageId": "page_blog_index",
+          "label": "Blog",
+          "title": "Blog",
+          "slug": "blog",
+          "path": "/blog",
+          "status": "published",
+          "isHomepage": false,
+          "children": []
+        }
+      ]
+    },
     "route": {
       "type": "post",
       "path": "/blog/content-backed-frontends",

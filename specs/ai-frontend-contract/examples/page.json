@@ -59,6 +59,34 @@
         }
       }
     },
+    "navigation": {
+      "primary": [
+        {
+          "id": "nav_home",
+          "type": "page",
+          "pageId": "page_home",
+          "label": "Home",
+          "title": "Home",
+          "slug": "home",
+          "path": "/",
+          "status": "published",
+          "isHomepage": true,
+          "children": []
+        },
+        {
+          "id": "nav_contact",
+          "type": "page",
+          "pageId": "page_contact",
+          "label": "Contact",
+          "title": "Contact",
+          "slug": "contact",
+          "path": "/contact",
+          "status": "published",
+          "isHomepage": false,
+          "children": []
+        }
+      ]
+    },
     "route": {
       "type": "page",
       "path": "/",

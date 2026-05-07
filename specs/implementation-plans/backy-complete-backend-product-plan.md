@@ -83,9 +83,14 @@ The next implementation should not start by adding more UI screens. The product 
   - Supports data bindings to collection fields.
   - Supports asset IDs instead of raw URLs only.
   - Supports action definitions for links/forms/media/custom actions.
+- **Current progress**:
+  - `packages/core/src/content-contract.ts` now exports the canonical `BackyContentDocument`, `BackyContentElement`, action, data-binding, theme-token, asset, SEO, interaction, and editable-map types.
+  - Core helpers create documents, validate required structure and duplicate element ids, build a flat element index, and find nested elements by stable id.
+  - `packages/sdk-js` now imports its public `BackyContentDocument` and `BackyElement` types from the core content contract instead of maintaining a separate local shape.
 - **Validation**:
   - Typecheck `packages/core`.
   - Add unit tests for minimal valid page/post/template documents.
+  - Current command: `npm run test:content-contract --workspace @backy-cms/core`.
 
 ### Task 1.2: Generate AI contract JSON Schemas
 
@@ -104,6 +109,7 @@ The next implementation should not start by adding more UI screens. The product 
 - **Validation**:
   - Add JSON schema validation script or npm command.
   - Validate all example payloads.
+  - Current command: `npm run test:ai-contract-examples --workspace @backy/public`.
 
 ### Task 1.3: Add canonical sample payloads
 
