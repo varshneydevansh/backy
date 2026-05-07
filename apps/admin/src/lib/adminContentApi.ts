@@ -184,6 +184,25 @@ interface ApiBlogPostResponse {
   };
 }
 
+interface ApiSettings {
+  deliveryMode: SiteSettingsInput['deliveryMode'];
+  apiKeys: {
+    publicApiKey: string;
+    adminApiKey: string;
+  };
+  updatedAt?: string;
+}
+
+interface ApiSettingsResponse {
+  success: boolean;
+  data?: {
+    settings: ApiSettings;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 export interface SiteCreateInput {
   name: string;
   slug: string;
@@ -204,6 +223,14 @@ export interface UserUpdateInput {
   email?: string;
   role?: User['role'];
   status?: User['status'] | 'invited';
+}
+
+export interface SiteSettingsInput {
+  deliveryMode: 'managed-hosting' | 'custom-frontend';
+  apiKeys: {
+    publicApiKey: string;
+    adminApiKey: string;
+  };
 }
 
 export interface PageCreateInput {
@@ -519,6 +546,60 @@ export async function deleteUser(userId: string): Promise<void> {
   if (!response.ok || !payload.success || !payload.data?.deleted) {
     throw new Error(payload.error?.message || 'Unable to delete user');
   }
+}
+
+export async function getSettings(): Promise<SiteSettingsInput> {
+  const response = await fetch(`${getAdminApiBase()}/settings`);
+  const payload = await readJson<ApiSettingsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load settings');
+  }
+
+  return {
+    deliveryMode: payload.data.settings.deliveryMode,
+    apiKeys: payload.data.settings.apiKeys,
+  };
+}
+
+export async function updateSettings(input: Partial<SiteSettingsInput>): Promise<SiteSettingsInput> {
+  const response = await fetch(`${getAdminApiBase()}/settings`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiSettingsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to save settings');
+  }
+
+  return {
+    deliveryMode: payload.data.settings.deliveryMode,
+    apiKeys: payload.data.settings.apiKeys,
+  };
+}
+
+export async function regenerateSettingsApiKeys(): Promise<SiteSettingsInput> {
+  const response = await fetch(`${getAdminApiBase()}/settings`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ action: 'regenerate-api-keys' }),
+  });
+  const payload = await readJson<ApiSettingsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to regenerate API keys');
+  }
+
+  return {
+    deliveryMode: payload.data.settings.deliveryMode,
+    apiKeys: payload.data.settings.apiKeys,
+  };
 }
 
 export async function listPages(siteId: string): Promise<Page[]> {

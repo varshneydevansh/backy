@@ -27,6 +27,11 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStore, type DeliveryMode } from '@/stores/mockStore';
+import {
+  getSettings,
+  regenerateSettingsApiKeys,
+  updateSettings as updateBackendSettings,
+} from '@/lib/adminContentApi';
 
 // ============================================
 // ROUTE DEFINITION
@@ -188,6 +193,8 @@ function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general');
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('managed-hosting');
   const [saved, setSaved] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const persistedDeliveryMode = useStore((state) => state.settings.deliveryMode);
   const updateSettings = useStore((state) => state.updateSettings);
   const publicApiKey = useStore((state) => state.settings.apiKeys.publicApiKey);
@@ -198,10 +205,62 @@ function SettingsPage() {
     setDeliveryMode(persistedDeliveryMode);
   }, [persistedDeliveryMode]);
 
-  const handleSave = () => {
-    updateSettings({ deliveryMode });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSettings = async () => {
+      try {
+        const backendSettings = await getSettings();
+        if (!cancelled) {
+          updateSettings(backendSettings);
+          setDeliveryMode(backendSettings.deliveryMode);
+          setNotice(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setNotice('Using local fallback settings because the backend settings API is unavailable.');
+        }
+      }
+    };
+
+    void loadSettings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [updateSettings]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setNotice(null);
+
+    try {
+      const backendSettings = await updateBackendSettings({ deliveryMode });
+      updateSettings(backendSettings);
+      setDeliveryMode(backendSettings.deliveryMode);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      updateSettings({ deliveryMode });
+      setNotice('Backend save failed, so local fallback settings were updated only.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRegenerateKeys = async () => {
+    setNotice(null);
+
+    try {
+      const backendSettings = await regenerateSettingsApiKeys();
+      updateSettings(backendSettings);
+      setDeliveryMode(backendSettings.deliveryMode);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      regenerateApiKeys();
+      setNotice('Backend key regeneration failed, so local fallback keys were regenerated only.');
+    }
   };
 
   return (
@@ -216,10 +275,11 @@ function SettingsPage() {
         </div>
 
         <button
-          onClick={handleSave}
+          onClick={() => void handleSave()}
+          disabled={isSaving}
           className={cn(
             'flex items-center gap-2 px-4 py-2 rounded-lg font-medium',
-            'bg-primary text-primary-foreground hover:bg-primary/90 transition-colors'
+            'bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed'
           )}
         >
           {saved ? (
@@ -230,11 +290,17 @@ function SettingsPage() {
           ) : (
             <>
               <Save className="w-4 h-4" />
-              Save Changes
+              {isSaving ? 'Saving...' : 'Save Changes'}
             </>
           )}
         </button>
       </div>
+
+      {notice && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {notice}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border">
@@ -271,7 +337,7 @@ function SettingsPage() {
           <SecuritySettings
             publicApiKey={publicApiKey}
             adminApiKey={adminApiKey}
-            onRegenerateKeys={regenerateApiKeys}
+            onRegenerateKeys={handleRegenerateKeys}
           />
         )}
       </div>

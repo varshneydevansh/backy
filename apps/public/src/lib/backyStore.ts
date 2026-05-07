@@ -160,6 +160,15 @@ interface StoreUser {
   invitedAt: string | null;
 }
 
+interface StoreSettings {
+  deliveryMode: 'managed-hosting' | 'custom-frontend';
+  apiKeys: {
+    publicApiKey: string;
+    adminApiKey: string;
+  };
+  updatedAt: string;
+}
+
 interface Pagination {
   total: number;
   limit: number;
@@ -315,6 +324,19 @@ const USER_LIST: StoreUser[] = [
     invitedAt: null,
   },
 ];
+
+const createRuntimeApiKey = (kind: 'public' | 'admin') => (
+  `${kind === 'public' ? 'pk' : 'sk'}_live_${randomUUID().replace(/-/g, '').slice(0, 24)}`
+);
+
+let SETTINGS: StoreSettings = {
+  deliveryMode: 'managed-hosting',
+  apiKeys: {
+    publicApiKey: createRuntimeApiKey('public'),
+    adminApiKey: createRuntimeApiKey('admin'),
+  },
+  updatedAt: nowIso,
+};
 
 const PAGE_LIST: StorePage[] = [
   {
@@ -788,6 +810,7 @@ interface AdminContentSnapshot {
   pages?: StorePage[];
   blogPosts?: StoreBlogPost[];
   users?: StoreUser[];
+  settings?: StoreSettings;
   revisions?: ContentRevision[];
   previewTokens?: PreviewToken[];
 }
@@ -891,6 +914,17 @@ function ensurePersistedAdminContentLoaded() {
       USER_LIST.splice(0, USER_LIST.length, ...parsed.users);
     }
 
+    if (parsed.settings && typeof parsed.settings === 'object') {
+      SETTINGS = {
+        ...SETTINGS,
+        ...parsed.settings,
+        apiKeys: {
+          ...SETTINGS.apiKeys,
+          ...(parsed.settings.apiKeys || {}),
+        },
+      };
+    }
+
     if (Array.isArray(parsed.revisions)) {
       CONTENT_REVISIONS.splice(0, CONTENT_REVISIONS.length, ...parsed.revisions);
     }
@@ -914,6 +948,7 @@ function persistAdminContent() {
           pages: PAGE_LIST,
           blogPosts: BLOG_POSTS,
           users: USER_LIST,
+          settings: SETTINGS,
           revisions: CONTENT_REVISIONS,
           previewTokens: PREVIEW_TOKENS,
         } satisfies AdminContentSnapshot,
@@ -2653,6 +2688,62 @@ export function deleteAdminUser(userId: string): boolean {
   USER_LIST.splice(index, 1);
   persistAdminContent();
   return true;
+}
+
+const normalizeDeliveryMode = (
+  value: unknown,
+  fallback: StoreSettings['deliveryMode'] = 'managed-hosting',
+): StoreSettings['deliveryMode'] => (
+  value === 'managed-hosting' || value === 'custom-frontend' ? value : fallback
+);
+
+export function getAdminSettings(): StoreSettings {
+  ensurePersistedAdminContentLoaded();
+  return clone(SETTINGS);
+}
+
+export function updateAdminSettings(input: Record<string, unknown>): StoreSettings {
+  ensurePersistedAdminContentLoaded();
+
+  const apiKeysInput = toRecord(input.apiKeys);
+  SETTINGS = {
+    ...SETTINGS,
+    deliveryMode: input.deliveryMode === undefined
+      ? SETTINGS.deliveryMode
+      : normalizeDeliveryMode(input.deliveryMode, SETTINGS.deliveryMode),
+    apiKeys: {
+      publicApiKey: apiKeysInput.publicApiKey === undefined
+        ? SETTINGS.apiKeys.publicApiKey
+        : sanitizeString(apiKeysInput.publicApiKey) || SETTINGS.apiKeys.publicApiKey,
+      adminApiKey: apiKeysInput.adminApiKey === undefined
+        ? SETTINGS.apiKeys.adminApiKey
+        : sanitizeString(apiKeysInput.adminApiKey) || SETTINGS.apiKeys.adminApiKey,
+    },
+    updatedAt: new Date().toISOString(),
+  };
+
+  persistAdminContent();
+  return clone(SETTINGS);
+}
+
+export function regenerateAdminApiKeys(kind: 'all' | 'public' | 'admin' = 'all'): StoreSettings {
+  ensurePersistedAdminContentLoaded();
+
+  SETTINGS = {
+    ...SETTINGS,
+    apiKeys: {
+      publicApiKey: kind === 'all' || kind === 'public'
+        ? createRuntimeApiKey('public')
+        : SETTINGS.apiKeys.publicApiKey,
+      adminApiKey: kind === 'all' || kind === 'admin'
+        ? createRuntimeApiKey('admin')
+        : SETTINGS.apiKeys.adminApiKey,
+    },
+    updatedAt: new Date().toISOString(),
+  };
+
+  persistAdminContent();
+  return clone(SETTINGS);
 }
 
 export function getPageSummary(siteId: string, options: { includeUnpublished?: boolean } = {}): Omit<StorePage, 'content'>[] {
@@ -4433,4 +4524,4 @@ export function getMediaById(siteId: string, id: string): MediaItem | undefined 
   return item ? clone(item) : undefined;
 }
 
-export { type ContentRevision, type Pagination, type StoreBlogPost, type StorePage, type StoreSite, type StoreUser };
+export { type ContentRevision, type Pagination, type StoreBlogPost, type StorePage, type StoreSettings, type StoreSite, type StoreUser };

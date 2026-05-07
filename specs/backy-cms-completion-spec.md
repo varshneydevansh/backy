@@ -152,6 +152,7 @@ Legend:
 - ✅ canvas drop/drag reliability pass added: component drops use canvas-relative coordinates, pasteboard drops are ignored, nested child drag ids are preserved, and selected elements show clearer bounding-box metrics.
 - ✅ layers panel wiring added for editor parity: right-side layer view can select, root-reorder, hide/show, lock/unlock, duplicate, and delete persisted canvas elements; public renderer skips hidden elements.
 - ✅ users admin API baseline added: team users now persist through `GET/POST/PATCH/DELETE /api/admin/users` and the admin users screens use backend-first flows with local fallback.
+- ✅ settings admin API baseline added: delivery mode and API keys now persist through `GET/PATCH/POST /api/admin/settings`, and the settings page uses backend-first load/save/regenerate flows with local fallback.
 - ✅ list editing now supports marker-level control (`disc`, `circle`, `square`, `decimal`, alpha, roman) from list content panel and renderer
 - ⚠️ remaining parity targets: table/map embed behavior, comment blocks, shared status/action UX, and advanced list nesting behavior (indent/outdent stability at deep levels)
 
