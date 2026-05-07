@@ -8,6 +8,7 @@ import {
   Download,
   ExternalLink,
   Globe,
+  AlertTriangle,
   RefreshCw,
   Save,
   Send,
@@ -20,8 +21,10 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { cn } from '@/lib/utils';
 import {
   deleteSite as deleteSiteFromApi,
+  getSiteReadiness,
   updateSite as updateSiteFromApi,
 } from '@/lib/adminContentApi';
+import type { SiteReadiness } from '@/lib/adminContentApi';
 import type {
   Comment,
   Contact,
@@ -129,6 +132,18 @@ function downloadBlob(filename: string, blob: Blob): void {
   URL.revokeObjectURL(url);
 }
 
+function readinessStatusLabel(value?: SiteReadiness['statusLabel']): string {
+  if (value === 'ready') return 'Ready';
+  if (value === 'blocked') return 'Blocked';
+  return 'Needs attention';
+}
+
+function readinessStatusClass(value?: SiteReadiness['statusLabel']): string {
+  if (value === 'ready') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (value === 'blocked') return 'border-red-200 bg-red-50 text-red-700';
+  return 'border-amber-200 bg-amber-50 text-amber-700';
+}
+
 export const Route = createFileRoute('/sites/$siteId')({
   component: EditSitePage,
 });
@@ -175,6 +190,9 @@ function EditSitePage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [siteSettingsError, setSiteSettingsError] = useState<string | null>(null);
+  const [readiness, setReadiness] = useState<SiteReadiness | null>(null);
+  const [readinessLoading, setReadinessLoading] = useState(false);
+  const [readinessError, setReadinessError] = useState<string | null>(null);
   const [submissionStatus, setSubmissionStatus] = useState<SubmissionStatusFilter>('pending');
   const [contactStatus, setContactStatus] = useState<ContactStatusFilter>('all');
   const [commentStatus, setCommentStatus] = useState<CommentStatusFilter>('pending');
@@ -202,6 +220,21 @@ function EditSitePage() {
 
   const setWorkflowError = (message: string | null) =>
     setState((prev) => ({ ...prev, errorMessage: message }));
+
+  const loadReadiness = async () => {
+    if (!siteApiId) return;
+    setReadinessLoading(true);
+    setReadinessError(null);
+    try {
+      const nextReadiness = await getSiteReadiness(siteApiId);
+      setReadiness(nextReadiness);
+    } catch (error) {
+      setReadiness(null);
+      setReadinessError(error instanceof Error ? error.message : 'Unable to load site readiness.');
+    } finally {
+      setReadinessLoading(false);
+    }
+  };
 
   const loadForms = async () => {
     if (!site || !siteApiId) return;
@@ -861,6 +894,13 @@ function EditSitePage() {
   }, [siteApiId, submissionStatus, commentStatus, contactStatus, commentSearch, commentRequestId, commentTargetType, commentTargetId]);
 
   useEffect(() => {
+    if (siteApiId) {
+      void loadReadiness();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteApiId]);
+
+  useEffect(() => {
     if (state.selectedFormId && siteApiId) {
       void loadSubmissions(state.selectedFormId);
       void loadContacts(state.selectedFormId);
@@ -880,6 +920,11 @@ function EditSitePage() {
   }, [state.commentReportReasons, commentBlockReason]);
 
   const activeForm = state.forms.find((form) => form.id === state.selectedFormId);
+  const readinessFindings = readiness?.checks
+    .filter((check) => check.status !== 'pass')
+    .slice(0, 5) || [];
+  const readinessPages = readiness?.pages || [];
+  const readinessSummary = readiness?.summary;
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -897,6 +942,9 @@ function EditSitePage() {
     try {
       const savedSite = await updateSiteFromApi(siteApiId || siteId, nextSite);
       updateSite(siteId, savedSite);
+      if (siteApiId) {
+        void loadReadiness();
+      }
       navigate({ to: '/sites' });
     } catch (error) {
       updateSite(siteId, nextSite);
@@ -973,6 +1021,164 @@ function EditSitePage() {
             Visit Site
           </button>
         </div>
+
+        <section className="bg-card border border-border rounded-xl p-6 shadow-sm" data-testid="site-readiness-panel">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-semibold">Publish readiness</h2>
+                <span
+                  className={cn(
+                    'rounded-md border px-2 py-1 text-xs font-semibold',
+                    readinessStatusClass(readiness?.statusLabel),
+                  )}
+                >
+                  {readinessLoading ? 'Checking...' : readinessStatusLabel(readiness?.statusLabel)}
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Backend validation for public delivery, custom frontends, and editor-created pages.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadReadiness()}
+              disabled={!siteApiId || readinessLoading}
+              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw className={cn('h-4 w-4', readinessLoading && 'animate-spin')} />
+              Refresh
+            </button>
+          </div>
+
+          {readinessError ? (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {readinessError}
+            </div>
+          ) : (
+            <>
+              <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-8">
+                <div className="rounded-lg border border-border bg-background px-3 py-2">
+                  <div className="text-xs font-medium text-muted-foreground">Score</div>
+                  <div className="mt-1 text-2xl font-semibold tabular-nums">
+                    {readiness ? `${readiness.score}%` : '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-background px-3 py-2">
+                  <div className="text-xs font-medium text-muted-foreground">Errors</div>
+                  <div className="mt-1 text-2xl font-semibold tabular-nums text-red-600">
+                    {readinessSummary?.errors ?? '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-background px-3 py-2">
+                  <div className="text-xs font-medium text-muted-foreground">Warnings</div>
+                  <div className="mt-1 text-2xl font-semibold tabular-nums text-amber-600">
+                    {readinessSummary?.warnings ?? '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-background px-3 py-2">
+                  <div className="text-xs font-medium text-muted-foreground">Pages</div>
+                  <div className="mt-1 text-2xl font-semibold tabular-nums">
+                    {readinessSummary?.pages ?? '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-background px-3 py-2">
+                  <div className="text-xs font-medium text-muted-foreground">Published</div>
+                  <div className="mt-1 text-2xl font-semibold tabular-nums">
+                    {readinessSummary?.publishedPages ?? '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-background px-3 py-2">
+                  <div className="text-xs font-medium text-muted-foreground">Media</div>
+                  <div className="mt-1 text-2xl font-semibold tabular-nums">
+                    {readinessSummary?.media ?? '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-background px-3 py-2">
+                  <div className="text-xs font-medium text-muted-foreground">Collections</div>
+                  <div className="mt-1 text-2xl font-semibold tabular-nums">
+                    {readinessSummary?.collections ?? '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-background px-3 py-2">
+                  <div className="text-xs font-medium text-muted-foreground">Sections</div>
+                  <div className="mt-1 text-2xl font-semibold tabular-nums">
+                    {readinessSummary?.reusableSections ?? '—'}
+                  </div>
+                </div>
+              </div>
+
+              {readinessFindings.length > 0 ? (
+                <div className="mt-5 space-y-2">
+                  {readinessFindings.map((check) => (
+                    <div
+                      key={check.id}
+                      className={cn(
+                        'flex items-start gap-3 rounded-lg border px-3 py-2 text-sm',
+                        check.severity === 'error'
+                          ? 'border-red-200 bg-red-50 text-red-800'
+                          : check.severity === 'warning'
+                            ? 'border-amber-200 bg-amber-50 text-amber-800'
+                            : 'border-slate-200 bg-slate-50 text-slate-700',
+                      )}
+                    >
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <div className="min-w-0">
+                        <div className="font-semibold">{check.label}</div>
+                        <div className="text-xs opacity-90">{check.message}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : readiness ? (
+                <div className="mt-5 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+                  <CheckCircle className="h-4 w-4" />
+                  No readiness blockers or warnings.
+                </div>
+              ) : null}
+
+              {readinessPages.length > 0 && (
+                <div className="mt-5 overflow-hidden rounded-lg border border-border">
+                  <div className="grid grid-cols-[minmax(0,1fr)_120px_110px_90px] gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
+                    <span>Page</span>
+                    <span>Status</span>
+                    <span>Canvas</span>
+                    <span>Score</span>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {readinessPages.slice(0, 8).map((page) => (
+                      <div
+                        key={page.id}
+                        className="grid grid-cols-[minmax(0,1fr)_120px_110px_90px] items-center gap-3 px-3 py-2 text-sm"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{page.title}</div>
+                          <div className="truncate text-xs text-muted-foreground">{page.path}</div>
+                        </div>
+                        <StatusBadge status={page.status} />
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                          {page.canvasSize.width}x{page.canvasSize.height}
+                        </span>
+                        <span
+                          className={cn(
+                            'rounded-md px-2 py-1 text-xs font-semibold tabular-nums',
+                            page.statusLabel === 'ready'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : page.statusLabel === 'blocked'
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-amber-100 text-amber-700',
+                          )}
+                        >
+                          {page.score}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </section>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {siteSettingsError && (
