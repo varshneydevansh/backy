@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Globe, Save, ArrowLeft } from 'lucide-react';
+import { createSite } from '@/lib/adminContentApi';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { cn } from '@/lib/utils';
@@ -17,8 +18,9 @@ export const Route = createFileRoute('/sites/new')({
 
 function NewSitePage() {
     const navigate = useNavigate();
-    const { addSite } = useStore();
+    const { sites, addSite, setSites } = useStore();
     const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [formData, setFormData] = useState({
         name: '',
         slug: '',
@@ -30,19 +32,26 @@ function NewSitePage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
+        setError(null);
 
-        // Simulate network delay
-        await new Promise(resolve => setTimeout(resolve, 800));
-
-        addSite({
+        const input = {
             name: formData.name,
             slug: formData.slug || formData.name.toLowerCase().replace(/\s+/g, '-'),
             customDomain: formData.customDomain || null,
             description: formData.description,
             status: formData.status,
-        });
+        };
 
-        navigate({ to: '/sites' });
+        try {
+            const created = await createSite(input);
+            setSites([created, ...sites.filter((site) => site.id !== created.id)]);
+            navigate({ to: '/sites' });
+        } catch (createError) {
+            setError(createError instanceof Error ? createError.message : 'Unable to create site');
+            addSite(input);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -59,6 +68,12 @@ function NewSitePage() {
             }
         >
             <div className="max-w-2xl mx-auto">
+                {error && (
+                    <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        {error}. A local draft copy was kept in this browser.
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="bg-card border border-border rounded-xl p-6 space-y-6 shadow-sm">
 

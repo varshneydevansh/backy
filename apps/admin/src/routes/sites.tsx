@@ -4,8 +4,10 @@
  * Layout route that shows list at /sites, renders child routes otherwise.
  */
 
+import { useEffect, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
 import { Plus, Globe, Edit, Trash2 } from 'lucide-react';
+import { deleteSite as deleteSiteFromApi, listSites } from '@/lib/adminContentApi';
 import { useStore, type Site } from '@/stores/mockStore';
 import { useDataTable, type Column } from '@/hooks/useDataTable';
 import { PageShell } from '@/components/layout/PageShell';
@@ -31,7 +33,54 @@ function SitesLayout() {
 
 function SitesListView() {
   const navigate = useNavigate();
-  const { sites, deleteSite } = useStore();
+  const { sites, setSites, deleteSite } = useStore();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSites = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const backendSites = await listSites();
+        if (!cancelled) {
+          setSites(backendSites);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : 'Unable to load sites');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadSites();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [setSites]);
+
+  const handleDeleteSite = async (site: Site) => {
+    if (!confirm('Are you sure you want to delete this site?')) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await deleteSiteFromApi(site.publicSiteId || site.id);
+      deleteSite(site.id);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete site');
+    }
+  };
 
   // Define columns
   const columns: Column<Site>[] = [
@@ -82,11 +131,7 @@ function SitesListView() {
             <Edit className="w-4 h-4" />
           </button>
           <button
-            onClick={() => {
-              if (confirm('Are you sure you want to delete this site?')) {
-                deleteSite(site.id);
-              }
-            }}
+            onClick={() => void handleDeleteSite(site)}
             className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
             title="Delete Site"
           >
@@ -128,6 +173,18 @@ function SitesListView() {
         </Link>
       }
     >
+      {error && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {error}
+        </div>
+      )}
+
+      {isLoading && (
+        <div className="mb-4 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          Loading sites from backend...
+        </div>
+      )}
+
       {/* Search & Filter Bar */}
       <div className="flex items-center gap-4 mb-6">
         <div className="relative flex-1 max-w-sm">

@@ -93,6 +93,7 @@ interface AppState {
     settings: AppSettings;
 
     // Actions
+    setSites: (sites: Site[]) => void;
     addSite: (site: Omit<Site, 'id' | 'pageCount' | 'lastUpdated'>) => void;
     updateSite: (id: string, updates: Partial<Site>) => void;
     deleteSite: (id: string) => void;
@@ -258,6 +259,8 @@ export const useStore = create<AppState>()(
             settings: INITIAL_SETTINGS,
 
             // Site Actions
+            setSites: (sites) => set({ sites }),
+
             addSite: (site) => set((state) => ({
                 sites: [{
                     ...site,
