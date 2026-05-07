@@ -15,6 +15,23 @@ interface RouteParams {
 
 type CommentStatus = 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked';
 
+const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+  NextResponse.json(
+    {
+      success: false,
+      requestId,
+      error: {
+        code,
+        message,
+      },
+      errorMessage: message,
+    },
+    { status },
+  )
+);
+
 function parseStatus(raw: unknown): CommentStatus | null {
   if (
     raw === 'pending' ||
@@ -77,50 +94,56 @@ function parseBody(raw: unknown): {
 }
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
+  const requestId = _request.headers.get('x-request-id') || makeRequestId();
+
   try {
     const { siteId, commentId } = await params;
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return NextResponse.json({ error: 'Site not found' }, { status: 404 });
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
     const comment = getCommentById(commentId);
     if (!comment || comment.siteId !== site.id) {
-      return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
+      return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
     }
 
-    return NextResponse.json({ comment });
+    return NextResponse.json({
+      success: true,
+      requestId,
+      data: {
+        comment,
+      },
+      comment,
+    });
   } catch (error) {
     console.error('API Error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    );
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const baseRequestId = request.headers.get('x-request-id') || makeRequestId();
+
   try {
     const { siteId, commentId } = await params;
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return NextResponse.json({ error: 'Site not found' }, { status: 404 });
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', baseRequestId);
     }
 
     const comment = getCommentById(commentId);
     if (!comment || comment.siteId !== site.id) {
-      return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
+      return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', baseRequestId);
     }
 
     const payload = parseBody(await request.json().catch(() => null));
     if (!payload) {
-      return NextResponse.json(
-        { error: 'Invalid payload. status is required.' },
-        { status: 400 },
-      );
+      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status is required.', baseRequestId);
     }
+    const requestId = payload.requestId || baseRequestId;
 
     const updated = updateCommentStatus(comment.id, {
       status: payload.status,
@@ -132,18 +155,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!updated) {
-      return NextResponse.json(
-        { error: 'Unable to update comment' },
-        { status: 409 },
-      );
+      return errorResponse(409, 'COMMENT_UPDATE_FAILED', 'Unable to update comment', requestId);
     }
 
-    return NextResponse.json({ comment: updated as Comment });
+    return NextResponse.json({
+      success: true,
+      requestId,
+      data: {
+        comment: updated as Comment,
+      },
+      comment: updated as Comment,
+    });
   } catch (error) {
     console.error('API Error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    );
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', baseRequestId);
   }
 }

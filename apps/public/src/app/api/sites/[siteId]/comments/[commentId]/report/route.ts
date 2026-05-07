@@ -13,6 +13,23 @@ interface RouteParams {
   }>;
 }
 
+const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+  NextResponse.json(
+    {
+      success: false,
+      requestId,
+      error: {
+        code,
+        message,
+      },
+      errorMessage: message,
+    },
+    { status },
+  )
+);
+
 function parseTextInput(raw: unknown): string {
   return typeof raw === 'string' ? raw.trim() : '';
 }
@@ -53,41 +70,50 @@ function parseBody(raw: unknown): {
 }
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
+  const requestId = _request.headers.get('x-request-id') || makeRequestId();
+
   try {
     const { siteId } = await params;
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return NextResponse.json({ error: 'Site not found' }, { status: 404 });
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
     const reasons = getCommentReportReasons();
-    return NextResponse.json({ reasons });
+    return NextResponse.json({
+      success: true,
+      requestId,
+      data: {
+        reasons,
+      },
+      reasons,
+    });
   } catch (error) {
     console.error('API Error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  const baseRequestId = request.headers.get('x-request-id') || makeRequestId();
+
   try {
     const { siteId, commentId } = await params;
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return NextResponse.json({ error: 'Site not found' }, { status: 404 });
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', baseRequestId);
     }
 
     const comment = getCommentById(commentId);
     if (!comment || comment.siteId !== site.id) {
-      return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
+      return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', baseRequestId);
     }
 
     const payload = parseBody(await request.json().catch(() => null));
     if (!payload) {
-      return NextResponse.json(
-        { error: 'Invalid payload. reason is required.' },
-        { status: 400 },
-      );
+      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. reason is required.', baseRequestId);
     }
+    const requestId = payload.requestId || baseRequestId;
 
     const updated = reportComment({
       commentId: comment.id,
@@ -98,18 +124,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!updated) {
-      return NextResponse.json(
-        { error: 'Unable to process report' },
-        { status: 409 },
-      );
+      return errorResponse(409, 'COMMENT_REPORT_FAILED', 'Unable to process report', requestId);
     }
 
-    return NextResponse.json({ comment: updated }, { status: 201 });
+    return NextResponse.json({
+      success: true,
+      requestId,
+      data: {
+        comment: updated,
+      },
+      comment: updated,
+    }, { status: 201 });
   } catch (error) {
     console.error('API Error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    );
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', baseRequestId);
   }
 }

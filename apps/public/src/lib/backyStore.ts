@@ -1040,6 +1040,7 @@ const MEDIA_FOLDERS: MediaFolder[] = [
 
 const MEDIA_CATALOG_PATH = join(process.cwd(), 'data', 'backy', 'media-library.json');
 const ADMIN_CONTENT_PATH = join(process.cwd(), 'data', 'backy', 'admin-content.json');
+const INTERACTION_STORE_PATH = join(process.cwd(), 'data', 'backy', 'interactions.json');
 let persistedAdminContentLoaded = false;
 
 interface AdminContentSnapshot {
@@ -1059,6 +1060,13 @@ interface AdminContentSnapshot {
 interface MediaCatalogSnapshot {
   media?: MediaItem[];
   folders?: MediaFolder[];
+}
+
+interface InteractionStoreSnapshot {
+  comments?: Comment[];
+  formSubmissions?: FormSubmission[];
+  contacts?: Contact[];
+  auditEvents?: AuditEvent[];
 }
 
 function ensurePersistedMediaLoaded() {
@@ -1384,11 +1392,112 @@ const COMMENT_RATE_WINDOW_MS = 45 * 1000;
 const COMMENT_RATE_LIMIT = 12;
 const COMMENT_SIGNATURES = new Map<string, number[]>();
 const COMMENT_MIN_FILL_MS = 900;
-const AUDIT_EVENTS: AuditEvent[] = [];
 
-let commentStore: Comment[] = [...COMMENT_LIST];
-let formSubmissions: FormSubmission[] = [...FORM_SUBMISSIONS];
-let contactStore: Contact[] = [...CONTACT_LIST];
+interface BackyRuntimeStoreState {
+  comments: Comment[];
+  formSubmissions: FormSubmission[];
+  contacts: Contact[];
+  auditEvents: AuditEvent[];
+}
+
+const runtimeStoreState = ((globalThis as typeof globalThis & {
+  __BACKY_RUNTIME_STORE__?: BackyRuntimeStoreState;
+}).__BACKY_RUNTIME_STORE__ ??= {
+  comments: [...COMMENT_LIST],
+  formSubmissions: [...FORM_SUBMISSIONS],
+  contacts: [...CONTACT_LIST],
+  auditEvents: [],
+});
+
+let commentStore: Comment[] = runtimeStoreState.comments;
+let formSubmissions: FormSubmission[] = runtimeStoreState.formSubmissions;
+let contactStore: Contact[] = runtimeStoreState.contacts;
+const auditEvents: AuditEvent[] = runtimeStoreState.auditEvents;
+
+function setCommentStore(next: Comment[]) {
+  commentStore = next;
+  runtimeStoreState.comments = next;
+}
+
+function setFormSubmissions(next: FormSubmission[]) {
+  formSubmissions = next;
+  runtimeStoreState.formSubmissions = next;
+}
+
+function setContactStore(next: Contact[]) {
+  contactStore = next;
+  runtimeStoreState.contacts = next;
+}
+
+function refreshPersistedInteractionStore() {
+  if (!existsSync(INTERACTION_STORE_PATH)) {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(INTERACTION_STORE_PATH, 'utf8')) as InteractionStoreSnapshot;
+
+    if (Array.isArray(parsed.comments)) {
+      setCommentStore(parsed.comments);
+    }
+
+    if (Array.isArray(parsed.formSubmissions)) {
+      setFormSubmissions(parsed.formSubmissions);
+    }
+
+    if (Array.isArray(parsed.contacts)) {
+      setContactStore(parsed.contacts);
+    }
+
+    if (Array.isArray(parsed.auditEvents)) {
+      auditEvents.splice(0, auditEvents.length, ...parsed.auditEvents);
+    }
+  } catch (error) {
+    console.error('Unable to load persisted interaction store:', error);
+  }
+}
+
+function mergeById<T extends { id: string }>(persisted: T[] | undefined, current: T[]): T[] {
+  const merged = new Map<string, T>();
+  for (const item of current) {
+    if (item?.id) {
+      merged.set(item.id, item);
+    }
+  }
+  for (const item of persisted || []) {
+    if (item?.id && !merged.has(item.id)) {
+      merged.set(item.id, item);
+    }
+  }
+  return Array.from(merged.values());
+}
+
+function persistInteractionStore() {
+  try {
+    mkdirSync(dirname(INTERACTION_STORE_PATH), { recursive: true });
+    const persisted = existsSync(INTERACTION_STORE_PATH)
+      ? JSON.parse(readFileSync(INTERACTION_STORE_PATH, 'utf8')) as InteractionStoreSnapshot
+      : {};
+    const nextSnapshot: InteractionStoreSnapshot = {
+      comments: mergeById(persisted.comments, commentStore),
+      formSubmissions: mergeById(persisted.formSubmissions, formSubmissions),
+      contacts: mergeById(persisted.contacts, contactStore),
+      auditEvents: mergeById(persisted.auditEvents, auditEvents),
+    };
+
+    setCommentStore(nextSnapshot.comments || []);
+    setFormSubmissions(nextSnapshot.formSubmissions || []);
+    setContactStore(nextSnapshot.contacts || []);
+    auditEvents.splice(0, auditEvents.length, ...(nextSnapshot.auditEvents || []));
+
+    writeFileSync(
+      INTERACTION_STORE_PATH,
+      JSON.stringify(nextSnapshot, null, 2),
+    );
+  } catch (error) {
+    console.error('Unable to persist interaction store:', error);
+  }
+}
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -5013,6 +5122,8 @@ export function buildContactShareFromSubmission(
   },
   contactShareOverride?: ContactShareOverride,
 ): Contact | null {
+  refreshPersistedInteractionStore();
+
   const form = getFormById(siteId, formId);
   if (!form) {
     return null;
@@ -5087,7 +5198,8 @@ export function buildContactShareFromSubmission(
       updatedAt: new Date().toISOString(),
     };
 
-    contactStore = contactStore.map((item) => (item.id === existingByEmail.id ? merged : item));
+    setContactStore(contactStore.map((item) => (item.id === existingByEmail.id ? merged : item)));
+    persistInteractionStore();
     return clone(merged);
   }
 
@@ -5095,7 +5207,8 @@ export function buildContactShareFromSubmission(
     return null;
   }
 
-  contactStore = [payload, ...contactStore];
+  setContactStore([payload, ...contactStore]);
+  persistInteractionStore();
   return clone(payload);
 }
 
@@ -5133,7 +5246,8 @@ export function trackWebhookEvent(event: {
     error: event.error,
     createdAt: new Date().toISOString(),
   };
-  AUDIT_EVENTS.unshift(entry);
+  auditEvents.unshift(entry);
+  persistInteractionStore();
 }
 
 export function listAuditEvents(
@@ -5148,6 +5262,8 @@ export function listAuditEvents(
     offset?: number;
   } = {},
 ): { events: AuditEvent[]; count: number; pagination: Pagination } {
+  refreshPersistedInteractionStore();
+
   const {
     kind,
     requestId,
@@ -5158,7 +5274,7 @@ export function listAuditEvents(
     offset = 0,
   } = params;
 
-  let filtered = AUDIT_EVENTS.filter((event) => event.siteId === siteId);
+  let filtered = auditEvents.filter((event) => event.siteId === siteId);
 
   if (kind && kind !== 'all') {
     filtered = filtered.filter((event) => event.kind === kind);
@@ -5235,6 +5351,8 @@ export function reportComment(params: {
   actor?: string;
   requestId?: string;
 }): Comment | undefined {
+  refreshPersistedInteractionStore();
+
   const comment = commentStore.find(
     (item) => item.id === params.commentId && item.siteId === params.siteId,
   );
@@ -5260,7 +5378,8 @@ export function reportComment(params: {
     comment.status = 'spam';
   }
 
-  commentStore = commentStore.map((item) => (item.id === comment.id ? comment : item));
+  setCommentStore(commentStore.map((item) => (item.id === comment.id ? comment : item)));
+  persistInteractionStore();
 
   trackWebhookEvent({
     kind: 'comment-reported',
@@ -5293,6 +5412,8 @@ export function bulkUpdateCommentStatus(params: {
   actor?: string | null;
   requestId?: string;
 }): { updated: Comment[]; missingIds: string[] } {
+  refreshPersistedInteractionStore();
+
   const ids = Array.from(new Set(params.commentIds.map((id) => id.trim()).filter(Boolean)));
   if (ids.length === 0) {
     return { updated: [], missingIds: [] };
@@ -5303,7 +5424,7 @@ export function bulkUpdateCommentStatus(params: {
   const normalizedBlockReason = normalizeReportReason(params.blockReason || null);
   const updated: Comment[] = [];
 
-  commentStore = commentStore.map((comment) => {
+  setCommentStore(commentStore.map((comment) => {
     if (comment.siteId !== params.siteId || !ids.includes(comment.id)) {
       return comment;
     }
@@ -5357,7 +5478,8 @@ export function bulkUpdateCommentStatus(params: {
     });
 
     return comment;
-  });
+  }));
+  persistInteractionStore();
 
   return {
     updated: clone(updated),
@@ -5378,6 +5500,8 @@ export function createFormSubmission(record: {
   reviewedBy?: string | null;
   adminNotes?: string | null;
 }): FormSubmission {
+  refreshPersistedInteractionStore();
+
   const submission: FormSubmission = {
     id: `submission-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     siteId: record.siteId,
@@ -5397,7 +5521,8 @@ export function createFormSubmission(record: {
     submittedAt: new Date().toISOString(),
   };
 
-  formSubmissions = [submission, ...formSubmissions];
+  setFormSubmissions([submission, ...formSubmissions]);
+  persistInteractionStore();
   return clone(submission);
 }
 
@@ -5481,6 +5606,8 @@ export function attachCollectionRecordToSubmission(
     errors: SubmissionValidationDetail[];
   },
 ): FormSubmission | undefined {
+  refreshPersistedInteractionStore();
+
   const submission = formSubmissions.find((item) => item.id === submissionId);
   if (!submission) return undefined;
 
@@ -5501,7 +5628,8 @@ export function attachCollectionRecordToSubmission(
   }
 
   submission.collectionRecordErrors = input.errors;
-  formSubmissions = formSubmissions.map((item) => (item.id === submission.id ? submission : item));
+  setFormSubmissions(formSubmissions.map((item) => (item.id === submission.id ? submission : item)));
+  persistInteractionStore();
   return clone(submission);
 }
 
@@ -5509,6 +5637,8 @@ export function listFormSubmissions(
   formId: string,
   params: { status?: FormSubmission['status']; requestId?: string; limit?: number; offset?: number } = {},
 ): { data: FormSubmission[]; pagination: Pagination } {
+  refreshPersistedInteractionStore();
+
   const { status, requestId, limit = 20, offset = 0 } = params;
 
   const records = formSubmissions
@@ -5528,6 +5658,8 @@ export function listFormContacts(
   formId: string,
   params: { status?: Contact['status']; requestId?: string; limit?: number; offset?: number } = {},
 ): { contacts: Contact[]; count: number; pagination: Pagination } {
+  refreshPersistedInteractionStore();
+
   const { status, requestId, limit = 20, offset = 0 } = params;
   const records = contactStore
     .filter((contact) => contact.formId === formId)
@@ -5544,11 +5676,15 @@ export function listFormContacts(
 }
 
 export function getContactById(contactId: string): Contact | undefined {
+  refreshPersistedInteractionStore();
+
   const contact = contactStore.find((item) => item.id === contactId);
   return contact ? clone(contact) : undefined;
 }
 
 export function getSubmissionById(submissionId: string): FormSubmission | undefined {
+  refreshPersistedInteractionStore();
+
   const submission = formSubmissions.find((item) => item.id === submissionId);
   return submission ? clone(submission) : undefined;
 }
@@ -5561,6 +5697,8 @@ export function updateFormSubmissionStatus(
     adminNotes?: string | null;
   },
 ): FormSubmission | undefined {
+  refreshPersistedInteractionStore();
+
   const submission = formSubmissions.find((item) => item.id === submissionId);
   if (!submission) return undefined;
 
@@ -5569,7 +5707,8 @@ export function updateFormSubmissionStatus(
   submission.adminNotes = updates.adminNotes ?? null;
   submission.reviewedAt = new Date().toISOString();
 
-  formSubmissions = formSubmissions.map((item) => (item.id === submission.id ? submission : item));
+  setFormSubmissions(formSubmissions.map((item) => (item.id === submission.id ? submission : item)));
+  persistInteractionStore();
   return clone(submission);
 }
 
@@ -5579,13 +5718,16 @@ export function updateContactStatus(
     status: Contact['status'];
   },
 ): Contact | undefined {
+  refreshPersistedInteractionStore();
+
   const contact = contactStore.find((item) => item.id === contactId);
   if (!contact) return undefined;
 
   contact.status = updates.status;
   contact.updatedAt = new Date().toISOString();
 
-  contactStore = contactStore.map((item) => (item.id === contact.id ? contact : item));
+  setContactStore(contactStore.map((item) => (item.id === contact.id ? contact : item)));
+  persistInteractionStore();
   return clone(contact);
 }
 
@@ -5613,6 +5755,8 @@ export function listComments(
     offset?: number;
   } = {},
 ): { comments: Comment[]; count: number; pagination: Pagination } {
+  refreshPersistedInteractionStore();
+
   const {
     targetType,
     targetId,
@@ -5709,6 +5853,8 @@ export function getCommentsByTarget(
 }
 
 export function getCommentById(commentId: string): Comment | undefined {
+  refreshPersistedInteractionStore();
+
   const comment = commentStore.find((item) => item.id === commentId);
   return comment ? clone(comment) : undefined;
 }
@@ -5724,6 +5870,8 @@ export function updateCommentStatus(
     requestId?: string;
   },
 ): Comment | undefined {
+  refreshPersistedInteractionStore();
+
   const comment = commentStore.find((item) => item.id === commentId);
   if (!comment) return undefined;
 
@@ -5755,6 +5903,9 @@ export function updateCommentStatus(
     comment.blockedAt = null;
   }
 
+  setCommentStore(commentStore.map((item) => (item.id === comment.id ? comment : item)));
+  persistInteractionStore();
+
   trackWebhookEvent({
     kind: 'comment-status',
     siteId: comment.siteId,
@@ -5771,7 +5922,6 @@ export function updateCommentStatus(
     },
   });
 
-  commentStore = commentStore.map((item) => (item.id === comment.id ? comment : item));
   return clone(comment);
 }
 
@@ -5780,6 +5930,8 @@ export function listCommentReplies(siteId: string, params: {
   targetId: string;
   parentId: string;
 }): Comment[] {
+  refreshPersistedInteractionStore();
+
   const replies = commentStore.filter(
     (comment) =>
       comment.siteId === siteId &&
@@ -5805,6 +5957,8 @@ export function createComment(params: {
   requestId?: string;
   ipHash?: string | null;
 }): Comment {
+  refreshPersistedInteractionStore();
+
   const comment: Comment = {
     id: `comment-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     siteId: params.siteId,
@@ -5832,7 +5986,7 @@ export function createComment(params: {
     updatedAt: new Date().toISOString(),
   };
 
-  commentStore = [comment, ...commentStore];
+  setCommentStore([comment, ...commentStore]);
   trackWebhookEvent({
     kind: 'comment-submitted',
     siteId: comment.siteId,

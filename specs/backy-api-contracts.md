@@ -163,8 +163,13 @@ Public page payload should include:
 
 - `GET /api/sites/:siteId/comments`
 - `PATCH /api/sites/:siteId/comments`
+- `GET/PATCH /api/sites/:siteId/comments/:commentId`
 - `GET /api/sites/:siteId/comments/report-reasons`
-  - Site-wide comment moderation/read endpoints return `{ success, requestId, data }` while preserving legacy top-level `comments`, `updated`, `reasons`, and related count fields.
+- `GET/POST /api/sites/:siteId/comments/:commentId/report`
+  - Site-wide comment moderation/read/report endpoints return `{ success, requestId, data }` while preserving legacy top-level `comments`, `comment`, `updated`, `reasons`, and related count fields.
+
+- `GET /api/sites/:siteId/events`
+  - Lists public interaction audit events with `{ success, requestId, data: { siteId, events, count, pagination } }`; legacy top-level `siteId/events/count/pagination` remain for compatibility.
 
 ### 2.4 Security behavior
 - Return `403` if site/page is in private/unpublished state.
