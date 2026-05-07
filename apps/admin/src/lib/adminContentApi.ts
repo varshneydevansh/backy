@@ -912,6 +912,25 @@ const getAdminApiBase = (): string => {
   return `${base.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api/admin`;
 };
 
+const getAdminApiKey = (): string => (
+  getEnvValue('VITE_BACKY_ADMIN_API_KEY') ||
+  getEnvValue('VITE_ADMIN_API_KEY')
+);
+
+const adminFetch: typeof globalThis.fetch = (input, init = {}) => {
+  const apiKey = getAdminApiKey();
+  const headers = new Headers(init.headers);
+
+  if (apiKey && !headers.has('x-backy-admin-key') && !headers.has('authorization')) {
+    headers.set('x-backy-admin-key', apiKey);
+  }
+
+  return globalThis.fetch(input, {
+    ...init,
+    headers,
+  });
+};
+
 const toAdminSiteStatus = (status?: AdminSiteStatus, isPublished?: boolean): Site['status'] => {
   if (status === 'archived') return 'archived';
   if (status === 'published' || isPublished) return 'published';
@@ -1131,7 +1150,7 @@ const readJson = async <T>(response: Response): Promise<T> => {
 };
 
 export async function listSites(): Promise<Site[]> {
-  const response = await fetch(`${getAdminApiBase()}/sites?includeUnpublished=true`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites?includeUnpublished=true`);
   const payload = await readJson<ApiListSitesResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1142,7 +1161,7 @@ export async function listSites(): Promise<Site[]> {
 }
 
 export async function createSite(input: SiteCreateInput): Promise<Site> {
-  const response = await fetch(`${getAdminApiBase()}/sites`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1162,7 +1181,7 @@ export async function createSite(input: SiteCreateInput): Promise<Site> {
 }
 
 export async function deleteSite(siteId: string): Promise<void> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}`, {
     method: 'DELETE',
   });
   const payload = await readJson<ApiDeleteResponse>(response);
@@ -1173,7 +1192,7 @@ export async function deleteSite(siteId: string): Promise<void> {
 }
 
 export async function updateSite(siteId: string, input: Partial<SiteCreateInput>): Promise<Site> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}`, {
     method: 'PATCH',
     headers: {
       'content-type': 'application/json',
@@ -1193,7 +1212,7 @@ export async function updateSite(siteId: string, input: Partial<SiteCreateInput>
 }
 
 export async function getSiteReadiness(siteId: string): Promise<SiteReadiness> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/readiness`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/readiness`);
   const payload = await readJson<ApiSiteReadinessResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1204,7 +1223,7 @@ export async function getSiteReadiness(siteId: string): Promise<SiteReadiness> {
 }
 
 export async function getPageReadiness(siteId: string, pageId: string): Promise<PageReadiness> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/readiness`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/readiness`);
   const payload = await readJson<ApiPageReadinessResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1215,7 +1234,7 @@ export async function getPageReadiness(siteId: string, pageId: string): Promise<
 }
 
 export async function getBlogPostReadiness(siteId: string, postId: string): Promise<BlogPostReadiness> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/readiness`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/readiness`);
   const payload = await readJson<ApiBlogPostReadinessResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1226,7 +1245,7 @@ export async function getBlogPostReadiness(siteId: string, postId: string): Prom
 }
 
 export async function listUsers(): Promise<User[]> {
-  const response = await fetch(`${getAdminApiBase()}/users`);
+  const response = await adminFetch(`${getAdminApiBase()}/users`);
   const payload = await readJson<ApiListUsersResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1237,7 +1256,7 @@ export async function listUsers(): Promise<User[]> {
 }
 
 export async function getUser(userId: string): Promise<User> {
-  const response = await fetch(`${getAdminApiBase()}/users/${userId}`);
+  const response = await adminFetch(`${getAdminApiBase()}/users/${userId}`);
   const payload = await readJson<ApiUserResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1248,7 +1267,7 @@ export async function getUser(userId: string): Promise<User> {
 }
 
 export async function createUser(input: UserInput): Promise<User> {
-  const response = await fetch(`${getAdminApiBase()}/users`, {
+  const response = await adminFetch(`${getAdminApiBase()}/users`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1265,7 +1284,7 @@ export async function createUser(input: UserInput): Promise<User> {
 }
 
 export async function updateUser(userId: string, input: UserUpdateInput): Promise<User> {
-  const response = await fetch(`${getAdminApiBase()}/users/${userId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/users/${userId}`, {
     method: 'PATCH',
     headers: {
       'content-type': 'application/json',
@@ -1282,7 +1301,7 @@ export async function updateUser(userId: string, input: UserUpdateInput): Promis
 }
 
 export async function deleteUser(userId: string): Promise<void> {
-  const response = await fetch(`${getAdminApiBase()}/users/${userId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/users/${userId}`, {
     method: 'DELETE',
   });
   const payload = await readJson<ApiDeleteResponse>(response);
@@ -1293,7 +1312,7 @@ export async function deleteUser(userId: string): Promise<void> {
 }
 
 export async function getSettings(): Promise<SiteSettingsInput> {
-  const response = await fetch(`${getAdminApiBase()}/settings`);
+  const response = await adminFetch(`${getAdminApiBase()}/settings`);
   const payload = await readJson<ApiSettingsResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1307,7 +1326,7 @@ export async function getSettings(): Promise<SiteSettingsInput> {
 }
 
 export async function updateSettings(input: Partial<SiteSettingsInput>): Promise<SiteSettingsInput> {
-  const response = await fetch(`${getAdminApiBase()}/settings`, {
+  const response = await adminFetch(`${getAdminApiBase()}/settings`, {
     method: 'PATCH',
     headers: {
       'content-type': 'application/json',
@@ -1327,7 +1346,7 @@ export async function updateSettings(input: Partial<SiteSettingsInput>): Promise
 }
 
 export async function regenerateSettingsApiKeys(): Promise<SiteSettingsInput> {
-  const response = await fetch(`${getAdminApiBase()}/settings`, {
+  const response = await adminFetch(`${getAdminApiBase()}/settings`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1347,7 +1366,7 @@ export async function regenerateSettingsApiKeys(): Promise<SiteSettingsInput> {
 }
 
 export async function listPages(siteId: string): Promise<Page[]> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages?includeUnpublished=true`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages?includeUnpublished=true`);
   const payload = await readJson<ApiListPagesResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1358,7 +1377,7 @@ export async function listPages(siteId: string): Promise<Page[]> {
 }
 
 export async function createPage(siteId: string, input: PageCreateInput): Promise<Page> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1375,7 +1394,7 @@ export async function createPage(siteId: string, input: PageCreateInput): Promis
 }
 
 export async function getPage(siteId: string, pageId: string): Promise<Page> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}`);
   const payload = await readJson<ApiPageResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1386,7 +1405,7 @@ export async function getPage(siteId: string, pageId: string): Promise<Page> {
 }
 
 export async function updatePage(siteId: string, pageId: string, input: PageUpdateInput): Promise<Page> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}`, {
     method: 'PATCH',
     headers: {
       'content-type': 'application/json',
@@ -1403,7 +1422,7 @@ export async function updatePage(siteId: string, pageId: string, input: PageUpda
 }
 
 export async function listPageRevisions(siteId: string, pageId: string): Promise<ContentRevision[]> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/revisions?limit=8`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/revisions?limit=8`);
   const payload = await readJson<ApiRevisionListResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1414,7 +1433,7 @@ export async function listPageRevisions(siteId: string, pageId: string): Promise
 }
 
 export async function publishPage(siteId: string, pageId: string): Promise<Page> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/publish`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/publish`, {
     method: 'POST',
   });
   const payload = await readJson<ApiPageResponse>(response);
@@ -1427,7 +1446,7 @@ export async function publishPage(siteId: string, pageId: string): Promise<Page>
 }
 
 export async function archivePage(siteId: string, pageId: string): Promise<Page> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/archive`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/archive`, {
     method: 'POST',
   });
   const payload = await readJson<ApiPageResponse>(response);
@@ -1440,7 +1459,7 @@ export async function archivePage(siteId: string, pageId: string): Promise<Page>
 }
 
 export async function rollbackPage(siteId: string, pageId: string, revisionId: string): Promise<Page> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/rollback`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/rollback`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1457,7 +1476,7 @@ export async function rollbackPage(siteId: string, pageId: string, revisionId: s
 }
 
 export async function createPagePreview(siteId: string, pageId: string): Promise<PreviewLink> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/preview`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/preview`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1478,7 +1497,7 @@ export async function createPagePreview(siteId: string, pageId: string): Promise
 }
 
 export async function deletePage(siteId: string, pageId: string): Promise<void> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}`, {
     method: 'DELETE',
   });
   const payload = await readJson<ApiDeleteResponse>(response);
@@ -1498,7 +1517,7 @@ export async function listBlogPosts(
   if (filters.tagId) query.set('tagId', filters.tagId);
   if (filters.authorId) query.set('authorId', filters.authorId);
 
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog?${query.toString()}`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog?${query.toString()}`);
   const payload = await readJson<ApiListBlogResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1509,7 +1528,7 @@ export async function listBlogPosts(
 }
 
 export async function listBlogCategories(siteId: string): Promise<BlogCategory[]> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/categories`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/categories`);
   const payload = await readJson<ApiListBlogCategoriesResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1520,7 +1539,7 @@ export async function listBlogCategories(siteId: string): Promise<BlogCategory[]
 }
 
 export async function createBlogCategory(siteId: string, input: BlogCategoryInput): Promise<BlogCategory> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/categories`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/categories`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1541,7 +1560,7 @@ export async function updateBlogCategory(
   categoryId: string,
   input: BlogCategoryUpdateInput,
 ): Promise<BlogCategory> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/categories/${categoryId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/categories/${categoryId}`, {
     method: 'PATCH',
     headers: {
       'content-type': 'application/json',
@@ -1558,7 +1577,7 @@ export async function updateBlogCategory(
 }
 
 export async function deleteBlogCategory(siteId: string, categoryId: string): Promise<void> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/categories/${categoryId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/categories/${categoryId}`, {
     method: 'DELETE',
   });
   const payload = await readJson<ApiDeleteResponse>(response);
@@ -1569,7 +1588,7 @@ export async function deleteBlogCategory(siteId: string, categoryId: string): Pr
 }
 
 export async function listBlogTags(siteId: string): Promise<BlogTag[]> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/tags`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/tags`);
   const payload = await readJson<ApiListBlogTagsResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1580,7 +1599,7 @@ export async function listBlogTags(siteId: string): Promise<BlogTag[]> {
 }
 
 export async function listBlogAuthors(siteId: string): Promise<BlogAuthor[]> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/authors`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/authors`);
   const payload = await readJson<ApiListBlogAuthorsResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1591,7 +1610,7 @@ export async function listBlogAuthors(siteId: string): Promise<BlogAuthor[]> {
 }
 
 export async function createBlogTag(siteId: string, input: BlogTagInput): Promise<BlogTag> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/tags`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/tags`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1608,7 +1627,7 @@ export async function createBlogTag(siteId: string, input: BlogTagInput): Promis
 }
 
 export async function updateBlogTag(siteId: string, tagId: string, input: BlogTagUpdateInput): Promise<BlogTag> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/tags/${tagId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/tags/${tagId}`, {
     method: 'PATCH',
     headers: {
       'content-type': 'application/json',
@@ -1625,7 +1644,7 @@ export async function updateBlogTag(siteId: string, tagId: string, input: BlogTa
 }
 
 export async function deleteBlogTag(siteId: string, tagId: string): Promise<void> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/tags/${tagId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/tags/${tagId}`, {
     method: 'DELETE',
   });
   const payload = await readJson<ApiDeleteResponse>(response);
@@ -1636,7 +1655,7 @@ export async function deleteBlogTag(siteId: string, tagId: string): Promise<void
 }
 
 export async function createBlogPost(siteId: string, input: BlogPostInput): Promise<BlogPost> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1653,7 +1672,7 @@ export async function createBlogPost(siteId: string, input: BlogPostInput): Prom
 }
 
 export async function getBlogPost(siteId: string, postId: string): Promise<BlogPost> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}`);
   const payload = await readJson<ApiBlogPostResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1668,7 +1687,7 @@ export async function updateBlogPost(
   postId: string,
   input: BlogPostUpdateInput,
 ): Promise<BlogPost> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}`, {
     method: 'PATCH',
     headers: {
       'content-type': 'application/json',
@@ -1685,7 +1704,7 @@ export async function updateBlogPost(
 }
 
 export async function listBlogPostRevisions(siteId: string, postId: string): Promise<ContentRevision[]> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/revisions?limit=8`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/revisions?limit=8`);
   const payload = await readJson<ApiRevisionListResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1696,7 +1715,7 @@ export async function listBlogPostRevisions(siteId: string, postId: string): Pro
 }
 
 export async function publishBlogPost(siteId: string, postId: string): Promise<BlogPost> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/publish`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/publish`, {
     method: 'POST',
   });
   const payload = await readJson<ApiBlogPostResponse>(response);
@@ -1709,7 +1728,7 @@ export async function publishBlogPost(siteId: string, postId: string): Promise<B
 }
 
 export async function archiveBlogPost(siteId: string, postId: string): Promise<BlogPost> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/archive`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/archive`, {
     method: 'POST',
   });
   const payload = await readJson<ApiBlogPostResponse>(response);
@@ -1722,7 +1741,7 @@ export async function archiveBlogPost(siteId: string, postId: string): Promise<B
 }
 
 export async function rollbackBlogPost(siteId: string, postId: string, revisionId: string): Promise<BlogPost> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/rollback`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/rollback`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1739,7 +1758,7 @@ export async function rollbackBlogPost(siteId: string, postId: string, revisionI
 }
 
 export async function createBlogPostPreview(siteId: string, postId: string): Promise<PreviewLink> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/preview`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/preview`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1760,7 +1779,7 @@ export async function createBlogPostPreview(siteId: string, postId: string): Pro
 }
 
 export async function deleteBlogPost(siteId: string, postId: string): Promise<void> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}`, {
     method: 'DELETE',
   });
   const payload = await readJson<ApiDeleteResponse>(response);
@@ -1771,7 +1790,7 @@ export async function deleteBlogPost(siteId: string, postId: string): Promise<vo
 }
 
 export async function listCollections(siteId: string): Promise<Collection[]> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections`);
   const payload = await readJson<ApiListCollectionsResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1782,7 +1801,7 @@ export async function listCollections(siteId: string): Promise<Collection[]> {
 }
 
 export async function createCollection(siteId: string, input: CollectionInput): Promise<Collection> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1803,7 +1822,7 @@ export async function updateCollection(
   collectionId: string,
   input: Partial<CollectionInput>,
 ): Promise<Collection> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}`, {
     method: 'PATCH',
     headers: {
       'content-type': 'application/json',
@@ -1820,7 +1839,7 @@ export async function updateCollection(
 }
 
 export async function deleteCollection(siteId: string, collectionId: string): Promise<void> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}`, {
     method: 'DELETE',
   });
   const payload = await readJson<ApiDeleteResponse>(response);
@@ -1845,7 +1864,7 @@ export async function listCollectionRecords(
   if (filters.sortBy) query.set('sortBy', filters.sortBy);
   if (filters.sortDirection) query.set('sortDirection', filters.sortDirection);
 
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records?${query.toString()}`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records?${query.toString()}`);
   const payload = await readJson<ApiListCollectionRecordsResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -1879,7 +1898,7 @@ export async function exportCollectionRecordsCsv(
   if (filters.sortBy) query.set('sortBy', filters.sortBy);
   if (filters.sortDirection) query.set('sortDirection', filters.sortDirection);
 
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records?${query.toString()}`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records?${query.toString()}`);
 
   if (!response.ok) {
     const message = await response.text();
@@ -1898,7 +1917,7 @@ export async function importCollectionRecordsCsv(
   const query = new URLSearchParams();
   if (options.upsert) query.set('upsert', 'true');
 
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records/import?${query.toString()}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records/import?${query.toString()}`, {
     method: 'POST',
     headers: {
       'content-type': 'text/csv; charset=utf-8',
@@ -1919,7 +1938,7 @@ export async function createCollectionRecord(
   collectionId: string,
   input: CollectionRecordInput,
 ): Promise<CollectionRecord> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1941,7 +1960,7 @@ export async function updateCollectionRecord(
   recordId: string,
   input: Partial<CollectionRecordInput>,
 ): Promise<CollectionRecord> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records/${recordId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records/${recordId}`, {
     method: 'PATCH',
     headers: {
       'content-type': 'application/json',
@@ -1966,7 +1985,7 @@ export async function bulkUpdateCollectionRecords(
     status?: CollectionRecord['status'];
   },
 ): Promise<BulkCollectionRecordResult> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records/bulk`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records/bulk`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1993,7 +2012,7 @@ export async function deleteCollectionRecord(
   collectionId: string,
   recordId: string,
 ): Promise<void> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records/${recordId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records/${recordId}`, {
     method: 'DELETE',
   });
   const payload = await readJson<ApiDeleteResponse>(response);
@@ -2013,7 +2032,7 @@ export async function listReusableSections(
   if (filters.tag) query.set('tag', filters.tag);
   if (filters.search) query.set('search', filters.search);
 
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections?${query.toString()}`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections?${query.toString()}`);
   const payload = await readJson<ApiListReusableSectionsResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -2027,7 +2046,7 @@ export async function createReusableSection(
   siteId: string,
   input: ReusableSectionInput,
 ): Promise<ReusableSection> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -2048,7 +2067,7 @@ export async function updateReusableSection(
   sectionId: string,
   input: Partial<ReusableSectionInput>,
 ): Promise<ReusableSection> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections/${sectionId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections/${sectionId}`, {
     method: 'PATCH',
     headers: {
       'content-type': 'application/json',
@@ -2065,7 +2084,7 @@ export async function updateReusableSection(
 }
 
 export async function deleteReusableSection(siteId: string, sectionId: string): Promise<void> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections/${sectionId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections/${sectionId}`, {
     method: 'DELETE',
   });
   const payload = await readJson<ApiDeleteResponse>(response);

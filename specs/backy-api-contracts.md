@@ -446,7 +446,9 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 - `packages/sdk-js` wraps this public flow for JavaScript/TypeScript frontends. It intentionally calls the same public endpoints documented above, so consumers can use the SDK or raw HTTP interchangeably without depending on admin/editor internals.
 - CORS policy for custom frontends:
   - allow exact frontend origin(s),
-  - send `requestId` for debug parity.
+  - allow `Authorization`, `X-Backy-Admin-Key`, `X-API-Key`, and `X-Request-Id` headers for configured admin clients,
+  - send `x-backy-request-id` for debug parity.
+  - Admin API key enforcement is opt-in with `BACKY_REQUIRE_ADMIN_API_KEY=true` plus `BACKY_ADMIN_API_KEY` or `BACKY_ADMIN_SECRET_KEY`. Admin clients can send the key with `X-Backy-Admin-Key` or `Authorization: Bearer ...`; the Vite admin app reads `VITE_BACKY_ADMIN_API_KEY` or `VITE_ADMIN_API_KEY` and attaches the header to admin API requests.
 
 ---
 

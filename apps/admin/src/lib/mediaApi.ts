@@ -194,6 +194,25 @@ const getAdminApiBase = (): string => {
   return `${base.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api/admin`;
 };
 
+const getAdminApiKey = (): string => (
+  getEnvValue('VITE_BACKY_ADMIN_API_KEY') ||
+  getEnvValue('VITE_ADMIN_API_KEY')
+);
+
+const adminFetch: typeof globalThis.fetch = (input, init = {}) => {
+  const apiKey = getAdminApiKey();
+  const headers = new Headers(init.headers);
+
+  if (apiKey && !headers.has('x-backy-admin-key') && !headers.has('authorization')) {
+    headers.set('x-backy-admin-key', apiKey);
+  }
+
+  return globalThis.fetch(input, {
+    ...init,
+    headers,
+  });
+};
+
 const toAdminMediaType = (type: ApiMediaItem['type']): MediaAsset['type'] => {
   if (type === 'image' || type === 'video' || type === 'font') {
     return type;
@@ -235,7 +254,7 @@ export async function listMedia(options: MediaListOptions = {}): Promise<MediaAs
   if (options.postId) query.set('postId', options.postId);
   if (options.limit) query.set('limit', `${options.limit}`);
 
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/media?${query.toString()}`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media?${query.toString()}`);
   const payload = await response.json() as ApiMediaListResponse;
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -253,7 +272,7 @@ const toMediaFolder = (folder: ApiMediaFolder): MediaFolder => ({
 });
 
 export async function listMediaFolders(siteId = getDefaultMediaSiteId()): Promise<MediaFolder[]> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/media/folders`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/folders`);
   const payload = await response.json() as ApiMediaFolderListResponse;
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -264,7 +283,7 @@ export async function listMediaFolders(siteId = getDefaultMediaSiteId()): Promis
 }
 
 export async function createMediaFolder(name: string, siteId = getDefaultMediaSiteId()): Promise<MediaFolder> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/media/folders`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/folders`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -281,7 +300,7 @@ export async function createMediaFolder(name: string, siteId = getDefaultMediaSi
 }
 
 export async function deleteMediaFolder(folderId: string, siteId = getDefaultMediaSiteId()): Promise<void> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/media/folders/${folderId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/folders/${folderId}`, {
     method: 'DELETE',
   });
   const payload = await response.json() as ApiDeleteResponse;
@@ -307,7 +326,7 @@ export async function uploadMedia(file: File, options: MediaUploadOptions = {}):
   if (options.fontWeight) formData.set('fontWeight', options.fontWeight);
   if (options.fontStyle) formData.set('fontStyle', options.fontStyle);
 
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/media`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media`, {
     method: 'POST',
     body: formData,
   });
@@ -325,7 +344,7 @@ export async function updateMedia(
   input: MediaUpdateInput,
   siteId = getDefaultMediaSiteId(),
 ): Promise<MediaAsset> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/media/${mediaId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/${mediaId}`, {
     method: 'PATCH',
     headers: {
       'content-type': 'application/json',
@@ -345,7 +364,7 @@ export async function deleteMediaFromBackend(
   mediaId: string,
   siteId = getDefaultMediaSiteId(),
 ): Promise<void> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/media/${mediaId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/${mediaId}`, {
     method: 'DELETE',
   });
   const payload = await response.json() as ApiDeleteResponse;
@@ -360,7 +379,7 @@ export async function bindMediaToTarget(
   input: MediaBindInput,
   siteId = getDefaultMediaSiteId(),
 ): Promise<MediaAsset> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/media/${mediaId}/bind`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/${mediaId}/bind`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
