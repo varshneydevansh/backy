@@ -1120,6 +1120,7 @@ export function CanvasEditor({
 
       // Ctrl+Z / Cmd+Z (Undo)
       if ((e.ctrlKey || e.metaKey) && key === 'z') {
+        e.preventDefault();
         if (e.shiftKey) {
           handleRedo();
         } else {

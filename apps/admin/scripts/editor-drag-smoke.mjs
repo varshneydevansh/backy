@@ -353,6 +353,135 @@ const readEditorElementState = async (client, elementIds) => {
   return Object.fromEntries(entries);
 };
 
+const assertElementState = (actualState, expectedState, label) => {
+  for (const [elementId, expected] of Object.entries(expectedState)) {
+    const actual = actualState[elementId];
+    assert(actual, `${label}: missing ${elementId}`);
+    assert(
+      Math.abs(actual.x - expected.x) <= 1 &&
+      Math.abs(actual.y - expected.y) <= 1 &&
+      Math.abs(actual.width - expected.width) <= 1 &&
+      Math.abs(actual.height - expected.height) <= 1,
+      `${label}: ${elementId} expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
+    );
+  }
+};
+
+const selectElement = async (client, elementId) => {
+  const box = await getElementBox(client, elementId);
+  assert(box, `Missing selectable element ${elementId}`);
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: Math.round(box.x + Math.min(box.width / 2, 60)),
+    y: Math.round(box.y + Math.min(box.height / 2, 24)),
+    button: 'none',
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: Math.round(box.x + Math.min(box.width / 2, 60)),
+    y: Math.round(box.y + Math.min(box.height / 2, 24)),
+    button: 'left',
+    buttons: 1,
+    clickCount: 1,
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: Math.round(box.x + Math.min(box.width / 2, 60)),
+    y: Math.round(box.y + Math.min(box.height / 2, 24)),
+    button: 'left',
+    buttons: 0,
+    clickCount: 1,
+  });
+  await sleep(150);
+};
+
+const pressKey = async (client, key, options = {}) => {
+  const codeByKey = {
+    ArrowLeft: 'ArrowLeft',
+    ArrowRight: 'ArrowRight',
+    ArrowUp: 'ArrowUp',
+    ArrowDown: 'ArrowDown',
+    z: 'KeyZ',
+  };
+  const virtualKeyByKey = {
+    ArrowLeft: 37,
+    ArrowRight: 39,
+    ArrowUp: 38,
+    ArrowDown: 40,
+    z: 90,
+  };
+  const modifiers =
+    (options.shiftKey ? 8 : 0) |
+    (options.ctrlKey ? 2 : 0) |
+    (options.metaKey ? 4 : 0);
+
+  await client.send('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key,
+    code: codeByKey[key] || key,
+    windowsVirtualKeyCode: virtualKeyByKey[key] || key.toUpperCase?.().charCodeAt(0) || 0,
+    nativeVirtualKeyCode: virtualKeyByKey[key] || key.toUpperCase?.().charCodeAt(0) || 0,
+    modifiers,
+  });
+  await client.send('Input.dispatchKeyEvent', {
+    type: 'keyUp',
+    key,
+    code: codeByKey[key] || key,
+    windowsVirtualKeyCode: virtualKeyByKey[key] || key.toUpperCase?.().charCodeAt(0) || 0,
+    nativeVirtualKeyCode: virtualKeyByKey[key] || key.toUpperCase?.().charCodeAt(0) || 0,
+    modifiers,
+  });
+  await sleep(150);
+};
+
+const testKeyboardNudge = async (client, elementId) => {
+  await selectElement(client, elementId);
+  const before = await readEditorElementState(client, [elementId]);
+  await pressKey(client, 'ArrowRight', { shiftKey: true });
+  await pressKey(client, 'ArrowDown', { shiftKey: true });
+  const after = await readEditorElementState(client, [elementId]);
+
+  assert(
+    after[elementId].x === before[elementId].x + 10 &&
+    after[elementId].y === before[elementId].y + 10,
+    `${elementId} keyboard nudge failed: before ${JSON.stringify(before[elementId])}, after ${JSON.stringify(after[elementId])}`,
+  );
+
+  return {
+    elementId,
+    before: before[elementId],
+    after: after[elementId],
+    delta: {
+      x: after[elementId].x - before[elementId].x,
+      y: after[elementId].y - before[elementId].y,
+    },
+  };
+};
+
+const testUndoRedoAfterDrag = async (client, elementId) => {
+  const before = await readEditorElementState(client, [elementId]);
+  const drag = await dragElement(client, elementId, 30, 20);
+  const moved = await readEditorElementState(client, [elementId]);
+
+  await pressKey(client, 'z', { ctrlKey: true });
+  const undone = await readEditorElementState(client, [elementId]);
+  assertElementState(undone, before, `${elementId} Ctrl+Z`);
+
+  await pressKey(client, 'z', { ctrlKey: true, shiftKey: true });
+  const redone = await readEditorElementState(client, [elementId]);
+  assertElementState(redone, moved, `${elementId} Ctrl+Shift+Z`);
+
+  return {
+    elementId,
+    drag,
+    before: before[elementId],
+    moved: moved[elementId],
+    undone: undone[elementId],
+    redone: redone[elementId],
+  };
+};
+
 const clickSave = async (client) => {
   const clicked = await evaluate(client, `(() => {
     const button = Array.from(document.querySelectorAll('button')).find((candidate) => {
@@ -657,6 +786,23 @@ const main = async () => {
       await resizeElement(client, 'smoke-image', 50, 40),
       await resizeElement(client, 'smoke-form', 50, 40),
     ];
+    const keyboard = EDITOR_PATH
+      ? {
+          nudges: [
+            await testKeyboardNudge(client, 'home-cta'),
+          ],
+          undoRedo: [
+            await testUndoRedoAfterDrag(client, 'home-heading'),
+          ],
+        }
+      : {
+          nudges: [
+            await testKeyboardNudge(client, 'smoke-child-button'),
+          ],
+          undoRedo: [
+            await testUndoRedoAfterDrag(client, 'smoke-heading'),
+          ],
+        };
 
     let persistedState = null;
     let reloadedState = null;
@@ -720,6 +866,7 @@ const main = async () => {
       url: `${ADMIN_BASE_URL}${editorPath}`,
       drags,
       resizes,
+      keyboard,
       persistedState,
       reloadedState,
       invalidInputWarnings: invalidInputWarnings.length,
