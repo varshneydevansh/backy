@@ -248,6 +248,10 @@ Public page payload should include:
   - Response uses `{ success, requestId, data: { readiness } }`; legacy top-level `readiness` remains for compatibility.
   - Validates canvas dimensions, element count, element bounds, slug/title, SEO title/description/canonical, and indexability before page publish.
 
+- `POST /api/admin/sites/:siteId/pages/:pageId/publish`
+  - Publishes a page only when page readiness has no `severity: "error"` checks.
+  - Returns `400 READINESS_BLOCKED` with readiness details when canvas dimensions, element bounds, title, or slug checks fail.
+
 - `PATCH /api/admin/sites/:siteId/pages/:pageId`
   - Body supports partial updates for title, slug, description, status, homepage flag, canvas content, SEO meta, forms, and schedule.
 

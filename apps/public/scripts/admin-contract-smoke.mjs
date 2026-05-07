@@ -375,6 +375,40 @@ try {
       `${pageReadiness.url} missing legacy page readiness checks`,
     );
 
+    const invalidPage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Invalid Publish Page',
+        slug: `${pageSlug}-invalid`,
+        status: 'draft',
+        content: {
+          elements: [
+            {
+              id: 'invalid-heading',
+              type: 'heading',
+              x: -10,
+              y: 10,
+              width: 100,
+              height: 40,
+              zIndex: 1,
+              props: { content: 'Invalid' },
+            },
+          ],
+          canvasSize: { width: 200, height: 200 },
+        },
+      }),
+    });
+    assert(invalidPage.response.status === 201, `${invalidPage.url} expected 201, got ${invalidPage.response.status}`);
+    const invalidPageId = invalidPage.json?.data?.page?.id;
+    const blockedPublish = await request(`/api/admin/sites/${createdSiteId}/pages/${invalidPageId}/publish`, { method: 'POST' });
+    assert(blockedPublish.response.status === 400, `${blockedPublish.url} expected readiness 400, got ${blockedPublish.response.status}`);
+    assert(blockedPublish.json?.error?.code === 'READINESS_BLOCKED', `${blockedPublish.url} expected readiness error code`);
+    assert(blockedPublish.json?.error?.details?.checks?.some((check) => check.severity === 'error'), `${blockedPublish.url} missing readiness error details`);
+    await request(`/api/admin/sites/${createdSiteId}/pages/${invalidPageId}`, { method: 'DELETE' });
+
     const bindMedia = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}/bind`, {
       method: 'POST',
       headers: {

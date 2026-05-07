@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSiteByIdOrSlug, publishAdminPage } from '@/lib/backyStore';
+import { getAdminPageById, getSiteByIdOrSlug, publishAdminPage } from '@/lib/backyStore';
+import { buildSiteReadiness } from '@/lib/siteReadiness';
 
 export const runtime = 'nodejs';
 
@@ -12,8 +13,18 @@ interface RouteParams {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json({ success: false, requestId, error: { code, message } }, { status })
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+  details?: unknown,
+) => (
+  NextResponse.json({
+    success: false,
+    requestId,
+    error: { code, message, details },
+  }, { status })
 );
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
@@ -25,6 +36,30 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
+    const currentPage = getAdminPageById(site.id, pageId);
+
+    if (!currentPage) {
+      return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
+    }
+
+    const readiness = buildSiteReadiness(site).pages.find((item) => item.id === currentPage.id);
+    const readinessErrors = readiness?.checks.filter((check) => (
+      check.status !== 'pass' && check.severity === 'error'
+    )) || [];
+
+    if (readinessErrors.length > 0) {
+      return errorResponse(
+        400,
+        'READINESS_BLOCKED',
+        'Resolve page readiness errors before publishing',
+        requestId,
+        {
+          readiness,
+          checks: readinessErrors,
+        },
+      );
     }
 
     const page = publishAdminPage(site.id, pageId, request.headers.get('x-backy-actor') || 'admin');
