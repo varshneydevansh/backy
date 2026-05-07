@@ -158,6 +158,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 
 - `POST /api/admin/sites/:siteId/media/:mediaId/bind`
   - bind/unbind to page/post contexts.
+  - Current implementation does not expose this dedicated route yet; page/post create, update, rollback, and delete paths now sync `pageIds`/`postIds` from saved content `mediaId`/`assetId` references and featured media.
 
 ### 3.4 Forms
 - `POST /api/admin/sites/:siteId/forms`

@@ -1667,6 +1667,122 @@ function createContentRevision(
   return revision;
 }
 
+function collectMediaReferenceIds(value: unknown): Set<string> {
+  const references = new Set<string>();
+
+  const visit = (entry: unknown) => {
+    if (!entry) {
+      return;
+    }
+
+    if (Array.isArray(entry)) {
+      entry.forEach(visit);
+      return;
+    }
+
+    if (typeof entry !== 'object') {
+      return;
+    }
+
+    const record = entry as Record<string, unknown>;
+    const directMediaId = sanitizeString(record.mediaId);
+    const directAssetId = sanitizeString(record.assetId);
+
+    if (directMediaId) {
+      references.add(directMediaId);
+    }
+
+    if (directAssetId) {
+      references.add(directAssetId);
+    }
+
+    if (record.props && typeof record.props === 'object' && !Array.isArray(record.props)) {
+      const props = record.props as Record<string, unknown>;
+      const propsMediaId = sanitizeString(props.mediaId);
+      const propsAssetId = sanitizeString(props.assetId);
+
+      if (propsMediaId) {
+        references.add(propsMediaId);
+      }
+
+      if (propsAssetId) {
+        references.add(propsAssetId);
+      }
+    }
+
+    Object.values(record).forEach(visit);
+  };
+
+  visit(value);
+  return references;
+}
+
+function syncMediaReferencesForTarget(
+  siteId: string,
+  targetType: 'page' | 'post',
+  targetId: string,
+  content: unknown,
+  additionalMediaIds: string[] = [],
+) {
+  ensurePersistedMediaLoaded();
+
+  const referenceIds = collectMediaReferenceIds(content);
+  additionalMediaIds.map(sanitizeString).filter(Boolean).forEach((id) => referenceIds.add(id));
+  let changed = false;
+
+  MEDIA_LIBRARY.forEach((item, index) => {
+    if (item.siteId !== siteId) {
+      return;
+    }
+
+    const key = targetType === 'page' ? 'pageIds' : 'postIds';
+    const currentRefs = item[key] || [];
+    const shouldReference = referenceIds.has(item.id);
+    const hasReference = currentRefs.includes(targetId);
+
+    if (shouldReference === hasReference) {
+      return;
+    }
+
+    MEDIA_LIBRARY[index] = {
+      ...item,
+      [key]: shouldReference
+        ? [...currentRefs, targetId]
+        : currentRefs.filter((id) => id !== targetId),
+      updatedAt: new Date().toISOString(),
+    };
+    changed = true;
+  });
+
+  if (changed) {
+    persistRuntimeMediaCatalog();
+  }
+}
+
+function removeMediaReferencesForTarget(siteId: string, targetType: 'page' | 'post', targetId: string) {
+  ensurePersistedMediaLoaded();
+
+  let changed = false;
+  const key = targetType === 'page' ? 'pageIds' : 'postIds';
+
+  MEDIA_LIBRARY.forEach((item, index) => {
+    if (item.siteId !== siteId || !item[key]?.includes(targetId)) {
+      return;
+    }
+
+    MEDIA_LIBRARY[index] = {
+      ...item,
+      [key]: item[key].filter((id) => id !== targetId),
+      updatedAt: new Date().toISOString(),
+    };
+    changed = true;
+  });
+
+  if (changed) {
+    persistRuntimeMediaCatalog();
+  }
+}
+
 function getValueAsString(values: Record<string, unknown>, key: string): string {
   return sanitizeString(values[key] || '');
 }
@@ -2360,6 +2476,7 @@ export function createAdminPage(siteId: string, input: Record<string, unknown>):
 
   PAGE_LIST.unshift(page);
   persistAdminContent();
+  syncMediaReferencesForTarget(siteId, 'page', page.id, page.content);
   return clone(page);
 }
 
@@ -2431,6 +2548,7 @@ export function updateAdminPage(
 
   PAGE_LIST[index] = updated;
   persistAdminContent();
+  syncMediaReferencesForTarget(siteId, 'page', pageId, updated.content);
   return clone(updated);
 }
 
@@ -2443,6 +2561,7 @@ export function deleteAdminPage(siteId: string, pageId: string): boolean {
   }
 
   PAGE_LIST.splice(index, 1);
+  removeMediaReferencesForTarget(siteId, 'page', pageId);
 
   for (let revisionIndex = CONTENT_REVISIONS.length - 1; revisionIndex >= 0; revisionIndex -= 1) {
     const revision = CONTENT_REVISIONS[revisionIndex];
@@ -2551,6 +2670,7 @@ export function createAdminBlogPost(siteId: string, input: Record<string, unknow
 
   BLOG_POSTS.unshift(post);
   persistAdminContent();
+  syncMediaReferencesForTarget(siteId, 'post', post.id, post.content, post.featuredImageId ? [post.featuredImageId] : []);
   return clone(post);
 }
 
@@ -2614,6 +2734,7 @@ export function updateAdminBlogPost(
 
   BLOG_POSTS[index] = updated;
   persistAdminContent();
+  syncMediaReferencesForTarget(siteId, 'post', postId, updated.content, updated.featuredImageId ? [updated.featuredImageId] : []);
   return clone(updated);
 }
 
@@ -2626,6 +2747,7 @@ export function deleteAdminBlogPost(siteId: string, postId: string): boolean {
   }
 
   BLOG_POSTS.splice(index, 1);
+  removeMediaReferencesForTarget(siteId, 'post', postId);
 
   for (let revisionIndex = CONTENT_REVISIONS.length - 1; revisionIndex >= 0; revisionIndex -= 1) {
     const revision = CONTENT_REVISIONS[revisionIndex];
@@ -2686,6 +2808,7 @@ export function publishAdminPage(siteId: string, pageId: string, actor = 'admin'
 
   PAGE_LIST[index] = updated;
   persistAdminContent();
+  syncMediaReferencesForTarget(siteId, 'page', pageId, updated.content);
   return clone(updated);
 }
 
@@ -2713,6 +2836,7 @@ export function archiveAdminPage(siteId: string, pageId: string, actor = 'admin'
 
   PAGE_LIST[index] = updated;
   persistAdminContent();
+  syncMediaReferencesForTarget(siteId, 'page', pageId, updated.content);
   return clone(updated);
 }
 
@@ -2748,6 +2872,7 @@ export function rollbackAdminPage(
 
   PAGE_LIST[index] = updated;
   persistAdminContent();
+  syncMediaReferencesForTarget(siteId, 'page', pageId, updated.content);
   return clone(updated);
 }
 
@@ -2777,6 +2902,7 @@ export function publishAdminBlogPost(siteId: string, postId: string, actor = 'ad
 
   BLOG_POSTS[index] = updated;
   persistAdminContent();
+  syncMediaReferencesForTarget(siteId, 'post', postId, updated.content, updated.featuredImageId ? [updated.featuredImageId] : []);
   return clone(updated);
 }
 
@@ -2804,6 +2930,7 @@ export function archiveAdminBlogPost(siteId: string, postId: string, actor = 'ad
 
   BLOG_POSTS[index] = updated;
   persistAdminContent();
+  syncMediaReferencesForTarget(siteId, 'post', postId, updated.content, updated.featuredImageId ? [updated.featuredImageId] : []);
   return clone(updated);
 }
 
@@ -2839,6 +2966,7 @@ export function rollbackAdminBlogPost(
 
   BLOG_POSTS[index] = updated;
   persistAdminContent();
+  syncMediaReferencesForTarget(siteId, 'post', postId, updated.content, updated.featuredImageId ? [updated.featuredImageId] : []);
   return clone(updated);
 }
 
