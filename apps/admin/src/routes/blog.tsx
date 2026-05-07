@@ -9,9 +9,11 @@ import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tan
 import { Plus, FileText, Edit, Trash2 } from 'lucide-react';
 import {
   deleteBlogPost,
+  listBlogAuthors,
   listBlogCategories,
   listBlogPosts,
   listBlogTags,
+  type BlogAuthor,
   type BlogCategory,
   type BlogTag,
 } from '@/lib/adminContentApi';
@@ -45,8 +47,10 @@ function BlogListView() {
   const [error, setError] = useState<string | null>(null);
   const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [tags, setTags] = useState<BlogTag[]>([]);
+  const [authors, setAuthors] = useState<BlogAuthor[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [selectedTagId, setSelectedTagId] = useState('');
+  const [selectedAuthorId, setSelectedAuthorId] = useState('');
   const activeSiteId = useMemo(
     () => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo',
     [sites],
@@ -60,18 +64,21 @@ function BlogListView() {
       setError(null);
 
       try {
-        const [backendPosts, backendCategories, backendTags] = await Promise.all([
+        const [backendPosts, backendCategories, backendTags, backendAuthors] = await Promise.all([
           listBlogPosts(activeSiteId, {
             categoryId: selectedCategoryId || undefined,
             tagId: selectedTagId || undefined,
+            authorId: selectedAuthorId || undefined,
           }),
           listBlogCategories(activeSiteId),
           listBlogTags(activeSiteId),
+          listBlogAuthors(activeSiteId),
         ]);
         if (!cancelled) {
           setPosts(backendPosts);
           setCategories(backendCategories);
           setTags(backendTags);
+          setAuthors(backendAuthors);
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -89,7 +96,7 @@ function BlogListView() {
     return () => {
       cancelled = true;
     };
-  }, [activeSiteId, selectedCategoryId, selectedTagId, setPosts]);
+  }, [activeSiteId, selectedAuthorId, selectedCategoryId, selectedTagId, setPosts]);
 
   const categoryById = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
@@ -98,6 +105,10 @@ function BlogListView() {
   const tagById = useMemo(
     () => new Map(tags.map((tag) => [tag.id, tag])),
     [tags],
+  );
+  const authorById = useMemo(
+    () => new Map(authors.map((author) => [author.id, author])),
+    [authors],
   );
 
   const handleDeletePost = async (post: BlogPost) => {
@@ -142,6 +153,7 @@ function BlogListView() {
       key: 'author',
       label: 'Author',
       sortable: true,
+      render: (post) => authorById.get(post.author)?.name || post.author,
     },
     {
       key: 'categoryIds',
@@ -264,6 +276,21 @@ function BlogListView() {
           {tags.map((tag) => (
             <option key={tag.id} value={tag.id}>
               {tag.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={selectedAuthorId}
+          onChange={(event) => {
+            setSelectedAuthorId(event.target.value);
+            setCurrentPage(1);
+          }}
+          className="w-44 rounded-lg border bg-background px-3 py-2 text-sm"
+        >
+          <option value="">All authors</option>
+          {authors.map((author) => (
+            <option key={author.id} value={author.id}>
+              {author.name}
             </option>
           ))}
         </select>

@@ -10,12 +10,14 @@ import {
     createBlogPostPreview,
     deleteBlogPost,
     getBlogPost,
+    listBlogAuthors,
     listBlogCategories,
     listBlogPostRevisions,
     listBlogTags,
     publishBlogPost,
     rollbackBlogPost,
     updateBlogPost,
+    type BlogAuthor,
     type BlogCategory,
     type BlogTag,
     type ContentRevision,
@@ -57,6 +59,7 @@ function EditBlogPostPage() {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [previewExpiresAt, setPreviewExpiresAt] = useState<string | null>(null);
     const [revisions, setRevisions] = useState<ContentRevision[]>([]);
+    const [authors, setAuthors] = useState<BlogAuthor[]>([]);
     const [categories, setCategories] = useState<BlogCategory[]>([]);
     const [tags, setTags] = useState<BlogTag[]>([]);
 
@@ -65,6 +68,7 @@ function EditBlogPostPage() {
     const [slug, setSlug] = useState(post?.slug || '');
     const [excerpt, setExcerpt] = useState(post?.excerpt || '');
     const [status, setStatus] = useState<ContentStatus>(post?.status || 'draft');
+    const [selectedAuthorId, setSelectedAuthorId] = useState(post?.author || 'admin');
     const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(post?.categoryIds || []);
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>(post?.tagIds || []);
 
@@ -85,6 +89,7 @@ function EditBlogPostPage() {
                     setSlug(backendPost.slug);
                     setExcerpt(backendPost.excerpt);
                     setStatus(backendPost.status);
+                    setSelectedAuthorId(backendPost.author || 'admin');
                     setSelectedCategoryIds(backendPost.categoryIds || []);
                     setSelectedTagIds(backendPost.tagIds || []);
                 }
@@ -92,6 +97,7 @@ function EditBlogPostPage() {
                 if (!cancelled) {
                     if (localFallbackPost) {
                         setPost(localFallbackPost);
+                        setSelectedAuthorId(localFallbackPost.author || 'admin');
                         setSelectedCategoryIds(localFallbackPost.categoryIds || []);
                         setSelectedTagIds(localFallbackPost.tagIds || []);
                         setLoadError(error instanceof Error ? error.message : 'Unable to load backend post.');
@@ -119,11 +125,13 @@ function EditBlogPostPage() {
 
         const loadTaxonomy = async () => {
             try {
-                const [backendCategories, backendTags] = await Promise.all([
+                const [backendAuthors, backendCategories, backendTags] = await Promise.all([
+                    listBlogAuthors(activeSiteId),
                     listBlogCategories(activeSiteId),
                     listBlogTags(activeSiteId),
                 ]);
                 if (!cancelled) {
+                    setAuthors(backendAuthors);
                     setCategories(backendCategories);
                     setTags(backendTags);
                 }
@@ -242,6 +250,7 @@ function EditBlogPostPage() {
             excerpt,
             content,
             status,
+            author: selectedAuthorId,
             categoryIds: selectedCategoryIds,
             tagIds: selectedTagIds,
         };
@@ -257,6 +266,7 @@ function EditBlogPostPage() {
                     title,
                     description: excerpt,
                 },
+                authorId: selectedAuthorId || 'admin',
                 categoryIds: selectedCategoryIds,
                 tagIds: selectedTagIds,
                 revisionNote: 'Before blog editor save',
@@ -283,6 +293,7 @@ function EditBlogPostPage() {
         setSlug(nextPost.slug);
         setExcerpt(nextPost.excerpt);
         setStatus(nextPost.status);
+        setSelectedAuthorId(nextPost.author || 'admin');
         setSelectedCategoryIds(nextPost.categoryIds || []);
         setSelectedTagIds(nextPost.tagIds || []);
     };
@@ -557,6 +568,22 @@ function EditBlogPostPage() {
                                     <option value="published">Published</option>
                                     <option value="scheduled">Scheduled</option>
                                     <option value="archived">Archived</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Author</label>
+                                <select
+                                    value={selectedAuthorId}
+                                    onChange={(e) => setSelectedAuthorId(e.target.value)}
+                                    className="w-full px-4 py-2.5 rounded-lg border bg-background"
+                                >
+                                    {authors.length === 0 ? (
+                                        <option value={selectedAuthorId}>{selectedAuthorId}</option>
+                                    ) : authors.map((author) => (
+                                        <option key={author.id} value={author.id}>
+                                            {author.name}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
                             <div>

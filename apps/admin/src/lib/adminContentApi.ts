@@ -189,6 +189,16 @@ interface ApiBlogTag {
   createdAt?: string;
 }
 
+interface ApiBlogAuthor {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  role: User['role'] | 'contributor';
+  status: User['status'] | 'invited' | 'external';
+  postCount: number;
+}
+
 interface ApiListBlogResponse {
   success: boolean;
   data?: {
@@ -223,6 +233,16 @@ interface ApiListBlogTagsResponse {
   success: boolean;
   data?: {
     tags: ApiBlogTag[];
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiListBlogAuthorsResponse {
+  success: boolean;
+  data?: {
+    authors: ApiBlogAuthor[];
   };
   error?: {
     message?: string;
@@ -394,6 +414,16 @@ export interface BlogTag {
   createdAt?: string;
 }
 
+export interface BlogAuthor {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  role: User['role'] | 'contributor';
+  status: User['status'] | 'invited' | 'external';
+  postCount: number;
+}
+
 export interface ContentRevision {
   id: string;
   targetType: 'page' | 'post';
@@ -518,6 +548,16 @@ const toBlogTag = (tag: ApiBlogTag): BlogTag => ({
   postCount: tag.postCount || 0,
   updatedAt: tag.updatedAt,
   createdAt: tag.createdAt,
+});
+
+const toBlogAuthor = (author: ApiBlogAuthor): BlogAuthor => ({
+  id: author.id,
+  siteId: author.siteId,
+  name: author.name,
+  slug: author.slug,
+  role: author.role,
+  status: author.status,
+  postCount: author.postCount || 0,
 });
 
 const toLastActiveLabel = (user: ApiUser): string => {
@@ -889,12 +929,13 @@ export async function deletePage(siteId: string, pageId: string): Promise<void> 
 
 export async function listBlogPosts(
   siteId: string,
-  filters: { status?: BlogPost['status']; categoryId?: string; tagId?: string } = {},
+  filters: { status?: BlogPost['status']; categoryId?: string; tagId?: string; authorId?: string } = {},
 ): Promise<BlogPost[]> {
   const query = new URLSearchParams({ limit: '100' });
   if (filters.status) query.set('status', filters.status);
   if (filters.categoryId) query.set('categoryId', filters.categoryId);
   if (filters.tagId) query.set('tagId', filters.tagId);
+  if (filters.authorId) query.set('authorId', filters.authorId);
 
   const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog?${query.toString()}`);
   const payload = await readJson<ApiListBlogResponse>(response);
@@ -975,6 +1016,17 @@ export async function listBlogTags(siteId: string): Promise<BlogTag[]> {
   }
 
   return payload.data.tags.map(toBlogTag);
+}
+
+export async function listBlogAuthors(siteId: string): Promise<BlogAuthor[]> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/authors`);
+  const payload = await readJson<ApiListBlogAuthorsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load blog authors');
+  }
+
+  return payload.data.authors.map(toBlogAuthor);
 }
 
 export async function createBlogTag(siteId: string, input: BlogTagInput): Promise<BlogTag> {

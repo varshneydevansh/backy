@@ -7,8 +7,10 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, Save, FileText } from 'lucide-react';
 import {
     createBlogPost,
+    listBlogAuthors,
     listBlogCategories,
     listBlogTags,
+    type BlogAuthor,
     type BlogCategory,
     type BlogTag,
 } from '@/lib/adminContentApi';
@@ -46,21 +48,28 @@ function NewBlogPostPage() {
     const [status, setStatus] = useState<'draft' | 'published'>('draft');
     const [categories, setCategories] = useState<BlogCategory[]>([]);
     const [tags, setTags] = useState<BlogTag[]>([]);
+    const [authors, setAuthors] = useState<BlogAuthor[]>([]);
     const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+    const [selectedAuthorId, setSelectedAuthorId] = useState(user?.id || 'admin');
 
     useEffect(() => {
         let cancelled = false;
 
         const loadTaxonomy = async () => {
             try {
-                const [backendCategories, backendTags] = await Promise.all([
+                const [backendCategories, backendTags, backendAuthors] = await Promise.all([
                     listBlogCategories(activeSiteId),
                     listBlogTags(activeSiteId),
+                    listBlogAuthors(activeSiteId),
                 ]);
                 if (!cancelled) {
                     setCategories(backendCategories);
                     setTags(backendTags);
+                    setAuthors(backendAuthors);
+                    if (!selectedAuthorId || selectedAuthorId === 'admin') {
+                        setSelectedAuthorId(backendAuthors[0]?.id || user?.id || 'admin');
+                    }
                 }
             } catch {
                 if (!cancelled) {
@@ -75,7 +84,7 @@ function NewBlogPostPage() {
         return () => {
             cancelled = true;
         };
-    }, [activeSiteId]);
+    }, [activeSiteId, selectedAuthorId, user?.id]);
 
     const toggleSelection = (
         id: string,
@@ -127,7 +136,7 @@ function NewBlogPostPage() {
             excerpt,
             status,
             author: user?.fullName || 'Anonymous',
-            authorId: user?.id || 'admin',
+            authorId: selectedAuthorId || user?.id || 'admin',
             categoryIds: selectedCategoryIds,
             tagIds: selectedTagIds,
             content: JSON.parse(content),
@@ -149,7 +158,7 @@ function NewBlogPostPage() {
                 excerpt,
                 content,
                 status,
-                author: user?.fullName || 'Anonymous',
+                author: authors.find((author) => author.id === selectedAuthorId)?.name || user?.fullName || 'Anonymous',
                 categoryIds: selectedCategoryIds,
                 tagIds: selectedTagIds,
             });
@@ -246,6 +255,22 @@ function NewBlogPostPage() {
                                 >
                                     <option value="draft">Draft</option>
                                     <option value="published">Published</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Author</label>
+                                <select
+                                    value={selectedAuthorId}
+                                    onChange={(event) => setSelectedAuthorId(event.target.value)}
+                                    className="w-full px-4 py-2.5 rounded-lg border bg-background"
+                                >
+                                    {authors.length === 0 ? (
+                                        <option value={selectedAuthorId}>{user?.fullName || 'Admin'}</option>
+                                    ) : authors.map((author) => (
+                                        <option key={author.id} value={author.id}>
+                                            {author.name}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
                             <div>

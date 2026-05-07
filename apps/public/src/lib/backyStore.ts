@@ -183,6 +183,16 @@ interface StoreUser {
   invitedAt: string | null;
 }
 
+interface StoreBlogAuthor {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  role: StoreUser['role'] | 'contributor';
+  status: StoreUser['status'] | 'external';
+  postCount: number;
+}
+
 interface StoreSettings {
   deliveryMode: 'managed-hosting' | 'custom-frontend';
   apiKeys: {
@@ -672,7 +682,7 @@ const BLOG_POSTS: StoreBlogPost[] = [
     },
     status: 'published',
     featuredImageId: 'media-demo-hero',
-    authorId: 'editor-1',
+    authorId: 'user-editor',
     meta: {
       title: 'Welcome to Backy',
       description: 'A quick start into the Backy CMS world.',
@@ -698,7 +708,7 @@ const BLOG_POSTS: StoreBlogPost[] = [
     },
     status: 'draft',
     featuredImageId: null,
-    authorId: 'editor-1',
+    authorId: 'user-editor',
     meta: {
       title: 'Building CMS parity page by page',
       description: 'Why editor/public parity is the hardest part.',
@@ -3055,6 +3065,8 @@ export function getBlogPosts(
     categorySlug?: string;
     tagId?: string;
     tagSlug?: string;
+    authorId?: string;
+    authorSlug?: string;
     limit?: number;
     offset?: number;
     includeUnpublished?: boolean;
@@ -3067,6 +3079,8 @@ export function getBlogPosts(
     categorySlug,
     tagId,
     tagSlug,
+    authorId,
+    authorSlug,
     limit = 20,
     offset = 0,
     includeUnpublished = false,
@@ -3102,6 +3116,15 @@ export function getBlogPosts(
     posts = posts.filter((post) => post.tagIds.includes(effectiveTagId));
   }
 
+  const normalizedAuthorId = sanitizeString(authorId);
+  const authorBySlug = authorSlug
+    ? getBlogAuthorByIdOrSlug(siteId, authorSlug)
+    : undefined;
+  const effectiveAuthorId = normalizedAuthorId || authorBySlug?.id || '';
+  if (effectiveAuthorId) {
+    posts = posts.filter((post) => post.authorId === effectiveAuthorId);
+  }
+
   if (slug) {
     const target = posts.find((post) => normalizeIdentifier(post.slug) === normalizeIdentifier(slug));
     const list = target ? [target] : [];
@@ -3121,6 +3144,76 @@ export function getBlogPosts(
     posts: clone(paginated),
     pagination: getPagination(posts.length, limit, offset),
   };
+}
+
+const getAuthorSlug = (name: string, fallback: string): string => (
+  normalizeSlugInput(name || fallback, fallback || 'author')
+);
+
+const getAuthorPostCount = (siteId: string, authorId: string): number => (
+  BLOG_POSTS.filter(
+    (post) =>
+      post.siteId === siteId &&
+      post.authorId === authorId &&
+      post.status !== 'archived',
+  ).length
+);
+
+const toBlogAuthor = (siteId: string, user: StoreUser): StoreBlogAuthor => ({
+  id: user.id,
+  siteId,
+  name: user.fullName,
+  slug: getAuthorSlug(user.fullName, user.id),
+  role: user.role,
+  status: user.status,
+  postCount: getAuthorPostCount(siteId, user.id),
+});
+
+const toExternalBlogAuthor = (siteId: string, authorId: string): StoreBlogAuthor => ({
+  id: authorId,
+  siteId,
+  name: authorId,
+  slug: getAuthorSlug(authorId, authorId),
+  role: 'contributor',
+  status: 'external',
+  postCount: getAuthorPostCount(siteId, authorId),
+});
+
+export function listBlogAuthors(siteId: string): StoreBlogAuthor[] {
+  ensurePersistedAdminContentLoaded();
+
+  const assignedAuthorIds = new Set(
+    BLOG_POSTS
+      .filter((post) => post.siteId === siteId && post.authorId)
+      .map((post) => post.authorId as string),
+  );
+  const userAuthors = USER_LIST
+    .filter(
+      (user) =>
+        user.role === 'admin' ||
+        user.role === 'editor' ||
+        assignedAuthorIds.has(user.id),
+    )
+    .map((user) => toBlogAuthor(siteId, user));
+  const knownUserIds = new Set(userAuthors.map((author) => author.id));
+  const externalAuthors = [...assignedAuthorIds]
+    .filter((authorId) => !knownUserIds.has(authorId))
+    .map((authorId) => toExternalBlogAuthor(siteId, authorId));
+
+  return clone([...userAuthors, ...externalAuthors].sort((a, b) => a.name.localeCompare(b.name)));
+}
+
+export function getBlogAuthorByIdOrSlug(siteId: string, identifier: string): StoreBlogAuthor | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const normalized = normalizeIdentifier(identifier);
+  const author = listBlogAuthors(siteId).find(
+    (item) =>
+      normalizeIdentifier(item.id) === normalized ||
+      normalizeIdentifier(item.slug) === normalized,
+  );
+
+  return author ? clone(author) : undefined;
 }
 
 const withCategoryPostCount = (category: StoreBlogCategory): StoreBlogCategory => ({

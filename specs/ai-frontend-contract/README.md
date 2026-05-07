@@ -31,6 +31,7 @@ The rule is simple: a custom frontend can look completely different from the Bac
    - blog: `GET /api/sites/:siteId/blog`
    - blog categories: `GET /api/sites/:siteId/blog/categories`
    - blog tags: `GET /api/sites/:siteId/blog/tags`
+   - blog authors: `GET /api/sites/:siteId/blog/authors`
    - comments: `GET /api/sites/:siteId/pages/:pageId/comments?status=approved`
 
 4. Submit interactions.

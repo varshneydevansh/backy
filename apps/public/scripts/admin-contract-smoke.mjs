@@ -291,6 +291,17 @@ try {
     assert(update.json?.data?.tag?.name === 'Updated Admin Contract Tag', `${update.url} expected updated tag name`);
   });
 
+  await record('admin blog authors list returns usable author resources', async () => {
+    const authors = await request(`/api/admin/sites/${createdSiteId}/blog/authors`);
+    assert(authors.response.status === 200, `${authors.url} expected 200, got ${authors.response.status}`);
+    assert(Array.isArray(authors.json?.data?.authors), `${authors.url} expected authors array`);
+    assert(authors.json.data.authors.some((author) => author.id === 'user-admin'), `${authors.url} missing admin author`);
+
+    const publicAuthors = await request(`/api/sites/${createdSiteId}/blog/authors`);
+    assert(publicAuthors.response.status === 200, `${publicAuthors.url} expected 200, got ${publicAuthors.response.status}`);
+    assert(publicAuthors.json?.authors?.some((author) => author.id === 'user-admin'), `${publicAuthors.url} missing public admin author`);
+  });
+
   await record('admin blog create/list/detail/update/delete works for temporary site', async () => {
     const create = await request(`/api/admin/sites/${createdSiteId}/blog`, {
       method: 'POST',
@@ -302,6 +313,7 @@ try {
         slug: postSlug,
         excerpt: 'Temporary contract smoke post',
         status: 'draft',
+        authorId: 'user-admin',
         categoryIds: [createdCategoryId],
         tagIds: [createdTagId],
         content: {
@@ -326,9 +338,14 @@ try {
     assert(tagFilter.response.status === 200, `${tagFilter.url} expected 200, got ${tagFilter.response.status}`);
     assert(tagFilter.json?.data?.posts?.some((post) => post.id === createdPostId), `${tagFilter.url} missing tag-filtered post`);
 
+    const authorFilter = await request(`/api/admin/sites/${createdSiteId}/blog?authorId=user-admin`);
+    assert(authorFilter.response.status === 200, `${authorFilter.url} expected 200, got ${authorFilter.response.status}`);
+    assert(authorFilter.json?.data?.posts?.some((post) => post.id === createdPostId), `${authorFilter.url} missing author-filtered post`);
+
     const detail = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`);
     assert(detail.response.status === 200, `${detail.url} expected 200, got ${detail.response.status}`);
     assert(detail.json?.data?.post?.id === createdPostId, `${detail.url} returned wrong post`);
+    assert(detail.json?.data?.post?.authorId === 'user-admin', `${detail.url} missing author assignment`);
     assert(detail.json?.data?.post?.categoryIds?.includes(createdCategoryId), `${detail.url} missing category assignment`);
     assert(detail.json?.data?.post?.tagIds?.includes(createdTagId), `${detail.url} missing tag assignment`);
 
@@ -354,6 +371,10 @@ try {
     const publicCategoryFilter = await request(`/api/sites/${createdSiteId}/blog?categorySlug=${categorySlug}`);
     assert(publicCategoryFilter.response.status === 200, `${publicCategoryFilter.url} expected 200, got ${publicCategoryFilter.response.status}`);
     assert(publicCategoryFilter.json?.posts?.some((post) => post.id === createdPostId), `${publicCategoryFilter.url} missing public category-filtered post`);
+
+    const publicAuthorFilter = await request(`/api/sites/${createdSiteId}/blog?authorId=user-admin`);
+    assert(publicAuthorFilter.response.status === 200, `${publicAuthorFilter.url} expected 200, got ${publicAuthorFilter.response.status}`);
+    assert(publicAuthorFilter.json?.posts?.some((post) => post.id === createdPostId), `${publicAuthorFilter.url} missing public author-filtered post`);
 
     const remove = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, { method: 'DELETE' });
     assert(remove.response.status === 200, `${remove.url} expected 200, got ${remove.response.status}`);

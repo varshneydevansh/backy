@@ -64,6 +64,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             categorySlug: searchParams.get('categorySlug') || undefined,
             tagId: searchParams.get('tagId') || undefined,
             tagSlug: searchParams.get('tagSlug') || undefined,
+            authorId: searchParams.get('authorId') || undefined,
+            authorSlug: searchParams.get('authorSlug') || undefined,
         });
         return NextResponse.json(data);
     } catch (error) {
