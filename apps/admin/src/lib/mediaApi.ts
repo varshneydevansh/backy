@@ -54,6 +54,23 @@ interface ApiMediaResponse {
   };
 }
 
+interface ApiMediaBindResponse {
+  success: boolean;
+  data?: {
+    media: ApiMediaItem;
+    binding: unknown;
+    target: {
+      type: 'page' | 'post';
+      id: string;
+      bound: boolean;
+      referenceKey: 'pageIds' | 'postIds';
+    };
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiDeleteResponse {
   success: boolean;
   data?: {
@@ -128,6 +145,14 @@ export interface MediaUpdateInput {
   scope?: MediaScope;
   scopeTargetId?: string | null;
   visibility?: MediaVisibility;
+}
+
+export interface MediaBindInput {
+  targetType: 'page' | 'post';
+  targetId: string;
+  action?: 'bind' | 'unbind';
+  usageType?: 'content' | 'background' | 'thumbnail' | 'cover' | 'avatar' | 'document' | 'icon' | 'other';
+  attachedBy?: string | null;
 }
 
 export interface MediaFolder {
@@ -321,4 +346,25 @@ export async function deleteMediaFromBackend(
   if (!response.ok || !payload.success || !payload.data?.deleted) {
     throw new Error(payload.error?.message || 'Unable to delete media');
   }
+}
+
+export async function bindMediaToTarget(
+  mediaId: string,
+  input: MediaBindInput,
+  siteId = getDefaultMediaSiteId(),
+): Promise<MediaAsset> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/media/${mediaId}/bind`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await response.json() as ApiMediaBindResponse;
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to update media binding');
+  }
+
+  return toMediaAsset(payload.data.media);
 }

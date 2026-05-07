@@ -298,6 +298,26 @@ try {
     assert(detail.response.status === 200, `${detail.url} expected 200, got ${detail.response.status}`);
     assert(detail.json?.data?.page?.id === createdPageId, `${detail.url} returned wrong page`);
 
+    const bindMedia = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}/bind`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        targetType: 'page',
+        targetId: createdPageId,
+        usageType: 'content',
+        attachedBy: 'contract-smoke',
+      }),
+    });
+    assert(bindMedia.response.status === 200, `${bindMedia.url} expected 200, got ${bindMedia.response.status}`);
+    assert(bindMedia.json?.data?.media?.pageIds?.includes(createdPageId), `${bindMedia.url} did not bind media to page`);
+    assert(bindMedia.json?.data?.binding?.targetId === createdPageId, `${bindMedia.url} missing binding metadata`);
+
+    const pageMediaList = await request(`/api/admin/sites/${createdSiteId}/media?pageId=${createdPageId}&type=font`);
+    assert(pageMediaList.response.status === 200, `${pageMediaList.url} expected 200, got ${pageMediaList.response.status}`);
+    assert(pageMediaList.json?.data?.media?.some((item) => item.id === createdMediaId && item.pageIds?.includes(createdPageId)), `${pageMediaList.url} missing page-bound media`);
+
     const futurePageSchedule = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     const futureScheduledPage = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, {
       method: 'PATCH',
@@ -372,6 +392,20 @@ try {
     assert(resolvedPage.json?.success === true, `${resolvedPage.url} expected success envelope`);
     assert(resolvedPage.json?.data?.route?.type === 'page', `${resolvedPage.url} expected page route`);
     assert(resolvedPage.json?.data?.route?.resource?.id === createdPageId, `${resolvedPage.url} returned wrong resolved page`);
+
+    const unbindMedia = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}/bind`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        targetType: 'page',
+        targetId: createdPageId,
+        action: 'unbind',
+      }),
+    });
+    assert(unbindMedia.response.status === 200, `${unbindMedia.url} expected 200, got ${unbindMedia.response.status}`);
+    assert(!unbindMedia.json?.data?.media?.pageIds?.includes(createdPageId), `${unbindMedia.url} did not unbind media from page`);
 
     const remove = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, { method: 'DELETE' });
     assert(remove.response.status === 200, `${remove.url} expected 200, got ${remove.response.status}`);

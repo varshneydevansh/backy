@@ -202,8 +202,9 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - Current implementation deletes the catalog record and removes local uploaded files under `/public/uploads/sites/:siteId/...` when present.
 
 - `POST /api/admin/sites/:siteId/media/:mediaId/bind`
-  - bind/unbind to page/post contexts.
-  - Current implementation does not expose this dedicated route yet; page/post create, update, rollback, and delete paths now sync `pageIds`/`postIds` from saved content `mediaId`/`assetId` references and featured media.
+  - Body: `{ targetType: "page"|"post", targetId, action?: "bind"|"unbind", usageType?, attachedBy? }`
+  - Binds or unbinds media to page/post contexts, updates `pageIds`/`postIds`, and stores lightweight binding metadata under `media.metadata.bindings`.
+  - Page/post create, update, rollback, and delete paths also sync `pageIds`/`postIds` from saved content `mediaId`/`assetId` references and featured media.
 
 ### 3.4 Forms
 - `POST /api/admin/sites/:siteId/forms`
