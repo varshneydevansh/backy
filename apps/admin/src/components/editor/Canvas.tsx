@@ -826,11 +826,13 @@ export function Canvas({
    * Handle resize start from resize handles
    */
   const handleResizeStart = useCallback(
-    (e: React.MouseEvent, elementId: string, handle: 'nw' | 'ne' | 'sw' | 'se') => {
+    (e: React.MouseEvent | React.PointerEvent, elementId: string, handle: 'nw' | 'ne' | 'sw' | 'se') => {
       if (isPreview) return;
+      if ('button' in e && e.button !== 0) return;
 
       e.stopPropagation();
       e.preventDefault();
+      if (resizeStateRef.current || dragStateRef.current) return;
 
       const element = findElementById(elements, elementId);
       if (!element) return;
@@ -850,6 +852,10 @@ export function Canvas({
       dragStateRef.current = null;
       setResizeState(nextResizeState);
       setDragState(null);
+
+      if ('pointerId' in e && e.pointerId !== undefined) {
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+      }
     },
     [elements, isPreview]
   );
@@ -1320,7 +1326,7 @@ interface CanvasElementComponentProps {
   draggingId: string | null;
   isPreview: boolean;
   onDragStart: (e: React.PointerEvent | React.MouseEvent, elementId: string) => void;
-  onResizeStart: (e: React.MouseEvent, elementId: string, handle: 'nw' | 'ne' | 'sw' | 'se') => void;
+  onResizeStart: (e: React.MouseEvent | React.PointerEvent, elementId: string, handle: 'nw' | 'ne' | 'sw' | 'se') => void;
   onClick: (e: React.MouseEvent) => void;
   onSelectElement: (elementId: string) => void;
   onUpdate: (updates: { [key: string]: unknown }) => void;
@@ -2553,7 +2559,7 @@ function CanvasElementComponent({
 
 interface ResizeHandleProps {
   position: 'nw' | 'ne' | 'sw' | 'se';
-  onMouseDown: (e: React.MouseEvent) => void;
+  onMouseDown: (e: React.MouseEvent | React.PointerEvent) => void;
 }
 
 function ResizeHandle({ position, onMouseDown }: ResizeHandleProps) {
@@ -2566,9 +2572,10 @@ function ResizeHandle({ position, onMouseDown }: ResizeHandleProps) {
 
   return (
     <div
-      className="absolute h-3 w-3 rounded-[3px] border border-sky-600 bg-white shadow-sm transition-transform hover:scale-110"
+      className="absolute z-[80] h-3 w-3 rounded-[3px] border border-sky-600 bg-white shadow-sm transition-transform hover:scale-110"
       style={positionStyles[position]}
       data-role="canvas-resize-handle"
+      onPointerDown={onMouseDown}
       onMouseDown={onMouseDown}
     />
   );
