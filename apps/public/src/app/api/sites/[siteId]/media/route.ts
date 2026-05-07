@@ -23,7 +23,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '50', 10) || 50));
         const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
         const scope = searchParams.get('scope');
-        const visibility = searchParams.get('visibility');
         const pageId = searchParams.get('pageId');
         const postId = searchParams.get('postId');
 
@@ -35,7 +34,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const mediaPayload = getMediaList(site.id, {
             type: type || undefined,
             scope: scope || undefined,
-            visibility: visibility || undefined,
+            visibility: 'public',
             pageId: pageId || undefined,
             postId: postId || undefined,
             limit,

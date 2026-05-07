@@ -54,6 +54,10 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/public/sites/:siteId/blog/posts/:slug` (optional alias)
   - Published post detail by slug.
 
+- `GET /api/sites/:siteId/media`
+  - Public media catalog for custom frontends.
+  - Current implementation only returns `visibility=public` catalog items, even if a caller asks for private media.
+
 ### 2.2 Render payload
 Public page payload should include:
 - `content` in shared editor schema
@@ -230,6 +234,7 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 - `MediaItem.scope` = `global|page|post`
 - `MediaItem.scopeTargetId` = pageId/postId for scoped assets
 - `MediaItem.visibility` = `public|private`
+- Public media APIs must expose only `visibility=public` items. Private media requires authenticated/signed delivery before it can be considered complete.
 - `FormDefinition.pageId|postId` associates form to specific content node
 - `Comment.targetType|targetId` links comment thread to page/post
 - `PublicContentPayload` extends read payload used by custom frontends
