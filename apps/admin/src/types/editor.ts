@@ -93,6 +93,9 @@ export interface CanvasElement {
 
   // Animation config (for GSAP/interaction animations)
   animation?: AnimationConfig | null;
+
+  // Optional public render bindings for collection-backed content.
+  dataBindings?: Record<string, unknown>[];
 }
 
 // ============================================

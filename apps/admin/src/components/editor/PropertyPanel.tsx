@@ -20,6 +20,7 @@ import {
   Layout,
   Box,
   Sparkles,
+  Database,
   ChevronDown,
   ChevronRight,
   Trash2,
@@ -33,6 +34,11 @@ import { getFontFamilyOptions, toFontFamilyStyle } from './fontCatalog';
 import { RichTextFormatting } from './RichTextFormatting';
 import { AnimationBuilder, type AnimationConfig } from './AnimationBuilder';
 import type { CanvasElement, ElementProps } from '@/types/editor';
+import {
+  listCollections,
+  type Collection,
+  type CollectionField,
+} from '@/lib/adminContentApi';
 import {
   buildListContentFromItems,
   normalizeListContent,
@@ -254,6 +260,38 @@ export function PropertyPanel({
   const [mediaOpenTab, setMediaOpenTab] = useState<'library' | 'upload'>('library');
   const [mediaUploadFilter, setMediaUploadFilter] = useState<'all' | 'image' | 'video' | 'file'>('all');
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [collectionsError, setCollectionsError] = useState<string | null>(null);
+  const siteId = mediaContext?.siteId;
+
+  useEffect(() => {
+    if (!siteId) {
+      setCollections([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadCollections = async () => {
+      try {
+        const backendCollections = await listCollections(siteId);
+        if (!cancelled) {
+          setCollections(backendCollections);
+          setCollectionsError(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCollections([]);
+          setCollectionsError(error instanceof Error ? error.message : 'Unable to load collections');
+        }
+      }
+    };
+
+    void loadCollections();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [siteId]);
 
   if (!element) {
     return (
@@ -364,6 +402,21 @@ export function PropertyPanel({
           onToggle={() => toggleSection('appearance')}
         >
           <AppearanceProperties element={element} onChange={updateProps} />
+        </PropertySection>
+
+        {/* Data Binding Section */}
+        <PropertySection
+          title="Data"
+          icon={Database}
+          isExpanded={expandedSections.includes('data')}
+          onToggle={() => toggleSection('data')}
+        >
+          <DataBindingProperties
+            element={element}
+            collections={collections}
+            collectionsError={collectionsError}
+            onChange={onChange}
+          />
         </PropertySection>
 
         {/* Animation Section */}
@@ -2162,6 +2215,250 @@ function AppearanceProperties({ element, onChange }: StylePropertiesProps) {
           )}
         />
       </div>
+    </div>
+  );
+}
+
+// ============================================
+// DATA BINDING PROPERTIES
+// ============================================
+
+interface DataBindingPropertiesProps {
+  element: CanvasElement;
+  collections: Collection[];
+  collectionsError: string | null;
+  onChange: (updates: Partial<CanvasElement>) => void;
+}
+
+const getBindingSource = (binding: unknown): Record<string, unknown> | null => (
+  binding && typeof binding === 'object' && !Array.isArray(binding)
+    ? ((binding as Record<string, unknown>).source as Record<string, unknown> | undefined) || null
+    : null
+);
+
+const getCollectionBinding = (element: CanvasElement): Record<string, unknown> | null => {
+  const bindings = Array.isArray(element.dataBindings) ? element.dataBindings : [];
+  return bindings.find((binding) => getBindingSource(binding)?.kind === 'collection') || null;
+};
+
+const getTargetPathOptions = (elementType: CanvasElement['type']) => {
+  if (elementType === 'image') {
+    return [
+      { value: 'props.assetId', label: 'Image asset' },
+      { value: 'props.src', label: 'Image URL' },
+      { value: 'props.alt', label: 'Alt text' },
+    ];
+  }
+  if (elementType === 'button') {
+    return [
+      { value: 'props.label', label: 'Button label' },
+      { value: 'props.href', label: 'Button URL' },
+    ];
+  }
+  if (elementType === 'link') {
+    return [
+      { value: 'props.content', label: 'Link text' },
+      { value: 'props.href', label: 'Link URL' },
+    ];
+  }
+  if (elementType === 'video') {
+    return [
+      { value: 'props.src', label: 'Video URL' },
+    ];
+  }
+  return [
+    { value: 'props.content', label: 'Text content' },
+    { value: 'props.html', label: 'HTML content' },
+  ];
+};
+
+const getBindingModeForField = (field?: CollectionField | null, targetPath = '') => {
+  if (field?.type === 'richText' || targetPath === 'props.html') return 'html';
+  if (field?.type === 'image') return 'image';
+  if (field?.type === 'number') return 'number';
+  if (field?.type === 'boolean') return 'boolean';
+  if (field?.type === 'file') return 'url';
+  return 'text';
+};
+
+function DataBindingProperties({
+  element,
+  collections,
+  collectionsError,
+  onChange,
+}: DataBindingPropertiesProps) {
+  const currentBinding = getCollectionBinding(element);
+  const currentSource = getBindingSource(currentBinding);
+  const selectedCollectionId = typeof currentSource?.collectionId === 'string' ? currentSource.collectionId : '';
+  const selectedFieldKey = typeof currentSource?.field === 'string' ? currentSource.field : '';
+  const selectedRecordId = typeof currentSource?.recordId === 'string' ? currentSource.recordId : '';
+  const selectedTargetPath = typeof currentBinding?.targetPath === 'string'
+    ? currentBinding.targetPath
+    : getTargetPathOptions(element.type)[0].value;
+  const selectedCollection = collections.find((collection) => collection.id === selectedCollectionId) || null;
+  const selectedField = selectedCollection?.fields.find((field) => field.key === selectedFieldKey) || null;
+  const targetPathOptions = getTargetPathOptions(element.type);
+
+  const updateBinding = (updates: {
+    collectionId?: string;
+    fieldKey?: string;
+    recordId?: string;
+    targetPath?: string;
+  }) => {
+    const collectionId = updates.collectionId ?? selectedCollectionId;
+    const collection = collections.find((item) => item.id === collectionId) || null;
+    const fieldKey = updates.fieldKey
+      ?? (collection?.fields.some((field) => field.key === selectedFieldKey) ? selectedFieldKey : collection?.fields[0]?.key)
+      ?? '';
+    const field = collection?.fields.find((item) => item.key === fieldKey) || null;
+    const targetPath = updates.targetPath ?? selectedTargetPath;
+    const recordId = updates.recordId ?? selectedRecordId;
+    const otherBindings = (Array.isArray(element.dataBindings) ? element.dataBindings : [])
+      .filter((binding) => getBindingSource(binding)?.kind !== 'collection');
+
+    if (!collection || !fieldKey) {
+      onChange({ dataBindings: otherBindings });
+      return;
+    }
+
+    onChange({
+      dataBindings: [
+        ...otherBindings,
+        {
+          id: `bind_${element.id}_${fieldKey}`,
+          datasetId: `dataset_${collection.id}`,
+          targetPath,
+          source: {
+            kind: 'collection',
+            collectionId: collection.id,
+            field: fieldKey,
+            ...(recordId.trim() ? { recordId: recordId.trim() } : {}),
+          },
+          mode: getBindingModeForField(field, targetPath),
+          ...(recordId.trim() ? { query: { recordId: recordId.trim() } } : {}),
+        },
+      ],
+    });
+  };
+
+  const clearBinding = () => {
+    onChange({
+      dataBindings: (Array.isArray(element.dataBindings) ? element.dataBindings : [])
+        .filter((binding) => getBindingSource(binding)?.kind !== 'collection'),
+    });
+  };
+
+  if (collectionsError) {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        {collectionsError}
+      </div>
+    );
+  }
+
+  if (collections.length === 0) {
+    return (
+      <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        No collections available.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">
+          Collection
+        </label>
+        <select
+          value={selectedCollectionId}
+          onChange={(event) => updateBinding({ collectionId: event.target.value, fieldKey: undefined, recordId: '' })}
+          className={cn(
+            'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+            'focus:outline-none focus:ring-2 focus:ring-ring'
+          )}
+        >
+          <option value="">Unbound</option>
+          {collections.map((collection) => (
+            <option key={collection.id} value={collection.id}>
+              {collection.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {selectedCollection && (
+        <>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Field
+            </label>
+            <select
+              value={selectedFieldKey}
+              onChange={(event) => updateBinding({ fieldKey: event.target.value })}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              {selectedCollection.fields.map((field) => (
+                <option key={field.key} value={field.key}>
+                  {field.label} ({field.type})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Target
+            </label>
+            <select
+              value={targetPathOptions.some((option) => option.value === selectedTargetPath) ? selectedTargetPath : targetPathOptions[0].value}
+              onChange={(event) => updateBinding({ targetPath: event.target.value })}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              {targetPathOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Record ID or slug
+            </label>
+            <input
+              type="text"
+              value={selectedRecordId}
+              onChange={(event) => updateBinding({ recordId: event.target.value })}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Optional"
+            />
+          </div>
+
+          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            Dataset: dataset_{selectedCollection.id}
+            {selectedField ? ` • ${selectedField.key}` : ''}
+          </div>
+
+          <button
+            type="button"
+            onClick={clearBinding}
+            className="w-full rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
+          >
+            Clear binding
+          </button>
+        </>
+      )}
     </div>
   );
 }
