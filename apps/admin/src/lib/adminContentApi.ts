@@ -1910,6 +1910,27 @@ export async function createReusableSection(
   return toReusableSection(payload.data.section);
 }
 
+export async function updateReusableSection(
+  siteId: string,
+  sectionId: string,
+  input: Partial<ReusableSectionInput>,
+): Promise<ReusableSection> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections/${sectionId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiReusableSectionResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to update reusable section');
+  }
+
+  return toReusableSection(payload.data.section);
+}
+
 export async function deleteReusableSection(siteId: string, sectionId: string): Promise<void> {
   const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections/${sectionId}`, {
     method: 'DELETE',

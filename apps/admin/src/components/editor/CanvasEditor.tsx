@@ -60,8 +60,10 @@ import { useStore } from '@/stores/mockStore';
 import { listMedia } from '@/lib/mediaApi';
 import {
   createReusableSection,
+  deleteReusableSection,
   listReusableSections,
   type ReusableSection,
+  updateReusableSection,
 } from '@/lib/adminContentApi';
 
 const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
@@ -1017,6 +1019,54 @@ export function CanvasEditor({
     toReusableTemplateElement,
   ]);
 
+  const handleRenameReusableSection = useCallback(async (sectionId: string) => {
+    if (!activeSiteId) {
+      return;
+    }
+
+    const section = reusableSections.find((item) => item.id === sectionId);
+    if (!section) {
+      return;
+    }
+
+    const nextName = window.prompt('Rename reusable section', section.name);
+    if (!nextName?.trim() || nextName.trim() === section.name) {
+      return;
+    }
+
+    try {
+      const updated = await updateReusableSection(activeSiteId, sectionId, {
+        name: nextName.trim(),
+        updatedBy: 'admin',
+      });
+      setReusableSections((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Unable to rename reusable section');
+    }
+  }, [activeSiteId, reusableSections]);
+
+  const handleDeleteReusableSection = useCallback(async (sectionId: string) => {
+    if (!activeSiteId) {
+      return;
+    }
+
+    const section = reusableSections.find((item) => item.id === sectionId);
+    if (!section) {
+      return;
+    }
+
+    if (!window.confirm(`Delete "${section.name}" from saved sections?`)) {
+      return;
+    }
+
+    try {
+      await deleteReusableSection(activeSiteId, sectionId);
+      setReusableSections((current) => current.filter((item) => item.id !== sectionId));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Unable to delete reusable section');
+    }
+  }, [activeSiteId, reusableSections]);
+
   /**
    * Handle canvas drop
    */
@@ -1705,6 +1755,8 @@ export function CanvasEditor({
               isSavingReusableSection={isSavingReusableSection}
               onRefreshReusableSections={loadReusableSections}
               onSaveSelectionAsReusableSection={handleSaveSelectionAsReusableSection}
+              onRenameReusableSection={handleRenameReusableSection}
+              onDeleteReusableSection={handleDeleteReusableSection}
             />
           )}
 

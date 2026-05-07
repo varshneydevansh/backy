@@ -40,6 +40,8 @@ import {
   LayoutGrid,
   BookmarkPlus,
   RefreshCw,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ComponentLibraryItem } from '@/types/editor';
@@ -66,6 +68,8 @@ interface ComponentLibraryProps {
   isSavingReusableSection?: boolean;
   onRefreshReusableSections?: () => void;
   onSaveSelectionAsReusableSection?: () => void;
+  onRenameReusableSection?: (sectionId: string) => void;
+  onDeleteReusableSection?: (sectionId: string) => void;
 }
 
 /**
@@ -83,6 +87,8 @@ export function ComponentLibrary({
   isSavingReusableSection = false,
   onRefreshReusableSections,
   onSaveSelectionAsReusableSection,
+  onRenameReusableSection,
+  onDeleteReusableSection,
 }: ComponentLibraryProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -251,6 +257,8 @@ export function ComponentLibrary({
                   key={item.id ?? item.type}
                   item={item}
                   onDragStart={() => onDragStart?.(item)}
+                  onRenameReusableSection={onRenameReusableSection}
+                  onDeleteReusableSection={onDeleteReusableSection}
                 />
               ))}
             </div>
@@ -274,9 +282,16 @@ export function ComponentLibrary({
 interface LibraryItemProps {
   item: ComponentLibraryItem;
   onDragStart: () => void;
+  onRenameReusableSection?: (sectionId: string) => void;
+  onDeleteReusableSection?: (sectionId: string) => void;
 }
 
-function LibraryItem({ item, onDragStart }: LibraryItemProps) {
+function LibraryItem({
+  item,
+  onDragStart,
+  onRenameReusableSection,
+  onDeleteReusableSection,
+}: LibraryItemProps) {
   const getIcon = () => {
     switch (item.icon) {
       case 'Type':
@@ -325,6 +340,7 @@ function LibraryItem({ item, onDragStart }: LibraryItemProps) {
   };
 
   const Icon = getIcon();
+  const reusableSectionId = item.reusableContent?.sectionId;
 
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData('application/json', JSON.stringify(item));
@@ -337,7 +353,7 @@ function LibraryItem({ item, onDragStart }: LibraryItemProps) {
       draggable
       onDragStart={handleDragStart}
       className={cn(
-        'flex items-center gap-3 p-2 rounded-md cursor-grab',
+        'group flex items-center gap-3 p-2 rounded-md cursor-grab',
         'hover:bg-slate-100 transition-colors',
         'active:cursor-grabbing'
       )}
@@ -354,6 +370,36 @@ function LibraryItem({ item, onDragStart }: LibraryItemProps) {
           </p>
         )}
       </div>
+      {reusableSectionId && (
+        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            type="button"
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onRenameReusableSection?.(reusableSectionId);
+            }}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-slate-900"
+            title="Rename saved section"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onDeleteReusableSection?.(reusableSectionId);
+            }}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-red-50 hover:text-red-700"
+            title="Delete saved section"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

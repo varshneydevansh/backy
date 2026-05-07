@@ -446,7 +446,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ⚠️ Page templates
   - Static composed library presets now exist for hero, feature-grid, and lead-capture form sections.
   - Backend reusable-section APIs now persist saved canvas section patterns, and the editor library can load active saved sections, save the selected element tree, and insert saved sections as cloned editable canvas elements.
-  - Still missing persisted site/page/blog template registry, synced reusable blocks, saved-section rename/delete management UI, and import/export.
+  - Still missing persisted site/page/blog template registry, synced reusable blocks, richer saved-section metadata editing, and import/export.
 
 ## Priority Order
 **Phase 1: Critical Fixes (Immediate)**
