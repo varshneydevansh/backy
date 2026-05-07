@@ -7,7 +7,7 @@
  */
 
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { Plus, Layout, Edit, Trash2, Home, File } from 'lucide-react';
+import { Plus, Layout, Edit, Trash2, Home } from 'lucide-react';
 import { useStore, type Page } from '@/stores/mockStore';
 import { useDataTable, type Column } from '@/hooks/useDataTable';
 import { PageShell } from '@/components/layout/PageShell';

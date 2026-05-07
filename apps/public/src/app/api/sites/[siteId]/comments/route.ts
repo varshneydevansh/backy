@@ -4,7 +4,7 @@ import {
   getSiteByIdOrSlug,
   listComments,
 } from '@/lib/backyStore';
-import type { CommentTargetType } from '@backy-cms/core';
+import type { CommentStatus, CommentTargetType } from '@backy-cms/core';
 
 interface RouteParams {
   params: Promise<{
@@ -12,7 +12,8 @@ interface RouteParams {
   }>;
 }
 
-type CommentStatusFilter = 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked' | 'all';
+type CommentStatusFilter = CommentStatus | 'all';
+type CommentModerationStatus = CommentStatus;
 
 function parseStatus(raw: string | null): CommentStatusFilter {
   if (
@@ -27,6 +28,11 @@ function parseStatus(raw: string | null): CommentStatusFilter {
   }
 
   return 'all';
+}
+
+function parseModerationStatus(raw: string | null): CommentModerationStatus | null {
+  const status = parseStatus(raw);
+  return status === 'all' ? null : status;
 }
 
 function parseTargetType(raw: string | null): CommentTargetType | 'all' {
@@ -77,8 +83,8 @@ function parsePatchPayload(raw: unknown) {
     return null;
   }
 
-  const status = parseStatus(typeof (raw as { status?: unknown }).status === 'string'
-    ? ((raw as { status?: string }).status)
+  const status = parseModerationStatus(typeof (raw as { status?: unknown }).status === 'string'
+    ? ((raw as { status: string }).status)
     : null);
 
   const commentIds = parseCommentIds((raw as { commentIds?: unknown }).commentIds);

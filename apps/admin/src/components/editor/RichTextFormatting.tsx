@@ -100,7 +100,7 @@ export function RichTextFormatting({
     storeSelection,
   } = useActiveEditor();
 
-  const pendingActionRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingActionRef = useRef<number | null>(null);
   const activePropertyActionRef = useRef<string>('unknown');
 
   const canInteractWithEditor = useCallback(() => !!getActiveEditor(), [getActiveEditor]);
@@ -297,7 +297,7 @@ export function RichTextFormatting({
         return [{
           type: 'li',
           children: [{ text: String(node ?? '') }],
-        }] as Record<string, unknown>;
+        }];
       }
 
       const typed = node as Record<string, unknown>;
@@ -313,13 +313,13 @@ export function RichTextFormatting({
         return [{
           type: 'li',
           children: [{ text: String(typed.text || '') }],
-        }] as Record<string, unknown>;
+        }];
       }
 
       return [{
         type: 'li',
         children,
-      }] as Record<string, unknown>;
+      }];
     });
 
     return listItems.length
@@ -410,7 +410,7 @@ export function RichTextFormatting({
           match: (node) => Text.isText(node),
           mode: 'all',
         })
-      ).map(([node]) => node as Record<string, unknown>);
+      ).map(([node]) => node as unknown as Record<string, unknown>);
 
       if (nodes.length === 0) {
         return MARK_ABSENT;
@@ -524,7 +524,7 @@ export function RichTextFormatting({
         if (anchorNode && Text.isText(anchorNode)) {
           const hasProperty = Object.prototype.hasOwnProperty.call(anchorNode, format);
           if (hasProperty) {
-            const value = (anchorNode as Record<string, unknown>)[format];
+            const value = (anchorNode as unknown as Record<string, unknown>)[format];
             if (value !== undefined) {
               return value as MarkStateValue;
             }
@@ -533,12 +533,12 @@ export function RichTextFormatting({
       }
 
       const textNodes = Array.from(
-        Editor.nodes(editor, {
+        Editor.nodes(editor as any, {
           at: selection,
           match: (node) => Text.isText(node),
           mode: 'all',
         })
-      ).map(([node]) => node as Record<string, unknown>);
+      ).map(([node]) => node as unknown as Record<string, unknown>);
 
       if (textNodes.length === 0) {
         const marks = Editor.marks(editor as any) as Record<string, unknown> | null;
@@ -778,10 +778,11 @@ export function RichTextFormatting({
     }
 
     const currentSelection = editor.selection;
-    let hasActiveRange = currentSelection && SlateRange.isRange(currentSelection);
-    let hasValidSelection = hasActiveRange
-      && Node.has(editor as any, currentSelection.anchor.path)
-      && Node.has(editor as any, currentSelection.focus.path);
+    let hasActiveRange = SlateRange.isRange(currentSelection);
+    let hasValidSelection = hasActiveRange && currentSelection
+      ? Node.has(editor as any, currentSelection.anchor.path)
+        && Node.has(editor as any, currentSelection.focus.path)
+      : false;
 
     if (!hasActiveRange || !hasValidSelection) {
       if (!hasRestored) {
@@ -827,7 +828,8 @@ export function RichTextFormatting({
       return false;
     }
 
-    if (shouldRequireTextSelection && SlateRange.isCollapsed(editor.selection)) {
+    const activeSelection = editor.selection;
+    if (shouldRequireTextSelection && SlateRange.isRange(activeSelection) && SlateRange.isCollapsed(activeSelection)) {
       logTextAction('runForRangeSelection.restore-failed', {
         requireTextSelection: true,
         reason: 'selection-is-caret-only',

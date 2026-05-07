@@ -1,0 +1,184 @@
+{
+  "success": true,
+  "requestId": "req_blog_demo",
+  "data": {
+    "site": {
+      "id": "site_demo",
+      "slug": "demo",
+      "name": "Backy Demo",
+      "locale": "en",
+      "status": "published",
+      "themeTokens": {
+        "schemaVersion": "backy.theme.v1",
+        "colors": {
+          "primary": "#2563eb",
+          "background": "#ffffff",
+          "surface": "#f8fafc",
+          "text": "#0f172a",
+          "textMuted": "#64748b"
+        },
+        "typography": {
+          "families": {
+            "heading": "Inter",
+            "body": "Inter"
+          },
+          "scale": {
+            "h1": "44px",
+            "body": "18px"
+          },
+          "lineHeights": {
+            "body": 1.7
+          },
+          "weights": {
+            "regular": 400,
+            "bold": 700
+          }
+        },
+        "spacing": {
+          "md": "16px",
+          "xl": "48px"
+        },
+        "radii": {
+          "md": "8px"
+        },
+        "shadows": {},
+        "breakpoints": {
+          "mobile": 390,
+          "tablet": 768,
+          "desktop": 1200
+        }
+      }
+    },
+    "route": {
+      "type": "post",
+      "path": "/blog/content-backed-frontends",
+      "status": "published",
+      "canonical": "/blog/content-backed-frontends",
+      "params": {
+        "slug": "content-backed-frontends"
+      }
+    },
+    "content": {
+      "schemaVersion": "backy.content.v1",
+      "id": "post_content_backed_frontends",
+      "kind": "post",
+      "title": "Content-backed frontends",
+      "locale": "en",
+      "version": "v1",
+      "elements": [
+        {
+          "id": "post_title",
+          "type": "heading",
+          "children": [],
+          "props": {
+            "content": "Content-backed frontends",
+            "level": "h1"
+          },
+          "styles": {
+            "fontFamily": "{typography.families.heading}",
+            "fontSize": "{typography.scale.h1}"
+          },
+          "responsive": {},
+          "actions": [],
+          "dataBindings": [],
+          "permissions": {
+            "editContent": true
+          }
+        },
+        {
+          "id": "post_body",
+          "type": "richText",
+          "children": [],
+          "props": {
+            "content": [
+              {
+                "type": "p",
+                "children": [
+                  {
+                    "text": "This post is rendered from a Backy public payload, not admin internals."
+                  }
+                ]
+              }
+            ]
+          },
+          "styles": {
+            "fontSize": "{typography.scale.body}",
+            "lineHeight": "{typography.lineHeights.body}"
+          },
+          "responsive": {},
+          "actions": [],
+          "dataBindings": [],
+          "permissions": {
+            "editContent": true
+          }
+        }
+      ]
+    },
+    "assets": {
+      "media": [
+        {
+          "id": "media_featured",
+          "siteId": "site_demo",
+          "type": "image",
+          "mimeType": "image/jpeg",
+          "filename": "featured.jpg",
+          "originalName": "featured.jpg",
+          "url": "https://cdn.example.com/site_demo/featured.jpg",
+          "thumbnailUrl": "https://cdn.example.com/site_demo/featured-thumb.jpg",
+          "altText": "Laptop showing a Backy page payload",
+          "caption": "Featured article image",
+          "scope": "post",
+          "scopeTargetId": "post_content_backed_frontends",
+          "visibility": "public",
+          "metadata": {
+            "width": 1600,
+            "height": 900
+          }
+        }
+      ],
+      "fonts": []
+    },
+    "interactions": {
+      "forms": [],
+      "comments": [
+        {
+          "id": "thread_post_content_backed_frontends",
+          "targetType": "post",
+          "targetId": "post_content_backed_frontends",
+          "endpoint": "/api/sites/site_demo/blog/post_content_backed_frontends/comments",
+          "moderationMode": "manual",
+          "count": 0
+        }
+      ],
+      "actions": {
+        "schemaVersion": "backy.actions.v1",
+        "actions": []
+      }
+    },
+    "seo": {
+      "title": "Content-backed frontends",
+      "description": "A blog post payload that can render in any frontend.",
+      "canonical": "/blog/content-backed-frontends",
+      "robots": {
+        "index": true,
+        "follow": true
+      },
+      "jsonLd": []
+    },
+    "dataBindings": {
+      "schemaVersion": "backy.bindings.v1",
+      "datasets": [],
+      "bindings": []
+    },
+    "editableMap": {
+      "post.title": {
+        "elementId": "post_title",
+        "field": "props.content",
+        "editable": true,
+        "label": "Post title",
+        "valueType": "string",
+        "scope": "post"
+      }
+    }
+  }
+}

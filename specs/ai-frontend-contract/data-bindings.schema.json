@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://backy.dev/schemas/ai-frontend-contract/data-bindings.schema.json",
+  "title": "Backy Data Bindings",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "elementId": { "type": "string", "minLength": 1 },
+        "targetPath": { "type": "string", "minLength": 1 },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "enum": ["collection", "page", "post", "site", "route", "query", "auth", "static"] },
+            "collectionId": { "type": "string" },
+            "field": { "type": "string" },
+            "recordId": { "type": "string" },
+            "path": { "type": "string" }
+          },
+          "required": ["kind"]
+        },
+        "mode": { "enum": ["text", "html", "image", "video", "audio", "url", "boolean", "number", "json"] },
+        "fallback": {},
+        "format": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "writeBack": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "permission": { "type": "string" },
+            "endpoint": { "type": "string" }
+          },
+          "required": ["enabled"]
+        }
+      },
+      "required": ["id", "elementId", "targetPath", "source", "mode"]
+    },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "collectionId": { "type": "string", "minLength": 1 },
+        "query": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "pagination": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "limit": { "type": "integer", "minimum": 1 },
+            "cursor": { "type": "string" }
+          }
+        }
+      },
+      "required": ["id", "collectionId"]
+    }
+  },
+  "properties": {
+    "schemaVersion": {
+      "const": "backy.bindings.v1"
+    },
+    "datasets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dataset" }
+    },
+    "bindings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/binding" }
+    }
+  },
+  "required": ["schemaVersion", "datasets", "bindings"]
+}

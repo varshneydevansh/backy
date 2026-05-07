@@ -1,0 +1,204 @@
+{
+  "success": true,
+  "requestId": "req_dynamic_demo",
+  "data": {
+    "site": {
+      "id": "site_demo",
+      "slug": "demo",
+      "name": "Backy Demo",
+      "locale": "en",
+      "status": "published",
+      "themeTokens": {
+        "schemaVersion": "backy.theme.v1",
+        "colors": {
+          "primary": "#0f766e",
+          "background": "#ffffff",
+          "surface": "#f8fafc",
+          "text": "#0f172a"
+        },
+        "typography": {
+          "families": {
+            "heading": "Inter",
+            "body": "Inter"
+          },
+          "scale": {
+            "h1": "42px",
+            "body": "16px"
+          },
+          "lineHeights": {
+            "body": 1.6
+          },
+          "weights": {
+            "regular": 400,
+            "bold": 700
+          }
+        },
+        "spacing": {
+          "md": "16px",
+          "lg": "32px"
+        },
+        "radii": {
+          "md": "8px"
+        },
+        "shadows": {},
+        "breakpoints": {
+          "mobile": 390,
+          "tablet": 768,
+          "desktop": 1200
+        }
+      }
+    },
+    "route": {
+      "type": "dynamicItem",
+      "path": "/team/devansh",
+      "status": "published",
+      "canonical": "/team/devansh",
+      "params": {
+        "collection": "team",
+        "slug": "devansh"
+      }
+    },
+    "content": {
+      "schemaVersion": "backy.content.v1",
+      "id": "template_team_member",
+      "kind": "dynamicItem",
+      "title": "Team member",
+      "locale": "en",
+      "version": "v1",
+      "elements": [
+        {
+          "id": "member_name",
+          "type": "heading",
+          "children": [],
+          "props": {},
+          "styles": {},
+          "responsive": {},
+          "actions": [],
+          "dataBindings": [
+            {
+              "id": "bind_member_name",
+              "elementId": "member_name",
+              "targetPath": "props.content",
+              "source": {
+                "kind": "collection",
+                "collectionId": "team",
+                "field": "name",
+                "recordId": "member_devansh"
+              },
+              "mode": "text"
+            }
+          ],
+          "permissions": {
+            "editContent": true
+          }
+        },
+        {
+          "id": "member_photo",
+          "type": "image",
+          "children": [],
+          "props": {},
+          "styles": {
+            "borderRadius": "{radii.md}"
+          },
+          "responsive": {},
+          "actions": [],
+          "dataBindings": [
+            {
+              "id": "bind_member_photo",
+              "elementId": "member_photo",
+              "targetPath": "props.assetId",
+              "source": {
+                "kind": "collection",
+                "collectionId": "team",
+                "field": "photo",
+                "recordId": "member_devansh"
+              },
+              "mode": "image"
+            }
+          ],
+          "permissions": {
+            "editContent": true
+          }
+        }
+      ]
+    },
+    "assets": {
+      "media": [],
+      "fonts": []
+    },
+    "interactions": {
+      "forms": [],
+      "comments": [],
+      "actions": {
+        "schemaVersion": "backy.actions.v1",
+        "actions": []
+      }
+    },
+    "seo": {
+      "title": "Devansh | Team",
+      "description": "Team member profile rendered by a collection-backed template.",
+      "canonical": "/team/devansh",
+      "robots": {
+        "index": true,
+        "follow": true
+      },
+      "jsonLd": []
+    },
+    "dataBindings": {
+      "schemaVersion": "backy.bindings.v1",
+      "datasets": [
+        {
+          "id": "dataset_team_member",
+          "collectionId": "team",
+          "query": {
+            "slug": "devansh"
+          }
+        }
+      ],
+      "bindings": [
+        {
+          "id": "bind_member_name",
+          "elementId": "member_name",
+          "targetPath": "props.content",
+          "source": {
+            "kind": "collection",
+            "collectionId": "team",
+            "field": "name",
+            "recordId": "member_devansh"
+          },
+          "mode": "text"
+        },
+        {
+          "id": "bind_member_photo",
+          "elementId": "member_photo",
+          "targetPath": "props.assetId",
+          "source": {
+            "kind": "collection",
+            "collectionId": "team",
+            "field": "photo",
+            "recordId": "member_devansh"
+          },
+          "mode": "image"
+        }
+      ]
+    },
+    "editableMap": {
+      "member.name": {
+        "elementId": "member_name",
+        "field": "props.content",
+        "editable": true,
+        "label": "Member name",
+        "valueType": "string",
+        "scope": "collectionRecord"
+      },
+      "member.photo": {
+        "elementId": "member_photo",
+        "field": "props.assetId",
+        "editable": true,
+        "label": "Member photo",
+        "valueType": "image",
+        "scope": "collectionRecord"
+      }
+    }
+  }
+}

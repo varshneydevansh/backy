@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://backy.dev/schemas/ai-frontend-contract/theme-tokens.schema.json",
+  "title": "Backy Theme Tokens",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "backy.theme.v1"
+    },
+    "colors": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "properties": {
+        "primary": { "type": "string" },
+        "secondary": { "type": "string" },
+        "background": { "type": "string" },
+        "surface": { "type": "string" },
+        "text": { "type": "string" },
+        "textMuted": { "type": "string" },
+        "success": { "type": "string" },
+        "warning": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "typography": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "families": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "properties": {
+            "heading": { "type": "string" },
+            "body": { "type": "string" },
+            "mono": { "type": "string" }
+          }
+        },
+        "scale": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "lineHeights": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["number", "string"]
+          }
+        },
+        "weights": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["number", "string"]
+          }
+        }
+      }
+    },
+    "spacing": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "radii": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "shadows": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "motion": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "duration": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "easing": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "breakpoints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mobile": { "type": "number", "minimum": 0 },
+        "tablet": { "type": "number", "minimum": 0 },
+        "desktop": { "type": "number", "minimum": 0 },
+        "wide": { "type": "number", "minimum": 0 }
+      }
+    },
+    "customCss": {
+      "type": "string"
+    }
+  },
+  "required": ["schemaVersion", "colors", "typography", "spacing", "radii", "shadows", "breakpoints"]
+}

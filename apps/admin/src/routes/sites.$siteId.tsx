@@ -62,8 +62,16 @@ const DEFAULT_COMMENT_REPORT_REASONS: CommentReportReason[] = [
 ];
 
 const apiBase = (() => {
-  const envBase = (import.meta as unknown as { env?: Record<string, string | undefined> }).env
-    ?.VITE_BACKY_PUBLIC_API_BASE_URL?.trim();
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+  const envBase = (
+    env.VITE_BACKY_PUBLIC_API_BASE_URL ||
+    env.VITE_PUBLIC_API_URL ||
+    env.VITE_API_BASE_URL ||
+    ''
+  ).trim();
+  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+    return 'http://localhost:3001';
+  }
   return envBase ? envBase.replace(/\/$/, '') : '';
 })();
 
@@ -94,7 +102,7 @@ function csvEscape(value: unknown): string {
   return `"${raw.replace(/"/g, '""')}"`;
 }
 
-function makeCsvBlob(rows: string[][]): Blob {
+function makeCsvBlob(rows: unknown[][]): Blob {
   const csv = rows.map((line) => line.map(csvEscape).join(',')).join('\n');
   return new Blob([csv], { type: 'text/csv;charset=utf-8' });
 }
@@ -120,7 +128,13 @@ function EditSitePage() {
   const site = sites.find((s) => s.id === siteId);
   const siteApiId = site?.publicSiteId || site?.slug || site?.id;
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    slug: string;
+    customDomain: string;
+    description: string;
+    status: SiteStatusFilter;
+  }>({
     name: '',
     slug: '',
     customDomain: '',
@@ -341,11 +355,11 @@ function EditSitePage() {
       }
 
       const payload = await response.json().catch(() => null);
-      const reasons = Array.isArray(payload?.reasons) ? payload.reasons : [];
+      const reasons: unknown[] = Array.isArray(payload?.reasons) ? payload.reasons : [];
       const fallback = new Set(DEFAULT_COMMENT_REPORT_REASONS);
       const parsed = reasons
-        .map((value) => (typeof value === 'string' ? value.trim() : ''))
-        .filter((value): value is CommentReportReason =>
+        .map((value: unknown) => (typeof value === 'string' ? value.trim() : ''))
+        .filter((value: string): value is CommentReportReason =>
           value.length > 0 && fallback.has(value as CommentReportReason),
         );
 

@@ -40,6 +40,12 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Path-based page fetch for public rendering.
   - Must return only published content.
 
+- `GET /api/sites/:siteId/render?path=/about`
+- `GET /api/public/sites/:siteId/render?path=/about` (future stable alias)
+  - Returns the external render payload described by `specs/ai-frontend-contract/content-payload.schema.json`.
+  - Includes site bootstrap, route, canonical content document, assets, forms/comments/actions, SEO, data bindings, and editable map.
+  - Current implementation is backed by the public seed adapter; production implementation must use the durable service layer.
+
 - `GET /api/sites/:siteId/blog/posts?status=published&limit=&cursor=`
 - `GET /api/public/sites/:siteId/blog/posts?status=published&limit=&cursor=` (optional alias)
   - Published posts list with canonical URLs.
@@ -85,9 +91,13 @@ Public page payload should include:
 - `POST /api/admin/sites/:siteId/media`
   - multipart upload
   - query/body flags: `scope` (`global|page|post`), `scopeTargetId`, `visibility`
+  - current implementation accepts `file`, `altText`, `caption`, `tags`, `uploadedBy`
+  - validates image/video/audio/document/font MIME categories and writes local assets under `/public/uploads/sites/:siteId/...`
+  - returns `{ success, requestId, data: { media } }`
 
 - `GET /api/admin/sites/:siteId/media`
   - filters: `scope`, `visibility`, `search`, `type`, `tag`, `page`, `perPage`
+  - current implementation supports `scope`, `visibility`, `type`, `pageId`, `postId`, `limit`, `offset`
 
 - `PATCH /api/admin/sites/:siteId/media/:mediaId`
   - Update metadata (alt, caption, tags, visibility)

@@ -4,7 +4,7 @@ import {
     Bold, Italic, Underline, Strikethrough, Code,
     Link, List, ListOrdered, Image,
     Undo, Redo, AlignLeft, AlignCenter, AlignRight,
-    Table, ChevronDown, Palette, Type, Highlighter
+    Table, ChevronDown, Palette, Highlighter
 } from 'lucide-react';
 import { cn } from '../utils';
 import { Editor, Transforms, Element as SlateElement } from 'slate';
@@ -103,7 +103,7 @@ const toggleBlock = (editor: any, format: string) => {
 
 // --- Main Compact Toolbar ---
 export const AdvancedToolbar = ({ className }: { className?: string }) => {
-    const editor = useEditorRef();
+    const editor = useEditorRef() as any;
     if (!editor) return null;
 
     return (

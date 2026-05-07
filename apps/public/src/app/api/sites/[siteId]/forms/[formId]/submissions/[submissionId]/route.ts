@@ -237,7 +237,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           formId: form.id,
           eventType: 'contact-shared',
           target: form.notificationWebhook,
-          requestId: updated.requestId,
+          requestId: updated.requestId ?? undefined,
           siteId: site.id,
           submissionId: updated.id,
           contactId: contact.id,

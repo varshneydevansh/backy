@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, UserPlus, Mail, Lock } from 'lucide-react';
+import { ArrowLeft, UserPlus } from 'lucide-react';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { cn } from '@/lib/utils';

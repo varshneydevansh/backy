@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, Upload, Image as ImageIcon, Film } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getDefaultMediaSiteId, listMedia, uploadMedia } from '@/lib/mediaApi';
 import { useStore, type MediaAsset } from '@/stores/mockStore';
 
-type AllowedType = 'image' | 'video' | 'file' | 'any';
+type AllowedType = 'image' | 'video' | 'file' | 'font' | 'any';
 type MediaScopeFilter = 'all' | 'global' | 'page' | 'post';
 type UploadFilter = 'all' | 'image' | 'video' | 'file';
 type MediaLibraryTab = 'library' | 'upload';
 
 export interface MediaContext {
+  siteId?: string;
   scope?: 'global' | 'page' | 'post';
   targetId?: string;
   targetLabel?: string;
@@ -39,10 +41,14 @@ export function MediaLibraryModal({
 }: MediaLibraryModalProps) {
   const media = useStore((state) => state.media);
   const addMedia = useStore((state) => state.addMedia);
+  const setMedia = useStore((state) => state.setMedia);
   const [activeTab, setActiveTab] = useState<MediaLibraryTab>('library');
   const [uploadFilter, setUploadFilter] = useState<UploadFilter>('all');
   const [dragActive, setDragActive] = useState(false);
   const [scopeFilter, setScopeFilter] = useState<MediaScopeFilter>(mediaContext?.scope || 'all');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -58,11 +64,12 @@ export function MediaLibraryModal({
   }, [initialTab, initialUploadFilter, isOpen]);
 
   const allowedTypesSet = useMemo(() => {
-    if (allowedTypes === 'any') return new Set(['image', 'video', 'file']);
+    if (allowedTypes === 'any') return new Set(['image', 'video', 'file', 'font']);
     if (allowedTypes === 'file') return new Set(['file']);
     return new Set([allowedTypes]);
   }, [allowedTypes]);
 
+  const siteId = mediaContext?.siteId || getDefaultMediaSiteId();
   const targetScope = mediaContext?.scope || 'global';
   const targetId = mediaContext?.targetId;
   const targetLabel = mediaContext?.targetLabel || mediaContext?.targetId;
@@ -105,6 +112,33 @@ export function MediaLibraryModal({
     return scopeMatches(item, scopeFilter);
   };
 
+  const loadMedia = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const loaded = await listMedia({
+        siteId,
+        limit: 100,
+        pageId: targetScope === 'page' ? targetId : undefined,
+        postId: targetScope === 'post' ? targetId : undefined,
+      });
+      setMedia(loaded);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load media library');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [setMedia, siteId, targetId, targetScope]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    void loadMedia();
+  }, [isOpen, loadMedia]);
+
   const filteredMedia = useMemo(
     () =>
       normalized.filter((item) => {
@@ -120,7 +154,7 @@ export function MediaLibraryModal({
     return `${scope === 'page' ? 'Page' : 'Post'}${item.scopeTargetId ? ` • ${item.scopeTargetId}` : ''}`;
   };
 
-  const handleFileUpload = (files: FileList | null, filterHint: UploadFilter) => {
+  const handleFileUpload = async (files: FileList | null, filterHint: UploadFilter) => {
     if (!files || files.length === 0) return;
 
     const shouldKeepFile = (file: File) => {
@@ -130,38 +164,71 @@ export function MediaLibraryModal({
       return !file.type.startsWith('image/') && !file.type.startsWith('video/');
     };
 
-    Array.from(files).forEach((file) => {
+    setIsUploading(true);
+    setError(null);
+
+    try {
+      const uploaded: MediaAsset[] = [];
+
+      for (const file of Array.from(files)) {
       const resolvedType = file.type.startsWith('image/')
         ? 'image'
         : file.type.startsWith('video/')
           ? 'video'
           : 'file';
 
-      if (!shouldKeepFile(file)) return;
-      if (!['image', 'video', 'file'].includes(resolvedType)) return;
+        if (!shouldKeepFile(file)) continue;
+        if (!['image', 'video', 'file'].includes(resolvedType)) continue;
 
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        const scope = (targetScope || 'global') as 'global' | 'page' | 'post';
-
-        addMedia({
-          name: file.name,
-          type: resolvedType,
-          size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
-          url: result,
-          scope,
+        const uploadedItem = await uploadMedia(file, {
+          siteId,
+          scope: targetScope,
           scopeTargetId: targetId || null,
           visibility: 'public',
-          uploadedBy: 'admin',
-          targetPageIds: scope === 'page' && targetId ? [targetId] : [],
-          targetPostIds: scope === 'post' && targetId ? [targetId] : [],
         });
-      };
-      reader.readAsDataURL(file);
-    });
+        uploaded.push(uploadedItem);
+      }
 
-    setActiveTab('library');
+      if (uploaded.length) {
+        setMedia([...uploaded, ...media.filter((item) => !uploaded.some((next) => next.id === item.id))]);
+      }
+
+      setActiveTab('library');
+    } catch (uploadError) {
+      const fallbackFiles = Array.from(files).filter(shouldKeepFile);
+
+      fallbackFiles.forEach((file) => {
+        const resolvedType = file.type.startsWith('image/')
+          ? 'image'
+          : file.type.startsWith('video/')
+            ? 'video'
+            : 'file';
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const result = event.target?.result as string;
+
+          addMedia({
+            name: file.name,
+            type: resolvedType,
+            size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
+            url: result,
+            scope: targetScope,
+            scopeTargetId: targetId || null,
+            visibility: 'public',
+            uploadedBy: 'admin',
+            targetPageIds: targetScope === 'page' && targetId ? [targetId] : [],
+            targetPostIds: targetScope === 'post' && targetId ? [targetId] : [],
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+
+      setError(uploadError instanceof Error ? uploadError.message : 'Backend upload failed; kept local fallback copy.');
+      setActiveTab('library');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -231,8 +298,18 @@ export function MediaLibraryModal({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 min-h-[400px]">
+          {error ? (
+            <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {error}
+            </div>
+          ) : null}
           {activeTab === 'library' ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {isLoading ? (
+                <div className="col-span-full py-12 text-center text-sm text-muted-foreground">
+                  Loading media...
+                </div>
+              ) : null}
               {filteredMedia.map((item) => (
                 <button
                   key={item.id}
@@ -272,7 +349,7 @@ export function MediaLibraryModal({
                 </button>
               ))}
 
-              {filteredMedia.length === 0 ? (
+              {!isLoading && filteredMedia.length === 0 ? (
                 <div className="col-span-full flex flex-col items-center justify-center py-12 text-muted-foreground">
                   <ImageIcon className="w-12 h-12 mb-2 opacity-50" />
                   <p>No media found</p>
@@ -310,19 +387,22 @@ export function MediaLibraryModal({
                 onDrop={(e) => {
                   e.preventDefault();
                   setDragActive(false);
-                  handleFileUpload(e.dataTransfer.files, uploadFilter);
+                  void handleFileUpload(e.dataTransfer.files, uploadFilter);
                 }}
               >
                 <input
                   type="file"
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   multiple
-                  onChange={(e) => handleFileUpload(e.target.files, uploadFilter)}
+                  disabled={isUploading}
+                  onChange={(e) => void handleFileUpload(e.target.files, uploadFilter)}
                 />
                 <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4 pointer-events-none">
                   <Upload className="w-8 h-8 text-muted-foreground" />
                 </div>
-                <h3 className="text-lg font-medium mb-1 pointer-events-none">Drag & Drop files here</h3>
+                <h3 className="text-lg font-medium mb-1 pointer-events-none">
+                  {isUploading ? 'Uploading...' : 'Drag & Drop files here'}
+                </h3>
                 <p className="text-sm text-muted-foreground mb-4 pointer-events-none">
                   or click to browse
                 </p>

@@ -23,6 +23,9 @@
       }
     ],
     "paths": {
+      "@backy-cms/core": [
+        "../../packages/core/src/index.ts"
+      ],
       "@/*": [
         "./src/*"
       ]

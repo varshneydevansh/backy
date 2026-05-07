@@ -8,7 +8,6 @@ import {
   Layout,
   FileText,
   Users,
-  Plus,
   ArrowUpRight,
   HardDrive
 } from 'lucide-react';

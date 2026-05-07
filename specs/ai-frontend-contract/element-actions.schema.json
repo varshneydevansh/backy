@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://backy.dev/schemas/ai-frontend-contract/element-actions.schema.json",
+  "title": "Backy Element Actions",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": {
+          "enum": [
+            "link",
+            "route",
+            "submitForm",
+            "openModal",
+            "closeModal",
+            "toggle",
+            "playMedia",
+            "pauseMedia",
+            "download",
+            "customEvent"
+          ]
+        },
+        "label": { "type": "string" },
+        "target": { "type": "string" },
+        "href": { "type": "string" },
+        "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+        "formId": { "type": "string" },
+        "mediaId": { "type": "string" },
+        "openIn": { "enum": ["self", "new-tab", "modal", "download"] },
+        "requiresAuth": { "type": "boolean" },
+        "analyticsEvent": { "type": "string" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "required": ["id", "type"]
+    }
+  },
+  "properties": {
+    "schemaVersion": {
+      "const": "backy.actions.v1"
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/action"
+      }
+    }
+  },
+  "required": ["schemaVersion", "actions"]
+}

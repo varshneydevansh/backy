@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://backy.dev/schemas/ai-frontend-contract/editable-map.schema.json",
+  "title": "Backy Editable Map",
+  "type": "object",
+  "additionalProperties": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "elementId": { "type": "string", "minLength": 1 },
+      "field": { "type": "string", "minLength": 1 },
+      "token": { "type": "string" },
+      "editable": { "type": "boolean" },
+      "permission": { "type": "string" },
+      "label": { "type": "string" },
+      "valueType": {
+        "enum": ["string", "richText", "number", "boolean", "color", "image", "video", "audio", "file", "url", "json"]
+      },
+      "scope": {
+        "enum": ["site", "page", "post", "template", "element", "collectionRecord"]
+      }
+    },
+    "required": ["elementId", "field", "editable", "valueType"]
+  }
+}

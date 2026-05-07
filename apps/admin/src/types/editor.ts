@@ -176,9 +176,6 @@ export interface ElementProps {
   scopeTargetId?: string | null;
   name?: string;
 
-  // Rich text marks
-  fontSize?: string | number;
-
   // Media/asset metadata
   src?: string;
   alt?: string;

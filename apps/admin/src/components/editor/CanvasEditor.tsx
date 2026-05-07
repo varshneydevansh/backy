@@ -243,7 +243,7 @@ export function CanvasEditor({
   const [isPreview, setIsPreview] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autosaveTimeoutRef = useRef<number | null>(null);
   const changeSequenceRef = useRef(0);
 
   // Undo/Redo State
@@ -672,7 +672,7 @@ export function CanvasEditor({
   /**
    * Handle drag start from component library
    */
-  const handleDragStart = useCallback((item: ComponentLibraryItem) => {
+  const handleDragStart = useCallback((_item: ComponentLibraryItem) => {
     // Placeholder for drag analytics/hooks.
   }, []);
 
@@ -989,23 +989,23 @@ export function CanvasEditor({
 
   return (
     <ActiveEditorProvider>
-      <div className={cn("flex flex-col bg-background", className || "fixed inset-0")}>
+      <div className={cn("flex flex-col bg-slate-100 text-slate-950", className || "fixed inset-0")}>
         {/* Header */}
-        <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4">
+        <header className="h-14 bg-white/95 border-b border-slate-200 shadow-sm backdrop-blur flex items-center justify-between px-4">
           {/* Left */}
           {!hideNavigation ? (
             <div className="flex items-center gap-4">
               <button
                 type="button"
                 onClick={onBack}
-                className="p-2 rounded-lg hover:bg-accent"
+                className="p-2 rounded-md hover:bg-slate-100"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
 
               <div>
                 <h1 className="font-semibold">{mode === 'blog' ? 'Edit Post' : 'Edit Page'}</h1>
-                <p className="text-xs text-muted-foreground">{pageSettings.title || 'Untitled'}</p>
+                <p className="text-xs text-slate-500">{pageSettings.title || 'Untitled'}</p>
               </div>
 
               {hasUnsavedChanges && (
@@ -1017,15 +1017,15 @@ export function CanvasEditor({
           ) : <div className="w-4" />}
 
           {/* Center - Breakpoint Toggle */}
-          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
             <button
               type="button"
               onClick={() => handleBreakpointChange('desktop')}
               className={cn(
                 'p-2 rounded-md transition-colors',
                 breakpoint === 'desktop'
-                  ? 'bg-card shadow-sm'
-                  : 'hover:bg-muted/80'
+                  ? 'bg-white text-slate-950 shadow-sm'
+                  : 'text-slate-500 hover:bg-white/70'
               )}
               title="Desktop"
             >
@@ -1037,8 +1037,8 @@ export function CanvasEditor({
               className={cn(
                 'p-2 rounded-md transition-colors',
                 breakpoint === 'tablet'
-                  ? 'bg-card shadow-sm'
-                  : 'hover:bg-muted/80'
+                  ? 'bg-white text-slate-950 shadow-sm'
+                  : 'text-slate-500 hover:bg-white/70'
               )}
               title="Tablet"
             >
@@ -1050,8 +1050,8 @@ export function CanvasEditor({
               className={cn(
                 'p-2 rounded-md transition-colors',
                 breakpoint === 'mobile'
-                  ? 'bg-card shadow-sm'
-                  : 'hover:bg-muted/80'
+                  ? 'bg-white text-slate-950 shadow-sm'
+                  : 'text-slate-500 hover:bg-white/70'
               )}
               title="Mobile"
             >
@@ -1066,7 +1066,7 @@ export function CanvasEditor({
               type="button"
               onClick={handleUndo}
               disabled={historyIndex <= 0}
-              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Undo (Ctrl+Z)"
               aria-label="Undo"
             >
@@ -1077,7 +1077,7 @@ export function CanvasEditor({
               type="button"
               onClick={handleRedo}
               disabled={historyIndex >= history.length - 1}
-              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Redo (Ctrl+Shift+Z)"
               aria-label="Redo"
             >
@@ -1090,7 +1090,7 @@ export function CanvasEditor({
               type="button"
               onClick={handleCopy}
               disabled={!selectedId}
-              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Copy (Ctrl+C)"
               aria-label="Copy"
             >
@@ -1100,7 +1100,7 @@ export function CanvasEditor({
               type="button"
               onClick={handleCut}
               disabled={!selectedId}
-              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Cut (Ctrl+X)"
               aria-label="Cut"
             >
@@ -1110,7 +1110,7 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={handlePaste}
-              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent"
+              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100"
               title="Paste (Ctrl+V)"
               aria-label="Paste"
             >
@@ -1120,7 +1120,7 @@ export function CanvasEditor({
               type="button"
               onClick={handleDuplicate}
               disabled={!selectedId}
-              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Duplicate (Ctrl+D)"
               aria-label="Duplicate"
             >
@@ -1130,24 +1130,24 @@ export function CanvasEditor({
               type="button"
               onClick={deleteElement}
               disabled={!selectedId}
-              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Delete (Delete)"
               aria-label="Delete"
             >
               Delete
             </button>
 
-            <div className="w-px h-6 bg-border mx-1" />
+            <div className="w-px h-6 bg-slate-200 mx-1" />
 
             {/* Preview Toggle */}
             <button
               type="button"
               onClick={() => setIsPreview(!isPreview)}
               className={cn(
-                'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm',
+                'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm',
                 isPreview
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-accent'
+                  ? 'bg-slate-950 text-white'
+                  : 'hover:bg-slate-100'
               )}
             >
               <Eye className="w-4 h-4" />
@@ -1159,7 +1159,7 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={() => setIsSettingsOpen(true)}
-              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent"
+              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100"
               title="Page settings"
                 aria-label="Page settings"
               >
@@ -1171,7 +1171,7 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={handleReload}
-              className="px-2 py-1.5 rounded-lg text-sm font-medium hover:bg-accent"
+              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100"
               title="Reload page from last saved state"
               aria-label="Reload page"
             >
@@ -1179,7 +1179,7 @@ export function CanvasEditor({
               <span className="ml-1">Reload</span>
             </button>
 
-            <div className="w-px h-6 bg-border mx-1" />
+            <div className="w-px h-6 bg-slate-200 mx-1" />
 
             {/* Save */}
             {!hideSave && (
@@ -1190,7 +1190,7 @@ export function CanvasEditor({
                     onClick={handleTogglePublish}
                     disabled={isSaving}
                     className={cn(
-                      'px-2 py-1.5 rounded-lg text-sm font-medium',
+                      'px-2 py-1.5 rounded-md text-sm font-medium',
                       pageSettings.status === 'published'
                         ? 'bg-amber-500 text-white hover:bg-amber-500/90'
                         : 'bg-emerald-600 text-white hover:bg-emerald-600/90',
@@ -1213,9 +1213,9 @@ export function CanvasEditor({
 
                 <button
                   type="button"
-                  onClick={handleSaveWrapper}
+                  onClick={() => void handleSaveWrapper()}
                   disabled={isSaving}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm bg-slate-950 text-white hover:bg-slate-800 disabled:opacity-70 disabled:cursor-not-allowed"
                   title="Save Page (Ctrl+S)"
                 >
                   <Save className="w-4 h-4" />
@@ -1235,12 +1235,18 @@ export function CanvasEditor({
           {/* Center - Canvas */}
           <div
             ref={canvasViewportRef}
-            className="flex-1 bg-muted overflow-auto p-8"
+            className="flex-1 overflow-auto p-8"
+            style={{
+              backgroundColor: '#eef2f7',
+              backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(100,116,139,0.28) 1px, transparent 0)',
+              backgroundSize: '20px 20px',
+            }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleCanvasDrop}
           >
             <div className="flex justify-center min-h-full">
               <div
+                className="relative"
                 style={{
                   transform: isPreview ? `scale(${canvasScale})` : undefined,
                   transformOrigin: 'top center',
@@ -1248,6 +1254,12 @@ export function CanvasEditor({
                   height: isPreview ? size.height : undefined,
                 }}
               >
+                {!isPreview && (
+                  <div className="mb-3 flex items-center justify-between text-xs font-medium text-slate-500">
+                    <span>{breakpoint.charAt(0).toUpperCase() + breakpoint.slice(1)} canvas</span>
+                    <span>{size.width} x {size.height}px</span>
+                  </div>
+                )}
                 <Canvas
                   elements={elements}
                   onElementsChange={handleElementsChange}

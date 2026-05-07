@@ -288,10 +288,11 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
   }, [focusAndRestore]);
 
   const getIsListNode = useCallback((node: unknown): node is SlateElement & { type: 'ul' | 'ol' } => {
+    const type = (node as SlateElement & { type?: unknown }).type;
     return (
       !Editor.isEditor(node) &&
       SlateElement.isElement(node) &&
-      ['ul', 'ol'].includes((node as SlateElement & { type?: string }).type)
+      (type === 'ul' || type === 'ol')
     );
   }, []);
 
@@ -310,7 +311,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     const matching = Array.from(
-      Editor.nodes(editor, {
+      Editor.nodes(editor as any, {
         at: editor.selection,
         match: (node) =>
           SlateElement.isElement(node) &&
@@ -339,7 +340,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     }
 
     const listTypes = Array.from(
-      Editor.nodes(editor, {
+      Editor.nodes(editor as any, {
         at: editor.selection,
         match: (node) => getIsListNode(node),
         mode: 'lowest',
@@ -363,7 +364,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       if (!editor.selection || !Range.isRange(editor.selection)) return;
 
       const listItems = Array.from(
-        Editor.nodes(editor, {
+        Editor.nodes(editor as any, {
           at: editor.selection,
           match: (node) => getIsListItemNode(node),
           mode: 'lowest',
@@ -417,7 +418,7 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
       }
 
       const textNodes = Array.from(
-        Editor.nodes(editor, {
+        Editor.nodes(editor as any, {
           at: selection,
           match: (node) => Text.isText(node),
           mode: 'all',

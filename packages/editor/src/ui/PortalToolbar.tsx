@@ -137,7 +137,7 @@ export const PORTAL_TOOLBAR_CONTAINER_ID = 'rich-text-toolbar-portal';
 
 // --- Main Portal Toolbar ---
 export const PortalToolbar = () => {
-    const editor = useEditorRef();
+    const editor = useEditorRef() as any;
     const [showTextColor, setShowTextColor] = useState(false);
     const [showHighlight, setShowHighlight] = useState(false);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);

@@ -5,14 +5,13 @@
  */
 
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { Plus, User, MoreVertical, Edit, Trash2, Mail } from 'lucide-react';
+import { Plus, User, Edit, Trash2 } from 'lucide-react';
 import { useStore, type User as UserType } from '@/stores/mockStore';
 import { useDataTable, type Column } from '@/hooks/useDataTable';
 import { PageShell } from '@/components/layout/PageShell';
 import { DataGrid } from '@/components/ui/DataGrid';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { useState } from 'react';
 
 export const Route = createFileRoute('/users')({
   component: UsersLayout,

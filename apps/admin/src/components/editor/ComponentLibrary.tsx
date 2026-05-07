@@ -96,9 +96,9 @@ export function ComponentLibrary({ onDragStart }: ComponentLibraryProps) {
   ];
 
   return (
-    <div className="w-72 bg-card border-r border-border flex flex-col h-full">
+    <div className="w-72 bg-white border-r border-slate-200 flex flex-col h-full">
       {/* Header */}
-      <div className="p-4 border-b border-border">
+      <div className="p-4 border-b border-slate-200">
         <h2 className="font-semibold mb-3">Components</h2>
 
         {/* Search */}
@@ -110,23 +110,23 @@ export function ComponentLibrary({ onDragStart }: ComponentLibraryProps) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className={cn(
-              'w-full pl-8 pr-3 py-1.5 text-sm rounded-md border bg-background',
-              'focus:outline-none focus:ring-2 focus:ring-ring'
+              'w-full pl-8 pr-3 py-1.5 text-sm rounded-md border border-slate-200 bg-slate-50',
+              'focus:outline-none focus:ring-2 focus:ring-sky-500'
             )}
           />
         </div>
       </div>
 
       {/* Category Filters */}
-      <div className="p-2 border-b border-border">
+      <div className="p-2 border-b border-slate-200">
         <div className="flex flex-wrap gap-1">
           <button
             onClick={() => setSelectedCategory(null)}
             className={cn(
               'px-2 py-1 text-xs rounded-md transition-colors',
               selectedCategory === null
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted hover:bg-muted/80'
+                ? 'bg-slate-950 text-white'
+                : 'bg-slate-100 hover:bg-slate-200'
             )}
           >
             All
@@ -138,8 +138,8 @@ export function ComponentLibrary({ onDragStart }: ComponentLibraryProps) {
               className={cn(
                 'px-2 py-1 text-xs rounded-md transition-colors flex items-center gap-1',
                 selectedCategory === cat.id
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted hover:bg-muted/80'
+                  ? 'bg-slate-950 text-white'
+                  : 'bg-slate-100 hover:bg-slate-200'
               )}
             >
               <span className={cn('w-2 h-2 rounded-full', cat.color)} />
@@ -244,14 +244,14 @@ function LibraryItem({ item, onDragStart }: LibraryItemProps) {
       draggable
       onDragStart={handleDragStart}
       className={cn(
-        'flex items-center gap-3 p-2 rounded-lg cursor-grab',
-        'hover:bg-accent transition-colors',
+        'flex items-center gap-3 p-2 rounded-md cursor-grab',
+        'hover:bg-slate-100 transition-colors',
         'active:cursor-grabbing'
       )}
       title={item.description}
     >
-      <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center flex-shrink-0">
-        <Icon className="w-4 h-4 text-muted-foreground" />
+      <div className="w-8 h-8 rounded-md bg-slate-100 flex items-center justify-center flex-shrink-0">
+        <Icon className="w-4 h-4 text-slate-500" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{item.name}</p>

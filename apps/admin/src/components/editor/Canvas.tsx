@@ -65,12 +65,6 @@ interface TreeUpdateResult {
   updated: boolean;
 }
 
-interface TreeResultWithParent {
-  elements: CanvasElement[];
-  updated: boolean;
-  removedParentId?: string | null;
-}
-
 const findElementById = (elements: CanvasElement[], targetId: string): CanvasElement | null => {
   for (const element of elements) {
     if (element.id === targetId) {
@@ -153,54 +147,6 @@ const insertElementAsChild = (
   });
 
   return { elements: next, updated: inserted };
-};
-
-const removeElementById = (
-  elements: CanvasElement[],
-  targetId: string,
-): TreeResultWithParent => {
-  let removedParentId: string | null | undefined;
-
-  const walk = (nodes: CanvasElement[], parentId: string | null): TreeUpdateResult => {
-    let updated = false;
-
-    const nextNodes = nodes.reduce<CanvasElement[]>((acc, element) => {
-      if (element.id === targetId) {
-        removedParentId = parentId;
-        updated = true;
-        return acc;
-      }
-
-      if (!element.children?.length) {
-        acc.push(element);
-        return acc;
-      }
-
-      const nextChildren = walk(element.children, element.id);
-      if (!nextChildren.updated) {
-        acc.push(element);
-        return acc;
-      }
-
-      updated = true;
-      acc.push({
-        ...element,
-        children: nextChildren.elements,
-      });
-      return acc;
-    }, []);
-
-    return {
-      elements: nextNodes,
-      updated,
-    };
-  };
-
-  const result = walk(elements, null);
-  return {
-    ...result,
-    removedParentId,
-  };
 };
 
 const canAcceptNestedDrop = (elementType: CanvasElement['type']): boolean => {
@@ -374,7 +320,7 @@ const buildSharedElementStyle = (element: CanvasElement): CSSProperties => {
     wordSpacing: toCssLength(p.wordSpacing ?? savedStyles.wordSpacing),
     textShadow: p.textShadow ?? savedStyles.textShadow,
     textIndent: toCssLength(p.textIndent ?? savedStyles.textIndent),
-    fontStyle: (p as Record<string, unknown>).fontStyle ?? (savedStyles as Record<string, unknown>).fontStyle,
+    fontStyle: ((p as Record<string, unknown>).fontStyle ?? (savedStyles as Record<string, unknown>).fontStyle) as CSSProperties['fontStyle'],
     textAlign: p.textAlign ?? savedStyles.textAlign,
     textDecoration: p.textDecoration ?? savedStyles.textDecoration,
     margin: toCssLength(p.margin ?? savedStyles.margin),
@@ -523,6 +469,7 @@ export function Canvas({
   const canvasRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const { clearActiveEditor } = useActiveEditor();
+  const elementsRef = useRef(elements);
   const debugTextInteraction = useCallback((..._args: unknown[]) => {
   }, []);
 
@@ -534,6 +481,10 @@ export function Canvas({
     }
     return null;
   }, []);
+
+  useEffect(() => {
+    elementsRef.current = elements;
+  }, [elements]);
 
   useEffect(() => {
     if (isPreview) {
@@ -700,20 +651,9 @@ export function Canvas({
         return;
       }
 
-      if (isTextEditableElement(clickedElement.type)) {
-        debugTextInteraction('handleMouseDown text-element-select-only', {
-          elementId: clickedElement.id,
-          elementType: clickedElement.type,
-        });
-        clearActiveEditor();
-        if (editingId) {
-          setEditingId(null);
-        }
-        onSelect(elementId);
-        return;
-      }
       debugTextInteraction('handleMouseDown started drag', { elementId, x: e.clientX, y: e.clientY });
 
+      e.preventDefault();
       onSelect(elementId);
 
       if (editingId) {
@@ -759,88 +699,90 @@ export function Canvas({
     [elements, isPreview]
   );
 
-  /**
-   * Handle mouse move for dragging and resizing
-   */
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (isPreview) return;
+  const handleGlobalElementMove = useCallback((event: MouseEvent) => {
+    if (isPreview) {
+      return;
+    }
 
-      // Handle resize
-      if (resizeState) {
-        const deltaX = e.clientX - resizeState.startX;
-        const deltaY = e.clientY - resizeState.startY;
+    if (resizeState) {
+      const deltaX = event.clientX - resizeState.startX;
+      const deltaY = event.clientY - resizeState.startY;
 
-        let newX = resizeState.initialX;
-        let newY = resizeState.initialY;
-        let newWidth = resizeState.initialWidth;
-        let newHeight = resizeState.initialHeight;
+      let newX = resizeState.initialX;
+      let newY = resizeState.initialY;
+      let newWidth = resizeState.initialWidth;
+      let newHeight = resizeState.initialHeight;
 
-        // Calculate new dimensions based on resize handle
-        switch (resizeState.handle) {
-          case 'se':
-            newWidth = Math.max(50, resizeState.initialWidth + deltaX);
-            newHeight = Math.max(30, resizeState.initialHeight + deltaY);
-            break;
-          case 'sw':
-            newX = resizeState.initialX + deltaX;
-            newWidth = Math.max(50, resizeState.initialWidth - deltaX);
-            newHeight = Math.max(30, resizeState.initialHeight + deltaY);
-            break;
-          case 'ne':
-            newWidth = Math.max(50, resizeState.initialWidth + deltaX);
-            newY = resizeState.initialY + deltaY;
-            newHeight = Math.max(30, resizeState.initialHeight - deltaY);
-            break;
-          case 'nw':
-            newX = resizeState.initialX + deltaX;
-            newY = resizeState.initialY + deltaY;
-            newWidth = Math.max(50, resizeState.initialWidth - deltaX);
-            newHeight = Math.max(30, resizeState.initialHeight - deltaY);
-            break;
-        }
-
-        // Snap to grid
-        newX = Math.round(newX / 10) * 10;
-        newY = Math.round(newY / 10) * 10;
-        newWidth = Math.round(newWidth / 10) * 10;
-        newHeight = Math.round(newHeight / 10) * 10;
-
-        onElementsChange(
-          updateElementById(elements, resizeState.elementId, (element) => ({
-            ...element,
-            x: newX,
-            y: newY,
-            width: newWidth,
-            height: newHeight,
-          })).elements
-        );
-        return;
+      switch (resizeState.handle) {
+        case 'se':
+          newWidth = Math.max(50, resizeState.initialWidth + deltaX);
+          newHeight = Math.max(30, resizeState.initialHeight + deltaY);
+          break;
+        case 'sw':
+          newX = resizeState.initialX + deltaX;
+          newWidth = Math.max(50, resizeState.initialWidth - deltaX);
+          newHeight = Math.max(30, resizeState.initialHeight + deltaY);
+          break;
+        case 'ne':
+          newWidth = Math.max(50, resizeState.initialWidth + deltaX);
+          newY = resizeState.initialY + deltaY;
+          newHeight = Math.max(30, resizeState.initialHeight - deltaY);
+          break;
+        case 'nw':
+          newX = resizeState.initialX + deltaX;
+          newY = resizeState.initialY + deltaY;
+          newWidth = Math.max(50, resizeState.initialWidth - deltaX);
+          newHeight = Math.max(30, resizeState.initialHeight - deltaY);
+          break;
       }
 
-      // Handle drag
-      if (dragState) {
-        const deltaX = e.clientX - dragState.startX;
-        const deltaY = e.clientY - dragState.startY;
+      onElementsChange(
+        updateElementById(elementsRef.current, resizeState.elementId, (element) => ({
+          ...element,
+          x: Math.round(newX / 10) * 10,
+          y: Math.round(newY / 10) * 10,
+          width: Math.round(newWidth / 10) * 10,
+          height: Math.round(newHeight / 10) * 10,
+        })).elements
+      );
+      return;
+    }
 
-        const newX = dragState.initialX + deltaX;
-        const newY = dragState.initialY + deltaY;
+    if (!dragState) {
+      return;
+    }
 
-        // Snap to grid (10px)
-        const snappedX = Math.round(newX / 10) * 10;
-        const snappedY = Math.round(newY / 10) * 10;
+    const deltaX = event.clientX - dragState.startX;
+    const deltaY = event.clientY - dragState.startY;
+    const newX = dragState.initialX + deltaX;
+    const newY = dragState.initialY + deltaY;
 
-        onElementsChange(
-          updateElementById(elements, dragState.elementId, (element) => ({
-            ...element,
-            x: snappedX,
-            y: snappedY,
-          })).elements
-        );
-      }
-    },
-    [dragState, resizeState, elements, isPreview, onElementsChange]
-  );
+    onElementsChange(
+      updateElementById(elementsRef.current, dragState.elementId, (element) => ({
+        ...element,
+        x: Math.round(newX / 10) * 10,
+        y: Math.round(newY / 10) * 10,
+      })).elements
+    );
+  }, [dragState, isPreview, onElementsChange, resizeState]);
+
+  const handleGlobalElementUp = useCallback(() => {
+    setDragState(null);
+    setResizeState(null);
+  }, []);
+
+  useEffect(() => {
+    if (!dragState && !resizeState) {
+      return;
+    }
+
+    window.addEventListener('mousemove', handleGlobalElementMove);
+    window.addEventListener('mouseup', handleGlobalElementUp);
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalElementMove);
+      window.removeEventListener('mouseup', handleGlobalElementUp);
+    };
+  }, [dragState, handleGlobalElementMove, handleGlobalElementUp, resizeState]);
 
   const handleCanvasElementDrop = useCallback(
     (event: React.DragEvent, forcedParentId?: string) => {
@@ -1036,8 +978,8 @@ export function Canvas({
     <div
       ref={canvasRef}
       className={cn(
-        'relative bg-white overflow-hidden',
-        !isPreview && 'cursor-default'
+        'relative overflow-hidden bg-white shadow-[0_18px_55px_rgba(15,23,42,0.16)]',
+        !isPreview && 'cursor-default ring-1 ring-slate-200'
       )}
       style={{
         width: size.width,
@@ -1045,9 +987,7 @@ export function Canvas({
         minWidth: size.width,
         minHeight: size.height,
       }}
-      onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
       onClick={handleCanvasClick}
       onDoubleClick={handleCanvasDoubleClick}
     >
@@ -1057,8 +997,8 @@ export function Canvas({
           className="absolute inset-0 pointer-events-none opacity-20"
           style={{
             backgroundImage: `
-              linear-gradient(to right, #e5e7eb 1px, transparent 1px),
-              linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
+              linear-gradient(to right, #cbd5e1 1px, transparent 1px),
+              linear-gradient(to bottom, #cbd5e1 1px, transparent 1px)
             `,
             backgroundSize: '10px 10px',
           }}
@@ -1074,7 +1014,7 @@ export function Canvas({
             selectedId={selectedId}
             isPreview={isPreview}
             onPointerDown={(e) => handleMouseDown(e, element.id)}
-            onResizeStart={(e, handle) => handleResizeStart(e, element.id, handle)}
+            onResizeStart={handleResizeStart}
             onClick={(e) => {
               e.stopPropagation();
               debugTextInteraction('element onClick', {
@@ -1122,14 +1062,14 @@ interface CanvasElementComponentProps {
   selectedId: string | null;
   isPreview: boolean;
   onPointerDown: (e: React.PointerEvent, elementId?: string) => void;
-  onResizeStart: (e: React.MouseEvent, handle: 'nw' | 'ne' | 'sw' | 'se') => void;
+  onResizeStart: (e: React.MouseEvent, elementId: string, handle: 'nw' | 'ne' | 'sw' | 'se') => void;
   onClick: (e: React.MouseEvent) => void;
   onSelectElement: (elementId: string) => void;
   onUpdate: (updates: { [key: string]: unknown }) => void;
   onUpdateElement: (elementId: string, updates: { [key: string]: unknown }) => void;
   onDrop?: (e: React.DragEvent, forcedParentId?: string) => void;
   isEditing: boolean;
-  onDoubleClick: () => void;
+  onDoubleClick: (elementId?: string) => void;
   onStopEditing?: () => void;
 }
 
@@ -1164,11 +1104,12 @@ function CanvasElementComponent({
           selectedId={resolvedSelectedId}
           isPreview={isPreview}
           onPointerDown={(event) => onPointerDown(event, child.id)}
-          onResizeStart={(event, handle) => onResizeStart(event, child.id, handle)}
+          onResizeStart={onResizeStart}
           onClick={(event) => {
             event.stopPropagation();
             onSelectElement(child.id);
           }}
+          onSelectElement={onSelectElement}
           onUpdate={(updates) => onUpdateElement(child.id, updates)}
           onUpdateElement={onUpdateElement}
           onDrop={(event, forcedParentId) => onDrop?.(event, forcedParentId)}
@@ -1203,7 +1144,7 @@ function CanvasElementComponent({
         return (
           <div
             style={{ ...sharedStyle, width: '100%', height: '100%' }}
-            onDoubleClick={onDoubleClick}
+            onDoubleClick={() => onDoubleClick()}
             onMouseDown={(e) => {
               if (isEditing) e.stopPropagation();
             }}
@@ -1233,7 +1174,7 @@ function CanvasElementComponent({
       return (
         <div
           style={{ ...sharedStyle, width: '100%', height: '100%' }}
-          onDoubleClick={onDoubleClick}
+          onDoubleClick={() => onDoubleClick()}
           onMouseDown={(e) => {
             if (isEditing) e.stopPropagation();
           }}
@@ -1750,7 +1691,7 @@ function CanvasElementComponent({
         return (
           <div
             style={{ ...sharedStyle, width: '100%', height: '100%' }}
-            onDoubleClick={onDoubleClick}
+            onDoubleClick={() => onDoubleClick()}
             onMouseDown={(e) => {
               if (isEditing) e.stopPropagation();
             }}
@@ -1793,7 +1734,7 @@ function CanvasElementComponent({
         return (
         <div
             style={{ ...sharedStyle, width: '100%', height: '100%' }}
-            onDoubleClick={onDoubleClick}
+            onDoubleClick={() => onDoubleClick()}
             onMouseDown={(e) => {
               if (isEditing) e.stopPropagation();
             }}
@@ -2126,7 +2067,7 @@ function CanvasElementComponent({
       return (
         <div
           style={{ ...sharedStyle, width: '100%', height: '100%' }}
-          onDoubleClick={onDoubleClick}
+          onDoubleClick={() => onDoubleClick()}
           onMouseDown={(e) => {
             if (isEditing) e.stopPropagation();
           }}
@@ -2276,7 +2217,7 @@ function CanvasElementComponent({
       className={cn(
         'absolute',
         !isPreview && !isEditing && 'cursor-move select-none',
-        isSelected && !isPreview && 'ring-2 ring-primary ring-offset-2'
+        isSelected && !isPreview && 'ring-2 ring-sky-500 ring-offset-1 ring-offset-white'
       )}
       data-element-id={element.id}
       data-backy-text-editor={isTextElement ? 'true' : undefined}
@@ -2299,17 +2240,20 @@ function CanvasElementComponent({
         onPointerDown(event, element.id);
       }}
       onClick={onClick}
-      onDoubleClick={onDoubleClick}
+      onDoubleClick={() => onDoubleClick()}
     >
       {renderContent()}
 
       {/* Resize Handles (only when selected and not in preview) */}
       {isSelected && !isPreview && (
         <>
-          <ResizeHandle position="nw" onMouseDown={(e) => onResizeStart(e, 'nw')} />
-          <ResizeHandle position="ne" onMouseDown={(e) => onResizeStart(e, 'ne')} />
-          <ResizeHandle position="sw" onMouseDown={(e) => onResizeStart(e, 'sw')} />
-          <ResizeHandle position="se" onMouseDown={(e) => onResizeStart(e, 'se')} />
+          <div className="pointer-events-none absolute -top-7 left-0 rounded bg-sky-600 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-white shadow-sm">
+            {normalizeCanvasElementType(element.type)}
+          </div>
+          <ResizeHandle position="nw" onMouseDown={(e) => onResizeStart(e, element.id, 'nw')} />
+          <ResizeHandle position="ne" onMouseDown={(e) => onResizeStart(e, element.id, 'ne')} />
+          <ResizeHandle position="sw" onMouseDown={(e) => onResizeStart(e, element.id, 'sw')} />
+          <ResizeHandle position="se" onMouseDown={(e) => onResizeStart(e, element.id, 'se')} />
         </>
       )}
     </div>
@@ -2335,7 +2279,7 @@ function ResizeHandle({ position, onMouseDown }: ResizeHandleProps) {
 
   return (
     <div
-      className="absolute w-3 h-3 bg-primary rounded-full hover:bg-primary/80 active:scale-110 transition-transform"
+      className="absolute h-3 w-3 rounded-[3px] border border-sky-600 bg-white shadow-sm transition-transform hover:scale-110"
       style={positionStyles[position]}
       data-role="canvas-resize-handle"
       onMouseDown={onMouseDown}
@@ -2357,9 +2301,9 @@ function SelectionInfo({ elements, selectedId }: SelectionInfoProps) {
   if (!element) return null;
 
   return (
-    <div className="absolute bottom-4 left-4 bg-card border border-border rounded-lg shadow-lg px-3 py-2 text-sm">
+    <div className="absolute bottom-4 left-4 rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-xs shadow-lg backdrop-blur">
       <div className="flex items-center gap-4">
-        <span className="text-muted-foreground">{element.type}</span>
+        <span className="font-medium text-sky-700">{element.type}</span>
         <span>X: {element.x}px</span>
         <span>Y: {element.y}px</span>
         <span>W: {element.width}px</span>

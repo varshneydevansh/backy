@@ -566,7 +566,7 @@ export interface BlogTag {
 /**
  * Media file types we support
  */
-export type MediaType = 'image' | 'video' | 'audio' | 'document' | 'other';
+export type MediaType = 'image' | 'video' | 'audio' | 'document' | 'font' | 'other';
 
 /**
  * A MediaItem represents a file in the media library.
@@ -895,6 +895,7 @@ export interface FormSubmission {
   reviewedBy?: string | null;
   reviewedAt?: string | null;
   adminNotes?: string | null;
+  updatedAt?: string;
 
   submittedAt: string;
 }

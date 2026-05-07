@@ -1,0 +1,293 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://backy.dev/schemas/ai-frontend-contract/content-payload.schema.json",
+  "title": "Backy Public Render Payload",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "status": {
+      "enum": ["draft", "published", "scheduled", "archived"]
+    },
+    "element": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/element" }
+        },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number" },
+        "height": { "type": "number" },
+        "zIndex": { "type": "number" },
+        "rotation": { "type": "number" },
+        "props": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "styles": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "responsive": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "element-actions.schema.json#/$defs/action"
+          }
+        },
+        "dataBindings": {
+          "type": "array",
+          "items": {
+            "$ref": "data-bindings.schema.json#/$defs/binding"
+          }
+        },
+        "accessibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "label": { "type": "string" },
+            "alt": { "type": "string" },
+            "role": { "type": "string" },
+            "aria": {
+              "type": "object",
+              "additionalProperties": {
+                "type": ["string", "number", "boolean"]
+              }
+            }
+          }
+        },
+        "permissions": {
+          "type": "object",
+          "additionalProperties": { "type": "boolean" }
+        }
+      },
+      "required": ["id", "type", "children", "props"]
+    },
+    "mediaAsset": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "siteId": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["image", "video", "audio", "document", "font", "other"] },
+        "mimeType": { "type": "string" },
+        "filename": { "type": "string" },
+        "originalName": { "type": "string" },
+        "url": { "type": "string" },
+        "thumbnailUrl": { "type": ["string", "null"] },
+        "altText": { "type": ["string", "null"] },
+        "caption": { "type": ["string", "null"] },
+        "scope": { "enum": ["global", "page", "post"] },
+        "scopeTargetId": { "type": ["string", "null"] },
+        "visibility": { "enum": ["public", "private"] },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": ["id", "siteId", "type", "mimeType", "filename", "url", "scope", "visibility"]
+    },
+    "fontAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "family": { "type": "string", "minLength": 1 },
+        "source": { "enum": ["system", "google", "uploaded", "external"] },
+        "url": { "type": "string" },
+        "weights": {
+          "type": "array",
+          "items": { "type": ["number", "string"] }
+        },
+        "styles": {
+          "type": "array",
+          "items": { "enum": ["normal", "italic", "oblique"] }
+        }
+      },
+      "required": ["id", "family", "source"]
+    },
+    "form": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "endpoint": { "type": "string", "minLength": 1 },
+        "method": { "const": "POST" },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "key": { "type": "string", "minLength": 1 },
+              "label": { "type": "string" },
+              "type": { "type": "string" },
+              "required": { "type": "boolean" },
+              "options": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            },
+            "required": ["key", "label", "type"]
+          }
+        }
+      },
+      "required": ["id", "endpoint", "method", "fields"]
+    },
+    "commentThread": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "targetType": { "enum": ["page", "post"] },
+        "targetId": { "type": "string", "minLength": 1 },
+        "endpoint": { "type": "string", "minLength": 1 },
+        "moderationMode": { "enum": ["manual", "auto-approve"] },
+        "count": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["id", "targetType", "targetId", "endpoint", "moderationMode"]
+    }
+  },
+  "properties": {
+    "success": { "const": true },
+    "requestId": { "type": "string", "minLength": 1 },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "site": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "slug": { "type": "string", "minLength": 1 },
+            "name": { "type": "string", "minLength": 1 },
+            "locale": { "type": "string", "minLength": 2 },
+            "status": { "$ref": "#/$defs/status" },
+            "assetsBaseUrl": { "type": "string" },
+            "themeTokens": { "$ref": "theme-tokens.schema.json" }
+          },
+          "required": ["id", "slug", "name", "locale", "status", "themeTokens"]
+        },
+        "route": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "enum": ["page", "post", "dynamicItem", "redirect", "notFound", "gone"] },
+            "path": { "type": "string" },
+            "status": { "$ref": "#/$defs/status" },
+            "canonical": { "type": "string" },
+            "params": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
+          },
+          "required": ["type", "path", "status", "canonical"]
+        },
+        "content": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schemaVersion": { "const": "backy.content.v1" },
+            "id": { "type": "string", "minLength": 1 },
+            "kind": { "enum": ["page", "post", "template", "dynamicItem"] },
+            "title": { "type": "string" },
+            "locale": { "type": "string" },
+            "version": { "type": "string" },
+            "elements": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/element" }
+            }
+          },
+          "required": ["schemaVersion", "id", "kind", "elements"]
+        },
+        "assets": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "media": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/mediaAsset" }
+            },
+            "fonts": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/fontAsset" }
+            }
+          },
+          "required": ["media", "fonts"]
+        },
+        "interactions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "forms": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/form" }
+            },
+            "comments": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/commentThread" }
+            },
+            "actions": {
+              "$ref": "element-actions.schema.json"
+            }
+          },
+          "required": ["forms", "comments", "actions"]
+        },
+        "seo": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "title": { "type": "string" },
+            "description": { "type": "string" },
+            "canonical": { "type": "string" },
+            "keywords": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "robots": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "index": { "type": "boolean" },
+                "follow": { "type": "boolean" }
+              },
+              "required": ["index", "follow"]
+            },
+            "openGraph": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "jsonLd": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          },
+          "required": ["title", "description", "robots"]
+        },
+        "dataBindings": {
+          "$ref": "data-bindings.schema.json"
+        },
+        "editableMap": {
+          "$ref": "editable-map.schema.json"
+        }
+      },
+      "required": ["site", "route", "content", "assets", "interactions", "seo", "dataBindings", "editableMap"]
+    }
+  },
+  "required": ["success", "requestId", "data"]
+}

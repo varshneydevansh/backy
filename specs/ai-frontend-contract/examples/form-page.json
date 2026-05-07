@@ -1,0 +1,187 @@
+{
+  "success": true,
+  "requestId": "req_form_demo",
+  "data": {
+    "site": {
+      "id": "site_demo",
+      "slug": "demo",
+      "name": "Backy Demo",
+      "locale": "en",
+      "status": "published",
+      "themeTokens": {
+        "schemaVersion": "backy.theme.v1",
+        "colors": {
+          "primary": "#2563eb",
+          "background": "#ffffff",
+          "surface": "#f8fafc",
+          "text": "#0f172a"
+        },
+        "typography": {
+          "families": {
+            "heading": "Inter",
+            "body": "Inter"
+          },
+          "scale": {
+            "h1": "42px",
+            "body": "16px"
+          },
+          "lineHeights": {
+            "body": 1.6
+          },
+          "weights": {
+            "regular": 400,
+            "bold": 700
+          }
+        },
+        "spacing": {
+          "md": "16px",
+          "lg": "32px"
+        },
+        "radii": {
+          "md": "8px"
+        },
+        "shadows": {},
+        "breakpoints": {
+          "mobile": 390,
+          "tablet": 768,
+          "desktop": 1200
+        }
+      }
+    },
+    "route": {
+      "type": "page",
+      "path": "/contact",
+      "status": "published",
+      "canonical": "/contact",
+      "params": {}
+    },
+    "content": {
+      "schemaVersion": "backy.content.v1",
+      "id": "page_contact",
+      "kind": "page",
+      "title": "Contact",
+      "locale": "en",
+      "version": "v1",
+      "elements": [
+        {
+          "id": "contact_title",
+          "type": "heading",
+          "children": [],
+          "props": {
+            "content": "Contact us"
+          },
+          "styles": {},
+          "responsive": {},
+          "actions": [],
+          "dataBindings": [],
+          "permissions": {
+            "editContent": true
+          }
+        },
+        {
+          "id": "contact_form_block",
+          "type": "form",
+          "children": [],
+          "props": {
+            "formId": "form_contact"
+          },
+          "styles": {},
+          "responsive": {},
+          "actions": [
+            {
+              "id": "act_submit_contact",
+              "type": "submitForm",
+              "formId": "form_contact",
+              "method": "POST",
+              "target": "/api/sites/site_demo/forms/form_contact/submissions"
+            }
+          ],
+          "dataBindings": [],
+          "permissions": {
+            "editContent": true,
+            "editStyle": true
+          }
+        }
+      ]
+    },
+    "assets": {
+      "media": [],
+      "fonts": []
+    },
+    "interactions": {
+      "forms": [
+        {
+          "id": "form_contact",
+          "endpoint": "/api/sites/site_demo/forms/form_contact/submissions",
+          "method": "POST",
+          "fields": [
+            {
+              "key": "name",
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "key": "email",
+              "label": "Email",
+              "type": "email",
+              "required": true
+            },
+            {
+              "key": "message",
+              "label": "Message",
+              "type": "textarea",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "comments": [],
+      "actions": {
+        "schemaVersion": "backy.actions.v1",
+        "actions": [
+          {
+            "id": "act_submit_contact",
+            "type": "submitForm",
+            "formId": "form_contact",
+            "method": "POST",
+            "target": "/api/sites/site_demo/forms/form_contact/submissions"
+          }
+        ]
+      }
+    },
+    "seo": {
+      "title": "Contact",
+      "description": "Contact the Backy Demo team.",
+      "canonical": "/contact",
+      "robots": {
+        "index": true,
+        "follow": true
+      },
+      "jsonLd": []
+    },
+    "dataBindings": {
+      "schemaVersion": "backy.bindings.v1",
+      "datasets": [],
+      "bindings": []
+    },
+    "editableMap": {
+      "contact.title": {
+        "elementId": "contact_title",
+        "field": "props.content",
+        "editable": true,
+        "label": "Contact page title",
+        "valueType": "string",
+        "scope": "page"
+      },
+      "contact.form": {
+        "elementId": "contact_form_block",
+        "field": "props.formId",
+        "editable": true,
+        "label": "Contact form",
+        "valueType": "json",
+        "scope": "page"
+      }
+    }
+  }
+}

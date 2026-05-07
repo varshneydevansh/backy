@@ -26,7 +26,6 @@ interface UseDataTableProps<T> {
 
 export function useDataTable<T>({
     data,
-    columns,
     initialSort = { key: 'createdAt' as keyof T, direction: 'desc' },
     pageSize = 10
 }: UseDataTableProps<T>) {

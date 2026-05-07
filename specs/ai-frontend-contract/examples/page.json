@@ -1,0 +1,237 @@
+{
+  "success": true,
+  "requestId": "req_page_demo",
+  "data": {
+    "site": {
+      "id": "site_demo",
+      "slug": "demo",
+      "name": "Backy Demo",
+      "locale": "en",
+      "status": "published",
+      "assetsBaseUrl": "https://cdn.example.com/site_demo",
+      "themeTokens": {
+        "schemaVersion": "backy.theme.v1",
+        "colors": {
+          "primary": "#2563eb",
+          "secondary": "#14b8a6",
+          "background": "#ffffff",
+          "surface": "#f8fafc",
+          "text": "#0f172a",
+          "textMuted": "#64748b"
+        },
+        "typography": {
+          "families": {
+            "heading": "Inter",
+            "body": "Inter",
+            "mono": "JetBrains Mono"
+          },
+          "scale": {
+            "hero": "56px",
+            "h1": "44px",
+            "body": "16px"
+          },
+          "lineHeights": {
+            "tight": 1.1,
+            "body": 1.6
+          },
+          "weights": {
+            "regular": 400,
+            "bold": 700
+          }
+        },
+        "spacing": {
+          "sm": "8px",
+          "md": "16px",
+          "lg": "32px"
+        },
+        "radii": {
+          "sm": "4px",
+          "md": "8px"
+        },
+        "shadows": {
+          "page": "0 18px 55px rgba(15,23,42,0.16)"
+        },
+        "breakpoints": {
+          "mobile": 390,
+          "tablet": 768,
+          "desktop": 1200,
+          "wide": 1440
+        }
+      }
+    },
+    "route": {
+      "type": "page",
+      "path": "/",
+      "status": "published",
+      "canonical": "/",
+      "params": {}
+    },
+    "content": {
+      "schemaVersion": "backy.content.v1",
+      "id": "page_home",
+      "kind": "page",
+      "title": "Home",
+      "locale": "en",
+      "version": "v1",
+      "elements": [
+        {
+          "id": "el_hero",
+          "type": "section",
+          "name": "Hero",
+          "x": 0,
+          "y": 0,
+          "width": 1200,
+          "height": 560,
+          "children": [
+            {
+              "id": "el_hero_title",
+              "type": "heading",
+              "name": "Hero title",
+              "x": 80,
+              "y": 120,
+              "width": 620,
+              "height": 120,
+              "children": [],
+              "props": {
+                "content": "Launch content-backed sites faster",
+                "fontFamily": "Inter",
+                "fontSize": "56px"
+              },
+              "styles": {
+                "color": "{colors.text}"
+              },
+              "responsive": {
+                "mobile": {
+                  "x": 24,
+                  "width": 342,
+                  "props": {
+                    "fontSize": "38px"
+                  }
+                }
+              },
+              "actions": [],
+              "dataBindings": [],
+              "accessibility": {
+                "role": "heading",
+                "label": "Launch content-backed sites faster"
+              },
+              "permissions": {
+                "editContent": true,
+                "editStyle": true
+              }
+            },
+            {
+              "id": "el_cta",
+              "type": "button",
+              "name": "Primary CTA",
+              "x": 80,
+              "y": 280,
+              "width": 180,
+              "height": 48,
+              "children": [],
+              "props": {
+                "label": "Start editing"
+              },
+              "styles": {
+                "backgroundColor": "{colors.primary}",
+                "color": "#ffffff",
+                "borderRadius": "{radii.md}"
+              },
+              "responsive": {},
+              "actions": [
+                {
+                  "id": "act_start_editing",
+                  "type": "route",
+                  "label": "Start editing",
+                  "target": "/pages"
+                }
+              ],
+              "dataBindings": [],
+              "accessibility": {
+                "label": "Start editing"
+              },
+              "permissions": {
+                "editContent": true,
+                "editStyle": true
+              }
+            }
+          ],
+          "props": {},
+          "styles": {
+            "backgroundColor": "{colors.surface}"
+          },
+          "responsive": {},
+          "actions": [],
+          "dataBindings": [],
+          "permissions": {
+            "editStyle": true
+          }
+        }
+      ]
+    },
+    "assets": {
+      "media": [],
+      "fonts": [
+        {
+          "id": "font_inter",
+          "family": "Inter",
+          "source": "google",
+          "weights": [400, 600, 700],
+          "styles": ["normal"]
+        }
+      ]
+    },
+    "interactions": {
+      "forms": [],
+      "comments": [],
+      "actions": {
+        "schemaVersion": "backy.actions.v1",
+        "actions": [
+          {
+            "id": "act_start_editing",
+            "type": "route",
+            "label": "Start editing",
+            "target": "/pages"
+          }
+        ]
+      }
+    },
+    "seo": {
+      "title": "Backy Demo",
+      "description": "A Backy-managed page that any frontend can render.",
+      "canonical": "/",
+      "robots": {
+        "index": true,
+        "follow": true
+      },
+      "openGraph": {
+        "title": "Backy Demo"
+      },
+      "jsonLd": []
+    },
+    "dataBindings": {
+      "schemaVersion": "backy.bindings.v1",
+      "datasets": [],
+      "bindings": []
+    },
+    "editableMap": {
+      "headline.hero": {
+        "elementId": "el_hero_title",
+        "field": "props.content",
+        "editable": true,
+        "label": "Hero headline",
+        "valueType": "richText",
+        "scope": "element"
+      },
+      "button.primary.color": {
+        "elementId": "el_cta",
+        "field": "styles.backgroundColor",
+        "token": "colors.primary",
+        "editable": true,
+        "label": "Primary button color",
+        "valueType": "color",
+        "scope": "site"
+      }
+    }
+  }
+}

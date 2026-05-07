@@ -1,4 +1,6 @@
 import { DEFAULT_THEME } from '@backy-cms/core';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import type {
   Comment,
   CommentTargetType,
@@ -692,6 +694,51 @@ const MEDIA_LIBRARY: MediaItem[] = [
   },
 ];
 
+const MEDIA_CATALOG_PATH = join(process.cwd(), 'data', 'backy', 'media-library.json');
+let persistedMediaLoaded = false;
+
+function ensurePersistedMediaLoaded() {
+  if (persistedMediaLoaded) {
+    return;
+  }
+
+  persistedMediaLoaded = true;
+
+  if (!existsSync(MEDIA_CATALOG_PATH)) {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(MEDIA_CATALOG_PATH, 'utf8')) as unknown;
+    if (!Array.isArray(parsed)) {
+      return;
+    }
+
+    for (const item of parsed) {
+      if (!item || typeof item !== 'object' || !('id' in item)) {
+        continue;
+      }
+
+      const media = item as MediaItem;
+      if (!MEDIA_LIBRARY.some((existing) => existing.id === media.id)) {
+        MEDIA_LIBRARY.unshift(media);
+      }
+    }
+  } catch (error) {
+    console.error('Unable to load persisted media catalog:', error);
+  }
+}
+
+function persistRuntimeMediaCatalog() {
+  try {
+    mkdirSync(dirname(MEDIA_CATALOG_PATH), { recursive: true });
+    const runtimeItems = MEDIA_LIBRARY.filter((item) => item.id.startsWith('media_'));
+    writeFileSync(MEDIA_CATALOG_PATH, JSON.stringify(runtimeItems, null, 2));
+  } catch (error) {
+    console.error('Unable to persist media catalog:', error);
+  }
+}
+
 const FORM_LIBRARY: FormDefinition[] = [
   {
     id: 'form-contact',
@@ -872,7 +919,7 @@ function normalizeIdentifier(value: string) {
   return value.trim().toLowerCase();
 }
 
-function normalizeReportReason(raw: string | null | undefined): string | null {
+function normalizeReportReason(raw: string | null | undefined): CommentReportReason | null {
   const normalized = (raw || '').trim().toLowerCase();
   if (!normalized) {
     return null;
@@ -2001,6 +2048,8 @@ export function getMediaList(
     offset?: number;
   } = {},
 ): { media: MediaItem[]; pagination: Pagination } {
+  ensurePersistedMediaLoaded();
+
   const { type, scope, visibility, pageId, postId, limit = 50, offset = 0 } = params;
   const normalizedType = typeof type === 'string' ? type.trim().toLowerCase() : undefined;
 
@@ -2050,6 +2099,62 @@ export function getMediaList(
     media: clone(paginated),
     pagination: getPagination(media.length, limit, offset),
   };
+}
+
+export function createMediaItem(
+  siteId: string,
+  input: {
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    sizeBytes: number;
+    type: MediaItem['type'];
+    url: string;
+    thumbnailUrl?: string | null;
+    folderId?: string | null;
+    pageIds?: string[];
+    postIds?: string[];
+    tags?: string[];
+    metadata?: Record<string, unknown>;
+    altText?: string | null;
+    caption?: string | null;
+    uploadedBy?: string | null;
+    scope?: MediaItem['scope'];
+    scopeTargetId?: string | null;
+    visibility?: MediaItem['visibility'];
+  },
+): MediaItem {
+  ensurePersistedMediaLoaded();
+
+  const now = new Date().toISOString();
+  const item: MediaItem = {
+    id: `media_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    siteId,
+    filename: input.filename,
+    originalName: input.originalName,
+    mimeType: input.mimeType,
+    sizeBytes: input.sizeBytes,
+    type: input.type,
+    url: input.url,
+    thumbnailUrl: input.thumbnailUrl ?? (input.type === 'image' ? input.url : null),
+    folderId: input.folderId ?? null,
+    pageIds: input.pageIds ?? [],
+    postIds: input.postIds ?? [],
+    tags: input.tags ?? [],
+    metadata: input.metadata ?? {},
+    altText: input.altText ?? null,
+    caption: input.caption ?? null,
+    uploadedBy: input.uploadedBy ?? 'admin',
+    scope: input.scope ?? 'global',
+    scopeTargetId: input.scopeTargetId ?? null,
+    visibility: input.visibility ?? 'public',
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  MEDIA_LIBRARY.unshift(item);
+  persistRuntimeMediaCatalog();
+  return clone(item);
 }
 
 export function listFormsBySite(siteId: string, filters: { pageId?: string; postId?: string } = {}): FormDefinition[] {
@@ -2403,7 +2508,7 @@ export function reportComment(params: {
 
   const normalizedReason = normalizeReportReason(params.reason || null);
   const reportCount = (comment.reportCount || 0) + 1;
-  const reportReasons = new Set(comment.reportReasons || []);
+  const reportReasons = new Set<CommentReportReason>(comment.reportReasons || []);
   if (normalizedReason) {
     reportReasons.add(normalizedReason);
   }
@@ -2620,7 +2725,6 @@ export function updateFormSubmissionStatus(
   submission.reviewedBy = updates.reviewedBy ?? null;
   submission.adminNotes = updates.adminNotes ?? null;
   submission.reviewedAt = new Date().toISOString();
-  submission.updatedAt = submission.reviewedAt;
 
   formSubmissions = formSubmissions.map((item) => (item.id === submission.id ? submission : item));
   return clone(submission);
@@ -2920,6 +3024,7 @@ export function getCanonicalPathForPage(page: StorePage | null): string {
 }
 
 export function getMediaById(siteId: string, id: string): MediaItem | undefined {
+  ensurePersistedMediaLoaded();
   const item = MEDIA_LIBRARY.find((media) => media.siteId === siteId && media.id === id);
   return item ? clone(item) : undefined;
 }

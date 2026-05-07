@@ -5,7 +5,7 @@
  */
 
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { Plus, Globe, MoreVertical, Edit, Trash2, ExternalLink, Copy } from 'lucide-react';
+import { Plus, Globe, Edit, Trash2 } from 'lucide-react';
 import { useStore, type Site } from '@/stores/mockStore';
 import { useDataTable, type Column } from '@/hooks/useDataTable';
 import { PageShell } from '@/components/layout/PageShell';
@@ -13,7 +13,6 @@ import { DataGrid } from '@/components/ui/DataGrid';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDate } from '@/lib/utils';
-import { useState } from 'react';
 
 export const Route = createFileRoute('/sites')({
   component: SitesLayout,

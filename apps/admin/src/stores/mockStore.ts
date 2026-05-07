@@ -63,7 +63,7 @@ type MediaVisibility = 'public' | 'private';
 export interface MediaAsset {
   id: string;
   name: string;
-  type: 'image' | 'video' | 'file';
+  type: 'image' | 'video' | 'file' | 'font';
   size: string;
   url: string;
   scope?: MediaScope;
@@ -111,6 +111,7 @@ interface AppState {
     deleteUser: (id: string) => void;
 
     addMedia: (media: Omit<MediaAsset, 'id'>) => void;
+    setMedia: (media: MediaAsset[]) => void;
     deleteMedia: (id: string) => void;
 
     setDeliveryMode: (mode: DeliveryMode) => void;
@@ -336,6 +337,8 @@ export const useStore = create<AppState>()(
                     ...state.media,
                 ],
             })),
+
+            setMedia: (media) => set({ media }),
 
             deleteMedia: (id) => set((state) => ({
                 media: state.media.filter((item) => item.id !== id),

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Globe, Search, Image as ImageIcon } from 'lucide-react';
+import { X, Search, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface PageSettings {

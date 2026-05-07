@@ -20,8 +20,7 @@ import { BaseAutoformatPlugin } from '@udecode/plate-autoformat';
 
 import { FloatingToolbar } from './ui/FloatingToolbar';
 import { AdvancedToolbar } from './ui/AdvancedToolbar';
-import { PortalToolbar, PORTAL_TOOLBAR_CONTAINER_ID } from './ui/PortalToolbar';
-import { ColorPicker } from './ui/ColorPicker';
+import { PortalToolbar } from './ui/PortalToolbar';
 
 import { cn } from './utils';
 

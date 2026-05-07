@@ -37,7 +37,7 @@ interface HeaderProps {
 // COMPONENT
 // ============================================
 
-export function Header({ sidebarCollapsed, onSidebarToggle }: HeaderProps) {
+export function Header({ onSidebarToggle }: HeaderProps) {
   const navigate = useNavigate();
   const routerState = useRouterState();
   const { user, signOut } = useAuthStore();

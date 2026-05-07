@@ -1805,7 +1805,7 @@ function CommentThreadElement({ element, isPreview, siteId, pageId, postId }: El
 
   return (
     <section style={{ ...styles }}>
-      <h4 style={{ margin: '0 0 12px' }}>{props.commentTitle || 'Comments'}</h4>
+      <h4 style={{ margin: '0 0 12px' }}>{String(props.commentTitle || 'Comments')}</h4>
       {isPreview ? (
         <p style={{ color: '#64748b', fontSize: '12px' }}>
           Preview mode: comment thread data is not refreshed.

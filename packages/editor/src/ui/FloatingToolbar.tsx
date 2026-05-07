@@ -1,5 +1,3 @@
-import React from 'react';
-import { useEditorRef } from '@udecode/plate/react';
 // In a real implementation, we would use useFloatingToolbar from @udecode/plate-floating
 // But since we are resolving dependencies, we will create a placeholder or minimal version.
 
