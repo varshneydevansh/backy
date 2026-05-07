@@ -44,6 +44,7 @@ import type {
   ComponentLibraryItem,
 } from '@/types/editor';
 import { useStore } from '@/stores/mockStore';
+import { listMedia } from '@/lib/mediaApi';
 
 const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
   'text',
@@ -202,7 +203,34 @@ export function CanvasEditor({
   onChange,
 }: CanvasEditorProps) {
   const media = useStore((state) => state.media);
+  const setMedia = useStore((state) => state.setMedia);
   const fontOptions = useMemo(() => getFontFamilyOptions(media), [media]);
+
+  useEffect(() => {
+    const siteId = mediaContext?.siteId;
+    if (!siteId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadSiteMedia = async () => {
+      try {
+        const backendMedia = await listMedia({ siteId, scope: 'all', limit: 250 });
+        if (!cancelled) {
+          setMedia(backendMedia);
+        }
+      } catch {
+        // Keep the current local media store when the backend is unavailable.
+      }
+    };
+
+    void loadSiteMedia();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaContext?.siteId, setMedia]);
 
   // Load fonts
   useEffect(() => {
