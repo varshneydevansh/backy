@@ -652,14 +652,14 @@ export async function createBlogPostPreview(siteId: string, postId: string): Pro
   });
   const payload = await readJson<ApiPreviewResponse>(response);
 
-  if (!response.ok || !payload.success || !payload.data?.postApiUrl) {
+  if (!response.ok || !payload.success || !payload.data || (!payload.data.hostedUrl && !payload.data.postApiUrl)) {
     throw new Error(payload.error?.message || 'Unable to create post preview');
   }
 
   return {
     previewToken: payload.data.previewToken,
     expiresAt: payload.data.expiresAt,
-    url: payload.data.postApiUrl,
+    url: payload.data.hostedUrl || payload.data.postApiUrl || '',
   };
 }
 

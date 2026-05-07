@@ -16,6 +16,13 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   NextResponse.json({ success: false, requestId, error: { code, message } }, { status })
 );
 
+const encodePath = (path: string) => (
+  path
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/')
+);
+
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -42,7 +49,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
     const origin = new URL(request.url).origin;
     const encodedToken = encodeURIComponent(preview.token);
-    const encodedSlug = encodeURIComponent(post.slug);
+    const encodedSlug = encodePath(post.slug);
+    const hostedUrl = `${origin}/sites/${encodeURIComponent(site.slug || site.id)}/blog/${encodedSlug}?previewToken=${encodedToken}`;
     const postApiUrl = `${origin}/api/sites/${encodeURIComponent(site.slug || site.id)}/blog?slug=${encodedSlug}&previewToken=${encodedToken}`;
 
     return NextResponse.json({
@@ -53,6 +61,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         expiresAt: preview.expiresAt,
         targetType: preview.targetType,
         targetId: preview.targetId,
+        hostedUrl,
         postApiUrl,
       },
     });

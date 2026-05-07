@@ -235,7 +235,7 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 
 - `POST /api/admin/sites/:siteId/blog/:postId/preview`
   - Body: `{ ttlSeconds? }`
-  - Creates a bounded preview token and returns draft-capable `postApiUrl`.
+  - Creates a bounded preview token and returns draft-capable `hostedUrl` and `postApiUrl`.
 
 - `POST /api/admin/sites/:siteId/pages/:pageId/resolve-conflict`
   - Future workflow endpoint for merge/conflict resolution once collaborative editing is implemented.

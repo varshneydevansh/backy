@@ -1703,6 +1703,21 @@ function removePreviewTokensForTarget(siteId: string, targetType: PreviewToken['
   }
 }
 
+function refreshPersistedPreviewTokens() {
+  if (!existsSync(ADMIN_CONTENT_PATH)) {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(ADMIN_CONTENT_PATH, 'utf8')) as AdminContentSnapshot;
+    if (Array.isArray(parsed.previewTokens)) {
+      PREVIEW_TOKENS.splice(0, PREVIEW_TOKENS.length, ...parsed.previewTokens);
+    }
+  } catch (error) {
+    console.error('Unable to refresh preview tokens:', error);
+  }
+}
+
 export function createPreviewToken(
   siteId: string,
   targetType: PreviewToken['targetType'],
@@ -1737,16 +1752,13 @@ export function validatePreviewToken(
   token: string | null | undefined,
 ): boolean {
   ensurePersistedAdminContentLoaded();
+  refreshPersistedPreviewTokens();
 
   if (!token) {
     return false;
   }
 
-  const before = PREVIEW_TOKENS.length;
   prunePreviewTokens();
-  if (PREVIEW_TOKENS.length !== before) {
-    persistAdminContent();
-  }
 
   return PREVIEW_TOKENS.some((entry) => (
     entry.siteId === siteId
