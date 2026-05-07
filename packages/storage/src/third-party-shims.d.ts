@@ -43,8 +43,13 @@ declare module '@supabase/supabase-js' {
                     options?: {
                         contentType?: string;
                         upsert?: boolean;
+                        cacheControl?: string;
                     }
                 ) => Promise<{ error?: { message: string } | null }>;
+                download: (path: string) => Promise<{
+                    data: Blob | null;
+                    error: { message: string } | null;
+                }>;
                 remove: (paths: string[]) => Promise<{
                     error?: { message: string };
                 }>;

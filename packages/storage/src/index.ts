@@ -16,8 +16,8 @@
 /// <reference path="./third-party-shims.d.ts" />
 
 import { createHash, randomUUID } from 'crypto';
-import { existsSync, mkdirSync, unlinkSync, writeFileSync, readFileSync } from 'fs';
-import { join, dirname, extname, basename } from 'path';
+import { existsSync, mkdirSync, unlinkSync, writeFileSync, readFileSync, statSync } from 'fs';
+import { join, dirname, extname, basename, resolve, relative, sep } from 'path';
 
 // ==========================================================================
 // TYPES
@@ -40,6 +40,8 @@ export interface UploadResult {
     mimeType: string;
     /** Generated filename */
     filename: string;
+    /** Provider-specific metadata that should be stored with the media record */
+    metadata?: Record<string, unknown>;
 }
 
 /**
@@ -54,6 +56,19 @@ export interface StorageItem {
     lastModified: Date;
     /** MIME type (if known) */
     mimeType?: string;
+    /** Entity tag, checksum, or provider version identifier */
+    etag?: string;
+    /** Provider-specific metadata */
+    metadata?: Record<string, unknown>;
+}
+
+export interface StorageUploadOptions {
+    path?: string;
+    mimeType?: string;
+    filename?: string;
+    metadata?: Record<string, string>;
+    cacheControl?: string;
+    contentDisposition?: string;
 }
 
 /**
@@ -104,6 +119,47 @@ export interface LocalConfig {
 /** Union of all storage configurations */
 export type StorageConfig = S3Config | SupabaseConfig | LocalConfig;
 
+const normalizeStoragePath = (path: string): string => {
+    const normalized = path.replace(/\\/g, '/').replace(/^\/+/, '');
+    const parts = normalized.split('/').filter((part) => part && part !== '.');
+
+    if (parts.some((part) => part === '..')) {
+        throw new Error(`Unsafe storage path: ${path}`);
+    }
+
+    return parts.join('/');
+};
+
+const safeLocalPath = (basePath: string, storagePath: string): string => {
+    const root = resolve(basePath);
+    const fullPath = resolve(root, normalizeStoragePath(storagePath));
+    const rel = relative(root, fullPath);
+
+    if (rel.startsWith('..') || rel === '..' || rel.includes(`..${sep}`)) {
+        throw new Error(`Storage path escapes base directory: ${storagePath}`);
+    }
+
+    return fullPath;
+};
+
+const joinPublicUrl = (publicUrl: string, storagePath: string): string => (
+    `${publicUrl.replace(/\/+$/, '')}/${normalizeStoragePath(storagePath)}`
+);
+
+export const createStoragePath = (input: {
+    siteId: string;
+    type: string;
+    filename: string;
+    date?: Date;
+}): string => {
+    const date = input.date || new Date();
+    const month = date.toISOString().slice(0, 7);
+    const safeSiteId = normalizeStoragePath(input.siteId || 'site').replace(/\//g, '-');
+    const safeType = normalizeStoragePath(input.type || 'assets').replace(/\//g, '-');
+    const safeFilename = normalizeStoragePath(input.filename || 'asset').replace(/\//g, '-');
+    return `sites/${safeSiteId}/${safeType}/${month}/${safeFilename}`;
+};
+
 // ==========================================================================
 // STORAGE ADAPTER INTERFACE
 // ==========================================================================
@@ -124,14 +180,14 @@ export interface StorageAdapter {
      * @param path - Optional path/key (auto-generated if not provided)
      * @param options - Upload options
      */
-    upload(
-        file: Buffer | Blob,
-        options?: {
-            path?: string;
-            mimeType?: string;
-            filename?: string;
-        }
-    ): Promise<UploadResult>;
+    upload(file: Buffer | Blob, options?: StorageUploadOptions): Promise<UploadResult>;
+
+    /**
+     * Read a file from storage.
+     *
+     * @param path - File path/key
+     */
+    read(path: string): Promise<Buffer>;
 
     /**
      * Delete a file from storage
@@ -171,6 +227,13 @@ export interface StorageAdapter {
      * @param path - File path/key
      */
     exists(path: string): Promise<boolean>;
+
+    /**
+     * Get metadata for a file if it exists.
+     *
+     * @param path - File path/key
+     */
+    stat(path: string): Promise<StorageItem | null>;
 }
 
 // ==========================================================================
@@ -228,6 +291,9 @@ export async function createS3Adapter(config: S3Config): Promise<StorageAdapter>
                     Key: path,
                     Body: buffer,
                     ContentType: options.mimeType || 'application/octet-stream',
+                    CacheControl: options.cacheControl,
+                    ContentDisposition: options.contentDisposition,
+                    Metadata: options.metadata,
                 })
             );
 
@@ -237,7 +303,27 @@ export async function createS3Adapter(config: S3Config): Promise<StorageAdapter>
                 size: buffer.length,
                 mimeType: options.mimeType || 'application/octet-stream',
                 filename,
+                metadata: options.metadata,
             };
+        },
+
+        async read(path: string): Promise<Buffer> {
+            const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+            const response = await client.send(new GetObjectCommand({ Bucket: config.bucket, Key: path }));
+            const body = response.Body as {
+                transformToByteArray?: () => Promise<Uint8Array>;
+                arrayBuffer?: () => Promise<ArrayBuffer>;
+            } | undefined;
+
+            if (body?.transformToByteArray) {
+                return Buffer.from(await body.transformToByteArray());
+            }
+
+            if (body?.arrayBuffer) {
+                return Buffer.from(await body.arrayBuffer());
+            }
+
+            throw new Error('Unable to read S3 object body.');
         },
 
         async delete(path: string): Promise<void> {
@@ -282,6 +368,28 @@ export async function createS3Adapter(config: S3Config): Promise<StorageAdapter>
                 return false;
             }
         },
+
+        async stat(path: string): Promise<StorageItem | null> {
+            try {
+                const response = await client.send(new HeadObjectCommand({ Bucket: config.bucket, Key: path })) as {
+                    ContentLength?: number;
+                    LastModified?: Date;
+                    ContentType?: string;
+                    ETag?: string;
+                    Metadata?: Record<string, unknown>;
+                };
+                return {
+                    path,
+                    size: response.ContentLength || 0,
+                    lastModified: response.LastModified || new Date(),
+                    mimeType: response.ContentType,
+                    etag: response.ETag,
+                    metadata: response.Metadata,
+                };
+            } catch {
+                return null;
+            }
+        },
     };
 }
 
@@ -316,6 +424,7 @@ export async function createSupabaseAdapter(
             const { error } = await storage.upload(path, buffer, {
                 contentType: options.mimeType,
                 upsert: false,
+                cacheControl: options.cacheControl,
             });
 
             if (error) throw new Error(`Upload failed: ${error.message}`);
@@ -328,7 +437,15 @@ export async function createSupabaseAdapter(
                 size: buffer.length,
                 mimeType: options.mimeType || 'application/octet-stream',
                 filename,
+                metadata: options.metadata,
             };
+        },
+
+        async read(path: string): Promise<Buffer> {
+            const { data, error } = await storage.download(path);
+            if (error) throw new Error(`Download failed: ${error.message}`);
+            if (!data) throw new Error(`Storage object not found: ${path}`);
+            return Buffer.from(await data.arrayBuffer());
         },
 
         async delete(path: string): Promise<void> {
@@ -372,6 +489,23 @@ export async function createSupabaseAdapter(
             const { data } = await storage.list(dir, { search: name });
             return (data || []).some((item: { name: string }) => item.name === name);
         },
+
+        async stat(path: string): Promise<StorageItem | null> {
+            const dir = dirname(path);
+            const name = basename(path);
+            const { data, error } = await storage.list(dir, { search: name });
+            if (error) throw new Error(`Stat failed: ${error.message}`);
+            const item = (data || []).find((candidate: { name: string }) => candidate.name === name);
+            if (!item) return null;
+
+            return {
+                path,
+                size: item.metadata?.size || 0,
+                lastModified: new Date(item.updated_at || item.created_at || new Date().toISOString()),
+                mimeType: item.metadata?.mimetype,
+                metadata: item.metadata,
+            };
+        },
     };
 }
 
@@ -399,8 +533,8 @@ export function createLocalAdapter(config: LocalConfig): StorageAdapter {
             const ext = options.filename ? extname(options.filename) : '';
             const filename = `${hash}-${randomUUID().slice(0, 8)}${ext}`;
             const relativePath =
-                options.path || `uploads/${new Date().toISOString().slice(0, 7)}/${filename}`;
-            const fullPath = join(config.basePath, relativePath);
+                normalizeStoragePath(options.path || `uploads/${new Date().toISOString().slice(0, 7)}/${filename}`);
+            const fullPath = safeLocalPath(config.basePath, relativePath);
 
             // Ensure directory exists
             const dir = dirname(fullPath);
@@ -411,23 +545,28 @@ export function createLocalAdapter(config: LocalConfig): StorageAdapter {
             writeFileSync(fullPath, buffer);
 
             return {
-                url: `${config.publicUrl}/${relativePath}`,
+                url: joinPublicUrl(config.publicUrl, relativePath),
                 path: relativePath,
                 size: buffer.length,
                 mimeType: options.mimeType || 'application/octet-stream',
                 filename,
+                metadata: options.metadata,
             };
         },
 
+        async read(path: string): Promise<Buffer> {
+            return readFileSync(safeLocalPath(config.basePath, path));
+        },
+
         async delete(path: string): Promise<void> {
-            const fullPath = join(config.basePath, path);
+            const fullPath = safeLocalPath(config.basePath, path);
             if (existsSync(fullPath)) {
                 unlinkSync(fullPath);
             }
         },
 
         getPublicUrl(path: string): string {
-            return `${config.publicUrl}/${path}`;
+            return joinPublicUrl(config.publicUrl, path);
         },
 
         async getSignedUrl(path: string): Promise<string> {
@@ -437,8 +576,9 @@ export function createLocalAdapter(config: LocalConfig): StorageAdapter {
         },
 
         async list(prefix: string): Promise<StorageItem[]> {
-            const { readdirSync, statSync } = await import('fs');
-            const fullPath = join(config.basePath, prefix);
+            const { readdirSync } = await import('fs');
+            const safePrefix = normalizeStoragePath(prefix);
+            const fullPath = safeLocalPath(config.basePath, safePrefix);
 
             if (!existsSync(fullPath)) return [];
 
@@ -449,7 +589,7 @@ export function createLocalAdapter(config: LocalConfig): StorageAdapter {
                     const filePath = join(fullPath, f.name);
                     const stat = statSync(filePath);
                     return {
-                        path: join(prefix, f.name),
+                        path: normalizeStoragePath(join(safePrefix, f.name)),
                         size: stat.size,
                         lastModified: stat.mtime,
                     };
@@ -457,7 +597,21 @@ export function createLocalAdapter(config: LocalConfig): StorageAdapter {
         },
 
         async exists(path: string): Promise<boolean> {
-            return existsSync(join(config.basePath, path));
+            return existsSync(safeLocalPath(config.basePath, path));
+        },
+
+        async stat(path: string): Promise<StorageItem | null> {
+            const safePath = safeLocalPath(config.basePath, path);
+            if (!existsSync(safePath)) {
+                return null;
+            }
+
+            const stat = statSync(safePath);
+            return {
+                path: normalizeStoragePath(path),
+                size: stat.size,
+                lastModified: stat.mtime,
+            };
         },
     };
 }

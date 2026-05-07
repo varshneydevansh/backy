@@ -353,6 +353,10 @@ The next implementation should not start by adding more UI screens. The product 
 - **Acceptance Criteria**:
   - Local/Supabase first adapter works.
   - S3/R2-compatible adapter shape is documented.
+- **Current progress**:
+  - `@backy/storage` now exposes a provider-neutral adapter contract for upload, read, delete, public URL, signed URL, list, exists, and stat operations.
+  - Local storage blocks path traversal, provides deterministic site/type/date key generation through `createStoragePath`, and is covered by `npm run test:smoke --workspace @backy/storage`.
+  - S3/R2 and Supabase adapters expose the same contract shape with upload metadata/cache controls and signed URL support.
 - **Validation**:
   - Storage adapter tests with local temp storage.
 

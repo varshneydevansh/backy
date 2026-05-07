@@ -14,7 +14,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --external @aws-sdk/client-s3 @aws-sdk/s3-request-presigner @supabase/supabase-js",
     "dev": "tsup src/index.ts --format esm --dts --watch --external @aws-sdk/client-s3 @aws-sdk/s3-request-presigner @supabase/supabase-js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:smoke": "node scripts/local-adapter-smoke.mjs"
   },
     "peerDependencies": {
         "@aws-sdk/client-s3": "^3.0.0",
