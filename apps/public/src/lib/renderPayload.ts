@@ -684,14 +684,43 @@ const buildEditableMap = (elements: RenderElement[]): Record<string, JsonObject>
   return editableMap;
 };
 
-const buildFontAssets = (site: StoreSite) => (
-  (site.theme.fonts.custom || []).map((font) => ({
+const getStringMetadata = (metadata: Record<string, unknown>, key: string) => {
+  const value = metadata[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : '';
+};
+
+const buildFontAssets = (site: StoreSite) => {
+  const themeFonts = (site.theme.fonts.custom || []).map((font) => ({
     id: `font_${font.name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
     family: font.name,
     source: 'uploaded',
     url: font.url,
-  }))
-);
+  }));
+  const mediaFonts = getMediaList(site.id, {
+    type: 'font',
+    visibility: 'public',
+    limit: 100,
+  }).media.map((font) => ({
+    id: font.id,
+    family: getStringMetadata(font.metadata, 'fontFamily') || font.originalName.replace(/\.[a-z0-9]+$/i, ''),
+    source: 'uploaded',
+    url: font.url,
+    weights: [getStringMetadata(font.metadata, 'fontWeight') || '400'],
+    styles: [getStringMetadata(font.metadata, 'fontStyle') === 'italic' || getStringMetadata(font.metadata, 'fontStyle') === 'oblique'
+      ? getStringMetadata(font.metadata, 'fontStyle')
+      : 'normal'],
+  }));
+  const seen = new Set<string>();
+
+  return [...themeFonts, ...mediaFonts].filter((font) => {
+    const key = `${font.family}:${font.url || ''}`.toLowerCase();
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+};
 
 const normalizePostElements = (post: StoreBlogPost): RenderElement[] => {
   const content = post.content;

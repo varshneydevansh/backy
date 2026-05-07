@@ -9,6 +9,8 @@ export interface FontOption {
   mediaId?: string;
   url?: string;
   format?: string;
+  weight?: string;
+  style?: string;
 }
 
 const FONT_EXTENSIONS = ['woff', 'woff2', 'ttf', 'otf', 'eot', 'svg'] as const;
@@ -60,7 +62,17 @@ const cleanFontNameFromFilename = (name: string): string => {
   return base.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
 };
 
+const getStringMetadata = (media: MediaAsset, key: string): string => {
+  const value = media.metadata?.[key];
+  return typeof value === 'string' ? value.trim() : '';
+};
+
 const toFontName = (media: MediaAsset): string | null => {
+  const registeredFamily = getStringMetadata(media, 'fontFamily');
+  if (registeredFamily) {
+    return registeredFamily;
+  }
+
   const candidate = (media.name || '').trim();
   const extension = getExtension(candidate) || getExtension(media.url || '');
   if (!extension || !FONT_EXTENSIONS.includes(extension as (typeof FONT_EXTENSIONS)[number])) return null;
@@ -137,6 +149,8 @@ export const getFontFamilyOptions = (media: MediaAsset[] = []): FontOption[] => 
       mediaId: item.id,
       url,
       format,
+      weight: getStringMetadata(item, 'fontWeight') || '400',
+      style: getStringMetadata(item, 'fontStyle') || 'normal',
     });
     seen.add(key);
   });
@@ -150,12 +164,14 @@ export const buildCustomFontFaces = (fonts: FontOption[]): string => {
     .map((font) => {
       const fontName = font.value.replace(/["']/g, '');
       const formatPart = font.format ? ` format("${font.format}")` : '';
+      const weight = font.weight || '400';
+      const style = font.style || 'normal';
 
       return `@font-face {
   font-family: "${fontName}";
   src: url("${font.url}")${formatPart};
-  font-style: normal;
-  font-weight: normal;
+  font-style: ${style};
+  font-weight: ${weight};
   font-display: swap;
 }`.trim();
     })

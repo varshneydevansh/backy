@@ -13,6 +13,7 @@ let createdTagId = null;
 let createdUserId = null;
 let createdCollectionId = null;
 let createdCollectionRecordId = null;
+let createdMediaId = null;
 let originalDeliveryMode = null;
 
 function assert(condition, message) {
@@ -70,6 +71,10 @@ async function cleanup() {
 
   if (createdSiteId && createdCollectionId) {
     await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (createdSiteId && createdMediaId) {
+    await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, { method: 'DELETE' }).catch(() => {});
   }
 
   if (createdSiteId) {
@@ -206,6 +211,43 @@ try {
     assert(publicSiteList.json?.data?.sites?.some((site) => site.id === createdSiteId), `${publicSiteList.url} missing published temporary site`);
   });
 
+  await record('admin media font upload registers public font asset', async () => {
+    const formData = new FormData();
+    formData.set('file', new Blob(['contract-font'], { type: 'font/woff2' }), 'ContractSans.woff2');
+    formData.set('visibility', 'public');
+    formData.set('fontFamily', 'Contract Sans');
+    formData.set('fontWeight', '500');
+
+    const upload = await request(`/api/admin/sites/${createdSiteId}/media`, {
+      method: 'POST',
+      body: formData,
+    });
+    assert(upload.response.status === 201, `${upload.url} expected 201, got ${upload.response.status}`);
+    assert(upload.json?.data?.media?.type === 'font', `${upload.url} expected font media type`);
+    assert(upload.json?.data?.media?.metadata?.fontFamily === 'Contract Sans', `${upload.url} expected font family metadata`);
+    createdMediaId = upload.json.data.media.id;
+
+    const update = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        metadata: {
+          fontFamily: 'Contract Sans Display',
+          fontWeight: '600',
+          fontStyle: 'normal',
+        },
+      }),
+    });
+    assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
+    assert(update.json?.data?.media?.metadata?.fontFamily === 'Contract Sans Display', `${update.url} expected updated font family metadata`);
+
+    const publicFonts = await request(`/api/sites/${createdSiteId}/media?type=font`);
+    assert(publicFonts.response.status === 200, `${publicFonts.url} expected 200, got ${publicFonts.response.status}`);
+    assert(publicFonts.json?.media?.some((item) => item.id === createdMediaId && item.metadata?.fontFamily === 'Contract Sans Display'), `${publicFonts.url} missing public font media`);
+  });
+
   await record('admin pages create/list/detail/update/delete works for temporary site', async () => {
     const create = await request(`/api/admin/sites/${createdSiteId}/pages`, {
       method: 'POST',
@@ -297,6 +339,10 @@ try {
     assert(
       renderPayload.json?.data?.navigation?.primary?.some((item) => item.pageId === createdPageId && item.path === `/${pageSlug}`),
       `${renderPayload.url} missing render navigation manifest`,
+    );
+    assert(
+      renderPayload.json?.data?.assets?.fonts?.some((font) => font.id === createdMediaId && font.family === 'Contract Sans Display'),
+      `${renderPayload.url} missing uploaded font asset manifest`,
     );
 
     const resolvedPage = await request(`/api/sites/${createdSiteId}/resolve?path=/${pageSlug}`);

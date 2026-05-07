@@ -58,6 +58,15 @@ const safePathSegment = (value: string) => (
     || 'asset'
 );
 
+const cleanFontFamily = (value: string) => (
+  value
+    .trim()
+    .replace(/\.[a-z0-9]+$/i, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    || 'Uploaded Font'
+);
+
 const toStringValue = (value: FormDataEntryValue | null): string | null => (
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 );
@@ -202,6 +211,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       tags: toStringList(formData.get('tags')),
       metadata: {
         extension: extension.replace(/^\./, ''),
+        ...(mediaType === 'font'
+          ? {
+              fontFamily: toStringValue(formData.get('fontFamily')) || cleanFontFamily(originalName),
+              fontWeight: toStringValue(formData.get('fontWeight')) || '400',
+              fontStyle: toStringValue(formData.get('fontStyle')) || 'normal',
+            }
+          : {}),
       },
       altText: toStringValue(formData.get('altText')),
       caption: toStringValue(formData.get('caption')),

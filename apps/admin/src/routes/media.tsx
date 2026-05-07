@@ -45,6 +45,9 @@ function MediaPage() {
     altText: '',
     caption: '',
     tags: '',
+    fontFamily: '',
+    fontWeight: '400',
+    fontStyle: 'normal' as 'normal' | 'italic' | 'oblique',
     folderId: '',
     visibility: 'public' as 'public' | 'private',
   });
@@ -140,6 +143,11 @@ function MediaPage() {
       altText: asset.altText || '',
       caption: asset.caption || '',
       tags: (asset.tags || []).join(', '),
+      fontFamily: typeof asset.metadata?.fontFamily === 'string' ? asset.metadata.fontFamily : '',
+      fontWeight: typeof asset.metadata?.fontWeight === 'string' ? asset.metadata.fontWeight : '400',
+      fontStyle: asset.metadata?.fontStyle === 'italic' || asset.metadata?.fontStyle === 'oblique'
+        ? asset.metadata.fontStyle
+        : 'normal',
       folderId: asset.folderId || '',
       visibility: asset.visibility || 'public',
     });
@@ -258,6 +266,13 @@ function MediaPage() {
         altText: metadataForm.altText,
         caption: metadataForm.caption,
         tags: metadataForm.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
+        metadata: selectedAsset.type === 'font'
+          ? {
+              fontFamily: metadataForm.fontFamily.trim() || metadataForm.name.replace(/\.[a-z0-9]+$/i, ''),
+              fontWeight: metadataForm.fontWeight.trim() || '400',
+              fontStyle: metadataForm.fontStyle,
+            }
+          : selectedAsset.metadata,
         folderId: metadataForm.folderId || null,
         visibility: metadataForm.visibility,
       }, siteId);
@@ -576,6 +591,17 @@ function MediaPage() {
 
       {selectedAsset && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          {selectedAsset.type === 'font' && selectedAsset.url && (
+            <style>
+              {`@font-face {
+                font-family: "${(metadataForm.fontFamily || selectedAsset.name.replace(/\.[a-z0-9]+$/i, '')).replace(/["\\]/g, '')}";
+                src: url("${selectedAsset.url}");
+                font-style: ${metadataForm.fontStyle};
+                font-weight: ${metadataForm.fontWeight || '400'};
+                font-display: swap;
+              }`}
+            </style>
+          )}
           <div className="w-full max-w-3xl rounded-xl border border-border bg-background shadow-xl">
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
               <div>
@@ -641,6 +667,60 @@ function MediaPage() {
                     placeholder="hero, product, brand"
                   />
                 </div>
+
+                {selectedAsset.type === 'font' && (
+                  <div className="rounded-xl border border-border bg-muted/30 p-4">
+                    <div className="mb-3">
+                      <div className="text-sm font-semibold">Font registration</div>
+                      <div className="text-xs text-muted-foreground">
+                        Registered fonts appear in editor font controls and public render payloads.
+                      </div>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_110px_120px]">
+                      <label className="space-y-1 text-sm">
+                        <span className="font-medium">Family</span>
+                        <input
+                          value={metadataForm.fontFamily}
+                          onChange={(event) => setMetadataForm((current) => ({ ...current, fontFamily: event.target.value }))}
+                          className="w-full rounded-lg border bg-background px-3 py-2"
+                          placeholder="Brand Sans"
+                        />
+                      </label>
+                      <label className="space-y-1 text-sm">
+                        <span className="font-medium">Weight</span>
+                        <input
+                          value={metadataForm.fontWeight}
+                          onChange={(event) => setMetadataForm((current) => ({ ...current, fontWeight: event.target.value }))}
+                          className="w-full rounded-lg border bg-background px-3 py-2"
+                          placeholder="400"
+                        />
+                      </label>
+                      <label className="space-y-1 text-sm">
+                        <span className="font-medium">Style</span>
+                        <select
+                          value={metadataForm.fontStyle}
+                          onChange={(event) => setMetadataForm((current) => ({
+                            ...current,
+                            fontStyle: event.target.value === 'italic' || event.target.value === 'oblique'
+                              ? event.target.value
+                              : 'normal',
+                          }))}
+                          className="w-full rounded-lg border bg-background px-3 py-2"
+                        >
+                          <option value="normal">Normal</option>
+                          <option value="italic">Italic</option>
+                          <option value="oblique">Oblique</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div
+                      className="mt-3 rounded-lg border border-border bg-background px-3 py-2 text-lg"
+                      style={{ fontFamily: metadataForm.fontFamily ? `"${metadataForm.fontFamily}"` : undefined }}
+                    >
+                      {metadataForm.fontFamily || 'Uploaded font preview'}
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="mb-1 block text-sm font-medium">Folder</label>

@@ -12,6 +12,7 @@ import {
     getCanonicalPathForPage,
     getCollectionByIdOrSlug,
     getCollectionRecordByIdOrSlug,
+    getMediaList,
     getPageByPath,
     getSiteByIdOrSlug,
     validatePreviewToken,
@@ -53,6 +54,30 @@ function getDynamicCollectionItem(siteId: string, pathParts: string[] | undefine
 function getCollectionRecordTitle(record: { slug: string; values: Record<string, unknown> }) {
     const title = record.values.title || record.values.name || record.values.label;
     return typeof title === 'string' && title.length > 0 ? title : record.slug;
+}
+
+function getStringMetadata(metadata: Record<string, unknown>, key: string) {
+    const value = metadata[key];
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : '';
+}
+
+function getHostedFontAssets(siteId: string) {
+    const fonts = getMediaList(siteId, {
+        type: 'font',
+        visibility: 'public',
+        limit: 100,
+    }).media;
+
+    return fonts.map((font) => ({
+        id: font.id,
+        family: getStringMetadata(font.metadata, 'fontFamily') || font.originalName.replace(/\.[a-z0-9]+$/i, ''),
+        source: 'uploaded' as const,
+        url: font.url,
+        weights: [getStringMetadata(font.metadata, 'fontWeight') || '400'],
+        styles: [getStringMetadata(font.metadata, 'fontStyle') === 'italic' || getStringMetadata(font.metadata, 'fontStyle') === 'oblique'
+            ? getStringMetadata(font.metadata, 'fontStyle') as 'italic' | 'oblique'
+            : 'normal' as const],
+    }));
 }
 
 // ==========================================================================
@@ -149,6 +174,7 @@ export default async function SitePage({ params, searchParams }: PageProps) {
     }
 
     const page = await getPage(site.id, pageSlug, previewToken);
+    const fontAssets = getHostedFontAssets(site.id);
     if (page) {
         const pageContent = {
             ...page.content,
@@ -163,6 +189,7 @@ export default async function SitePage({ params, searchParams }: PageProps) {
                 <PageRenderer
                     content={pageContent}
                     theme={site.theme}
+                    fontAssets={fontAssets}
                     siteId={site.id}
                     pageId={page.id}
                     pageSlug={page.slug}
@@ -189,6 +216,7 @@ export default async function SitePage({ params, searchParams }: PageProps) {
             <PageRenderer
                 content={dynamicContent}
                 theme={site.theme}
+                fontAssets={fontAssets}
                 siteId={site.id}
                 pageSlug={`${dynamicItem.collection.slug}/${dynamicItem.record.slug}`}
             />

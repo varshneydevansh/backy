@@ -18,6 +18,7 @@ interface ApiMediaItem {
   altText?: string | null;
   caption?: string | null;
   tags?: string[];
+  metadata?: Record<string, unknown>;
   uploadedBy?: string | null;
   pageIds?: string[];
   postIds?: string[];
@@ -99,6 +100,7 @@ export interface MediaUploadOptions {
   scopeTargetId?: string | null;
   visibility?: MediaVisibility;
   tags?: string[];
+  metadata?: Record<string, unknown>;
   altText?: string;
   caption?: string;
 }
@@ -121,6 +123,7 @@ export interface MediaUpdateInput {
   altText?: string | null;
   caption?: string | null;
   tags?: string[];
+  metadata?: Record<string, unknown>;
   folderId?: string | null;
   scope?: MediaScope;
   scopeTargetId?: string | null;
@@ -180,6 +183,7 @@ const toMediaAsset = (item: ApiMediaItem): MediaAsset => ({
   altText: item.altText || null,
   caption: item.caption || null,
   tags: item.tags || [],
+  metadata: item.metadata || {},
   folderId: item.folderId || null,
   scope: item.scope || 'global',
   scopeTargetId: item.scopeTargetId || null,

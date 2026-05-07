@@ -72,6 +72,7 @@ export interface MediaAsset {
   type: 'image' | 'video' | 'file' | 'font';
   size: string;
   url: string;
+  metadata?: Record<string, unknown>;
   altText?: string | null;
   caption?: string | null;
   tags?: string[];

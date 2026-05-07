@@ -172,7 +172,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 - `POST /api/admin/sites/:siteId/media`
   - multipart upload
   - query/body flags: `scope` (`global|page|post`), `scopeTargetId`, `visibility`
-  - current implementation accepts `file`, `altText`, `caption`, `tags`, `uploadedBy`
+  - current implementation accepts `file`, `altText`, `caption`, `tags`, `uploadedBy`, plus `fontFamily`, `fontWeight`, and `fontStyle` for font uploads
   - validates image/video/audio/document/font MIME categories and writes local assets under `/public/uploads/sites/:siteId/...`
   - returns `{ success, requestId, data: { media } }`
 
@@ -195,6 +195,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 
 - `PATCH /api/admin/sites/:siteId/media/:mediaId`
   - Current implementation updates original name, folder, tags, alt text, caption, scope, scope target, visibility, page/post references, and metadata in the local runtime catalog.
+  - Font media metadata can register `fontFamily`, `fontWeight`, and `fontStyle`; `/render` exposes public font media in `assets.fonts`, and hosted page/post rendering injects matching `@font-face` rules.
 
 - `DELETE /api/admin/sites/:siteId/media/:mediaId`
   - Current implementation deletes the catalog record and removes local uploaded files under `/public/uploads/sites/:siteId/...` when present.

@@ -7,7 +7,7 @@
 import { notFound } from 'next/navigation';
 import { PageRenderer, type PageContent } from '@/components/PageRenderer';
 import AnimationHydrator from '@/components/AnimationHydrator';
-import { getBlogPosts, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
+import { getBlogPosts, getMediaList, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
 import { resolveElementDataBindings } from '@/lib/renderPayload';
 import type { Metadata } from 'next';
 import type { StoreBlogPost } from '@/lib/backyStore';
@@ -33,6 +33,28 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 const asString = (value: unknown): string => (
   typeof value === 'string' ? value : ''
 );
+
+function getStringMetadata(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : '';
+}
+
+function getHostedFontAssets(siteId: string) {
+  return getMediaList(siteId, {
+    type: 'font',
+    visibility: 'public',
+    limit: 100,
+  }).media.map((font) => ({
+    id: font.id,
+    family: getStringMetadata(font.metadata, 'fontFamily') || font.originalName.replace(/\.[a-z0-9]+$/i, ''),
+    source: 'uploaded' as const,
+    url: font.url,
+    weights: [getStringMetadata(font.metadata, 'fontWeight') || '400'],
+    styles: [getStringMetadata(font.metadata, 'fontStyle') === 'italic' || getStringMetadata(font.metadata, 'fontStyle') === 'oblique'
+      ? getStringMetadata(font.metadata, 'fontStyle') as 'italic' | 'oblique'
+      : 'normal' as const],
+  }));
+}
 
 const getPostBySlug = (siteId: string, slug: string, previewToken?: string): StoreBlogPost | undefined => {
   const previewPost = previewToken
@@ -155,6 +177,7 @@ export default async function BlogPostPage({ params, searchParams }: PageProps) 
       <PageRenderer
         content={normalizePostContent(site.id, post)}
         theme={site.theme}
+        fontAssets={getHostedFontAssets(site.id)}
         siteId={site.id}
         postId={post.id}
         pageSlug={`blog/${post.slug}`}

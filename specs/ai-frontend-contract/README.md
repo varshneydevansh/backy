@@ -54,7 +54,11 @@ The first implementation-backed endpoint is:
 
 It returns the `content-payload.schema.json` shape for pages, blog posts, and collection dynamic item routes from the current public data adapter. This is not yet the final durable database-backed service, but it gives external frontends and AI-generated frontends a stable payload target while Backy replaces seeded/mock persistence.
 
-`npm run test:admin-contract --workspace @backy/public` validates the page, blog post, collection-bound page, and collection dynamic item render responses against `content-payload.schema.json` so contract drift is caught during the public API smoke pass. The same smoke verifies that `/render` exposes the dataset manifest, resolved collection fields/records, normalized element binding, and collection-record editable map entry.
+`npm run test:admin-contract --workspace @backy/public` validates the page, blog post, collection-bound page, and collection dynamic item render responses against `content-payload.schema.json` so contract drift is caught during the public API smoke pass. The same smoke verifies that `/render` exposes the dataset manifest, resolved collection fields/records, normalized element binding, collection-record editable map entry, and uploaded public font asset manifests.
+
+## Current font asset contract
+
+Uploaded font files are stored as media with `type: "font"`. Admin media upload/update accepts font metadata keys `fontFamily`, `fontWeight`, and `fontStyle`; public media hides private fonts, while `/render` includes public registered fonts in `assets.fonts`. Backy's hosted page and blog renderers inject matching `@font-face` rules so element-level font choices render without custom frontend code.
 
 ## Current collection endpoints
 

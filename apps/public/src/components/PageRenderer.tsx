@@ -105,6 +105,15 @@ export interface ThemeConfig {
   customCSS?: string;
 }
 
+interface FontAsset {
+  id: string;
+  family: string;
+  source: 'system' | 'google' | 'uploaded' | 'external';
+  url?: string;
+  weights?: Array<string | number>;
+  styles?: Array<'normal' | 'italic' | 'oblique'>;
+}
+
 interface CommentItem {
   id: string;
   content: string;
@@ -2241,6 +2250,7 @@ export function ElementRenderer({ element, isPreview, siteId, pageId, postId }: 
 interface PageRendererProps {
   content: PageContent;
   theme?: ThemeConfig;
+  fontAssets?: FontAsset[];
   isPreview?: boolean;
   siteId?: string;
   pageId?: string;
@@ -2256,6 +2266,7 @@ interface PageRendererProps {
 export function PageRenderer({
   content,
   theme,
+  fontAssets = [],
   isPreview,
   siteId,
   pageId,
@@ -2331,11 +2342,29 @@ export function PageRenderer({
     });
   }
 
+  const fontFaceCss = fontAssets
+    .filter((font) => font.source === 'uploaded' && font.family && font.url)
+    .map((font) => {
+      const family = font.family.replace(/["\\]/g, '');
+      const weight = font.weights?.[0] || '400';
+      const style = font.styles?.[0] || 'normal';
+
+      return `@font-face {
+        font-family: "${family}";
+        src: url("${font.url}");
+        font-style: ${style};
+        font-weight: ${weight};
+        font-display: swap;
+      }`;
+    })
+    .join('\n');
+
   return (
     <>
       <style
         dangerouslySetInnerHTML={{
           __html: `
+            ${fontFaceCss}
             :root {
               ${Object.entries(themeVars)
                 .map(([k, v]) => `${k}: ${v};`)
