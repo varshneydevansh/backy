@@ -3,6 +3,7 @@
  *
  * GET /api/sites/[siteId]/collections/[collectionId]/records
  * GET /api/sites/[siteId]/collections/[collectionId]/records?slug=example
+ * GET /api/sites/[siteId]/collections/[collectionId]/records?q=term&fieldKey=title&fieldValue=example&sortBy=title
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -36,8 +37,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const limit = Math.max(1, Math.min(100, Number(searchParams.get('limit') || 50)));
     const offset = Math.max(0, Number(searchParams.get('offset') || 0));
+    const sortDirection = searchParams.get('sortDirection') === 'desc' ? 'desc' : 'asc';
     const payload = listCollectionRecords(site.id, collection.id, {
       slug: searchParams.get('slug') || undefined,
+      search: searchParams.get('q') || searchParams.get('search') || undefined,
+      fieldKey: searchParams.get('fieldKey') || undefined,
+      fieldValue: searchParams.get('fieldValue') || undefined,
+      sortBy: searchParams.get('sortBy') || undefined,
+      sortDirection,
       limit,
       offset,
     });

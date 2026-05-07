@@ -2,6 +2,7 @@
  * Admin CMS collection records endpoint.
  *
  * GET  /api/admin/sites/[siteId]/collections/[collectionId]/records
+ * GET  /api/admin/sites/[siteId]/collections/[collectionId]/records?q=term&fieldKey=title&fieldValue=example&sortBy=title
  * POST /api/admin/sites/[siteId]/collections/[collectionId]/records
  */
 
@@ -78,10 +79,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const limit = Math.max(1, Math.min(100, Number(searchParams.get('limit') || 50)));
     const offset = Math.max(0, Number(searchParams.get('offset') || 0));
+    const sortDirection = searchParams.get('sortDirection') === 'desc' ? 'desc' : 'asc';
     const payload = listCollectionRecords(site.id, collection.id, {
       includeUnpublished: true,
       status: parseStatusFilter(searchParams.get('status')),
       slug: searchParams.get('slug') || undefined,
+      search: searchParams.get('q') || searchParams.get('search') || undefined,
+      fieldKey: searchParams.get('fieldKey') || undefined,
+      fieldValue: searchParams.get('fieldValue') || undefined,
+      sortBy: searchParams.get('sortBy') || undefined,
+      sortDirection,
       limit,
       offset,
     });

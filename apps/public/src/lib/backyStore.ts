@@ -3377,13 +3377,29 @@ export function listCollectionRecords(
     includeUnpublished?: boolean;
     status?: StoreCollectionRecord['status'];
     slug?: string;
+    search?: string;
+    fieldKey?: string;
+    fieldValue?: unknown;
+    sortBy?: string;
+    sortDirection?: 'asc' | 'desc';
     limit?: number;
     offset?: number;
   } = {},
 ): { records: StoreCollectionRecord[]; pagination: Pagination } {
   ensurePersistedAdminContentLoaded();
 
-  const { includeUnpublished = false, status, slug, limit = 50, offset = 0 } = params;
+  const {
+    includeUnpublished = false,
+    status,
+    slug,
+    search,
+    fieldKey,
+    fieldValue,
+    sortBy,
+    sortDirection = 'asc',
+    limit = 50,
+    offset = 0,
+  } = params;
   let records = COLLECTION_RECORDS.filter((record) => (
     record.siteId === siteId &&
     record.collectionId === collectionId &&
@@ -3396,6 +3412,39 @@ export function listCollectionRecords(
 
   if (slug) {
     records = records.filter((record) => normalizeIdentifier(record.slug) === normalizeIdentifier(slug));
+  }
+
+  if (fieldKey && fieldValue !== undefined && fieldValue !== null && sanitizeString(fieldValue).length > 0) {
+    const normalizedFieldValue = normalizeIdentifier(sanitizeString(fieldValue));
+    records = records.filter((record) => normalizeIdentifier(sanitizeString(record.values[fieldKey])).includes(normalizedFieldValue));
+  }
+
+  if (search && search.trim().length > 0) {
+    const normalizedSearch = normalizeIdentifier(search);
+    records = records.filter((record) => (
+      normalizeIdentifier(record.slug).includes(normalizedSearch) ||
+      Object.values(record.values).some((value) => normalizeIdentifier(sanitizeString(value)).includes(normalizedSearch))
+    ));
+  }
+
+  if (sortBy) {
+    const direction = sortDirection === 'desc' ? -1 : 1;
+    records = [...records].sort((left, right) => {
+      const leftValue = sortBy === 'slug' || sortBy === 'status' || sortBy === 'createdAt' || sortBy === 'updatedAt'
+        ? left[sortBy]
+        : left.values[sortBy];
+      const rightValue = sortBy === 'slug' || sortBy === 'status' || sortBy === 'createdAt' || sortBy === 'updatedAt'
+        ? right[sortBy]
+        : right.values[sortBy];
+      const leftNumber = typeof leftValue === 'number' ? leftValue : Number.NaN;
+      const rightNumber = typeof rightValue === 'number' ? rightValue : Number.NaN;
+
+      if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+        return (leftNumber - rightNumber) * direction;
+      }
+
+      return sanitizeString(leftValue).localeCompare(sanitizeString(rightValue)) * direction;
+    });
   }
 
   const paginated = records.slice(offset, offset + limit);

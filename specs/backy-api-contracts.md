@@ -87,10 +87,12 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/sites/:siteId/collections`
 - `GET /api/sites/:siteId/collections/:collectionId`
 - `GET /api/sites/:siteId/collections/:collectionId/records?slug=:slug&limit=&offset=`
+- `GET /api/sites/:siteId/collections/:collectionId/records?q=&fieldKey=&fieldValue=&sortBy=&sortDirection=asc|desc&limit=&offset=`
   - Public CMS collection contract for custom frontends and future dataset bindings.
   - Returns only collections with `status: "published"` and `permissions.publicRead: true`.
   - Returns only published records or scheduled records whose `scheduledAt` has passed.
-  - Current implementation is backed by the same runtime JSON adapter as admin content. `/render` now surfaces dataset, binding, field, and record manifests for collection-bound elements and generated dynamic item pages, but production completion still needs DB-backed querying, indexes, CSV import/export, custom dynamic route templates, and authenticated visitor-write policies.
+  - Supports basic record search, field-value filtering, sorting, limit, and offset in both public and admin record list endpoints. `/render` dataset hydration accepts the same query fields.
+  - Current implementation is backed by the same runtime JSON adapter as admin content. `/render` now surfaces dataset, binding, field, and record manifests for collection-bound elements and generated dynamic item pages, but production completion still needs DB-backed indexes, CSV import/export, custom dynamic route templates, and authenticated visitor-write policies.
 
 ### 2.2 Render payload
 Public page payload should include:
@@ -306,7 +308,7 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
   2. Resolve path on route changes: `GET /api/sites/:siteId/resolve?path=/...`.
   3. Fetch page, blog post, or collection dynamic item render payloads: `GET /api/sites/:siteId/render?path=/...`.
   4. If route resolves to a blog post and a custom archive UI is needed, call blog listing/detail APIs.
-  5. If elements bind to structured content, inspect `dataBindings.datasets` from the render payload. Record-bound and slug-bound datasets include resolved public records; fetch additional records through `GET /api/sites/:siteId/collections/:collectionId/records` when the frontend needs more than the payload provided.
+  5. If elements bind to structured content, inspect `dataBindings.datasets` from the render payload. Record-bound, slug-bound, searched, filtered, and sorted datasets include resolved public records; fetch additional records through `GET /api/sites/:siteId/collections/:collectionId/records` when the frontend needs more than the payload provided.
   6. Render from `content` + `theme` + `meta` only; ignore admin-only flags.
   7. Submit interactive blocks using:
      - `POST /api/sites/:siteId/forms/:formId/submissions`

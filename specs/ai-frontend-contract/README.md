@@ -63,10 +63,11 @@ Backy now exposes the first implementation-backed CMS collection surface:
 - `GET /api/sites/:siteId/collections`
 - `GET /api/sites/:siteId/collections/:collectionId`
 - `GET /api/sites/:siteId/collections/:collectionId/records?slug=example`
+- `GET /api/sites/:siteId/collections/:collectionId/records?q=term&fieldKey=title&fieldValue=example&sortBy=rank&sortDirection=desc`
 - `GET/POST/PATCH/DELETE /api/admin/sites/:siteId/collections`
 - `GET/POST/PATCH/DELETE /api/admin/sites/:siteId/collections/:collectionId/records`
 
-These endpoints make collection schemas and records addressable by custom frontends. Public reads hide draft/private collections and unpublished records. The admin `/collections` route now gives editors a backend-backed schema and record builder for these APIs, and the editor property panel can attach basic collection field bindings to selected canvas elements. Collection dynamic item URLs now resolve and render at `/:collectionSlug/:recordSlug` after normal page and blog routes. When page, post, or generated dynamic item elements declare collection `dataBindings`, `/render` exposes normalized dataset manifests, collection field schemas, resolved public records, binding metadata, and server-resolved element prop values for custom frontends and Backy's hosted renderer. Dynamic list templates, custom item URL rules, and richer dataset query/repeater UI still need to be completed.
+These endpoints make collection schemas and records addressable by custom frontends. Public reads hide draft/private collections and unpublished records. Record list endpoints support basic search, field-value filtering, sorting, limit, and offset, and `/render` dataset hydration accepts the same query shape. The admin `/collections` route now gives editors a backend-backed schema and record builder for these APIs, and the editor property panel can attach basic collection field bindings to selected canvas elements. Collection dynamic item URLs now resolve and render at `/:collectionSlug/:recordSlug` after normal page and blog routes. When page, post, or generated dynamic item elements declare collection `dataBindings`, `/render` exposes normalized dataset manifests, collection field schemas, resolved public records, binding metadata, and server-resolved element prop values for custom frontends and Backy's hosted renderer. Dynamic list templates, custom item URL rules, and richer dataset repeater UI still need to be completed.
 
 ## Required payload shape
 

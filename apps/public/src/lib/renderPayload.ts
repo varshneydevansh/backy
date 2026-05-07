@@ -490,16 +490,36 @@ const hydrateDatasetRecords = (siteId: string, dataset: DatasetManifest): Datase
   const query = isRecord(dataset.query) ? dataset.query : {};
   const recordId = typeof query.recordId === 'string' && query.recordId.length > 0 ? query.recordId : null;
   const slug = typeof query.slug === 'string' && query.slug.length > 0 ? query.slug : null;
+  const search = typeof query.q === 'string' && query.q.length > 0
+    ? query.q
+    : typeof query.search === 'string' && query.search.length > 0
+      ? query.search
+      : null;
+  const fieldKey = typeof query.fieldKey === 'string' && query.fieldKey.length > 0 ? query.fieldKey : null;
+  const fieldValue = query.fieldValue;
+  const sortBy = typeof query.sortBy === 'string' && query.sortBy.length > 0 ? query.sortBy : null;
+  const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
   const limit = isRecord(dataset.pagination) && typeof dataset.pagination.limit === 'number'
     ? dataset.pagination.limit
     : typeof query.limit === 'number'
       ? query.limit
       : 50;
+  const offset = isRecord(dataset.pagination) && typeof dataset.pagination.offset === 'number'
+    ? dataset.pagination.offset
+    : typeof query.offset === 'number'
+      ? query.offset
+      : 0;
   const records = recordId
     ? [getCollectionRecordByIdOrSlug(siteId, collection.id, recordId)].filter(Boolean)
     : listCollectionRecords(siteId, collection.id, {
         slug: slug || undefined,
+        search: search || undefined,
+        fieldKey: fieldKey || undefined,
+        fieldValue,
+        sortBy: sortBy || undefined,
+        sortDirection,
         limit: Number.isInteger(limit) && limit > 0 ? Math.min(limit, 100) : 50,
+        offset: Number.isInteger(offset) && offset > 0 ? offset : 0,
       }).records;
 
   return {
