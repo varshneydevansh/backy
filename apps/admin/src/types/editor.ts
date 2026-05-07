@@ -210,6 +210,12 @@ export interface ElementProps {
   contactShareNotesField?: string;
   contactShareDedupeByEmail?: boolean;
 
+  // Collection write mapping
+  collectionWriteEnabled?: boolean;
+  collectionWriteCollectionId?: string;
+  collectionWriteSlugField?: string;
+  collectionWriteFieldMap?: Record<string, string>;
+
   // Comment block settings
   commentTitle?: string;
   commentModerationMode?: 'manual' | 'auto-approve';

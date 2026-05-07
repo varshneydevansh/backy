@@ -870,6 +870,21 @@ export interface FormDefinition {
     dedupeByEmail?: boolean;
   };
 
+  /** Optional mapping that writes accepted public submissions into a CMS collection */
+  collectionTarget?: {
+    /** Enable collection record creation for this form */
+    enabled: boolean;
+
+    /** Target collection id or slug */
+    collectionId: string;
+
+    /** Map submitted form field keys to collection field keys */
+    fieldMap?: Record<string, string>;
+
+    /** Submitted field used to derive the collection record slug */
+    slugField?: string;
+  };
+
   /** Who can access this form config */
   createdBy?: string | null;
   updatedBy?: string | null;

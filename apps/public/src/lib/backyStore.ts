@@ -1870,6 +1870,14 @@ function buildFormDefinitionFromCanvas(
           dedupeByEmail: props.contactShareDedupeByEmail !== false && sanitizeString(props.contactShareDedupeByEmail).toLowerCase() !== 'false',
         }
       : undefined,
+    collectionTarget: props.collectionWriteEnabled === true || sanitizeString(props.collectionWriteEnabled).toLowerCase() === 'true'
+      ? {
+          enabled: true,
+          collectionId: sanitizeString(props.collectionWriteCollectionId || props.collectionId),
+          slugField: sanitizeString(props.collectionWriteSlugField),
+          fieldMap: parseFieldMap(props.collectionWriteFieldMap),
+        }
+      : undefined,
     createdBy: 'admin',
     updatedBy: 'admin',
     createdAt: nowIso,
@@ -2695,6 +2703,38 @@ function parseShareValue(values: Record<string, unknown>, key?: string | null): 
 
   const parsed = sanitizeString(values[key]);
   return parsed.length > 0 ? parsed : null;
+}
+
+function parseFieldMap(value: unknown): Record<string, string> | undefined {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const map = Object.entries(value as Record<string, unknown>).reduce<Record<string, string>>((acc, [key, target]) => {
+      const sourceKey = sanitizeString(key);
+      const targetKey = sanitizeString(target);
+      if (sourceKey && targetKey) {
+        acc[sourceKey] = targetKey;
+      }
+      return acc;
+    }, {});
+
+    return Object.keys(map).length > 0 ? map : undefined;
+  }
+
+  if (typeof value === 'string') {
+    const map = value.split(/\r?\n|,/)
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .reduce<Record<string, string>>((acc, entry) => {
+        const [source, target] = entry.split(':').map((item) => item?.trim());
+        if (source && target) {
+          acc[source] = target;
+        }
+        return acc;
+      }, {});
+
+    return Object.keys(map).length > 0 ? map : undefined;
+  }
+
+  return undefined;
 }
 
 export function getSites(params: { includeUnpublished?: boolean } = {}): StoreSite[] {
@@ -5357,6 +5397,79 @@ export function createFormSubmission(record: {
 
   formSubmissions = [submission, ...formSubmissions];
   return clone(submission);
+}
+
+export function createCollectionRecordFromFormSubmission(
+  siteId: string,
+  form: FormDefinition,
+  values: Record<string, unknown>,
+  submission: FormSubmission,
+): {
+  skipped: boolean;
+  record: StoreCollectionRecord | null;
+  errors: SubmissionValidationDetail[];
+  reason?: string;
+} {
+  const target = form.collectionTarget;
+  if (!target?.enabled) {
+    return { skipped: true, record: null, errors: [] };
+  }
+
+  const collectionId = sanitizeString(target.collectionId);
+  if (!collectionId) {
+    return { skipped: true, record: null, errors: [], reason: 'missing-collection-target' };
+  }
+
+  const collection = getCollectionByIdOrSlug(siteId, collectionId, { includeUnpublished: true });
+  if (!collection || collection.status !== 'published') {
+    return { skipped: false, record: null, errors: [{ field: 'collectionId', message: 'Target collection is not published or does not exist.' }] };
+  }
+
+  if (!collection.permissions.publicCreate) {
+    return { skipped: false, record: null, errors: [{ field: 'collectionId', message: 'Target collection does not allow public creation.' }] };
+  }
+
+  const fieldKeys = new Set(collection.fields.map((field) => field.key));
+  const fieldMap = target.fieldMap || {};
+  const mappedValues = Object.entries(values).reduce<Record<string, unknown>>((acc, [sourceKey, value]) => {
+    const mappedKey = sanitizeString(fieldMap[sourceKey] || sourceKey);
+    if (mappedKey && fieldKeys.has(mappedKey)) {
+      acc[mappedKey] = value;
+    }
+    return acc;
+  }, {});
+
+  if (fieldKeys.has('sourceSubmissionId')) {
+    mappedValues.sourceSubmissionId = submission.id;
+  }
+
+  const validationErrors = validateCollectionRecordValues(collection, mappedValues);
+  if (validationErrors.length > 0) {
+    return { skipped: false, record: null, errors: validationErrors };
+  }
+
+  const slugSource = target.slugField
+    ? values[target.slugField] ?? mappedValues[target.slugField]
+    : mappedValues.slug || mappedValues.title || mappedValues.name;
+  const baseSlug = normalizeSlugInput(slugSource || `${form.id}-${submission.id}`, 'submission');
+  let slug = baseSlug;
+  let suffix = 2;
+  while (getCollectionRecordByIdOrSlug(siteId, collection.id, slug, { includeUnpublished: true })) {
+    slug = `${baseSlug}-${suffix}`;
+    suffix += 1;
+  }
+
+  const record = createAdminCollectionRecord(siteId, collection.id, {
+    slug,
+    status: 'draft',
+    values: mappedValues,
+  });
+
+  return {
+    skipped: false,
+    record: record || null,
+    errors: record ? [] : [{ field: 'collectionId', message: 'Unable to create collection record.' }],
+  };
 }
 
 export function listFormSubmissions(

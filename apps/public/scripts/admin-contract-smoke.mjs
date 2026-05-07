@@ -782,6 +782,125 @@ try {
     const hiddenPublicCreatedRecord = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records?slug=${publicCreatedRecordSlug}`);
     assert(hiddenPublicCreatedRecord.response.status === 404, `${hiddenPublicCreatedRecord.url} expected draft public-created record to stay hidden`);
 
+    let formWritePageId = null;
+    try {
+      const createFormWritePage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: 'Collection Form Write Page',
+          slug: `${pageSlug}-form-write`,
+          status: 'published',
+          content: {
+            elements: [
+              {
+                id: 'contract-form-write',
+                type: 'form',
+                x: 80,
+                y: 80,
+                width: 520,
+                height: 360,
+                props: {
+                  formId: 'contract-form-write',
+                  formTitle: 'Collection form write',
+                  formActive: true,
+                  moderationMode: 'auto-approve',
+                  enableHoneypot: false,
+                  collectionWriteEnabled: true,
+                  collectionWriteCollectionId: createdCollectionId,
+                  collectionWriteSlugField: 'title',
+                  collectionWriteFieldMap: {
+                    title: 'title',
+                    message: 'summary',
+                    category: 'category',
+                  },
+                },
+                children: [
+                  {
+                    id: 'contract-form-write-title',
+                    type: 'input',
+                    x: 0,
+                    y: 0,
+                    width: 420,
+                    height: 44,
+                    props: {
+                      name: 'title',
+                      placeholder: 'Title',
+                      required: true,
+                    },
+                  },
+                  {
+                    id: 'contract-form-write-message',
+                    type: 'textarea',
+                    x: 0,
+                    y: 64,
+                    width: 420,
+                    height: 120,
+                    props: {
+                      name: 'message',
+                      placeholder: 'Message',
+                    },
+                  },
+                  {
+                    id: 'contract-form-write-category',
+                    type: 'select',
+                    x: 0,
+                    y: 204,
+                    width: 260,
+                    height: 44,
+                    props: {
+                      name: 'category',
+                      options: ['Featured', 'Standard'],
+                    },
+                  },
+                ],
+              },
+            ],
+            canvasSize: { width: 1200, height: 760 },
+          },
+        }),
+      });
+      assert(createFormWritePage.response.status === 201, `${createFormWritePage.url} expected 201, got ${createFormWritePage.response.status}`);
+      formWritePageId = createFormWritePage.json?.data?.page?.id;
+      assert(formWritePageId, `${createFormWritePage.url} missing created page id`);
+
+      const formWriteSubmission = await request(`/api/sites/${createdSiteId}/forms/contract-form-write/submissions`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          values: {
+            title: 'Form Write Record',
+            message: 'Form submissions can become draft collection records.',
+            category: 'Featured',
+          },
+          pageId: formWritePageId,
+          requestId: 'contract-form-write',
+          rateLimitBypass: true,
+        }),
+      });
+      assert(formWriteSubmission.response.status === 201, `${formWriteSubmission.url} expected 201, got ${formWriteSubmission.response.status}`);
+      assert(formWriteSubmission.json?.collectionRecord?.status === 'draft', `${formWriteSubmission.url} expected draft collection record`);
+      assert(formWriteSubmission.json?.collectionRecord?.slug === 'form-write-record', `${formWriteSubmission.url} expected slug from title`);
+      assert(formWriteSubmission.json?.collectionRecord?.values?.summary === 'Form submissions can become draft collection records.', `${formWriteSubmission.url} expected mapped summary value`);
+      assert(formWriteSubmission.json?.collectionRecordErrors?.length === 0, `${formWriteSubmission.url} expected no collection record errors`);
+
+      const formWrittenRecordSlug = formWriteSubmission.json.collectionRecord.slug;
+      const hiddenFormWrittenRecord = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records?slug=${formWrittenRecordSlug}`);
+      assert(hiddenFormWrittenRecord.response.status === 404, `${hiddenFormWrittenRecord.url} expected draft form-written record to stay hidden`);
+
+      const adminFormWrittenRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records?slug=${formWrittenRecordSlug}`);
+      assert(adminFormWrittenRecord.response.status === 200, `${adminFormWrittenRecord.url} expected 200, got ${adminFormWrittenRecord.response.status}`);
+      assert(adminFormWrittenRecord.json?.data?.records?.[0]?.status === 'draft', `${adminFormWrittenRecord.url} missing draft form-written record`);
+    } finally {
+      if (formWritePageId) {
+        await request(`/api/admin/sites/${createdSiteId}/pages/${formWritePageId}`, { method: 'DELETE' }).catch(() => {});
+      }
+    }
+
     const invalidRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records`, {
       method: 'POST',
       headers: {

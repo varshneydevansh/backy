@@ -79,6 +79,30 @@ const parseBooleanSetting = (value: unknown, fallback = false): boolean => {
   return fallback;
 };
 
+const formatFieldMap = (value: unknown): string => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return '';
+  }
+
+  return Object.entries(value as Record<string, unknown>)
+    .map(([source, target]) => `${source}: ${String(target || '')}`)
+    .join('\n');
+};
+
+const parseFieldMapInput = (value: string): Record<string, string> => (
+  value
+    .split(/\r?\n|,/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .reduce<Record<string, string>>((acc, entry) => {
+      const [source, target] = entry.split(':').map((item) => item?.trim());
+      if (source && target) {
+        acc[source] = target;
+      }
+      return acc;
+    }, {})
+);
+
 const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
   const normalized = typeof value === 'string' ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
 
@@ -1434,6 +1458,70 @@ function ContentProperties({
                 Deduplicate contacts by email
               </label>
             </>
+          )}
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={Boolean(element.props.collectionWriteEnabled)}
+              onChange={(e) => onChange({ collectionWriteEnabled: e.target.checked })}
+            />
+            Create draft collection record on submit
+          </label>
+          {Boolean(element.props.collectionWriteEnabled) && (
+            <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Target collection
+                </label>
+                <select
+                  value={element.props.collectionWriteCollectionId || ''}
+                  onChange={(e) => onChange({ collectionWriteCollectionId: e.target.value })}
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                >
+                  <option value="">Select collection...</option>
+                  {collections.map((collection) => (
+                    <option key={collection.id} value={collection.id}>
+                      {collection.name}
+                    </option>
+                  ))}
+                </select>
+                {collectionsError && (
+                  <p className="mt-1 text-xs text-amber-600">{collectionsError}</p>
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Slug source field
+                </label>
+                <input
+                  type="text"
+                  value={element.props.collectionWriteSlugField || ''}
+                  onChange={(e) => onChange({ collectionWriteSlugField: e.target.value })}
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                  placeholder="title"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Field map
+                </label>
+                <textarea
+                  value={formatFieldMap(element.props.collectionWriteFieldMap)}
+                  onChange={(e) => onChange({ collectionWriteFieldMap: parseFieldMapInput(e.target.value) })}
+                  className={cn(
+                    'min-h-[80px] w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                  placeholder={'formField: collectionField\nmessage: summary'}
+                />
+              </div>
+            </div>
           )}
           <p className="text-xs text-muted-foreground">
             Note: Drag input + button elements into the form area

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   buildContactShareFromSubmission,
+  createCollectionRecordFromFormSubmission,
   createFormSubmission,
   listFormSubmissions,
   getFormById,
@@ -320,6 +321,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     let contact = null;
+    let collectionRecordResult = null;
     if (classification.status === 'approved' || classification.status === 'pending') {
       contact = buildContactShareFromSubmission(site.id, form.id, parsed.values, {
         status: submission.status,
@@ -329,6 +331,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ipHash,
         sourceSubmissionId: submission.id,
       }, parsed.contactShareOverride ?? undefined);
+
+      collectionRecordResult = createCollectionRecordFromFormSubmission(
+        site.id,
+        form,
+        parsed.values,
+        submission,
+      );
     }
 
     if (form.notificationWebhook && submission.status !== 'spam' && submission.status !== 'rejected') {
@@ -417,6 +426,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           : 'Submission received.',
         submission,
         contact,
+        collectionRecord: collectionRecordResult?.record || null,
+        collectionRecordErrors: collectionRecordResult?.errors || [],
       },
       { status: 201 },
     );
