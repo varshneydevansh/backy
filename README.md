@@ -104,6 +104,7 @@ For external/custom frontends, use the public endpoints from `apps/public` direc
 
 - [Completion spec](./specs/backy-cms-completion-spec.md)
 - [Platform gap analysis and AI frontend contract](./specs/backy-platform-gap-analysis-and-ai-frontend-contract.md)
+- [Page and backend completeness audit](./specs/page-completion-audit/backy-page-surface-audit.md)
 - [AI frontend contract area](./specs/ai-frontend-contract/README.md)
 - [Parity roadmap](./specs/backy-wix-canva-cms-v1-roadmap.md)
 - [Editor spec](./specs/editor_complete_spec.md)
