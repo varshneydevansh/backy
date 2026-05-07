@@ -1317,7 +1317,8 @@ export function Canvas({
     <div
       ref={canvasRef}
       className={cn(
-        'relative overflow-hidden bg-white shadow-[0_18px_55px_rgba(15,23,42,0.16)] transition-shadow',
+        'relative bg-white shadow-[0_18px_55px_rgba(15,23,42,0.16)] transition-shadow',
+        isPreview ? 'overflow-hidden' : 'overflow-visible',
         !isPreview && 'cursor-default ring-1 ring-slate-200',
         isDropActive && !isPreview && 'ring-2 ring-sky-500 shadow-[0_22px_70px_rgba(14,165,233,0.24)]'
       )}

@@ -98,6 +98,20 @@ const createSmokePage = async () => {
             },
           },
           {
+            id: 'smoke-top-edge',
+            type: 'paragraph',
+            x: 360,
+            y: 10,
+            width: 300,
+            height: 64,
+            zIndex: 5,
+            props: {
+              content: 'Top edge handle check',
+              fontSize: 18,
+              color: '#0f172a',
+            },
+          },
+          {
             id: 'smoke-box',
             type: 'box',
             x: 460,
@@ -691,6 +705,20 @@ const getMoveHandleBox = async (client, elementId) => {
   return result.value || null;
 };
 
+const waitForMoveHandleBox = async (client, elementId) => {
+  let lastHandle = null;
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    lastHandle = await getMoveHandleBox(client, elementId);
+    if (lastHandle) {
+      return lastHandle;
+    }
+    await sleep(75);
+  }
+
+  return lastHandle;
+};
+
 const readInspectorState = async (client) => {
   const { result } = await client.send('Runtime.evaluate', {
     expression: `(() => {
@@ -862,8 +890,42 @@ const dragSelectionHandle = async (client, elementId, deltaX, deltaY, options = 
   }
   const before = await getElementBox(client, elementId);
   assert(before, `Missing element ${elementId} before move-handle drag`);
-  const handle = await getMoveHandleBox(client, elementId);
-  assert(handle, `Missing move handle for selected element ${elementId}`);
+  const handle = await waitForMoveHandleBox(client, elementId);
+  if (!handle) {
+    const selectionState = await evaluate(client, `(() => {
+      const node = document.querySelector('[data-element-id="${elementId}"]');
+      const selected = Array.from(document.querySelectorAll('[data-element-id]'))
+        .filter((candidate) => candidate.querySelector('[data-role="canvas-move-handle"]'))
+        .map((candidate) => ({
+          id: candidate.getAttribute('data-element-id'),
+          className: candidate.className?.toString?.() || '',
+        }));
+      return {
+        exists: Boolean(node),
+        className: node?.className?.toString?.() || '',
+        text: node?.textContent?.trim?.().slice(0, 120) || '',
+        box: (() => {
+          const rect = node?.getBoundingClientRect?.();
+          return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null;
+        })(),
+        centerHit: (() => {
+          const rect = node?.getBoundingClientRect?.();
+          if (!rect) return null;
+          const hit = document.elementFromPoint(rect.x + Math.min(rect.width / 2, 60), rect.y + Math.min(rect.height / 2, 24));
+          const element = hit instanceof Element ? hit : hit?.parentElement;
+          const host = element?.closest?.('[data-element-id]');
+          return {
+            tag: element?.tagName || null,
+            text: element?.textContent?.trim?.().slice(0, 80) || '',
+            elementId: host?.getAttribute('data-element-id') || null,
+            className: element?.className?.toString?.() || '',
+          };
+        })(),
+        selected,
+      };
+    })()`);
+    assert(handle, `Missing move handle for selected element ${elementId}: ${JSON.stringify(selectionState)}`);
+  }
 
   const startX = Math.round(handle.x + Math.min(handle.width / 2, 56));
   const startY = Math.round(handle.y + Math.min(handle.height / 2, 12));
@@ -1084,7 +1146,7 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge']);
 
     const drags = EDITOR_PATH
       ? [
@@ -1104,6 +1166,7 @@ const main = async () => {
         ]
       : [
           await dragSelectionHandle(client, 'smoke-heading', 40, 20),
+          await dragSelectionHandle(client, 'smoke-top-edge', 30, 20),
         ];
     const editingMoveHandleDrags = EDITOR_PATH
       ? [
@@ -1145,7 +1208,7 @@ const main = async () => {
     let reloadedState = null;
     let postSaveInspector = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-box', 'smoke-child-button', 'smoke-form'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form'];
       const expectedState = await readEditorElementState(client, elementIds);
       await clickSave(client);
       postSaveInspector = await readInspectorState(client);
