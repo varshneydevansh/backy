@@ -13,7 +13,6 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@core': path.resolve(__dirname, '../../packages/core/src'),
-      '@db': path.resolve(__dirname, '../../packages/database/src'),
     },
   },
   // Provide shims for Node.js globals that don't exist in browser
@@ -23,7 +22,7 @@ export default defineConfig({
   },
   // Exclude Node.js-only packages from browser bundle
   optimizeDeps: {
-    exclude: ['@backy-cms/database', '@supabase/supabase-js'],
+    exclude: ['@backy/db', '@supabase/supabase-js'],
   },
   server: {
     port: 5173,
@@ -32,8 +31,5 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
-    rollupOptions: {
-      external: ['@backy-cms/database'],
-    },
   },
 });

@@ -170,6 +170,10 @@ The next implementation should not start by adding more UI screens. The product 
 - **Acceptance Criteria**:
   - No new code imports both DB packages for the same responsibility.
   - Decision record exists in `specs/decisions/`.
+- **Current progress**:
+  - `specs/decisions/0001-database-boundary.md` accepts `@backy/db` as the canonical schema/adapter/repository package.
+  - `@backy-cms/database` is documented as legacy Supabase scaffolding that new code must not import.
+  - Admin no longer declares `@backy-cms/database`, `@db/*`, or a Vite external for the legacy package.
 - **Validation**:
   - `rg "packages/database|@backy-cms/database|@backy/db"` shows expected imports only.
 

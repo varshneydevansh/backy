@@ -14,8 +14,8 @@
   },
   "dependencies": {
     "@backy-cms/core": "*",
-    "@backy-cms/database": "*",
     "@backy-cms/editor": "*",
+    "@backy/db": "*",
     "@supabase/supabase-js": "^2.39.0",
     "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-query": "^5.17.0",
