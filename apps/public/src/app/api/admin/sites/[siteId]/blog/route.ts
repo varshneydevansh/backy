@@ -7,10 +7,17 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  canvasElementsToBackyContentDocument,
+  isBackyContentDocument,
+  type BackyContentDocument,
+  type BackyPost,
+} from '@backy-cms/core';
+import {
   createAdminBlogPost,
   getBlogPosts,
   getSiteByIdOrSlug,
 } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
@@ -61,12 +68,98 @@ const parseStatusFilter = (value: string | null) => {
   return undefined;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const statusFromInput = (value: unknown): 'draft' | 'published' | 'scheduled' | 'archived' => (
+  value === 'published' || value === 'scheduled' || value === 'archived' ? value : 'draft'
+);
+
+const stringArrayFromInput = (value: unknown): string[] => (
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : []
+);
+
+const contentDocumentFromInput = (
+  rawContent: unknown,
+  input: {
+    id: string;
+    title: string;
+    slug: string;
+    status: 'draft' | 'published' | 'scheduled' | 'archived';
+  },
+): BackyContentDocument => {
+  if (isBackyContentDocument(rawContent)) {
+    return rawContent;
+  }
+  if (isRecord(rawContent) && isBackyContentDocument(rawContent.contentDocument)) {
+    return rawContent.contentDocument;
+  }
+
+  return canvasElementsToBackyContentDocument({
+    id: input.id,
+    kind: 'post',
+    title: input.title,
+    slug: input.slug,
+    status: input.status,
+    elements: isRecord(rawContent) ? rawContent : [],
+    canvasSize: isRecord(rawContent) ? rawContent.canvasSize : undefined,
+    customCSS: isRecord(rawContent) && typeof rawContent.customCSS === 'string' ? rawContent.customCSS : undefined,
+  });
+};
+
+const adminPostFromRepositoryPost = (post: BackyPost) => {
+  const canvasSize = isRecord(post.content.metadata?.canvasSize)
+    ? post.content.metadata.canvasSize
+    : { width: 1200, height: 900 };
+  return {
+    ...post,
+    content: {
+      elements: post.content.elements,
+      canvasSize,
+      customCSS: typeof post.content.metadata?.customCSS === 'string' ? post.content.metadata.customCSS : undefined,
+      contentDocument: post.content,
+    },
+  };
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { siteId } = await params;
     const { searchParams } = new URL(request.url);
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const limit = Math.max(1, Math.min(100, Number(searchParams.get('limit') || 50)));
+      const offset = Math.max(0, Number(searchParams.get('offset') || 0));
+      const payload = await repositories.posts.list({
+        siteId: site.id,
+        includeUnpublished: true,
+        status: parseStatusFilter(searchParams.get('status')) || 'all',
+        categoryId: searchParams.get('categoryId') || undefined,
+        tagId: searchParams.get('tagId') || undefined,
+        authorId: searchParams.get('authorId') || undefined,
+        limit,
+        offset,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          posts: payload.items.map(adminPostFromRepositoryPost),
+          pagination: payload.pagination,
+        },
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -108,6 +201,60 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const body = await parseJsonBody(request);
+      const title = typeof body.title === 'string' ? body.title.trim() : '';
+      const slug = normalizeSlug(body.slug || title);
+      const status = statusFromInput(body.status);
+
+      if (!title) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Post title is required', requestId);
+      }
+
+      if (!slug) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Post slug is required', requestId);
+      }
+
+      const slugCheck = await repositories.posts.checkSlug({ siteId: site.id, slug });
+      if (!slugCheck.available) {
+        return errorResponse(409, 'SLUG_CONFLICT', 'A post with this slug already exists', requestId);
+      }
+
+      const postId = typeof body.id === 'string' && body.id.trim().length > 0 ? body.id.trim() : `post_${slug}`;
+      const created = await repositories.posts.create({
+        siteId: site.id,
+        title,
+        slug,
+        excerpt: typeof body.excerpt === 'string' ? body.excerpt : null,
+        status,
+        scheduledAt: typeof body.scheduledAt === 'string' ? body.scheduledAt : null,
+        featuredImageId: typeof body.featuredImageId === 'string' ? body.featuredImageId : null,
+        authorId: typeof body.authorId === 'string' ? body.authorId : null,
+        categoryIds: stringArrayFromInput(body.categoryIds),
+        tagIds: stringArrayFromInput(body.tagIds),
+        content: contentDocumentFromInput(body.content, { id: postId, title, slug, status }),
+        meta: isRecord(body.meta) ? body.meta : undefined,
+      });
+
+      return NextResponse.json(
+        {
+          success: true,
+          requestId,
+          data: {
+            post: adminPostFromRepositoryPost(created.item),
+          },
+        },
+        { status: 201 },
+      );
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {

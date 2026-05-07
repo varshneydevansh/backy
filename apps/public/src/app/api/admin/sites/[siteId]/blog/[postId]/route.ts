@@ -8,12 +8,19 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  canvasElementsToBackyContentDocument,
+  isBackyContentDocument,
+  type BackyContentDocument,
+  type BackyPost,
+} from '@backy-cms/core';
+import {
   deleteAdminBlogPost,
   getAdminBlogPostById,
   getBlogPosts,
   getSiteByIdOrSlug,
   updateAdminBlogPost,
 } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
@@ -57,11 +64,92 @@ const normalizeSlug = (value: unknown): string => (
     : ''
 );
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const statusFromInput = (value: unknown): 'draft' | 'published' | 'scheduled' | 'archived' | undefined => (
+  value === 'draft' || value === 'published' || value === 'scheduled' || value === 'archived' ? value : undefined
+);
+
+const stringArrayFromInput = (value: unknown): string[] | undefined => (
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : undefined
+);
+
+const contentDocumentFromInput = (
+  rawContent: unknown,
+  fallback: BackyPost,
+  input: {
+    title: string;
+    slug: string;
+    status: 'draft' | 'published' | 'scheduled' | 'archived';
+  },
+): BackyContentDocument | undefined => {
+  if (rawContent === undefined) {
+    return undefined;
+  }
+  if (isBackyContentDocument(rawContent)) {
+    return rawContent;
+  }
+  if (isRecord(rawContent) && isBackyContentDocument(rawContent.contentDocument)) {
+    return rawContent.contentDocument;
+  }
+
+  return canvasElementsToBackyContentDocument({
+    id: fallback.id,
+    kind: 'post',
+    title: input.title,
+    slug: input.slug,
+    status: input.status,
+    elements: isRecord(rawContent) ? rawContent : [],
+    canvasSize: isRecord(rawContent) ? rawContent.canvasSize : undefined,
+    customCSS: isRecord(rawContent) && typeof rawContent.customCSS === 'string' ? rawContent.customCSS : undefined,
+  });
+};
+
+const adminPostFromRepositoryPost = (post: BackyPost) => {
+  const canvasSize = isRecord(post.content.metadata?.canvasSize)
+    ? post.content.metadata.canvasSize
+    : { width: 1200, height: 900 };
+  return {
+    ...post,
+    content: {
+      elements: post.content.elements,
+      canvasSize,
+      customCSS: typeof post.content.metadata?.customCSS === 'string' ? post.content.metadata.customCSS : undefined,
+      contentDocument: post.content,
+    },
+  };
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { siteId, postId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const post = await repositories.posts.getById(site.id, postId);
+
+      if (!post) {
+        return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          post: adminPostFromRepositoryPost(post),
+        },
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -92,6 +180,63 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, postId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const post = await repositories.posts.getById(site.id, postId);
+
+      if (!post) {
+        return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+      }
+
+      const body = await parseJsonBody(request);
+      const nextSlug = body.slug === undefined ? post.slug : normalizeSlug(body.slug);
+
+      if (body.slug !== undefined && !nextSlug) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Post slug is required', requestId);
+      }
+
+      if (nextSlug && nextSlug !== post.slug) {
+        const conflict = await repositories.posts.checkSlug({ siteId: site.id, slug: nextSlug, excludePostId: post.id });
+        if (!conflict.available) {
+          return errorResponse(409, 'SLUG_CONFLICT', 'A post with this slug already exists', requestId);
+        }
+      }
+
+      const status = statusFromInput(body.status) || post.status;
+      const title = typeof body.title === 'string' ? body.title : post.title;
+      const content = contentDocumentFromInput(body.content, post, { title, slug: nextSlug, status });
+      const updated = await repositories.posts.update(site.id, post.id, {
+        title: body.title === undefined ? undefined : title,
+        slug: body.slug === undefined ? undefined : nextSlug,
+        excerpt: typeof body.excerpt === 'string' || body.excerpt === null ? body.excerpt : undefined,
+        status: statusFromInput(body.status),
+        scheduledAt: typeof body.scheduledAt === 'string' || body.scheduledAt === null ? body.scheduledAt : undefined,
+        featuredImageId: typeof body.featuredImageId === 'string' || body.featuredImageId === null
+          ? body.featuredImageId
+          : undefined,
+        authorId: typeof body.authorId === 'string' || body.authorId === null ? body.authorId : undefined,
+        categoryIds: stringArrayFromInput(body.categoryIds),
+        tagIds: stringArrayFromInput(body.tagIds),
+        content,
+        meta: isRecord(body.meta) ? body.meta : undefined,
+        revisionNote: typeof body.revisionNote === 'string' ? body.revisionNote : undefined,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          post: adminPostFromRepositoryPost(updated.item),
+        },
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -149,6 +294,30 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, postId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const deleted = await repositories.posts.delete(site.id, postId);
+
+      if (!deleted) {
+        return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          deleted: true,
+          postId,
+        },
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
