@@ -580,6 +580,7 @@ type DragInteraction = {
   startY: number;
   initialX: number;
   initialY: number;
+  raisedZIndex: number;
 };
 
 type ResizeInteraction = {
@@ -712,6 +713,16 @@ export function Canvas({
 
     return editorHost.getAttribute('data-backy-text-editor-editable') === 'true';
   }, [getTargetElement]);
+
+  const exitTextEditingForTransform = useCallback(() => {
+    setEditingId(null);
+    clearActiveEditor();
+
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && canvasRef.current?.contains(activeElement)) {
+      activeElement.blur();
+    }
+  }, [clearActiveEditor]);
 
   const requestEditForElement = useCallback((elementId: string | null) => {
     if (!elementId || isPreview) {
@@ -851,10 +862,7 @@ export function Canvas({
       }
       onSelect(elementId);
 
-      if (editingId) {
-        setEditingId(null);
-      }
-      clearActiveEditor();
+      exitTextEditingForTransform();
 
       const nextDragState: DragInteraction = {
         elementId,
@@ -863,6 +871,7 @@ export function Canvas({
         startY: e.clientY,
         initialX: clickedElement.x,
         initialY: clickedElement.y,
+        raisedZIndex: Math.max(clickedElement.zIndex || 1, getMaxZIndex(elementsRef.current) + 1),
       };
 
       dragStateRef.current = nextDragState;
@@ -870,7 +879,7 @@ export function Canvas({
       setDragState(nextDragState);
       setResizeState(null);
     },
-    [clearActiveEditor, elements, editingId, isInteractiveHandle, isTextEditorInteraction, isPreview, onSelect]
+    [elements, exitTextEditingForTransform, isInteractiveHandle, isTextEditorInteraction, isPreview, onSelect]
   );
 
   /**
@@ -1002,6 +1011,7 @@ export function Canvas({
         ...element,
         x: clampToCanvas(smartSnap.x, element.width, size.width),
         y: clampToCanvas(smartSnap.y, element.height, size.height),
+        zIndex: activeDragState.raisedZIndex,
       };
     });
 
@@ -1026,9 +1036,10 @@ export function Canvas({
     setResizeState(null);
     setAlignmentGuides([]);
     if (hadActiveTransform) {
+      exitTextEditingForTransform();
       onElementsChange(elementsRef.current, { commit: true, selectedId: activeElementId });
     }
-  }, [onElementsChange, selectedId]);
+  }, [exitTextEditingForTransform, onElementsChange, selectedId]);
 
   useEffect(() => {
     if (!dragState && !resizeState) {

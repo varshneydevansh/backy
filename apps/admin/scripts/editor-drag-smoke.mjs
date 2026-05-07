@@ -604,6 +604,19 @@ const dragElement = async (client, elementId, deltaX, deltaY) => {
   const startY = Math.round(before.y + Math.min(before.height / 2, 30));
   const endX = startX + deltaX;
   const endY = startY + deltaY;
+  const hitTarget = await evaluate(client, `(() => {
+    const node = document.elementFromPoint(${startX}, ${startY});
+    const element = node instanceof Element ? node : node?.parentElement;
+    const host = element?.closest?.('[data-element-id]');
+    return {
+      tag: element?.tagName || null,
+      className: element?.className?.toString?.() || '',
+      elementId: host?.getAttribute('data-element-id') || null,
+      role: element?.getAttribute?.('data-role') || null,
+      editable: host?.getAttribute('data-backy-text-editor-editable') || null,
+      text: element?.textContent?.trim?.().slice(0, 120) || '',
+    };
+  })()`);
 
   await client.send('Input.dispatchMouseEvent', {
     type: 'mouseMoved',
@@ -648,7 +661,7 @@ const dragElement = async (client, elementId, deltaX, deltaY) => {
   const actualDeltaY = Math.round(after.y - before.y);
   assert(
     Math.abs(actualDeltaX - deltaX) <= 12 && Math.abs(actualDeltaY - deltaY) <= 12,
-    `${elementId} did not drag correctly: expected ${deltaX},${deltaY}; got ${actualDeltaX},${actualDeltaY}`,
+    `${elementId} did not drag correctly: expected ${deltaX},${deltaY}; got ${actualDeltaX},${actualDeltaY}; hit ${JSON.stringify(hitTarget)}`,
   );
 
   return {
