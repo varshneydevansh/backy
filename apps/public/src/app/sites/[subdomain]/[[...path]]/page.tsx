@@ -18,7 +18,7 @@ import {
 } from '@/lib/backyStore';
 import { PageRenderer, type PageContent } from '@/components/PageRenderer';
 import AnimationHydrator from '@/components/AnimationHydrator';
-import { buildCollectionItemContent } from '@/lib/renderPayload';
+import { buildCollectionItemContent, resolveElementDataBindings } from '@/lib/renderPayload';
 import type { Metadata } from 'next';
 
 async function getSite(subdomain: string) {
@@ -150,13 +150,18 @@ export default async function SitePage({ params, searchParams }: PageProps) {
 
     const page = await getPage(site.id, pageSlug, previewToken);
     if (page) {
+        const pageContent = {
+            ...page.content,
+            elements: resolveElementDataBindings(site.id, page.content.elements),
+        } as unknown as PageContent;
+
         return (
             <>
                 {/* SEO head handled by generateMetadata */}
 
                 {/* Page content */}
                 <PageRenderer
-                    content={page.content}
+                    content={pageContent}
                     theme={site.theme}
                     siteId={site.id}
                     pageId={page.id}

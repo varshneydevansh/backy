@@ -8,6 +8,7 @@ import { notFound } from 'next/navigation';
 import { PageRenderer, type PageContent } from '@/components/PageRenderer';
 import AnimationHydrator from '@/components/AnimationHydrator';
 import { getBlogPosts, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
+import { resolveElementDataBindings } from '@/lib/renderPayload';
 import type { Metadata } from 'next';
 import type { StoreBlogPost } from '@/lib/backyStore';
 
@@ -46,7 +47,7 @@ const getPostBySlug = (siteId: string, slug: string, previewToken?: string): Sto
     : getBlogPosts(siteId, { slug }).posts[0];
 };
 
-const normalizePostContent = (post: StoreBlogPost): PageContent => {
+const normalizePostContent = (siteId: string, post: StoreBlogPost): PageContent => {
   const content = post.content;
   const canvasSize = isRecord(content.canvasSize)
     ? {
@@ -60,7 +61,7 @@ const normalizePostContent = (post: StoreBlogPost): PageContent => {
 
   if (Array.isArray(content.elements)) {
     return {
-      elements: content.elements as PageContent['elements'],
+      elements: resolveElementDataBindings(siteId, content.elements) as unknown as PageContent['elements'],
       canvasSize,
       customCSS: asString(content.customCSS),
       customJS: asString(content.customJS),
@@ -152,7 +153,7 @@ export default async function BlogPostPage({ params, searchParams }: PageProps) 
   return (
     <>
       <PageRenderer
-        content={normalizePostContent(post)}
+        content={normalizePostContent(site.id, post)}
         theme={site.theme}
         siteId={site.id}
         postId={post.id}

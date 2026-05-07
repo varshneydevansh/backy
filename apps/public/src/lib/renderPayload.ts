@@ -300,6 +300,163 @@ const normalizeElementForPayload = (element: RenderElement): RenderElement => ({
     .filter((binding): binding is JsonObject => !!binding) ?? [],
 });
 
+const getBoundCollectionRecord = (
+  siteId: string,
+  collectionId: string,
+  binding: JsonObject,
+): StoreCollectionRecord | undefined => {
+  const source = isRecord(binding.source) ? binding.source : {};
+  const query = isRecord(binding.query)
+    ? binding.query
+    : isRecord(source.query)
+      ? source.query
+      : {};
+  const recordId = typeof source.recordId === 'string' && source.recordId.length > 0
+    ? source.recordId
+    : typeof query.recordId === 'string' && query.recordId.length > 0
+      ? query.recordId
+      : null;
+  const slug = typeof query.slug === 'string' && query.slug.length > 0 ? query.slug : null;
+
+  if (recordId) {
+    return getCollectionRecordByIdOrSlug(siteId, collectionId, recordId);
+  }
+
+  return listCollectionRecords(siteId, collectionId, {
+    slug: slug || undefined,
+    limit: 1,
+  }).records[0];
+};
+
+const valueForBinding = (
+  siteId: string,
+  binding: JsonObject,
+): unknown => {
+  const normalized = normalizeCollectionBinding(binding, {
+    id: 'binding-target',
+    type: 'binding',
+    children: [],
+    props: {},
+    dataBindings: [],
+  }, 0);
+  const source = isRecord(normalized?.source) ? normalized.source : null;
+  const collectionId = typeof source?.collectionId === 'string' ? source.collectionId : null;
+  const field = typeof source?.field === 'string' ? source.field : null;
+
+  if (!collectionId || !field) {
+    return undefined;
+  }
+
+  const collection = getCollectionByIdOrSlug(siteId, collectionId);
+  if (!collection) {
+    return undefined;
+  }
+
+  const record = getBoundCollectionRecord(siteId, collection.id, binding);
+  if (!record) {
+    return undefined;
+  }
+
+  return record.values[field];
+};
+
+const valueForTargetPath = (siteId: string, targetPath: string, value: unknown) => {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (
+    targetPath === 'props.src'
+    || targetPath === 'props.assetId'
+    || targetPath === 'props.mediaId'
+  ) {
+    if (typeof value === 'string') {
+      const media = getMediaById(siteId, value);
+      return {
+        value,
+        media,
+      };
+    }
+  }
+
+  return { value };
+};
+
+const applyBindingValue = (
+  siteId: string,
+  element: RenderElement,
+  targetPath: string,
+  rawValue: unknown,
+): RenderElement => {
+  if (!targetPath.startsWith('props.')) {
+    return element;
+  }
+
+  const propName = targetPath.slice('props.'.length);
+  if (!propName) {
+    return element;
+  }
+
+  const resolved = valueForTargetPath(siteId, targetPath, rawValue);
+  if (!isRecord(resolved)) {
+    return element;
+  }
+
+  const nextProps: JsonObject = {
+    ...element.props,
+    [propName]: resolved.value,
+  };
+
+  if ((propName === 'assetId' || propName === 'mediaId') && isRecord(resolved.media)) {
+    nextProps.assetId = typeof resolved.media.id === 'string' ? resolved.media.id : resolved.value;
+    nextProps.mediaId = typeof resolved.media.id === 'string' ? resolved.media.id : resolved.value;
+    if (typeof resolved.media.url === 'string') {
+      nextProps.src = resolved.media.url;
+    }
+  }
+
+  if (propName === 'src' && isRecord(resolved.media)) {
+    nextProps.assetId = typeof resolved.media.id === 'string' ? resolved.media.id : resolved.value;
+    nextProps.mediaId = typeof resolved.media.id === 'string' ? resolved.media.id : resolved.value;
+    if (typeof resolved.media.url === 'string') {
+      nextProps.src = resolved.media.url;
+    }
+  }
+
+  return {
+    ...element,
+    props: nextProps,
+  };
+};
+
+export const resolveElementDataBindings = (siteId: string, rawElements: unknown[]): RenderElement[] => (
+  rawElements
+    .map(normalizeElement)
+    .filter((element): element is RenderElement => !!element)
+    .map((element) => {
+      const children = resolveElementDataBindings(siteId, element.children);
+      const withChildren: RenderElement = {
+        ...element,
+        children,
+      };
+
+      return (element.dataBindings || []).reduce<RenderElement>((currentElement, binding, index) => {
+        const normalized = normalizeCollectionBinding(binding, currentElement, index);
+        const targetPath = typeof normalized?.targetPath === 'string' ? normalized.targetPath : null;
+        if (!normalized || !targetPath) {
+          return currentElement;
+        }
+
+        const nextValue = valueForBinding(siteId, binding);
+        if (nextValue === undefined) {
+          return currentElement;
+        }
+
+        return applyBindingValue(siteId, currentElement, targetPath, nextValue);
+      }, withChildren);
+    })
+);
+
 const normalizeResolvedCollectionFields = (fields: unknown): JsonObject[] => (
   Array.isArray(fields)
     ? fields.filter(isRecord).map((field) => ({
@@ -800,9 +957,7 @@ export const buildCollectionItemContent = (
 };
 
 export function buildPublicRenderPayload(site: StoreSite, page: StorePage, options: RenderPayloadOptions) {
-  const elements = page.content.elements
-    .map(normalizeElement)
-    .filter((element): element is RenderElement => !!element);
+  const elements = resolveElementDataBindings(site.id, page.content.elements);
   const payloadElements = elements.map(normalizeElementForPayload);
   const mediaPayload = getMediaList(site.id, {
     pageId: page.id,
@@ -997,7 +1152,8 @@ export function buildPublicBlogPostRenderPayload(
   options: RenderPayloadOptions,
 ) {
   const elements = normalizePostElements(post);
-  const payloadElements = elements.map(normalizeElementForPayload);
+  const resolvedElements = resolveElementDataBindings(site.id, elements);
+  const payloadElements = resolvedElements.map(normalizeElementForPayload);
   const mediaPayload = getMediaList(site.id, {
     postId: post.id,
     visibility: 'public',
@@ -1005,8 +1161,8 @@ export function buildPublicBlogPostRenderPayload(
   });
   const forms = listFormsBySite(site.id, { postId: post.id });
   const canonical = post.meta?.canonical || `/blog/${post.slug}`;
-  const actions = collectElementActions(elements);
-  const dataBindings = collectDataBindingManifest(site.id, elements);
+  const actions = collectElementActions(resolvedElements);
+  const dataBindings = collectDataBindingManifest(site.id, resolvedElements);
   const navigation = getSiteNavigation(site.id);
 
   return {
@@ -1086,7 +1242,7 @@ export function buildPublicBlogPostRenderPayload(
       dataBindings: {
         ...dataBindings,
       },
-      editableMap: buildEditableMap(elements),
+      editableMap: buildEditableMap(resolvedElements),
     },
   };
 }

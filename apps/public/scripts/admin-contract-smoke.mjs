@@ -760,6 +760,13 @@ try {
       `${boundRender.url} missing collection binding manifest`,
     );
     assert(
+      boundRender.json?.data?.content?.elements?.some((element) => (
+        element.id === 'bound_title'
+        && element.props?.content === 'Collection Record'
+      )),
+      `${boundRender.url} did not resolve bound collection value into element props`,
+    );
+    assert(
       boundRender.json?.data?.editableMap?.[`collection.${createdCollectionId}.bound_title.title`]?.scope === 'collectionRecord',
       `${boundRender.url} missing collection record editable map entry`,
     );
