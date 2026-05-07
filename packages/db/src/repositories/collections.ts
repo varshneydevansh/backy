@@ -304,6 +304,7 @@ export function createCollectionRepository(db: DatabaseInstance): BackyCollectio
                 status,
                 values: input.values,
                 publishedAt: publishedAtForStatus(status),
+                scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
                 updatedAt: new Date(),
             }).returning() as CollectionRecordRow[];
             return { item: toCollectionRecord(row) };
@@ -320,6 +321,7 @@ export function createCollectionRepository(db: DatabaseInstance): BackyCollectio
                 updates.status = input.status;
                 updates.publishedAt = publishedAtForStatus(input.status, existing?.publishedAt || null);
             }
+            if (input.scheduledAt !== undefined) updates.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
 
             const [row] = await database.update(contentCollectionRecords).set(updates).where(and(
                 eq(contentCollectionRecords.siteId, siteId),

@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import type { BackyCollection, BackyCollectionField, BackyJsonValue, PublishStatus } from '@backy-cms/core';
 import {
   createAdminCollectionRecord,
   getCollectionByIdOrSlug,
@@ -13,7 +14,9 @@ import {
   getSiteByIdOrSlug,
   updateAdminCollectionRecord,
   validateCollectionRecordValues,
+  type StoreCollection,
 } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
@@ -52,6 +55,12 @@ const normalizeSlug = (value: unknown, fallback: string): string => {
   const slug = raw.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   return slug || fallback;
 };
+
+const parseStatus = (value: unknown): PublishStatus => (
+  value === 'draft' || value === 'published' || value === 'scheduled' || value === 'archived'
+    ? value
+    : 'draft'
+);
 
 const parseCsvRows = (source: string): string[][] => {
   const rows: string[][] = [];
@@ -108,7 +117,7 @@ const parseCsvRows = (source: string): string[][] => {
 };
 
 const parseImportedValue = (
-  field: NonNullable<ReturnType<typeof getCollectionByIdOrSlug>>['fields'][number] | undefined,
+  field: BackyCollectionField | NonNullable<ReturnType<typeof getCollectionByIdOrSlug>>['fields'][number] | undefined,
   value: string,
 ): unknown => {
   if (!field || field.type !== 'json') {
@@ -126,6 +135,82 @@ const parseImportedValue = (
   }
 };
 
+const toJsonRecord = (value: Record<string, unknown>): Record<string, BackyJsonValue> => (
+  value as Record<string, BackyJsonValue>
+);
+
+const importRows = async (
+  input: {
+    siteId: string;
+    collection: BackyCollection;
+    rows: string[][];
+    headers: string[];
+    upsert: boolean;
+    save: (
+      slug: string,
+      values: Record<string, unknown>,
+      status: PublishStatus,
+      scheduledAt: string | null,
+    ) => Promise<{ record: unknown | null; existing: boolean }>;
+  },
+) => {
+  const fieldsByKey = new Map(input.collection.fields.map((field) => [field.key, field]));
+  const records = [];
+  const errors: ImportError[] = [];
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  for (const [rowIndex, cells] of input.rows.slice(1).entries()) {
+    const rowNumber = rowIndex + 2;
+    const rowData = Object.fromEntries(input.headers.map((header, index) => [header, cells[index] ?? '']));
+    const values = Object.fromEntries(
+      input.headers
+        .filter((header) => !RESERVED_COLUMNS.has(header))
+        .map((header) => [header, parseImportedValue(fieldsByKey.get(header), rowData[header] ?? '')]),
+    );
+    const slug = normalizeSlug(rowData.slug || values.title || values.name || `record-${rowNumber}`, `record-${rowNumber}`);
+    const status = parseStatus(rowData.status);
+    const scheduledAt = rowData.scheduledAt || null;
+    const validationErrors = validateCollectionRecordValues(input.collection as unknown as StoreCollection, values);
+
+    if (validationErrors.length > 0) {
+      skipped += 1;
+      errors.push({
+        row: rowNumber,
+        slug,
+        message: 'Collection record values are invalid.',
+        details: validationErrors,
+      });
+      continue;
+    }
+
+    const saved = await input.save(slug, values, status, scheduledAt);
+    if (!saved.record) {
+      skipped += 1;
+      errors.push({ row: rowNumber, slug, message: 'Unable to save imported record.' });
+      continue;
+    }
+
+    records.push(saved.record);
+    if (saved.existing) {
+      updated += 1;
+    } else {
+      created += 1;
+    }
+  }
+
+  return {
+    records,
+    import: {
+      created,
+      updated,
+      skipped,
+      errors,
+    },
+  };
+};
+
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -133,6 +218,75 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { siteId, collectionId } = await params;
     const { searchParams } = new URL(request.url);
     const upsert = searchParams.get('upsert') === 'true';
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const collection = await repositories.collections.getById(site.id, collectionId)
+        || await repositories.collections.getBySlug(site.id, collectionId);
+      if (!collection) {
+        return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+      }
+
+      const csv = await request.text();
+      const rows = parseCsvRows(csv);
+
+      if (rows.length < 2) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'CSV import requires a header row and at least one record row', requestId);
+      }
+
+      const headers = rows[0].map((header) => header.trim()).filter(Boolean);
+      if (headers.length === 0) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'CSV import requires at least one column header', requestId);
+      }
+
+      const result = await importRows({
+        siteId: site.id,
+        collection,
+        rows,
+        headers,
+        upsert,
+        save: async (slug, values, status, scheduledAt) => {
+          const existing = await repositories.collections.getRecordBySlug(site.id, collection.id, slug);
+          if (existing && !upsert) {
+            return { record: null, existing: true };
+          }
+
+          const record = existing
+            ? (await repositories.collections.updateRecord(site.id, collection.id, existing.id, {
+                slug,
+                status,
+                scheduledAt,
+                values: toJsonRecord(values),
+              })).item
+            : (await repositories.collections.createRecord({
+                siteId: site.id,
+                collectionId: collection.id,
+                slug,
+                status,
+                scheduledAt,
+                values: toJsonRecord(values),
+              })).item;
+
+          return { record, existing: Boolean(existing) };
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          collection,
+          records: result.records,
+          import: result.import,
+        },
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {

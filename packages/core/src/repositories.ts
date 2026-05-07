@@ -298,6 +298,7 @@ export interface BackyCollectionRecordCreateInput {
   collectionId: string;
   slug?: string;
   status?: PublishStatus;
+  scheduledAt?: string | null;
   values: Record<string, BackyJsonValue>;
 }
 

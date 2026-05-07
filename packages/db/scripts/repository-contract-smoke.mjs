@@ -498,12 +498,14 @@ assert(record.id === 'contentCollectionRecords_1', 'Expected fake collection rec
 assert((await collectionRepository.listRecords({ siteId: site.id, collectionId: collection.id })).items.length === 0, 'Expected draft records hidden by default');
 const publishedRecord = (await collectionRepository.updateRecord(site.id, collection.id, record.id, {
   status: 'published',
+  scheduledAt: '2030-01-02T03:04:05.000Z',
   values: {
     title: 'Starter Pack',
     price: 59,
   },
 })).item;
 assert(publishedRecord.status === 'published' && publishedRecord.publishedAt, 'Expected published collection record');
+assert(publishedRecord.scheduledAt === '2030-01-02T03:04:05.000Z', 'Expected collection record scheduledAt update');
 assert(publishedRecord.values.price === 59, 'Expected record values update');
 assert((await collectionRepository.getRecordBySlug(site.id, collection.id, 'starter-pack'))?.id === record.id, 'Expected record getBySlug');
 assert((await collectionRepository.listRecords({
