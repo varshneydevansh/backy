@@ -80,6 +80,14 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Navigation items include page id, label/title, slug, canonical path, status, homepage flag, and child arrays.
   - Current implementation derives primary navigation from publishable pages in the runtime content adapter. Production completion still needs editable menus, nested page hierarchy, redirects, locale-aware paths, and custom/external links.
 
+- `GET /api/sites/:siteId/collections`
+- `GET /api/sites/:siteId/collections/:collectionId`
+- `GET /api/sites/:siteId/collections/:collectionId/records?slug=:slug&limit=&offset=`
+  - Public CMS collection contract for custom frontends and future dataset bindings.
+  - Returns only collections with `status: "published"` and `permissions.publicRead: true`.
+  - Returns only published records or scheduled records whose `scheduledAt` has passed.
+  - Current implementation is backed by the same runtime JSON adapter as admin content. Production completion still needs DB-backed querying, indexes, CSV import/export, dataset resolver wiring, dynamic route templates, and authenticated visitor-write policies.
+
 ### 2.2 Render payload
 Public page payload should include:
 - `content` in shared editor schema
@@ -294,8 +302,9 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
   2. Resolve path on route changes: `GET /api/sites/:siteId/resolve?path=/...`.
   3. Fetch page or blog post render payloads: `GET /api/sites/:siteId/render?path=/...`.
   4. If route resolves to a blog post and a custom archive UI is needed, call blog listing/detail APIs.
-  5. Render from `content` + `theme` + `meta` only; ignore admin-only flags.
-  6. Submit interactive blocks using:
+  5. If elements bind to structured content, fetch collection records through `GET /api/sites/:siteId/collections/:collectionId/records`.
+  6. Render from `content` + `theme` + `meta` only; ignore admin-only flags.
+  7. Submit interactive blocks using:
      - `POST /api/sites/:siteId/forms/:formId/submissions`
      - `POST /api/sites/:siteId/pages/:pageId/comments`
 - CORS policy for custom frontends:

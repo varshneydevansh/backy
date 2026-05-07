@@ -35,6 +35,8 @@ The rule is simple: a custom frontend can look completely different from the Bac
    - blog categories: `GET /api/sites/:siteId/blog/categories`
    - blog tags: `GET /api/sites/:siteId/blog/tags`
    - blog authors: `GET /api/sites/:siteId/blog/authors`
+   - collections: `GET /api/sites/:siteId/collections`
+   - collection records: `GET /api/sites/:siteId/collections/:collectionId/records`
    - comments: `GET /api/sites/:siteId/pages/:pageId/comments?status=approved`
 
 4. Submit interactions.
@@ -52,6 +54,18 @@ The first implementation-backed endpoint is:
 It returns the `content-payload.schema.json` shape for pages and blog posts from the current public data adapter. This is not yet the final durable database-backed service, but it gives external frontends and AI-generated frontends a stable payload target while Backy replaces seeded/mock persistence.
 
 `npm run test:admin-contract --workspace @backy/public` validates the page and blog post render responses against `content-payload.schema.json` so contract drift is caught during the public API smoke pass.
+
+## Current collection endpoints
+
+Backy now exposes the first implementation-backed CMS collection surface:
+
+- `GET /api/sites/:siteId/collections`
+- `GET /api/sites/:siteId/collections/:collectionId`
+- `GET /api/sites/:siteId/collections/:collectionId/records?slug=example`
+- `GET/POST/PATCH/DELETE /api/admin/sites/:siteId/collections`
+- `GET/POST/PATCH/DELETE /api/admin/sites/:siteId/collections/:collectionId/records`
+
+These endpoints make collection schemas and records addressable by custom frontends. Public reads hide draft/private collections and unpublished records. Dataset binding resolution and dynamic item route rendering still need to be wired into the render payload.
 
 ## Required payload shape
 

@@ -11,6 +11,8 @@ let createdPostId = null;
 let createdCategoryId = null;
 let createdTagId = null;
 let createdUserId = null;
+let createdCollectionId = null;
+let createdCollectionRecordId = null;
 let originalDeliveryMode = null;
 
 function assert(condition, message) {
@@ -62,6 +64,14 @@ async function cleanup() {
     await request(`/api/admin/sites/${createdSiteId}/blog/tags/${createdTagId}`, { method: 'DELETE' }).catch(() => {});
   }
 
+  if (createdSiteId && createdCollectionId && createdCollectionRecordId) {
+    await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records/${createdCollectionRecordId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (createdSiteId && createdCollectionId) {
+    await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
   if (createdSiteId) {
     await request(`/api/admin/sites/${createdSiteId}`, { method: 'DELETE' }).catch(() => {});
   }
@@ -88,6 +98,8 @@ try {
   const postSlug = `admin-contract-post-${unique}`;
   const categorySlug = `admin-contract-category-${unique}`;
   const tagSlug = `admin-contract-tag-${unique}`;
+  const collectionSlug = `admin-contract-collection-${unique}`;
+  const collectionRecordSlug = `admin-contract-record-${unique}`;
   const adminDevOrigin = 'http://localhost:5173';
 
   await record('api cors allows local admin dev origin', async () => {
@@ -556,6 +568,145 @@ try {
     assert(removeTag.response.status === 200, `${removeTag.url} expected 200, got ${removeTag.response.status}`);
     assert(removeTag.json?.data?.deleted === true, `${removeTag.url} expected deleted tag`);
     createdTagId = null;
+  });
+
+  await record('admin collections create/read/update/delete records for temporary site', async () => {
+    const createCollection = await request(`/api/admin/sites/${createdSiteId}/collections`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Admin Contract Collection',
+        slug: collectionSlug,
+        status: 'published',
+        fields: [
+          { key: 'title', label: 'Title', type: 'text', required: true, unique: true },
+          { key: 'summary', label: 'Summary', type: 'richText' },
+          { key: 'rank', label: 'Rank', type: 'number' },
+        ],
+        permissions: {
+          publicRead: true,
+          publicCreate: false,
+          publicUpdate: false,
+          publicDelete: false,
+        },
+      }),
+    });
+    assert(createCollection.response.status === 201, `${createCollection.url} expected 201, got ${createCollection.response.status}`);
+    assert(createCollection.json?.success === true, `${createCollection.url} expected success envelope`);
+    assert(createCollection.json?.data?.collection?.slug === collectionSlug, `${createCollection.url} returned wrong collection slug`);
+    assert(createCollection.json?.data?.collection?.fields?.some((field) => field.key === 'title' && field.required === true), `${createCollection.url} missing title field schema`);
+    createdCollectionId = createCollection.json.data.collection.id;
+
+    const duplicateCollection = await request(`/api/admin/sites/${createdSiteId}/collections`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ name: 'Duplicate Collection', slug: collectionSlug }),
+    });
+    assert(duplicateCollection.response.status === 409, `${duplicateCollection.url} expected 409, got ${duplicateCollection.response.status}`);
+    assert(duplicateCollection.json?.error?.code === 'SLUG_CONFLICT', `${duplicateCollection.url} expected SLUG_CONFLICT`);
+
+    const listCollections = await request(`/api/admin/sites/${createdSiteId}/collections`);
+    assert(listCollections.response.status === 200, `${listCollections.url} expected 200, got ${listCollections.response.status}`);
+    assert(listCollections.json?.data?.collections?.some((collection) => collection.id === createdCollectionId), `${listCollections.url} missing created collection`);
+
+    const publicCollections = await request(`/api/sites/${createdSiteId}/collections`);
+    assert(publicCollections.response.status === 200, `${publicCollections.url} expected 200, got ${publicCollections.response.status}`);
+    assert(publicCollections.json?.collections?.some((collection) => collection.id === createdCollectionId), `${publicCollections.url} missing public collection`);
+
+    const invalidRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        slug: `${collectionRecordSlug}-invalid`,
+        status: 'published',
+        values: { summary: 'Missing required title' },
+      }),
+    });
+    assert(invalidRecord.response.status === 400, `${invalidRecord.url} expected 400, got ${invalidRecord.response.status}`);
+    assert(invalidRecord.json?.error?.code === 'VALIDATION_ERROR', `${invalidRecord.url} expected VALIDATION_ERROR`);
+
+    const createRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        slug: collectionRecordSlug,
+        status: 'published',
+        values: {
+          title: 'Collection Record',
+          summary: 'Reusable structured content',
+          rank: 1,
+        },
+      }),
+    });
+    assert(createRecord.response.status === 201, `${createRecord.url} expected 201, got ${createRecord.response.status}`);
+    assert(createRecord.json?.data?.record?.slug === collectionRecordSlug, `${createRecord.url} returned wrong record slug`);
+    assert(createRecord.json?.data?.record?.values?.rank === 1, `${createRecord.url} expected numeric rank`);
+    createdCollectionRecordId = createRecord.json.data.record.id;
+
+    const duplicateRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        slug: `${collectionRecordSlug}-duplicate-title`,
+        status: 'published',
+        values: {
+          title: 'Collection Record',
+        },
+      }),
+    });
+    assert(duplicateRecord.response.status === 400, `${duplicateRecord.url} expected 400, got ${duplicateRecord.response.status}`);
+
+    const publicRecords = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records?slug=${collectionRecordSlug}`);
+    assert(publicRecords.response.status === 200, `${publicRecords.url} expected 200, got ${publicRecords.response.status}`);
+    assert(publicRecords.json?.records?.[0]?.id === createdCollectionRecordId, `${publicRecords.url} returned wrong public collection record`);
+
+    const updateRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records/${createdCollectionRecordId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        values: {
+          summary: 'Updated structured content',
+          rank: 2,
+        },
+      }),
+    });
+    assert(updateRecord.response.status === 200, `${updateRecord.url} expected 200, got ${updateRecord.response.status}`);
+    assert(updateRecord.json?.data?.record?.values?.summary === 'Updated structured content', `${updateRecord.url} expected updated summary`);
+    assert(updateRecord.json?.data?.record?.values?.title === 'Collection Record', `${updateRecord.url} expected partial update to preserve title`);
+
+    const hideCollection = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ status: 'draft' }),
+    });
+    assert(hideCollection.response.status === 200, `${hideCollection.url} expected 200, got ${hideCollection.response.status}`);
+
+    const hiddenPublicCollection = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}`);
+    assert(hiddenPublicCollection.response.status === 404, `${hiddenPublicCollection.url} expected draft collection to be hidden`);
+
+    const removeRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records/${createdCollectionRecordId}`, { method: 'DELETE' });
+    assert(removeRecord.response.status === 200, `${removeRecord.url} expected 200, got ${removeRecord.response.status}`);
+    assert(removeRecord.json?.data?.deleted === true, `${removeRecord.url} expected deleted record`);
+    createdCollectionRecordId = null;
+
+    const removeCollection = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}`, { method: 'DELETE' });
+    assert(removeCollection.response.status === 200, `${removeCollection.url} expected 200, got ${removeCollection.response.status}`);
+    assert(removeCollection.json?.data?.deleted === true, `${removeCollection.url} expected deleted collection`);
+    createdCollectionId = null;
   });
 
   await record('admin sites delete removes temporary site', async () => {

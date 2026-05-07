@@ -53,7 +53,7 @@ Backy currently has pieces of this model but not the complete loop.
 
 | Capability | Wix-like expectation | Backy state | Required Backy work |
 |---|---|---|---|
-| Collections | Structured content collections independent of pages | Core/blog/media/form types exist, but no general collection builder UI/API | Add generic collection schemas, field types, validation, import/export, permissions |
+| Collections | Structured content collections independent of pages | Generic collection schema/record admin APIs and public read APIs now exist in the runtime adapter, with required/unique field validation and public visibility guards covered by `test:admin-contract`. No admin builder UI or durable DB querying yet. | Add admin collection builder UI, DB-backed indexes/querying, CSV import/export, backups, audit events, and full RBAC permissions |
 | Dataset binding | Page elements bind to collection fields | Element props are static JSON; no reusable dataset binding contract | Add `dataBindings` per element and a query/dataset resolver |
 | Dynamic pages | One template renders many item URLs | Page/blog routes exist, but no collection-template routing model | Add template routes, item URL variables, preview records, conflict-safe slug policy |
 | Presets/templates | Starter CMS presets create sample collection plus list/detail pages | Specs mention templates; code has block catalog but no complete preset pipeline | Add site/page/blog/form template registry and cloning/versioning |

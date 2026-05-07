@@ -215,6 +215,71 @@ interface StoreSettings {
   updatedAt: string;
 }
 
+type CollectionFieldType =
+  | 'text'
+  | 'richText'
+  | 'number'
+  | 'boolean'
+  | 'date'
+  | 'datetime'
+  | 'image'
+  | 'video'
+  | 'file'
+  | 'reference'
+  | 'multiReference'
+  | 'url'
+  | 'email'
+  | 'phone'
+  | 'slug'
+  | 'json';
+
+interface StoreCollectionField {
+  id: string;
+  key: string;
+  label: string;
+  type: CollectionFieldType;
+  required: boolean;
+  unique: boolean;
+  sortOrder: number;
+  helpText: string | null;
+  options?: string[];
+  referenceCollectionId?: string | null;
+  defaultValue?: unknown;
+}
+
+interface StoreCollectionPermissions {
+  publicRead: boolean;
+  publicCreate: boolean;
+  publicUpdate: boolean;
+  publicDelete: boolean;
+}
+
+interface StoreCollection {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  status: 'draft' | 'published' | 'archived';
+  fields: StoreCollectionField[];
+  permissions: StoreCollectionPermissions;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface StoreCollectionRecord {
+  id: string;
+  siteId: string;
+  collectionId: string;
+  slug: string;
+  status: 'draft' | 'published' | 'scheduled' | 'archived';
+  values: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
+  scheduledAt: string | null;
+}
+
 interface Pagination {
   total: number;
   limit: number;
@@ -781,6 +846,87 @@ const BLOG_TAGS: StoreBlogTag[] = [
   },
 ];
 
+const COLLECTIONS: StoreCollection[] = [
+  {
+    id: 'collection-team',
+    siteId: 'site-demo',
+    name: 'Team Members',
+    slug: 'team',
+    description: 'Demo collection for dynamic team profile pages.',
+    status: 'published',
+    fields: [
+      {
+        id: 'field-team-name',
+        key: 'name',
+        label: 'Name',
+        type: 'text',
+        required: true,
+        unique: false,
+        sortOrder: 10,
+        helpText: null,
+      },
+      {
+        id: 'field-team-role',
+        key: 'role',
+        label: 'Role',
+        type: 'text',
+        required: true,
+        unique: false,
+        sortOrder: 20,
+        helpText: null,
+      },
+      {
+        id: 'field-team-bio',
+        key: 'bio',
+        label: 'Bio',
+        type: 'richText',
+        required: false,
+        unique: false,
+        sortOrder: 30,
+        helpText: null,
+      },
+      {
+        id: 'field-team-photo',
+        key: 'photo',
+        label: 'Photo',
+        type: 'image',
+        required: false,
+        unique: false,
+        sortOrder: 40,
+        helpText: null,
+      },
+    ],
+    permissions: {
+      publicRead: true,
+      publicCreate: false,
+      publicUpdate: false,
+      publicDelete: false,
+    },
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  },
+];
+
+const COLLECTION_RECORDS: StoreCollectionRecord[] = [
+  {
+    id: 'record-team-ada',
+    siteId: 'site-demo',
+    collectionId: 'collection-team',
+    slug: 'ada-lovelace',
+    status: 'published',
+    values: {
+      name: 'Ada Lovelace',
+      role: 'Systems Architect',
+      bio: 'Leads the collection-backed rendering model for Backy demos.',
+      photo: 'media-demo-hero',
+    },
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    publishedAt: nowIso,
+    scheduledAt: null,
+  },
+];
+
 const CONTENT_REVISIONS: ContentRevision[] = [];
 const PREVIEW_TOKENS: PreviewToken[] = [];
 
@@ -901,6 +1047,8 @@ interface AdminContentSnapshot {
   blogPosts?: StoreBlogPost[];
   blogCategories?: StoreBlogCategory[];
   blogTags?: StoreBlogTag[];
+  collections?: StoreCollection[];
+  collectionRecords?: StoreCollectionRecord[];
   users?: StoreUser[];
   settings?: StoreSettings;
   revisions?: ContentRevision[];
@@ -1014,6 +1162,14 @@ function refreshPersistedAdminContent() {
       BLOG_TAGS.splice(0, BLOG_TAGS.length, ...parsed.blogTags);
     }
 
+    if (Array.isArray(parsed.collections)) {
+      COLLECTIONS.splice(0, COLLECTIONS.length, ...parsed.collections);
+    }
+
+    if (Array.isArray(parsed.collectionRecords)) {
+      COLLECTION_RECORDS.splice(0, COLLECTION_RECORDS.length, ...parsed.collectionRecords);
+    }
+
     if (Array.isArray(parsed.users)) {
       USER_LIST.splice(0, USER_LIST.length, ...parsed.users);
     }
@@ -1053,6 +1209,8 @@ function persistAdminContent() {
           blogPosts: BLOG_POSTS,
           blogCategories: BLOG_CATEGORIES,
           blogTags: BLOG_TAGS,
+          collections: COLLECTIONS,
+          collectionRecords: COLLECTION_RECORDS,
           users: USER_LIST,
           settings: SETTINGS,
           revisions: CONTENT_REVISIONS,
@@ -1231,7 +1389,7 @@ function clone<T>(value: T): T {
 }
 
 function isPublished(
-  status?: StorePage['status'] | StoreBlogPost['status'],
+  status?: StorePage['status'] | StoreBlogPost['status'] | StoreCollectionRecord['status'],
   scheduledAt?: string | null,
 ): boolean {
   if (status === 'published') {
@@ -2675,6 +2833,18 @@ export function deleteAdminSite(siteId: string): boolean {
     }
   }
 
+  for (let collectionIndex = COLLECTIONS.length - 1; collectionIndex >= 0; collectionIndex -= 1) {
+    if (COLLECTIONS[collectionIndex].siteId === siteId) {
+      COLLECTIONS.splice(collectionIndex, 1);
+    }
+  }
+
+  for (let recordIndex = COLLECTION_RECORDS.length - 1; recordIndex >= 0; recordIndex -= 1) {
+    if (COLLECTION_RECORDS[recordIndex].siteId === siteId) {
+      COLLECTION_RECORDS.splice(recordIndex, 1);
+    }
+  }
+
   for (let revisionIndex = CONTENT_REVISIONS.length - 1; revisionIndex >= 0; revisionIndex -= 1) {
     if (CONTENT_REVISIONS[revisionIndex].siteId === siteId) {
       CONTENT_REVISIONS.splice(revisionIndex, 1);
@@ -2878,6 +3048,484 @@ export function regenerateAdminApiKeys(kind: 'all' | 'public' | 'admin' = 'all')
 
   persistAdminContent();
   return clone(SETTINGS);
+}
+
+const COLLECTION_FIELD_TYPES: CollectionFieldType[] = [
+  'text',
+  'richText',
+  'number',
+  'boolean',
+  'date',
+  'datetime',
+  'image',
+  'video',
+  'file',
+  'reference',
+  'multiReference',
+  'url',
+  'email',
+  'phone',
+  'slug',
+  'json',
+];
+
+const normalizeCollectionFieldType = (value: unknown): CollectionFieldType => {
+  const normalized = sanitizeString(value);
+  return COLLECTION_FIELD_TYPES.includes(normalized as CollectionFieldType)
+    ? normalized as CollectionFieldType
+    : 'text';
+};
+
+const normalizeCollectionFieldKey = (value: unknown, fallback: string): string => (
+  normalizeSlugInput(value, fallback).replace(/-/g, '_')
+);
+
+const normalizeCollectionField = (
+  raw: unknown,
+  index: number,
+  existing?: StoreCollectionField,
+): StoreCollectionField => {
+  const input = toRecord(raw);
+  const label = sanitizeString(input.label) || sanitizeString(input.name) || existing?.label || `Field ${index + 1}`;
+  const key = normalizeCollectionFieldKey(input.key || input.slug || label, existing?.key || `field_${index + 1}`);
+  const options = Array.isArray(input.options)
+    ? input.options.map(sanitizeString).filter(Boolean)
+    : existing?.options;
+
+  return {
+    id: sanitizeString(input.id) || existing?.id || createRuntimeId('field'),
+    key,
+    label,
+    type: input.type === undefined ? existing?.type || 'text' : normalizeCollectionFieldType(input.type),
+    required: input.required === undefined ? existing?.required ?? false : parseBooleanInput(input.required, false),
+    unique: input.unique === undefined ? existing?.unique ?? false : parseBooleanInput(input.unique, false),
+    sortOrder: Number(input.sortOrder) || existing?.sortOrder || (index + 1) * 10,
+    helpText: input.helpText === undefined ? existing?.helpText || null : sanitizeString(input.helpText) || null,
+    ...(options?.length ? { options } : {}),
+    referenceCollectionId: input.referenceCollectionId === undefined
+      ? existing?.referenceCollectionId || null
+      : sanitizeString(input.referenceCollectionId) || null,
+    ...(input.defaultValue !== undefined ? { defaultValue: input.defaultValue } : existing && 'defaultValue' in existing ? { defaultValue: existing.defaultValue } : {}),
+  };
+};
+
+const normalizeCollectionFields = (
+  rawFields: unknown,
+  existingFields: StoreCollectionField[] = [],
+): StoreCollectionField[] => {
+  const source = Array.isArray(rawFields) && rawFields.length > 0
+    ? rawFields
+    : existingFields.length > 0
+      ? existingFields
+      : [
+          { key: 'title', label: 'Title', type: 'text', required: true, unique: false },
+          { key: 'slug', label: 'Slug', type: 'slug', required: true, unique: true },
+        ];
+  const usedKeys = new Set<string>();
+
+  return source.map((field, index) => {
+    const normalized = normalizeCollectionField(field, index, existingFields[index]);
+    let key = normalized.key;
+    let suffix = 2;
+    while (usedKeys.has(key)) {
+      key = `${normalized.key}_${suffix}`;
+      suffix += 1;
+    }
+    usedKeys.add(key);
+    return {
+      ...normalized,
+      key,
+    };
+  }).sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
+};
+
+const normalizeCollectionPermissions = (
+  value: unknown,
+  existing?: StoreCollectionPermissions,
+): StoreCollectionPermissions => {
+  const input = toRecord(value);
+  const base = existing || {
+    publicRead: true,
+    publicCreate: false,
+    publicUpdate: false,
+    publicDelete: false,
+  };
+
+  return {
+    publicRead: input.publicRead === undefined ? base.publicRead : parseBooleanInput(input.publicRead, base.publicRead),
+    publicCreate: input.publicCreate === undefined ? base.publicCreate : parseBooleanInput(input.publicCreate, base.publicCreate),
+    publicUpdate: input.publicUpdate === undefined ? base.publicUpdate : parseBooleanInput(input.publicUpdate, base.publicUpdate),
+    publicDelete: input.publicDelete === undefined ? base.publicDelete : parseBooleanInput(input.publicDelete, base.publicDelete),
+  };
+};
+
+const normalizeCollectionRecordValue = (type: CollectionFieldType, value: unknown): unknown => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (type === 'number') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (type === 'boolean') {
+    return parseBooleanInput(value, false);
+  }
+
+  if (type === 'multiReference') {
+    return Array.isArray(value)
+      ? value.map(sanitizeString).filter(Boolean)
+      : sanitizeString(value)
+        ? [sanitizeString(value)]
+        : [];
+  }
+
+  if (type === 'json') {
+    return value;
+  }
+
+  return sanitizeString(value);
+};
+
+const normalizeCollectionRecordValues = (
+  collection: StoreCollection,
+  values: Record<string, unknown>,
+  existingValues: Record<string, unknown> = {},
+): Record<string, unknown> => {
+  const normalized: Record<string, unknown> = {};
+
+  for (const field of collection.fields) {
+    if (values[field.key] !== undefined) {
+      normalized[field.key] = normalizeCollectionRecordValue(field.type, values[field.key]);
+      continue;
+    }
+
+    if (existingValues[field.key] !== undefined) {
+      normalized[field.key] = existingValues[field.key];
+      continue;
+    }
+
+    if ('defaultValue' in field) {
+      normalized[field.key] = normalizeCollectionRecordValue(field.type, field.defaultValue);
+    }
+  }
+
+  for (const [key, value] of Object.entries(values)) {
+    if (!(key in normalized)) {
+      normalized[key] = value;
+    }
+  }
+
+  return normalized;
+};
+
+export function listCollections(siteId: string, options: { includeUnpublished?: boolean } = {}): StoreCollection[] {
+  ensurePersistedAdminContentLoaded();
+
+  const collections = COLLECTIONS.filter((collection) => (
+    collection.siteId === siteId &&
+    (options.includeUnpublished || (collection.status === 'published' && collection.permissions.publicRead))
+  ));
+
+  return clone(collections);
+}
+
+export function getCollectionByIdOrSlug(
+  siteId: string,
+  identifier: string,
+  options: { includeUnpublished?: boolean } = {},
+): StoreCollection | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const normalized = normalizeIdentifier(identifier);
+  const collection = COLLECTIONS.find((item) => (
+    item.siteId === siteId &&
+    (normalizeIdentifier(item.id) === normalized || normalizeIdentifier(item.slug) === normalized)
+  ));
+
+  if (!collection) {
+    return undefined;
+  }
+
+  if (!options.includeUnpublished && (collection.status !== 'published' || !collection.permissions.publicRead)) {
+    return undefined;
+  }
+
+  return clone(collection);
+}
+
+export function createAdminCollection(siteId: string, input: Record<string, unknown>): StoreCollection {
+  ensurePersistedAdminContentLoaded();
+
+  const now = new Date().toISOString();
+  const name = sanitizeString(input.name) || 'Untitled collection';
+  const slug = normalizeSlugInput(input.slug || name, 'collection');
+  const collection: StoreCollection = {
+    id: sanitizeString(input.id) || createRuntimeId('collection'),
+    siteId,
+    name,
+    slug,
+    description: sanitizeString(input.description) || null,
+    status: parseStatusInput(input.status, ['draft', 'published', 'archived'] as const, 'draft'),
+    fields: normalizeCollectionFields(input.fields),
+    permissions: normalizeCollectionPermissions(input.permissions),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  COLLECTIONS.unshift(collection);
+  persistAdminContent();
+  return clone(collection);
+}
+
+export function updateAdminCollection(
+  siteId: string,
+  collectionId: string,
+  input: Record<string, unknown>,
+): StoreCollection | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = COLLECTIONS.findIndex((collection) => collection.siteId === siteId && collection.id === collectionId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const current = COLLECTIONS[index];
+  const updated: StoreCollection = {
+    ...current,
+    name: input.name === undefined ? current.name : sanitizeString(input.name) || current.name,
+    slug: input.slug === undefined ? current.slug : normalizeSlugInput(input.slug, current.slug),
+    description: input.description === undefined ? current.description : sanitizeString(input.description) || null,
+    status: input.status === undefined
+      ? current.status
+      : parseStatusInput(input.status, ['draft', 'published', 'archived'] as const, current.status),
+    fields: input.fields === undefined ? current.fields : normalizeCollectionFields(input.fields, current.fields),
+    permissions: input.permissions === undefined
+      ? current.permissions
+      : normalizeCollectionPermissions(input.permissions, current.permissions),
+    updatedAt: new Date().toISOString(),
+  };
+
+  COLLECTIONS[index] = updated;
+  persistAdminContent();
+  return clone(updated);
+}
+
+export function deleteAdminCollection(siteId: string, collectionId: string): boolean {
+  ensurePersistedAdminContentLoaded();
+
+  const index = COLLECTIONS.findIndex((collection) => collection.siteId === siteId && collection.id === collectionId);
+  if (index === -1) {
+    return false;
+  }
+
+  COLLECTIONS.splice(index, 1);
+  for (let recordIndex = COLLECTION_RECORDS.length - 1; recordIndex >= 0; recordIndex -= 1) {
+    if (COLLECTION_RECORDS[recordIndex].siteId === siteId && COLLECTION_RECORDS[recordIndex].collectionId === collectionId) {
+      COLLECTION_RECORDS.splice(recordIndex, 1);
+    }
+  }
+
+  persistAdminContent();
+  return true;
+}
+
+export function validateCollectionRecordValues(
+  collection: StoreCollection,
+  values: Record<string, unknown>,
+  options: { existingValues?: Record<string, unknown>; excludeRecordId?: string } = {},
+): SubmissionValidationDetail[] {
+  ensurePersistedAdminContentLoaded();
+
+  const normalizedValues = normalizeCollectionRecordValues(collection, values, options.existingValues);
+  const errors: SubmissionValidationDetail[] = [];
+
+  for (const field of collection.fields) {
+    const value = normalizedValues[field.key];
+    const empty = value === null ||
+      value === undefined ||
+      (typeof value === 'string' && value.trim().length === 0) ||
+      (Array.isArray(value) && value.length === 0);
+
+    if (field.required && empty) {
+      errors.push({ field: field.key, message: `${field.label} is required.` });
+      continue;
+    }
+
+    if (field.unique && !empty) {
+      const duplicate = COLLECTION_RECORDS.find((record) => (
+        record.siteId === collection.siteId &&
+        record.collectionId === collection.id &&
+        record.id !== options.excludeRecordId &&
+        sanitizeString(record.values[field.key]).toLowerCase() === sanitizeString(value).toLowerCase()
+      ));
+
+      if (duplicate) {
+        errors.push({ field: field.key, message: `${field.label} must be unique.` });
+      }
+    }
+  }
+
+  return errors;
+}
+
+export function listCollectionRecords(
+  siteId: string,
+  collectionId: string,
+  params: {
+    includeUnpublished?: boolean;
+    status?: StoreCollectionRecord['status'];
+    slug?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+): { records: StoreCollectionRecord[]; pagination: Pagination } {
+  ensurePersistedAdminContentLoaded();
+
+  const { includeUnpublished = false, status, slug, limit = 50, offset = 0 } = params;
+  let records = COLLECTION_RECORDS.filter((record) => (
+    record.siteId === siteId &&
+    record.collectionId === collectionId &&
+    (includeUnpublished || isPublished(record.status, record.scheduledAt))
+  ));
+
+  if (status) {
+    records = records.filter((record) => record.status === status);
+  }
+
+  if (slug) {
+    records = records.filter((record) => normalizeIdentifier(record.slug) === normalizeIdentifier(slug));
+  }
+
+  const paginated = records.slice(offset, offset + limit);
+  return {
+    records: clone(paginated),
+    pagination: getPagination(records.length, limit, offset),
+  };
+}
+
+export function getCollectionRecordByIdOrSlug(
+  siteId: string,
+  collectionId: string,
+  identifier: string,
+  options: { includeUnpublished?: boolean } = {},
+): StoreCollectionRecord | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const normalized = normalizeIdentifier(identifier);
+  const record = COLLECTION_RECORDS.find((item) => (
+    item.siteId === siteId &&
+    item.collectionId === collectionId &&
+    (normalizeIdentifier(item.id) === normalized || normalizeIdentifier(item.slug) === normalized)
+  ));
+
+  if (!record) {
+    return undefined;
+  }
+
+  if (!options.includeUnpublished && !isPublished(record.status, record.scheduledAt)) {
+    return undefined;
+  }
+
+  return clone(record);
+}
+
+export function createAdminCollectionRecord(
+  siteId: string,
+  collectionId: string,
+  input: Record<string, unknown>,
+): StoreCollectionRecord | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const collection = getCollectionByIdOrSlug(siteId, collectionId, { includeUnpublished: true });
+  if (!collection) {
+    return undefined;
+  }
+
+  const now = new Date().toISOString();
+  const rawValues = toRecord(input.values);
+  const normalizedValues = normalizeCollectionRecordValues(collection, rawValues);
+  const slug = normalizeSlugInput(input.slug || normalizedValues.slug || normalizedValues.title || normalizedValues.name || 'record', 'record');
+  const status = parseStatusInput(input.status, ['draft', 'published', 'scheduled', 'archived'] as const, 'draft');
+  const record: StoreCollectionRecord = {
+    id: sanitizeString(input.id) || createRuntimeId('record'),
+    siteId,
+    collectionId: collection.id,
+    slug,
+    status,
+    values: normalizedValues,
+    createdAt: now,
+    updatedAt: now,
+    publishedAt: status === 'published' ? now : null,
+    scheduledAt: sanitizeString(input.scheduledAt) || null,
+  };
+
+  COLLECTION_RECORDS.unshift(record);
+  persistAdminContent();
+  return clone(record);
+}
+
+export function updateAdminCollectionRecord(
+  siteId: string,
+  collectionId: string,
+  recordId: string,
+  input: Record<string, unknown>,
+): StoreCollectionRecord | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const collection = getCollectionByIdOrSlug(siteId, collectionId, { includeUnpublished: true });
+  const index = COLLECTION_RECORDS.findIndex((record) => (
+    record.siteId === siteId &&
+    record.collectionId === collection?.id &&
+    record.id === recordId
+  ));
+
+  if (!collection || index === -1) {
+    return undefined;
+  }
+
+  const current = COLLECTION_RECORDS[index];
+  const rawValues = input.values === undefined ? current.values : toRecord(input.values);
+  const status = input.status === undefined
+    ? current.status
+    : parseStatusInput(input.status, ['draft', 'published', 'scheduled', 'archived'] as const, current.status);
+  const updated: StoreCollectionRecord = {
+    ...current,
+    slug: input.slug === undefined ? current.slug : normalizeSlugInput(input.slug, current.slug),
+    status,
+    values: normalizeCollectionRecordValues(collection, rawValues, input.values === undefined ? {} : current.values),
+    updatedAt: new Date().toISOString(),
+    publishedAt: status === 'published' && !current.publishedAt ? new Date().toISOString() : current.publishedAt,
+    scheduledAt: input.scheduledAt === undefined ? current.scheduledAt : sanitizeString(input.scheduledAt) || null,
+  };
+
+  COLLECTION_RECORDS[index] = updated;
+  persistAdminContent();
+  return clone(updated);
+}
+
+export function deleteAdminCollectionRecord(siteId: string, collectionId: string, recordId: string): boolean {
+  ensurePersistedAdminContentLoaded();
+
+  const collection = getCollectionByIdOrSlug(siteId, collectionId, { includeUnpublished: true });
+  if (!collection) {
+    return false;
+  }
+
+  const index = COLLECTION_RECORDS.findIndex((record) => (
+    record.siteId === siteId &&
+    record.collectionId === collection.id &&
+    record.id === recordId
+  ));
+
+  if (index === -1) {
+    return false;
+  }
+
+  COLLECTION_RECORDS.splice(index, 1);
+  persistAdminContent();
+  return true;
 }
 
 export function getPageSummary(siteId: string, options: { includeUnpublished?: boolean } = {}): Omit<StorePage, 'content'>[] {
