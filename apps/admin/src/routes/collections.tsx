@@ -13,6 +13,7 @@ import {
   Upload,
 } from 'lucide-react';
 import {
+  AdminContentApiError,
   createCollection,
   createCollectionRecord,
   deleteCollection,
@@ -137,6 +138,34 @@ const parseFieldOptions = (value: string) => (
     .filter(Boolean)
 );
 
+const formatValidationDetails = (details: unknown): string[] => {
+  if (!Array.isArray(details)) return [];
+
+  return details
+    .map((detail) => {
+      if (!detail || typeof detail !== 'object') {
+        return '';
+      }
+
+      const item = detail as {
+        field?: unknown;
+        row?: unknown;
+        slug?: unknown;
+        message?: unknown;
+        details?: unknown;
+      };
+      const message = typeof item.message === 'string' ? item.message : '';
+      const field = typeof item.field === 'string' ? item.field : '';
+      const row = typeof item.row === 'number' ? `Row ${item.row}` : '';
+      const nested = formatValidationDetails(item.details);
+      const prefix = [row, field].filter(Boolean).join(' ');
+      const body = [message, ...nested].filter(Boolean).join(' ');
+
+      return [prefix, body].filter(Boolean).join(': ');
+    })
+    .filter(Boolean);
+};
+
 type RecordStatusFilter = CollectionRecord['status'] | '';
 
 function CollectionsPage() {
@@ -180,6 +209,7 @@ function CollectionsPage() {
   const [isExportingRecords, setIsExportingRecords] = useState(false);
   const [isImportingRecords, setIsImportingRecords] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationDetails, setValidationDetails] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -206,6 +236,13 @@ function CollectionsPage() {
   const updateRecordFilters = (updates: Partial<typeof recordFilters>) => {
     setRecordFilters((prev) => ({ ...prev, ...updates }));
     setRecordPagination((prev) => ({ ...prev, offset: 0 }));
+  };
+
+  const showApiError = (apiError: unknown, fallback: string) => {
+    setError(apiError instanceof Error ? apiError.message : fallback);
+    setValidationDetails(apiError instanceof AdminContentApiError
+      ? formatValidationDetails(apiError.details)
+      : []);
   };
 
   useEffect(() => {
@@ -269,6 +306,7 @@ function CollectionsPage() {
   const loadCollections = async () => {
     setIsLoading(true);
     setError(null);
+    setValidationDetails([]);
     setNotice(null);
     try {
       const backendCollections = await listCollections(activeSiteId);
@@ -291,6 +329,7 @@ function CollectionsPage() {
   const loadRecords = async (collectionId: string) => {
     setIsRecordsLoading(true);
     setError(null);
+    setValidationDetails([]);
     try {
       const result = await listCollectionRecords(activeSiteId, collectionId, {
         search: recordFilters.search.trim() || undefined,
@@ -370,6 +409,7 @@ function CollectionsPage() {
     event.preventDefault();
     setIsSavingCollection(true);
     setError(null);
+    setValidationDetails([]);
     setNotice(null);
 
     const fields = collectionForm.fields
@@ -401,7 +441,7 @@ function CollectionsPage() {
       });
       selectCollection(saved);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save collection');
+      showApiError(saveError, 'Unable to save collection');
     } finally {
       setIsSavingCollection(false);
     }
@@ -413,6 +453,7 @@ function CollectionsPage() {
     }
 
     setError(null);
+    setValidationDetails([]);
     setNotice(null);
     try {
       await deleteCollection(activeSiteId, collection.id);
@@ -437,6 +478,7 @@ function CollectionsPage() {
 
     setIsSavingRecord(true);
     setError(null);
+    setValidationDetails([]);
     setNotice(null);
 
     try {
@@ -465,7 +507,7 @@ function CollectionsPage() {
         void loadRecords(activeCollection.id);
       }
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save collection record');
+      showApiError(saveError, 'Unable to save collection record');
     } finally {
       setIsSavingRecord(false);
     }
@@ -477,6 +519,7 @@ function CollectionsPage() {
     }
 
     setError(null);
+    setValidationDetails([]);
     setNotice(null);
     try {
       await deleteCollectionRecord(activeSiteId, activeCollection.id, record.id);
@@ -495,6 +538,7 @@ function CollectionsPage() {
 
     setIsExportingRecords(true);
     setError(null);
+    setValidationDetails([]);
     setNotice(null);
     try {
       const blob = await exportCollectionRecordsCsv(activeSiteId, activeCollection.id, {
@@ -529,6 +573,7 @@ function CollectionsPage() {
 
     setIsImportingRecords(true);
     setError(null);
+    setValidationDetails([]);
     setNotice(null);
     try {
       const csv = await file.text();
@@ -537,10 +582,11 @@ function CollectionsPage() {
       if (result.errors.length > 0) {
         const firstError = result.errors[0];
         setError(`Row ${firstError.row} skipped: ${firstError.message}`);
+        setValidationDetails(formatValidationDetails(firstError.details));
       }
       await loadRecords(activeCollection.id);
     } catch (importError) {
-      setError(importError instanceof Error ? importError.message : 'Unable to import collection records');
+      showApiError(importError, 'Unable to import collection records');
     } finally {
       setIsImportingRecords(false);
       event.target.value = '';
@@ -574,7 +620,14 @@ function CollectionsPage() {
     >
       {error && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {error}
+          <div>{error}</div>
+          {validationDetails.length > 0 && (
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {validationDetails.map((detail) => (
+                <li key={detail}>{detail}</li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

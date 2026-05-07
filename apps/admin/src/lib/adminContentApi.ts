@@ -878,6 +878,16 @@ const toCollectionRecord = (record: ApiCollectionRecord): CollectionRecord => ({
   scheduledAt: record.scheduledAt || null,
 });
 
+export class AdminContentApiError extends Error {
+  details?: unknown;
+
+  constructor(message: string, details?: unknown) {
+    super(message);
+    this.name = 'AdminContentApiError';
+    this.details = details;
+  }
+}
+
 const readJson = async <T>(response: Response): Promise<T> => {
   try {
     return await response.json() as T;
@@ -1515,7 +1525,7 @@ export async function createCollection(siteId: string, input: CollectionInput): 
   const payload = await readJson<ApiCollectionResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to create collection');
+    throw new AdminContentApiError(payload.error?.message || 'Unable to create collection', payload.error?.details);
   }
 
   return toCollection(payload.data.collection);
@@ -1536,7 +1546,7 @@ export async function updateCollection(
   const payload = await readJson<ApiCollectionResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to save collection');
+    throw new AdminContentApiError(payload.error?.message || 'Unable to save collection', payload.error?.details);
   }
 
   return toCollection(payload.data.collection);
@@ -1631,7 +1641,7 @@ export async function importCollectionRecordsCsv(
   const payload = await readJson<ApiImportCollectionRecordsResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to import collection records');
+    throw new AdminContentApiError(payload.error?.message || 'Unable to import collection records', payload.error?.details);
   }
 
   return payload.data.import;
@@ -1652,7 +1662,7 @@ export async function createCollectionRecord(
   const payload = await readJson<ApiCollectionRecordResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to create collection record');
+    throw new AdminContentApiError(payload.error?.message || 'Unable to create collection record', payload.error?.details);
   }
 
   return toCollectionRecord(payload.data.record);
@@ -1674,7 +1684,7 @@ export async function updateCollectionRecord(
   const payload = await readJson<ApiCollectionRecordResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to save collection record');
+    throw new AdminContentApiError(payload.error?.message || 'Unable to save collection record', payload.error?.details);
   }
 
   return toCollectionRecord(payload.data.record);
