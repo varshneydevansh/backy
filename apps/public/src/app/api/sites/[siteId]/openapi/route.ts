@@ -193,6 +193,32 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
           },
         },
+        [`/api/sites/${site.id}/seo`]: {
+          get: {
+            tags: ['Discovery'],
+            summary: 'Fetch site SEO route metadata, sitemap XML, or robots text',
+            operationId: 'getBackySeoDiscovery',
+            parameters: [
+              queryParameter('format', { type: 'string', enum: ['json', 'sitemap', 'robots'] }, 'Optional response format. Omit for JSON.'),
+            ],
+            responses: {
+              '200': {
+                description: 'SEO discovery payload or text response',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/SeoDiscoveryEnvelope' },
+                  },
+                  'application/xml': {
+                    schema: { type: 'string' },
+                  },
+                  'text/plain': {
+                    schema: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        },
         [`/api/sites/${site.id}/navigation`]: {
           get: {
             tags: ['Content'],
@@ -962,6 +988,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             properties: {
               site: { type: 'object', additionalProperties: true },
               navigation: { type: 'object', additionalProperties: true },
+            },
+          }),
+          SeoDiscoveryEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['site', 'defaults', 'routes', 'sitemap', 'robots'],
+            properties: {
+              site: { type: 'object', additionalProperties: true },
+              defaults: { type: 'object', additionalProperties: true },
+              routes: { type: 'array', items: { type: 'object', additionalProperties: true } },
+              sitemap: { type: 'object', additionalProperties: true },
+              robots: { type: 'object', additionalProperties: true },
             },
           }),
           MediaList: {

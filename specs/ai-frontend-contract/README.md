@@ -40,6 +40,7 @@ The rule is simple: a custom frontend can look completely different from the Bac
    - collections: `GET /api/sites/:siteId/collections`
    - collection records: `GET /api/sites/:siteId/collections/:collectionId/records`
    - reusable sections: `GET /api/sites/:siteId/reusable-sections`
+   - SEO discovery: `GET /api/sites/:siteId/seo`
    - comments: `GET /api/sites/:siteId/pages/:pageId/comments?status=approved`
 
 4. Submit interactions.
@@ -75,9 +76,19 @@ The manifest advertises a site-scoped OpenAPI export at `GET /api/sites/:siteId/
 
 Published manifest and OpenAPI responses include short public discovery cache headers, ETags with `If-None-Match` 304 support, plus the same Backy contract/request/site headers. Draft/hidden discovery responses are `no-store`.
 
+## Current SEO discovery endpoint
+
+Backy exposes route-level SEO metadata for custom and default frontends:
+
+- `GET /api/sites/:siteId/seo`
+- `GET /api/sites/:siteId/seo?format=sitemap`
+- `GET /api/sites/:siteId/seo?format=robots`
+
+The JSON response lists publishable page, blog post, and dynamic collection item routes with canonical paths, title, description, robots flags, Open Graph basics, keywords, sitemap priority, change frequency, and update timestamps. `format=sitemap` emits sitemap XML from the same route index, and `format=robots` emits a minimal robots text response that points at the sitemap mode. The manifest advertises `capabilities.seoDiscovery`, `endpoints.seo`, `endpoints.sitemap`, and `endpoints.robots`; the OpenAPI export includes the SEO operation.
+
 ## JavaScript SDK starter
 
-`packages/sdk-js` provides the current TypeScript client for custom frontends. It uses only public Backy APIs and exposes helpers for site discovery, manifest/OpenAPI bootstrap, route resolution, render payloads, navigation, media, collections/records, reusable sections, forms/submissions/contacts, comments/reports, and interaction events. Its exported types now cover the main public contract objects (`BackyRenderPayload`, content documents/elements, media/font assets, collection schemas/records, reusable sections, form submissions/contacts, comments, events, response metadata, and conditional 304 results) so frontends can consume Backy with stronger compile-time guarantees. `manifestCached`, `openapiCached`, and `renderCached` expose cache/contract headers and send `If-None-Match` when an ETag is provided, letting custom frontends reuse cached discovery/render payloads without dropping to raw `fetch`. The smoke command `npm run test:smoke --workspace @backy/sdk-js` validates read flows, SDK ETag/304 helpers, reusable-section reads, and SDK public writes for collection records, form submissions, form contacts, page comments, comment moderation, comment reports, and interaction events against a temporary site, building confidence that a frontend can consume the public API surface without importing admin/editor code.
+`packages/sdk-js` provides the current TypeScript client for custom frontends. It uses only public Backy APIs and exposes helpers for site discovery, manifest/OpenAPI bootstrap, route resolution, render payloads, SEO discovery, navigation, media, collections/records, reusable sections, forms/submissions/contacts, comments/reports, and interaction events. Its exported types now cover the main public contract objects (`BackyRenderPayload`, content documents/elements, SEO routes, media/font assets, collection schemas/records, reusable sections, form submissions/contacts, comments, events, response metadata, and conditional 304 results) so frontends can consume Backy with stronger compile-time guarantees. `manifestCached`, `openapiCached`, and `renderCached` expose cache/contract headers and send `If-None-Match` when an ETag is provided, letting custom frontends reuse cached discovery/render payloads without dropping to raw `fetch`. The smoke command `npm run test:smoke --workspace @backy/sdk-js` validates read flows, SDK ETag/304 helpers, SEO discovery, reusable-section reads, and SDK public writes for collection records, form submissions, form contacts, page comments, comment moderation, comment reports, and interaction events against a temporary site, building confidence that a frontend can consume the public API surface without importing admin/editor code.
 
 ## Current reusable section endpoints
 

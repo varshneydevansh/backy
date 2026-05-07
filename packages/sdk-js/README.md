@@ -10,6 +10,7 @@ const backy = createBackyClient({ baseUrl: 'https://your-backy-host.com' });
 await backy.discoverSite('demo');
 const manifest = await backy.manifest();
 const page = await backy.render('/');
+const seo = await backy.seo();
 const sections = await backy.reusableSections();
 
 page.data.content.elements.forEach((element) => {
@@ -17,6 +18,7 @@ page.data.content.elements.forEach((element) => {
 });
 
 console.log(sections.data.sections.map((section) => section.name));
+console.log(seo.data.sitemap.url);
 ```
 
 Conditional discovery/render helpers expose Backy's response metadata and handle `If-None-Match` revalidation:
@@ -35,8 +37,8 @@ if (second.notModified) {
 }
 ```
 
-The SDK intentionally does not import admin/editor code. It wraps the public site bootstrap, manifest/OpenAPI discovery, route resolution, render payload, media, collection, reusable-section, form, comment, report, and event endpoints documented in `specs/backy-api-contracts.md`.
-The default return types expose Backy contract shapes such as `BackyRenderPayload`, `BackyContentDocument`, `BackyMediaAsset`, `BackyCollectionRecord`, `BackyReusableSection`, `BackyFormSubmission`, `BackyComment`, `BackyInteractionEvent`, `BackyResponseMeta`, and `BackyConditionalResult`. Collection record reads/writes are generic, so a frontend can pass its own value shape: `backy.records<{ title: string }>(collectionId)`.
+The SDK intentionally does not import admin/editor code. It wraps the public site bootstrap, manifest/OpenAPI discovery, route resolution, render payload, SEO discovery, media, collection, reusable-section, form, comment, report, and event endpoints documented in `specs/backy-api-contracts.md`.
+The default return types expose Backy contract shapes such as `BackyRenderPayload`, `BackyContentDocument`, `BackySeoDiscovery`, `BackyMediaAsset`, `BackyCollectionRecord`, `BackyReusableSection`, `BackyFormSubmission`, `BackyComment`, `BackyInteractionEvent`, `BackyResponseMeta`, and `BackyConditionalResult`. Collection record reads/writes are generic, so a frontend can pass its own value shape: `backy.records<{ title: string }>(collectionId)`.
 
 ## Local validation
 
@@ -46,4 +48,4 @@ npm run test:smoke --workspace @backy/sdk-js
 ```
 
 `test:smoke` expects a running Backy public app at `http://localhost:3001` unless `BACKY_SDK_BASE_URL` is set.
-By default it also creates and deletes a temporary site through the local admin API so it can verify SDK reusable-section reads and public writes for collection records, forms, contacts, comments, reports, and events. Set `BACKY_SDK_SKIP_WRITE_SMOKE=1` to run the read-only smoke against an environment where admin fixture setup is unavailable.
+By default it also creates and deletes a temporary site through the local admin API so it can verify SDK SEO/reusable-section reads and public writes for collection records, forms, contacts, comments, reports, and events. Set `BACKY_SDK_SKIP_WRITE_SMOKE=1` to run the read-only smoke against an environment where admin fixture setup is unavailable.

@@ -311,6 +311,41 @@ export interface BackyRouteResolve {
   navigation?: { primary?: BackyNavigationItem[]; [key: string]: unknown };
 }
 
+export interface BackySeoRoute {
+  type: 'page' | 'post' | 'dynamicItem' | string;
+  id: string;
+  title: string;
+  description?: string;
+  path: string;
+  canonical: string;
+  status?: string;
+  updatedAt?: string;
+  priority?: number;
+  changeFrequency?: string;
+  robots?: {
+    index?: boolean;
+    follow?: boolean;
+  };
+  openGraph?: Record<string, unknown>;
+  keywords?: string[];
+  [key: string]: unknown;
+}
+
+export interface BackySeoDiscovery {
+  site: BackySiteSummary;
+  defaults: Record<string, unknown>;
+  routes: BackySeoRoute[];
+  sitemap: {
+    url: string;
+    count?: number;
+    [key: string]: unknown;
+  };
+  robots: {
+    url: string;
+    [key: string]: unknown;
+  };
+}
+
 export interface BackyFrontendManifest {
   schemaVersion: string;
   site: BackySiteSummary;
@@ -467,6 +502,10 @@ export class BackyClient {
 
   navigation(siteId = this.requireSiteId()): Promise<BackyEnvelope<{ site?: BackySiteSummary; navigation: { primary: BackyNavigationItem[]; [key: string]: unknown } }>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/navigation`);
+  }
+
+  seo(siteId = this.requireSiteId()): Promise<BackyEnvelope<BackySeoDiscovery>> {
+    return this.request(`/api/sites/${encodeURIComponent(siteId)}/seo`);
   }
 
   pages(options: { path?: string; previewToken?: string; siteId?: string } = {}): Promise<BackyEnvelope<Record<string, unknown>>> {
