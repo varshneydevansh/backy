@@ -41,14 +41,14 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/sites/:siteId/manifest`
   - Site-level frontend discovery/bootstrap document described by `specs/ai-frontend-contract/frontend-manifest.schema.json`.
   - Returns site identity, theme tokens, schema references, capability flags, public endpoint URLs, route patterns, navigation, module summaries, collection field schemas, form submit/detail/submission/contact URLs, page/blog comment URL templates, comment report URLs, interaction event URLs, media/font counts, and form-to-collection target metadata.
-  - Published manifest responses include `Cache-Control: public, max-age=60, stale-while-revalidate=300`, `x-backy-cache-scope: discovery`, `x-backy-contract-version`, `x-backy-schema-version`, `x-backy-request-id`, and `x-backy-site-id`.
+  - Published manifest responses include `Cache-Control: public, max-age=60, stale-while-revalidate=300`, `ETag`/`If-None-Match` 304 support, `x-backy-cache-scope: discovery`, `x-backy-contract-version`, `x-backy-schema-version`, `x-backy-request-id`, and `x-backy-site-id`.
   - Draft/unpublished sites are hidden from the public manifest.
 
 - `GET /api/sites/:siteId/openapi`
   - Site-scoped OpenAPI 3.1 document for public frontend integrations.
   - Describes discovery, route resolution, render payload, navigation, media list, collection list/records/create, form detail/submission/contact operations, page/blog/site comment operations, comment reports, report reasons, and interaction events for the selected site.
   - Includes `x-backy` vendor metadata for `siteId`, `siteSlug`, contract version, public collection ids, and form ids.
-  - Published OpenAPI responses use the same discovery cache and Backy contract headers as the manifest.
+  - Published OpenAPI responses use the same discovery cache, ETag revalidation, and Backy contract headers as the manifest.
   - Draft/unpublished sites are hidden from the public OpenAPI document.
 
 - `GET /api/sites/:siteId/pages?path=/about`
@@ -65,7 +65,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Returns the external page/post/dynamic item render payload described by `specs/ai-frontend-contract/content-payload.schema.json`.
   - Includes site bootstrap, route, canonical content document, assets, forms/comments/actions, SEO, data bindings, and editable map.
   - Current data bindings include normalized collection dataset manifests, resolved public collection fields/records, and element binding metadata when canvas elements declare collection `dataBindings`.
-  - Published render responses include `Cache-Control: public, max-age=30, stale-while-revalidate=120`, `x-backy-cache-scope: render`, `x-backy-contract-version`, `x-backy-schema-version`, `x-backy-request-id`, and `x-backy-site-id`.
+  - Published render responses include `Cache-Control: public, max-age=30, stale-while-revalidate=120`, `ETag`/`If-None-Match` 304 support, `x-backy-cache-scope: render`, `x-backy-contract-version`, `x-backy-schema-version`, `x-backy-request-id`, and `x-backy-site-id`.
   - Preview-token responses and error envelopes use `Cache-Control: no-store`.
   - Collection dynamic item paths currently resolve after normal pages and blog posts using `/:collectionSlug/:recordSlug`, and return a generated `dynamicItem` content document backed by the selected public record.
   - Current implementation is backed by the public seed adapter; production implementation must use the durable service layer.

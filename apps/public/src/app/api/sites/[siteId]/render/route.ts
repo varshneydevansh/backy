@@ -78,6 +78,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         buildPublicBlogPostRenderPayload(site, post, { requestId, path }),
         {
           requestId,
+          request,
           cache: previewToken ? 'private' : 'render',
           schemaVersion: 'backy.content-payload.v1',
           siteId: site.id,
@@ -99,6 +100,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         buildPublicRenderPayload(site, page, { requestId, path }),
         {
           requestId,
+          request,
           cache: previewToken ? 'private' : 'render',
           schemaVersion: 'backy.content-payload.v1',
           siteId: site.id,
@@ -120,6 +122,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           buildPublicCollectionItemRenderPayload(site, collection, record, { requestId, path }),
           {
             requestId,
+            request,
             cache: 'render',
             schemaVersion: 'backy.content-payload.v1',
             siteId: site.id,

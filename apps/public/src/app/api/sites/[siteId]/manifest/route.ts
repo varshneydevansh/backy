@@ -62,7 +62,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const authors = listBlogAuthors(site.id);
     const fonts = media.media.filter((item) => item.type === 'font');
 
-    return publicContractJson({
+    const manifest = {
       success: true,
       requestId,
       data: {
@@ -231,8 +231,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
         navigation: getSiteNavigation(site.id),
       },
-    }, {
+    };
+
+    return publicContractJson(manifest, {
       requestId,
+      request,
       cache: 'discovery',
       schemaVersion: 'backy.frontend-manifest.v1',
       siteId: site.id,

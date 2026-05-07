@@ -1049,6 +1049,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     }, {
       requestId,
+      request,
       cache: 'discovery',
       schemaVersion: 'openapi.3.1',
       siteId: site.id,

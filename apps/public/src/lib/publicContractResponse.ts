@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createHash } from 'node:crypto';
 
 export const BACKY_PUBLIC_CONTRACT_VERSION = 'backy.ai-frontend.v1';
 
@@ -15,6 +16,8 @@ export interface PublicContractResponseOptions {
   status?: number;
   requestId: string;
   cache: PublicContractCacheScope;
+  request?: Request;
+  etagSeed?: unknown;
   contractVersion?: string;
   schemaVersion?: string;
   siteId?: string;
@@ -44,7 +47,59 @@ export const withPublicContractHeaders = (
 export const publicContractJson = <TBody>(
   body: TBody,
   options: PublicContractResponseOptions,
-) => withPublicContractHeaders(
-  NextResponse.json(body, { status: options.status }),
-  options,
+) => {
+  const status = options.status || 200;
+  const etag = shouldAttachEtag(status, options.cache)
+    ? createEtag(options.etagSeed ?? body)
+    : null;
+  const response = etag && requestHasMatchingEtag(options.request, etag)
+    ? new NextResponse(null, { status: 304 })
+    : NextResponse.json(body, { status: options.status });
+
+  if (etag) {
+    response.headers.set('etag', etag);
+  }
+
+  return withPublicContractHeaders(response, options);
+};
+
+const shouldAttachEtag = (status: number, cache: PublicContractCacheScope) => (
+  status >= 200 && status < 300 && (cache === 'discovery' || cache === 'render')
 );
+
+const createEtag = (value: unknown) => {
+  const hash = createHash('sha256')
+    .update(JSON.stringify(normalizeEtagValue(value)))
+    .digest('base64url')
+    .slice(0, 24);
+
+  return `"backy-${hash}"`;
+};
+
+const normalizeEtagValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(normalizeEtagValue);
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => key !== 'requestId' && key !== 'generatedAt')
+      .map(([key, entry]) => [key, normalizeEtagValue(entry)]),
+  );
+};
+
+const requestHasMatchingEtag = (request: Request | undefined, etag: string) => {
+  const raw = request?.headers.get('if-none-match');
+  if (!raw) {
+    return false;
+  }
+
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .some((entry) => entry === etag || entry === '*');
+};
