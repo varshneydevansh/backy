@@ -324,9 +324,10 @@ The next implementation should not start by adding more UI screens. The product 
   - Document public APIs for custom frontends and add a minimal TypeScript client.
 - **Dependencies**: Tasks 4.1 and 4.2
 - **Acceptance Criteria**:
-  - External frontend can call site resolve, page fetch, media list, form submit, comment list/submit.
+  - External frontend can call site resolve, page fetch, media list, collection reads/writes, form list/detail/submit/review/contact endpoints, comment list/detail/update/report endpoints, and interaction event reads.
 - **Validation**:
   - SDK smoke test against local public app.
+  - Public contract smoke verifies that the site manifest advertises the same interaction endpoint templates that the site-scoped OpenAPI document exposes.
 
 ## Sprint 5: Media, Fonts, Files, Video, and Audio Management
 

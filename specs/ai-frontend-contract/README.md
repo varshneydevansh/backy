@@ -68,7 +68,7 @@ Backy exposes a site-level discovery endpoint:
 
 It returns `frontend-manifest.schema.json` and gives custom frontends a single bootstrap document for site identity, theme tokens, public endpoint URLs, route patterns, module capabilities, navigation, page/blog/collection/form/media summaries, collection field schemas, form submit URLs, and form-to-collection targets. This mirrors the role of REST discovery in a WordPress-like frontend integration while keeping Backy's render payload as the page/post/item-specific contract.
 
-The manifest advertises a site-scoped OpenAPI export at `GET /api/sites/:siteId/openapi`. That document describes the current public discovery, route resolution, render, navigation, media, collection, form, and comment operations for the selected site and includes Backy-specific vendor metadata for available collection and form ids.
+The manifest advertises a site-scoped OpenAPI export at `GET /api/sites/:siteId/openapi`. That document describes the current public discovery, route resolution, render, navigation, media, collection, form, comment, report, contact, and interaction-event operations for the selected site and includes Backy-specific vendor metadata for available collection and form ids. Manifest `endpoints` also include template URLs for form detail/submissions/contacts, page/blog comments, comment reports, and interaction events so generated frontends do not have to hardcode Backy route shapes.
 
 ## Current font asset contract
 
