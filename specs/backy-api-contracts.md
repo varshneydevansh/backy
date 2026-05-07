@@ -87,6 +87,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
 
 - `GET /api/sites/:siteId/media`
   - Public media catalog for custom frontends.
+  - Response uses `{ success, requestId, data: { media, pagination } }`; legacy top-level `media` and `pagination` remain for compatibility.
   - Current implementation only returns `visibility=public` catalog items, even if a caller asks for private media.
   - Supports `type`, `scope`, `pageId`, `postId`, `q`/`search`, `tag`, `folderId`, `limit`, and `offset` filters.
 
@@ -102,6 +103,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/sites/:siteId/collections/:collectionId/records?q=&fieldKey=&fieldValue=&sortBy=&sortDirection=asc|desc&limit=&offset=`
 - `POST /api/sites/:siteId/collections/:collectionId/records`
   - Public CMS collection contract for custom frontends and future dataset bindings.
+  - Collection list/detail/record read responses use `{ success, requestId, data }`; legacy top-level `collection`, `collections`, `records`, and `pagination` remain for compatibility.
   - Returns only collections with `status: "published"` and `permissions.publicRead: true`.
   - Returns only published records or scheduled records whose `scheduledAt` has passed.
   - Public record creation requires a published collection with `permissions.publicCreate: true`, validates `values` or `fields` against the collection schema, rejects slug conflicts, and stores accepted visitor-created records as `draft` for admin moderation.
@@ -127,6 +129,7 @@ Public page payload should include:
 ### 2.3 Page interactions
 - `POST /api/sites/:siteId/forms/:formId/submissions`
 - `POST /api/public/sites/:siteId/forms/:formId/submissions` (optional alias)
+  - `GET /api/sites/:siteId/forms` lists public form definitions with `{ success, requestId, data: { forms, total, pagination } }`; legacy top-level `forms` and `total` remain for compatibility.
   - Body: form values map + optional hidden metadata.
   - Response: submission id, status, optional message, or detailed validation errors.
   - Canvas-derived form definitions may include `collectionTarget: { enabled, collectionId, fieldMap, slugField }`.

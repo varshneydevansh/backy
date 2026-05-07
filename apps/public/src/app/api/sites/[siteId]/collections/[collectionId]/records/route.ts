@@ -54,18 +54,20 @@ const normalizeSlug = (value: unknown): string => (
 );
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
+
   try {
     const { siteId, collectionId } = await params;
     const { searchParams } = new URL(request.url);
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
-      return NextResponse.json({ error: 'Site not found' }, { status: 404 });
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
     const collection = getCollectionByIdOrSlug(site.id, collectionId);
     if (!collection) {
-      return NextResponse.json({ error: 'Collection not found' }, { status: 404 });
+      return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
     }
 
     const limit = Math.max(1, Math.min(100, Number(searchParams.get('limit') || 50)));
@@ -83,17 +85,24 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
 
     if (searchParams.get('slug') && payload.records.length === 0) {
-      return NextResponse.json({ error: 'Collection record not found' }, { status: 404 });
+      return errorResponse(404, 'COLLECTION_RECORD_NOT_FOUND', 'Collection record not found', requestId);
     }
 
     return NextResponse.json({
+      success: true,
+      requestId,
+      data: {
+        collection,
+        records: payload.records,
+        pagination: payload.pagination,
+      },
       collection,
       records: payload.records,
       pagination: payload.pagination,
     });
   } catch (error) {
     console.error('Public collection records API error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }
 

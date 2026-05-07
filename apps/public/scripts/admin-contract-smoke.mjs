@@ -254,6 +254,8 @@ try {
 
     const publicFonts = await request(`/api/sites/${createdSiteId}/media?type=font&search=${encodeURIComponent('Contract Sans')}&tag=font`);
     assert(publicFonts.response.status === 200, `${publicFonts.url} expected 200, got ${publicFonts.response.status}`);
+    assert(publicFonts.json?.success === true, `${publicFonts.url} expected success envelope`);
+    assert(publicFonts.json?.data?.media?.some((item) => item.id === createdMediaId && item.metadata?.fontFamily === 'Contract Sans Display'), `${publicFonts.url} missing public font media in data envelope`);
     assert(publicFonts.json?.media?.some((item) => item.id === createdMediaId && item.metadata?.fontFamily === 'Contract Sans Display'), `${publicFonts.url} missing public font media`);
 
     const privateUpdate = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, {
@@ -266,6 +268,7 @@ try {
     assert(privateUpdate.response.status === 200, `${privateUpdate.url} expected 200, got ${privateUpdate.response.status}`);
     const hiddenPrivateFont = await request(`/api/sites/${createdSiteId}/media?type=font&tag=font`);
     assert(hiddenPrivateFont.response.status === 200, `${hiddenPrivateFont.url} expected 200, got ${hiddenPrivateFont.response.status}`);
+    assert(hiddenPrivateFont.json?.success === true, `${hiddenPrivateFont.url} expected success envelope`);
     assert(!hiddenPrivateFont.json?.media?.some((item) => item.id === createdMediaId), `${hiddenPrivateFont.url} exposed private font media`);
 
     const publicUpdate = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, {
@@ -728,6 +731,8 @@ try {
 
     const publicCollections = await request(`/api/sites/${createdSiteId}/collections`);
     assert(publicCollections.response.status === 200, `${publicCollections.url} expected 200, got ${publicCollections.response.status}`);
+    assert(publicCollections.json?.success === true, `${publicCollections.url} expected success envelope`);
+    assert(publicCollections.json?.data?.collections?.some((collection) => collection.id === createdCollectionId), `${publicCollections.url} missing public collection in data envelope`);
     assert(publicCollections.json?.collections?.some((collection) => collection.id === createdCollectionId), `${publicCollections.url} missing public collection`);
     const publicCollectionSchema = publicCollections.json?.collections?.find((collection) => collection.id === createdCollectionId);
     assert(publicCollectionSchema?.fields?.some((field) => field.key === 'category' && field.type === 'select' && field.options?.includes('Featured')), `${publicCollections.url} missing select option schema`);
@@ -874,6 +879,12 @@ try {
       formWritePageId = createFormWritePage.json?.data?.page?.id;
       assert(formWritePageId, `${createFormWritePage.url} missing created page id`);
 
+      const listedForms = await request(`/api/sites/${createdSiteId}/forms?pageId=${formWritePageId}`);
+      assert(listedForms.response.status === 200, `${listedForms.url} expected 200, got ${listedForms.response.status}`);
+      assert(listedForms.json?.success === true, `${listedForms.url} expected success envelope`);
+      assert(listedForms.json?.data?.forms?.some((form) => form.id === 'contract-form-write'), `${listedForms.url} missing form in data envelope`);
+      assert(listedForms.json?.forms?.some((form) => form.id === 'contract-form-write'), `${listedForms.url} missing legacy forms list`);
+
       const formWriteSubmission = await request(`/api/sites/${createdSiteId}/forms/contract-form-write/submissions`, {
         method: 'POST',
         headers: {
@@ -1009,10 +1020,13 @@ try {
 
     const publicRecords = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records?slug=${collectionRecordSlug}`);
     assert(publicRecords.response.status === 200, `${publicRecords.url} expected 200, got ${publicRecords.response.status}`);
+    assert(publicRecords.json?.success === true, `${publicRecords.url} expected success envelope`);
+    assert(publicRecords.json?.data?.records?.[0]?.id === createdCollectionRecordId, `${publicRecords.url} returned wrong public collection record in data envelope`);
     assert(publicRecords.json?.records?.[0]?.id === createdCollectionRecordId, `${publicRecords.url} returned wrong public collection record`);
 
     const filteredRecords = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records?fieldKey=title&fieldValue=${encodeURIComponent('Collection Record')}&q=${encodeURIComponent('Reusable')}&sortBy=rank&sortDirection=desc`);
     assert(filteredRecords.response.status === 200, `${filteredRecords.url} expected 200, got ${filteredRecords.response.status}`);
+    assert(filteredRecords.json?.success === true, `${filteredRecords.url} expected success envelope`);
     assert(filteredRecords.json?.records?.[0]?.id === createdCollectionRecordId, `${filteredRecords.url} did not filter/search collection records`);
 
     const adminFilteredRecords = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records?fieldKey=title&fieldValue=${encodeURIComponent('Collection Record')}&sortBy=rank&sortDirection=desc`);
@@ -1253,6 +1267,8 @@ try {
 
     const hiddenPublicCollection = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}`);
     assert(hiddenPublicCollection.response.status === 404, `${hiddenPublicCollection.url} expected draft collection to be hidden`);
+    assert(hiddenPublicCollection.json?.success === false, `${hiddenPublicCollection.url} expected error envelope`);
+    assert(hiddenPublicCollection.json?.error?.code === 'COLLECTION_NOT_FOUND', `${hiddenPublicCollection.url} expected COLLECTION_NOT_FOUND`);
 
     const hiddenDynamicResolve = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(dynamicItemPath)}`);
     assert(hiddenDynamicResolve.response.status === 404, `${hiddenDynamicResolve.url} expected draft collection dynamic route to be hidden`);
