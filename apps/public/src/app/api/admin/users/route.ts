@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminUser, getAdminUserByEmail, listAdminUsers } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
@@ -41,12 +42,12 @@ const normalizeEmail = (value: unknown): string => (
   typeof value === 'string' ? value.trim().toLowerCase() : ''
 );
 
-const normalizeRole = (value: unknown): 'admin' | 'editor' | 'viewer' | null => (
-  value === 'admin' || value === 'editor' || value === 'viewer' ? value : null
+const normalizeRole = (value: unknown): 'owner' | 'admin' | 'editor' | 'viewer' | null => (
+  value === 'owner' || value === 'admin' || value === 'editor' || value === 'viewer' ? value : null
 );
 
-const normalizeStatus = (value: unknown): 'active' | 'inactive' | 'invited' | null => (
-  value === 'active' || value === 'inactive' || value === 'invited' ? value : null
+const normalizeStatus = (value: unknown): 'active' | 'inactive' | 'invited' | 'suspended' | null => (
+  value === 'active' || value === 'inactive' || value === 'invited' || value === 'suspended' ? value : null
 );
 
 export async function GET(request: NextRequest) {
@@ -54,6 +55,26 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const result = await repositories.users.list({
+        search: searchParams.get('search') || undefined,
+        role: normalizeRole(searchParams.get('role') || undefined) || undefined,
+        status: normalizeStatus(searchParams.get('status') || undefined) || undefined,
+        limit: 100,
+        offset: 0,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          users: result.items,
+          pagination: result.pagination,
+        },
+      });
+    }
+
     const users = listAdminUsers({
       search: searchParams.get('search') || undefined,
       role: searchParams.get('role') || undefined,
@@ -98,7 +119,32 @@ export async function POST(request: NextRequest) {
     }
 
     if (!role) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Role must be admin, editor, or viewer', requestId);
+      return errorResponse(400, 'VALIDATION_ERROR', 'Role must be owner, admin, editor, or viewer', requestId);
+    }
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      if (await repositories.users.getByEmail(email)) {
+        return errorResponse(409, 'EMAIL_CONFLICT', 'A user with this email already exists', requestId);
+      }
+
+      const user = (await repositories.users.create({
+        fullName,
+        email,
+        role,
+        status,
+      })).item;
+
+      return NextResponse.json(
+        {
+          success: true,
+          requestId,
+          data: {
+            user,
+          },
+        },
+        { status: 201 },
+      );
     }
 
     if (getAdminUserByEmail(email)) {
