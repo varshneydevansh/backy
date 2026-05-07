@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import {
   AdminContentApiError,
+  bulkUpdateCollectionRecords,
   createCollection,
   createCollectionRecord,
   deleteCollection,
@@ -175,6 +176,7 @@ function CollectionsPage() {
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [records, setRecords] = useState<CollectionRecord[]>([]);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+  const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   const [collectionForm, setCollectionForm] = useState({
     name: '',
     slug: '',
@@ -232,10 +234,29 @@ function CollectionsPage() {
   const recordPageCount = Math.max(1, Math.ceil(recordPagination.total / recordPagination.limit));
   const recordRangeStart = recordPagination.total === 0 ? 0 : recordPagination.offset + 1;
   const recordRangeEnd = Math.min(recordPagination.total, recordPagination.offset + records.length);
+  const selectedRecordsOnPage = records.filter((record) => selectedRecordIds.includes(record.id));
+  const allRecordsOnPageSelected = records.length > 0 && selectedRecordsOnPage.length === records.length;
 
   const updateRecordFilters = (updates: Partial<typeof recordFilters>) => {
     setRecordFilters((prev) => ({ ...prev, ...updates }));
     setRecordPagination((prev) => ({ ...prev, offset: 0 }));
+  };
+
+  const toggleRecordSelection = (recordId: string, selected: boolean) => {
+    setSelectedRecordIds((prev) => (
+      selected
+        ? [...new Set([...prev, recordId])]
+        : prev.filter((id) => id !== recordId)
+    ));
+  };
+
+  const togglePageRecordSelection = (selected: boolean) => {
+    const pageIds = records.map((record) => record.id);
+    setSelectedRecordIds((prev) => (
+      selected
+        ? [...new Set([...prev, ...pageIds])]
+        : prev.filter((id) => !pageIds.includes(id))
+    ));
   };
 
   const showApiError = (apiError: unknown, fallback: string) => {
@@ -254,6 +275,7 @@ function CollectionsPage() {
   const resetCollectionForm = () => {
     setSelectedCollectionId(null);
     setSelectedRecordId(null);
+    setSelectedRecordIds([]);
     setRecords([]);
     setRecordFilters({
       search: '',
@@ -283,6 +305,7 @@ function CollectionsPage() {
   const selectCollection = (collection: Collection) => {
     setSelectedCollectionId(collection.id);
     setSelectedRecordId(null);
+    setSelectedRecordIds([]);
     setRecordFilters((prev) => ({
       ...prev,
       fieldKey: '',
@@ -342,6 +365,7 @@ function CollectionsPage() {
         offset: recordPagination.offset,
       });
       setRecords(result.records);
+      setSelectedRecordIds((prev) => prev.filter((id) => result.records.some((record) => record.id === id)));
       setRecordPagination(result.pagination);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load collection records');
@@ -530,6 +554,54 @@ function CollectionsPage() {
       void loadRecords(activeCollection.id);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete collection record');
+    }
+  };
+
+  const handleBulkUpdateStatus = async (status: CollectionRecord['status']) => {
+    if (!activeCollection || selectedRecordIds.length === 0) return;
+
+    setError(null);
+    setValidationDetails([]);
+    setNotice(null);
+    try {
+      const result = await bulkUpdateCollectionRecords(activeSiteId, activeCollection.id, {
+        action: 'updateStatus',
+        recordIds: selectedRecordIds,
+        status,
+      });
+      setRecords((prev) => prev.map((record) => (
+        result.records.find((updatedRecord) => updatedRecord.id === record.id) || record
+      )));
+      setSelectedRecordIds([]);
+      setNotice(`${result.updated} records moved to ${status}${result.skipped ? `, ${result.skipped} skipped` : ''}.`);
+      void loadRecords(activeCollection.id);
+    } catch (bulkError) {
+      showApiError(bulkError, 'Unable to update selected collection records');
+    }
+  };
+
+  const handleBulkDeleteRecords = async () => {
+    if (!activeCollection || selectedRecordIds.length === 0) return;
+    if (!confirm(`Delete ${selectedRecordIds.length} selected records?`)) return;
+
+    setError(null);
+    setValidationDetails([]);
+    setNotice(null);
+    try {
+      const deletedIds = selectedRecordIds;
+      const result = await bulkUpdateCollectionRecords(activeSiteId, activeCollection.id, {
+        action: 'delete',
+        recordIds: deletedIds,
+      });
+      setRecords((prev) => prev.filter((record) => !deletedIds.includes(record.id)));
+      if (selectedRecordId && deletedIds.includes(selectedRecordId)) {
+        setSelectedRecordId(null);
+      }
+      setSelectedRecordIds([]);
+      setNotice(`${result.deleted} records deleted${result.skipped ? `, ${result.skipped} skipped` : ''}.`);
+      void loadRecords(activeCollection.id);
+    } catch (bulkError) {
+      showApiError(bulkError, 'Unable to delete selected collection records');
     }
   };
 
@@ -1038,11 +1110,64 @@ function CollectionsPage() {
                 </label>
               </div>
 
+              {selectedRecordIds.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/30 px-4 py-3 text-sm">
+                  <span className="font-medium">
+                    {selectedRecordIds.length} selected
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleBulkUpdateStatus('published')}
+                      className="rounded-lg border border-border px-3 py-2 hover:bg-background"
+                    >
+                      Publish
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleBulkUpdateStatus('draft')}
+                      className="rounded-lg border border-border px-3 py-2 hover:bg-background"
+                    >
+                      Draft
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleBulkUpdateStatus('archived')}
+                      className="rounded-lg border border-border px-3 py-2 hover:bg-background"
+                    >
+                      Archive
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRecordIds([])}
+                      className="rounded-lg border border-border px-3 py-2 hover:bg-background"
+                    >
+                      Clear
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleBulkDeleteRecords()}
+                      className="rounded-lg border border-red-200 px-3 py-2 text-red-700 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_360px]">
                 <div className="overflow-x-auto border-b border-border xl:border-b-0 xl:border-r">
                   <table className="w-full min-w-[680px] text-sm">
                     <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
                       <tr>
+                        <th className="px-4 py-2">
+                          <input
+                            type="checkbox"
+                            checked={allRecordsOnPageSelected}
+                            onChange={(event) => togglePageRecordSelection(event.target.checked)}
+                            aria-label="Select all records on this page"
+                          />
+                        </th>
                         <th className="px-4 py-2">Slug</th>
                         <th className="px-4 py-2">Status</th>
                         <th className="px-4 py-2">Updated</th>
@@ -1053,7 +1178,7 @@ function CollectionsPage() {
                     <tbody className="divide-y divide-border">
                       {records.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                          <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                             No records
                           </td>
                         </tr>
@@ -1061,6 +1186,14 @@ function CollectionsPage() {
                         const href = `${dynamicBaseUrl}/sites/${activeSiteSlug}/${activeCollection.slug}/${record.slug}`;
                         return (
                           <tr key={record.id} className={record.id === selectedRecordId ? 'bg-primary/5' : ''}>
+                            <td className="px-4 py-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedRecordIds.includes(record.id)}
+                                onChange={(event) => toggleRecordSelection(record.id, event.target.checked)}
+                                aria-label={`Select record ${record.slug}`}
+                              />
+                            </td>
                             <td className="px-4 py-3">
                               <button
                                 type="button"

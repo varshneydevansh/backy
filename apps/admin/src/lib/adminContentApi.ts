@@ -406,6 +406,21 @@ interface ApiCollectionRecordResponse {
   };
 }
 
+interface ApiBulkCollectionRecordsResponse {
+  success: boolean;
+  data?: {
+    action: 'delete' | 'updateStatus';
+    deleted: number;
+    updated: number;
+    skipped: number;
+    records: ApiCollectionRecord[];
+  };
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
 interface ApiImportCollectionRecordsResponse {
   success: boolean;
   data?: {
@@ -661,6 +676,14 @@ export interface CollectionRecordPagination {
 export interface CollectionRecordListResult {
   records: CollectionRecord[];
   pagination: CollectionRecordPagination;
+}
+
+export interface BulkCollectionRecordResult {
+  action: 'delete' | 'updateStatus';
+  deleted: number;
+  updated: number;
+  skipped: number;
+  records: CollectionRecord[];
 }
 
 export interface CollectionRecordImportError {
@@ -1688,6 +1711,37 @@ export async function updateCollectionRecord(
   }
 
   return toCollectionRecord(payload.data.record);
+}
+
+export async function bulkUpdateCollectionRecords(
+  siteId: string,
+  collectionId: string,
+  input: {
+    action: 'delete' | 'updateStatus';
+    recordIds: string[];
+    status?: CollectionRecord['status'];
+  },
+): Promise<BulkCollectionRecordResult> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records/bulk`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiBulkCollectionRecordsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new AdminContentApiError(payload.error?.message || 'Unable to update collection records', payload.error?.details);
+  }
+
+  return {
+    action: payload.data.action,
+    deleted: payload.data.deleted,
+    updated: payload.data.updated,
+    skipped: payload.data.skipped,
+    records: payload.data.records.map(toCollectionRecord),
+  };
 }
 
 export async function deleteCollectionRecord(

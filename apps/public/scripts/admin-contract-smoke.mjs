@@ -831,6 +831,76 @@ try {
     assert(importRecords.json?.data?.records?.[0]?.slug === importedCollectionRecordSlug, `${importRecords.url} returned wrong imported record`);
     assert(importRecords.json?.data?.records?.[0]?.values?.summary === 'Imported, structured content', `${importRecords.url} did not parse quoted CSV field`);
 
+    const bulkRecordOne = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        slug: `${collectionRecordSlug}-bulk-one`,
+        status: 'draft',
+        values: {
+          title: 'Bulk Record One',
+          summary: 'Temporary bulk record',
+          rank: 3,
+          category: 'Featured',
+          labels: ['Internal'],
+        },
+      }),
+    });
+    assert(bulkRecordOne.response.status === 201, `${bulkRecordOne.url} expected 201, got ${bulkRecordOne.response.status}`);
+
+    const bulkRecordTwo = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        slug: `${collectionRecordSlug}-bulk-two`,
+        status: 'draft',
+        values: {
+          title: 'Bulk Record Two',
+          summary: 'Temporary bulk record',
+          rank: 4,
+          category: 'Standard',
+          labels: ['Internal'],
+        },
+      }),
+    });
+    assert(bulkRecordTwo.response.status === 201, `${bulkRecordTwo.url} expected 201, got ${bulkRecordTwo.response.status}`);
+
+    const bulkRecordIds = [
+      bulkRecordOne.json?.data?.record?.id,
+      bulkRecordTwo.json?.data?.record?.id,
+    ].filter(Boolean);
+    const bulkPublish = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records/bulk`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'updateStatus',
+        recordIds: bulkRecordIds,
+        status: 'published',
+      }),
+    });
+    assert(bulkPublish.response.status === 200, `${bulkPublish.url} expected 200, got ${bulkPublish.response.status}`);
+    assert(bulkPublish.json?.data?.updated === 2, `${bulkPublish.url} expected two bulk-updated records`);
+    assert(bulkPublish.json?.data?.records?.every((record) => record.status === 'published'), `${bulkPublish.url} expected published records`);
+
+    const bulkDelete = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records/bulk`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'delete',
+        recordIds: bulkRecordIds,
+      }),
+    });
+    assert(bulkDelete.response.status === 200, `${bulkDelete.url} expected 200, got ${bulkDelete.response.status}`);
+    assert(bulkDelete.json?.data?.deleted === 2, `${bulkDelete.url} expected two bulk-deleted records`);
+
     const dynamicItemPath = `/${collectionSlug}/${collectionRecordSlug}`;
     const dynamicResolve = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(dynamicItemPath)}`);
     assert(dynamicResolve.response.status === 200, `${dynamicResolve.url} expected 200, got ${dynamicResolve.response.status}`);
