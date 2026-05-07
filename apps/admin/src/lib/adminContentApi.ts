@@ -355,6 +355,13 @@ interface ApiCollectionRecord {
   scheduledAt?: string | null;
 }
 
+interface ApiPagination {
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
 interface ApiListCollectionsResponse {
   success: boolean;
   data?: {
@@ -381,6 +388,7 @@ interface ApiListCollectionRecordsResponse {
   data?: {
     collection: ApiCollection;
     records: ApiCollectionRecord[];
+    pagination: ApiPagination;
   };
   error?: {
     message?: string;
@@ -641,6 +649,18 @@ export interface CollectionRecordListFilters {
   sortDirection?: 'asc' | 'desc';
   limit?: number;
   offset?: number;
+}
+
+export interface CollectionRecordPagination {
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+export interface CollectionRecordListResult {
+  records: CollectionRecord[];
+  pagination: CollectionRecordPagination;
 }
 
 export interface CollectionRecordImportError {
@@ -1537,7 +1557,7 @@ export async function listCollectionRecords(
   siteId: string,
   collectionId: string,
   filters: CollectionRecordListFilters = {},
-): Promise<CollectionRecord[]> {
+): Promise<CollectionRecordListResult> {
   const query = new URLSearchParams();
   query.set('limit', String(filters.limit || 100));
   query.set('offset', String(filters.offset || 0));
@@ -1555,7 +1575,15 @@ export async function listCollectionRecords(
     throw new Error(payload.error?.message || 'Unable to load collection records');
   }
 
-  return payload.data.records.map(toCollectionRecord);
+  return {
+    records: payload.data.records.map(toCollectionRecord),
+    pagination: payload.data.pagination || {
+      total: payload.data.records.length,
+      limit: filters.limit || payload.data.records.length || 1,
+      offset: filters.offset || 0,
+      hasMore: false,
+    },
+  };
 }
 
 export async function exportCollectionRecordsCsv(

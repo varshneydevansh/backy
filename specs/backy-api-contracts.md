@@ -94,7 +94,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Returns only published records or scheduled records whose `scheduledAt` has passed.
   - Collection fields support `text`, `richText`, `number`, `boolean`, `date`, `datetime`, `image`, `video`, `file`, `reference`, `multiReference`, `select`, `tags`, `url`, `email`, `phone`, `slug`, and `json`. Public collection schemas expose `options` for `select`/`tags` fields and `referenceCollectionId` for reference fields.
   - Record validation enforces required fields, unique fields, and allowed option values for `select` and `tags` fields before admin create/update/import writes persist.
-  - Supports basic record search, field-value filtering, sorting, limit, and offset in both public and admin record list endpoints. `/render` dataset hydration accepts the same query fields.
+  - Supports basic record search, field-value filtering, sorting, limit, offset, and pagination metadata in both public and admin record list endpoints. `/render` dataset hydration accepts the same query fields.
   - Admin record lists also support `GET /api/admin/sites/:siteId/collections/:collectionId/records?format=csv` with the same filters for backend-backed CSV export.
   - Admin collection records support `POST /api/admin/sites/:siteId/collections/:collectionId/records/import?upsert=true` for backend-validated CSV import.
   - Current implementation is backed by the same runtime JSON adapter as admin content. `/render` now surfaces dataset, binding, field, field option/reference, and record manifests for collection-bound elements and generated dynamic item pages, but production completion still needs DB-backed indexes, custom dynamic route templates, and authenticated visitor-write policies.

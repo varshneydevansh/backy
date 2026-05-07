@@ -1,6 +1,8 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import {
+  ChevronLeft,
+  ChevronRight,
   Database,
   Download,
   ExternalLink,
@@ -35,6 +37,8 @@ import { formatDate } from '@/lib/utils';
 export const Route = createFileRoute('/collections')({
   component: CollectionsPage,
 });
+
+const DEFAULT_RECORD_PAGE_SIZE = 25;
 
 const FIELD_TYPES: CollectionFieldType[] = [
   'text',
@@ -163,6 +167,12 @@ function CollectionsPage() {
     sortBy: 'updatedAt',
     sortDirection: 'desc' as 'asc' | 'desc',
   });
+  const [recordPagination, setRecordPagination] = useState({
+    total: 0,
+    limit: DEFAULT_RECORD_PAGE_SIZE,
+    offset: 0,
+    hasMore: false,
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [isRecordsLoading, setIsRecordsLoading] = useState(false);
   const [isSavingCollection, setIsSavingCollection] = useState(false);
@@ -188,6 +198,15 @@ function CollectionsPage() {
     [records, selectedRecordId],
   );
   const dynamicBaseUrl = getPublicBaseUrl();
+  const recordPage = Math.floor(recordPagination.offset / recordPagination.limit) + 1;
+  const recordPageCount = Math.max(1, Math.ceil(recordPagination.total / recordPagination.limit));
+  const recordRangeStart = recordPagination.total === 0 ? 0 : recordPagination.offset + 1;
+  const recordRangeEnd = Math.min(recordPagination.total, recordPagination.offset + records.length);
+
+  const updateRecordFilters = (updates: Partial<typeof recordFilters>) => {
+    setRecordFilters((prev) => ({ ...prev, ...updates }));
+    setRecordPagination((prev) => ({ ...prev, offset: 0 }));
+  };
 
   useEffect(() => {
     if (!selectedSiteId && sites[0]) {
@@ -207,6 +226,12 @@ function CollectionsPage() {
       sortBy: 'updatedAt',
       sortDirection: 'desc',
     });
+    setRecordPagination({
+      total: 0,
+      limit: DEFAULT_RECORD_PAGE_SIZE,
+      offset: 0,
+      hasMore: false,
+    });
     setCollectionForm({
       name: '',
       slug: '',
@@ -225,6 +250,10 @@ function CollectionsPage() {
       ...prev,
       fieldKey: '',
       fieldValue: '',
+    }));
+    setRecordPagination((prev) => ({
+      ...prev,
+      offset: 0,
     }));
     setCollectionForm({
       name: collection.name,
@@ -263,18 +292,26 @@ function CollectionsPage() {
     setIsRecordsLoading(true);
     setError(null);
     try {
-      const backendRecords = await listCollectionRecords(activeSiteId, collectionId, {
+      const result = await listCollectionRecords(activeSiteId, collectionId, {
         search: recordFilters.search.trim() || undefined,
         status: recordFilters.status || undefined,
         fieldKey: recordFilters.fieldKey || undefined,
         fieldValue: recordFilters.fieldValue.trim() || undefined,
         sortBy: recordFilters.sortBy || undefined,
         sortDirection: recordFilters.sortDirection,
+        limit: recordPagination.limit,
+        offset: recordPagination.offset,
       });
-      setRecords(backendRecords);
+      setRecords(result.records);
+      setRecordPagination(result.pagination);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load collection records');
       setRecords([]);
+      setRecordPagination((prev) => ({
+        ...prev,
+        total: 0,
+        hasMore: false,
+      }));
     } finally {
       setIsRecordsLoading(false);
     }
@@ -290,7 +327,7 @@ function CollectionsPage() {
       void loadRecords(selectedCollectionId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCollectionId, activeSiteId, recordFilters.search, recordFilters.status, recordFilters.fieldKey, recordFilters.fieldValue, recordFilters.sortBy, recordFilters.sortDirection]);
+  }, [selectedCollectionId, activeSiteId, recordFilters.search, recordFilters.status, recordFilters.fieldKey, recordFilters.fieldValue, recordFilters.sortBy, recordFilters.sortDirection, recordPagination.limit, recordPagination.offset]);
 
   useEffect(() => {
     if (!selectedRecord || !activeCollection) {
@@ -447,6 +484,7 @@ function CollectionsPage() {
       if (selectedRecordId === record.id) {
         setSelectedRecordId(null);
       }
+      void loadRecords(activeCollection.id);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete collection record');
     }
@@ -820,7 +858,7 @@ function CollectionsPage() {
                 <div>
                   <h2 className="text-sm font-semibold">Records</h2>
                   <p className="text-xs text-muted-foreground">
-                    {records.length} items in {activeCollection.name}
+                    {recordPagination.total} items in {activeCollection.name}
                     {isRecordsLoading ? ' • Loading...' : ''}
                   </p>
                 </div>
@@ -869,7 +907,7 @@ function CollectionsPage() {
                   <span className="font-medium">Search</span>
                   <input
                     value={recordFilters.search}
-                    onChange={(event) => setRecordFilters((prev) => ({ ...prev, search: event.target.value }))}
+                    onChange={(event) => updateRecordFilters({ search: event.target.value })}
                     className="w-full rounded-lg border bg-background px-3 py-2"
                     placeholder="Search values"
                   />
@@ -878,10 +916,9 @@ function CollectionsPage() {
                   <span className="font-medium">Status</span>
                   <select
                     value={recordFilters.status}
-                    onChange={(event) => setRecordFilters((prev) => ({
-                      ...prev,
+                    onChange={(event) => updateRecordFilters({
                       status: event.target.value as RecordStatusFilter,
-                    }))}
+                    })}
                     className="w-full rounded-lg border bg-background px-3 py-2"
                   >
                     <option value="">All</option>
@@ -895,11 +932,10 @@ function CollectionsPage() {
                   <span className="font-medium">Field</span>
                   <select
                     value={recordFilters.fieldKey}
-                    onChange={(event) => setRecordFilters((prev) => ({
-                      ...prev,
+                    onChange={(event) => updateRecordFilters({
                       fieldKey: event.target.value,
-                      fieldValue: event.target.value ? prev.fieldValue : '',
-                    }))}
+                      fieldValue: event.target.value ? recordFilters.fieldValue : '',
+                    })}
                     className="w-full rounded-lg border bg-background px-3 py-2"
                   >
                     <option value="">Any field</option>
@@ -912,7 +948,7 @@ function CollectionsPage() {
                   <span className="font-medium">Field value</span>
                   <input
                     value={recordFilters.fieldValue}
-                    onChange={(event) => setRecordFilters((prev) => ({ ...prev, fieldValue: event.target.value }))}
+                    onChange={(event) => updateRecordFilters({ fieldValue: event.target.value })}
                     disabled={!recordFilters.fieldKey}
                     className="w-full rounded-lg border bg-background px-3 py-2 disabled:opacity-60"
                     placeholder="Contains"
@@ -922,7 +958,7 @@ function CollectionsPage() {
                   <span className="font-medium">Sort by</span>
                   <select
                     value={recordFilters.sortBy}
-                    onChange={(event) => setRecordFilters((prev) => ({ ...prev, sortBy: event.target.value }))}
+                    onChange={(event) => updateRecordFilters({ sortBy: event.target.value })}
                     className="w-full rounded-lg border bg-background px-3 py-2"
                   >
                     <option value="updatedAt">Updated</option>
@@ -938,10 +974,9 @@ function CollectionsPage() {
                   <span className="font-medium">Direction</span>
                   <select
                     value={recordFilters.sortDirection}
-                    onChange={(event) => setRecordFilters((prev) => ({
-                      ...prev,
+                    onChange={(event) => updateRecordFilters({
                       sortDirection: event.target.value === 'asc' ? 'asc' : 'desc',
-                    }))}
+                    })}
                     className="w-full rounded-lg border bg-background px-3 py-2"
                   >
                     <option value="desc">Descending</option>
@@ -1009,6 +1044,56 @@ function CollectionsPage() {
                       })}
                     </tbody>
                   </table>
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-sm">
+                    <div className="text-muted-foreground">
+                      Showing {recordRangeStart}-{recordRangeEnd} of {recordPagination.total}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 text-muted-foreground">
+                        Rows
+                        <select
+                          value={recordPagination.limit}
+                          onChange={(event) => setRecordPagination((prev) => ({
+                            ...prev,
+                            limit: Number(event.target.value),
+                            offset: 0,
+                          }))}
+                          className="rounded-lg border bg-background px-2 py-1 text-foreground"
+                        >
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </label>
+                      <span className="text-muted-foreground">
+                        Page {recordPage} of {recordPageCount}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setRecordPagination((prev) => ({
+                          ...prev,
+                          offset: Math.max(0, prev.offset - prev.limit),
+                        }))}
+                        disabled={recordPagination.offset === 0 || isRecordsLoading}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted disabled:opacity-40"
+                        aria-label="Previous records page"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRecordPagination((prev) => ({
+                          ...prev,
+                          offset: prev.offset + prev.limit,
+                        }))}
+                        disabled={!recordPagination.hasMore || isRecordsLoading}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted disabled:opacity-40"
+                        aria-label="Next records page"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <form onSubmit={handleRecordSubmit} className="space-y-4 p-4">
