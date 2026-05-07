@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSiteByIdOrSlug, listFormsBySite } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
     params: Promise<{
@@ -32,6 +33,35 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const { searchParams } = new URL(request.url);
         const pageId = searchParams.get('pageId');
         const postId = searchParams.get('postId');
+
+        if (!shouldUseDemoStoreFallback()) {
+            const repositories = await getRequiredDatabaseRepositories();
+            const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+            if (!site || !site.isPublished) {
+                return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+            }
+
+            const payload = await repositories.forms.list({
+                siteId: site.id,
+                pageId: pageId || undefined,
+                postId: postId || undefined,
+                isActive: true,
+                limit: 100,
+                offset: 0,
+            });
+
+            return NextResponse.json({
+                success: true,
+                requestId,
+                data: {
+                    forms: payload.items,
+                    total: payload.pagination.total,
+                    pagination: payload.pagination,
+                },
+                forms: payload.items,
+                total: payload.pagination.total,
+            });
+        }
 
         const site = getSiteByIdOrSlug(siteId);
         if (!site) {

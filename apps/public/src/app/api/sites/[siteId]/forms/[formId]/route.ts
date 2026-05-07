@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getFormById, getSiteByIdOrSlug, listFormSubmissions } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
     params: Promise<{
@@ -30,6 +31,53 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     try {
         const { siteId, formId } = await params;
+
+        if (!shouldUseDemoStoreFallback()) {
+            const repositories = await getRequiredDatabaseRepositories();
+            const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+            if (!site || !site.isPublished) {
+                return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+            }
+
+            const form = await repositories.forms.getById(site.id, formId);
+            if (!form || !form.isActive) {
+                return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+            }
+
+            const { searchParams } = new URL(_request.url);
+            const statusParam = searchParams.get('status');
+            const filterRequestId = searchParams.get('requestId')?.trim() || undefined;
+            const status = statusParam === 'pending' || statusParam === 'approved' || statusParam === 'rejected' || statusParam === 'spam'
+              ? statusParam
+              : undefined;
+            const limit = parseInt(searchParams.get('limit') || '20', 10);
+            const offset = parseInt(searchParams.get('offset') || '0', 10);
+            const submissions = await repositories.forms.listSubmissions({
+              siteId: site.id,
+              formId: form.id,
+              status,
+              requestId: filterRequestId,
+              limit: Number.isFinite(limit) ? limit : 20,
+              offset: Number.isFinite(offset) ? offset : 0,
+            });
+
+            return NextResponse.json({
+              success: true,
+              requestId,
+              data: {
+                form,
+                submissions: {
+                  data: submissions.items,
+                  pagination: submissions.pagination,
+                },
+              },
+              form,
+              submissions: {
+                data: submissions.items,
+                pagination: submissions.pagination,
+              },
+            });
+        }
 
         const site = getSiteByIdOrSlug(siteId);
         if (!site) {

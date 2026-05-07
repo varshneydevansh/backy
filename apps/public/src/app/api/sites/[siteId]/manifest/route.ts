@@ -5,7 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import type { BackyCollection, BackyPage, BackyPost, MediaItem, Site } from '@backy-cms/core';
+import type { BackyCollection, BackyPage, BackyPost, FormDefinition, MediaItem, Site } from '@backy-cms/core';
 import {
   getBlogPosts,
   getMediaList,
@@ -93,6 +93,7 @@ const buildRepositoryManifest = (
     pages: BackyPage[];
     posts: BackyPost[];
     collections: BackyCollection[];
+    forms: FormDefinition[];
     media: MediaItem[];
   },
 ) => {
@@ -137,11 +138,11 @@ const buildRepositoryManifest = (
         uploadedFonts: fonts.length > 0,
         blog: true,
         comments: false,
-        forms: false,
+        forms: input.forms.length > 0,
         collectionSchemas: true,
         collectionRecords: true,
         publicCollectionCreate: publicCollections.some((collection) => collection.permissions.publicCreate),
-        collectionWriteForms: false,
+        collectionWriteForms: input.forms.some((form) => form.collectionTarget?.enabled),
         dynamicItemRoutes: publicCollections.length > 0,
         reusableSections: false,
         previewTokens: false,
@@ -236,7 +237,20 @@ const buildRepositoryManifest = (
           tags: [],
           items: [],
         },
-        forms: [],
+        forms: input.forms.map((form) => ({
+          id: form.id,
+          title: form.title,
+          active: form.isActive,
+          moderationMode: form.moderationMode,
+          pageId: form.pageId || null,
+          postId: form.postId || null,
+          fields: form.fields,
+          submitUrl: `/api/sites/${input.site.id}/forms/${form.id}/submissions`,
+          detailUrl: `/api/sites/${input.site.id}/forms/${form.id}`,
+          submissionsUrl: `/api/sites/${input.site.id}/forms/${form.id}/submissions`,
+          contactsUrl: `/api/sites/${input.site.id}/forms/${form.id}/contacts`,
+          collectionTarget: form.collectionTarget || null,
+        })),
         media: {
           count: input.media.length,
           publicCount: input.media.length,
@@ -263,10 +277,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const [pages, posts, collections, media] = await Promise.all([
+      const [pages, posts, collections, forms, media] = await Promise.all([
         repositories.pages.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
         repositories.posts.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
         repositories.collections.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
+        repositories.forms.list({ siteId: site.id, isActive: true, limit: 100, offset: 0 }),
         repositories.media.list({ siteId: site.id, visibility: 'public', limit: 1000, offset: 0 }),
       ]);
       const manifest = buildRepositoryManifest({
@@ -275,6 +290,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         pages: pages.items.filter(isPubliclyReadable),
         posts: posts.items.filter(isPubliclyReadable),
         collections: collections.items.filter((collection) => collection.status === 'published'),
+        forms: forms.items,
         media: media.items,
       });
 
