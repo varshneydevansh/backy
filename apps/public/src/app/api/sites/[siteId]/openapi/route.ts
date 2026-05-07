@@ -99,7 +99,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const forms = repositories
       ? (await repositories.forms.list({ siteId: site.id, isActive: true, limit: 100, offset: 0 })).items
       : listFormsBySite(site.id);
-    const reusableSections = repositories ? [] : listReusableSections(site.id, { status: 'active' });
+    const reusableSections = repositories
+      ? (await repositories.reusableSections.list({ siteId: site.id, status: 'active', limit: 100, offset: 0 })).items
+      : listReusableSections(site.id, { status: 'active' });
     const collectionIds = collections.map((collection) => collection.id);
     const formIds = forms.map((form) => form.id);
     const reusableSectionIds = reusableSections.map((section) => section.id);

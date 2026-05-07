@@ -13,6 +13,8 @@ import {
   getSiteByIdOrSlug,
   updateReusableSection,
 } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import type { BackyJsonObject } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
 
@@ -54,11 +56,42 @@ const hasElements = (value: unknown): boolean => (
   ((value as { elements: unknown[] }).elements.length > 0)
 );
 
+const parseContent = (value: unknown): BackyJsonObject => (
+  value && typeof value === 'object' && !Array.isArray(value) ? value as BackyJsonObject : {}
+);
+
+const parseTags = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return Array.from(new Set(value.map((tag) => typeof tag === 'string' ? tag.trim() : '').filter(Boolean)));
+  }
+  if (typeof value === 'string') {
+    return Array.from(new Set(value.split(',').map((tag) => tag.trim()).filter(Boolean)));
+  }
+  return [];
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { siteId, sectionId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const section = await repositories.reusableSections.getById(site.id, sectionId) ||
+        await repositories.reusableSections.getBySlug(site.id, sectionId);
+      if (!section) {
+        return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
+      }
+
+      return NextResponse.json({ success: true, requestId, data: { section } });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -82,6 +115,53 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, sectionId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const section = await repositories.reusableSections.getById(site.id, sectionId) ||
+        await repositories.reusableSections.getBySlug(site.id, sectionId);
+      if (!section) {
+        return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
+      }
+
+      const body = await parseJsonBody(request);
+      const nextSlug = body.slug === undefined ? '' : normalizeSlug(body.slug);
+
+      if (body.slug !== undefined && !nextSlug) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Reusable section slug is required', requestId);
+      }
+
+      if (body.content !== undefined && !hasElements(body.content)) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Reusable section content must include at least one element', requestId);
+      }
+
+      if (nextSlug && nextSlug !== section.slug) {
+        const conflict = await repositories.reusableSections.getBySlug(site.id, nextSlug);
+        if (conflict && conflict.id !== section.id) {
+          return errorResponse(409, 'SLUG_CONFLICT', 'A reusable section with this slug already exists', requestId);
+        }
+      }
+
+      const updated = (await repositories.reusableSections.update(site.id, section.id, {
+        ...(typeof body.name === 'string' && body.name.trim() ? { name: body.name.trim() } : {}),
+        ...(nextSlug ? { slug: nextSlug } : {}),
+        ...(body.description !== undefined ? { description: typeof body.description === 'string' ? body.description.trim() || null : null } : {}),
+        ...(typeof body.category === 'string' && body.category.trim() ? { category: body.category.trim() } : {}),
+        ...(body.status === 'active' || body.status === 'archived' ? { status: body.status } : {}),
+        ...(body.tags !== undefined ? { tags: parseTags(body.tags) } : {}),
+        ...(body.content !== undefined ? { content: parseContent(body.content) } : {}),
+        ...(body.sourceElementId !== undefined ? { sourceElementId: typeof body.sourceElementId === 'string' ? body.sourceElementId.trim() || null : null } : {}),
+        ...(body.updatedBy !== undefined ? { updatedBy: typeof body.updatedBy === 'string' ? body.updatedBy.trim() || null : null } : {}),
+      })).item;
+
+      return NextResponse.json({ success: true, requestId, data: { section: updated } });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -132,6 +212,35 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, sectionId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const section = await repositories.reusableSections.getById(site.id, sectionId) ||
+        await repositories.reusableSections.getBySlug(site.id, sectionId);
+      if (!section) {
+        return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
+      }
+
+      const deleted = await repositories.reusableSections.delete(site.id, section.id);
+      if (!deleted) {
+        return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          deleted: true,
+          sectionId: section.id,
+        },
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {

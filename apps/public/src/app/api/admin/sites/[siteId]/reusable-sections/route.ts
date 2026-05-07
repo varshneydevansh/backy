@@ -12,6 +12,8 @@ import {
   getSiteByIdOrSlug,
   listReusableSections,
 } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import type { BackyJsonObject } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
 
@@ -52,12 +54,58 @@ const hasElements = (value: unknown): boolean => (
   ((value as { elements: unknown[] }).elements.length > 0)
 );
 
+const parseContent = (value: unknown): BackyJsonObject => (
+  value && typeof value === 'object' && !Array.isArray(value) ? value as BackyJsonObject : {}
+);
+
+const parseTags = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return Array.from(new Set(value.map((tag) => typeof tag === 'string' ? tag.trim() : '').filter(Boolean)));
+  }
+  if (typeof value === 'string') {
+    return Array.from(new Set(value.split(',').map((tag) => tag.trim()).filter(Boolean)));
+  }
+  return [];
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { siteId } = await params;
     const { searchParams } = new URL(request.url);
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const statusParam = searchParams.get('status');
+      const status = statusParam === 'active' || statusParam === 'archived' || statusParam === 'all'
+        ? statusParam
+        : 'active';
+      const result = await repositories.reusableSections.list({
+        siteId: site.id,
+        status,
+        category: searchParams.get('category') || undefined,
+        tag: searchParams.get('tag') || undefined,
+        search: searchParams.get('search') || undefined,
+        limit: 100,
+        offset: 0,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          sections: result.items,
+          pagination: result.pagination,
+        },
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -94,6 +142,54 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const body = await parseJsonBody(request);
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      const slug = normalizeSlug(body.slug || name);
+
+      if (!name) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Reusable section name is required', requestId);
+      }
+
+      if (!slug) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Reusable section slug is required', requestId);
+      }
+
+      if (!hasElements(body.content)) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Reusable section content must include at least one element', requestId);
+      }
+
+      if (await repositories.reusableSections.getBySlug(site.id, slug)) {
+        return errorResponse(409, 'SLUG_CONFLICT', 'A reusable section with this slug already exists', requestId);
+      }
+
+      const section = (await repositories.reusableSections.create({
+        siteId: site.id,
+        name,
+        slug,
+        description: typeof body.description === 'string' ? body.description.trim() || null : null,
+        category: typeof body.category === 'string' && body.category.trim() ? body.category.trim() : 'general',
+        status: body.status === 'archived' ? 'archived' : 'active',
+        tags: parseTags(body.tags),
+        content: parseContent(body.content),
+        sourceElementId: typeof body.sourceElementId === 'string' ? body.sourceElementId.trim() || null : null,
+        createdBy: typeof body.createdBy === 'string' ? body.createdBy.trim() || 'admin' : 'admin',
+        updatedBy: typeof body.updatedBy === 'string' ? body.updatedBy.trim() || 'admin' : 'admin',
+      })).item;
+
+      return NextResponse.json(
+        { success: true, requestId, data: { section } },
+        { status: 201 },
+      );
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {

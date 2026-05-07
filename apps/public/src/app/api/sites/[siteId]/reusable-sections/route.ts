@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSiteByIdOrSlug, listReusableSections } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
   params: Promise<{
@@ -35,13 +36,43 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
+    const { searchParams } = new URL(request.url);
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      if (!site || !site.isPublished) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const result = await repositories.reusableSections.list({
+        siteId: site.id,
+        status: 'active',
+        category: searchParams.get('category') || undefined,
+        tag: searchParams.get('tag') || undefined,
+        search: searchParams.get('search') || undefined,
+        limit: 100,
+        offset: 0,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          sections: result.items,
+          pagination: result.pagination,
+        },
+        sections: result.items,
+        pagination: result.pagination,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site || !site.isPublished) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const { searchParams } = new URL(request.url);
     const sections = listReusableSections(site.id, {
       status: 'active',
       category: searchParams.get('category') || undefined,

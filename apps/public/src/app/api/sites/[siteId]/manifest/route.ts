@@ -5,7 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import type { BackyCollection, BackyPage, BackyPost, FormDefinition, MediaItem, Site } from '@backy-cms/core';
+import type { BackyCollection, BackyPage, BackyPost, BackyReusableSection, FormDefinition, MediaItem, Site } from '@backy-cms/core';
 import {
   getBlogPosts,
   getMediaList,
@@ -93,6 +93,7 @@ const buildRepositoryManifest = (
     pages: BackyPage[];
     posts: BackyPost[];
     collections: BackyCollection[];
+    reusableSections: BackyReusableSection[];
     forms: FormDefinition[];
     media: MediaItem[];
   },
@@ -144,7 +145,7 @@ const buildRepositoryManifest = (
         publicCollectionCreate: publicCollections.some((collection) => collection.permissions.publicCreate),
         collectionWriteForms: input.forms.some((form) => form.collectionTarget?.enabled),
         dynamicItemRoutes: publicCollections.length > 0,
-        reusableSections: false,
+        reusableSections: input.reusableSections.length > 0,
         previewTokens: false,
       },
       endpoints: {
@@ -231,11 +232,21 @@ const buildRepositoryManifest = (
           dynamicRoutePattern: `/${collection.slug}/:recordSlug`,
         })),
         reusableSections: {
-          count: 0,
+          count: input.reusableSections.length,
           listUrl: `/api/sites/${input.site.id}/reusable-sections`,
-          categories: [],
-          tags: [],
-          items: [],
+          categories: Array.from(new Set(input.reusableSections.map((section) => section.category))).sort(),
+          tags: Array.from(new Set(input.reusableSections.flatMap((section) => section.tags))).sort(),
+          items: input.reusableSections.map((section) => ({
+            id: section.id,
+            slug: section.slug,
+            name: section.name,
+            description: section.description,
+            category: section.category,
+            tags: section.tags,
+            detailUrl: `/api/sites/${input.site.id}/reusable-sections/${section.id}`,
+            canvasSize: section.content.canvasSize,
+            elementCount: Array.isArray(section.content.elements) ? section.content.elements.length : 0,
+          })),
         },
         forms: input.forms.map((form) => ({
           id: form.id,
@@ -277,10 +288,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const [pages, posts, collections, forms, media] = await Promise.all([
+      const [pages, posts, collections, reusableSections, forms, media] = await Promise.all([
         repositories.pages.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
         repositories.posts.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
         repositories.collections.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
+        repositories.reusableSections.list({ siteId: site.id, status: 'active', limit: 100, offset: 0 }),
         repositories.forms.list({ siteId: site.id, isActive: true, limit: 100, offset: 0 }),
         repositories.media.list({ siteId: site.id, visibility: 'public', limit: 1000, offset: 0 }),
       ]);
@@ -290,6 +302,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         pages: pages.items.filter(isPubliclyReadable),
         posts: posts.items.filter(isPubliclyReadable),
         collections: collections.items.filter((collection) => collection.status === 'published'),
+        reusableSections: reusableSections.items,
         forms: forms.items,
         media: media.items,
       });

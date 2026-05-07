@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getReusableSectionByIdOrSlug, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
   params: Promise<{
@@ -36,6 +37,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, sectionId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      if (!site || !site.isPublished) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const section = await repositories.reusableSections.getById(site.id, sectionId) ||
+        await repositories.reusableSections.getBySlug(site.id, sectionId);
+      if (!section || section.status !== 'active') {
+        return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          section,
+        },
+        section,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site || !site.isPublished) {
