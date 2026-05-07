@@ -96,6 +96,15 @@ export interface PageCreateInput {
   content?: unknown;
 }
 
+export interface PageUpdateInput {
+  title?: string;
+  slug?: string;
+  status?: Page['status'];
+  description?: string;
+  meta?: Record<string, unknown>;
+  content?: unknown;
+}
+
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
   return env[key]?.trim() ?? '';
@@ -224,6 +233,34 @@ export async function createPage(siteId: string, input: PageCreateInput): Promis
 
   if (!response.ok || !payload.success || !payload.data) {
     throw new Error(payload.error?.message || 'Unable to create page');
+  }
+
+  return toStorePage(payload.data.page);
+}
+
+export async function getPage(siteId: string, pageId: string): Promise<Page> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}`);
+  const payload = await readJson<ApiPageResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load page');
+  }
+
+  return toStorePage(payload.data.page);
+}
+
+export async function updatePage(siteId: string, pageId: string, input: PageUpdateInput): Promise<Page> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiPageResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to save page');
   }
 
   return toStorePage(payload.data.page);
