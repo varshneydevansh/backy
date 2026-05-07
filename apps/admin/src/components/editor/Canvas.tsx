@@ -701,6 +701,10 @@ export function Canvas({
     const element = getTargetElement(target);
     if (!element) return false;
 
+    if (element.closest('[data-role="canvas-move-handle"]')) {
+      return false;
+    }
+
     const editorHost = element.closest('[data-backy-text-editor]');
     if (!editorHost) {
       return false;
@@ -2651,6 +2655,8 @@ function CanvasElementComponent({
             className="pointer-events-auto absolute -top-8 left-0 z-[90] flex cursor-move touch-none select-none items-center gap-2 rounded bg-sky-600 px-2 py-1 text-[11px] font-medium text-white shadow-sm"
             data-role="canvas-move-handle"
             title="Drag selected element"
+            onPointerDown={(event) => onDragStart(event, element.id)}
+            onMouseDown={(event) => onDragStart(event, element.id)}
           >
             <span className="grid h-3 w-2 grid-cols-2 gap-[2px]" aria-hidden="true">
               <span className="rounded-full bg-white/80" />

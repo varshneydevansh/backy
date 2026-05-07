@@ -482,6 +482,51 @@ const testUndoRedoAfterDrag = async (client, elementId) => {
   };
 };
 
+const activateTextEditing = async (client, elementId) => {
+  const box = await getElementBox(client, elementId);
+  assert(box, `Missing text-editable element ${elementId}`);
+
+  const x = Math.round(box.x + Math.min(box.width / 2, 120));
+  const y = Math.round(box.y + Math.min(box.height / 2, 30));
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x,
+    y,
+    button: 'none',
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x,
+    y,
+    button: 'left',
+    buttons: 1,
+    clickCount: 2,
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x,
+    y,
+    button: 'left',
+    buttons: 0,
+    clickCount: 2,
+  });
+  await sleep(250);
+
+  const state = await evaluate(client, `(() => {
+    const node = document.querySelector('[data-element-id="${elementId}"]');
+    return {
+      selected: Boolean(node?.className?.toString?.().includes('ring-sky-500')),
+      editable: node?.getAttribute('data-backy-text-editor-editable') === 'true',
+      hasMoveHandle: Boolean(node?.querySelector('[data-role="canvas-move-handle"]')),
+    };
+  })()`);
+
+  assert(state?.editable, `Text editing did not activate for ${elementId}: ${JSON.stringify(state)}`);
+  assert(state.hasMoveHandle, `Move handle missing while editing ${elementId}: ${JSON.stringify(state)}`);
+  return state;
+};
+
 const clickSave = async (client) => {
   const clicked = await evaluate(client, `(() => {
     const button = Array.from(document.querySelectorAll('button')).find((candidate) => {
@@ -798,8 +843,10 @@ const testLayerGrouping = async (client, elementIds) => {
   };
 };
 
-const dragSelectionHandle = async (client, elementId, deltaX, deltaY) => {
-  await selectElement(client, elementId);
+const dragSelectionHandle = async (client, elementId, deltaX, deltaY, options = {}) => {
+  if (options.selectFirst !== false) {
+    await selectElement(client, elementId);
+  }
   const before = await getElementBox(client, elementId);
   assert(before, `Missing element ${elementId} before move-handle drag`);
   const handle = await getMoveHandleBox(client, elementId);
@@ -862,6 +909,12 @@ const dragSelectionHandle = async (client, elementId, deltaX, deltaY) => {
     after: { x: Math.round(after.x), y: Math.round(after.y), left: after.left, top: after.top },
     delta: { x: actualDeltaX, y: actualDeltaY },
   };
+};
+
+const dragEditingMoveHandle = async (client, elementId, deltaX, deltaY) => {
+  const editing = await activateTextEditing(client, elementId);
+  const drag = await dragSelectionHandle(client, elementId, deltaX, deltaY, { selectFirst: false });
+  return { editing, drag };
 };
 
 const resizeElement = async (client, elementId, deltaX, deltaY) => {
@@ -1039,6 +1092,13 @@ const main = async () => {
       : [
           await dragSelectionHandle(client, 'smoke-heading', 40, 20),
         ];
+    const editingMoveHandleDrags = EDITOR_PATH
+      ? [
+          await dragEditingMoveHandle(client, 'home-heading', 25, 15),
+        ]
+      : [
+          await dragEditingMoveHandle(client, 'smoke-heading', 25, 15),
+        ];
     const resizes = EDITOR_PATH ? [] : [
       await resizeElement(client, 'smoke-image', 50, 40),
       await resizeElement(client, 'smoke-form', 50, 40),
@@ -1140,6 +1200,7 @@ const main = async () => {
       url: `${ADMIN_BASE_URL}${editorPath}`,
       drags,
       moveHandleDrags,
+      editingMoveHandleDrags,
       resizes,
       keyboard,
       inspector,
