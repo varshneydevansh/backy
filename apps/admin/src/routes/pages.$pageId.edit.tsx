@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { Archive, CheckCircle2, ExternalLink, Eye, History, RotateCcw } from 'lucide-react';
+import { AlertTriangle, Archive, CheckCircle2, ExternalLink, Eye, History, RefreshCw, RotateCcw } from 'lucide-react';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
 import { PageSettings } from '@/components/editor/PageSettingsModal';
@@ -16,11 +16,13 @@ import {
   archivePage,
   createPagePreview,
   getPage,
+  getPageReadiness,
   listPageRevisions,
   publishPage,
   rollbackPage,
   updatePage as updatePageFromApi,
   type ContentRevision,
+  type PageReadiness,
 } from '@/lib/adminContentApi';
 import { useStore, type Page } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
@@ -54,6 +56,9 @@ function PageEditorRoute() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewExpiresAt, setPreviewExpiresAt] = useState<string | null>(null);
   const [revisions, setRevisions] = useState<ContentRevision[]>([]);
+  const [pageReadiness, setPageReadiness] = useState<PageReadiness | null>(null);
+  const [readinessLoading, setReadinessLoading] = useState(false);
+  const [readinessError, setReadinessError] = useState<string | null>(null);
   const [editorResetVersion, setEditorResetVersion] = useState(0);
 
   useEffect(() => {
@@ -122,6 +127,33 @@ function PageEditorRoute() {
       cancelled = true;
     };
   }, [page, pageId, siteId]);
+
+  const loadPageReadiness = async () => {
+    if (!page) {
+      return null;
+    }
+
+    setReadinessLoading(true);
+    setReadinessError(null);
+    try {
+      const readiness = await getPageReadiness(siteId, pageId);
+      setPageReadiness(readiness);
+      return readiness;
+    } catch (error) {
+      setPageReadiness(null);
+      setReadinessError(error instanceof Error ? error.message : 'Unable to load page readiness.');
+      return null;
+    } finally {
+      setReadinessLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (page) {
+      void loadPageReadiness();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page?.id, siteId]);
 
   // Load Elements
   const { elements: initialElements, canvasSize: initialCanvasSize } = useMemo(
@@ -199,6 +231,10 @@ function PageEditorRoute() {
     scheduledAt: page.scheduledAt || null,
     meta: page.meta || { title: page.title, description: '' },
   };
+  const pageReadinessFindings = pageReadiness?.checks
+    .filter((check) => check.status !== 'pass')
+    .slice(0, 3) || [];
+  const isReadinessBlocked = pageReadiness?.statusLabel === 'blocked';
 
   const handleSave = async (
     elements: CanvasElement[],
@@ -230,6 +266,7 @@ function PageEditorRoute() {
       updatePage(pageId, savedPage);
       setSaveWarning(null);
       setWorkflowNotice('Page saved and revision snapshot recorded.');
+      void loadPageReadiness();
     } catch (error) {
       updatePage(pageId, localUpdate);
       setPage((current) => current ? { ...current, ...localUpdate } : current);
@@ -249,12 +286,22 @@ function PageEditorRoute() {
     setWorkflowNotice(null);
 
     try {
+      if (action === 'publish') {
+        const readiness = await loadPageReadiness();
+        if (readiness?.statusLabel === 'blocked') {
+          const firstError = readiness.checks.find((check) => check.status !== 'pass' && check.severity === 'error');
+          setSaveWarning(firstError?.message || 'Resolve page readiness errors before publishing.');
+          return;
+        }
+      }
+
       const nextPage = action === 'publish'
         ? await publishPage(siteId, pageId)
         : await archivePage(siteId, pageId);
       setPage(nextPage);
       updatePage(pageId, nextPage);
       setWorkflowNotice(action === 'publish' ? 'Page published.' : 'Page archived.');
+      void loadPageReadiness();
     } catch (error) {
       setSaveWarning(error instanceof Error ? error.message : `Unable to ${action} page.`);
     } finally {
@@ -334,7 +381,7 @@ function PageEditorRoute() {
           </button>
           <button
             type="button"
-            disabled={isWorkflowBusy || page.status === 'published'}
+            disabled={isWorkflowBusy || page.status === 'published' || isReadinessBlocked}
             onClick={() => void applyWorkflow('publish')}
             className="inline-flex items-center justify-center gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-green-800 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -350,6 +397,74 @@ function PageEditorRoute() {
             <Archive className="h-4 w-4" />
             Archive
           </button>
+        </div>
+
+        <div className="mt-3 rounded-md border border-border px-3 py-2" data-testid="page-readiness-panel">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Page readiness
+              </div>
+              <div className="mt-1 flex items-center gap-2">
+                <span
+                  className={
+                    pageReadiness?.statusLabel === 'ready'
+                      ? 'text-sm font-semibold text-green-700'
+                      : pageReadiness?.statusLabel === 'blocked'
+                        ? 'text-sm font-semibold text-red-700'
+                        : 'text-sm font-semibold text-amber-700'
+                  }
+                >
+                  {readinessLoading
+                    ? 'Checking...'
+                    : pageReadiness
+                      ? `${pageReadiness.score}% ${pageReadiness.statusLabel.replace('-', ' ')}`
+                      : 'Not checked'}
+                </span>
+                {pageReadiness && (
+                  <span className="text-xs text-muted-foreground">
+                    {pageReadiness.elementCount} elements · {pageReadiness.canvasSize.width}x{pageReadiness.canvasSize.height}
+                  </span>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadPageReadiness()}
+              disabled={readinessLoading}
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+              title="Refresh page readiness"
+            >
+              <RefreshCw className={readinessLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+            </button>
+          </div>
+
+          {readinessError && (
+            <div className="mt-2 text-xs text-amber-700">{readinessError}</div>
+          )}
+
+          {pageReadinessFindings.length > 0 ? (
+            <div className="mt-2 space-y-1.5">
+              {pageReadinessFindings.map((check) => (
+                <div
+                  key={check.id}
+                  className={
+                    check.severity === 'error'
+                      ? 'flex items-start gap-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-800'
+                      : 'flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800'
+                  }
+                >
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{check.message}</span>
+                </div>
+              ))}
+            </div>
+          ) : pageReadiness ? (
+            <div className="mt-2 flex items-center gap-2 text-xs font-medium text-green-700">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Ready for publishing checks.
+            </div>
+          ) : null}
         </div>
 
         {workflowNotice && (

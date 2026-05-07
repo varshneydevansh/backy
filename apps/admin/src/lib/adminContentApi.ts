@@ -89,10 +89,22 @@ export interface SiteReadiness {
   }>;
 }
 
+export type PageReadiness = SiteReadiness['pages'][number];
+
 interface ApiSiteReadinessResponse {
   success: boolean;
   data?: {
     readiness: SiteReadiness;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiPageReadinessResponse {
+  success: boolean;
+  data?: {
+    readiness: PageReadiness;
   };
   error?: {
     message?: string;
@@ -1162,6 +1174,17 @@ export async function getSiteReadiness(siteId: string): Promise<SiteReadiness> {
 
   if (!response.ok || !payload.success || !payload.data) {
     throw new Error(payload.error?.message || 'Unable to load site readiness');
+  }
+
+  return payload.data.readiness;
+}
+
+export async function getPageReadiness(siteId: string, pageId: string): Promise<PageReadiness> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/readiness`);
+  const payload = await readJson<ApiPageReadinessResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load page readiness');
   }
 
   return payload.data.readiness;

@@ -365,6 +365,16 @@ try {
     assert(detail.response.status === 200, `${detail.url} expected 200, got ${detail.response.status}`);
     assert(detail.json?.data?.page?.id === createdPageId, `${detail.url} returned wrong page`);
 
+    const pageReadiness = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}/readiness`);
+    assert(pageReadiness.response.status === 200, `${pageReadiness.url} expected 200, got ${pageReadiness.response.status}`);
+    assert(pageReadiness.json?.success === true, `${pageReadiness.url} expected success envelope`);
+    assert(pageReadiness.json?.data?.readiness?.id === createdPageId, `${pageReadiness.url} returned wrong page readiness`);
+    assert(pageReadiness.json?.data?.readiness?.elementCount === 1, `${pageReadiness.url} expected one canvas element`);
+    assert(
+      pageReadiness.json?.readiness?.checks?.some((check) => check.id === `page:${createdPageId}:canvas-size` && check.status === 'pass'),
+      `${pageReadiness.url} missing legacy page readiness checks`,
+    );
+
     const bindMedia = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}/bind`, {
       method: 'POST',
       headers: {

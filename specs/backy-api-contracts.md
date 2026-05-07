@@ -243,6 +243,11 @@ Public page payload should include:
 - `GET /api/admin/sites/:siteId/pages/:pageId`
   - Returns full editable page payload including canvas content.
 
+- `GET /api/admin/sites/:siteId/pages/:pageId/readiness`
+  - Admin page readiness audit for page editor publish workflow.
+  - Response uses `{ success, requestId, data: { readiness } }`; legacy top-level `readiness` remains for compatibility.
+  - Validates canvas dimensions, element count, element bounds, slug/title, SEO title/description/canonical, and indexability before page publish.
+
 - `PATCH /api/admin/sites/:siteId/pages/:pageId`
   - Body supports partial updates for title, slug, description, status, homepage flag, canvas content, SEO meta, forms, and schedule.
 
