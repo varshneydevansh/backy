@@ -87,7 +87,45 @@ Public page payload should include:
 
 ## 3) Admin API (authenticated)
 
-### 3.1 Media
+### 3.1 Sites
+- `GET /api/admin/sites?includeUnpublished=true`
+  - Current implementation returns `{ success, requestId, data: { sites, pagination } }`.
+  - Includes draft/published sites for admin use when `includeUnpublished=true`.
+
+- `POST /api/admin/sites`
+  - Body: `{ name, slug?, description?, customDomain?, status?, isPublished?, theme? }`
+  - Validates required name, slug format, and slug conflicts.
+  - Current implementation persists to local runtime catalog `data/backy/admin-content.json`.
+
+- `GET /api/admin/sites/:siteId`
+  - Resolve by site id or slug.
+
+- `PATCH /api/admin/sites/:siteId`
+  - Body supports partial site settings updates: `name`, `slug`, `description`, `customDomain`, `status`, `isPublished`, `theme`.
+
+- `DELETE /api/admin/sites/:siteId`
+  - Deletes the site and cascades local page/post records in the current runtime adapter.
+
+### 3.2 Pages
+- `GET /api/admin/sites/:siteId/pages?includeUnpublished=true`
+  - Current implementation returns page summaries without content.
+
+- `POST /api/admin/sites/:siteId/pages`
+  - Body: `{ title, slug?, description?, status?, isHomepage?, content?, meta?, forms?, scheduledAt? }`
+  - Validates required title, slug format, and per-site slug conflicts.
+
+- `GET /api/admin/sites/:siteId/pages/:pageId`
+  - Returns full editable page payload including canvas content.
+
+- `PATCH /api/admin/sites/:siteId/pages/:pageId`
+  - Body supports partial updates for title, slug, description, status, homepage flag, canvas content, SEO meta, forms, and schedule.
+
+- `DELETE /api/admin/sites/:siteId/pages/:pageId`
+  - Deletes the page from the runtime adapter.
+
+Current sites/pages admin endpoints are intentionally local file-backed. Production completion still requires authenticated database persistence, RBAC, audit events, revisions, preview tokens, and cache invalidation.
+
+### 3.3 Media
 - `POST /api/admin/sites/:siteId/media`
   - multipart upload
   - query/body flags: `scope` (`global|page|post`), `scopeTargetId`, `visibility`
@@ -105,7 +143,7 @@ Public page payload should include:
 - `POST /api/admin/sites/:siteId/media/:mediaId/bind`
   - bind/unbind to page/post contexts.
 
-### 3.2 Forms
+### 3.4 Forms
 - `POST /api/admin/sites/:siteId/forms`
 - `GET /api/admin/sites/:siteId/forms`
 - `GET /api/admin/sites/:siteId/forms/:formId`
@@ -115,16 +153,12 @@ Public page payload should include:
 - `POST /api/admin/sites/:siteId/forms/:formId/submissions/:submissionId/review`
   - status transitions `pending|approved|rejected|spam`
 
-### 3.3 Comments
+### 3.5 Comments
 - `GET /api/admin/sites/:siteId/comments?targetType=page|post&status=`
 - `PATCH /api/admin/sites/:siteId/comments/:commentId`
 - `POST /api/admin/sites/:siteId/comments/:commentId/block-user`
 
-### 3.4 Pages and blog
-- `GET /api/admin/sites/:siteId/pages`
-- `GET /api/admin/sites/:siteId/pages/:pageId`
-- `POST /api/admin/sites/:siteId/pages`
-- `PATCH /api/admin/sites/:siteId/pages/:pageId`
+### 3.6 Publish, revisions, and blog
 - `POST /api/admin/sites/:siteId/pages/:pageId/publish`
 - `POST /api/admin/sites/:siteId/pages/:pageId/archive`
 - `POST /api/admin/sites/:siteId/pages/:pageId/rollback`

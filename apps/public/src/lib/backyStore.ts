@@ -695,7 +695,15 @@ const MEDIA_LIBRARY: MediaItem[] = [
 ];
 
 const MEDIA_CATALOG_PATH = join(process.cwd(), 'data', 'backy', 'media-library.json');
+const ADMIN_CONTENT_PATH = join(process.cwd(), 'data', 'backy', 'admin-content.json');
 let persistedMediaLoaded = false;
+let persistedAdminContentLoaded = false;
+
+interface AdminContentSnapshot {
+  sites?: StoreSite[];
+  pages?: StorePage[];
+  blogPosts?: StoreBlogPost[];
+}
 
 function ensurePersistedMediaLoaded() {
   if (persistedMediaLoaded) {
@@ -736,6 +744,56 @@ function persistRuntimeMediaCatalog() {
     writeFileSync(MEDIA_CATALOG_PATH, JSON.stringify(runtimeItems, null, 2));
   } catch (error) {
     console.error('Unable to persist media catalog:', error);
+  }
+}
+
+function ensurePersistedAdminContentLoaded() {
+  if (persistedAdminContentLoaded) {
+    return;
+  }
+
+  persistedAdminContentLoaded = true;
+
+  if (!existsSync(ADMIN_CONTENT_PATH)) {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(ADMIN_CONTENT_PATH, 'utf8')) as AdminContentSnapshot;
+
+    if (Array.isArray(parsed.sites)) {
+      SITE_LIST.splice(0, SITE_LIST.length, ...parsed.sites);
+    }
+
+    if (Array.isArray(parsed.pages)) {
+      PAGE_LIST.splice(0, PAGE_LIST.length, ...parsed.pages);
+    }
+
+    if (Array.isArray(parsed.blogPosts)) {
+      BLOG_POSTS.splice(0, BLOG_POSTS.length, ...parsed.blogPosts);
+    }
+  } catch (error) {
+    console.error('Unable to load persisted admin content:', error);
+  }
+}
+
+function persistAdminContent() {
+  try {
+    mkdirSync(dirname(ADMIN_CONTENT_PATH), { recursive: true });
+    writeFileSync(
+      ADMIN_CONTENT_PATH,
+      JSON.stringify(
+        {
+          sites: SITE_LIST,
+          pages: PAGE_LIST,
+          blogPosts: BLOG_POSTS,
+        } satisfies AdminContentSnapshot,
+        null,
+        2,
+      ),
+    );
+  } catch (error) {
+    console.error('Unable to persist admin content:', error);
   }
 }
 
@@ -1475,6 +1533,53 @@ function sanitizeString(value: unknown): string {
   return '';
 }
 
+function normalizeSlugInput(value: unknown, fallback = 'untitled'): string {
+  const raw = sanitizeString(value) || fallback;
+  const normalized = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return normalized || fallback;
+}
+
+function createRuntimeId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function toStringRecord(value: unknown): Record<string, string> {
+  return Object.entries(toRecord(value)).reduce<Record<string, string>>((acc, [key, entry]) => {
+    const parsed = sanitizeString(entry);
+    if (parsed) {
+      acc[key] = parsed;
+    }
+    return acc;
+  }, {});
+}
+
+function parseBooleanInput(value: unknown, fallback = false): boolean {
+  if (typeof value === 'boolean') return value;
+  const normalized = sanitizeString(value).toLowerCase();
+  if (normalized === 'true' || normalized === '1' || normalized === 'yes') return true;
+  if (normalized === 'false' || normalized === '0' || normalized === 'no') return false;
+  return fallback;
+}
+
+function parseStatusInput<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+  fallback: T,
+): T {
+  const normalized = sanitizeString(value).toLowerCase();
+  return allowed.includes(normalized as T) ? normalized as T : fallback;
+}
+
 function getValueAsString(values: Record<string, unknown>, key: string): string {
   return sanitizeString(values[key] || '');
 }
@@ -1923,12 +2028,16 @@ function parseShareValue(values: Record<string, unknown>, key?: string | null): 
 }
 
 export function getSites(params: { includeUnpublished?: boolean } = {}): StoreSite[] {
+  ensurePersistedAdminContentLoaded();
+
   const { includeUnpublished = false } = params;
   const raw = includeUnpublished ? SITE_LIST : SITE_LIST.filter((site) => site.isPublished);
   return clone(raw);
 }
 
 export function getSiteByIdOrSlug(identifier: string): StoreSite | undefined {
+  ensurePersistedAdminContentLoaded();
+
   const normalized = normalizeIdentifier(identifier);
   const found = SITE_LIST.find(
     (site) =>
@@ -1940,7 +2049,121 @@ export function getSiteByIdOrSlug(identifier: string): StoreSite | undefined {
   return found ? clone(found) : undefined;
 }
 
+export function createAdminSite(input: Record<string, unknown>): StoreSite {
+  ensurePersistedAdminContentLoaded();
+
+  const now = new Date().toISOString();
+  const name = sanitizeString(input.name) || 'Untitled site';
+  const slug = normalizeSlugInput(input.slug || name, 'site');
+  const status = parseStatusInput(input.status, ['draft', 'published', 'scheduled', 'archived'] as const, 'draft');
+
+  const site: StoreSite = {
+    id: sanitizeString(input.id) || createRuntimeId('site'),
+    name,
+    slug,
+    description: sanitizeString(input.description),
+    customDomain: sanitizeString(input.customDomain) || null,
+    status,
+    isPublished: status === 'published' || parseBooleanInput(input.isPublished, false),
+    theme: {
+      ...seedTheme,
+      ...toRecord(input.theme),
+      colors: {
+        ...seedTheme.colors,
+        ...toStringRecord(toRecord(input.theme).colors),
+      },
+      fonts: {
+        ...seedTheme.fonts,
+        ...toStringRecord(toRecord(input.theme).fonts),
+      },
+      customCSS: sanitizeString(toRecord(input.theme).customCSS) || seedTheme.customCSS,
+    },
+  };
+
+  SITE_LIST.unshift(site);
+  persistAdminContent();
+  return clone(site);
+}
+
+export function updateAdminSite(siteId: string, input: Record<string, unknown>): StoreSite | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = SITE_LIST.findIndex((site) => site.id === siteId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const current = SITE_LIST[index];
+  const nextStatus = input.status === undefined
+    ? current.status
+    : parseStatusInput(input.status, ['draft', 'published', 'scheduled', 'archived'] as const, current.status);
+  const themeInput = toRecord(input.theme);
+
+  const updated: StoreSite = {
+    ...current,
+    name: input.name === undefined ? current.name : sanitizeString(input.name) || current.name,
+    slug: input.slug === undefined ? current.slug : normalizeSlugInput(input.slug, current.slug),
+    description: input.description === undefined ? current.description : sanitizeString(input.description),
+    customDomain: input.customDomain === undefined
+      ? current.customDomain
+      : sanitizeString(input.customDomain) || null,
+    status: nextStatus,
+    isPublished: input.isPublished === undefined
+      ? nextStatus === 'published'
+      : parseBooleanInput(input.isPublished, nextStatus === 'published'),
+    theme: input.theme === undefined
+      ? current.theme
+      : {
+          ...current.theme,
+          ...themeInput,
+          colors: {
+            ...current.theme.colors,
+            ...toStringRecord(themeInput.colors),
+          },
+          fonts: {
+            ...current.theme.fonts,
+            ...toStringRecord(themeInput.fonts),
+          },
+          customCSS: themeInput.customCSS === undefined
+            ? current.theme.customCSS
+            : sanitizeString(themeInput.customCSS),
+        },
+  };
+
+  SITE_LIST[index] = updated;
+  persistAdminContent();
+  return clone(updated);
+}
+
+export function deleteAdminSite(siteId: string): boolean {
+  ensurePersistedAdminContentLoaded();
+
+  const index = SITE_LIST.findIndex((site) => site.id === siteId);
+  if (index === -1) {
+    return false;
+  }
+
+  SITE_LIST.splice(index, 1);
+
+  for (let pageIndex = PAGE_LIST.length - 1; pageIndex >= 0; pageIndex -= 1) {
+    if (PAGE_LIST[pageIndex].siteId === siteId) {
+      PAGE_LIST.splice(pageIndex, 1);
+    }
+  }
+
+  for (let postIndex = BLOG_POSTS.length - 1; postIndex >= 0; postIndex -= 1) {
+    if (BLOG_POSTS[postIndex].siteId === siteId) {
+      BLOG_POSTS.splice(postIndex, 1);
+    }
+  }
+
+  persistAdminContent();
+  return true;
+}
+
 export function getPageSummary(siteId: string, options: { includeUnpublished?: boolean } = {}): Omit<StorePage, 'content'>[] {
+  ensurePersistedAdminContentLoaded();
+
   const { includeUnpublished = false } = options;
   const pages = PAGE_LIST.filter(
     (page) => page.siteId === siteId && (includeUnpublished || isPublished(page.status)),
@@ -1956,6 +2179,8 @@ export function getPageBySlug(
   slug: string,
   options: { includeUnpublished?: boolean } = {},
 ): StorePage | undefined {
+  ensurePersistedAdminContentLoaded();
+
   const normalizedSlug = normalizeIdentifier(slug || 'index');
   const { includeUnpublished = false } = options;
 
@@ -1979,12 +2204,153 @@ export function getPageByPath(
   path: string,
   options: { includeUnpublished?: boolean } = {},
 ): StorePage | undefined {
+  ensurePersistedAdminContentLoaded();
+
   const normalizedPath = normalizeIdentifier((path || 'index').replace(/^\/+|\/+$/g, ''));
   const canonicalPath = normalizedPath === '' || normalizedPath === 'index' || normalizedPath === 'home'
     ? 'index'
     : normalizedPath;
 
   return getPageBySlug(siteId, canonicalPath, options);
+}
+
+export function getAdminPageById(siteId: string, pageId: string): StorePage | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const page = PAGE_LIST.find((item) => item.siteId === siteId && item.id === pageId);
+  return page ? clone(page) : undefined;
+}
+
+export function createAdminPage(siteId: string, input: Record<string, unknown>): StorePage {
+  ensurePersistedAdminContentLoaded();
+
+  const now = new Date().toISOString();
+  const title = sanitizeString(input.title) || 'Untitled page';
+  const slug = normalizeSlugInput(input.slug || title, 'page');
+  const status = parseStatusInput(input.status, ['draft', 'published', 'scheduled', 'archived'] as const, 'draft');
+  const metaInput = toRecord(input.meta);
+  const contentInput = toRecord(input.content);
+  const canvasSizeInput = toRecord(contentInput.canvasSize);
+
+  const page: StorePage = {
+    id: sanitizeString(input.id) || createRuntimeId('page'),
+    siteId,
+    title,
+    slug,
+    description: sanitizeString(input.description) || sanitizeString(metaInput.description) || null,
+    status,
+    isHomepage: parseBooleanInput(input.isHomepage, false),
+    content: {
+      elements: Array.isArray(contentInput.elements) ? contentInput.elements as CanvasElement[] : [],
+      canvasSize: {
+        width: Number(canvasSizeInput.width) || 1200,
+        height: Number(canvasSizeInput.height) || 900,
+      },
+      customCSS: sanitizeString(contentInput.customCSS),
+      customJS: sanitizeString(contentInput.customJS),
+    },
+    meta: {
+      title: sanitizeString(metaInput.title) || title,
+      description: sanitizeString(metaInput.description) || sanitizeString(input.description),
+      keywords: Array.isArray(metaInput.keywords) ? metaInput.keywords.map(sanitizeString).filter(Boolean) : undefined,
+      ogImage: sanitizeString(metaInput.ogImage) || null,
+      canonical: sanitizeString(metaInput.canonical) || `/${slug}`,
+      noIndex: parseBooleanInput(metaInput.noIndex, status !== 'published'),
+      noFollow: parseBooleanInput(metaInput.noFollow, false),
+    },
+    forms: Array.isArray(input.forms) ? input.forms.map(sanitizeString).filter(Boolean) : [],
+    createdAt: now,
+    updatedAt: now,
+    publishedAt: status === 'published' ? now : null,
+    scheduledAt: sanitizeString(input.scheduledAt) || null,
+  };
+
+  PAGE_LIST.unshift(page);
+  persistAdminContent();
+  return clone(page);
+}
+
+export function updateAdminPage(
+  siteId: string,
+  pageId: string,
+  input: Record<string, unknown>,
+): StorePage | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = PAGE_LIST.findIndex((page) => page.siteId === siteId && page.id === pageId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const current = PAGE_LIST[index];
+  const now = new Date().toISOString();
+  const status = input.status === undefined
+    ? current.status
+    : parseStatusInput(input.status, ['draft', 'published', 'scheduled', 'archived'] as const, current.status);
+  const metaInput = toRecord(input.meta);
+  const contentInput = toRecord(input.content);
+  const canvasSizeInput = toRecord(contentInput.canvasSize);
+
+  const updated: StorePage = {
+    ...current,
+    title: input.title === undefined ? current.title : sanitizeString(input.title) || current.title,
+    slug: input.slug === undefined ? current.slug : normalizeSlugInput(input.slug, current.slug),
+    description: input.description === undefined ? current.description : sanitizeString(input.description) || null,
+    status,
+    isHomepage: input.isHomepage === undefined ? current.isHomepage : parseBooleanInput(input.isHomepage, current.isHomepage),
+    content: input.content === undefined
+      ? current.content
+      : {
+          elements: Array.isArray(contentInput.elements) ? contentInput.elements as CanvasElement[] : current.content.elements,
+          canvasSize: {
+            width: Number(canvasSizeInput.width) || current.content.canvasSize.width,
+            height: Number(canvasSizeInput.height) || current.content.canvasSize.height,
+          },
+          customCSS: contentInput.customCSS === undefined
+            ? current.content.customCSS
+            : sanitizeString(contentInput.customCSS),
+          customJS: contentInput.customJS === undefined
+            ? current.content.customJS
+            : sanitizeString(contentInput.customJS),
+        },
+    meta: input.meta === undefined
+      ? current.meta
+      : {
+          ...current.meta,
+          title: metaInput.title === undefined ? current.meta.title : sanitizeString(metaInput.title),
+          description: metaInput.description === undefined
+            ? current.meta.description
+            : sanitizeString(metaInput.description),
+          keywords: Array.isArray(metaInput.keywords)
+            ? metaInput.keywords.map(sanitizeString).filter(Boolean)
+            : current.meta.keywords,
+          ogImage: metaInput.ogImage === undefined ? current.meta.ogImage : sanitizeString(metaInput.ogImage) || null,
+          canonical: metaInput.canonical === undefined ? current.meta.canonical : sanitizeString(metaInput.canonical),
+          noIndex: metaInput.noIndex === undefined ? current.meta.noIndex : parseBooleanInput(metaInput.noIndex, false),
+          noFollow: metaInput.noFollow === undefined ? current.meta.noFollow : parseBooleanInput(metaInput.noFollow, false),
+        },
+    forms: Array.isArray(input.forms) ? input.forms.map(sanitizeString).filter(Boolean) : current.forms,
+    updatedAt: now,
+    publishedAt: status === 'published' && !current.publishedAt ? now : current.publishedAt,
+    scheduledAt: input.scheduledAt === undefined ? current.scheduledAt : sanitizeString(input.scheduledAt) || null,
+  };
+
+  PAGE_LIST[index] = updated;
+  persistAdminContent();
+  return clone(updated);
+}
+
+export function deleteAdminPage(siteId: string, pageId: string): boolean {
+  ensurePersistedAdminContentLoaded();
+
+  const index = PAGE_LIST.findIndex((page) => page.siteId === siteId && page.id === pageId);
+  if (index === -1) {
+    return false;
+  }
+
+  PAGE_LIST.splice(index, 1);
+  persistAdminContent();
+  return true;
 }
 
 export function getBlogPosts(
@@ -2004,6 +2370,8 @@ export function getBlogPosts(
     offset = 0,
     includeUnpublished = false,
   } = params;
+
+  ensurePersistedAdminContentLoaded();
 
   let posts = BLOG_POSTS.filter((post) => post.siteId === siteId);
 
