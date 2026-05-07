@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { validateAiRenderPayload } from './validate-ai-render-payload.mjs';
+
 const baseUrl = (process.env.BACKY_PUBLIC_CONTRACT_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
 
 const checks = [];
@@ -255,6 +257,7 @@ try {
 
     const renderPayload = await request(`/api/sites/${createdSiteId}/render?path=/${pageSlug}`);
     assert(renderPayload.response.status === 200, `${renderPayload.url} expected 200, got ${renderPayload.response.status}`);
+    validateAiRenderPayload(renderPayload.json, 'page render payload');
     assert(
       renderPayload.json?.data?.navigation?.primary?.some((item) => item.pageId === createdPageId && item.path === `/${pageSlug}`),
       `${renderPayload.url} missing render navigation manifest`,
@@ -465,6 +468,7 @@ try {
 
     const visibleScheduledPostRender = await request(`/api/sites/${createdSiteId}/render?path=/blog/${postSlug}`);
     assert(visibleScheduledPostRender.response.status === 200, `${visibleScheduledPostRender.url} expected past scheduled post render to be visible`);
+    validateAiRenderPayload(visibleScheduledPostRender.json, 'scheduled post render payload');
     assert(visibleScheduledPostRender.json?.data?.content?.kind === 'post', `${visibleScheduledPostRender.url} expected post render content`);
     assert(visibleScheduledPostRender.json?.data?.content?.id === createdPostId, `${visibleScheduledPostRender.url} returned wrong rendered post`);
 
@@ -487,6 +491,7 @@ try {
 
     const renderedPost = await request(`/api/sites/${createdSiteId}/render?path=/blog/${postSlug}`);
     assert(renderedPost.response.status === 200, `${renderedPost.url} expected 200, got ${renderedPost.response.status}`);
+    validateAiRenderPayload(renderedPost.json, 'post render payload');
     assert(renderedPost.json?.success === true, `${renderedPost.url} expected success envelope`);
     assert(renderedPost.json?.data?.route?.type === 'post', `${renderedPost.url} expected post render route`);
     assert(renderedPost.json?.data?.content?.kind === 'post', `${renderedPost.url} expected post content kind`);

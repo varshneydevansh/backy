@@ -51,6 +51,8 @@ The first implementation-backed endpoint is:
 
 It returns the `content-payload.schema.json` shape for pages and blog posts from the current public data adapter. This is not yet the final durable database-backed service, but it gives external frontends and AI-generated frontends a stable payload target while Backy replaces seeded/mock persistence.
 
+`npm run test:admin-contract --workspace @backy/public` validates the page and blog post render responses against `content-payload.schema.json` so contract drift is caught during the public API smoke pass.
+
 ## Required payload shape
 
 Backy should expose one public render payload:
