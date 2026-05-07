@@ -98,6 +98,7 @@ interface AppState {
     updateSite: (id: string, updates: Partial<Site>) => void;
     deleteSite: (id: string) => void;
 
+    setPages: (pages: Page[]) => void;
     addPage: (page: Omit<Page, 'id' | 'lastUpdated'>) => void;
     deletePage: (id: string) => void;
 
@@ -279,6 +280,8 @@ export const useStore = create<AppState>()(
             })),
 
             // Page Actions
+            setPages: (pages) => set({ pages }),
+
             addPage: (page) => set((state) => ({
                 pages: [{
                     ...page,

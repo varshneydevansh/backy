@@ -1,4 +1,4 @@
-import type { Site } from '@/stores/mockStore';
+import type { Page, Site } from '@/stores/mockStore';
 
 type AdminSiteStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 
@@ -34,6 +34,39 @@ interface ApiSiteResponse {
   };
 }
 
+interface ApiPage {
+  id: string;
+  siteId: string;
+  title: string;
+  slug: string;
+  description?: string | null;
+  status?: AdminSiteStatus;
+  content?: unknown;
+  meta?: Record<string, unknown>;
+  updatedAt?: string;
+  createdAt?: string;
+}
+
+interface ApiListPagesResponse {
+  success: boolean;
+  data?: {
+    pages: ApiPage[];
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiPageResponse {
+  success: boolean;
+  data?: {
+    page: ApiPage;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiDeleteResponse {
   success: boolean;
   data?: {
@@ -51,6 +84,16 @@ export interface SiteCreateInput {
   description?: string;
   customDomain?: string | null;
   status?: Site['status'];
+}
+
+export interface PageCreateInput {
+  title: string;
+  slug: string;
+  status?: Page['status'];
+  description?: string;
+  template?: string;
+  meta?: Record<string, unknown>;
+  content?: unknown;
 }
 
 const getEnvValue = (key: string): string => {
@@ -92,6 +135,20 @@ const toStoreSite = (site: ApiSite): Site => ({
   publicSiteId: site.id,
   pageCount: 0,
   lastUpdated: site.updatedAt || site.createdAt || new Date().toISOString(),
+});
+
+const toStorePage = (page: ApiPage): Page => ({
+  id: page.id,
+  siteId: page.siteId,
+  title: page.title,
+  slug: page.slug,
+  status: toAdminSiteStatus(page.status, page.status === 'published') === 'published' ? 'published' : 'draft',
+  content: page.content ? JSON.stringify(page.content) : undefined,
+  meta: page.meta || {
+    title: page.title,
+    description: page.description || '',
+  },
+  lastUpdated: page.updatedAt || page.createdAt || new Date().toISOString(),
 });
 
 const readJson = async <T>(response: Response): Promise<T> => {
@@ -141,5 +198,44 @@ export async function deleteSite(siteId: string): Promise<void> {
 
   if (!response.ok || !payload.success || !payload.data?.deleted) {
     throw new Error(payload.error?.message || 'Unable to delete site');
+  }
+}
+
+export async function listPages(siteId: string): Promise<Page[]> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages?includeUnpublished=true`);
+  const payload = await readJson<ApiListPagesResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load pages');
+  }
+
+  return payload.data.pages.map(toStorePage);
+}
+
+export async function createPage(siteId: string, input: PageCreateInput): Promise<Page> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiPageResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to create page');
+  }
+
+  return toStorePage(payload.data.page);
+}
+
+export async function deletePage(siteId: string, pageId: string): Promise<void> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}`, {
+    method: 'DELETE',
+  });
+  const payload = await readJson<ApiDeleteResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.deleted) {
+    throw new Error(payload.error?.message || 'Unable to delete page');
   }
 }

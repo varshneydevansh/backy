@@ -6,8 +6,10 @@
  * - At /pages/new or /pages/:id/edit: renders child via <Outlet />
  */
 
+import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
 import { Plus, Layout, Edit, Trash2, Home } from 'lucide-react';
+import { deletePage as deletePageFromApi, listPages } from '@/lib/adminContentApi';
 import { useStore, type Page } from '@/stores/mockStore';
 import { useDataTable, type Column } from '@/hooks/useDataTable';
 import { PageShell } from '@/components/layout/PageShell';
@@ -39,7 +41,58 @@ function PagesLayout() {
 
 function PagesListView() {
   const navigate = useNavigate();
-  const { pages, deletePage } = useStore();
+  const { sites, pages, setPages, deletePage } = useStore();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const activeSiteId = useMemo(
+    () => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo',
+    [sites],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPages = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const backendPages = await listPages(activeSiteId);
+        if (!cancelled) {
+          setPages(backendPages);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : 'Unable to load pages');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadPages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSiteId, setPages]);
+
+  const handleDeletePage = async (page: Page) => {
+    if (!confirm('Delete page?')) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await deletePageFromApi(page.siteId || activeSiteId, page.id);
+      deletePage(page.id);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete page');
+    }
+  };
 
   const columns: Column<Page>[] = [
     {
@@ -87,7 +140,7 @@ function PagesListView() {
           </button>
           <button
             onClick={() => {
-              if (confirm('Delete page?')) deletePage(page.id);
+              void handleDeletePage(page);
             }}
             className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
           >
@@ -128,6 +181,18 @@ function PagesListView() {
         </Link>
       }
     >
+      {error && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {error}
+        </div>
+      )}
+
+      {isLoading && (
+        <div className="mb-4 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          Loading pages from backend...
+        </div>
+      )}
+
       <div className="flex items-center gap-4 mb-6">
         <div className="relative flex-1 max-w-sm">
           <input

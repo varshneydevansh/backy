@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, Save, Layout, Globe } from 'lucide-react';
+import { createPage } from '@/lib/adminContentApi';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { cn } from '@/lib/utils';
@@ -15,14 +16,15 @@ export const Route = createFileRoute('/pages/new')({
 
 function NewPageRoute() {
     const navigate = useNavigate();
-    const { sites, addPage } = useStore();
+    const { sites, pages, addPage, setPages } = useStore();
     const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     // Default to first site if available
     const [formData, setFormData] = useState({
         title: '',
         slug: '',
-        siteId: sites[0]?.id || '',
+        siteId: sites[0]?.publicSiteId || sites[0]?.id || 'site-demo',
         template: 'blank',
         status: 'draft' as const,
     });
@@ -30,16 +32,30 @@ function NewPageRoute() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
-        await new Promise(resolve => setTimeout(resolve, 800));
+        setError(null);
 
-        addPage({
+        const input = {
             title: formData.title,
             slug: formData.slug,
             siteId: formData.siteId,
             status: formData.status,
-        });
+            template: formData.template,
+            meta: {
+                title: formData.title,
+                description: '',
+            },
+        };
 
-        navigate({ to: '/pages' });
+        try {
+            const created = await createPage(formData.siteId, input);
+            setPages([created, ...pages.filter((page) => page.id !== created.id)]);
+            navigate({ to: '/pages' });
+        } catch (createError) {
+            setError(createError instanceof Error ? createError.message : 'Unable to create page');
+            addPage(input);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -53,6 +69,12 @@ function NewPageRoute() {
             }
         >
             <div className="max-w-2xl mx-auto">
+                {error && (
+                    <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        {error}. A local draft copy was kept in this browser.
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="bg-card border border-border rounded-xl p-6 space-y-6 shadow-sm">
 
@@ -69,7 +91,7 @@ function NewPageRoute() {
                                 >
                                     <option value="" disabled>Select a site...</option>
                                     {sites.map(site => (
-                                        <option key={site.id} value={site.id}>{site.name}</option>
+                                        <option key={site.id} value={site.publicSiteId || site.id}>{site.name}</option>
                                     ))}
                                 </select>
                             </div>
