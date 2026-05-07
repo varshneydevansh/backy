@@ -72,7 +72,7 @@ The manifest advertises a site-scoped OpenAPI export at `GET /api/sites/:siteId/
 
 ## JavaScript SDK starter
 
-`packages/sdk-js` provides the current TypeScript client for custom frontends. It uses only public Backy APIs and exposes helpers for site discovery, manifest/OpenAPI bootstrap, route resolution, render payloads, navigation, media, collections/records, forms/submissions/contacts, comments/reports, and interaction events. The smoke command `npm run test:smoke --workspace @backy/sdk-js` builds confidence that a frontend can consume the public API surface without importing admin/editor code.
+`packages/sdk-js` provides the current TypeScript client for custom frontends. It uses only public Backy APIs and exposes helpers for site discovery, manifest/OpenAPI bootstrap, route resolution, render payloads, navigation, media, collections/records, forms/submissions/contacts, comments/reports, and interaction events. The smoke command `npm run test:smoke --workspace @backy/sdk-js` validates read flows plus SDK public writes for collection records, form submissions, form contacts, page comments, comment moderation, comment reports, and interaction events against a temporary site, building confidence that a frontend can consume the public API surface without importing admin/editor code.
 
 ## Current font asset contract
 

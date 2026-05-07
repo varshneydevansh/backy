@@ -55,15 +55,19 @@ export interface BackyFormSubmissionInput {
   postId?: string;
   honeypot?: string;
   startedAt?: string | number;
+  rateLimitBypass?: boolean;
   contactShareOverride?: unknown;
 }
 
 export interface BackyCommentInput {
+  content?: string;
+  body?: string;
   authorName: string;
   authorEmail?: string;
-  body: string;
   requestId?: string;
   parentId?: string;
+  moderationMode?: 'manual' | 'auto-approve';
+  rateLimitBypass?: boolean;
 }
 
 export interface BackyCommentListOptions extends BackyListOptions {
@@ -284,7 +288,7 @@ export class BackyClient {
   submitPageComment(pageId: string, input: BackyCommentInput): Promise<BackyEnvelope<Record<string, unknown>>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments`, {
       method: 'POST',
-      body: input,
+      body: normalizeCommentInput(input),
       requestId: input.requestId,
     });
   }
@@ -311,7 +315,7 @@ export class BackyClient {
   submitBlogComment(postId: string, input: BackyCommentInput): Promise<BackyEnvelope<Record<string, unknown>>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/blog/${encodeURIComponent(postId)}/comments`, {
       method: 'POST',
-      body: input,
+      body: normalizeCommentInput(input),
       requestId: input.requestId,
     });
   }
@@ -457,4 +461,12 @@ function isBackyErrorEnvelope(value: unknown): value is BackyErrorEnvelope {
     typeof (value as { error?: { code?: unknown; message?: unknown } }).error?.code === 'string' &&
     typeof (value as { error?: { code?: unknown; message?: unknown } }).error?.message === 'string',
   );
+}
+
+function normalizeCommentInput(input: BackyCommentInput): Record<string, unknown> {
+  const { body, content, ...rest } = input;
+  return {
+    ...rest,
+    content: content ?? body ?? '',
+  };
 }

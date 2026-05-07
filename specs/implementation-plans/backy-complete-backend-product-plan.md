@@ -328,7 +328,7 @@ The next implementation should not start by adding more UI screens. The product 
 - **Current progress**:
   - `packages/sdk-js` exposes a TypeScript public API client for site discovery, manifest/OpenAPI bootstrap, resolve, render, navigation, media, collection records, forms/submissions/contacts, comments/reports, and interaction events.
 - **Validation**:
-  - SDK smoke test against local public app.
+  - SDK smoke test against local public app, including temporary-site public write coverage for collection records, forms, contacts, comments, reports, and events.
   - Public contract smoke verifies that the site manifest advertises the same interaction endpoint templates that the site-scoped OpenAPI document exposes.
 
 ## Sprint 5: Media, Fonts, Files, Video, and Audio Management

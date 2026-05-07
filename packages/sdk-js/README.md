@@ -22,3 +22,4 @@ npm run test:smoke --workspace @backy/sdk-js
 ```
 
 `test:smoke` expects a running Backy public app at `http://localhost:3001` unless `BACKY_SDK_BASE_URL` is set.
+By default it also creates and deletes a temporary site through the local admin API so it can verify SDK public writes for collection records, forms, contacts, comments, reports, and events. Set `BACKY_SDK_SKIP_WRITE_SMOKE=1` to run the read-only smoke against an environment where admin fixture setup is unavailable.
