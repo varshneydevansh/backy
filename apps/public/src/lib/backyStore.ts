@@ -886,11 +886,15 @@ function persistRuntimeMediaCatalog() {
 
 function ensurePersistedAdminContentLoaded() {
   if (persistedAdminContentLoaded) {
+    refreshPersistedAdminContent();
     return;
   }
 
   persistedAdminContentLoaded = true;
+  refreshPersistedAdminContent();
+}
 
+function refreshPersistedAdminContent() {
   if (!existsSync(ADMIN_CONTENT_PATH)) {
     return;
   }

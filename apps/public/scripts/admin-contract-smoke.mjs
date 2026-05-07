@@ -3,6 +3,9 @@
 const baseUrl = (process.env.BACKY_PUBLIC_CONTRACT_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
 
 const checks = [];
+let createdSiteId = null;
+let createdPageId = null;
+let createdPostId = null;
 let createdUserId = null;
 let originalDeliveryMode = null;
 
@@ -39,6 +42,18 @@ async function record(name, fn) {
 }
 
 async function cleanup() {
+  if (createdSiteId && createdPostId) {
+    await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (createdSiteId && createdPageId) {
+    await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (createdSiteId) {
+    await request(`/api/admin/sites/${createdSiteId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
   if (createdUserId) {
     await request(`/api/admin/users/${createdUserId}`, { method: 'DELETE' }).catch(() => {});
   }
@@ -55,6 +70,177 @@ async function cleanup() {
 }
 
 try {
+  const unique = Date.now();
+  const siteSlug = `admin-contract-site-${unique}`;
+  const pageSlug = `admin-contract-page-${unique}`;
+  const postSlug = `admin-contract-post-${unique}`;
+
+  await record('admin sites list returns success envelope', async () => {
+    const { response, json, url } = await request('/api/admin/sites?includeUnpublished=true');
+    assert(response.status === 200, `${url} expected 200, got ${response.status}`);
+    assert(json?.success === true, `${url} expected success envelope`);
+    assert(Array.isArray(json?.data?.sites), `${url} expected sites array`);
+  });
+
+  await record('admin sites create validates and persists site', async () => {
+    const { response, json, url } = await request('/api/admin/sites', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Admin Contract Site',
+        slug: siteSlug,
+        description: 'Temporary contract smoke site',
+        status: 'draft',
+      }),
+    });
+
+    assert(response.status === 201, `${url} expected 201, got ${response.status}`);
+    assert(json?.success === true, `${url} expected success envelope`);
+    assert(json?.data?.site?.slug === siteSlug, `${url} returned wrong site slug`);
+    assert(json?.data?.site?.status === 'draft', `${url} returned wrong site status`);
+    createdSiteId = json.data.site.id;
+  });
+
+  await record('admin sites duplicate slug is rejected', async () => {
+    const { response, json, url } = await request('/api/admin/sites', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Duplicate Admin Contract Site',
+        slug: siteSlug,
+      }),
+    });
+
+    assert(response.status === 409, `${url} expected 409, got ${response.status}`);
+    assert(json?.success === false, `${url} expected error envelope`);
+    assert(json?.error?.code === 'SLUG_CONFLICT', `${url} expected SLUG_CONFLICT`);
+  });
+
+  await record('admin sites detail and update return edited site', async () => {
+    const detail = await request(`/api/admin/sites/${createdSiteId}`);
+    assert(detail.response.status === 200, `${detail.url} expected 200, got ${detail.response.status}`);
+    assert(detail.json?.data?.site?.id === createdSiteId, `${detail.url} returned wrong site`);
+
+    const update = await request(`/api/admin/sites/${createdSiteId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        description: 'Updated contract smoke site',
+        status: 'published',
+      }),
+    });
+
+    assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
+    assert(update.json?.success === true, `${update.url} expected success envelope`);
+    assert(update.json?.data?.site?.status === 'published', `${update.url} expected published status`);
+    assert(update.json?.data?.site?.description === 'Updated contract smoke site', `${update.url} expected updated description`);
+  });
+
+  await record('admin pages create/list/detail/update/delete works for temporary site', async () => {
+    const create = await request(`/api/admin/sites/${createdSiteId}/pages`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Admin Contract Page',
+        slug: pageSlug,
+        status: 'draft',
+        content: {
+          elements: [],
+          canvasSize: { width: 1200, height: 900 },
+        },
+      }),
+    });
+    assert(create.response.status === 201, `${create.url} expected 201, got ${create.response.status}`);
+    assert(create.json?.data?.page?.slug === pageSlug, `${create.url} returned wrong page slug`);
+    createdPageId = create.json.data.page.id;
+
+    const list = await request(`/api/admin/sites/${createdSiteId}/pages?includeUnpublished=true`);
+    assert(list.response.status === 200, `${list.url} expected 200, got ${list.response.status}`);
+    assert(list.json?.data?.pages?.some((page) => page.id === createdPageId), `${list.url} missing created page`);
+
+    const detail = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`);
+    assert(detail.response.status === 200, `${detail.url} expected 200, got ${detail.response.status}`);
+    assert(detail.json?.data?.page?.id === createdPageId, `${detail.url} returned wrong page`);
+
+    const update = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ title: 'Updated Admin Contract Page', status: 'published' }),
+    });
+    assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
+    assert(update.json?.data?.page?.title === 'Updated Admin Contract Page', `${update.url} expected updated title`);
+    assert(update.json?.data?.page?.status === 'published', `${update.url} expected published status`);
+
+    const remove = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, { method: 'DELETE' });
+    assert(remove.response.status === 200, `${remove.url} expected 200, got ${remove.response.status}`);
+    assert(remove.json?.data?.deleted === true, `${remove.url} expected deleted true`);
+    createdPageId = null;
+  });
+
+  await record('admin blog create/list/detail/update/delete works for temporary site', async () => {
+    const create = await request(`/api/admin/sites/${createdSiteId}/blog`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Admin Contract Post',
+        slug: postSlug,
+        excerpt: 'Temporary contract smoke post',
+        status: 'draft',
+        content: {
+          elements: [],
+          canvasSize: { width: 900, height: 720 },
+        },
+      }),
+    });
+    assert(create.response.status === 201, `${create.url} expected 201, got ${create.response.status}`);
+    assert(create.json?.data?.post?.slug === postSlug, `${create.url} returned wrong post slug`);
+    createdPostId = create.json.data.post.id;
+
+    const list = await request(`/api/admin/sites/${createdSiteId}/blog?status=draft`);
+    assert(list.response.status === 200, `${list.url} expected 200, got ${list.response.status}`);
+    assert(list.json?.data?.posts?.some((post) => post.id === createdPostId), `${list.url} missing created post`);
+
+    const detail = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`);
+    assert(detail.response.status === 200, `${detail.url} expected 200, got ${detail.response.status}`);
+    assert(detail.json?.data?.post?.id === createdPostId, `${detail.url} returned wrong post`);
+
+    const update = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ title: 'Updated Admin Contract Post', status: 'published' }),
+    });
+    assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
+    assert(update.json?.data?.post?.title === 'Updated Admin Contract Post', `${update.url} expected updated title`);
+    assert(update.json?.data?.post?.status === 'published', `${update.url} expected published status`);
+
+    const remove = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, { method: 'DELETE' });
+    assert(remove.response.status === 200, `${remove.url} expected 200, got ${remove.response.status}`);
+    assert(remove.json?.data?.deleted === true, `${remove.url} expected deleted true`);
+    createdPostId = null;
+  });
+
+  await record('admin sites delete removes temporary site', async () => {
+    const { response, json, url } = await request(`/api/admin/sites/${createdSiteId}`, { method: 'DELETE' });
+    assert(response.status === 200, `${url} expected 200, got ${response.status}`);
+    assert(json?.success === true, `${url} expected success envelope`);
+    assert(json?.data?.deleted === true, `${url} expected deleted true`);
+    createdSiteId = null;
+  });
+
   await record('admin users list returns success envelope', async () => {
     const { response, json, url } = await request('/api/admin/users');
     assert(response.status === 200, `${url} expected 200, got ${response.status}`);
