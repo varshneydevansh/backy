@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSiteByIdOrSlug, listAuditEvents } from '@/lib/backyStore';
+import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import type { BackyAuditLogEntry } from '@backy-cms/core';
 
 interface RouteParams {
   params: Promise<{
@@ -55,16 +58,37 @@ function parseTextInput(raw: string | null): string {
   return raw ? raw.trim() : '';
 }
 
+function metadataText(event: BackyAuditLogEntry, key: string): string | null {
+  const value = event.metadata?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function auditLogToPublicEvent(event: BackyAuditLogEntry) {
+  return {
+    id: event.id,
+    siteId: event.siteId || '',
+    kind: event.action,
+    formId: metadataText(event, 'formId'),
+    commentId: event.entity === 'comment' ? event.entityId : metadataText(event, 'commentId'),
+    contactId: event.entity === 'contact' ? event.entityId : metadataText(event, 'contactId'),
+    submissionId: event.entity === 'formSubmission' ? event.entityId : metadataText(event, 'submissionId'),
+    target: metadataText(event, 'target') || `${event.entity}:${event.entityId}`,
+    status: metadataText(event, 'status') || 'succeeded',
+    statusCode: typeof event.metadata?.statusCode === 'number' ? event.metadata.statusCode : undefined,
+    requestId: event.requestId,
+    reason: metadataText(event, 'reason'),
+    actor: event.actorId || metadataText(event, 'actor'),
+    metadata: event.metadata || {},
+    error: metadataText(event, 'error') || undefined,
+    createdAt: event.createdAt,
+  };
+}
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const responseRequestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { siteId } = await params;
-    const site = getSiteByIdOrSlug(siteId);
-    if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
-    }
-
     const { searchParams } = new URL(request.url);
     const kind = parseKind(searchParams.get('kind'));
     const requestId = parseTextInput(searchParams.get('requestId'));
@@ -73,6 +97,53 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const contactId = parseTextInput(searchParams.get('contactId'));
     const limit = parseLimit(searchParams.get('limit'));
     const offset = parseOffset(searchParams.get('offset'));
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
+      }
+
+      const result = await repositories.auditLogs.list({
+        siteId: site.id,
+        action: kind === 'all' ? undefined : kind,
+        requestId: requestId || undefined,
+        limit,
+        offset,
+      });
+      const events = result.items
+        .map(auditLogToPublicEvent)
+        .filter((event) => formId ? event.formId === formId : true)
+        .filter((event) => commentId ? event.commentId === commentId : true)
+        .filter((event) => contactId ? event.contactId === contactId : true);
+
+      return NextResponse.json({
+        success: true,
+        requestId: responseRequestId,
+        data: {
+          siteId: site.id,
+          events,
+          count: events.length,
+          pagination: {
+            ...result.pagination,
+            total: events.length,
+          },
+        },
+        siteId: site.id,
+        events,
+        count: events.length,
+        pagination: {
+          ...result.pagination,
+          total: events.length,
+        },
+      });
+    }
+
+    const site = getSiteByIdOrSlug(siteId);
+    if (!site) {
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
+    }
 
     const result = listAuditEvents(site.id, {
       kind,

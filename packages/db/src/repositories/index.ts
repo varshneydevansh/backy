@@ -1,4 +1,7 @@
 export {
+    createAuditLogRepository,
+} from './audit-logs';
+export {
     createCollectionRepository,
 } from './collections';
 export {

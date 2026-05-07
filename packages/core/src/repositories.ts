@@ -497,6 +497,7 @@ export interface BackyAuditLogListInput extends BackyPaginationInput {
   entity?: BackyRepositoryEntity;
   entityId?: string;
   action?: string;
+  requestId?: string;
 }
 
 export interface BackySiteRepository {

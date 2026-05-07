@@ -8,7 +8,10 @@ import {
   getSiteByIdOrSlug,
   validateAndClassifyComment,
 } from '@/lib/backyStore';
-import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
+import {
+  recordRepositoryInteractionEvent,
+  resolveRepositorySite,
+} from '@/lib/commentRepositorySupport';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -408,6 +411,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ipHash,
         status: classification.status,
       })).item;
+      await recordRepositoryInteractionEvent(repositories, {
+        kind: 'comment-submitted',
+        siteId: comment.siteId,
+        commentId: comment.id,
+        target: `comment:${comment.id}`,
+        status: 'succeeded',
+        requestId: comment.requestId,
+        reason: comment.status,
+        metadata: {
+          targetType: comment.targetType,
+          targetId: comment.targetId,
+          status: comment.status,
+          parentId: comment.parentId,
+          hasAuthorEmail: Boolean(comment.authorEmail),
+          hasAuthorWebsite: Boolean(comment.authorWebsite),
+        },
+      });
 
       return NextResponse.json(
         {

@@ -2,6 +2,7 @@
 
 import { createBackyContentDocument } from '../../core/dist/index.mjs';
 import {
+  createAuditLogRepository,
   createCollectionRepository,
   createCommentRepository,
   createDatabaseRepositories,
@@ -14,6 +15,7 @@ import {
 } from '../dist/index.js';
 import {
   blogPosts,
+  activityLogs,
   comments,
   contentCollectionRecords,
   contentCollections,
@@ -33,6 +35,7 @@ const assert = (condition, message) => {
 };
 
 const tableName = (table) => {
+  if (table === activityLogs) return 'activityLogs';
   if (table === sites) return 'sites';
   if (table === pages) return 'pages';
   if (table === blogPosts) return 'blogPosts';
@@ -49,6 +52,7 @@ const tableName = (table) => {
 
 const createFakeDb = () => {
   const state = {
+    activityLogs: [],
     sites: [],
     pages: [],
     blogPosts: [],
@@ -62,6 +66,7 @@ const createFakeDb = () => {
     mediaFolders: [],
   };
   const counters = {
+    activityLogs: 0,
     sites: 0,
     pages: 0,
     blogPosts: 0,
@@ -290,6 +295,21 @@ const createFakeDb = () => {
         ...values,
       };
     }
+    if (name === 'activityLogs') {
+      return {
+        id: nextId(name),
+        siteId: null,
+        userId: null,
+        action: 'create',
+        entityType: 'auditLog',
+        entityId: null,
+        details: {},
+        ipAddress: null,
+        userAgent: null,
+        createdAt: timestamp,
+        ...values,
+      };
+    }
     return {
       id: nextId(name),
       siteId: 'site_default',
@@ -386,6 +406,7 @@ assert(repositorySet.media, 'Expected media repository factory');
 assert(repositorySet.collections, 'Expected collection repository factory');
 assert(repositorySet.forms, 'Expected form repository factory');
 assert(repositorySet.comments, 'Expected comment repository factory');
+assert(repositorySet.auditLogs, 'Expected audit log repository factory');
 
 const siteRepository = createSiteRepository(db);
 const pageRepository = createPageRepository(db);
@@ -394,6 +415,7 @@ const mediaRepository = createMediaRepository(db);
 const collectionRepository = createCollectionRepository(db);
 const formRepository = createFormRepository(db);
 const commentRepository = createCommentRepository(db);
+const auditLogRepository = createAuditLogRepository(db);
 
 const site = (await siteRepository.create({
   teamId: 'team_contract',
@@ -797,6 +819,31 @@ assert(updatedComment.status === 'blocked' && updatedComment.reportCount === 3, 
 assert((await commentRepository.getById(site.id, rootComment.id))?.blockReason === 'spam', 'Expected comment getById');
 assert(await commentRepository.delete(site.id, replyComment.id), 'Expected comment delete');
 assert(await commentRepository.delete(site.id, rootComment.id), 'Expected root comment delete');
+
+const auditEntry = await auditLogRepository.record({
+  siteId: site.id,
+  teamId: site.teamId,
+  actorId: 'user_admin',
+  entity: 'comment',
+  entityId: rootComment.id,
+  action: 'comment-status',
+  before: { status: 'approved' },
+  after: { status: 'blocked' },
+  metadata: {
+    targetType: 'page',
+    requestId: 'req_audit_contract',
+  },
+  requestId: 'req_audit_contract',
+});
+assert(auditEntry.id === 'activityLogs_1', 'Expected fake audit log id');
+assert(auditEntry.entity === 'comment' && auditEntry.action === 'comment-status', 'Expected audit log mapping');
+assert((await auditLogRepository.list({
+  siteId: site.id,
+  entity: 'comment',
+  entityId: rootComment.id,
+  action: 'comment-status',
+  requestId: 'req_audit_contract',
+})).items.length === 1, 'Expected audit log filters');
 
 assert(await pageRepository.delete(site.id, publishedPage.id), 'Expected page delete');
 assert(await postRepository.delete(site.id, archivedPost.id), 'Expected post delete');

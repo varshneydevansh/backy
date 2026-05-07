@@ -539,7 +539,7 @@ export const activityLogs = pgTable('activity_logs', {
     userId: uuid('user_id').references(() => profiles.id),
     action: text('action').notNull(),
     entityType: text('entity_type').notNull(),
-    entityId: uuid('entity_id'),
+    entityId: text('entity_id'),
     details: jsonb('details').default({}),
     ipAddress: text('ip_address'),
     userAgent: text('user_agent'),

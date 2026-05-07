@@ -1,5 +1,6 @@
 import type { BackyRepositories } from '@backy-cms/core/repositories';
 import type { DatabaseAdapter } from '../adapters';
+import { createAuditLogRepository } from './audit-logs';
 import { createCollectionRepository } from './collections';
 import { createCommentRepository } from './comments';
 import { createFormRepository } from './forms';
@@ -10,7 +11,7 @@ import {
     createSiteRepository,
 } from './site-page-post';
 
-type ImplementedBackyRepositories = Pick<BackyRepositories, 'sites' | 'pages' | 'posts' | 'media' | 'collections' | 'forms' | 'comments'>;
+type ImplementedBackyRepositories = Pick<BackyRepositories, 'sites' | 'pages' | 'posts' | 'media' | 'collections' | 'forms' | 'comments' | 'auditLogs'>;
 
 export interface DatabaseRepositoryFactoryInput {
     adapter: DatabaseAdapter;
@@ -27,6 +28,7 @@ export function createDatabaseRepositories(
         collections: createCollectionRepository(input.adapter.db),
         forms: createFormRepository(input.adapter.db),
         comments: createCommentRepository(input.adapter.db),
+        auditLogs: createAuditLogRepository(input.adapter.db),
     };
 }
 

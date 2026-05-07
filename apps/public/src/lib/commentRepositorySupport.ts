@@ -1,4 +1,4 @@
-import type { Comment, CommentReportReason, CommentStatus } from '@backy-cms/core';
+import type { BackyRepositoryEntity, Comment, CommentReportReason, CommentStatus } from '@backy-cms/core';
 import type { getRequiredDatabaseRepositories } from '@/lib/repositoryRuntime';
 import { blockCommentIdentity, getCommentReportReasons } from '@/lib/backyStore';
 
@@ -19,6 +19,60 @@ export function normalizeRepositoryReportReason(raw: string | null | undefined):
 
   const reasons = getCommentReportReasons();
   return reasons.find((reason) => reason === value) || null;
+}
+
+export async function recordRepositoryInteractionEvent(
+  repositories: PublicCommentRepositories,
+  event: {
+    kind: 'form-submission' | 'contact-shared' | 'contact-status' | 'comment-submitted' | 'comment-status' | 'comment-reported';
+    siteId: string;
+    formId?: string | null;
+    commentId?: string | null;
+    contactId?: string | null;
+    submissionId?: string | null;
+    target: string;
+    status: 'queued' | 'succeeded' | 'failed' | 'received';
+    statusCode?: number;
+    requestId?: string | null;
+    reason?: string | null;
+    actor?: string | null;
+    metadata?: Record<string, unknown>;
+    error?: string;
+  },
+) {
+  const entity: BackyRepositoryEntity = event.commentId
+    ? 'comment'
+    : event.contactId
+      ? 'contact'
+      : event.submissionId
+        ? 'formSubmission'
+        : event.formId
+          ? 'form'
+          : 'auditLog';
+  const entityId = event.commentId || event.contactId || event.submissionId || event.formId || event.target;
+
+  const metadata = {
+    ...(event.metadata || {}),
+    formId: event.formId || null,
+    commentId: event.commentId || null,
+    contactId: event.contactId || null,
+    submissionId: event.submissionId || null,
+    target: event.target,
+    status: event.status,
+    ...(event.statusCode !== undefined ? { statusCode: event.statusCode } : {}),
+    ...(event.reason ? { reason: event.reason } : {}),
+    ...(event.error ? { error: event.error } : {}),
+  };
+
+  await repositories.auditLogs.record({
+    siteId: event.siteId,
+    actorId: event.actor || null,
+    entity,
+    entityId,
+    action: event.kind,
+    metadata,
+    requestId: event.requestId || undefined,
+  });
 }
 
 export async function updateRepositoryCommentStatus(
@@ -70,7 +124,24 @@ export async function updateRepositoryCommentStatus(
     update.rejectionReason = null;
   }
 
-  return (await repositories.comments.update(siteId, comment.id, update)).item;
+  const nextComment = (await repositories.comments.update(siteId, comment.id, update)).item;
+  await recordRepositoryInteractionEvent(repositories, {
+    kind: 'comment-status',
+    siteId,
+    commentId: nextComment.id,
+    target: `comment:${nextComment.id}`,
+    status: 'succeeded',
+    requestId: resolvedRequestId,
+    reason: input.status,
+    actor: reviewedBy,
+    metadata: {
+      targetType: nextComment.targetType,
+      targetId: nextComment.targetId,
+      status: input.status,
+      blockReason: nextComment.blockReason,
+    },
+  });
+  return nextComment;
 }
 
 export async function reportRepositoryComment(
@@ -93,7 +164,7 @@ export async function reportRepositoryComment(
   const reviewedAt = new Date().toISOString();
   const nextStatus = reportCount >= 3 && comment.status === 'approved' ? 'spam' : comment.status;
 
-  return (await repositories.comments.update(siteId, comment.id, {
+  const nextComment = (await repositories.comments.update(siteId, comment.id, {
     status: nextStatus,
     reviewedBy: input.actor || null,
     reviewedAt,
@@ -101,4 +172,22 @@ export async function reportRepositoryComment(
     reportReasons: Array.from(reportReasons),
     requestId: input.requestId || comment.requestId || null,
   })).item;
+  await recordRepositoryInteractionEvent(repositories, {
+    kind: 'comment-reported',
+    siteId,
+    commentId: nextComment.id,
+    target: `comment:${nextComment.id}`,
+    status: 'succeeded',
+    requestId: input.requestId,
+    reason: normalizedReason || 'other',
+    actor: input.actor,
+    metadata: {
+      authorName: nextComment.authorName,
+      targetType: nextComment.targetType,
+      targetId: nextComment.targetId,
+      reportCount: nextComment.reportCount,
+      reportReasons: nextComment.reportReasons,
+    },
+  });
+  return nextComment;
 }
