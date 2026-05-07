@@ -327,6 +327,7 @@ The next implementation should not start by adding more UI screens. The product 
   - External frontend can call site resolve, page fetch, media list, collection reads/writes, form list/detail/submit/review/contact endpoints, comment list/detail/update/report endpoints, and interaction event reads.
 - **Current progress**:
   - `packages/sdk-js` exposes a TypeScript public API client for site discovery, manifest/OpenAPI bootstrap, resolve, render, navigation, media, collection records, forms/submissions/contacts, comments/reports, and interaction events.
+  - The SDK exports starter public contract types for render payloads, content documents/elements, media/font assets, collection schemas/records, forms/submissions/contacts, comments, and events.
   - Public manifest, OpenAPI, and render endpoints emit cache-control, ETag/304 revalidation, plus Backy contract/schema/request/site headers; preview and error responses are no-store.
 - **Validation**:
   - SDK smoke test against local public app, including temporary-site public write coverage for collection records, forms, contacts, comments, reports, and events.

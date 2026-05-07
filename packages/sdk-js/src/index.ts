@@ -29,6 +29,176 @@ export interface BackyListOptions {
   requestId?: string;
 }
 
+export interface BackyPagination {
+  total?: number;
+  limit?: number;
+  offset?: number;
+  hasMore?: boolean;
+  [key: string]: unknown;
+}
+
+export interface BackyThemeTokens {
+  colors?: Record<string, string>;
+  fonts?: Record<string, string>;
+  spacing?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface BackySiteSummary {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+  customDomain?: string | null;
+  status?: string;
+  isPublished?: boolean;
+  theme?: BackyThemeTokens;
+  themeTokens?: BackyThemeTokens;
+  [key: string]: unknown;
+}
+
+export interface BackyNavigationItem {
+  id?: string;
+  pageId?: string;
+  label?: string;
+  title?: string;
+  path: string;
+  children?: BackyNavigationItem[];
+  [key: string]: unknown;
+}
+
+export interface BackyElement {
+  id: string;
+  type: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  zIndex?: number;
+  props?: Record<string, unknown>;
+  children?: BackyElement[];
+  [key: string]: unknown;
+}
+
+export interface BackyContentDocument {
+  schemaVersion: string;
+  id: string;
+  kind: 'page' | 'post' | 'template' | 'dynamicItem';
+  title?: string;
+  locale?: string;
+  version?: string;
+  elements: BackyElement[];
+  [key: string]: unknown;
+}
+
+export interface BackyMediaAsset {
+  id: string;
+  type: 'image' | 'video' | 'audio' | 'document' | 'font' | string;
+  url?: string;
+  src?: string;
+  alt?: string;
+  title?: string;
+  visibility?: string;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface BackyFontAsset extends BackyMediaAsset {
+  family?: string;
+  weight?: string | number;
+  style?: string;
+}
+
+export interface BackyFieldSchema {
+  key: string;
+  label?: string;
+  type: string;
+  required?: boolean;
+  unique?: boolean;
+  options?: string[];
+  referenceCollectionId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyCollectionSchema {
+  id: string;
+  slug: string;
+  name: string;
+  status?: string;
+  permissions?: Record<string, boolean>;
+  fields: BackyFieldSchema[];
+  recordsUrl?: string;
+  dynamicRoutePattern?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyCollectionRecord<TValues extends Record<string, unknown> = Record<string, unknown>> {
+  id: string;
+  slug: string;
+  status?: string;
+  values: TValues;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyFormDefinition {
+  id: string;
+  title?: string;
+  active?: boolean;
+  isActive?: boolean;
+  fields?: Array<Record<string, unknown>>;
+  submitUrl?: string;
+  detailUrl?: string;
+  submissionsUrl?: string;
+  contactsUrl?: string;
+  collectionTarget?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
+export interface BackyFormSubmission {
+  id: string;
+  status?: string;
+  values?: Record<string, unknown>;
+  collectionRecord?: Record<string, unknown> | null;
+  collectionRecordErrors?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export interface BackyContact {
+  id: string;
+  status?: string;
+  name?: string;
+  email?: string;
+  notes?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyComment {
+  id: string;
+  targetType?: 'page' | 'post';
+  targetId?: string;
+  status?: string;
+  content?: string;
+  authorName?: string;
+  authorEmail?: string;
+  parentId?: string | null;
+  reportCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyInteractionEvent {
+  id?: string;
+  kind?: string;
+  requestId?: string;
+  commentId?: string;
+  formId?: string;
+  createdAt?: string;
+  [key: string]: unknown;
+}
+
 export interface BackyMediaListOptions extends BackyListOptions {
   type?: 'image' | 'video' | 'audio' | 'document' | 'font';
   q?: string;
@@ -81,20 +251,48 @@ export interface BackyEventListOptions extends BackyListOptions {
 }
 
 export interface BackyRouteResolve {
-  site: Record<string, unknown>;
+  site: BackySiteSummary;
   route: Record<string, unknown>;
-  navigation?: Record<string, unknown>;
+  navigation?: { primary?: BackyNavigationItem[]; [key: string]: unknown };
 }
 
 export interface BackyFrontendManifest {
   schemaVersion: string;
-  site: Record<string, unknown>;
+  site: BackySiteSummary;
   contract: Record<string, unknown>;
   capabilities: Record<string, boolean>;
   endpoints: Record<string, string>;
   routePatterns: Array<Record<string, unknown>>;
-  modules: Record<string, unknown>;
-  navigation: Record<string, unknown>;
+  modules: {
+    pages?: { count: number; items: Array<Record<string, unknown>> };
+    blog?: Record<string, unknown>;
+    collections?: BackyCollectionSchema[];
+    forms?: BackyFormDefinition[];
+    media?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  navigation: { primary?: BackyNavigationItem[]; [key: string]: unknown };
+}
+
+export interface BackyRenderPayload {
+  site: BackySiteSummary;
+  navigation: { primary: BackyNavigationItem[]; [key: string]: unknown };
+  route: Record<string, unknown>;
+  content: BackyContentDocument;
+  assets: {
+    media: BackyMediaAsset[];
+    fonts: BackyFontAsset[];
+    [key: string]: unknown;
+  };
+  interactions: {
+    forms: BackyFormDefinition[];
+    comments: Array<Record<string, unknown>>;
+    actions: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  seo: Record<string, unknown>;
+  dataBindings: Record<string, unknown>;
+  editableMap: Record<string, unknown>;
 }
 
 export class BackyApiError extends Error {
@@ -144,12 +342,12 @@ export class BackyClient {
     return this.siteId;
   }
 
-  sites(): Promise<BackyEnvelope<{ sites: Array<Record<string, unknown>>; pagination?: Record<string, unknown> }>> {
+  sites(): Promise<BackyEnvelope<{ sites: BackySiteSummary[]; pagination?: BackyPagination }>> {
     return this.request('/api/sites');
   }
 
-  async discoverSite(identifier: string): Promise<BackyEnvelope<{ site: Record<string, unknown> }>> {
-    const envelope = await this.request<{ site: Record<string, unknown> }>('/api/sites', {
+  async discoverSite(identifier: string): Promise<BackyEnvelope<{ site: BackySiteSummary }>> {
+    const envelope = await this.request<{ site: BackySiteSummary }>('/api/sites', {
       query: { identifier },
     });
     const discoveredSiteId = typeof envelope.data.site.id === 'string' ? envelope.data.site.id : undefined;
@@ -173,13 +371,13 @@ export class BackyClient {
     });
   }
 
-  render<TPayload = Record<string, unknown>>(path: string, options: { previewToken?: string; siteId?: string } = {}): Promise<BackyEnvelope<TPayload>> {
+  render<TPayload = BackyRenderPayload>(path: string, options: { previewToken?: string; siteId?: string } = {}): Promise<BackyEnvelope<TPayload>> {
     return this.request(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/render`, {
       query: { path, previewToken: options.previewToken },
     });
   }
 
-  navigation(siteId = this.requireSiteId()): Promise<BackyEnvelope<Record<string, unknown>>> {
+  navigation(siteId = this.requireSiteId()): Promise<BackyEnvelope<{ site?: BackySiteSummary; navigation: { primary: BackyNavigationItem[]; [key: string]: unknown } }>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/navigation`);
   }
 
@@ -196,7 +394,7 @@ export class BackyClient {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/blog`, { query });
   }
 
-  media(options: BackyMediaListOptions = {}): Promise<BackyEnvelope<Record<string, unknown>>> {
+  media(options: BackyMediaListOptions = {}): Promise<BackyEnvelope<{ media: BackyMediaAsset[]; pagination: BackyPagination }>> {
     const { requestId, ...query } = options;
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/media`, {
       query,
@@ -204,15 +402,18 @@ export class BackyClient {
     });
   }
 
-  collections(siteId = this.requireSiteId()): Promise<BackyEnvelope<Record<string, unknown>>> {
+  collections(siteId = this.requireSiteId()): Promise<BackyEnvelope<{ collections: BackyCollectionSchema[] }>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/collections`);
   }
 
-  collection(collectionId: string): Promise<BackyEnvelope<Record<string, unknown>>> {
+  collection(collectionId: string): Promise<BackyEnvelope<{ collection: BackyCollectionSchema }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}`);
   }
 
-  records(collectionId: string, options: BackyCollectionRecordListOptions = {}): Promise<BackyEnvelope<Record<string, unknown>>> {
+  records<TValues extends Record<string, unknown> = Record<string, unknown>>(
+    collectionId: string,
+    options: BackyCollectionRecordListOptions = {},
+  ): Promise<BackyEnvelope<{ collection: BackyCollectionSchema; records: Array<BackyCollectionRecord<TValues>>; pagination: BackyPagination }>> {
     const { requestId, ...query } = options;
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`, {
       query,
@@ -220,22 +421,26 @@ export class BackyClient {
     });
   }
 
-  createRecord(collectionId: string, values: Record<string, unknown>, slug?: string): Promise<BackyEnvelope<Record<string, unknown>>> {
+  createRecord<TValues extends Record<string, unknown> = Record<string, unknown>>(
+    collectionId: string,
+    values: TValues,
+    slug?: string,
+  ): Promise<BackyEnvelope<{ record: BackyCollectionRecord<TValues> }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`, {
       method: 'POST',
       body: { values, slug },
     });
   }
 
-  forms(options: { pageId?: string; postId?: string; active?: boolean } = {}): Promise<BackyEnvelope<Record<string, unknown>>> {
+  forms(options: { pageId?: string; postId?: string; active?: boolean } = {}): Promise<BackyEnvelope<{ forms: BackyFormDefinition[]; total?: number; pagination?: BackyPagination }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms`, { query: options });
   }
 
-  form(formId: string): Promise<BackyEnvelope<Record<string, unknown>>> {
+  form(formId: string): Promise<BackyEnvelope<{ form: BackyFormDefinition }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}`);
   }
 
-  formSubmissions(formId: string, options: BackyListOptions & { status?: string } = {}): Promise<BackyEnvelope<Record<string, unknown>>> {
+  formSubmissions(formId: string, options: BackyListOptions & { status?: string } = {}): Promise<BackyEnvelope<{ form: BackyFormDefinition; submissions: { data?: BackyFormSubmission[]; [key: string]: unknown }; pagination?: BackyPagination }>> {
     const { requestId, ...query } = options;
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions`, {
       query,
@@ -243,7 +448,7 @@ export class BackyClient {
     });
   }
 
-  submitForm(formId: string, input: BackyFormSubmissionInput): Promise<BackyEnvelope<Record<string, unknown>>> {
+  submitForm(formId: string, input: BackyFormSubmissionInput): Promise<BackyEnvelope<{ submission: BackyFormSubmission; contact?: BackyContact; collectionRecord?: BackyCollectionRecord | null; collectionRecordErrors?: Array<Record<string, unknown>> }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions`, {
       method: 'POST',
       body: input,
@@ -251,18 +456,18 @@ export class BackyClient {
     });
   }
 
-  formSubmission(formId: string, submissionId: string): Promise<BackyEnvelope<Record<string, unknown>>> {
+  formSubmission(formId: string, submissionId: string): Promise<BackyEnvelope<{ submission: BackyFormSubmission }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}`);
   }
 
-  updateFormSubmission(formId: string, submissionId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<Record<string, unknown>>> {
+  updateFormSubmission(formId: string, submissionId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<{ submission: BackyFormSubmission }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}`, {
       method: 'PATCH',
       body: updates,
     });
   }
 
-  formContacts(formId: string, options: BackyListOptions & { status?: string } = {}): Promise<BackyEnvelope<Record<string, unknown>>> {
+  formContacts(formId: string, options: BackyListOptions & { status?: string } = {}): Promise<BackyEnvelope<{ form: BackyFormDefinition; contacts: BackyContact[]; pagination?: BackyPagination }>> {
     const { requestId, ...query } = options;
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts`, {
       query,
@@ -270,14 +475,14 @@ export class BackyClient {
     });
   }
 
-  updateFormContact(formId: string, contactId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<Record<string, unknown>>> {
+  updateFormContact(formId: string, contactId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<{ contact: BackyContact }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/${encodeURIComponent(contactId)}`, {
       method: 'PATCH',
       body: updates,
     });
   }
 
-  pageComments(pageId: string, options: BackyCommentListOptions = {}): Promise<BackyEnvelope<Record<string, unknown>>> {
+  pageComments(pageId: string, options: BackyCommentListOptions = {}): Promise<BackyEnvelope<{ comments: BackyComment[]; count: number; pagination?: BackyPagination }>> {
     const { requestId, ...query } = options;
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments`, {
       query,
@@ -285,7 +490,7 @@ export class BackyClient {
     });
   }
 
-  submitPageComment(pageId: string, input: BackyCommentInput): Promise<BackyEnvelope<Record<string, unknown>>> {
+  submitPageComment(pageId: string, input: BackyCommentInput): Promise<BackyEnvelope<{ comment: BackyComment }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments`, {
       method: 'POST',
       body: normalizeCommentInput(input),
@@ -293,18 +498,18 @@ export class BackyClient {
     });
   }
 
-  pageComment(pageId: string, commentId: string): Promise<BackyEnvelope<Record<string, unknown>>> {
+  pageComment(pageId: string, commentId: string): Promise<BackyEnvelope<{ comment: BackyComment }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments/${encodeURIComponent(commentId)}`);
   }
 
-  updatePageComment(pageId: string, commentId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<Record<string, unknown>>> {
+  updatePageComment(pageId: string, commentId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<{ comment: BackyComment }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments/${encodeURIComponent(commentId)}`, {
       method: 'PATCH',
       body: updates,
     });
   }
 
-  blogComments(postId: string, options: BackyCommentListOptions = {}): Promise<BackyEnvelope<Record<string, unknown>>> {
+  blogComments(postId: string, options: BackyCommentListOptions = {}): Promise<BackyEnvelope<{ comments: BackyComment[]; count: number; pagination?: BackyPagination }>> {
     const { requestId, ...query } = options;
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/blog/${encodeURIComponent(postId)}/comments`, {
       query,
@@ -312,7 +517,7 @@ export class BackyClient {
     });
   }
 
-  submitBlogComment(postId: string, input: BackyCommentInput): Promise<BackyEnvelope<Record<string, unknown>>> {
+  submitBlogComment(postId: string, input: BackyCommentInput): Promise<BackyEnvelope<{ comment: BackyComment }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/blog/${encodeURIComponent(postId)}/comments`, {
       method: 'POST',
       body: normalizeCommentInput(input),
@@ -320,18 +525,18 @@ export class BackyClient {
     });
   }
 
-  blogComment(postId: string, commentId: string): Promise<BackyEnvelope<Record<string, unknown>>> {
+  blogComment(postId: string, commentId: string): Promise<BackyEnvelope<{ comment: BackyComment }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/blog/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`);
   }
 
-  updateBlogComment(postId: string, commentId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<Record<string, unknown>>> {
+  updateBlogComment(postId: string, commentId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<{ comment: BackyComment }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/blog/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`, {
       method: 'PATCH',
       body: updates,
     });
   }
 
-  siteComments(options: BackyCommentListOptions = {}): Promise<BackyEnvelope<Record<string, unknown>>> {
+  siteComments(options: BackyCommentListOptions = {}): Promise<BackyEnvelope<{ comments: BackyComment[]; count: number; pagination?: BackyPagination }>> {
     const { requestId, ...query } = options;
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments`, {
       query,
@@ -339,22 +544,22 @@ export class BackyClient {
     });
   }
 
-  comment(commentId: string): Promise<BackyEnvelope<Record<string, unknown>>> {
+  comment(commentId: string): Promise<BackyEnvelope<{ comment: BackyComment }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`);
   }
 
-  updateComment(commentId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<Record<string, unknown>>> {
+  updateComment(commentId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<{ comment: BackyComment }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`, {
       method: 'PATCH',
       body: updates,
     });
   }
 
-  reportReasons(): Promise<BackyEnvelope<Record<string, unknown>>> {
+  reportReasons(): Promise<BackyEnvelope<{ reasons: string[] }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/report-reasons`);
   }
 
-  reportComment(commentId: string, input: { reason: string; details?: string; reporterEmail?: string; requestId?: string }): Promise<BackyEnvelope<Record<string, unknown>>> {
+  reportComment(commentId: string, input: { reason: string; details?: string; reporterEmail?: string; requestId?: string }): Promise<BackyEnvelope<{ comment: BackyComment; report?: Record<string, unknown> }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}/report`, {
       method: 'POST',
       body: input,
@@ -362,7 +567,7 @@ export class BackyClient {
     });
   }
 
-  events(options: BackyEventListOptions = {}): Promise<BackyEnvelope<Record<string, unknown>>> {
+  events(options: BackyEventListOptions = {}): Promise<BackyEnvelope<{ siteId: string; events: BackyInteractionEvent[]; count: number; pagination?: BackyPagination }>> {
     const { requestId, ...query } = options;
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/events`, {
       query,

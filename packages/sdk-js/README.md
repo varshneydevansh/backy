@@ -10,9 +10,14 @@ const backy = createBackyClient({ baseUrl: 'https://your-backy-host.com' });
 await backy.discoverSite('demo');
 const manifest = await backy.manifest();
 const page = await backy.render('/');
+
+page.data.content.elements.forEach((element) => {
+  console.log(element.id, element.type);
+});
 ```
 
 The SDK intentionally does not import admin/editor code. It wraps the public site bootstrap, manifest/OpenAPI discovery, route resolution, render payload, media, collection, form, comment, report, and event endpoints documented in `specs/backy-api-contracts.md`.
+The default return types expose Backy contract shapes such as `BackyRenderPayload`, `BackyContentDocument`, `BackyMediaAsset`, `BackyCollectionRecord`, `BackyFormSubmission`, `BackyComment`, and `BackyInteractionEvent`. Collection record reads/writes are generic, so a frontend can pass its own value shape: `backy.records<{ title: string }>(collectionId)`.
 
 ## Local validation
 
