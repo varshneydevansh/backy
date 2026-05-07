@@ -82,6 +82,14 @@ const createSmokePage = async () => {
               fontWeight: 'bold',
               color: '#111827',
             },
+            styles: {
+              position: 'relative',
+              left: '4px',
+              top: '6px',
+              width: '80px',
+              height: '40px',
+              transform: 'translateX(30px)',
+            },
           },
           {
             id: 'smoke-image',

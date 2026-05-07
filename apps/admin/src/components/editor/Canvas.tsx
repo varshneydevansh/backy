@@ -418,39 +418,57 @@ const parseFormOptions = (value: unknown): string[] => {
 const buildSharedElementStyle = (element: CanvasElement): CSSProperties => {
   const p = element.props as Record<string, any>;
   const savedStyles = element.styles || {};
+  const visualStyles = { ...savedStyles };
+  delete visualStyles.position;
+  delete visualStyles.left;
+  delete visualStyles.top;
+  delete visualStyles.right;
+  delete visualStyles.bottom;
+  delete visualStyles.width;
+  delete visualStyles.height;
+  delete visualStyles.minWidth;
+  delete visualStyles.minHeight;
+  delete visualStyles.maxWidth;
+  delete visualStyles.maxHeight;
+  delete visualStyles.zIndex;
+  delete visualStyles.transform;
+  delete visualStyles.translate;
+  delete visualStyles.rotate;
+  delete visualStyles.scale;
+  delete visualStyles.pointerEvents;
 
-  const borderWidth = toCssLength(p.borderWidth ?? savedStyles.borderWidth);
-  const borderColor = p.borderColor ?? savedStyles.borderColor;
-  const borderStyle = p.borderStyle ?? savedStyles.borderStyle ?? 'solid';
-  const border = p.border ?? savedStyles.border ?? (borderWidth || borderColor
+  const borderWidth = toCssLength(p.borderWidth ?? visualStyles.borderWidth);
+  const borderColor = p.borderColor ?? visualStyles.borderColor;
+  const borderStyle = p.borderStyle ?? visualStyles.borderStyle ?? 'solid';
+  const border = p.border ?? visualStyles.border ?? (borderWidth || borderColor
     ? `${borderWidth || '1px'} ${borderStyle} ${borderColor || '#000000'}`
     : undefined);
 
   return {
-    ...savedStyles,
-    backgroundColor: p.backgroundColor ?? savedStyles.backgroundColor,
-    color: p.color ?? savedStyles.color,
+    ...visualStyles,
+    backgroundColor: p.backgroundColor ?? visualStyles.backgroundColor,
+    color: p.color ?? visualStyles.color,
     border,
     borderColor,
     borderStyle,
     borderWidth,
-    borderRadius: toCssLength(p.borderRadius ?? savedStyles.borderRadius),
-    padding: toCssLength(p.padding ?? savedStyles.padding),
-    fontFamily: p.fontFamily ?? savedStyles.fontFamily,
-    fontSize: p.fontSize ?? savedStyles.fontSize,
-    fontWeight: p.fontWeight ?? savedStyles.fontWeight,
-    lineHeight: p.lineHeight ?? savedStyles.lineHeight,
-    textTransform: p.textTransform ?? savedStyles.textTransform,
-    letterSpacing: toCssLength(p.letterSpacing ?? savedStyles.letterSpacing),
-    wordSpacing: toCssLength(p.wordSpacing ?? savedStyles.wordSpacing),
-    textShadow: p.textShadow ?? savedStyles.textShadow,
-    textIndent: toCssLength(p.textIndent ?? savedStyles.textIndent),
-    fontStyle: ((p as Record<string, unknown>).fontStyle ?? (savedStyles as Record<string, unknown>).fontStyle) as CSSProperties['fontStyle'],
-    textAlign: p.textAlign ?? savedStyles.textAlign,
-    textDecoration: p.textDecoration ?? savedStyles.textDecoration,
-    margin: toCssLength(p.margin ?? savedStyles.margin),
-    opacity: toOpacity(p.opacity ?? savedStyles.opacity),
-    boxShadow: p.boxShadow ?? savedStyles.boxShadow,
+    borderRadius: toCssLength(p.borderRadius ?? visualStyles.borderRadius),
+    padding: toCssLength(p.padding ?? visualStyles.padding),
+    fontFamily: p.fontFamily ?? visualStyles.fontFamily,
+    fontSize: p.fontSize ?? visualStyles.fontSize,
+    fontWeight: p.fontWeight ?? visualStyles.fontWeight,
+    lineHeight: p.lineHeight ?? visualStyles.lineHeight,
+    textTransform: p.textTransform ?? visualStyles.textTransform,
+    letterSpacing: toCssLength(p.letterSpacing ?? visualStyles.letterSpacing),
+    wordSpacing: toCssLength(p.wordSpacing ?? visualStyles.wordSpacing),
+    textShadow: p.textShadow ?? visualStyles.textShadow,
+    textIndent: toCssLength(p.textIndent ?? visualStyles.textIndent),
+    fontStyle: ((p as Record<string, unknown>).fontStyle ?? (visualStyles as Record<string, unknown>).fontStyle) as CSSProperties['fontStyle'],
+    textAlign: p.textAlign ?? visualStyles.textAlign,
+    textDecoration: p.textDecoration ?? visualStyles.textDecoration,
+    margin: toCssLength(p.margin ?? visualStyles.margin),
+    opacity: toOpacity(p.opacity ?? visualStyles.opacity),
+    boxShadow: p.boxShadow ?? visualStyles.boxShadow,
   };
 };
 
@@ -2631,14 +2649,15 @@ function CanvasElementComponent({
       data-backy-text-editor={isTextElement ? 'true' : undefined}
       data-backy-text-editor-editable={String(isTextElement && isEditing && !isPreview)}
       style={{
+        ...sharedStyle,
         boxSizing: 'border-box',
+        position: 'absolute',
         left: element.x,
         top: element.y,
         width: element.width,
         height: element.height,
         zIndex: element.zIndex || 1,
         transform: element.rotation ? `rotate(${element.rotation}deg)` : undefined,
-        ...sharedStyle,
         opacity: isHidden && !isPreview ? 0.25 : sharedStyle.opacity ?? 1,
         pointerEvents: isHidden && !isSelected ? 'none' : undefined,
         userSelect: !isPreview && !isEditing ? 'none' : sharedStyle.userSelect,
