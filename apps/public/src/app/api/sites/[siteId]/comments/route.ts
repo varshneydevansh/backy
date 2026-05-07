@@ -115,13 +115,32 @@ function parsePatchPayload(raw: unknown) {
   };
 }
 
+const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+  NextResponse.json(
+    {
+      success: false,
+      requestId,
+      error: {
+        code,
+        message,
+      },
+      errorMessage: message,
+    },
+    { status },
+  )
+);
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const responseRequestId = request.headers.get('x-request-id') || makeRequestId();
+
   try {
     const { siteId } = await params;
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return NextResponse.json({ error: 'Site not found' }, { status: 404 });
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
     }
 
     const { searchParams } = new URL(request.url);
@@ -150,6 +169,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
 
     return NextResponse.json({
+      success: true,
+      requestId: responseRequestId,
+      data: {
+        siteId: site.id,
+        comments: result.comments,
+        count: result.count,
+        pagination: result.pagination,
+      },
       siteId: site.id,
       comments: result.comments,
       count: result.count,
@@ -157,27 +184,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
   } catch (error) {
     console.error('API Error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    );
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', responseRequestId);
   }
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const responseRequestId = request.headers.get('x-request-id') || makeRequestId();
+
   try {
     const { siteId } = await params;
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return NextResponse.json({ error: 'Site not found' }, { status: 404 });
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
     }
 
     const payload = parsePatchPayload(await request.json().catch(() => null));
     if (!payload || !payload.status || payload.commentIds.length === 0) {
-      return NextResponse.json(
-        { error: 'Invalid payload. status and commentIds are required.' },
-        { status: 400 },
-      );
+      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status and commentIds are required.', responseRequestId);
     }
 
     const result = bulkUpdateCommentStatus({
@@ -192,10 +215,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!result.updated.length) {
-      return NextResponse.json({ error: 'No comments were updated.' }, { status: 404 });
+      return errorResponse(404, 'COMMENTS_NOT_UPDATED', 'No comments were updated.', responseRequestId);
     }
 
     return NextResponse.json({
+      success: true,
+      requestId: responseRequestId,
+      data: {
+        siteId: site.id,
+        updated: result.updated,
+        updatedCount: result.updated.length,
+        missingIds: result.missingIds,
+      },
       siteId: site.id,
       updated: result.updated,
       updatedCount: result.updated.length,
@@ -203,9 +234,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     });
   } catch (error) {
     console.error('API Error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    );
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', responseRequestId);
   }
 }

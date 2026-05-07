@@ -147,10 +147,21 @@ Public page payload should include:
 - `POST /api/sites/:siteId/pages/:pageId/comments`
 - `POST /api/public/sites/:siteId/pages/:pageId/comments` (optional alias)
   - Body: comment + optional parentId + optional identity fields.
+  - Response uses `{ success, requestId, data: { comment, message } }`; legacy top-level `comment` and `message` remain for compatibility.
 
 - `GET /api/sites/:siteId/pages/:pageId/comments?status=approved&limit=&cursor=`
 - `GET /api/public/sites/:siteId/pages/:pageId/comments` (optional alias)
   - Returns approved comments and count metadata.
+  - Response uses `{ success, requestId, data: { comments, count, pagination } }`; legacy top-level `comments/count/pagination` remain for compatibility.
+
+- `POST /api/sites/:siteId/blog/:postId/comments`
+- `GET /api/sites/:siteId/blog/:postId/comments?status=approved&limit=&offset=`
+  - Blog comment submit/list endpoints follow the same envelope and legacy compatibility behavior as page comments.
+
+- `GET /api/sites/:siteId/comments`
+- `PATCH /api/sites/:siteId/comments`
+- `GET /api/sites/:siteId/comments/report-reasons`
+  - Site-wide comment moderation/read endpoints return `{ success, requestId, data }` while preserving legacy top-level `comments`, `updated`, `reasons`, and related count fields.
 
 ### 2.4 Security behavior
 - Return `403` if site/page is in private/unpublished state.

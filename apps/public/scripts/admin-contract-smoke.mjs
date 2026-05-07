@@ -406,6 +406,42 @@ try {
     assert(resolvedPage.json?.data?.route?.type === 'page', `${resolvedPage.url} expected page route`);
     assert(resolvedPage.json?.data?.route?.resource?.id === createdPageId, `${resolvedPage.url} returned wrong resolved page`);
 
+    const pageComment = await request(`/api/sites/${createdSiteId}/pages/${createdPageId}/comments`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: 'This page comment verifies public comment envelopes.',
+        authorName: 'Contract Commenter',
+        moderationMode: 'auto-approve',
+        requestId: 'contract-page-comment',
+        rateLimitBypass: true,
+      }),
+    });
+    assert(pageComment.response.status === 201, `${pageComment.url} expected 201, got ${pageComment.response.status}`);
+    assert(pageComment.json?.success === true, `${pageComment.url} expected success envelope`);
+    assert(pageComment.json?.data?.comment?.status === 'approved', `${pageComment.url} expected approved comment in data envelope`);
+    assert(pageComment.json?.comment?.id === pageComment.json?.data?.comment?.id, `${pageComment.url} expected legacy comment to match data envelope`);
+
+    const pageComments = await request(`/api/sites/${createdSiteId}/pages/${createdPageId}/comments?status=approved&requestId=contract-page-comment`);
+    assert(pageComments.response.status === 200, `${pageComments.url} expected 200, got ${pageComments.response.status}`);
+    assert(pageComments.json?.success === true, `${pageComments.url} expected success envelope`);
+    assert(pageComments.json?.data?.comments?.some((comment) => comment.id === pageComment.json.data.comment.id), `${pageComments.url} missing comment in data envelope`);
+    assert(pageComments.json?.comments?.some((comment) => comment.id === pageComment.json.data.comment.id), `${pageComments.url} missing legacy comment list`);
+
+    const siteComments = await request(`/api/sites/${createdSiteId}/comments?targetType=page&targetId=${createdPageId}&status=approved&requestId=contract-page-comment`);
+    assert(siteComments.response.status === 200, `${siteComments.url} expected 200, got ${siteComments.response.status}`);
+    assert(siteComments.json?.success === true, `${siteComments.url} expected success envelope`);
+    assert(siteComments.json?.data?.comments?.some((comment) => comment.id === pageComment.json.data.comment.id), `${siteComments.url} missing site comment in data envelope`);
+    assert(siteComments.json?.comments?.some((comment) => comment.id === pageComment.json.data.comment.id), `${siteComments.url} missing legacy site comment list`);
+
+    const reportReasons = await request(`/api/sites/${createdSiteId}/comments/report-reasons`);
+    assert(reportReasons.response.status === 200, `${reportReasons.url} expected 200, got ${reportReasons.response.status}`);
+    assert(reportReasons.json?.success === true, `${reportReasons.url} expected success envelope`);
+    assert(reportReasons.json?.data?.reasons?.includes('spam'), `${reportReasons.url} missing report reason in data envelope`);
+    assert(reportReasons.json?.reasons?.includes('spam'), `${reportReasons.url} missing legacy report reasons`);
+
     const unbindMedia = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}/bind`, {
       method: 'POST',
       headers: {

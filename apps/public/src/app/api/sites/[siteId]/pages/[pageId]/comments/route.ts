@@ -97,7 +97,27 @@ function extractIpHash(request: NextRequest): string | null {
     .find(Boolean) || null;
 }
 
+const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
+  NextResponse.json(
+    {
+      success: false,
+      requestId,
+      error: {
+        code,
+        message,
+        details,
+      },
+      errorMessage: message,
+    },
+    { status },
+  )
+);
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
+
   try {
     const { siteId, pageId } = await params;
     const { searchParams } = new URL(request.url);
@@ -112,13 +132,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return NextResponse.json({ error: 'Site not found' }, { status: 404 });
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
     const pages = getPageSummary(site.id, { includeUnpublished: true });
     const pageExists = pages.some((page) => page.id === pageId);
     if (!pageExists) {
-      return NextResponse.json({ error: 'Page not found' }, { status: 404 });
+      return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
     }
 
     const comments = getCommentsByTarget(site.id, {
@@ -141,33 +161,42 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     );
 
     return NextResponse.json({
+      success: true,
+      requestId,
+      data: {
+        comments: sorted,
+        count: comments.count,
+        pagination: comments.pagination,
+      },
       comments: sorted,
       count: comments.count,
       pagination: comments.pagination,
     });
   } catch (error) {
     console.error('API Error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  const responseRequestId = request.headers.get('x-request-id') || makeRequestId();
+
   try {
     const { siteId, pageId } = await params;
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return NextResponse.json({ error: 'Site not found' }, { status: 404 });
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
     }
 
     const pages = getPageSummary(site.id, { includeUnpublished: true });
     const pageExists = pages.some((page) => page.id === pageId);
     if (!pageExists) {
-      return NextResponse.json({ error: 'Page not found' }, { status: 404 });
+      return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', responseRequestId);
     }
 
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || typeof body !== 'object') {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
+      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload', responseRequestId);
     }
 
     const content = parseTextInput(body.content);
@@ -175,6 +204,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (content.length === 0) {
       return NextResponse.json(
         {
+          success: false,
+          requestId: responseRequestId,
           error: 'Validation failed',
           details: { content: 'Comment content is required' },
         },
@@ -215,6 +246,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!finalAllowGuests && !userId) {
       return NextResponse.json(
         {
+          success: false,
+          requestId: responseRequestId,
           error: 'Validation failed',
           details: { authorName: 'Guests are disabled for this comment block.' },
         },
@@ -225,6 +258,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (finalRequireName && authorName.length === 0) {
       return NextResponse.json(
         {
+          success: false,
+          requestId: responseRequestId,
           error: 'Validation failed',
           details: { authorName: 'Name is required' },
         },
@@ -235,6 +270,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (finalRequireEmail && authorEmail.length === 0) {
       return NextResponse.json(
         {
+          success: false,
+          requestId: responseRequestId,
           error: 'Validation failed',
           details: { authorEmail: 'Email is required' },
         },
@@ -245,6 +282,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (parentId && !finalAllowReplies) {
       return NextResponse.json(
         {
+          success: false,
+          requestId: responseRequestId,
           error: 'Validation failed',
           details: { parentId: 'Replies are not enabled for this comment block' },
         },
@@ -258,6 +297,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (!parent || parent.siteId !== site.id || parent.targetType !== 'page' || parent.targetId !== pageId) {
         return NextResponse.json(
           {
+            success: false,
+            requestId: responseRequestId,
             error: 'Validation failed',
             details: { parentId: 'The selected parent comment does not belong to this target.' },
           },
@@ -268,6 +309,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (parent.commentThreadId && parent.commentThreadId !== commentThreadId) {
         return NextResponse.json(
           {
+            success: false,
+            requestId: responseRequestId,
             error: 'Validation failed',
             details: { parentId: 'The selected parent comment belongs to a different thread.' },
           },
@@ -295,6 +338,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!classification.ok) {
       return NextResponse.json(
         {
+          success: false,
+          requestId: responseRequestId,
           error: 'Validation failed',
           details: { content: classification.spamMessage || 'Comment rejected.' },
           status: classification.status,
@@ -323,6 +368,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json(
       {
         success: true,
+        requestId: responseRequestId,
+        data: {
+          comment,
+          message:
+            comment.status === 'approved'
+              ? 'Comment submitted and published.'
+              : 'Comment submitted for moderation.',
+        },
         comment,
         message:
           comment.status === 'approved'
@@ -333,6 +386,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   } catch (error) {
     console.error('API Error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', responseRequestId);
   }
 }
