@@ -241,7 +241,14 @@ function PageEditorRoute() {
     settings: PageSettings,
     canvasSize: CanvasSize = initialCanvasSize
   ) => {
-    const content = serializeCanvasContent(elements, canvasSize);
+    const content = serializeCanvasContent(elements, canvasSize, undefined, {
+      documentId: page.id,
+      kind: 'page',
+      title: settings.title,
+      slug: settings.slug,
+      status: settings.status,
+      locale: 'en',
+    });
     const localUpdate = {
       content,
       title: settings.title,

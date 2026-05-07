@@ -132,7 +132,14 @@ function NewBlogPostPage() {
         setError(null);
 
     // Serialize canvas elements for storage
-        const content = serializeCanvasContent(canvasElements, canvasSize);
+        const content = serializeCanvasContent(canvasElements, canvasSize, undefined, {
+            documentId: `new-post-${slug || title || 'draft'}`,
+            kind: 'post',
+            title,
+            slug,
+            status,
+            locale: 'en',
+        });
         const input = {
             title,
             slug,

@@ -1,4 +1,11 @@
 import { generateId } from '@/lib/utils';
+import {
+  canvasElementsToBackyContentDocument,
+  isBackyContentDocument,
+  type BackyContentDocument,
+  type BackyContentKind,
+  type BackyContentStatus,
+} from '@backy-cms/core';
 import type { CSSProperties } from 'react';
 import type {
   CanvasElement,
@@ -46,6 +53,17 @@ export interface SavedCanvasPayload {
   elements: CanvasElement[];
   canvasSize: CanvasSize;
   customCSS?: string;
+  contentDocument?: BackyContentDocument;
+}
+
+export interface SerializeCanvasContentOptions {
+  documentId?: string;
+  kind?: BackyContentKind;
+  title?: string;
+  slug?: string;
+  status?: BackyContentStatus;
+  locale?: string;
+  version?: string;
 }
 
 const cloneDefaultProps = (value: Record<string, unknown>): Record<string, unknown> =>
@@ -53,6 +71,10 @@ const cloneDefaultProps = (value: Record<string, unknown>): Record<string, unkno
 
 const cloneDefaultStyles = (value?: CSSProperties): CSSProperties | undefined =>
   value ? JSON.parse(JSON.stringify(value)) as CSSProperties : undefined;
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
 
 // ============================================
 // COMPONENT LIBRARY DEFINITIONS
@@ -818,19 +840,37 @@ export function normalizeSavedCanvasContent(raw?: string | null): SavedCanvasPay
 
   try {
     const parsed = JSON.parse(raw);
+    const contentDocument = isBackyContentDocument(parsed)
+      ? parsed
+      : isRecord(parsed) && isBackyContentDocument(parsed.contentDocument)
+        ? parsed.contentDocument
+        : undefined;
+    const documentCanvasSize = isRecord(contentDocument?.metadata?.canvasSize)
+      ? contentDocument.metadata.canvasSize
+      : undefined;
 
     if (Array.isArray(parsed)) {
       return {
         elements: parsed as CanvasElement[],
         canvasSize: DEFAULT_CANVAS_SIZE,
+        contentDocument,
       };
     }
 
-    if (parsed && Array.isArray(parsed.elements)) {
+    if (isRecord(parsed) && (Array.isArray(parsed.elements) || contentDocument)) {
       return {
-        elements: parsed.elements as CanvasElement[],
-        canvasSize: normalizeCanvasSize(parsed.canvasSize),
-        customCSS: parsed.customCSS,
+        elements: Array.isArray(parsed.elements)
+          ? parsed.elements as CanvasElement[]
+          : contentDocument
+            ? contentDocument.elements as unknown as CanvasElement[]
+            : [],
+        canvasSize: normalizeCanvasSize(isRecord(parsed.canvasSize) ? parsed.canvasSize : documentCanvasSize),
+        customCSS: typeof parsed.customCSS === 'string'
+          ? parsed.customCSS
+          : typeof contentDocument?.metadata?.customCSS === 'string'
+            ? contentDocument.metadata.customCSS
+            : undefined,
+        contentDocument,
       };
     }
   } catch {
@@ -853,11 +893,29 @@ function normalizeCanvasSize(input?: Partial<CanvasSize>): CanvasSize {
 export function serializeCanvasContent(
   elements: CanvasElement[],
   canvasSize: CanvasSize,
-  customCSS?: string
+  customCSS?: string,
+  options: SerializeCanvasContentOptions = {}
 ): string {
-  return JSON.stringify({
+  const payload: SavedCanvasPayload = {
     elements,
     canvasSize,
     customCSS,
-  });
+  };
+
+  if (options.documentId) {
+    payload.contentDocument = canvasElementsToBackyContentDocument({
+      id: options.documentId,
+      kind: options.kind || 'page',
+      title: options.title,
+      slug: options.slug,
+      status: options.status,
+      locale: options.locale || 'en',
+      version: options.version,
+      elements,
+      canvasSize,
+      customCSS,
+    });
+  }
+
+  return JSON.stringify(payload);
 }

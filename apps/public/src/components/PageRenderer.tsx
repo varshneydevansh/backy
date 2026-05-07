@@ -11,6 +11,7 @@
 
 'use client';
 
+import type { BackyContentDocument } from '@backy-cms/core';
 import React, { useEffect, useRef, useState } from 'react';
 
 // ============================================================================
@@ -92,6 +93,7 @@ export interface PageContent {
   canvasSize: { width: number; height: number };
   customCSS?: string;
   customJS?: string;
+  contentDocument?: BackyContentDocument;
 }
 
 /** Theme configuration */
@@ -113,6 +115,52 @@ interface FontAsset {
   weights?: Array<string | number>;
   styles?: Array<'normal' | 'italic' | 'oblique'>;
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const animationFromMetadata = (element: CanvasElement): AnimationConfig | undefined => {
+  const elementRecord = element as unknown as Record<string, unknown>;
+  const metadata = isRecord(elementRecord.metadata)
+    ? elementRecord.metadata
+    : null;
+  const animation = metadata && isRecord(metadata.animation)
+    ? metadata.animation
+    : null;
+
+  if (!animation) {
+    return undefined;
+  }
+
+  const type = typeof animation?.type === 'string' ? animation.type : null;
+  const duration = typeof animation?.duration === 'number' ? animation.duration : null;
+
+  if (!type || duration === null) {
+    return undefined;
+  }
+
+  return {
+    type,
+    duration,
+    delay: typeof animation.delay === 'number' ? animation.delay : undefined,
+    easing: typeof animation.easing === 'string' ? animation.easing : undefined,
+    direction: animation.direction === 'left' || animation.direction === 'right' || animation.direction === 'up' || animation.direction === 'down'
+      ? animation.direction
+      : undefined,
+    trigger: animation.trigger === 'load' || animation.trigger === 'scroll' || animation.trigger === 'hover'
+      ? animation.trigger
+      : undefined,
+  };
+};
+
+const toRenderableElements = (elements: CanvasElement[]): CanvasElement[] => (
+  elements.map((element) => ({
+    ...element,
+    animation: element.animation || animationFromMetadata(element),
+    children: element.children ? toRenderableElements(element.children) : undefined,
+  }))
+);
 
 interface CommentItem {
   id: string;
@@ -2272,7 +2320,25 @@ export function PageRenderer({
   pageId,
   postId,
 }: PageRendererProps) {
-  const { elements, canvasSize, customCSS } = content;
+  const documentCanvasSize = isRecord(content.contentDocument?.metadata?.canvasSize)
+    ? content.contentDocument.metadata.canvasSize
+    : null;
+  const elements = toRenderableElements(
+    content.elements.length > 0
+      ? content.elements
+      : content.contentDocument
+        ? content.contentDocument.elements as unknown as CanvasElement[]
+        : [],
+  );
+  const canvasSize = {
+    width: content.canvasSize?.width || Number(documentCanvasSize?.width) || 1200,
+    height: content.canvasSize?.height || Number(documentCanvasSize?.height) || 800,
+  };
+  const customCSS = content.customCSS || (
+    typeof content.contentDocument?.metadata?.customCSS === 'string'
+      ? content.contentDocument.metadata.customCSS
+      : undefined
+  );
   const [scale, setScale] = useState(1);
   const viewportRef = useRef<HTMLDivElement>(null);
 

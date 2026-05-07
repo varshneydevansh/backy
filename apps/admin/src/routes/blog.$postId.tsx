@@ -278,7 +278,14 @@ function EditBlogPostPage() {
         setIsLoading(true);
         setSaveWarning(null);
 
-        const content = serializeCanvasContent(canvasElements, canvasSize);
+        const content = serializeCanvasContent(canvasElements, canvasSize, undefined, {
+            documentId: post.id,
+            kind: 'post',
+            title,
+            slug,
+            status,
+            locale: 'en',
+        });
         const localUpdate = {
             title,
             slug,

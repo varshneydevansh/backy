@@ -1,4 +1,8 @@
-import { DEFAULT_THEME } from '@backy-cms/core';
+import {
+  DEFAULT_THEME,
+  isBackyContentDocument,
+  type BackyContentDocument,
+} from '@backy-cms/core';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -57,6 +61,7 @@ interface PageContent {
   };
   customCSS?: string;
   customJS?: string;
+  contentDocument?: BackyContentDocument;
 }
 
 interface StoreSite {
@@ -3604,6 +3609,9 @@ const normalizeReusableSectionContent = (
   const input = toRecord(value);
   const canvasSizeInput = toRecord(input.canvasSize);
   const existingCanvasSize = existing?.canvasSize || { width: 1200, height: 600 };
+  const contentDocument = isBackyContentDocument(input.contentDocument)
+    ? clone(input.contentDocument)
+    : existing?.contentDocument;
 
   return {
     elements: Array.isArray(input.elements)
@@ -3621,6 +3629,7 @@ const normalizeReusableSectionContent = (
     customJS: input.customJS === undefined
       ? existing?.customJS
       : sanitizeString(input.customJS),
+    contentDocument,
   };
 };
 
@@ -4139,6 +4148,9 @@ export function createAdminPage(siteId: string, input: Record<string, unknown>):
       },
       customCSS: sanitizeString(contentInput.customCSS),
       customJS: sanitizeString(contentInput.customJS),
+      contentDocument: isBackyContentDocument(contentInput.contentDocument)
+        ? clone(contentInput.contentDocument)
+        : undefined,
     },
     meta: {
       title: sanitizeString(metaInput.title) || title,
@@ -4205,6 +4217,11 @@ export function updateAdminPage(
           customJS: contentInput.customJS === undefined
             ? current.content.customJS
             : sanitizeString(contentInput.customJS),
+          contentDocument: contentInput.contentDocument === undefined
+            ? current.content.contentDocument
+            : isBackyContentDocument(contentInput.contentDocument)
+              ? clone(contentInput.contentDocument)
+              : undefined,
         },
     meta: input.meta === undefined
       ? {

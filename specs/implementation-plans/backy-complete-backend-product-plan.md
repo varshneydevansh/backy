@@ -143,6 +143,7 @@ The next implementation should not start by adding more UI screens. The product 
   - `packages/core/src/content-migrations.ts` now normalizes current canvas-shaped `elements[]` payloads into canonical `BackyContentDocument` data.
   - The migration keeps nested children, responsive overrides, JSON-safe props/styles, actions, data bindings, asset ids, accessibility hints, duplicate-id suffixing, animation metadata, canvas size metadata, and custom CSS metadata.
   - Public `/render` payload construction now runs page, post, and dynamic item content through the core migration helper before returning the schema-compatible content subset.
+  - Admin page and blog saves now include a canonical `contentDocument` beside the legacy canvas fields, and the public store/renderer preserve and render from that document when available.
 - **Validation**:
   - Add tests for current sample page content.
   - Current command: `npm run test:content-contract --workspace @backy-cms/core`.
