@@ -33,6 +33,7 @@ export interface Page {
     title: string;
     slug: string;
     status: ContentStatus;
+    scheduledAt?: string | null;
     content?: string;
     meta?: Record<string, any>;
     lastUpdated: string;
@@ -45,6 +46,7 @@ export interface BlogPost {
     excerpt: string;
     content: string;
     status: ContentStatus;
+    scheduledAt?: string | null;
     author: string;
     categoryIds?: string[];
     tagIds?: string[];

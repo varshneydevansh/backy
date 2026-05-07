@@ -14,6 +14,7 @@ import {
     type BlogCategory,
     type BlogTag,
 } from '@/lib/adminContentApi';
+import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
@@ -45,7 +46,8 @@ function NewBlogPostPage() {
     const [title, setTitle] = useState('');
     const [slug, setSlug] = useState('');
     const [excerpt, setExcerpt] = useState('');
-    const [status, setStatus] = useState<'draft' | 'published'>('draft');
+    const [status, setStatus] = useState<'draft' | 'published' | 'scheduled'>('draft');
+    const [scheduledAt, setScheduledAt] = useState<string | null>(null);
     const [categories, setCategories] = useState<BlogCategory[]>([]);
     const [tags, setTags] = useState<BlogTag[]>([]);
     const [authors, setAuthors] = useState<BlogAuthor[]>([]);
@@ -120,6 +122,7 @@ function NewBlogPostPage() {
         title,
         slug,
         status: 'draft',
+        scheduledAt: null,
         meta: { title, description: excerpt }
     };
 
@@ -135,6 +138,7 @@ function NewBlogPostPage() {
             slug,
             excerpt,
             status,
+            scheduledAt: status === 'scheduled' ? scheduledAt : null,
             author: user?.fullName || 'Anonymous',
             authorId: selectedAuthorId || user?.id || 'admin',
             categoryIds: selectedCategoryIds,
@@ -158,6 +162,7 @@ function NewBlogPostPage() {
                 excerpt,
                 content,
                 status,
+                scheduledAt: status === 'scheduled' ? scheduledAt : null,
                 author: authors.find((author) => author.id === selectedAuthorId)?.name || user?.fullName || 'Anonymous',
                 categoryIds: selectedCategoryIds,
                 tagIds: selectedTagIds,
@@ -250,13 +255,32 @@ function NewBlogPostPage() {
                                 <label className="block text-sm font-medium mb-2">Status</label>
                                 <select
                                     value={status}
-                                    onChange={(e) => setStatus(e.target.value as any)}
+                                    onChange={(e) => {
+                                        const nextStatus = e.target.value as typeof status;
+                                        setStatus(nextStatus);
+                                        if (nextStatus !== 'scheduled') {
+                                            setScheduledAt(null);
+                                        }
+                                    }}
                                     className="w-full px-4 py-2.5 rounded-lg border bg-background"
                                 >
                                     <option value="draft">Draft</option>
                                     <option value="published">Published</option>
+                                    <option value="scheduled">Scheduled</option>
                                 </select>
                             </div>
+                            {status === 'scheduled' && (
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Publish Date</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={toDateTimeLocalValue(scheduledAt)}
+                                        onChange={(e) => setScheduledAt(fromDateTimeLocalValue(e.target.value))}
+                                        className="w-full px-4 py-2.5 rounded-lg border bg-background"
+                                        required
+                                    />
+                                </div>
+                            )}
                             <div>
                                 <label className="block text-sm font-medium mb-2">Author</label>
                                 <select

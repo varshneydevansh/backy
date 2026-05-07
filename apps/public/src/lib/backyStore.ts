@@ -1217,8 +1217,24 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function isPublished(status?: StorePage['status']): boolean {
-  return status === 'published';
+function isPublished(
+  status?: StorePage['status'] | StoreBlogPost['status'],
+  scheduledAt?: string | null,
+): boolean {
+  if (status === 'published') {
+    return true;
+  }
+
+  if (status !== 'scheduled' || !scheduledAt) {
+    return false;
+  }
+
+  const scheduledTime = Date.parse(scheduledAt);
+  return Number.isFinite(scheduledTime) && scheduledTime <= Date.now();
+}
+
+function defaultNoIndexForStatus(status: StorePage['status'] | StoreBlogPost['status']): boolean {
+  return status !== 'published' && status !== 'scheduled';
 }
 
 function getPagination(total: number, limit: number, offset: number): Pagination {
@@ -2856,7 +2872,7 @@ export function getPageSummary(siteId: string, options: { includeUnpublished?: b
 
   const { includeUnpublished = false } = options;
   const pages = PAGE_LIST.filter(
-    (page) => page.siteId === siteId && (includeUnpublished || isPublished(page.status)),
+    (page) => page.siteId === siteId && (includeUnpublished || isPublished(page.status, page.scheduledAt)),
   );
 
   return clone(
@@ -2882,7 +2898,7 @@ export function getPageBySlug(
     return undefined;
   }
 
-  if (!includeUnpublished && !isPublished(target.status)) {
+  if (!includeUnpublished && !isPublished(target.status, target.scheduledAt)) {
     return undefined;
   }
 
@@ -2945,7 +2961,7 @@ export function createAdminPage(siteId: string, input: Record<string, unknown>):
       keywords: Array.isArray(metaInput.keywords) ? metaInput.keywords.map(sanitizeString).filter(Boolean) : undefined,
       ogImage: sanitizeString(metaInput.ogImage) || null,
       canonical: sanitizeString(metaInput.canonical) || `/${slug}`,
-      noIndex: parseBooleanInput(metaInput.noIndex, status !== 'published'),
+      noIndex: parseBooleanInput(metaInput.noIndex, defaultNoIndexForStatus(status)),
       noFollow: parseBooleanInput(metaInput.noFollow, false),
     },
     forms: Array.isArray(input.forms) ? input.forms.map(sanitizeString).filter(Boolean) : [],
@@ -3006,7 +3022,12 @@ export function updateAdminPage(
             : sanitizeString(contentInput.customJS),
         },
     meta: input.meta === undefined
-      ? current.meta
+      ? {
+          ...current.meta,
+          noIndex: current.status !== status && !defaultNoIndexForStatus(status)
+            ? false
+            : current.meta.noIndex,
+        }
       : {
           ...current.meta,
           title: metaInput.title === undefined ? current.meta.title : sanitizeString(metaInput.title),
@@ -3091,7 +3112,7 @@ export function getBlogPosts(
   let posts = BLOG_POSTS.filter((post) => post.siteId === siteId);
 
   if (!includeUnpublished) {
-    posts = posts.filter((post) => isPublished(post.status));
+    posts = posts.filter((post) => isPublished(post.status, post.scheduledAt));
   }
 
   if (status) {
@@ -3438,7 +3459,7 @@ export function createAdminBlogPost(siteId: string, input: Record<string, unknow
       keywords: Array.isArray(metaInput.keywords) ? metaInput.keywords.map(sanitizeString).filter(Boolean) : undefined,
       ogImage: sanitizeString(metaInput.ogImage) || null,
       canonical: sanitizeString(metaInput.canonical) || `/blog/${slug}`,
-      noIndex: parseBooleanInput(metaInput.noIndex, status !== 'published'),
+      noIndex: parseBooleanInput(metaInput.noIndex, defaultNoIndexForStatus(status)),
       noFollow: parseBooleanInput(metaInput.noFollow, false),
     },
     categoryIds: Array.isArray(input.categoryIds) ? input.categoryIds.map(sanitizeString).filter(Boolean) : [],
@@ -3487,7 +3508,12 @@ export function updateAdminBlogPost(
       : sanitizeString(input.featuredImageId) || null,
     authorId: input.authorId === undefined ? current.authorId : sanitizeString(input.authorId) || null,
     meta: input.meta === undefined
-      ? current.meta
+      ? {
+          ...current.meta,
+          noIndex: current.status !== status && !defaultNoIndexForStatus(status)
+            ? false
+            : current.meta.noIndex,
+        }
       : {
           ...current.meta,
           title: metaInput.title === undefined ? current.meta.title : sanitizeString(metaInput.title),

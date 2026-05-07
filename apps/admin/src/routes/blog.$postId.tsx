@@ -22,6 +22,7 @@ import {
     type BlogTag,
     type ContentRevision,
 } from '@/lib/adminContentApi';
+import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore, type BlogPost, type ContentStatus } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
@@ -68,6 +69,7 @@ function EditBlogPostPage() {
     const [slug, setSlug] = useState(post?.slug || '');
     const [excerpt, setExcerpt] = useState(post?.excerpt || '');
     const [status, setStatus] = useState<ContentStatus>(post?.status || 'draft');
+    const [scheduledAt, setScheduledAt] = useState<string | null>(post?.scheduledAt || null);
     const [selectedAuthorId, setSelectedAuthorId] = useState(post?.author || 'admin');
     const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(post?.categoryIds || []);
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>(post?.tagIds || []);
@@ -89,6 +91,7 @@ function EditBlogPostPage() {
                     setSlug(backendPost.slug);
                     setExcerpt(backendPost.excerpt);
                     setStatus(backendPost.status);
+                    setScheduledAt(backendPost.scheduledAt || null);
                     setSelectedAuthorId(backendPost.author || 'admin');
                     setSelectedCategoryIds(backendPost.categoryIds || []);
                     setSelectedTagIds(backendPost.tagIds || []);
@@ -97,6 +100,7 @@ function EditBlogPostPage() {
                 if (!cancelled) {
                     if (localFallbackPost) {
                         setPost(localFallbackPost);
+                        setScheduledAt(localFallbackPost.scheduledAt || null);
                         setSelectedAuthorId(localFallbackPost.author || 'admin');
                         setSelectedCategoryIds(localFallbackPost.categoryIds || []);
                         setSelectedTagIds(localFallbackPost.tagIds || []);
@@ -235,6 +239,7 @@ function EditBlogPostPage() {
         title,
         slug,
         status,
+        scheduledAt,
         meta: { title, description: excerpt },
     };
 
@@ -250,6 +255,7 @@ function EditBlogPostPage() {
             excerpt,
             content,
             status,
+            scheduledAt: status === 'scheduled' ? scheduledAt : null,
             author: selectedAuthorId,
             categoryIds: selectedCategoryIds,
             tagIds: selectedTagIds,
@@ -261,6 +267,7 @@ function EditBlogPostPage() {
                 slug,
                 excerpt,
                 status,
+                scheduledAt: status === 'scheduled' ? scheduledAt : null,
                 content: JSON.parse(content),
                 meta: {
                     title,
@@ -293,6 +300,7 @@ function EditBlogPostPage() {
         setSlug(nextPost.slug);
         setExcerpt(nextPost.excerpt);
         setStatus(nextPost.status);
+        setScheduledAt(nextPost.scheduledAt || null);
         setSelectedAuthorId(nextPost.author || 'admin');
         setSelectedCategoryIds(nextPost.categoryIds || []);
         setSelectedTagIds(nextPost.tagIds || []);
@@ -561,7 +569,13 @@ function EditBlogPostPage() {
                                 <label className="block text-sm font-medium mb-2">Status</label>
                                 <select
                                     value={status}
-                                    onChange={(e) => setStatus(e.target.value as ContentStatus)}
+                                    onChange={(e) => {
+                                        const nextStatus = e.target.value as ContentStatus;
+                                        setStatus(nextStatus);
+                                        if (nextStatus !== 'scheduled') {
+                                            setScheduledAt(null);
+                                        }
+                                    }}
                                     className="w-full px-4 py-2.5 rounded-lg border bg-background"
                                 >
                                     <option value="draft">Draft</option>
@@ -570,6 +584,18 @@ function EditBlogPostPage() {
                                     <option value="archived">Archived</option>
                                 </select>
                             </div>
+                            {status === 'scheduled' && (
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Publish Date</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={toDateTimeLocalValue(scheduledAt)}
+                                        onChange={(e) => setScheduledAt(fromDateTimeLocalValue(e.target.value))}
+                                        className="w-full px-4 py-2.5 rounded-lg border bg-background"
+                                        required
+                                    />
+                                </div>
+                            )}
                             <div>
                                 <label className="block text-sm font-medium mb-2">Author</label>
                                 <select

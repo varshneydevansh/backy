@@ -195,6 +195,7 @@ function PageEditorRoute() {
     title: page.title,
     slug: page.slug,
     status: page.status,
+    scheduledAt: page.scheduledAt || null,
     meta: page.meta || { title: page.title, description: '' },
   };
 
@@ -209,6 +210,7 @@ function PageEditorRoute() {
       title: settings.title,
       slug: settings.slug,
       status: settings.status,
+      scheduledAt: settings.status === 'scheduled' ? settings.scheduledAt || null : null,
       meta: settings.meta,
     };
 
@@ -217,6 +219,7 @@ function PageEditorRoute() {
         title: settings.title,
         slug: settings.slug,
         status: settings.status,
+        scheduledAt: settings.status === 'scheduled' ? settings.scheduledAt || null : null,
         meta: settings.meta,
         content: parseSerializedContent(content),
         revisionNote: 'Before page editor save',

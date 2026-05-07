@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, Save, Layout, Globe } from 'lucide-react';
 import { createPage } from '@/lib/adminContentApi';
+import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { cn } from '@/lib/utils';
@@ -26,7 +27,8 @@ function NewPageRoute() {
         slug: '',
         siteId: sites[0]?.publicSiteId || sites[0]?.id || 'site-demo',
         template: 'blank',
-        status: 'draft' as const,
+        status: 'draft' as 'draft' | 'published' | 'scheduled',
+        scheduledAt: null as string | null,
     });
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -39,6 +41,7 @@ function NewPageRoute() {
             slug: formData.slug,
             siteId: formData.siteId,
             status: formData.status,
+            scheduledAt: formData.status === 'scheduled' ? formData.scheduledAt : null,
             template: formData.template,
             meta: {
                 title: formData.title,
@@ -172,6 +175,44 @@ function NewPageRoute() {
                                     </label>
                                 ))}
                             </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Status</label>
+                                <select
+                                    value={formData.status}
+                                    onChange={(e) => {
+                                        const status = e.target.value as typeof formData.status;
+                                        setFormData({
+                                            ...formData,
+                                            status,
+                                            scheduledAt: status === 'scheduled' ? formData.scheduledAt : null,
+                                        });
+                                    }}
+                                    className="w-full px-4 py-2.5 rounded-lg border bg-background"
+                                >
+                                    <option value="draft">Draft</option>
+                                    <option value="published">Published</option>
+                                    <option value="scheduled">Scheduled</option>
+                                </select>
+                            </div>
+
+                            {formData.status === 'scheduled' && (
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Publish Date</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={toDateTimeLocalValue(formData.scheduledAt)}
+                                        onChange={(e) => setFormData({
+                                            ...formData,
+                                            scheduledAt: fromDateTimeLocalValue(e.target.value),
+                                        })}
+                                        className="w-full px-4 py-2.5 rounded-lg border bg-background"
+                                        required
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
 

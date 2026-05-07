@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { X, Search, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ContentStatus } from '@/stores/mockStore';
+import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 
 export interface PageSettings {
     title: string;
     slug: string;
     status: ContentStatus;
+    scheduledAt?: string | null;
     meta: {
         title?: string;
         description?: string;
@@ -30,14 +32,21 @@ export function PageSettingsModal({
 }: PageSettingsModalProps) {
     const [settings, setSettings] = useState<PageSettings>(initialSettings);
     const [activeTab, setActiveTab] = useState<'general' | 'seo' | 'social'>('general');
+    const [validationError, setValidationError] = useState<string | null>(null);
 
     useEffect(() => {
         setSettings(initialSettings);
+        setValidationError(null);
     }, [initialSettings, isOpen]);
 
     if (!isOpen) return null;
 
     const handleSave = () => {
+        if (settings.status === 'scheduled' && !settings.scheduledAt) {
+            setValidationError('Choose a publish date before scheduling this page.');
+            return;
+        }
+
         onSave(settings);
         onClose();
     };
@@ -97,6 +106,12 @@ export function PageSettingsModal({
                 <div className="p-6 overflow-y-auto flex-1">
                     {activeTab === 'general' && (
                         <div className="space-y-4">
+                            {validationError && (
+                                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                    {validationError}
+                                </div>
+                            )}
+
                             <div>
                                 <label className="block text-sm font-medium mb-1">Page Title</label>
                                 <input
@@ -128,7 +143,15 @@ export function PageSettingsModal({
                                 <label className="block text-sm font-medium mb-1">Status</label>
                                 <select
                                     value={settings.status}
-                                    onChange={(e) => setSettings({ ...settings, status: e.target.value as ContentStatus })}
+                                    onChange={(e) => {
+                                        const status = e.target.value as ContentStatus;
+                                        setValidationError(null);
+                                        setSettings({
+                                            ...settings,
+                                            status,
+                                            scheduledAt: status === 'scheduled' ? settings.scheduledAt || null : null,
+                                        });
+                                    }}
                                     className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
                                 >
                                     <option value="draft">Draft</option>
@@ -137,6 +160,25 @@ export function PageSettingsModal({
                                     <option value="archived">Archived</option>
                                 </select>
                             </div>
+
+                            {settings.status === 'scheduled' && (
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Publish Date</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={toDateTimeLocalValue(settings.scheduledAt)}
+                                        onChange={(e) => setSettings({
+                                            ...settings,
+                                            scheduledAt: fromDateTimeLocalValue(e.target.value),
+                                        })}
+                                        onFocus={() => setValidationError(null)}
+                                        className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
+                                    />
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        Scheduled pages go live automatically after this time.
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     )}
 

@@ -41,6 +41,7 @@ interface ApiPage {
   slug: string;
   description?: string | null;
   status?: AdminSiteStatus;
+  scheduledAt?: string | null;
   content?: unknown;
   meta?: Record<string, unknown>;
   updatedAt?: string;
@@ -162,6 +163,7 @@ interface ApiBlogPost {
   categoryIds?: string[];
   tagIds?: string[];
   publishedAt?: string | null;
+  scheduledAt?: string | null;
   updatedAt?: string;
   createdAt?: string;
 }
@@ -322,6 +324,7 @@ export interface PageCreateInput {
   title: string;
   slug: string;
   status?: Page['status'];
+  scheduledAt?: string | null;
   description?: string;
   template?: string;
   meta?: Record<string, unknown>;
@@ -332,6 +335,7 @@ export interface PageUpdateInput {
   title?: string;
   slug?: string;
   status?: Page['status'];
+  scheduledAt?: string | null;
   description?: string;
   meta?: Record<string, unknown>;
   content?: unknown;
@@ -344,6 +348,7 @@ export interface BlogPostInput {
   slug: string;
   excerpt?: string;
   status?: BlogPost['status'];
+  scheduledAt?: string | null;
   content?: unknown;
   meta?: Record<string, unknown>;
   authorId?: string | null;
@@ -356,6 +361,7 @@ export interface BlogPostUpdateInput {
   slug?: string;
   excerpt?: string;
   status?: BlogPost['status'];
+  scheduledAt?: string | null;
   content?: unknown;
   meta?: Record<string, unknown>;
   authorId?: string | null;
@@ -494,6 +500,7 @@ const toStorePage = (page: ApiPage): Page => ({
   title: page.title,
   slug: page.slug,
   status: toContentStatus(page.status, page.status === 'published'),
+  scheduledAt: page.scheduledAt || null,
   content: page.content ? JSON.stringify(page.content) : undefined,
   meta: page.meta || {
     title: page.title,
@@ -521,6 +528,7 @@ const toStorePost = (post: ApiBlogPost): BlogPost => ({
   excerpt: post.excerpt || '',
   content: stringifyContent(post.content),
   status: toContentStatus(post.status, post.status === 'published'),
+  scheduledAt: post.scheduledAt || null,
   author: post.authorId || 'admin',
   categoryIds: post.categoryIds || [],
   tagIds: post.tagIds || [],

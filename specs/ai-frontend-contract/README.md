@@ -25,6 +25,7 @@ The rule is simple: a custom frontend can look completely different from the Bac
    - `GET /api/sites/:siteId/pages?slug=:path`
    - `GET /api/sites/:siteId/render?path=/about`
    - Future stable form: `GET /api/public/sites/:siteId/resolve?path=/about`
+   - Public route resolution returns published content and scheduled content only after `scheduledAt` has passed. Drafts and future scheduled content require a valid preview token.
 
 3. Fetch supporting data.
    - media: `GET /api/sites/:siteId/media`
