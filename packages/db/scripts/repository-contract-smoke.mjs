@@ -4,6 +4,7 @@ import { createBackyContentDocument } from '../../core/dist/index.mjs';
 import {
   createCollectionRepository,
   createDatabaseRepositories,
+  createFormRepository,
   createMediaRepository,
   createPageRepository,
   createPostRepository,
@@ -14,6 +15,9 @@ import {
   blogPosts,
   contentCollectionRecords,
   contentCollections,
+  formContacts,
+  formDefinitions,
+  formSubmissions,
   media,
   mediaFolders,
   pages,
@@ -32,6 +36,9 @@ const tableName = (table) => {
   if (table === blogPosts) return 'blogPosts';
   if (table === contentCollections) return 'contentCollections';
   if (table === contentCollectionRecords) return 'contentCollectionRecords';
+  if (table === formDefinitions) return 'formDefinitions';
+  if (table === formSubmissions) return 'formSubmissions';
+  if (table === formContacts) return 'formContacts';
   if (table === media) return 'media';
   if (table === mediaFolders) return 'mediaFolders';
   throw new Error('Unknown table passed to fake DB');
@@ -44,6 +51,9 @@ const createFakeDb = () => {
     blogPosts: [],
     contentCollections: [],
     contentCollectionRecords: [],
+    formDefinitions: [],
+    formSubmissions: [],
+    formContacts: [],
     media: [],
     mediaFolders: [],
   };
@@ -53,6 +63,9 @@ const createFakeDb = () => {
     blogPosts: 0,
     contentCollections: 0,
     contentCollectionRecords: 0,
+    formDefinitions: 0,
+    formSubmissions: 0,
+    formContacts: 0,
     media: 0,
     mediaFolders: 0,
   };
@@ -172,6 +185,77 @@ const createFakeDb = () => {
         ...values,
       };
     }
+    if (name === 'formDefinitions') {
+      return {
+        id: nextId(name),
+        siteId: 'site_default',
+        pageId: null,
+        postId: null,
+        name: 'Contact',
+        title: 'Contact',
+        description: null,
+        audience: 'public',
+        isActive: true,
+        fields: [],
+        notificationEmail: null,
+        notificationWebhook: null,
+        successRedirectUrl: null,
+        successMessage: null,
+        enableHoneypot: true,
+        enableCaptcha: false,
+        moderationMode: 'manual',
+        contactShare: {},
+        collectionTarget: {},
+        createdBy: null,
+        updatedBy: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'formSubmissions') {
+      return {
+        id: nextId(name),
+        siteId: 'site_default',
+        formId: 'formDefinitions_1',
+        pageId: null,
+        postId: null,
+        values: {},
+        ipHash: null,
+        userAgent: null,
+        requestId: null,
+        status: 'pending',
+        reviewedBy: null,
+        reviewedAt: null,
+        adminNotes: null,
+        collectionRecord: null,
+        collectionRecordErrors: [],
+        submittedAt: timestamp,
+        updatedAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'formContacts') {
+      return {
+        id: nextId(name),
+        siteId: 'site_default',
+        formId: 'formDefinitions_1',
+        pageId: null,
+        postId: null,
+        name: null,
+        email: null,
+        phone: null,
+        notes: null,
+        sourceValues: {},
+        status: 'new',
+        sourceSubmissionId: null,
+        requestId: null,
+        sourceIpHash: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        ...values,
+      };
+    }
     return {
       id: nextId(name),
       siteId: 'site_default',
@@ -266,12 +350,14 @@ const repositorySet = createDatabaseRepositories({
 assert(repositorySet.sites && repositorySet.pages && repositorySet.posts, 'Expected repository set factories');
 assert(repositorySet.media, 'Expected media repository factory');
 assert(repositorySet.collections, 'Expected collection repository factory');
+assert(repositorySet.forms, 'Expected form repository factory');
 
 const siteRepository = createSiteRepository(db);
 const pageRepository = createPageRepository(db);
 const postRepository = createPostRepository(db);
 const mediaRepository = createMediaRepository(db);
 const collectionRepository = createCollectionRepository(db);
+const formRepository = createFormRepository(db);
 
 const site = (await siteRepository.create({
   teamId: 'team_contract',
@@ -517,6 +603,102 @@ assert((await collectionRepository.listRecords({
 assert(await collectionRepository.deleteRecord(site.id, collection.id, record.id), 'Expected collection record delete');
 assert(await collectionRepository.delete(site.id, updatedCollection.id), 'Expected collection delete');
 assert(await collectionRepository.delete(site.id, collection.id), 'Expected published collection delete');
+
+const form = (await formRepository.create({
+  siteId: site.id,
+  pageId: publishedPage.id,
+  postId: null,
+  name: 'Contact Form',
+  title: 'Contact us',
+  description: 'Lead capture',
+  audience: 'public',
+  isActive: true,
+  fields: [
+    {
+      key: 'email',
+      label: 'Email',
+      type: 'email',
+      required: true,
+    },
+    {
+      key: 'message',
+      label: 'Message',
+      type: 'textarea',
+      required: true,
+    },
+  ],
+  notificationEmail: 'team@example.com',
+  notificationWebhook: null,
+  successRedirectUrl: null,
+  successMessage: 'Thanks',
+  enableHoneypot: true,
+  enableCaptcha: false,
+  moderationMode: 'manual',
+  contactShare: {
+    enabled: true,
+    emailField: 'email',
+    notesField: 'message',
+  },
+  collectionTarget: null,
+  createdBy: 'user_admin',
+  updatedBy: 'user_admin',
+})).item;
+assert(form.id === 'formDefinitions_1', 'Expected fake form id');
+assert((await formRepository.list({ siteId: site.id, pageId: publishedPage.id })).items.length === 1, 'Expected form page filter');
+assert((await formRepository.getById(site.id, form.id))?.title === 'Contact us', 'Expected form getById');
+const updatedForm = (await formRepository.update(site.id, form.id, { title: 'Contact the team', isActive: false })).item;
+assert(updatedForm.title === 'Contact the team' && !updatedForm.isActive, 'Expected form update');
+
+const submission = (await formRepository.createSubmission({
+  siteId: site.id,
+  formId: form.id,
+  pageId: publishedPage.id,
+  postId: null,
+  values: {
+    email: 'reader@example.com',
+    message: 'Hello from repository smoke',
+  },
+  ipHash: '127.0.0.1',
+  userAgent: 'repository-smoke',
+  requestId: 'req_form_contract',
+  status: 'pending',
+  reviewedBy: null,
+  reviewedAt: null,
+  adminNotes: null,
+  collectionRecord: null,
+  collectionRecordErrors: [],
+})).item;
+assert(submission.id === 'formSubmissions_1', 'Expected fake submission id');
+assert((await formRepository.listSubmissions({ siteId: site.id, formId: form.id, requestId: 'req_form_contract' })).items.length === 1, 'Expected submission request filter');
+const approvedSubmission = (await formRepository.updateSubmission(site.id, submission.id, {
+  status: 'approved',
+  reviewedBy: 'user_admin',
+  adminNotes: 'Looks good',
+})).item;
+assert(approvedSubmission.status === 'approved' && approvedSubmission.reviewedBy === 'user_admin', 'Expected submission update');
+assert((await formRepository.getSubmissionById(site.id, form.id, submission.id))?.status === 'approved', 'Expected submission getById');
+
+const contact = (await formRepository.createContact({
+  siteId: site.id,
+  formId: form.id,
+  pageId: publishedPage.id,
+  postId: null,
+  name: 'Reader',
+  email: 'reader@example.com',
+  phone: null,
+  notes: 'Hello from repository smoke',
+  sourceValues: approvedSubmission.values,
+  status: 'new',
+  sourceSubmissionId: approvedSubmission.id,
+  requestId: approvedSubmission.requestId,
+  sourceIpHash: approvedSubmission.ipHash,
+})).item;
+assert(contact.id === 'formContacts_1', 'Expected fake contact id');
+assert((await formRepository.listContacts({ siteId: site.id, formId: form.id, requestId: 'req_form_contract' })).items.length === 1, 'Expected contact request filter');
+const qualifiedContact = (await formRepository.updateContact(site.id, contact.id, { status: 'qualified' })).item;
+assert(qualifiedContact.status === 'qualified', 'Expected contact update');
+assert((await formRepository.getContactById(site.id, form.id, contact.id))?.status === 'qualified', 'Expected contact getById');
+assert(await formRepository.delete(site.id, form.id), 'Expected form delete');
 
 assert(await pageRepository.delete(site.id, publishedPage.id), 'Expected page delete');
 assert(await postRepository.delete(site.id, archivedPost.id), 'Expected post delete');

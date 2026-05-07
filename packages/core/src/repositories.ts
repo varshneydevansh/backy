@@ -363,6 +363,15 @@ export interface BackyFormSubmissionListInput extends BackyPaginationInput {
   formId?: string;
   status?: FormSubmission['status'] | 'all';
   search?: string;
+  requestId?: string;
+}
+
+export interface BackyContactListInput extends BackyPaginationInput {
+  siteId: string;
+  formId?: string;
+  status?: Contact['status'] | 'all';
+  search?: string;
+  requestId?: string;
 }
 
 export interface BackyCommentCreateInput {
@@ -539,9 +548,13 @@ export interface BackyFormRepository {
   update(siteId: string, formId: string, input: Partial<FormDefinition>, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<FormDefinition>>;
   delete(siteId: string, formId: string, context?: BackyRepositoryContext): Promise<boolean>;
   listSubmissions(input: BackyFormSubmissionListInput, context?: BackyRepositoryContext): Promise<BackyListResult<FormSubmission>>;
+  getSubmissionById(siteId: string, formId: string, submissionId: string, context?: BackyRepositoryContext): Promise<FormSubmission | null>;
   createSubmission(input: Omit<FormSubmission, 'id' | 'submittedAt'>, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<FormSubmission>>;
   updateSubmission(siteId: string, submissionId: string, input: Partial<FormSubmission>, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<FormSubmission>>;
-  listContacts(input: BackyPaginationInput & { siteId: string; formId?: string; search?: string }, context?: BackyRepositoryContext): Promise<BackyListResult<Contact>>;
+  listContacts(input: BackyContactListInput, context?: BackyRepositoryContext): Promise<BackyListResult<Contact>>;
+  getContactById(siteId: string, formId: string, contactId: string, context?: BackyRepositoryContext): Promise<Contact | null>;
+  createContact(input: Omit<Contact, 'id' | 'createdAt' | 'updatedAt'>, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<Contact>>;
+  updateContact(siteId: string, contactId: string, input: Partial<Contact>, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<Contact>>;
 }
 
 export interface BackyCommentRepository {

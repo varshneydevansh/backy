@@ -366,6 +366,95 @@ export const contentCollectionRecords = pgTable('content_collection_records', {
 });
 
 // ==========================================================================
+// FORMS - Public interaction definitions, submissions, and contacts
+// ==========================================================================
+
+/**
+ * Form definitions - public forms that can be embedded on pages/posts or custom frontends.
+ */
+export const formDefinitions = pgTable('form_definitions', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    siteId: uuid('site_id')
+        .references(() => sites.id, { onDelete: 'cascade' })
+        .notNull(),
+
+    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'set null' }),
+    postId: uuid('post_id').references(() => blogPosts.id, { onDelete: 'set null' }),
+    name: text('name').notNull(),
+    title: text('title'),
+    description: text('description'),
+    audience: text('audience').default('public').notNull(),
+    isActive: boolean('is_active').default(true).notNull(),
+    fields: jsonb('fields').default([]).notNull(),
+    notificationEmail: text('notification_email'),
+    notificationWebhook: text('notification_webhook'),
+    successRedirectUrl: text('success_redirect_url'),
+    successMessage: text('success_message'),
+    enableHoneypot: boolean('enable_honeypot').default(true).notNull(),
+    enableCaptcha: boolean('enable_captcha').default(false).notNull(),
+    moderationMode: text('moderation_mode').default('manual').notNull(),
+    contactShare: jsonb('contact_share').default({}),
+    collectionTarget: jsonb('collection_target').default({}),
+    createdBy: uuid('created_by').references(() => profiles.id),
+    updatedBy: uuid('updated_by').references(() => profiles.id),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+/**
+ * Form submissions - captured public interaction payloads.
+ */
+export const formSubmissions = pgTable('form_submissions', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    siteId: uuid('site_id')
+        .references(() => sites.id, { onDelete: 'cascade' })
+        .notNull(),
+    formId: uuid('form_id')
+        .references(() => formDefinitions.id, { onDelete: 'cascade' })
+        .notNull(),
+    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'set null' }),
+    postId: uuid('post_id').references(() => blogPosts.id, { onDelete: 'set null' }),
+    values: jsonb('values').default({}).notNull(),
+    ipHash: text('ip_hash'),
+    userAgent: text('user_agent'),
+    requestId: text('request_id'),
+    status: text('status').default('pending').notNull(),
+    reviewedBy: uuid('reviewed_by').references(() => profiles.id),
+    reviewedAt: timestamp('reviewed_at'),
+    adminNotes: text('admin_notes'),
+    collectionRecord: jsonb('collection_record'),
+    collectionRecordErrors: jsonb('collection_record_errors').default([]),
+    submittedAt: timestamp('submitted_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+/**
+ * Form contacts - CRM-style leads derived from accepted submissions.
+ */
+export const formContacts = pgTable('form_contacts', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    siteId: uuid('site_id')
+        .references(() => sites.id, { onDelete: 'cascade' })
+        .notNull(),
+    formId: uuid('form_id')
+        .references(() => formDefinitions.id, { onDelete: 'cascade' })
+        .notNull(),
+    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'set null' }),
+    postId: uuid('post_id').references(() => blogPosts.id, { onDelete: 'set null' }),
+    name: text('name'),
+    email: text('email'),
+    phone: text('phone'),
+    notes: text('notes'),
+    sourceValues: jsonb('source_values').default({}),
+    status: text('status').default('new').notNull(),
+    sourceSubmissionId: uuid('source_submission_id'),
+    requestId: text('request_id'),
+    sourceIpHash: text('source_ip_hash'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// ==========================================================================
 // DOMAINS - Custom domain mapping
 // ==========================================================================
 
@@ -472,6 +561,7 @@ export const sitesRelations = relations(sites, ({ one, many }) => ({
     blogPosts: many(blogPosts),
     media: many(media),
     collections: many(contentCollections),
+    forms: many(formDefinitions),
 }));
 
 export const pagesRelations = relations(pages, ({ one }) => ({
@@ -519,5 +609,36 @@ export const contentCollectionRecordsRelations = relations(contentCollectionReco
     collection: one(contentCollections, {
         fields: [contentCollectionRecords.collectionId],
         references: [contentCollections.id],
+    }),
+}));
+
+export const formDefinitionsRelations = relations(formDefinitions, ({ one, many }) => ({
+    site: one(sites, {
+        fields: [formDefinitions.siteId],
+        references: [sites.id],
+    }),
+    submissions: many(formSubmissions),
+    contacts: many(formContacts),
+}));
+
+export const formSubmissionsRelations = relations(formSubmissions, ({ one }) => ({
+    site: one(sites, {
+        fields: [formSubmissions.siteId],
+        references: [sites.id],
+    }),
+    form: one(formDefinitions, {
+        fields: [formSubmissions.formId],
+        references: [formDefinitions.id],
+    }),
+}));
+
+export const formContactsRelations = relations(formContacts, ({ one }) => ({
+    site: one(sites, {
+        fields: [formContacts.siteId],
+        references: [sites.id],
+    }),
+    form: one(formDefinitions, {
+        fields: [formContacts.formId],
+        references: [formDefinitions.id],
     }),
 }));

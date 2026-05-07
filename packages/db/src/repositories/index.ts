@@ -2,6 +2,9 @@ export {
     createCollectionRepository,
 } from './collections';
 export {
+    createFormRepository,
+} from './forms';
+export {
     createMediaRepository,
 } from './media';
 export {
