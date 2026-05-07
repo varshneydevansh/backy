@@ -368,6 +368,7 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
   8. Submit interactive blocks using:
      - `POST /api/sites/:siteId/forms/:formId/submissions`
      - `POST /api/sites/:siteId/pages/:pageId/comments`
+- `packages/sdk-js` wraps this public flow for JavaScript/TypeScript frontends. It intentionally calls the same public endpoints documented above, so consumers can use the SDK or raw HTTP interchangeably without depending on admin/editor internals.
 - CORS policy for custom frontends:
   - allow exact frontend origin(s),
   - send `requestId` for debug parity.

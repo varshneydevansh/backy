@@ -70,6 +70,10 @@ It returns `frontend-manifest.schema.json` and gives custom frontends a single b
 
 The manifest advertises a site-scoped OpenAPI export at `GET /api/sites/:siteId/openapi`. That document describes the current public discovery, route resolution, render, navigation, media, collection, form, comment, report, contact, and interaction-event operations for the selected site and includes Backy-specific vendor metadata for available collection and form ids. Manifest `endpoints` also include template URLs for form detail/submissions/contacts, page/blog comments, comment reports, and interaction events so generated frontends do not have to hardcode Backy route shapes.
 
+## JavaScript SDK starter
+
+`packages/sdk-js` provides the current TypeScript client for custom frontends. It uses only public Backy APIs and exposes helpers for site discovery, manifest/OpenAPI bootstrap, route resolution, render payloads, navigation, media, collections/records, forms/submissions/contacts, comments/reports, and interaction events. The smoke command `npm run test:smoke --workspace @backy/sdk-js` builds confidence that a frontend can consume the public API surface without importing admin/editor code.
+
 ## Current font asset contract
 
 Uploaded font files are stored as media with `type: "font"`. Admin media upload/update accepts font metadata keys `fontFamily`, `fontWeight`, and `fontStyle`; public media hides private fonts, while `/render` includes public registered fonts in `assets.fonts`. Backy's hosted page and blog renderers inject matching `@font-face` rules so element-level font choices render without custom frontend code.

@@ -325,6 +325,8 @@ The next implementation should not start by adding more UI screens. The product 
 - **Dependencies**: Tasks 4.1 and 4.2
 - **Acceptance Criteria**:
   - External frontend can call site resolve, page fetch, media list, collection reads/writes, form list/detail/submit/review/contact endpoints, comment list/detail/update/report endpoints, and interaction event reads.
+- **Current progress**:
+  - `packages/sdk-js` exposes a TypeScript public API client for site discovery, manifest/OpenAPI bootstrap, resolve, render, navigation, media, collection records, forms/submissions/contacts, comments/reports, and interaction events.
 - **Validation**:
   - SDK smoke test against local public app.
   - Public contract smoke verifies that the site manifest advertises the same interaction endpoint templates that the site-scoped OpenAPI document exposes.
