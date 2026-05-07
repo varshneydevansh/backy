@@ -122,38 +122,6 @@ function PageEditorRoute() {
     };
   }, [page, pageId, siteId]);
 
-  const parseSerializedContent = (serialized: string): unknown => {
-    try {
-      return JSON.parse(serialized);
-    } catch {
-      return {
-        elements: [],
-        canvasSize: initialCanvasSize,
-      };
-    }
-  };
-
-  // If page not found, show error
-  if (isLoadingPage && !page) {
-    return (
-      <PageShell title="Loading page" description="Fetching editor content from the backend.">
-        <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          Loading page editor...
-        </div>
-      </PageShell>
-    );
-  }
-
-  if (!page) {
-    return (
-      <PageShell title="Page Not Found" description={loadError || "The page you requested doesn't exist."}>
-        <button onClick={() => navigate({ to: '/pages' })} className="text-primary hover:underline">
-          &larr; Back to Pages
-        </button>
-      </PageShell>
-    );
-  }
-
   // Load Elements
   const { elements: initialElements, canvasSize: initialCanvasSize } = useMemo(
     () => normalizeSavedCanvasContent(page?.content || null),
@@ -189,6 +157,38 @@ function PageEditorRoute() {
       }),
     ];
   }, [initialElements, page?.id, page?.title]);
+
+  const parseSerializedContent = (serialized: string): unknown => {
+    try {
+      return JSON.parse(serialized);
+    } catch {
+      return {
+        elements: [],
+        canvasSize: initialCanvasSize,
+      };
+    }
+  };
+
+  // If page not found, show error
+  if (isLoadingPage && !page) {
+    return (
+      <PageShell title="Loading page" description="Fetching editor content from the backend.">
+        <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          Loading page editor...
+        </div>
+      </PageShell>
+    );
+  }
+
+  if (!page) {
+    return (
+      <PageShell title="Page Not Found" description={loadError || "The page you requested doesn't exist."}>
+        <button onClick={() => navigate({ to: '/pages' })} className="text-primary hover:underline">
+          &larr; Back to Pages
+        </button>
+      </PageShell>
+    );
+  }
 
   // Load Settings
   const initialSettings: PageSettings = {

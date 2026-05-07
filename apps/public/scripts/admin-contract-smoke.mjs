@@ -88,6 +88,29 @@ try {
   const postSlug = `admin-contract-post-${unique}`;
   const categorySlug = `admin-contract-category-${unique}`;
   const tagSlug = `admin-contract-tag-${unique}`;
+  const adminDevOrigin = 'http://localhost:5173';
+
+  await record('api cors allows local admin dev origin', async () => {
+    const preflight = await request('/api/admin/sites', {
+      method: 'OPTIONS',
+      headers: {
+        origin: adminDevOrigin,
+        'access-control-request-method': 'GET',
+        'access-control-request-headers': 'content-type',
+      },
+    });
+    assert(preflight.response.status === 204, `${preflight.url} expected 204 preflight, got ${preflight.response.status}`);
+    assert(preflight.response.headers.get('access-control-allow-origin') === adminDevOrigin, `${preflight.url} missing allowed origin`);
+    assert(preflight.response.headers.get('access-control-allow-methods')?.includes('GET'), `${preflight.url} missing allowed methods`);
+
+    const actual = await request('/api/admin/sites?includeUnpublished=true', {
+      headers: {
+        origin: adminDevOrigin,
+      },
+    });
+    assert(actual.response.status === 200, `${actual.url} expected 200, got ${actual.response.status}`);
+    assert(actual.response.headers.get('access-control-allow-origin') === adminDevOrigin, `${actual.url} missing CORS header`);
+  });
 
   await record('admin sites list returns success envelope', async () => {
     const { response, json, url } = await request('/api/admin/sites?includeUnpublished=true');
