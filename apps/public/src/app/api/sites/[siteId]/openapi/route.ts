@@ -260,6 +260,29 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
           },
         },
+        [`/api/sites/${site.id}/media/{mediaId}`]: {
+          get: {
+            tags: ['Media'],
+            summary: 'Fetch a public media asset',
+            operationId: 'getBackyMedia',
+            parameters: [
+              { name: 'mediaId', in: 'path', required: true, schema: { type: 'string' } },
+            ],
+            responses: {
+              '200': {
+                description: 'Media asset',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/MediaDetailEnvelope' },
+                  },
+                },
+              },
+              '404': {
+                description: 'Media not found or private',
+              },
+            },
+          },
+        },
         [`/api/sites/${site.id}/collections`]: {
           get: {
             tags: ['Content'],
@@ -1011,6 +1034,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               },
             }),
           },
+          MediaDetailEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['media'],
+            properties: {
+              media: { type: 'object', additionalProperties: true },
+            },
+          }),
           ReusableSectionListEnvelope: envelopeSchema({
             type: 'object',
             required: ['sections', 'pagination'],

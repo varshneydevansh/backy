@@ -122,6 +122,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           robots: `/api/sites/${site.id}/seo?format=robots`,
           navigation: `/api/sites/${site.id}/navigation`,
           media: `/api/sites/${site.id}/media`,
+          mediaDetail: `/api/sites/${site.id}/media/{mediaId}`,
           pages: `/api/sites/${site.id}/pages`,
           blog: `/api/sites/${site.id}/blog`,
           blogCategories: `/api/sites/${site.id}/blog/categories`,

@@ -529,6 +529,10 @@ export class BackyClient {
     });
   }
 
+  mediaAsset(mediaId: string): Promise<BackyEnvelope<{ media: BackyMediaAsset }>> {
+    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/media/${encodeURIComponent(mediaId)}`);
+  }
+
   collections(siteId = this.requireSiteId()): Promise<BackyEnvelope<{ collections: BackyCollectionSchema[] }>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/collections`);
   }

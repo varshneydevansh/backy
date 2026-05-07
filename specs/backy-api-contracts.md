@@ -47,6 +47,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/sites/:siteId/openapi`
   - Site-scoped OpenAPI 3.1 document for public frontend integrations.
   - Describes discovery, route resolution, render payload, navigation, media list, collection list/records/create, form detail/submission/contact operations, page/blog/site comment operations, comment reports, report reasons, and interaction events for the selected site.
+  - Media detail is exposed as `/api/sites/:siteId/media/{mediaId}` for exact asset lookup by generated/custom frontends.
   - Includes `x-backy` vendor metadata for `siteId`, `siteSlug`, contract version, public collection ids, and form ids.
   - Published OpenAPI responses use the same discovery cache, ETag revalidation, and Backy contract headers as the manifest.
   - Draft/unpublished sites are hidden from the public OpenAPI document.
@@ -99,10 +100,12 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Responses use `{ success, requestId, data }`; legacy top-level `categories`, `tags`, and `authors` remain for compatibility.
 
 - `GET /api/sites/:siteId/media`
+- `GET /api/sites/:siteId/media/:mediaId`
   - Public media catalog for custom frontends.
   - Response uses `{ success, requestId, data: { media, pagination } }`; legacy top-level `media` and `pagination` remain for compatibility.
   - Current implementation only returns `visibility=public` catalog items, even if a caller asks for private media.
   - Supports `type`, `scope`, `pageId`, `postId`, `q`/`search`, `tag`, `folderId`, `limit`, and `offset` filters.
+  - The detail route returns one public asset in `{ success, requestId, data: { media } }`, preserves legacy top-level `media`, and returns `404` for missing or private media.
 
 - `GET /api/sites/:siteId/navigation`
   - Public navigation contract for external frontends.

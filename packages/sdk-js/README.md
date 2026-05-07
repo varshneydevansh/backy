@@ -12,12 +12,15 @@ const manifest = await backy.manifest();
 const page = await backy.render('/');
 const seo = await backy.seo();
 const sections = await backy.reusableSections();
+const media = await backy.media({ limit: 1 });
+const asset = media.data.media[0] ? await backy.mediaAsset(media.data.media[0].id) : null;
 
 page.data.content.elements.forEach((element) => {
   console.log(element.id, element.type);
 });
 
 console.log(sections.data.sections.map((section) => section.name));
+console.log(asset?.data.media.id);
 console.log(seo.data.sitemap.url);
 ```
 

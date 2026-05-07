@@ -32,6 +32,7 @@ The rule is simple: a custom frontend can look completely different from the Bac
 
 3. Fetch supporting data.
    - media: `GET /api/sites/:siteId/media`
+   - media detail: `GET /api/sites/:siteId/media/:mediaId`
    - navigation: `GET /api/sites/:siteId/navigation`
    - blog: `GET /api/sites/:siteId/blog`
    - blog categories: `GET /api/sites/:siteId/blog/categories`
@@ -72,7 +73,7 @@ Backy exposes a site-level discovery endpoint:
 
 It returns `frontend-manifest.schema.json` and gives custom frontends a single bootstrap document for site identity, theme tokens, public endpoint URLs, route patterns, module capabilities, navigation, page/blog/collection/reusable-section/form/media summaries, collection field schemas, form submit URLs, and form-to-collection targets. This mirrors the role of REST discovery in a WordPress-like frontend integration while keeping Backy's render payload as the page/post/item-specific contract.
 
-The manifest advertises a site-scoped OpenAPI export at `GET /api/sites/:siteId/openapi`. That document describes the current public discovery, route resolution, render, navigation, media, collection, reusable-section, form, comment, report, contact, and interaction-event operations for the selected site and includes Backy-specific vendor metadata for available collection, reusable-section, and form ids. Manifest `endpoints` also include template URLs for reusable section detail, form detail/submissions/contacts, page/blog comments, comment reports, and interaction events so generated frontends do not have to hardcode Backy route shapes.
+The manifest advertises a site-scoped OpenAPI export at `GET /api/sites/:siteId/openapi`. That document describes the current public discovery, route resolution, render, navigation, media, collection, reusable-section, form, comment, report, contact, and interaction-event operations for the selected site and includes Backy-specific vendor metadata for available collection, reusable-section, and form ids. Manifest `endpoints` also include template URLs for media detail, reusable section detail, form detail/submissions/contacts, page/blog comments, comment reports, and interaction events so generated frontends do not have to hardcode Backy route shapes. The SDK `mediaAsset(mediaId)` helper exposes exact public media lookup for generated/custom frontends that need to resolve a stored image, video, font, document, or file by stable Backy asset ID.
 
 Published manifest and OpenAPI responses include short public discovery cache headers, ETags with `If-None-Match` 304 support, plus the same Backy contract/request/site headers. Draft/hidden discovery responses are `no-store`.
 

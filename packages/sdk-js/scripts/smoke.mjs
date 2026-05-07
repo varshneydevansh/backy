@@ -262,6 +262,10 @@ assert(seo.data.sitemap?.url, 'seo() missing sitemap URL');
 
 const media = await client.media({ limit: 5 });
 assert(media.data.media || media.data.pagination, 'media() missing media list data');
+if (media.data.media?.length > 0) {
+  const mediaDetail = await client.mediaAsset(media.data.media[0].id);
+  assert(mediaDetail.data.media?.id === media.data.media[0].id, 'mediaAsset() returned wrong media asset');
+}
 
 const reusableSections = await client.reusableSections();
 assert(Array.isArray(reusableSections.data.sections), 'reusableSections() missing sections array');
