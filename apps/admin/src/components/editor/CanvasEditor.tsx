@@ -13,6 +13,12 @@
 
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import {
+  AlignHorizontalJustifyCenter,
+  AlignHorizontalJustifyEnd,
+  AlignHorizontalJustifyStart,
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
+  AlignVerticalJustifyStart,
   ArrowLeft,
   Save,
   Eye,
@@ -81,6 +87,8 @@ const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
   'quote',
   'comment',
 ];
+
+type CanvasAlignment = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
 
 export interface CanvasEditorProps {
   initialElements: CanvasElement[];
@@ -776,6 +784,7 @@ export function CanvasEditor({
 
   // Get selected element
   const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
+  const canAlignSelected = !!selectedElement && !selectedElement.locked;
 
   /**
    * Handle element selection
@@ -857,6 +866,42 @@ export function CanvasEditor({
         ...element,
         x: Math.max(0, Math.min(element.x + deltaX, Math.max(0, size.width - element.width))),
         y: Math.max(0, Math.min(element.y + deltaY, Math.max(0, size.height - element.height))),
+      }));
+
+      return result.updated ? result.elements : currentElements;
+    }, selectedId);
+  }, [findElementById, selectedId, size.height, size.width, updateElementsWithHistory]);
+
+  const alignSelectedElement = useCallback((alignment: CanvasAlignment) => {
+    if (!selectedId) {
+      return;
+    }
+
+    updateElementsWithHistory((currentElements) => {
+      const selected = findElementById(currentElements, selectedId);
+      if (!selected || selected.locked) {
+        return currentElements;
+      }
+
+      const nextX = alignment === 'left'
+        ? 0
+        : alignment === 'center'
+          ? Math.max(0, Math.round((size.width - selected.width) / 2))
+          : alignment === 'right'
+            ? Math.max(0, size.width - selected.width)
+            : selected.x;
+      const nextY = alignment === 'top'
+        ? 0
+        : alignment === 'middle'
+          ? Math.max(0, Math.round((size.height - selected.height) / 2))
+          : alignment === 'bottom'
+            ? Math.max(0, size.height - selected.height)
+            : selected.y;
+
+      const result = updateElementById(currentElements, selectedId, (element) => ({
+        ...element,
+        x: nextX,
+        y: nextY,
       }));
 
       return result.updated ? result.elements : currentElements;
@@ -1345,6 +1390,72 @@ export function CanvasEditor({
             >
               Duplicate
             </button>
+
+            <div className="w-px h-6 bg-slate-200 mx-1" />
+
+            <div className="flex items-center gap-0.5" aria-label="Alignment controls">
+              <button
+                type="button"
+                onClick={() => alignSelectedElement('left')}
+                disabled={!canAlignSelected}
+                className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Align left"
+                aria-label="Align left"
+              >
+                <AlignHorizontalJustifyStart className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => alignSelectedElement('center')}
+                disabled={!canAlignSelected}
+                className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Align horizontal center"
+                aria-label="Align horizontal center"
+              >
+                <AlignHorizontalJustifyCenter className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => alignSelectedElement('right')}
+                disabled={!canAlignSelected}
+                className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Align right"
+                aria-label="Align right"
+              >
+                <AlignHorizontalJustifyEnd className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => alignSelectedElement('top')}
+                disabled={!canAlignSelected}
+                className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Align top"
+                aria-label="Align top"
+              >
+                <AlignVerticalJustifyStart className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => alignSelectedElement('middle')}
+                disabled={!canAlignSelected}
+                className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Align vertical center"
+                aria-label="Align vertical center"
+              >
+                <AlignVerticalJustifyCenter className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => alignSelectedElement('bottom')}
+                disabled={!canAlignSelected}
+                className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Align bottom"
+                aria-label="Align bottom"
+              >
+                <AlignVerticalJustifyEnd className="h-4 w-4" />
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={deleteElement}
