@@ -5,6 +5,11 @@ import {
   getSiteByIdOrSlug,
   updateCommentStatus,
 } from '@/lib/backyStore';
+import {
+  resolveRepositorySite,
+  updateRepositoryCommentStatus,
+} from '@/lib/commentRepositorySupport';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { Comment } from '@backy-cms/core';
 
 interface RouteParams {
@@ -72,6 +77,34 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, pageId, commentId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const page = await repositories.pages.getById(site.id, pageId);
+      if (!page) {
+        return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
+      }
+
+      const comment = await repositories.comments.getById(site.id, commentId);
+      if (!comment || comment.targetType !== 'page' || comment.targetId !== pageId) {
+        return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          comment,
+        },
+        comment,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
@@ -107,6 +140,48 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, pageId, commentId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', baseRequestId);
+      }
+
+      const page = await repositories.pages.getById(site.id, pageId);
+      if (!page) {
+        return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', baseRequestId);
+      }
+
+      const targetComment = await repositories.comments.getById(site.id, commentId);
+      if (!targetComment || targetComment.targetType !== 'page' || targetComment.targetId !== pageId) {
+        return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', baseRequestId);
+      }
+
+      const body = parseBody(await request.json().catch(() => null));
+      if (!body || !body.status) {
+        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status is required.', baseRequestId);
+      }
+      const requestId = body.requestId || baseRequestId;
+
+      const nextComment = await updateRepositoryCommentStatus(repositories, site.id, targetComment, {
+        status: body.status,
+        reviewedBy: body.reviewedBy,
+        rejectionReason: body.rejectionReason,
+        blockReason: body.blockReason,
+        requestId: body.requestId,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          comment: nextComment,
+        },
+        comment: nextComment,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', baseRequestId);

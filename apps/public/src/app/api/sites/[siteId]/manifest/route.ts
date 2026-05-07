@@ -137,7 +137,7 @@ const buildRepositoryManifest = (
         mediaLibrary: true,
         uploadedFonts: fonts.length > 0,
         blog: true,
-        comments: false,
+        comments: true,
         forms: input.forms.length > 0,
         collectionSchemas: true,
         collectionRecords: true,

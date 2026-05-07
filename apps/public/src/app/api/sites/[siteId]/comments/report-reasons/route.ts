@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSiteByIdOrSlug, getCommentReportReasons } from '@/lib/backyStore';
+import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
   params: Promise<{
@@ -29,6 +31,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const reasons = getCommentReportReasons();
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          reasons,
+        },
+        reasons,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);

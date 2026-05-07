@@ -5,6 +5,11 @@ import {
   getCommentReportReasons,
   reportComment,
 } from '@/lib/backyStore';
+import {
+  reportRepositoryComment,
+  resolveRepositorySite,
+} from '@/lib/commentRepositorySupport';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
   params: Promise<{
@@ -74,6 +79,25 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const reasons = getCommentReportReasons();
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          reasons,
+        },
+        reasons,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
@@ -99,6 +123,41 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, commentId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', baseRequestId);
+      }
+
+      const comment = await repositories.comments.getById(site.id, commentId);
+      if (!comment) {
+        return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', baseRequestId);
+      }
+
+      const payload = parseBody(await request.json().catch(() => null));
+      if (!payload) {
+        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. reason is required.', baseRequestId);
+      }
+      const requestId = payload.requestId || baseRequestId;
+
+      const updated = await reportRepositoryComment(repositories, site.id, comment, {
+        reason: payload.reason,
+        actor: payload.actor,
+        requestId: payload.requestId,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          comment: updated,
+        },
+        comment: updated,
+      }, { status: 201 });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', baseRequestId);

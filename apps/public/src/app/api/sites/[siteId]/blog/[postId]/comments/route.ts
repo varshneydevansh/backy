@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { Comment } from '@backy-cms/core';
 import {
   createComment,
   getCommentById,
@@ -7,6 +8,8 @@ import {
   getSiteByIdOrSlug,
   validateAndClassifyComment,
 } from '@/lib/backyStore';
+import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
   params: Promise<{
@@ -130,6 +133,45 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const limit = parseInt(searchParams.get('limit') || '20', 10);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
 
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const post = await repositories.posts.getById(site.id, postId);
+      if (!post) {
+        return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+      }
+
+      const result = await repositories.comments.list({
+        siteId: site.id,
+        targetType: 'post',
+        targetId: postId,
+        commentThreadId: commentThreadId || undefined,
+        status,
+        parentOnly,
+        parentId: parentId || null,
+        sort,
+        limit: Number.isFinite(limit) ? limit : 20,
+        offset: Number.isFinite(offset) ? offset : 0,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          comments: result.items,
+          count: result.pagination.total,
+          pagination: result.pagination,
+        },
+        comments: result.items,
+        count: result.pagination.total,
+        pagination: result.pagination,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
@@ -183,6 +225,210 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, postId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
+      }
+
+      const post = await repositories.posts.getById(site.id, postId);
+      if (!post) {
+        return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', responseRequestId);
+      }
+
+      const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!body || typeof body !== 'object') {
+        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload', responseRequestId);
+      }
+
+      const content = parseTextInput(body.content);
+      if (content.length === 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            requestId: responseRequestId,
+            error: 'Validation failed',
+            details: { content: 'Comment content is required' },
+          },
+          { status: 422 },
+        );
+      }
+
+      const moderation = parseModerationMode(
+        (body as { commentModerationMode?: unknown }).commentModerationMode ??
+        (body as { moderationMode?: unknown }).moderationMode ??
+        body.mode,
+      );
+      const allowGuests = parseBoolean((body as { commentAllowGuests?: unknown }).commentAllowGuests);
+      const allowReplies = parseBoolean((body as { commentAllowReplies?: unknown }).commentAllowReplies);
+      const requireName = parseBoolean((body as { commentRequireName?: unknown }).commentRequireName);
+      const requireEmail = parseBoolean((body as { commentRequireEmail?: unknown }).commentRequireEmail);
+      const userId = parseTextInput(
+        (body as { userId?: unknown }).userId || (body as { commentUserId?: unknown }).commentUserId,
+      );
+      const finalAllowGuests = allowGuests !== false;
+      const finalAllowReplies = allowReplies !== false;
+      const finalRequireName = requireName !== false;
+      const finalRequireEmail = requireEmail === true;
+
+      const authorName = parseTextInput(body.authorName);
+      const authorEmail = parseTextInput(body.authorEmail);
+      const authorWebsite = parseTextInput(body.authorWebsite);
+      const parentId = typeof body.parentId === 'string' ? body.parentId : null;
+      const commentThreadId = parseTextInput(
+        (body as { commentThreadId?: unknown }).commentThreadId || (body as { threadId?: unknown }).threadId,
+      );
+      const requestId = generateRequestId(parseTextInput(body.requestId) || undefined);
+      const startedAt = parseStartedAt(body.startedAt);
+      const honeypot = parseTextInput(body.honeypot);
+      const rateLimitBypass = parseBoolean(body.rateLimitBypass) === true;
+      const ipHash = extractIpHash(request);
+
+      if (!finalAllowGuests && !userId) {
+        return NextResponse.json(
+          {
+            success: false,
+            requestId: responseRequestId,
+            error: 'Validation failed',
+            details: { authorName: 'Guests are disabled for this comment block.' },
+          },
+          { status: 403 },
+        );
+      }
+
+      if (finalRequireName && authorName.length === 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            requestId: responseRequestId,
+            error: 'Validation failed',
+            details: { authorName: 'Name is required' },
+          },
+          { status: 422 },
+        );
+      }
+
+      if (finalRequireEmail && authorEmail.length === 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            requestId: responseRequestId,
+            error: 'Validation failed',
+            details: { authorEmail: 'Email is required' },
+          },
+          { status: 422 },
+        );
+      }
+
+      if (parentId && !finalAllowReplies) {
+        return NextResponse.json(
+          {
+            success: false,
+            requestId: responseRequestId,
+            error: 'Validation failed',
+            details: { parentId: 'Replies are not enabled for this comment block' },
+          },
+          { status: 422 },
+        );
+      }
+
+      let parent: Comment | null = null;
+      if (parentId) {
+        parent = await repositories.comments.getById(site.id, parentId);
+        if (!parent || parent.targetType !== 'post' || parent.targetId !== postId) {
+          return NextResponse.json(
+            {
+              success: false,
+              requestId: responseRequestId,
+              error: 'Validation failed',
+              details: { parentId: 'The selected parent comment does not belong to this target.' },
+            },
+            { status: 422 },
+          );
+        }
+
+        if (parent.commentThreadId && commentThreadId && parent.commentThreadId !== commentThreadId) {
+          return NextResponse.json(
+            {
+              success: false,
+              requestId: responseRequestId,
+              error: 'Validation failed',
+              details: { parentId: 'The selected parent comment belongs to a different thread.' },
+            },
+            { status: 422 },
+          );
+        }
+      }
+
+      const resolvedCommentThreadId = commentThreadId || parent?.commentThreadId || undefined;
+
+      const classification = validateAndClassifyComment({
+        siteId: site.id,
+        targetType: 'post',
+        targetId: postId,
+        content,
+        authorEmail,
+        moderationMode: moderation,
+        honeypot,
+        ipHash,
+        requestId,
+        startedAt,
+        rateLimitBypass,
+      });
+
+      if (!classification.ok) {
+        return NextResponse.json(
+          {
+            success: false,
+            requestId: responseRequestId,
+            error: 'Validation failed',
+            details: { content: classification.spamMessage || 'Comment rejected.' },
+            status: classification.status,
+            spamFlags: classification.spamFlags,
+          },
+          { status: 422 },
+        );
+      }
+
+      const comment = (await repositories.comments.create({
+        siteId: site.id,
+        targetType: 'post',
+        targetId: postId,
+        content,
+        authorName,
+        authorEmail,
+        authorWebsite,
+        commentThreadId: resolvedCommentThreadId,
+        userId,
+        parentId,
+        requestId,
+        ipHash,
+        status: classification.status,
+      })).item;
+
+      return NextResponse.json(
+        {
+          success: true,
+          requestId: responseRequestId,
+          data: {
+            comment,
+            message:
+              comment.status === 'approved'
+                ? 'Comment submitted and published.'
+                : 'Comment submitted for moderation.',
+          },
+          comment,
+          message:
+            comment.status === 'approved'
+              ? 'Comment submitted and published.'
+              : 'Comment submitted for moderation.',
+        },
+        { status: 201 },
+      );
+    }
+
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);

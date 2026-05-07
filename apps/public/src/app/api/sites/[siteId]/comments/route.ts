@@ -4,6 +4,11 @@ import {
   getSiteByIdOrSlug,
   listComments,
 } from '@/lib/backyStore';
+import {
+  resolveRepositorySite,
+  updateRepositoryCommentStatus,
+} from '@/lib/commentRepositorySupport';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { CommentStatus, CommentTargetType } from '@backy-cms/core';
 
 interface RouteParams {
@@ -138,6 +143,55 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
 
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
+      }
+
+      const { searchParams } = new URL(request.url);
+      const status = parseStatus(searchParams.get('status'));
+      const targetType = parseTargetType(searchParams.get('targetType'));
+      const targetId = searchParams.get('targetId') || undefined;
+      const requestId = parseRequestId(searchParams.get('requestId'));
+      const q = parseSearchQuery(searchParams.get('q'));
+      const parentId = searchParams.get('parentId');
+      const parentOnly = parseBoolean(searchParams.get('parentOnly'));
+      const sort = parseSort(searchParams.get('sort'));
+      const limit = parseInt(searchParams.get('limit') || '20', 10);
+      const offset = parseInt(searchParams.get('offset') || '0', 10);
+
+      const result = await repositories.comments.list({
+        siteId: site.id,
+        targetType: targetType === 'all' ? undefined : targetType,
+        targetId,
+        status,
+        requestId,
+        q,
+        parentOnly,
+        parentId: parentId || null,
+        sort,
+        limit: Number.isFinite(limit) ? limit : 20,
+        offset: Number.isFinite(offset) ? offset : 0,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId: responseRequestId,
+        data: {
+          siteId: site.id,
+          comments: result.items,
+          count: result.pagination.total,
+          pagination: result.pagination,
+        },
+        siteId: site.id,
+        comments: result.items,
+        count: result.pagination.total,
+        pagination: result.pagination,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
@@ -193,6 +247,59 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
+      }
+
+      const payload = parsePatchPayload(await request.json().catch(() => null));
+      if (!payload || !payload.status || payload.commentIds.length === 0) {
+        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status and commentIds are required.', responseRequestId);
+      }
+
+      const updated = [];
+      const missingIds: string[] = [];
+      for (const commentId of Array.from(new Set(payload.commentIds))) {
+        const comment = await repositories.comments.getById(site.id, commentId);
+        if (!comment) {
+          missingIds.push(commentId);
+          continue;
+        }
+
+        updated.push(await updateRepositoryCommentStatus(repositories, site.id, comment, {
+          status: payload.status,
+          reviewedBy: payload.reviewedBy,
+          actor: payload.actor,
+          rejectionReason: payload.rejectionReason,
+          blockReason: payload.blockReason,
+          requestId: payload.requestId,
+          defaultReviewer: 'admin',
+        }));
+      }
+
+      if (!updated.length) {
+        return errorResponse(404, 'COMMENTS_NOT_UPDATED', 'No comments were updated.', responseRequestId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        requestId: responseRequestId,
+        data: {
+          siteId: site.id,
+          updated,
+          updatedCount: updated.length,
+          missingIds,
+        },
+        siteId: site.id,
+        updated,
+        updatedCount: updated.length,
+        missingIds,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);

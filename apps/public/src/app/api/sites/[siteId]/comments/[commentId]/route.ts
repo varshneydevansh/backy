@@ -4,6 +4,11 @@ import {
   getSiteByIdOrSlug,
   updateCommentStatus,
 } from '@/lib/backyStore';
+import {
+  resolveRepositorySite,
+  updateRepositoryCommentStatus,
+} from '@/lib/commentRepositorySupport';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { Comment } from '@backy-cms/core';
 
 interface RouteParams {
@@ -99,6 +104,28 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId, commentId } = await params;
 
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const comment = await repositories.comments.getById(site.id, commentId);
+      if (!comment) {
+        return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          comment,
+        },
+        comment,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
@@ -128,6 +155,43 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, commentId } = await params;
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', baseRequestId);
+      }
+
+      const comment = await repositories.comments.getById(site.id, commentId);
+      if (!comment) {
+        return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', baseRequestId);
+      }
+
+      const payload = parseBody(await request.json().catch(() => null));
+      if (!payload) {
+        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status is required.', baseRequestId);
+      }
+      const requestId = payload.requestId || baseRequestId;
+
+      const updated = await updateRepositoryCommentStatus(repositories, site.id, comment, {
+        status: payload.status,
+        reviewedBy: payload.reviewedBy || null,
+        actor: payload.actor,
+        rejectionReason: payload.rejectionReason || null,
+        blockReason: payload.blockReason || null,
+        requestId: payload.requestId,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          comment: updated as Comment,
+        },
+        comment: updated as Comment,
+      });
+    }
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
