@@ -99,6 +99,25 @@ const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
 
 type CanvasAlignment = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
 
+const RULER_SIZE = 28;
+const RULER_MAJOR_STEP = 100;
+const RULER_MINOR_STEP = 50;
+
+const buildRulerTicks = (length: number, scale: number) => {
+  const safeLength = Math.max(0, Math.ceil(length));
+  const ticks: Array<{ value: number; position: number; major: boolean }> = [];
+
+  for (let value = 0; value <= safeLength; value += RULER_MINOR_STEP) {
+    ticks.push({
+      value,
+      position: Math.round(value * scale),
+      major: value % RULER_MAJOR_STEP === 0,
+    });
+  }
+
+  return ticks;
+};
+
 export interface CanvasEditorProps {
   initialElements: CanvasElement[];
   initialSettings: PageSettings;
@@ -328,6 +347,14 @@ export function CanvasEditor({
   const scaledCanvasWidth = Math.max(1, Math.round(size.width * activeCanvasScale));
   const scaledCanvasHeight = Math.max(1, Math.round(size.height * activeCanvasScale));
   const zoomPercent = Math.round(activeCanvasScale * 100);
+  const horizontalRulerTicks = useMemo(
+    () => buildRulerTicks(size.width, activeCanvasScale),
+    [activeCanvasScale, size.width],
+  );
+  const verticalRulerTicks = useMemo(
+    () => buildRulerTicks(size.height, activeCanvasScale),
+    [activeCanvasScale, size.height],
+  );
 
   const clampCanvasZoom = useCallback((value: number) => {
     if (!Number.isFinite(value)) {
@@ -1765,57 +1792,131 @@ export function CanvasEditor({
             ref={canvasViewportRef}
             className="relative flex-1 overflow-auto p-8 pb-20"
             style={{
-              backgroundColor: '#eef2f7',
-              backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(100,116,139,0.28) 1px, transparent 0)',
+              backgroundColor: '#e9edf3',
+              backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(71,85,105,0.24) 1px, transparent 0)',
               backgroundSize: '20px 20px',
             }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleCanvasDrop}
           >
-            <div className="flex min-h-full justify-start">
+            <div className="flex min-h-full justify-center">
               <div
                 className="relative mx-auto"
                 style={{
-                  width: scaledCanvasWidth,
-                  minHeight: scaledCanvasHeight + (isPreview ? 0 : 32),
+                  width: scaledCanvasWidth + (isPreview ? 0 : RULER_SIZE),
+                  minHeight: scaledCanvasHeight + (isPreview ? 0 : RULER_SIZE + 48),
                 }}
               >
                 {!isPreview && (
-                  <div className="mb-3 flex items-center justify-between text-xs font-medium text-slate-500">
-                    <span>{breakpoint.charAt(0).toUpperCase() + breakpoint.slice(1)} canvas</span>
-                    <span>{size.width} x {size.height}px</span>
+                  <div className="mb-3 flex items-center justify-between gap-4 text-xs font-medium text-slate-600">
+                    <span className="rounded bg-white/85 px-2 py-1 shadow-sm ring-1 ring-slate-200">
+                      {breakpoint.charAt(0).toUpperCase() + breakpoint.slice(1)} canvas
+                    </span>
+                    <span className="rounded bg-white/85 px-2 py-1 tabular-nums shadow-sm ring-1 ring-slate-200">
+                      {size.width} x {size.height}px
+                    </span>
                   </div>
                 )}
-                <div
-                  style={{
-                    width: size.width,
-                    height: size.height,
-                    transform: `scale(${activeCanvasScale})`,
-                    transformOrigin: 'top left',
-                  }}
-                >
-                  <Canvas
-                    elements={elements}
-                    onElementsChange={handleElementsChange}
-                    selectedId={selectedId}
-                    onSelect={handleSelect}
-                    size={size}
-                    onSizeChange={(newSize) => {
-                      setSize(newSize);
-                      markChanges();
-                      if (onChange) {
-                        onChange(elements, pageSettings, newSize);
-                      }
+                {isPreview ? (
+                  <div
+                    className="overflow-hidden shadow-[0_28px_70px_rgba(15,23,42,0.18)]"
+                    style={{
+                      width: size.width,
+                      height: size.height,
+                      transform: `scale(${activeCanvasScale})`,
+                      transformOrigin: 'top left',
                     }}
-                    isPreview={isPreview}
-                    viewportScale={activeCanvasScale}
-                  />
-                </div>
+                  >
+                    <Canvas
+                      elements={elements}
+                      onElementsChange={handleElementsChange}
+                      selectedId={selectedId}
+                      onSelect={handleSelect}
+                      size={size}
+                      onSizeChange={(newSize) => {
+                        setSize(newSize);
+                        markChanges();
+                        if (onChange) {
+                          onChange(elements, pageSettings, newSize);
+                        }
+                      }}
+                      isPreview={isPreview}
+                      viewportScale={activeCanvasScale}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className="grid rounded-md border border-slate-300 bg-slate-100 shadow-[0_24px_70px_rgba(15,23,42,0.18)]"
+                    style={{
+                      gridTemplateColumns: `${RULER_SIZE}px ${scaledCanvasWidth}px`,
+                      gridTemplateRows: `${RULER_SIZE}px ${scaledCanvasHeight}px`,
+                    }}
+                  >
+                    <div className="border-b border-r border-slate-300 bg-slate-200" />
+                    <div className="relative overflow-hidden border-b border-slate-300 bg-slate-50">
+                      {horizontalRulerTicks.map((tick) => (
+                        <div
+                          key={`x-${tick.value}`}
+                          className="absolute top-0 h-full border-l border-slate-300"
+                          style={{ left: tick.position }}
+                        >
+                          {tick.major && (
+                            <span className="absolute left-1 top-1 text-[10px] font-medium tabular-nums text-slate-500">
+                              {tick.value}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="relative overflow-hidden border-r border-slate-300 bg-slate-50">
+                      {verticalRulerTicks.map((tick) => (
+                        <div
+                          key={`y-${tick.value}`}
+                          className="absolute left-0 w-full border-t border-slate-300"
+                          style={{ top: tick.position }}
+                        >
+                          {tick.major && tick.value > 0 && (
+                            <span className="absolute left-1 top-1 origin-top-left rotate-[-90deg] text-[10px] font-medium tabular-nums text-slate-500">
+                              {tick.value}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="relative overflow-visible bg-white">
+                      <div
+                        style={{
+                          width: size.width,
+                          height: size.height,
+                          transform: `scale(${activeCanvasScale})`,
+                          transformOrigin: 'top left',
+                        }}
+                      >
+                        <Canvas
+                          elements={elements}
+                          onElementsChange={handleElementsChange}
+                          selectedId={selectedId}
+                          onSelect={handleSelect}
+                          size={size}
+                          onSizeChange={(newSize) => {
+                            setSize(newSize);
+                            markChanges();
+                            if (onChange) {
+                              onChange(elements, pageSettings, newSize);
+                            }
+                          }}
+                          isPreview={isPreview}
+                          viewportScale={activeCanvasScale}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
             {!isPreview && (
-              <div className="absolute bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur">
+              <div className="absolute bottom-4 right-4 z-30 flex items-center gap-1 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur">
                 <button
                   type="button"
                   onClick={handleZoomOut}

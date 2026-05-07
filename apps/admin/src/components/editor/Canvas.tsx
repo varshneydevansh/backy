@@ -1419,7 +1419,7 @@ export function Canvas({
       {/* Canvas Resize Handle (Bottom) */}
       {!isPreview && (
         <div
-          className="absolute bottom-0 left-0 w-full h-4 hover:h-6 transition-all bg-transparent hover:bg-primary/5 cursor-ns-resize flex justify-center items-end pb-1 group z-50"
+          className="absolute bottom-0 left-0 z-0 flex h-4 w-full cursor-ns-resize items-end justify-center bg-transparent pb-1 transition-all hover:h-6 hover:bg-primary/5 group"
           onMouseDown={handleCanvasResizeStart}
           title="Drag to resize canvas height"
         >
