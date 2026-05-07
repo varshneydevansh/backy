@@ -39,12 +39,14 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/public/sites/:siteId/pages?path=/about` (optional alias)
   - Path-based page fetch for public rendering.
   - Must return only published content.
+  - Draft access requires `previewToken` created by the admin preview endpoint for that exact page.
 
 - `GET /api/sites/:siteId/render?path=/about`
 - `GET /api/public/sites/:siteId/render?path=/about` (future stable alias)
   - Returns the external render payload described by `specs/ai-frontend-contract/content-payload.schema.json`.
   - Includes site bootstrap, route, canonical content document, assets, forms/comments/actions, SEO, data bindings, and editable map.
   - Current implementation is backed by the public seed adapter; production implementation must use the durable service layer.
+  - Draft render access requires `previewToken` created by the admin preview endpoint for that exact page.
 
 - `GET /api/sites/:siteId/blog/posts?status=published&limit=&cursor=`
 - `GET /api/public/sites/:siteId/blog/posts?status=published&limit=&cursor=` (optional alias)
@@ -53,6 +55,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/sites/:siteId/blog/posts/:slug`
 - `GET /api/public/sites/:siteId/blog/posts/:slug` (optional alias)
   - Published post detail by slug.
+  - Draft post detail access requires `previewToken` created by the admin preview endpoint for that exact post.
 
 - `GET /api/sites/:siteId/media`
   - Public media catalog for custom frontends.
@@ -212,6 +215,11 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
   - Body: `{ revisionId }`
   - Restores a previous page snapshot and stores a rollback snapshot of the current state.
 
+- `POST /api/admin/sites/:siteId/pages/:pageId/preview`
+  - Body: `{ ttlSeconds? }`
+  - Creates a bounded preview token and returns draft-capable `renderUrl` and `pageApiUrl`.
+  - Current local runtime stores preview tokens in `data/backy/admin-content.json`; production should bind tokens to authenticated actors, audit creation, and invalidate on policy changes.
+
 - `GET /api/admin/sites/:siteId/blog/:postId/revisions`
   - Returns local revision history for the post with pagination metadata.
 
@@ -224,6 +232,10 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 - `POST /api/admin/sites/:siteId/blog/:postId/rollback`
   - Body: `{ revisionId }`
   - Restores a previous post snapshot and stores a rollback snapshot of the current state.
+
+- `POST /api/admin/sites/:siteId/blog/:postId/preview`
+  - Body: `{ ttlSeconds? }`
+  - Creates a bounded preview token and returns draft-capable `postApiUrl`.
 
 - `POST /api/admin/sites/:siteId/pages/:pageId/resolve-conflict`
   - Future workflow endpoint for merge/conflict resolution once collaborative editing is implemented.

@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getPageByPath, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { getPageByPath, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
 import { buildPublicRenderPayload } from '@/lib/renderPayload';
 
 interface RouteParams {
@@ -37,14 +37,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { siteId } = await params;
     const { searchParams } = new URL(request.url);
     const path = searchParams.get('path') || searchParams.get('slug') || '/';
-    const includeUnpublished = searchParams.get('includeUnpublished') === 'true';
+    const previewToken = searchParams.get('previewToken');
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const page = getPageByPath(site.id, path, { includeUnpublished });
+    const previewPage = previewToken
+      ? getPageByPath(site.id, path, { includeUnpublished: true })
+      : undefined;
+    const canPreview = previewPage
+      ? validatePreviewToken(site.id, 'page', previewPage.id, previewToken)
+      : false;
+    const page = canPreview
+      ? previewPage
+      : getPageByPath(site.id, path);
     if (!page) {
       return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
     }

@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getPageByPath, getPageSummary, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { getPageByPath, getPageSummary, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
 
 interface RouteParams {
     params: Promise<{
@@ -20,8 +20,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     try {
         const { siteId } = await params;
         const { searchParams } = new URL(request.url);
-        const slug = searchParams.get('slug');
-        const includeUnpublished = searchParams.get('includeUnpublished') === 'true' || false;
+        const slug = searchParams.get('slug') || searchParams.get('path');
+        const previewToken = searchParams.get('previewToken');
         const limit = parseInt(searchParams.get('limit') || '50', 10);
         const offset = parseInt(searchParams.get('offset') || '0', 10);
 
@@ -32,7 +32,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
         if (slug) {
             const path = slug.trim().replace(/^\/+|\/+$/g, '') || 'index';
-            const page = getPageByPath(site.id, path, { includeUnpublished });
+            const previewPage = previewToken
+                ? getPageByPath(site.id, path, { includeUnpublished: true })
+                : undefined;
+            const canPreview = previewPage
+                ? validatePreviewToken(site.id, 'page', previewPage.id, previewToken)
+                : false;
+            const page = canPreview
+                ? previewPage
+                : getPageByPath(site.id, path);
 
             if (!page) {
                 return NextResponse.json({ error: 'Page not found' }, { status: 404 });
@@ -41,7 +49,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             return NextResponse.json({ page });
         }
 
-        const pages = getPageSummary(site.id, { includeUnpublished });
+        const pages = getPageSummary(site.id);
         const paginated = pages.slice(offset, offset + limit);
 
         return NextResponse.json({

@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getBlogPosts, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { getBlogPosts, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
 
 interface RouteParams {
     params: Promise<{
@@ -21,6 +21,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const { siteId } = await params;
         const { searchParams } = new URL(request.url);
         const slug = searchParams.get('slug');
+        const previewToken = searchParams.get('previewToken');
         const limit = parseInt(searchParams.get('limit') || '10');
         const offset = parseInt(searchParams.get('offset') || '0');
         const status = searchParams.get('status') as
@@ -36,7 +37,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         }
 
         if (slug) {
-            const { posts } = getBlogPosts(site.id, { slug, status: status || undefined });
+            const previewPosts = previewToken
+                ? getBlogPosts(site.id, { slug, includeUnpublished: true }).posts
+                : [];
+            const previewPost = previewPosts[0];
+            const canPreview = previewPost
+                ? validatePreviewToken(site.id, 'post', previewPost.id, previewToken)
+                : false;
+            const { posts } = canPreview
+                ? { posts: previewPosts }
+                : getBlogPosts(site.id, { slug, status: status === 'published' ? status : undefined });
             const post = posts[0];
 
             if (!post) {
@@ -46,7 +56,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             return NextResponse.json({ post });
         }
 
-        const data = getBlogPosts(site.id, { limit, offset, status: status || undefined });
+        const data = getBlogPosts(site.id, { limit, offset, status: status === 'published' ? status : undefined });
         return NextResponse.json(data);
     } catch (error) {
         console.error('API Error:', error);

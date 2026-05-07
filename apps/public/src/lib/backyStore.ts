@@ -1,4 +1,5 @@
 import { DEFAULT_THEME } from '@backy-cms/core';
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type {
@@ -133,6 +134,16 @@ interface ContentRevision {
   note: string | null;
   createdBy: string | null;
   createdAt: string;
+}
+
+interface PreviewToken {
+  token: string;
+  siteId: string;
+  targetType: 'page' | 'post';
+  targetId: string;
+  createdAt: string;
+  expiresAt: string;
+  createdBy: string | null;
 }
 
 interface Pagination {
@@ -620,6 +631,7 @@ const BLOG_POSTS: StoreBlogPost[] = [
 ];
 
 const CONTENT_REVISIONS: ContentRevision[] = [];
+const PREVIEW_TOKENS: PreviewToken[] = [];
 
 const MEDIA_LIBRARY: MediaItem[] = [
   {
@@ -737,6 +749,7 @@ interface AdminContentSnapshot {
   pages?: StorePage[];
   blogPosts?: StoreBlogPost[];
   revisions?: ContentRevision[];
+  previewTokens?: PreviewToken[];
 }
 
 interface MediaCatalogSnapshot {
@@ -837,6 +850,10 @@ function ensurePersistedAdminContentLoaded() {
     if (Array.isArray(parsed.revisions)) {
       CONTENT_REVISIONS.splice(0, CONTENT_REVISIONS.length, ...parsed.revisions);
     }
+
+    if (Array.isArray(parsed.previewTokens)) {
+      PREVIEW_TOKENS.splice(0, PREVIEW_TOKENS.length, ...parsed.previewTokens);
+    }
   } catch (error) {
     console.error('Unable to load persisted admin content:', error);
   }
@@ -853,6 +870,7 @@ function persistAdminContent() {
           pages: PAGE_LIST,
           blogPosts: BLOG_POSTS,
           revisions: CONTENT_REVISIONS,
+          previewTokens: PREVIEW_TOKENS,
         } satisfies AdminContentSnapshot,
         null,
         2,
@@ -1667,6 +1685,77 @@ function createContentRevision(
   return revision;
 }
 
+function prunePreviewTokens() {
+  const now = Date.now();
+  for (let index = PREVIEW_TOKENS.length - 1; index >= 0; index -= 1) {
+    if (Date.parse(PREVIEW_TOKENS[index].expiresAt) <= now) {
+      PREVIEW_TOKENS.splice(index, 1);
+    }
+  }
+}
+
+function removePreviewTokensForTarget(siteId: string, targetType: PreviewToken['targetType'], targetId: string) {
+  for (let index = PREVIEW_TOKENS.length - 1; index >= 0; index -= 1) {
+    const token = PREVIEW_TOKENS[index];
+    if (token.siteId === siteId && token.targetType === targetType && token.targetId === targetId) {
+      PREVIEW_TOKENS.splice(index, 1);
+    }
+  }
+}
+
+export function createPreviewToken(
+  siteId: string,
+  targetType: PreviewToken['targetType'],
+  targetId: string,
+  ttlSeconds = 3600,
+  createdBy = 'admin',
+): PreviewToken {
+  ensurePersistedAdminContentLoaded();
+  prunePreviewTokens();
+
+  const now = Date.now();
+  const boundedTtlSeconds = Math.min(Math.max(Math.floor(ttlSeconds) || 3600, 60), 60 * 60 * 24);
+  const previewToken: PreviewToken = {
+    token: `preview_${randomUUID()}`,
+    siteId,
+    targetType,
+    targetId,
+    createdAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + boundedTtlSeconds * 1000).toISOString(),
+    createdBy: createdBy || 'admin',
+  };
+
+  PREVIEW_TOKENS.unshift(previewToken);
+  persistAdminContent();
+  return clone(previewToken);
+}
+
+export function validatePreviewToken(
+  siteId: string,
+  targetType: PreviewToken['targetType'],
+  targetId: string,
+  token: string | null | undefined,
+): boolean {
+  ensurePersistedAdminContentLoaded();
+
+  if (!token) {
+    return false;
+  }
+
+  const before = PREVIEW_TOKENS.length;
+  prunePreviewTokens();
+  if (PREVIEW_TOKENS.length !== before) {
+    persistAdminContent();
+  }
+
+  return PREVIEW_TOKENS.some((entry) => (
+    entry.siteId === siteId
+    && entry.targetType === targetType
+    && entry.targetId === targetId
+    && entry.token === token
+  ));
+}
+
 function collectMediaReferenceIds(value: unknown): Set<string> {
   const references = new Set<string>();
 
@@ -2366,6 +2455,12 @@ export function deleteAdminSite(siteId: string): boolean {
     }
   }
 
+  for (let tokenIndex = PREVIEW_TOKENS.length - 1; tokenIndex >= 0; tokenIndex -= 1) {
+    if (PREVIEW_TOKENS[tokenIndex].siteId === siteId) {
+      PREVIEW_TOKENS.splice(tokenIndex, 1);
+    }
+  }
+
   persistAdminContent();
   return true;
 }
@@ -2562,6 +2657,7 @@ export function deleteAdminPage(siteId: string, pageId: string): boolean {
 
   PAGE_LIST.splice(index, 1);
   removeMediaReferencesForTarget(siteId, 'page', pageId);
+  removePreviewTokensForTarget(siteId, 'page', pageId);
 
   for (let revisionIndex = CONTENT_REVISIONS.length - 1; revisionIndex >= 0; revisionIndex -= 1) {
     const revision = CONTENT_REVISIONS[revisionIndex];
@@ -2748,6 +2844,7 @@ export function deleteAdminBlogPost(siteId: string, postId: string): boolean {
 
   BLOG_POSTS.splice(index, 1);
   removeMediaReferencesForTarget(siteId, 'post', postId);
+  removePreviewTokensForTarget(siteId, 'post', postId);
 
   for (let revisionIndex = CONTENT_REVISIONS.length - 1; revisionIndex >= 0; revisionIndex -= 1) {
     const revision = CONTENT_REVISIONS[revisionIndex];
