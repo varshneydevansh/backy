@@ -5,13 +5,14 @@ import { createCollectionRepository } from './collections';
 import { createCommentRepository } from './comments';
 import { createFormRepository } from './forms';
 import { createMediaRepository } from './media';
+import { createUserRepository } from './users';
 import {
     createPageRepository,
     createPostRepository,
     createSiteRepository,
 } from './site-page-post';
 
-type ImplementedBackyRepositories = Pick<BackyRepositories, 'sites' | 'pages' | 'posts' | 'media' | 'collections' | 'forms' | 'comments' | 'auditLogs'>;
+type ImplementedBackyRepositories = Pick<BackyRepositories, 'sites' | 'pages' | 'posts' | 'media' | 'collections' | 'forms' | 'comments' | 'users' | 'auditLogs'>;
 
 export interface DatabaseRepositoryFactoryInput {
     adapter: DatabaseAdapter;
@@ -28,6 +29,7 @@ export function createDatabaseRepositories(
         collections: createCollectionRepository(input.adapter.db),
         forms: createFormRepository(input.adapter.db),
         comments: createCommentRepository(input.adapter.db),
+        users: createUserRepository(input.adapter.db),
         auditLogs: createAuditLogRepository(input.adapter.db),
     };
 }

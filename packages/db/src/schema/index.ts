@@ -27,7 +27,7 @@ import { relations } from 'drizzle-orm';
 // ==========================================================================
 
 /** User roles for access control */
-export type UserRole = 'admin' | 'editor' | 'viewer';
+export type UserRole = 'owner' | 'admin' | 'editor' | 'viewer';
 
 /** Page/Post publish status */
 export type PublishStatus = 'draft' | 'published' | 'scheduled' | 'archived';
@@ -65,6 +65,9 @@ export const profiles = pgTable('profiles', {
 
     /** Whether account is active */
     isActive: boolean('is_active').default(true).notNull(),
+
+    /** Account lifecycle status: active, inactive, invited, or suspended */
+    status: text('status').default('active').notNull(),
 
     /** Creation timestamp */
     createdAt: timestamp('created_at').defaultNow().notNull(),

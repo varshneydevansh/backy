@@ -19,6 +19,9 @@ export {
     createSiteRepository,
 } from './site-page-post';
 export {
+    createUserRepository,
+} from './users';
+export {
     createDatabaseRepositories,
     createUnimplementedRepositoryProxy,
     type DatabaseRepositoryFactoryInput,

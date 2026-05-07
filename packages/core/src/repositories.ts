@@ -419,7 +419,7 @@ export interface BackyCommentListInput extends BackyPaginationInput {
 }
 
 export type BackyUserRole = 'owner' | 'admin' | 'editor' | 'viewer';
-export type BackyUserStatus = 'active' | 'invited' | 'suspended';
+export type BackyUserStatus = 'active' | 'inactive' | 'invited' | 'suspended';
 
 export interface BackyUser {
   id: string;

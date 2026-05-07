@@ -12,6 +12,7 @@ import {
   createPostRepository,
   createSiteRepository,
   createUnimplementedRepositoryProxy,
+  createUserRepository,
 } from '../dist/index.js';
 import {
   blogPosts,
@@ -25,6 +26,7 @@ import {
   media,
   mediaFolders,
   pages,
+  profiles,
   sites,
 } from '../dist/schema/index.js';
 
@@ -38,6 +40,7 @@ const tableName = (table) => {
   if (table === activityLogs) return 'activityLogs';
   if (table === sites) return 'sites';
   if (table === pages) return 'pages';
+  if (table === profiles) return 'profiles';
   if (table === blogPosts) return 'blogPosts';
   if (table === comments) return 'comments';
   if (table === contentCollections) return 'contentCollections';
@@ -55,6 +58,7 @@ const createFakeDb = () => {
     activityLogs: [],
     sites: [],
     pages: [],
+    profiles: [],
     blogPosts: [],
     comments: [],
     contentCollections: [],
@@ -69,6 +73,7 @@ const createFakeDb = () => {
     activityLogs: 0,
     sites: 0,
     pages: 0,
+    profiles: 0,
     blogPosts: 0,
     comments: 0,
     contentCollections: 0,
@@ -123,6 +128,20 @@ const createFakeDb = () => {
         sortOrder: 0,
         createdBy: null,
         updatedBy: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'profiles') {
+      return {
+        id: nextId(name),
+        email: 'user@example.com',
+        fullName: 'Repository User',
+        avatarUrl: null,
+        role: 'viewer',
+        isActive: true,
+        status: 'active',
         createdAt: timestamp,
         updatedAt: timestamp,
         ...values,
@@ -406,6 +425,7 @@ assert(repositorySet.media, 'Expected media repository factory');
 assert(repositorySet.collections, 'Expected collection repository factory');
 assert(repositorySet.forms, 'Expected form repository factory');
 assert(repositorySet.comments, 'Expected comment repository factory');
+assert(repositorySet.users, 'Expected user repository factory');
 assert(repositorySet.auditLogs, 'Expected audit log repository factory');
 
 const siteRepository = createSiteRepository(db);
@@ -416,6 +436,7 @@ const collectionRepository = createCollectionRepository(db);
 const formRepository = createFormRepository(db);
 const commentRepository = createCommentRepository(db);
 const auditLogRepository = createAuditLogRepository(db);
+const userRepository = createUserRepository(db);
 
 const site = (await siteRepository.create({
   teamId: 'team_contract',
@@ -844,6 +865,24 @@ assert((await auditLogRepository.list({
   action: 'comment-status',
   requestId: 'req_audit_contract',
 })).items.length === 1, 'Expected audit log filters');
+
+const user = (await userRepository.create({
+  fullName: 'Repository User',
+  email: 'repository.user@example.com',
+  role: 'editor',
+  status: 'invited',
+})).item;
+assert(user.id === 'profiles_1', 'Expected fake user id');
+assert(user.email === 'repository.user@example.com', 'Expected user email normalization');
+assert((await userRepository.getByEmail(user.email))?.id === user.id, 'Expected user getByEmail');
+assert((await userRepository.list({ role: 'editor', status: 'invited', search: 'repository.user' })).items.length === 1, 'Expected user list filters');
+const activeUser = (await userRepository.update(user.id, {
+  status: 'active',
+  role: 'admin',
+  avatarUrl: 'https://example.com/avatar.png',
+})).item;
+assert(activeUser.status === 'active' && activeUser.role === 'admin', 'Expected user update');
+assert(await userRepository.delete(activeUser.id), 'Expected user delete');
 
 assert(await pageRepository.delete(site.id, publishedPage.id), 'Expected page delete');
 assert(await postRepository.delete(site.id, archivedPost.id), 'Expected post delete');
