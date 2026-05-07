@@ -235,7 +235,8 @@ The next implementation should not start by adding more UI screens. The product 
   - Repository tests against local test database or Supabase test project.
   - Current command: `npm run typecheck --workspace @backy/db`.
   - Current command: `npm run build --workspace @backy/db`.
-  - Remaining gap: add execution tests against a real local test database once the test DB service is configured.
+  - Current command: `npm run test:repositories --workspace @backy/db`.
+  - Remaining gap: add execution tests against a real local test database once the test DB service is configured; current repository smoke uses a Drizzle-shaped fake DB and covers repository behavior without a real engine.
 
 ## Sprint 3: Admin API and Auth/RBAC
 

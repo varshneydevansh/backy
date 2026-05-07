@@ -36,6 +36,7 @@
     "dev": "tsup src/index.ts --format esm --dts --watch --external postgres mysql2/promise better-sqlite3",
     "typecheck": "tsc --noEmit",
     "test:runtime": "npm run build && node scripts/runtime-config-smoke.mjs",
+    "test:repositories": "npm run build && node scripts/repository-contract-smoke.mjs",
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
     "studio": "drizzle-kit studio"
