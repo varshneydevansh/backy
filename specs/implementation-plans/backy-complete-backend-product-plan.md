@@ -207,8 +207,13 @@ The next implementation should not start by adding more UI screens. The product 
 - **Dependencies**: Task 2.2
 - **Acceptance Criteria**:
   - Production paths cannot accidentally use demo adapter unless a config flag enables it.
+- **Current progress**:
+  - `@backy/db` now exports `resolveBackyDataRuntimeConfig`, `createBackyRuntimeAdapter`, and an explicit `createDemoAdapter` marker.
+  - Runtime mode defaults to `database`; demo mode requires `BACKY_DATA_MODE=demo` or legacy `BACKY_DEMO_MODE=true`.
+  - Database mode validates required connection config instead of silently falling back to demo data.
 - **Validation**:
   - Unit test config selection.
+  - Current command: `npm run test:runtime --workspace @backy/db`.
 
 ### Task 2.4: Add DB-backed site/page/post repositories
 

@@ -42,5 +42,8 @@ export {
     type DatabaseInstance,
 } from './adapters';
 
+export * from './runtime';
+export * from './adapters/demo';
+
 // Re-export useful Drizzle utilities
 export { eq, and, or, desc, asc, sql, isNull, isNotNull } from 'drizzle-orm';
