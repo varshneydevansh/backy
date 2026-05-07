@@ -1,9 +1,12 @@
 import {
   getCanonicalPathForPage,
   getBlogPosts,
+  getCollectionRecordByIdOrSlug,
   getPageByPath,
+  listCollections,
   validatePreviewToken,
   type StoreBlogPost,
+  type StoreCollectionRecord,
   type StorePage,
   type StoreSite,
 } from './backyStore';
@@ -40,7 +43,27 @@ type ResolvedPostRoute = {
   };
 };
 
-export type ResolvedSiteRoute = ResolvedPageRoute | ResolvedPostRoute;
+type ResolvedDynamicItemRoute = {
+  type: 'dynamicItem';
+  path: string;
+  status: StoreCollectionRecord['status'];
+  canonical: string;
+  params: Record<string, string>;
+  resource: {
+    id: string;
+    kind: 'dynamicItem';
+    title: string;
+    slug: string;
+    collectionId: string;
+    collectionSlug: string;
+    collectionName: string;
+    apiUrl: string;
+    renderUrl: string;
+    hostedPath: string;
+  };
+};
+
+export type ResolvedSiteRoute = ResolvedPageRoute | ResolvedPostRoute | ResolvedDynamicItemRoute;
 
 export function normalizeRoutePath(rawPath: string | null | undefined): string {
   const pathOnly = (rawPath || '/').split('?')[0].split('#')[0].trim();
@@ -110,7 +133,51 @@ export function resolveSiteRoute(
     || getPageByPath(site.id, pagePath);
 
   if (!page) {
-    return null;
+    const dynamicItemMatch = path.match(/^\/([^/]+)\/([^/]+)$/);
+    if (!dynamicItemMatch) {
+      return null;
+    }
+
+    const collectionSlug = decodeURIComponent(dynamicItemMatch[1]);
+    const recordSlug = decodeURIComponent(dynamicItemMatch[2]);
+    const collection = listCollections(site.id).find((item) => item.slug === collectionSlug);
+    const record = collection
+      ? getCollectionRecordByIdOrSlug(site.id, collection.id, recordSlug)
+      : undefined;
+
+    if (!collection || !record) {
+      return null;
+    }
+
+    const title = typeof record.values.title === 'string' && record.values.title.length > 0
+      ? record.values.title
+      : typeof record.values.name === 'string' && record.values.name.length > 0
+        ? record.values.name
+        : record.slug;
+    const canonical = `/${collection.slug}/${record.slug}`;
+
+    return {
+      type: 'dynamicItem',
+      path,
+      status: record.status,
+      canonical,
+      params: {
+        collectionSlug: collection.slug,
+        recordSlug: record.slug,
+      },
+      resource: {
+        id: record.id,
+        kind: 'dynamicItem',
+        title,
+        slug: record.slug,
+        collectionId: collection.id,
+        collectionSlug: collection.slug,
+        collectionName: collection.name,
+        apiUrl: `/api/sites/${site.id}/collections/${collection.id}/records?slug=${encodeURIComponent(record.slug)}`,
+        renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(canonical)}`,
+        hostedPath: canonical,
+      },
+    };
   }
 
   const canonical = page.meta.canonical || getCanonicalPathForPage(page);

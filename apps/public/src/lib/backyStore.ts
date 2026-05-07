@@ -5644,4 +5644,15 @@ export function getMediaById(siteId: string, id: string): MediaItem | undefined 
   return item ? clone(item) : undefined;
 }
 
-export { type ContentRevision, type Pagination, type SiteNavigationItem, type StoreBlogPost, type StorePage, type StoreSettings, type StoreSite, type StoreUser };
+export {
+  type ContentRevision,
+  type Pagination,
+  type SiteNavigationItem,
+  type StoreBlogPost,
+  type StoreCollection,
+  type StoreCollectionRecord,
+  type StorePage,
+  type StoreSettings,
+  type StoreSite,
+  type StoreUser,
+};

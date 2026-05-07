@@ -2,11 +2,14 @@ import {
   getCanonicalPathForPage,
   getCollectionByIdOrSlug,
   getCollectionRecordByIdOrSlug,
+  getMediaById,
   getMediaList,
   listCollectionRecords,
   listFormsBySite,
   getSiteNavigation,
   type StoreBlogPost,
+  type StoreCollection,
+  type StoreCollectionRecord,
   type StorePage,
   type StoreSite,
 } from './backyStore';
@@ -545,6 +548,257 @@ const normalizePostElements = (post: StoreBlogPost): RenderElement[] => {
   return [legacyElement];
 };
 
+const safeIdPart = (value: string): string => (
+  value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'field'
+);
+
+const stringifyRecordValue = (value: unknown): string => {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(stringifyRecordValue).filter(Boolean).join(', ');
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '';
+  }
+};
+
+const preferredTitleField = (collection: StoreCollection, record: StoreCollectionRecord) => (
+  collection.fields.find((field) => ['title', 'name', 'label'].includes(field.key) && stringifyRecordValue(record.values[field.key]).length > 0)
+  || collection.fields.find((field) => stringifyRecordValue(record.values[field.key]).length > 0)
+);
+
+const preferredDescriptionField = (collection: StoreCollection, record: StoreCollectionRecord) => (
+  collection.fields.find((field) => (
+    ['summary', 'description', 'bio', 'content', 'body'].includes(field.key)
+    && stringifyRecordValue(record.values[field.key]).length > 0
+  ))
+);
+
+const preferredImageField = (collection: StoreCollection, record: StoreCollectionRecord) => (
+  collection.fields.find((field) => (
+    (field.type === 'image' || /image|photo|avatar|thumbnail/i.test(field.key))
+    && stringifyRecordValue(record.values[field.key]).length > 0
+  ))
+);
+
+const getCollectionRecordTitle = (collection: StoreCollection, record: StoreCollectionRecord): string => {
+  const titleField = preferredTitleField(collection, record);
+  return titleField ? stringifyRecordValue(record.values[titleField.key]) : record.slug;
+};
+
+const getCollectionRecordDescription = (collection: StoreCollection, record: StoreCollectionRecord): string => {
+  const descriptionField = preferredDescriptionField(collection, record);
+  if (descriptionField) {
+    return stringifyRecordValue(record.values[descriptionField.key]);
+  }
+
+  const titleField = preferredTitleField(collection, record);
+  const secondaryField = collection.fields.find((field) => (
+    field.key !== titleField?.key
+    && field.type !== 'image'
+    && stringifyRecordValue(record.values[field.key]).length > 0
+  ));
+
+  return secondaryField ? stringifyRecordValue(record.values[secondaryField.key]) : collection.description || '';
+};
+
+const collectionBindingForField = (
+  collection: StoreCollection,
+  record: StoreCollectionRecord,
+  fieldKey: string,
+  targetPath: string,
+): JsonObject[] => {
+  const field = collection.fields.find((item) => item.key === fieldKey);
+  const mode = field?.type === 'richText'
+    ? 'html'
+    : field?.type === 'image'
+      ? 'image'
+      : field?.type === 'number'
+        ? 'number'
+        : 'text';
+
+  return [
+    {
+      id: `bind_${safeIdPart(record.id)}_${safeIdPart(fieldKey)}`,
+      datasetId: `dataset_${collection.id}_${record.id}`,
+      targetPath,
+      mode,
+      source: {
+        kind: 'collection',
+        collectionId: collection.id,
+        field: fieldKey,
+        recordId: record.id,
+      },
+      query: {
+        recordId: record.id,
+      },
+    },
+  ];
+};
+
+export const buildCollectionItemContent = (
+  site: StoreSite,
+  collection: StoreCollection,
+  record: StoreCollectionRecord,
+): { canvasSize: { width: number; height: number }; elements: RenderElement[] } => {
+  const titleField = preferredTitleField(collection, record);
+  const descriptionField = preferredDescriptionField(collection, record);
+  const imageField = preferredImageField(collection, record);
+  const title = getCollectionRecordTitle(collection, record);
+  const imageValue = imageField ? stringifyRecordValue(record.values[imageField.key]) : '';
+  const media = imageValue ? getMediaById(site.id, imageValue) : undefined;
+  const imageSrc = media?.url || (/^(https?:)?\/\//.test(imageValue) || imageValue.startsWith('/') ? imageValue : '');
+  const contentLeft = imageSrc ? 536 : 96;
+  const detailFields = collection.fields
+    .filter((field) => (
+      field.key !== titleField?.key
+      && field.key !== descriptionField?.key
+      && field.key !== imageField?.key
+      && stringifyRecordValue(record.values[field.key]).length > 0
+    ))
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .slice(0, 6);
+  const elements: RenderElement[] = [
+    {
+      id: `dynamic_${safeIdPart(collection.id)}_${safeIdPart(record.id)}_eyebrow`,
+      type: 'text',
+      x: contentLeft,
+      y: 96,
+      width: 568,
+      height: 32,
+      children: [],
+      props: {
+        content: collection.name,
+        fontSize: 14,
+        fontWeight: 700,
+        color: '#2563eb',
+        textTransform: 'uppercase',
+      },
+      styles: {},
+      actions: [],
+      dataBindings: [],
+    },
+    {
+      id: `dynamic_${safeIdPart(collection.id)}_${safeIdPart(record.id)}_title`,
+      type: 'heading',
+      x: contentLeft,
+      y: 136,
+      width: 568,
+      height: 104,
+      children: [],
+      props: {
+        content: title,
+        level: 1,
+        fontSize: 48,
+        lineHeight: 1.1,
+        fontWeight: 800,
+        color: '#111827',
+      },
+      styles: {},
+      actions: [],
+      dataBindings: titleField
+        ? collectionBindingForField(collection, record, titleField.key, 'props.content')
+        : [],
+    },
+  ];
+
+  if (imageSrc && imageField) {
+    elements.unshift({
+      id: `dynamic_${safeIdPart(collection.id)}_${safeIdPart(record.id)}_${safeIdPart(imageField.key)}`,
+      type: 'image',
+      x: 96,
+      y: 96,
+      width: 376,
+      height: 420,
+      children: [],
+      props: {
+        src: imageSrc,
+        mediaId: media?.id || imageValue,
+        assetId: media?.id || imageValue,
+        alt: title,
+        objectFit: 'cover',
+        borderRadius: '8px',
+      },
+      styles: {},
+      actions: [],
+      dataBindings: collectionBindingForField(collection, record, imageField.key, 'props.assetId'),
+    });
+  }
+
+  if (descriptionField) {
+    const descriptionValue = stringifyRecordValue(record.values[descriptionField.key]);
+    elements.push({
+      id: `dynamic_${safeIdPart(collection.id)}_${safeIdPart(record.id)}_${safeIdPart(descriptionField.key)}`,
+      type: descriptionField.type === 'richText' ? 'html' : 'text',
+      x: contentLeft,
+      y: 264,
+      width: 568,
+      height: 148,
+      children: [],
+      props: descriptionField.type === 'richText'
+        ? { html: descriptionValue }
+        : {
+            content: descriptionValue,
+            fontSize: 18,
+            lineHeight: 1.65,
+            color: '#374151',
+          },
+      styles: {},
+      actions: [],
+      dataBindings: collectionBindingForField(
+        collection,
+        record,
+        descriptionField.key,
+        descriptionField.type === 'richText' ? 'props.html' : 'props.content',
+      ),
+    });
+  }
+
+  detailFields.forEach((field, index) => {
+    const y = 456 + index * 64;
+    elements.push({
+      id: `dynamic_${safeIdPart(collection.id)}_${safeIdPart(record.id)}_${safeIdPart(field.key)}`,
+      type: 'text',
+      x: contentLeft,
+      y,
+      width: 568,
+      height: 48,
+      children: [],
+      props: {
+        content: `${field.label}: ${stringifyRecordValue(record.values[field.key])}`,
+        fontSize: 16,
+        lineHeight: 1.5,
+        color: '#1f2937',
+      },
+      styles: {},
+      actions: [],
+      dataBindings: collectionBindingForField(collection, record, field.key, 'props.content'),
+    });
+  });
+
+  return {
+    canvasSize: {
+      width: pageDefaultWidth,
+      height: Math.max(760, 560 + detailFields.length * 64),
+    },
+    elements,
+  };
+};
+
 export function buildPublicRenderPayload(site: StoreSite, page: StorePage, options: RenderPayloadOptions) {
   const elements = page.content.elements
     .map(normalizeElement)
@@ -632,6 +886,102 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
           image: page.meta.ogImage || undefined,
         },
         jsonLd: [],
+      },
+      dataBindings: {
+        ...dataBindings,
+      },
+      editableMap: buildEditableMap(elements),
+    },
+  };
+}
+
+export function buildPublicCollectionItemRenderPayload(
+  site: StoreSite,
+  collection: StoreCollection,
+  record: StoreCollectionRecord,
+  options: RenderPayloadOptions,
+) {
+  const content = buildCollectionItemContent(site, collection, record);
+  const elements = content.elements;
+  const payloadElements = elements.map(normalizeElementForPayload);
+  const mediaPayload = getMediaList(site.id, {
+    visibility: 'public',
+    limit: 100,
+  });
+  const canonical = `/${collection.slug}/${record.slug}`;
+  const actions = collectElementActions(elements);
+  const dataBindings = collectDataBindingManifest(site.id, elements);
+  const navigation = getSiteNavigation(site.id);
+  const title = getCollectionRecordTitle(collection, record);
+  const description = getCollectionRecordDescription(collection, record);
+
+  return {
+    success: true,
+    requestId: options.requestId,
+    data: {
+      site: {
+        id: site.id,
+        slug: site.slug,
+        name: site.name,
+        locale: 'en',
+        status: site.status,
+        assetsBaseUrl: '',
+        themeTokens: buildThemeTokens(site),
+      },
+      navigation,
+      route: {
+        type: 'dynamicItem',
+        path: options.path,
+        status: record.status,
+        canonical,
+        params: {
+          collectionSlug: collection.slug,
+          recordSlug: record.slug,
+        },
+      },
+      content: {
+        schemaVersion: 'backy.content.v1',
+        id: record.id,
+        kind: 'dynamicItem',
+        title,
+        locale: 'en',
+        version: record.updatedAt,
+        elements: payloadElements,
+      },
+      assets: {
+        media: mediaPayload.media,
+        fonts: buildFontAssets(site),
+      },
+      interactions: {
+        forms: [],
+        comments: [],
+        actions: {
+          schemaVersion: 'backy.actions.v1',
+          actions,
+        },
+      },
+      seo: {
+        title,
+        description,
+        canonical,
+        keywords: [collection.slug, record.slug],
+        robots: {
+          index: true,
+          follow: true,
+        },
+        openGraph: {
+          title,
+          description,
+        },
+        jsonLd: [
+          {
+            '@context': 'https://schema.org',
+            '@type': 'Thing',
+            name: title,
+            description,
+            url: canonical,
+          },
+        ],
       },
       dataBindings: {
         ...dataBindings,

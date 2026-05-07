@@ -5,8 +5,19 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getBlogPosts, getPageByPath, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
-import { buildPublicBlogPostRenderPayload, buildPublicRenderPayload } from '@/lib/renderPayload';
+import {
+  getBlogPosts,
+  getCollectionByIdOrSlug,
+  getCollectionRecordByIdOrSlug,
+  getPageByPath,
+  getSiteByIdOrSlug,
+  validatePreviewToken,
+} from '@/lib/backyStore';
+import {
+  buildPublicBlogPostRenderPayload,
+  buildPublicCollectionItemRenderPayload,
+  buildPublicRenderPayload,
+} from '@/lib/renderPayload';
 import { normalizeRoutePath } from '@/lib/routeResolver';
 
 interface RouteParams {
@@ -74,11 +85,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const page = canPreview
       ? previewPage
       : getPageByPath(site.id, path);
-    if (!page) {
-      return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
+    if (page) {
+      return NextResponse.json(buildPublicRenderPayload(site, page, { requestId, path }));
     }
 
-    return NextResponse.json(buildPublicRenderPayload(site, page, { requestId, path }));
+    const dynamicItemMatch = path.match(/^\/([^/]+)\/([^/]+)$/);
+    if (dynamicItemMatch) {
+      const collectionSlug = decodeURIComponent(dynamicItemMatch[1]);
+      const recordSlug = decodeURIComponent(dynamicItemMatch[2]);
+      const collection = getCollectionByIdOrSlug(site.id, collectionSlug);
+      const record = collection
+        ? getCollectionRecordByIdOrSlug(site.id, collection.id, recordSlug)
+        : undefined;
+
+      if (collection && record) {
+        return NextResponse.json(buildPublicCollectionItemRenderPayload(site, collection, record, { requestId, path }));
+      }
+    }
+
+    return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
   } catch (error) {
     console.error('Render payload API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);

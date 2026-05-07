@@ -46,19 +46,22 @@ This document defines how custom frontends, admin UI, and public renderer intera
 
 - `GET /api/sites/:siteId/render?path=/about`
 - `GET /api/sites/:siteId/render?path=/blog/:slug`
+- `GET /api/sites/:siteId/render?path=/:collectionSlug/:recordSlug`
 - `GET /api/public/sites/:siteId/render?path=/about` (future stable alias)
-  - Returns the external page/post render payload described by `specs/ai-frontend-contract/content-payload.schema.json`.
+  - Returns the external page/post/dynamic item render payload described by `specs/ai-frontend-contract/content-payload.schema.json`.
   - Includes site bootstrap, route, canonical content document, assets, forms/comments/actions, SEO, data bindings, and editable map.
   - Current data bindings include normalized collection dataset manifests, resolved public collection fields/records, and element binding metadata when canvas elements declare collection `dataBindings`.
+  - Collection dynamic item paths currently resolve after normal pages and blog posts using `/:collectionSlug/:recordSlug`, and return a generated `dynamicItem` content document backed by the selected public record.
   - Current implementation is backed by the public seed adapter; production implementation must use the durable service layer.
   - Draft render access requires `previewToken` created by the admin preview endpoint for that exact page or post.
 
 - `GET /api/sites/:siteId/resolve?path=/about`
 - `GET /api/public/sites/:siteId/resolve?path=/about` (future stable alias)
-  - Resolves a public path to a page or blog post without requiring the frontend to know Backy's route internals.
+  - Resolves a public path to a page, blog post, or collection dynamic item without requiring the frontend to know Backy's route internals.
   - Returns `{ success, requestId, data: { site, route, navigation } }` when resolved.
   - Page routes include `resource.kind: "page"` plus page API and render URLs.
   - Blog post routes under `/blog/:slug` include `resource.kind: "post"` plus post API and hosted path.
+  - Collection dynamic item routes under `/:collectionSlug/:recordSlug` include `resource.kind: "dynamicItem"`, collection metadata, record id/slug, public records API URL, render URL, and hosted path.
   - Draft and future scheduled content stays hidden unless the exact preview token is supplied.
   - Unresolved paths return `404` with `ROUTE_NOT_FOUND`.
 
@@ -87,7 +90,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Public CMS collection contract for custom frontends and future dataset bindings.
   - Returns only collections with `status: "published"` and `permissions.publicRead: true`.
   - Returns only published records or scheduled records whose `scheduledAt` has passed.
-  - Current implementation is backed by the same runtime JSON adapter as admin content. `/render` now surfaces dataset, binding, field, and record manifests for collection-bound elements, but production completion still needs DB-backed querying, indexes, CSV import/export, dynamic route templates, and authenticated visitor-write policies.
+  - Current implementation is backed by the same runtime JSON adapter as admin content. `/render` now surfaces dataset, binding, field, and record manifests for collection-bound elements and generated dynamic item pages, but production completion still needs DB-backed querying, indexes, CSV import/export, custom dynamic route templates, and authenticated visitor-write policies.
 
 ### 2.2 Render payload
 Public page payload should include:
@@ -301,7 +304,7 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 - Public frontend bootstrap flow:
   1. Resolve site: `GET /api/sites/:identifier`.
   2. Resolve path on route changes: `GET /api/sites/:siteId/resolve?path=/...`.
-  3. Fetch page or blog post render payloads: `GET /api/sites/:siteId/render?path=/...`.
+  3. Fetch page, blog post, or collection dynamic item render payloads: `GET /api/sites/:siteId/render?path=/...`.
   4. If route resolves to a blog post and a custom archive UI is needed, call blog listing/detail APIs.
   5. If elements bind to structured content, inspect `dataBindings.datasets` from the render payload. Record-bound and slug-bound datasets include resolved public records; fetch additional records through `GET /api/sites/:siteId/collections/:collectionId/records` when the frontend needs more than the payload provided.
   6. Render from `content` + `theme` + `meta` only; ignore admin-only flags.

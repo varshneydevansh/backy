@@ -50,10 +50,11 @@ The first implementation-backed endpoint is:
 
 - `GET /api/sites/:siteId/render?path=/about`
 - `GET /api/sites/:siteId/render?path=/blog/example-post`
+- `GET /api/sites/:siteId/render?path=/team/ada-lovelace`
 
-It returns the `content-payload.schema.json` shape for pages and blog posts from the current public data adapter. This is not yet the final durable database-backed service, but it gives external frontends and AI-generated frontends a stable payload target while Backy replaces seeded/mock persistence.
+It returns the `content-payload.schema.json` shape for pages, blog posts, and collection dynamic item routes from the current public data adapter. This is not yet the final durable database-backed service, but it gives external frontends and AI-generated frontends a stable payload target while Backy replaces seeded/mock persistence.
 
-`npm run test:admin-contract --workspace @backy/public` validates the page and blog post render responses against `content-payload.schema.json` so contract drift is caught during the public API smoke pass. The same smoke now covers a collection-bound canvas element and verifies that `/render` exposes the dataset manifest, resolved collection fields/records, normalized element binding, and collection-record editable map entry.
+`npm run test:admin-contract --workspace @backy/public` validates the page, blog post, collection-bound page, and collection dynamic item render responses against `content-payload.schema.json` so contract drift is caught during the public API smoke pass. The same smoke verifies that `/render` exposes the dataset manifest, resolved collection fields/records, normalized element binding, and collection-record editable map entry.
 
 ## Current collection endpoints
 
@@ -65,7 +66,7 @@ Backy now exposes the first implementation-backed CMS collection surface:
 - `GET/POST/PATCH/DELETE /api/admin/sites/:siteId/collections`
 - `GET/POST/PATCH/DELETE /api/admin/sites/:siteId/collections/:collectionId/records`
 
-These endpoints make collection schemas and records addressable by custom frontends. Public reads hide draft/private collections and unpublished records. When page or post elements declare collection `dataBindings`, `/render` now exposes normalized dataset manifests, collection field schemas, resolved public records, and binding metadata for custom frontends. Dynamic item route rendering and the admin dataset-builder UI still need to be completed.
+These endpoints make collection schemas and records addressable by custom frontends. Public reads hide draft/private collections and unpublished records. Collection dynamic item URLs now resolve and render at `/:collectionSlug/:recordSlug` after normal page and blog routes. When page, post, or generated dynamic item elements declare collection `dataBindings`, `/render` exposes normalized dataset manifests, collection field schemas, resolved public records, and binding metadata for custom frontends. Dynamic list templates, custom item URL rules, and the admin dataset-builder UI still need to be completed.
 
 ## Required payload shape
 

@@ -10,12 +10,15 @@
 import { notFound } from 'next/navigation';
 import {
     getCanonicalPathForPage,
+    getCollectionByIdOrSlug,
+    getCollectionRecordByIdOrSlug,
     getPageByPath,
     getSiteByIdOrSlug,
     validatePreviewToken,
 } from '@/lib/backyStore';
-import { PageRenderer } from '@/components/PageRenderer';
+import { PageRenderer, type PageContent } from '@/components/PageRenderer';
 import AnimationHydrator from '@/components/AnimationHydrator';
+import { buildCollectionItemContent } from '@/lib/renderPayload';
 import type { Metadata } from 'next';
 
 async function getSite(subdomain: string) {
@@ -31,6 +34,25 @@ async function getPage(siteId: string, pageSlug: string, previewToken?: string) 
         : false;
 
     return canPreview ? previewPage : getPageByPath(siteId, pageSlug);
+}
+
+function getDynamicCollectionItem(siteId: string, pathParts: string[] | undefined) {
+    if (!pathParts || pathParts.length !== 2) {
+        return null;
+    }
+
+    const [collectionSlug, recordSlug] = pathParts;
+    const collection = getCollectionByIdOrSlug(siteId, collectionSlug);
+    const record = collection
+        ? getCollectionRecordByIdOrSlug(siteId, collection.id, recordSlug)
+        : undefined;
+
+    return collection && record ? { collection, record } : null;
+}
+
+function getCollectionRecordTitle(record: { slug: string; values: Record<string, unknown> }) {
+    const title = record.values.title || record.values.name || record.values.label;
+    return typeof title === 'string' && title.length > 0 ? title : record.slug;
 }
 
 // ==========================================================================
@@ -60,7 +82,37 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
     if (!site) return { title: 'Page Not Found' };
 
     const page = await getPage(site.id, pageSlug, previewToken);
-    if (!page) return { title: 'Page Not Found' };
+    if (!page) {
+        const dynamicItem = getDynamicCollectionItem(site.id, path);
+        if (!dynamicItem) return { title: 'Page Not Found' };
+
+        const title = getCollectionRecordTitle(dynamicItem.record);
+        const descriptionValue = dynamicItem.record.values.summary
+            || dynamicItem.record.values.description
+            || dynamicItem.record.values.bio
+            || dynamicItem.collection.description
+            || '';
+        const description = typeof descriptionValue === 'string' ? descriptionValue : '';
+        const canonicalPath = `/${dynamicItem.collection.slug}/${dynamicItem.record.slug}`;
+
+        return {
+            title,
+            description,
+            alternates: {
+                canonical: canonicalPath,
+            },
+            robots: {
+                index: dynamicItem.record.status === 'published',
+                follow: true,
+            },
+            openGraph: {
+                title,
+                description,
+                url: canonicalPath,
+                siteName: site.name,
+            },
+        };
+    }
     const canonicalPath = getCanonicalPathForPage(page);
     const pageKeywords = page.meta?.keywords || [];
 
@@ -97,9 +149,32 @@ export default async function SitePage({ params, searchParams }: PageProps) {
     }
 
     const page = await getPage(site.id, pageSlug, previewToken);
-    if (!page) {
+    if (page) {
+        return (
+            <>
+                {/* SEO head handled by generateMetadata */}
+
+                {/* Page content */}
+                <PageRenderer
+                    content={page.content}
+                    theme={site.theme}
+                    siteId={site.id}
+                    pageId={page.id}
+                    pageSlug={page.slug}
+                />
+
+                {/* Client-side animation hydration */}
+                <AnimationHydrator />
+            </>
+        );
+    }
+
+    const dynamicItem = getDynamicCollectionItem(site.id, path);
+    if (!dynamicItem) {
         notFound();
     }
+
+    const dynamicContent = buildCollectionItemContent(site, dynamicItem.collection, dynamicItem.record) as unknown as PageContent;
 
     return (
         <>
@@ -107,11 +182,10 @@ export default async function SitePage({ params, searchParams }: PageProps) {
 
             {/* Page content */}
             <PageRenderer
-                content={page.content}
+                content={dynamicContent}
                 theme={site.theme}
                 siteId={site.id}
-                pageId={page.id}
-                pageSlug={page.slug}
+                pageSlug={`${dynamicItem.collection.slug}/${dynamicItem.record.slug}`}
             />
 
             {/* Client-side animation hydration */}
