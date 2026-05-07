@@ -459,13 +459,29 @@ export const resolveElementDataBindings = (siteId: string, rawElements: unknown[
 
 const normalizeResolvedCollectionFields = (fields: unknown): JsonObject[] => (
   Array.isArray(fields)
-    ? fields.filter(isRecord).map((field) => ({
-        key: typeof field.key === 'string' ? field.key : '',
-        label: typeof field.label === 'string' ? field.label : typeof field.key === 'string' ? field.key : 'Field',
-        type: typeof field.type === 'string' ? field.type : 'text',
-        required: field.required === true,
-        unique: field.unique === true,
-      })).filter((field) => field.key.length > 0)
+    ? fields.filter(isRecord).map((field) => {
+        const normalizedField: JsonObject = {
+          key: typeof field.key === 'string' ? field.key : '',
+          label: typeof field.label === 'string' ? field.label : typeof field.key === 'string' ? field.key : 'Field',
+          type: typeof field.type === 'string' ? field.type : 'text',
+          required: field.required === true,
+          unique: field.unique === true,
+        };
+        const options = toStringArray(field.options);
+        const referenceCollectionId = typeof field.referenceCollectionId === 'string' && field.referenceCollectionId.length > 0
+          ? field.referenceCollectionId
+          : null;
+
+        if (options.length > 0) {
+          normalizedField.options = options;
+        }
+
+        if (referenceCollectionId) {
+          normalizedField.referenceCollectionId = referenceCollectionId;
+        }
+
+        return normalizedField;
+      }).filter((field) => typeof field.key === 'string' && field.key.length > 0)
     : []
 );
 

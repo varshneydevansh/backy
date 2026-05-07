@@ -296,9 +296,18 @@ type ApiCollectionFieldType =
   | 'number'
   | 'boolean'
   | 'date'
+  | 'datetime'
   | 'image'
+  | 'video'
   | 'file'
   | 'reference'
+  | 'multiReference'
+  | 'select'
+  | 'tags'
+  | 'url'
+  | 'email'
+  | 'phone'
+  | 'slug'
   | 'json';
 
 interface ApiCollectionField {

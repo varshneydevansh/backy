@@ -687,6 +687,8 @@ try {
           { key: 'title', label: 'Title', type: 'text', required: true, unique: true },
           { key: 'summary', label: 'Summary', type: 'richText' },
           { key: 'rank', label: 'Rank', type: 'number' },
+          { key: 'category', label: 'Category', type: 'select', options: ['Featured', 'Standard'] },
+          { key: 'labels', label: 'Labels', type: 'tags', options: ['Launch', 'Evergreen', 'Internal'] },
         ],
         permissions: {
           publicRead: true,
@@ -719,6 +721,9 @@ try {
     const publicCollections = await request(`/api/sites/${createdSiteId}/collections`);
     assert(publicCollections.response.status === 200, `${publicCollections.url} expected 200, got ${publicCollections.response.status}`);
     assert(publicCollections.json?.collections?.some((collection) => collection.id === createdCollectionId), `${publicCollections.url} missing public collection`);
+    const publicCollectionSchema = publicCollections.json?.collections?.find((collection) => collection.id === createdCollectionId);
+    assert(publicCollectionSchema?.fields?.some((field) => field.key === 'category' && field.type === 'select' && field.options?.includes('Featured')), `${publicCollections.url} missing select option schema`);
+    assert(publicCollectionSchema?.fields?.some((field) => field.key === 'labels' && field.type === 'tags' && field.options?.includes('Evergreen')), `${publicCollections.url} missing tags option schema`);
 
     const invalidRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records`, {
       method: 'POST',
@@ -734,6 +739,24 @@ try {
     assert(invalidRecord.response.status === 400, `${invalidRecord.url} expected 400, got ${invalidRecord.response.status}`);
     assert(invalidRecord.json?.error?.code === 'VALIDATION_ERROR', `${invalidRecord.url} expected VALIDATION_ERROR`);
 
+    const invalidOptionRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        slug: `${collectionRecordSlug}-invalid-option`,
+        status: 'published',
+        values: {
+          title: 'Invalid Option Record',
+          category: 'Archived',
+          labels: ['Launch'],
+        },
+      }),
+    });
+    assert(invalidOptionRecord.response.status === 400, `${invalidOptionRecord.url} expected 400, got ${invalidOptionRecord.response.status}`);
+    assert(invalidOptionRecord.json?.error?.code === 'VALIDATION_ERROR', `${invalidOptionRecord.url} expected VALIDATION_ERROR`);
+
     const createRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records`, {
       method: 'POST',
       headers: {
@@ -746,6 +769,8 @@ try {
           title: 'Collection Record',
           summary: 'Reusable structured content',
           rank: 1,
+          category: 'Featured',
+          labels: ['Launch', 'Evergreen'],
         },
       }),
     });
@@ -785,13 +810,13 @@ try {
     assert(adminCsvExport.response.status === 200, `${adminCsvExport.url} expected 200, got ${adminCsvExport.response.status}`);
     assert(adminCsvExport.response.headers.get('content-type')?.includes('text/csv'), `${adminCsvExport.url} expected CSV content type`);
     assert(adminCsvExport.response.headers.get('content-disposition')?.includes(`${collectionSlug}-records.csv`), `${adminCsvExport.url} missing CSV filename`);
-    assert(adminCsvExport.text.startsWith('id,slug,status,createdAt,updatedAt,publishedAt,scheduledAt,title,summary,rank'), `${adminCsvExport.url} missing CSV header`);
+    assert(adminCsvExport.text.startsWith('id,slug,status,createdAt,updatedAt,publishedAt,scheduledAt,title,summary,rank,category,labels'), `${adminCsvExport.url} missing CSV header`);
     assert(adminCsvExport.text.includes(collectionRecordSlug) && adminCsvExport.text.includes('Collection Record'), `${adminCsvExport.url} missing exported collection record`);
 
     const importedCollectionRecordSlug = `${collectionRecordSlug}-imported`;
     const importCsv = [
-      'slug,status,title,summary,rank',
-      `${importedCollectionRecordSlug},published,Imported Collection Record,"Imported, structured content",2`,
+      'slug,status,title,summary,rank,category,labels',
+      `${importedCollectionRecordSlug},published,Imported Collection Record,"Imported, structured content",2,Standard,"Launch, Evergreen"`,
     ].join('\n');
     const importRecords = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records/import?upsert=true`, {
       method: 'POST',
@@ -824,6 +849,14 @@ try {
         && dataset.records?.some((record) => record.id === createdCollectionRecordId && record.values?.title === 'Collection Record')
       )),
       `${dynamicRender.url} missing dynamic item dataset record`,
+    );
+    assert(
+      dynamicRender.json?.data?.dataBindings?.datasets?.some((dataset) => (
+        dataset.collectionId === createdCollectionId
+        && dataset.fields?.some((field) => field.key === 'category' && field.options?.includes('Featured'))
+        && dataset.fields?.some((field) => field.key === 'labels' && field.options?.includes('Evergreen'))
+      )),
+      `${dynamicRender.url} missing dynamic item field option metadata`,
     );
 
     const createBoundPage = await request(`/api/admin/sites/${createdSiteId}/pages`, {

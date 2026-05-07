@@ -59,7 +59,12 @@
               "label": { "type": "string" },
               "type": { "type": "string" },
               "required": { "type": "boolean" },
-              "unique": { "type": "boolean" }
+              "unique": { "type": "boolean" },
+              "options": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "referenceCollectionId": { "type": "string" }
             },
             "required": ["key", "label", "type"]
           }

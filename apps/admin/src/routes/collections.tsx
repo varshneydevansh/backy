@@ -42,9 +42,18 @@ const FIELD_TYPES: CollectionFieldType[] = [
   'number',
   'boolean',
   'date',
+  'datetime',
   'image',
+  'video',
   'file',
   'reference',
+  'multiReference',
+  'select',
+  'tags',
+  'url',
+  'email',
+  'phone',
+  'slug',
   'json',
 ];
 
@@ -86,8 +95,9 @@ const getPublicBaseUrl = () => {
   return typeof window !== 'undefined' ? window.location.origin : '';
 };
 
-const formatValue = (value: unknown) => {
+const formatValue = (value: unknown): string => {
   if (value === null || value === undefined) return '';
+  if (Array.isArray(value)) return value.map(formatValue).join(', ');
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   try {
@@ -104,12 +114,24 @@ const parseRecordValue = (field: CollectionField, value: string): unknown => {
   if (field.type === 'boolean') {
     return value === 'true';
   }
+  if (field.type === 'tags' || field.type === 'multiReference') {
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  }
   if (field.type === 'json') {
     if (!value.trim()) return {};
     return JSON.parse(value);
   }
   return value;
 };
+
+const formatFieldOptions = (options: string[] | undefined) => (options || []).join('\n');
+
+const parseFieldOptions = (value: string) => (
+  value
+    .split(/[\n,]/)
+    .map((option) => option.trim())
+    .filter(Boolean)
+);
 
 type RecordStatusFilter = CollectionRecord['status'] | '';
 
@@ -688,12 +710,13 @@ function CollectionsPage() {
                 </button>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-sm">
+                <table className="w-full min-w-[980px] text-sm">
                   <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
                     <tr>
                       <th className="px-4 py-2">Key</th>
                       <th className="px-4 py-2">Label</th>
                       <th className="px-4 py-2">Type</th>
+                      <th className="px-4 py-2">Options / reference</th>
                       <th className="px-4 py-2">Required</th>
                       <th className="px-4 py-2">Unique</th>
                       <th className="px-4 py-2" />
@@ -728,6 +751,36 @@ function CollectionsPage() {
                               <option key={type} value={type}>{type}</option>
                             ))}
                           </select>
+                        </td>
+                        <td className="px-4 py-2">
+                          {field.type === 'select' || field.type === 'tags' ? (
+                            <textarea
+                              value={formatFieldOptions(field.options)}
+                              onChange={(event) => updateField(index, { options: parseFieldOptions(event.target.value) })}
+                              className="min-h-16 w-full rounded-lg border bg-background px-2 py-1"
+                              placeholder="One option per line"
+                            />
+                          ) : field.type === 'reference' || field.type === 'multiReference' ? (
+                            <select
+                              value={field.referenceCollectionId || ''}
+                              onChange={(event) => updateField(index, { referenceCollectionId: event.target.value || null })}
+                              className="w-full rounded-lg border bg-background px-2 py-1"
+                            >
+                              <option value="">Choose collection</option>
+                              {collections
+                                .filter((collection) => collection.id !== selectedCollectionId)
+                                .map((collection) => (
+                                  <option key={collection.id} value={collection.id}>{collection.name}</option>
+                                ))}
+                            </select>
+                          ) : (
+                            <input
+                              value={field.helpText || ''}
+                              onChange={(event) => updateField(index, { helpText: event.target.value || null })}
+                              className="w-full rounded-lg border bg-background px-2 py-1"
+                              placeholder="Help text"
+                            />
+                          )}
                         </td>
                         <td className="px-4 py-2">
                           <input
@@ -1012,6 +1065,39 @@ function CollectionsPage() {
                         >
                           <option value="true">True</option>
                           <option value="false">False</option>
+                        </select>
+                      ) : field.type === 'select' && field.options?.length ? (
+                        <select
+                          value={recordForm.values[field.key] || ''}
+                          onChange={(event) => setRecordForm((prev) => ({
+                            ...prev,
+                            values: { ...prev.values, [field.key]: event.target.value },
+                          }))}
+                          className="w-full rounded-lg border bg-background px-3 py-2"
+                          required={field.required}
+                        >
+                          <option value="">Choose {field.label}</option>
+                          {field.options.map((option) => (
+                            <option key={option} value={option}>{option}</option>
+                          ))}
+                        </select>
+                      ) : field.type === 'tags' && field.options?.length ? (
+                        <select
+                          multiple
+                          value={(recordForm.values[field.key] || '').split(',').map((item) => item.trim()).filter(Boolean)}
+                          onChange={(event) => setRecordForm((prev) => ({
+                            ...prev,
+                            values: {
+                              ...prev.values,
+                              [field.key]: Array.from(event.target.selectedOptions).map((option) => option.value).join(', '),
+                            },
+                          }))}
+                          className="min-h-24 w-full rounded-lg border bg-background px-3 py-2"
+                          required={field.required}
+                        >
+                          {field.options.map((option) => (
+                            <option key={option} value={option}>{option}</option>
+                          ))}
                         </select>
                       ) : field.type === 'richText' || field.type === 'json' ? (
                         <textarea

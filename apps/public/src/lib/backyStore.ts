@@ -227,6 +227,8 @@ type CollectionFieldType =
   | 'file'
   | 'reference'
   | 'multiReference'
+  | 'select'
+  | 'tags'
   | 'url'
   | 'email'
   | 'phone'
@@ -3066,6 +3068,8 @@ const COLLECTION_FIELD_TYPES: CollectionFieldType[] = [
   'file',
   'reference',
   'multiReference',
+  'select',
+  'tags',
   'url',
   'email',
   'phone',
@@ -3182,6 +3186,14 @@ const normalizeCollectionRecordValue = (type: CollectionFieldType, value: unknow
       ? value.map(sanitizeString).filter(Boolean)
       : sanitizeString(value)
         ? [sanitizeString(value)]
+        : [];
+  }
+
+  if (type === 'tags') {
+    return Array.isArray(value)
+      ? value.map(sanitizeString).filter(Boolean)
+      : sanitizeString(value)
+        ? sanitizeString(value).split(',').map((item) => item.trim()).filter(Boolean)
         : [];
   }
 
@@ -3367,6 +3379,22 @@ export function validateCollectionRecordValues(
 
       if (duplicate) {
         errors.push({ field: field.key, message: `${field.label} must be unique.` });
+      }
+    }
+
+    if (field.options?.length && (field.type === 'select' || field.type === 'tags') && !empty) {
+      const allowedOptions = new Set(field.options.map((option) => normalizeIdentifier(option)));
+      const submittedValues = Array.isArray(value) ? value : [value];
+      const invalidValues = submittedValues
+        .map(sanitizeString)
+        .filter(Boolean)
+        .filter((item) => !allowedOptions.has(normalizeIdentifier(item)));
+
+      if (invalidValues.length > 0) {
+        errors.push({
+          field: field.key,
+          message: `${field.label} has invalid option value${invalidValues.length === 1 ? '' : 's'}: ${invalidValues.join(', ')}`,
+        });
       }
     }
   }
