@@ -12,6 +12,8 @@ import {
   getSiteByIdOrSlug,
   updateMediaItem,
 } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import type { MediaItem } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
 
@@ -65,18 +67,79 @@ const toBindingRecords = (value: unknown): BindingRecord[] => (
     : []
 );
 
+const buildMediaBindingUpdate = (
+  media: MediaItem,
+  input: {
+    mediaId: string;
+    targetType: 'page' | 'post';
+    targetId: string;
+    action: 'bind' | 'unbind';
+    usageType: string;
+    attachedBy: string | null;
+  },
+) => {
+  const now = new Date().toISOString();
+  const nextPageIds = new Set(media.pageIds || []);
+  const nextPostIds = new Set(media.postIds || []);
+  let bindings = toBindingRecords(media.metadata?.bindings);
+
+  if (input.action === 'bind') {
+    if (input.targetType === 'page') {
+      nextPageIds.add(input.targetId);
+    } else {
+      nextPostIds.add(input.targetId);
+    }
+
+    const existingIndex = bindings.findIndex((binding) => (
+      binding.scope === input.targetType && binding.targetId === input.targetId
+    ));
+    const nextBinding: BindingRecord = {
+      id: existingIndex >= 0 ? bindings[existingIndex].id : `binding_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      mediaId: input.mediaId,
+      scope: input.targetType,
+      targetId: input.targetId,
+      usageType: input.usageType,
+      attachedBy: input.attachedBy,
+      createdAt: existingIndex >= 0 ? bindings[existingIndex].createdAt : now,
+      updatedAt: now,
+    };
+
+    bindings = existingIndex >= 0
+      ? bindings.map((binding, index) => (index === existingIndex ? nextBinding : binding))
+      : [...bindings, nextBinding];
+  } else {
+    if (input.targetType === 'page') {
+      nextPageIds.delete(input.targetId);
+    } else {
+      nextPostIds.delete(input.targetId);
+    }
+    bindings = bindings.filter((binding) => !(binding.scope === input.targetType && binding.targetId === input.targetId));
+  }
+
+  return {
+    pageIds: [...nextPageIds],
+    postIds: [...nextPostIds],
+    bindings,
+  };
+};
+
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { siteId, mediaId } = await params;
-    const site = getSiteByIdOrSlug(siteId);
+    const repositories = !shouldUseDemoStoreFallback() ? await getRequiredDatabaseRepositories() : null;
+    const repositorySite = repositories ? await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId) : null;
+    const site = repositorySite || getSiteByIdOrSlug(siteId);
 
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const media = getMediaById(site.id, mediaId);
+    const media = repositories
+      ? await repositories.media.getById(site.id, mediaId)
+      : getMediaById(site.id, mediaId);
+
     if (!media) {
       return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media item not found', requestId);
     }
@@ -97,8 +160,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const targetExists = targetType === 'page'
-      ? !!getAdminPageById(site.id, targetId)
-      : !!getAdminBlogPostById(site.id, targetId);
+      ? repositories
+        ? !!await repositories.pages.getById(site.id, targetId)
+        : !!getAdminPageById(site.id, targetId)
+      : repositories
+        ? !!await repositories.posts.getById(site.id, targetId)
+        : !!getAdminBlogPostById(site.id, targetId);
 
     if (!targetExists) {
       return errorResponse(404, 'TARGET_NOT_FOUND', `${targetType === 'page' ? 'Page' : 'Post'} not found`, requestId);
@@ -108,50 +175,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, 'VALIDATION_ERROR', 'action must be bind or unbind', requestId);
     }
 
-    const now = new Date().toISOString();
     const key = targetType === 'page' ? 'pageIds' : 'postIds';
-    const nextPageIds = new Set(media.pageIds || []);
-    const nextPostIds = new Set(media.postIds || []);
-    let bindings = toBindingRecords(media.metadata?.bindings);
-
-    if (action === 'bind') {
-      if (targetType === 'page') {
-        nextPageIds.add(targetId);
-      } else {
-        nextPostIds.add(targetId);
-      }
-
-      const existingIndex = bindings.findIndex((binding) => binding.scope === targetType && binding.targetId === targetId);
-      const nextBinding: BindingRecord = {
-        id: existingIndex >= 0 ? bindings[existingIndex].id : `binding_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-        mediaId,
-        scope: targetType,
-        targetId,
-        usageType,
-        attachedBy,
-        createdAt: existingIndex >= 0 ? bindings[existingIndex].createdAt : now,
-        updatedAt: now,
-      };
-
-      bindings = existingIndex >= 0
-        ? bindings.map((binding, index) => (index === existingIndex ? nextBinding : binding))
-        : [...bindings, nextBinding];
-    } else {
-      if (targetType === 'page') {
-        nextPageIds.delete(targetId);
-      } else {
-        nextPostIds.delete(targetId);
-      }
-      bindings = bindings.filter((binding) => !(binding.scope === targetType && binding.targetId === targetId));
-    }
-
-    const updated = updateMediaItem(site.id, media.id, {
-      pageIds: [...nextPageIds],
-      postIds: [...nextPostIds],
-      metadata: {
-        bindings,
-      },
+    const bindingUpdate = buildMediaBindingUpdate(media, {
+      mediaId,
+      targetType,
+      targetId,
+      action: action as 'bind' | 'unbind',
+      usageType,
+      attachedBy,
     });
+
+    const updated = repositories
+      ? (await repositories.media.update(site.id, media.id, {
+          metadata: {
+            ...media.metadata,
+            pageIds: bindingUpdate.pageIds,
+            postIds: bindingUpdate.postIds,
+            bindings: bindingUpdate.bindings,
+          },
+        })).item
+      : updateMediaItem(site.id, media.id, {
+          pageIds: bindingUpdate.pageIds,
+          postIds: bindingUpdate.postIds,
+          metadata: {
+            bindings: bindingUpdate.bindings,
+          },
+        });
 
     if (!updated) {
       return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media item not found', requestId);
@@ -163,7 +212,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       data: {
         media: updated,
         binding: action === 'bind'
-          ? bindings.find((binding) => binding.scope === targetType && binding.targetId === targetId) || null
+          ? bindingUpdate.bindings.find((binding) => binding.scope === targetType && binding.targetId === targetId) || null
           : null,
         target: {
           type: targetType,
