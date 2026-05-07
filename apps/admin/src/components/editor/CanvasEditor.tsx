@@ -1592,9 +1592,9 @@ export function CanvasEditor({
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleCanvasDrop}
           >
-            <div className="flex justify-center min-h-full">
+            <div className="flex min-h-full justify-start">
               <div
-                className="relative"
+                className="relative mx-auto"
                 style={{
                   width: scaledCanvasWidth,
                   minHeight: scaledCanvasHeight + (isPreview ? 0 : 32),
