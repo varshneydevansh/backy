@@ -61,6 +61,7 @@ const sanitizeText = (value: unknown): string => {
 };
 
 const GRID_SIZE = 10;
+const SMART_GUIDE_THRESHOLD = 6;
 
 const snapToGrid = (value: number): number => (
   Math.round(Math.max(0, value) / GRID_SIZE) * GRID_SIZE
@@ -78,6 +79,105 @@ interface TreeUpdateResult {
   elements: CanvasElement[];
   updated: boolean;
 }
+
+interface AlignmentGuide {
+  orientation: 'vertical' | 'horizontal';
+  position: number;
+}
+
+interface SnapCandidate {
+  value: number;
+  offset: number;
+}
+
+const getDragSnapCandidates = (
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) => ({
+  vertical: [
+    { value: x, offset: 0 },
+    { value: x + width / 2, offset: width / 2 },
+    { value: x + width, offset: width },
+  ],
+  horizontal: [
+    { value: y, offset: 0 },
+    { value: y + height / 2, offset: height / 2 },
+    { value: y + height, offset: height },
+  ],
+});
+
+const collectSmartGuideTargets = (
+  elements: CanvasElement[],
+  activeElementId: string,
+  size: CanvasSize,
+) => {
+  const vertical = [0, size.width / 2, size.width];
+  const horizontal = [0, size.height / 2, size.height];
+
+  for (const element of elements) {
+    if (element.id === activeElementId || element.visible === false) {
+      continue;
+    }
+
+    vertical.push(element.x, element.x + element.width / 2, element.x + element.width);
+    horizontal.push(element.y, element.y + element.height / 2, element.y + element.height);
+  }
+
+  return { vertical, horizontal };
+};
+
+const findClosestSnap = (
+  candidates: SnapCandidate[],
+  targets: number[],
+): { delta: number; position: number } | null => {
+  let closest: { delta: number; distance: number; position: number } | null = null;
+
+  for (const candidate of candidates) {
+    for (const target of targets) {
+      const delta = target - candidate.value;
+      const distance = Math.abs(delta);
+      if (distance > SMART_GUIDE_THRESHOLD) {
+        continue;
+      }
+
+      if (!closest || distance < closest.distance) {
+        closest = {
+          delta,
+          distance,
+          position: target,
+        };
+      }
+    }
+  }
+
+  return closest ? { delta: closest.delta, position: closest.position } : null;
+};
+
+const resolveSmartDragSnap = (
+  elements: CanvasElement[],
+  activeElementId: string,
+  size: CanvasSize,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) => {
+  const targets = collectSmartGuideTargets(elements, activeElementId, size);
+  const candidates = getDragSnapCandidates(x, y, width, height);
+  const verticalSnap = findClosestSnap(candidates.vertical, targets.vertical);
+  const horizontalSnap = findClosestSnap(candidates.horizontal, targets.horizontal);
+
+  return {
+    x: verticalSnap ? x + verticalSnap.delta : x,
+    y: horizontalSnap ? y + horizontalSnap.delta : y,
+    guides: [
+      ...(verticalSnap ? [{ orientation: 'vertical' as const, position: verticalSnap.position }] : []),
+      ...(horizontalSnap ? [{ orientation: 'horizontal' as const, position: horizontalSnap.position }] : []),
+    ],
+  };
+};
 
 const findElementById = (elements: CanvasElement[], targetId: string): CanvasElement | null => {
   for (const element of elements) {
@@ -646,6 +746,7 @@ export function Canvas({
 
   // Resize state for resizing elements
   const [resizeState, setResizeState] = useState<ResizeInteraction | null>(null);
+  const [alignmentGuides, setAlignmentGuides] = useState<AlignmentGuide[]>([]);
 
   // Resize state for canvas itself
   const [canvasResizeState, setCanvasResizeState] = useState<{
@@ -759,9 +860,10 @@ export function Canvas({
     }
 
     const activeResizeState = resizeStateRef.current;
-    const activeDragState = dragStateRef.current;
+      const activeDragState = dragStateRef.current;
 
     if (activeResizeState) {
+      setAlignmentGuides([]);
       const deltaX = toCanvasDelta(event.clientX - activeResizeState.startX);
       const deltaY = toCanvasDelta(event.clientY - activeResizeState.startY);
 
@@ -814,15 +916,31 @@ export function Canvas({
     const deltaY = toCanvasDelta(event.clientY - activeDragState.startY);
     const newX = activeDragState.initialX + deltaX;
     const newY = activeDragState.initialY + deltaY;
+    let nextGuides: AlignmentGuide[] = [];
 
-    onElementsChange(
-      updateElementById(elementsRef.current, activeDragState.elementId, (element) => ({
+    const result = updateElementById(elementsRef.current, activeDragState.elementId, (element) => {
+      const snappedX = snapToGrid(clampToCanvas(newX, element.width, size.width));
+      const snappedY = snapToGrid(clampToCanvas(newY, element.height, size.height));
+      const smartSnap = resolveSmartDragSnap(
+        elementsRef.current,
+        activeDragState.elementId,
+        size,
+        snappedX,
+        snappedY,
+        element.width,
+        element.height,
+      );
+      nextGuides = smartSnap.guides;
+
+      return {
         ...element,
-        x: snapToGrid(clampToCanvas(newX, element.width, size.width)),
-        y: snapToGrid(clampToCanvas(newY, element.height, size.height)),
-      })).elements,
-      { transient: true, selectedId: activeDragState.elementId },
-    );
+        x: clampToCanvas(smartSnap.x, element.width, size.width),
+        y: clampToCanvas(smartSnap.y, element.height, size.height),
+      };
+    });
+
+    setAlignmentGuides(nextGuides);
+    onElementsChange(result.elements, { transient: true, selectedId: activeDragState.elementId });
   }, [isPreview, onElementsChange, size.height, size.width, toCanvasDelta]);
 
   const handleGlobalElementUp = useCallback(() => {
@@ -832,6 +950,7 @@ export function Canvas({
     resizeStateRef.current = null;
     setDragState(null);
     setResizeState(null);
+    setAlignmentGuides([]);
     if (hadActiveTransform) {
       onElementsChange(elementsRef.current, { commit: true, selectedId: activeElementId });
     }
@@ -1121,6 +1240,26 @@ export function Canvas({
           Drop components onto the canvas
         </div>
       )}
+
+      {!isPreview && alignmentGuides.map((guide, index) => (
+        <div
+          key={`${guide.orientation}-${guide.position}-${index}`}
+          className="pointer-events-none absolute z-[60] bg-fuchsia-500/80 shadow-[0_0_0_1px_rgba(217,70,239,0.22)]"
+          style={guide.orientation === 'vertical'
+            ? {
+                left: guide.position,
+                top: 0,
+                width: 1,
+                height: size.height,
+              }
+            : {
+                left: 0,
+                top: guide.position,
+                width: size.width,
+                height: 1,
+              }}
+        />
+      ))}
 
       {/* Canvas Elements */}
       {elements.map((element) => (
