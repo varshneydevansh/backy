@@ -5,6 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import type { BackyCollection, BackyPage, BackyPost, MediaItem, Site } from '@backy-cms/core';
 import {
   getBlogPosts,
   getMediaList,
@@ -19,6 +20,7 @@ import {
   listReusableSections,
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
   params: Promise<{
@@ -42,11 +44,249 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   )
 );
 
+const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null }) => (
+  item.status === 'published' && (!item.scheduledAt || new Date(item.scheduledAt).getTime() <= Date.now())
+);
+
+const pagePath = (page: Pick<BackyPage, 'isHomepage' | 'slug'>) => (
+  page.isHomepage || page.slug === 'index' ? '/' : `/${page.slug}`
+);
+
+const collectionField = (field: BackyCollection['fields'][number], index: number) => ({
+  key: field.key,
+  label: field.label,
+  type: field.type,
+  required: field.required === true,
+  unique: field.unique === true,
+  sortOrder: index,
+  options: field.options,
+  referenceCollectionId: field.referenceCollectionId,
+});
+
+const repositoryNavigation = (pages: BackyPage[]) => ({
+  primary: pages
+    .filter(isPubliclyReadable)
+    .map((page) => ({
+      id: `nav_${page.id}`,
+      type: 'page',
+      pageId: page.id,
+      label: page.title,
+      title: page.title,
+      slug: page.slug,
+      path: pagePath(page),
+      status: page.status,
+      isHomepage: page.isHomepage,
+      children: [],
+    }))
+    .sort((left, right) => {
+      if (left.isHomepage !== right.isHomepage) {
+        return left.isHomepage ? -1 : 1;
+      }
+      return left.label.localeCompare(right.label) || left.path.localeCompare(right.path);
+    }),
+});
+
+const buildRepositoryManifest = (
+  input: {
+    requestId: string;
+    site: Site;
+    pages: BackyPage[];
+    posts: BackyPost[];
+    collections: BackyCollection[];
+    media: MediaItem[];
+  },
+) => {
+  const fonts = input.media.filter((item) => item.type === 'font');
+  const publicCollections = input.collections.filter((collection) => collection.permissions.publicRead);
+
+  return {
+    success: true,
+    requestId: input.requestId,
+    data: {
+      schemaVersion: 'backy.frontend-manifest.v1',
+      generatedAt: new Date().toISOString(),
+      site: {
+        id: input.site.id,
+        slug: input.site.slug,
+        name: input.site.name,
+        description: input.site.description || '',
+        customDomain: input.site.customDomain,
+        status: input.site.isPublished ? 'published' : 'draft',
+        themeTokens: input.site.theme,
+      },
+      contract: {
+        version: 'backy.ai-frontend.v1',
+        docs: '/specs/ai-frontend-contract/README.md',
+        schemas: {
+          manifest: 'https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json',
+          renderPayload: 'https://backy.dev/schemas/ai-frontend-contract/content-payload.schema.json',
+          themeTokens: 'https://backy.dev/schemas/ai-frontend-contract/theme-tokens.schema.json',
+          elementActions: 'https://backy.dev/schemas/ai-frontend-contract/element-actions.schema.json',
+          dataBindings: 'https://backy.dev/schemas/ai-frontend-contract/data-bindings.schema.json',
+          editableMap: 'https://backy.dev/schemas/ai-frontend-contract/editable-map.schema.json',
+        },
+      },
+      capabilities: {
+        routeResolve: true,
+        renderPayload: true,
+        openApi: true,
+        seoDiscovery: true,
+        hostedRendering: true,
+        navigation: true,
+        mediaLibrary: true,
+        uploadedFonts: fonts.length > 0,
+        blog: true,
+        comments: false,
+        forms: false,
+        collectionSchemas: true,
+        collectionRecords: true,
+        publicCollectionCreate: publicCollections.some((collection) => collection.permissions.publicCreate),
+        collectionWriteForms: false,
+        dynamicItemRoutes: publicCollections.length > 0,
+        reusableSections: false,
+        previewTokens: false,
+      },
+      endpoints: {
+        site: `/api/sites?identifier=${encodeURIComponent(input.site.slug)}`,
+        manifest: `/api/sites/${input.site.id}/manifest`,
+        openapi: `/api/sites/${input.site.id}/openapi`,
+        resolve: `/api/sites/${input.site.id}/resolve?path=/`,
+        render: `/api/sites/${input.site.id}/render?path=/`,
+        seo: `/api/sites/${input.site.id}/seo`,
+        sitemap: `/api/sites/${input.site.id}/seo?format=sitemap`,
+        robots: `/api/sites/${input.site.id}/seo?format=robots`,
+        navigation: `/api/sites/${input.site.id}/navigation`,
+        media: `/api/sites/${input.site.id}/media`,
+        mediaDetail: `/api/sites/${input.site.id}/media/{mediaId}`,
+        pages: `/api/sites/${input.site.id}/pages`,
+        blog: `/api/sites/${input.site.id}/blog`,
+        blogCategories: `/api/sites/${input.site.id}/blog/categories`,
+        blogTags: `/api/sites/${input.site.id}/blog/tags`,
+        blogAuthors: `/api/sites/${input.site.id}/blog/authors`,
+        collections: `/api/sites/${input.site.id}/collections`,
+        reusableSections: `/api/sites/${input.site.id}/reusable-sections`,
+        reusableSectionDetail: `/api/sites/${input.site.id}/reusable-sections/{sectionId}`,
+        forms: `/api/sites/${input.site.id}/forms`,
+        formDetail: `/api/sites/${input.site.id}/forms/{formId}`,
+        formSubmissions: `/api/sites/${input.site.id}/forms/{formId}/submissions`,
+        formSubmission: `/api/sites/${input.site.id}/forms/{formId}/submissions/{submissionId}`,
+        formContacts: `/api/sites/${input.site.id}/forms/{formId}/contacts`,
+        formContact: `/api/sites/${input.site.id}/forms/{formId}/contacts/{contactId}`,
+        comments: `/api/sites/${input.site.id}/comments`,
+        pageComments: `/api/sites/${input.site.id}/pages/{pageId}/comments`,
+        pageComment: `/api/sites/${input.site.id}/pages/{pageId}/comments/{commentId}`,
+        blogComments: `/api/sites/${input.site.id}/blog/{postId}/comments`,
+        blogComment: `/api/sites/${input.site.id}/blog/{postId}/comments/{commentId}`,
+        commentReportReasons: `/api/sites/${input.site.id}/comments/report-reasons`,
+        commentReport: `/api/sites/${input.site.id}/comments/{commentId}/report`,
+        events: `/api/sites/${input.site.id}/events`,
+      },
+      routePatterns: [
+        {
+          type: 'page',
+          pattern: '/:pageSlug',
+          resolveUrl: `/api/sites/${input.site.id}/resolve?path=/:pageSlug`,
+          renderUrl: `/api/sites/${input.site.id}/render?path=/:pageSlug`,
+        },
+        {
+          type: 'blogPost',
+          pattern: '/blog/:postSlug',
+          resolveUrl: `/api/sites/${input.site.id}/resolve?path=/blog/:postSlug`,
+          renderUrl: `/api/sites/${input.site.id}/render?path=/blog/:postSlug`,
+        },
+        {
+          type: 'dynamicCollectionItem',
+          pattern: '/:collectionSlug/:recordSlug',
+          resolveUrl: `/api/sites/${input.site.id}/resolve?path=/:collectionSlug/:recordSlug`,
+          renderUrl: `/api/sites/${input.site.id}/render?path=/:collectionSlug/:recordSlug`,
+        },
+      ],
+      modules: {
+        pages: {
+          count: input.pages.length,
+          items: input.pages.map((page) => ({
+            id: page.id,
+            title: page.title,
+            slug: page.slug,
+            path: pagePath(page),
+            status: page.status,
+            renderUrl: `/api/sites/${input.site.id}/render?path=${encodeURIComponent(pagePath(page))}`,
+          })),
+        },
+        blog: {
+          count: input.posts.length,
+          categories: [],
+          tags: [],
+          authors: [],
+        },
+        collections: publicCollections.map((collection) => ({
+          id: collection.id,
+          slug: collection.slug,
+          name: collection.name,
+          status: collection.status,
+          permissions: collection.permissions,
+          fields: collection.fields.map(collectionField),
+          recordsUrl: `/api/sites/${input.site.id}/collections/${collection.id}/records`,
+          dynamicRoutePattern: `/${collection.slug}/:recordSlug`,
+        })),
+        reusableSections: {
+          count: 0,
+          listUrl: `/api/sites/${input.site.id}/reusable-sections`,
+          categories: [],
+          tags: [],
+          items: [],
+        },
+        forms: [],
+        media: {
+          count: input.media.length,
+          publicCount: input.media.length,
+          fontCount: fonts.length,
+          types: Array.from(new Set(input.media.map((item) => item.type))).sort(),
+          listUrl: `/api/sites/${input.site.id}/media`,
+        },
+      },
+      navigation: repositoryNavigation(input.pages),
+    },
+  };
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { siteId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site || !site.isPublished) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const [pages, posts, collections, media] = await Promise.all([
+        repositories.pages.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
+        repositories.posts.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
+        repositories.collections.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
+        repositories.media.list({ siteId: site.id, visibility: 'public', limit: 1000, offset: 0 }),
+      ]);
+      const manifest = buildRepositoryManifest({
+        requestId,
+        site,
+        pages: pages.items.filter(isPubliclyReadable),
+        posts: posts.items.filter(isPubliclyReadable),
+        collections: collections.items.filter((collection) => collection.status === 'published'),
+        media: media.items,
+      });
+
+      return publicContractJson(manifest, {
+        requestId,
+        request,
+        cache: 'discovery',
+        schemaVersion: 'backy.frontend-manifest.v1',
+        siteId: site.id,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site || !site.isPublished) {

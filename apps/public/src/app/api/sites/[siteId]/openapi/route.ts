@@ -7,6 +7,7 @@
 import { NextRequest } from 'next/server';
 import { getSiteByIdOrSlug, listCollections, listFormsBySite, listReusableSections } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
   params: Promise<{
@@ -66,16 +67,37 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
-    const site = getSiteByIdOrSlug(siteId);
+    const repositoryMode = !shouldUseDemoStoreFallback();
+    const repositories = repositoryMode ? await getRequiredDatabaseRepositories() : null;
+    const repositorySite = repositories
+      ? await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId)
+      : null;
+    const storeSite = repositoryMode ? null : getSiteByIdOrSlug(siteId);
+    const site = repositorySite
+      ? {
+          id: repositorySite.id,
+          slug: repositorySite.slug,
+          name: repositorySite.name,
+          isPublished: repositorySite.isPublished,
+        }
+      : storeSite;
 
     if (!site || !site.isPublished) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
     const origin = new URL(request.url).origin;
-    const collections = listCollections(site.id);
-    const forms = listFormsBySite(site.id);
-    const reusableSections = listReusableSections(site.id, { status: 'active' });
+    const collections = repositories
+      ? (await repositories.collections.list({
+          siteId: site.id,
+          includeUnpublished: false,
+          status: 'published',
+          limit: 100,
+          offset: 0,
+        })).items.filter((collection) => collection.permissions.publicRead)
+      : listCollections(site.id);
+    const forms = repositories ? [] : listFormsBySite(site.id);
+    const reusableSections = repositories ? [] : listReusableSections(site.id, { status: 'active' });
     const collectionIds = collections.map((collection) => collection.id);
     const formIds = forms.map((form) => form.id);
     const reusableSectionIds = reusableSections.map((section) => section.id);
