@@ -209,6 +209,7 @@ The next implementation should not start by adding more UI screens. The product 
   - Production paths cannot accidentally use demo adapter unless a config flag enables it.
 - **Current progress**:
   - `@backy/db` now exports `resolveBackyDataRuntimeConfig`, `createBackyRuntimeAdapter`, and an explicit `createDemoAdapter` marker.
+  - `apps/public/src/lib/repositoryRuntime.ts` now exposes the server-side bridge that returns database repositories only in database mode and returns a non-repository demo runtime in explicit demo mode.
   - Runtime mode defaults to `database`; demo mode requires `BACKY_DATA_MODE=demo` or legacy `BACKY_DEMO_MODE=true`.
   - Database mode validates required connection config instead of silently falling back to demo data.
 - **Validation**:
