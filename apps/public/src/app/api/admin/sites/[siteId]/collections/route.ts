@@ -6,12 +6,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import type { BackyCollectionField, BackyCollectionPermissions, PublishStatus } from '@backy-cms/core';
 import {
   createAdminCollection,
   getCollectionByIdOrSlug,
   getSiteByIdOrSlug,
   listCollections,
 } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
@@ -44,11 +46,53 @@ const normalizeSlug = (value: unknown): string => (
     : ''
 );
 
+const toCollectionFields = (value: unknown): BackyCollectionField[] => (
+  Array.isArray(value) ? value as BackyCollectionField[] : []
+);
+
+const toCollectionPermissions = (value: unknown): Partial<BackyCollectionPermissions> | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<BackyCollectionPermissions>
+    : undefined
+);
+
+const parseStatus = (value: unknown): PublishStatus | undefined => (
+  value === 'draft' || value === 'published' || value === 'scheduled' || value === 'archived'
+    ? value
+    : undefined
+);
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { siteId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const payload = await repositories.collections.list({
+        siteId: site.id,
+        includeUnpublished: true,
+        status: 'all',
+        limit: 100,
+        offset: 0,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          collections: payload.items,
+          pagination: payload.pagination,
+        },
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -73,6 +117,46 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const body = await parseJsonBody(request);
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      const slug = normalizeSlug(body.slug || name);
+
+      if (!name) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Collection name is required', requestId);
+      }
+
+      if (!slug) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Collection slug is required', requestId);
+      }
+
+      if (await repositories.collections.getBySlug(site.id, slug)) {
+        return errorResponse(409, 'SLUG_CONFLICT', 'A collection with this slug already exists', requestId);
+      }
+
+      const collection = (await repositories.collections.create({
+        siteId: site.id,
+        name,
+        slug,
+        description: typeof body.description === 'string' ? body.description : null,
+        status: parseStatus(body.status) || 'draft',
+        fields: toCollectionFields(body.fields),
+        permissions: toCollectionPermissions(body.permissions),
+      })).item;
+
+      return NextResponse.json(
+        { success: true, requestId, data: { collection } },
+        { status: 201 },
+      );
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {

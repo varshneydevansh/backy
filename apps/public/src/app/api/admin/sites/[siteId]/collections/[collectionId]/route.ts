@@ -7,12 +7,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import type { BackyCollectionField, BackyCollectionPermissions, PublishStatus } from '@backy-cms/core';
 import {
   deleteAdminCollection,
   getCollectionByIdOrSlug,
   getSiteByIdOrSlug,
   updateAdminCollection,
 } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
@@ -46,11 +48,44 @@ const normalizeSlug = (value: unknown): string => (
     : ''
 );
 
+const toCollectionFields = (value: unknown): BackyCollectionField[] | undefined => (
+  Array.isArray(value) ? value as BackyCollectionField[] : undefined
+);
+
+const toCollectionPermissions = (value: unknown): Partial<BackyCollectionPermissions> | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<BackyCollectionPermissions>
+    : undefined
+);
+
+const parseStatus = (value: unknown): PublishStatus | undefined => (
+  value === 'draft' || value === 'published' || value === 'scheduled' || value === 'archived'
+    ? value
+    : undefined
+);
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { siteId, collectionId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const collection = await repositories.collections.getById(site.id, collectionId)
+        || await repositories.collections.getBySlug(site.id, collectionId);
+      if (!collection) {
+        return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+      }
+
+      return NextResponse.json({ success: true, requestId, data: { collection } });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -74,6 +109,47 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, collectionId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const collection = await repositories.collections.getById(site.id, collectionId)
+        || await repositories.collections.getBySlug(site.id, collectionId);
+      if (!collection) {
+        return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+      }
+
+      const body = await parseJsonBody(request);
+      const nextSlug = body.slug === undefined ? '' : normalizeSlug(body.slug);
+
+      if (body.slug !== undefined && !nextSlug) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Collection slug is required', requestId);
+      }
+
+      if (nextSlug && nextSlug !== collection.slug) {
+        const conflict = await repositories.collections.getBySlug(site.id, nextSlug);
+        if (conflict && conflict.id !== collection.id) {
+          return errorResponse(409, 'SLUG_CONFLICT', 'A collection with this slug already exists', requestId);
+        }
+      }
+
+      const fields = body.fields === undefined ? undefined : toCollectionFields(body.fields);
+      const updated = (await repositories.collections.update(site.id, collection.id, {
+        ...(typeof body.name === 'string' ? { name: body.name.trim() } : {}),
+        ...(body.description === undefined ? {} : { description: typeof body.description === 'string' ? body.description : null }),
+        ...(parseStatus(body.status) ? { status: parseStatus(body.status) } : {}),
+        ...(fields === undefined ? {} : { fields }),
+        ...(body.permissions === undefined ? {} : { permissions: toCollectionPermissions(body.permissions) }),
+        ...(nextSlug ? { slug: nextSlug } : {}),
+      })).item;
+
+      return NextResponse.json({ success: true, requestId, data: { collection: updated } });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -120,6 +196,35 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, collectionId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const collection = await repositories.collections.getById(site.id, collectionId)
+        || await repositories.collections.getBySlug(site.id, collectionId);
+      if (!collection) {
+        return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+      }
+
+      const deleted = await repositories.collections.delete(site.id, collection.id);
+      if (!deleted) {
+        return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          deleted: true,
+          collectionId: collection.id,
+        },
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {

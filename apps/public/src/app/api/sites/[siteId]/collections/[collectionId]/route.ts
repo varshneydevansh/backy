@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCollectionByIdOrSlug, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
   params: Promise<{
@@ -36,6 +37,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, collectionId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site || !site.isPublished) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const collection = await repositories.collections.getById(site.id, collectionId)
+        || await repositories.collections.getBySlug(site.id, collectionId);
+      if (!collection || collection.status !== 'published' || !collection.permissions.publicRead) {
+        return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          collection,
+        },
+        collection,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {

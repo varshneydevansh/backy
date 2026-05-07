@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSiteByIdOrSlug, listCollections } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
   params: Promise<{
@@ -35,6 +36,43 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site || !site.isPublished) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const payload = await repositories.collections.list({
+        siteId: site.id,
+        includeUnpublished: false,
+        status: 'published',
+        limit: 100,
+        offset: 0,
+      });
+      const collections = payload.items.filter((collection) => collection.permissions.publicRead);
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          collections,
+          pagination: {
+            ...payload.pagination,
+            total: collections.length,
+            hasMore: false,
+          },
+        },
+        collections,
+        pagination: {
+          ...payload.pagination,
+          total: collections.length,
+          hasMore: false,
+        },
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
