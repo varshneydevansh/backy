@@ -68,6 +68,9 @@ export interface MediaAsset {
   type: 'image' | 'video' | 'file' | 'font';
   size: string;
   url: string;
+  altText?: string | null;
+  caption?: string | null;
+  tags?: string[];
   scope?: MediaScope;
   scopeTargetId?: string | null;
   visibility?: MediaVisibility;

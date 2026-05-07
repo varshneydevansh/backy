@@ -14,6 +14,9 @@ interface ApiMediaItem {
   scope?: MediaScope;
   scopeTargetId?: string | null;
   visibility?: MediaVisibility;
+  altText?: string | null;
+  caption?: string | null;
+  tags?: string[];
   uploadedBy?: string | null;
   pageIds?: string[];
   postIds?: string[];
@@ -39,6 +42,27 @@ interface ApiUploadResponse {
   };
 }
 
+interface ApiMediaResponse {
+  success: boolean;
+  data?: {
+    media: ApiMediaItem;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiDeleteResponse {
+  success: boolean;
+  data?: {
+    deleted: boolean;
+    mediaId: string;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 export interface MediaUploadOptions {
   siteId?: string;
   scope?: MediaScope;
@@ -57,6 +81,16 @@ export interface MediaListOptions {
   pageId?: string;
   postId?: string;
   limit?: number;
+}
+
+export interface MediaUpdateInput {
+  originalName?: string;
+  altText?: string | null;
+  caption?: string | null;
+  tags?: string[];
+  scope?: MediaScope;
+  scopeTargetId?: string | null;
+  visibility?: MediaVisibility;
 }
 
 const getEnvValue = (key: string): string => {
@@ -102,6 +136,9 @@ const toMediaAsset = (item: ApiMediaItem): MediaAsset => ({
   type: toAdminMediaType(item.type),
   size: formatBytes(item.sizeBytes || 0),
   url: item.url,
+  altText: item.altText || null,
+  caption: item.caption || null,
+  tags: item.tags || [],
   scope: item.scope || 'global',
   scopeTargetId: item.scopeTargetId || null,
   visibility: item.visibility || 'public',
@@ -154,4 +191,39 @@ export async function uploadMedia(file: File, options: MediaUploadOptions = {}):
   }
 
   return toMediaAsset(payload.data.media);
+}
+
+export async function updateMedia(
+  mediaId: string,
+  input: MediaUpdateInput,
+  siteId = getDefaultMediaSiteId(),
+): Promise<MediaAsset> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/media/${mediaId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await response.json() as ApiMediaResponse;
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to update media');
+  }
+
+  return toMediaAsset(payload.data.media);
+}
+
+export async function deleteMediaFromBackend(
+  mediaId: string,
+  siteId = getDefaultMediaSiteId(),
+): Promise<void> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/media/${mediaId}`, {
+    method: 'DELETE',
+  });
+  const payload = await response.json() as ApiDeleteResponse;
+
+  if (!response.ok || !payload.success || !payload.data?.deleted) {
+    throw new Error(payload.error?.message || 'Unable to delete media');
+  }
 }
