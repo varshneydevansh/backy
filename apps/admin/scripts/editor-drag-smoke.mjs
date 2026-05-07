@@ -291,13 +291,22 @@ const main = async () => {
         || (event.method === 'Log.entryAdded' && event.params?.entry?.level === 'error')
       ))
       .map((event) => event.params);
+    const invalidInputWarnings = client.events
+      .filter((event) => (
+        event.method === 'Log.entryAdded'
+        && event.params?.entry?.level === 'warning'
+        && /cannot be parsed|out of range/i.test(event.params.entry.text || '')
+      ))
+      .map((event) => event.params.entry.text);
 
     assert(browserErrors.length === 0, `Browser emitted errors: ${JSON.stringify(browserErrors.slice(0, 3))}`);
+    assert(invalidInputWarnings.length === 0, `Browser emitted invalid input warnings: ${JSON.stringify(invalidInputWarnings.slice(0, 3))}`);
 
     console.log(JSON.stringify({
       ok: true,
       url: `${ADMIN_BASE_URL}${EDITOR_PATH}`,
       drags,
+      invalidInputWarnings: invalidInputWarnings.length,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } catch (error) {

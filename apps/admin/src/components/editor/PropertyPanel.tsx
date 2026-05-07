@@ -2493,12 +2493,14 @@ function AnimationProperties({ element, onChange }: AnimationPropertiesProps) {
 
 interface NumberInputProps {
   label?: string;
-  value: number;
+  value: unknown;
   onChange: (value: number) => void;
   suffix?: string;
 }
 
 function NumberInput({ label, value, onChange, suffix }: NumberInputProps) {
+  const numericValue = toNumber(value);
+
   return (
     <div>
       {label && (
@@ -2509,7 +2511,7 @@ function NumberInput({ label, value, onChange, suffix }: NumberInputProps) {
       <div className="relative">
         <input
           type="number"
-          value={value}
+          value={numericValue}
           onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
           className={cn(
             'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
