@@ -3,6 +3,7 @@
  *
  * GET  /api/admin/sites/[siteId]/collections/[collectionId]/records
  * GET  /api/admin/sites/[siteId]/collections/[collectionId]/records?q=term&fieldKey=title&fieldValue=example&sortBy=title
+ * GET  /api/admin/sites/[siteId]/collections/[collectionId]/records?format=csv
  * POST /api/admin/sites/[siteId]/collections/[collectionId]/records
  */
 
@@ -60,6 +61,58 @@ const parseStatusFilter = (value: string | null) => (
     : undefined
 );
 
+const toCsvCell = (value: unknown): string => {
+  let text = '';
+
+  if (value === null || value === undefined) {
+    text = '';
+  } else if (typeof value === 'string') {
+    text = value;
+  } else if (typeof value === 'number' || typeof value === 'boolean') {
+    text = String(value);
+  } else {
+    try {
+      text = JSON.stringify(value);
+    } catch {
+      text = '';
+    }
+  }
+
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+const buildRecordsCsv = (
+  collection: NonNullable<ReturnType<typeof getCollectionByIdOrSlug>>,
+  records: ReturnType<typeof listCollectionRecords>['records'],
+) => {
+  const fields = [...collection.fields].sort((left, right) => left.sortOrder - right.sortOrder);
+  const headers = [
+    'id',
+    'slug',
+    'status',
+    'createdAt',
+    'updatedAt',
+    'publishedAt',
+    'scheduledAt',
+    ...fields.map((field) => field.key),
+  ];
+  const rows = records.map((record) => [
+    record.id,
+    record.slug,
+    record.status,
+    record.createdAt,
+    record.updatedAt,
+    record.publishedAt,
+    record.scheduledAt,
+    ...fields.map((field) => record.values[field.key]),
+  ]);
+
+  return [
+    headers.map(toCsvCell).join(','),
+    ...rows.map((row) => row.map(toCsvCell).join(',')),
+  ].join('\n');
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -77,7 +130,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
     }
 
-    const limit = Math.max(1, Math.min(100, Number(searchParams.get('limit') || 50)));
+    const csvRequested = searchParams.get('format') === 'csv' || searchParams.get('export') === 'csv';
+    const defaultLimit = csvRequested ? 1000 : 50;
+    const maxLimit = csvRequested ? 1000 : 100;
+    const limit = Math.max(1, Math.min(maxLimit, Number(searchParams.get('limit') || defaultLimit)));
     const offset = Math.max(0, Number(searchParams.get('offset') || 0));
     const sortDirection = searchParams.get('sortDirection') === 'desc' ? 'desc' : 'asc';
     const payload = listCollectionRecords(site.id, collection.id, {
@@ -92,6 +148,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       limit,
       offset,
     });
+
+    if (csvRequested) {
+      const csv = buildRecordsCsv(collection, payload.records);
+      return new NextResponse(csv, {
+        status: 200,
+        headers: {
+          'content-type': 'text/csv; charset=utf-8',
+          'content-disposition': `attachment; filename="${collection.slug}-records.csv"`,
+          'x-request-id': requestId,
+        },
+      });
+    }
 
     return NextResponse.json({
       success: true,

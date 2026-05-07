@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import {
   Database,
+  Download,
   ExternalLink,
   Plus,
   RefreshCw,
@@ -13,6 +14,7 @@ import {
   createCollectionRecord,
   deleteCollection,
   deleteCollectionRecord,
+  exportCollectionRecordsCsv,
   listCollectionRecords,
   listCollections,
   updateCollection,
@@ -141,6 +143,7 @@ function CollectionsPage() {
   const [isRecordsLoading, setIsRecordsLoading] = useState(false);
   const [isSavingCollection, setIsSavingCollection] = useState(false);
   const [isSavingRecord, setIsSavingRecord] = useState(false);
+  const [isExportingRecords, setIsExportingRecords] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const activeSite = useMemo(
@@ -414,6 +417,36 @@ function CollectionsPage() {
       }
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete collection record');
+    }
+  };
+
+  const handleExportRecords = async () => {
+    if (!activeCollection) return;
+
+    setIsExportingRecords(true);
+    setError(null);
+    try {
+      const blob = await exportCollectionRecordsCsv(activeSiteId, activeCollection.id, {
+        search: recordFilters.search.trim() || undefined,
+        status: recordFilters.status || undefined,
+        fieldKey: recordFilters.fieldKey || undefined,
+        fieldValue: recordFilters.fieldValue.trim() || undefined,
+        sortBy: recordFilters.sortBy || undefined,
+        sortDirection: recordFilters.sortDirection,
+        limit: 1000,
+      });
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = `${activeCollection.slug}-records.csv`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : 'Unable to export collection records');
+    } finally {
+      setIsExportingRecords(false);
     }
   };
 
@@ -695,17 +728,28 @@ function CollectionsPage() {
                     {isRecordsLoading ? ' • Loading...' : ''}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedRecordId(null);
-                    setRecordForm({ slug: '', status: 'published', values: {} });
-                  }}
-                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
-                >
-                  <Plus className="h-4 w-4" />
-                  New record
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleExportRecords()}
+                    disabled={isExportingRecords}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
+                  >
+                    <Download className="h-4 w-4" />
+                    {isExportingRecords ? 'Exporting...' : 'Export CSV'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedRecordId(null);
+                      setRecordForm({ slug: '', status: 'published', values: {} });
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
+                  >
+                    <Plus className="h-4 w-4" />
+                    New record
+                  </button>
+                </div>
               </div>
 
               <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(180px,1fr)_150px_160px_minmax(160px,1fr)_180px_140px]">

@@ -1522,6 +1522,32 @@ export async function listCollectionRecords(
   return payload.data.records.map(toCollectionRecord);
 }
 
+export async function exportCollectionRecordsCsv(
+  siteId: string,
+  collectionId: string,
+  filters: CollectionRecordListFilters = {},
+): Promise<Blob> {
+  const query = new URLSearchParams();
+  query.set('format', 'csv');
+  query.set('limit', String(filters.limit || 1000));
+  query.set('offset', String(filters.offset || 0));
+  if (filters.status) query.set('status', filters.status);
+  if (filters.search) query.set('q', filters.search);
+  if (filters.fieldKey) query.set('fieldKey', filters.fieldKey);
+  if (filters.fieldValue) query.set('fieldValue', filters.fieldValue);
+  if (filters.sortBy) query.set('sortBy', filters.sortBy);
+  if (filters.sortDirection) query.set('sortDirection', filters.sortDirection);
+
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records?${query.toString()}`);
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || 'Unable to export collection records');
+  }
+
+  return response.blob();
+}
+
 export async function createCollectionRecord(
   siteId: string,
   collectionId: string,

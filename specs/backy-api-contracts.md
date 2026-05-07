@@ -92,7 +92,8 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Returns only collections with `status: "published"` and `permissions.publicRead: true`.
   - Returns only published records or scheduled records whose `scheduledAt` has passed.
   - Supports basic record search, field-value filtering, sorting, limit, and offset in both public and admin record list endpoints. `/render` dataset hydration accepts the same query fields.
-  - Current implementation is backed by the same runtime JSON adapter as admin content. `/render` now surfaces dataset, binding, field, and record manifests for collection-bound elements and generated dynamic item pages, but production completion still needs DB-backed indexes, CSV import/export, custom dynamic route templates, and authenticated visitor-write policies.
+  - Admin record lists also support `GET /api/admin/sites/:siteId/collections/:collectionId/records?format=csv` with the same filters for backend-backed CSV export.
+  - Current implementation is backed by the same runtime JSON adapter as admin content. `/render` now surfaces dataset, binding, field, and record manifests for collection-bound elements and generated dynamic item pages, but production completion still needs DB-backed indexes, CSV import, custom dynamic route templates, and authenticated visitor-write policies.
 
 ### 2.2 Render payload
 Public page payload should include:
