@@ -220,6 +220,12 @@ Public page payload should include:
 - `GET /api/admin/sites/:siteId`
   - Resolve by site id or slug.
 
+- `GET /api/admin/sites/:siteId/readiness`
+  - Admin readiness audit for Wix/WordPress-style publish checks.
+  - Response uses `{ success, requestId, data: { readiness } }`; legacy top-level `readiness` remains for compatibility.
+  - Validates site identity/status, homepage/navigation, theme tokens, media/library presence, collections, reusable sections, and per-page canvas dimensions, element count, bounds, SEO title/description/canonical/indexing state.
+  - Returns a site score, status label (`ready`, `needs-attention`, `blocked`), summary counts, site checks, and page-level checks so admin UI can block or warn before publishing.
+
 - `PATCH /api/admin/sites/:siteId`
   - Body supports partial site settings updates: `name`, `slug`, `description`, `customDomain`, `status`, `isPublished`, `theme`.
 

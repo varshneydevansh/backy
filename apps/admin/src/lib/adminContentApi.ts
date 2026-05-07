@@ -35,6 +35,70 @@ interface ApiSiteResponse {
   };
 }
 
+export interface ReadinessCheck {
+  id: string;
+  category: 'site' | 'page' | 'seo' | 'navigation' | 'content' | 'media' | 'layout';
+  label: string;
+  status: 'pass' | 'fail' | 'notice';
+  severity: 'error' | 'warning' | 'info';
+  message: string;
+  target?: {
+    type: 'site' | 'page' | 'post' | 'collection' | 'media' | 'section';
+    id: string;
+    label?: string;
+  };
+  details?: Record<string, unknown>;
+}
+
+export interface SiteReadiness {
+  site: {
+    id: string;
+    slug: string;
+    name: string;
+    status: AdminSiteStatus;
+    isPublished: boolean;
+  };
+  score: number;
+  statusLabel: 'ready' | 'needs-attention' | 'blocked';
+  summary: {
+    errors: number;
+    warnings: number;
+    notices: number;
+    totalChecks: number;
+    passedChecks: number;
+    pages: number;
+    publishedPages: number;
+    posts: number;
+    collections: number;
+    media: number;
+    reusableSections: number;
+  };
+  checks: ReadinessCheck[];
+  pages: Array<{
+    id: string;
+    title: string;
+    slug: string;
+    path: string;
+    status: AdminSiteStatus;
+    isHomepage: boolean;
+    canvasSize: CanvasSize;
+    elementCount: number;
+    score: number;
+    statusLabel: 'ready' | 'needs-attention' | 'blocked';
+    checks: ReadinessCheck[];
+  }>;
+}
+
+interface ApiSiteReadinessResponse {
+  success: boolean;
+  data?: {
+    readiness: SiteReadiness;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiPage {
   id: string;
   siteId: string;
@@ -1090,6 +1154,17 @@ export async function updateSite(siteId: string, input: Partial<SiteCreateInput>
   }
 
   return toStoreSite(payload.data.site);
+}
+
+export async function getSiteReadiness(siteId: string): Promise<SiteReadiness> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/readiness`);
+  const payload = await readJson<ApiSiteReadinessResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load site readiness');
+  }
+
+  return payload.data.readiness;
 }
 
 export async function listUsers(): Promise<User[]> {

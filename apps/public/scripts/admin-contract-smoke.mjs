@@ -332,7 +332,23 @@ try {
         slug: pageSlug,
         status: 'draft',
         content: {
-          elements: [],
+          elements: [
+            {
+              id: 'contract-page-heading',
+              type: 'heading',
+              x: 80,
+              y: 96,
+              width: 520,
+              height: 72,
+              zIndex: 1,
+              props: {
+                content: 'Contract page readiness',
+                level: 'h1',
+                fontSize: 42,
+                fontWeight: '700',
+              },
+            },
+          ],
           canvasSize: { width: 1200, height: 900 },
         },
       }),
@@ -457,6 +473,22 @@ try {
     assert(resolvedPage.json?.success === true, `${resolvedPage.url} expected success envelope`);
     assert(resolvedPage.json?.data?.route?.type === 'page', `${resolvedPage.url} expected page route`);
     assert(resolvedPage.json?.data?.route?.resource?.id === createdPageId, `${resolvedPage.url} returned wrong resolved page`);
+
+    const readiness = await request(`/api/admin/sites/${createdSiteId}/readiness`);
+    assert(readiness.response.status === 200, `${readiness.url} expected 200, got ${readiness.response.status}`);
+    assert(readiness.json?.success === true, `${readiness.url} expected success envelope`);
+    assert(readiness.json?.data?.readiness?.site?.id === createdSiteId, `${readiness.url} returned wrong site readiness`);
+    assert(Number.isFinite(readiness.json?.data?.readiness?.score), `${readiness.url} missing readiness score`);
+    assert(readiness.json?.data?.readiness?.summary?.pages >= 1, `${readiness.url} missing page summary count`);
+    assert(readiness.json?.data?.readiness?.pages?.some((page) => (
+      page.id === createdPageId &&
+      page.elementCount > 0 &&
+      page.checks?.some((check) => check.id === `page:${createdPageId}:canvas-size` && check.status === 'pass')
+    )), `${readiness.url} missing created page readiness checks`);
+    assert(
+      readiness.json?.readiness?.checks?.some((check) => check.id === 'site:homepage'),
+      `${readiness.url} missing legacy readiness checks`,
+    );
 
     const pageComment = await request(`/api/sites/${createdSiteId}/pages/${createdPageId}/comments`, {
       method: 'POST',
