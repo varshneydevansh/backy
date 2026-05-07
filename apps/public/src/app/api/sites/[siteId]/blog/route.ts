@@ -56,7 +56,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             return NextResponse.json({ post });
         }
 
-        const data = getBlogPosts(site.id, { limit, offset, status: status === 'published' ? status : undefined });
+        const data = getBlogPosts(site.id, {
+            limit,
+            offset,
+            status: status === 'published' ? status : undefined,
+            categoryId: searchParams.get('categoryId') || undefined,
+            categorySlug: searchParams.get('categorySlug') || undefined,
+            tagId: searchParams.get('tagId') || undefined,
+            tagSlug: searchParams.get('tagSlug') || undefined,
+        });
         return NextResponse.json(data);
     } catch (error) {
         console.error('API Error:', error);

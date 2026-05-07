@@ -6,6 +6,8 @@ const checks = [];
 let createdSiteId = null;
 let createdPageId = null;
 let createdPostId = null;
+let createdCategoryId = null;
+let createdTagId = null;
 let createdUserId = null;
 let originalDeliveryMode = null;
 
@@ -50,6 +52,14 @@ async function cleanup() {
     await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, { method: 'DELETE' }).catch(() => {});
   }
 
+  if (createdSiteId && createdCategoryId) {
+    await request(`/api/admin/sites/${createdSiteId}/blog/categories/${createdCategoryId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (createdSiteId && createdTagId) {
+    await request(`/api/admin/sites/${createdSiteId}/blog/tags/${createdTagId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
   if (createdSiteId) {
     await request(`/api/admin/sites/${createdSiteId}`, { method: 'DELETE' }).catch(() => {});
   }
@@ -74,6 +84,8 @@ try {
   const siteSlug = `admin-contract-site-${unique}`;
   const pageSlug = `admin-contract-page-${unique}`;
   const postSlug = `admin-contract-post-${unique}`;
+  const categorySlug = `admin-contract-category-${unique}`;
+  const tagSlug = `admin-contract-tag-${unique}`;
 
   await record('admin sites list returns success envelope', async () => {
     const { response, json, url } = await request('/api/admin/sites?includeUnpublished=true');
@@ -187,6 +199,98 @@ try {
     createdPageId = null;
   });
 
+  await record('admin blog categories create/list/detail/update works for temporary site', async () => {
+    const create = await request(`/api/admin/sites/${createdSiteId}/blog/categories`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Admin Contract Category',
+        slug: categorySlug,
+        description: 'Temporary contract smoke category',
+        color: '#0ea5e9',
+      }),
+    });
+    assert(create.response.status === 201, `${create.url} expected 201, got ${create.response.status}`);
+    assert(create.json?.data?.category?.slug === categorySlug, `${create.url} returned wrong category slug`);
+    createdCategoryId = create.json.data.category.id;
+
+    const duplicate = await request(`/api/admin/sites/${createdSiteId}/blog/categories`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ name: 'Duplicate Category', slug: categorySlug }),
+    });
+    assert(duplicate.response.status === 409, `${duplicate.url} expected 409, got ${duplicate.response.status}`);
+    assert(duplicate.json?.error?.code === 'SLUG_CONFLICT', `${duplicate.url} expected SLUG_CONFLICT`);
+
+    const list = await request(`/api/admin/sites/${createdSiteId}/blog/categories`);
+    assert(list.response.status === 200, `${list.url} expected 200, got ${list.response.status}`);
+    assert(list.json?.data?.categories?.some((category) => category.id === createdCategoryId), `${list.url} missing created category`);
+
+    const detail = await request(`/api/admin/sites/${createdSiteId}/blog/categories/${createdCategoryId}`);
+    assert(detail.response.status === 200, `${detail.url} expected 200, got ${detail.response.status}`);
+    assert(detail.json?.data?.category?.id === createdCategoryId, `${detail.url} returned wrong category`);
+
+    const update = await request(`/api/admin/sites/${createdSiteId}/blog/categories/${createdCategoryId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ name: 'Updated Admin Contract Category', color: '#16a34a' }),
+    });
+    assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
+    assert(update.json?.data?.category?.name === 'Updated Admin Contract Category', `${update.url} expected updated category name`);
+    assert(update.json?.data?.category?.color === '#16a34a', `${update.url} expected updated category color`);
+  });
+
+  await record('admin blog tags create/list/detail/update works for temporary site', async () => {
+    const create = await request(`/api/admin/sites/${createdSiteId}/blog/tags`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Admin Contract Tag',
+        slug: tagSlug,
+        description: 'Temporary contract smoke tag',
+      }),
+    });
+    assert(create.response.status === 201, `${create.url} expected 201, got ${create.response.status}`);
+    assert(create.json?.data?.tag?.slug === tagSlug, `${create.url} returned wrong tag slug`);
+    createdTagId = create.json.data.tag.id;
+
+    const duplicate = await request(`/api/admin/sites/${createdSiteId}/blog/tags`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ name: 'Duplicate Tag', slug: tagSlug }),
+    });
+    assert(duplicate.response.status === 409, `${duplicate.url} expected 409, got ${duplicate.response.status}`);
+    assert(duplicate.json?.error?.code === 'SLUG_CONFLICT', `${duplicate.url} expected SLUG_CONFLICT`);
+
+    const list = await request(`/api/admin/sites/${createdSiteId}/blog/tags`);
+    assert(list.response.status === 200, `${list.url} expected 200, got ${list.response.status}`);
+    assert(list.json?.data?.tags?.some((tag) => tag.id === createdTagId), `${list.url} missing created tag`);
+
+    const detail = await request(`/api/admin/sites/${createdSiteId}/blog/tags/${createdTagId}`);
+    assert(detail.response.status === 200, `${detail.url} expected 200, got ${detail.response.status}`);
+    assert(detail.json?.data?.tag?.id === createdTagId, `${detail.url} returned wrong tag`);
+
+    const update = await request(`/api/admin/sites/${createdSiteId}/blog/tags/${createdTagId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ name: 'Updated Admin Contract Tag' }),
+    });
+    assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
+    assert(update.json?.data?.tag?.name === 'Updated Admin Contract Tag', `${update.url} expected updated tag name`);
+  });
+
   await record('admin blog create/list/detail/update/delete works for temporary site', async () => {
     const create = await request(`/api/admin/sites/${createdSiteId}/blog`, {
       method: 'POST',
@@ -198,6 +302,8 @@ try {
         slug: postSlug,
         excerpt: 'Temporary contract smoke post',
         status: 'draft',
+        categoryIds: [createdCategoryId],
+        tagIds: [createdTagId],
         content: {
           elements: [],
           canvasSize: { width: 900, height: 720 },
@@ -212,9 +318,19 @@ try {
     assert(list.response.status === 200, `${list.url} expected 200, got ${list.response.status}`);
     assert(list.json?.data?.posts?.some((post) => post.id === createdPostId), `${list.url} missing created post`);
 
+    const categoryFilter = await request(`/api/admin/sites/${createdSiteId}/blog?categoryId=${createdCategoryId}`);
+    assert(categoryFilter.response.status === 200, `${categoryFilter.url} expected 200, got ${categoryFilter.response.status}`);
+    assert(categoryFilter.json?.data?.posts?.some((post) => post.id === createdPostId), `${categoryFilter.url} missing category-filtered post`);
+
+    const tagFilter = await request(`/api/admin/sites/${createdSiteId}/blog?tagId=${createdTagId}`);
+    assert(tagFilter.response.status === 200, `${tagFilter.url} expected 200, got ${tagFilter.response.status}`);
+    assert(tagFilter.json?.data?.posts?.some((post) => post.id === createdPostId), `${tagFilter.url} missing tag-filtered post`);
+
     const detail = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`);
     assert(detail.response.status === 200, `${detail.url} expected 200, got ${detail.response.status}`);
     assert(detail.json?.data?.post?.id === createdPostId, `${detail.url} returned wrong post`);
+    assert(detail.json?.data?.post?.categoryIds?.includes(createdCategoryId), `${detail.url} missing category assignment`);
+    assert(detail.json?.data?.post?.tagIds?.includes(createdTagId), `${detail.url} missing tag assignment`);
 
     const update = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, {
       method: 'PATCH',
@@ -227,10 +343,34 @@ try {
     assert(update.json?.data?.post?.title === 'Updated Admin Contract Post', `${update.url} expected updated title`);
     assert(update.json?.data?.post?.status === 'published', `${update.url} expected published status`);
 
+    const publicCategories = await request(`/api/sites/${createdSiteId}/blog/categories`);
+    assert(publicCategories.response.status === 200, `${publicCategories.url} expected 200, got ${publicCategories.response.status}`);
+    assert(publicCategories.json?.categories?.some((category) => category.id === createdCategoryId), `${publicCategories.url} missing public category`);
+
+    const publicTags = await request(`/api/sites/${createdSiteId}/blog/tags`);
+    assert(publicTags.response.status === 200, `${publicTags.url} expected 200, got ${publicTags.response.status}`);
+    assert(publicTags.json?.tags?.some((tag) => tag.id === createdTagId), `${publicTags.url} missing public tag`);
+
+    const publicCategoryFilter = await request(`/api/sites/${createdSiteId}/blog?categorySlug=${categorySlug}`);
+    assert(publicCategoryFilter.response.status === 200, `${publicCategoryFilter.url} expected 200, got ${publicCategoryFilter.response.status}`);
+    assert(publicCategoryFilter.json?.posts?.some((post) => post.id === createdPostId), `${publicCategoryFilter.url} missing public category-filtered post`);
+
     const remove = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, { method: 'DELETE' });
     assert(remove.response.status === 200, `${remove.url} expected 200, got ${remove.response.status}`);
     assert(remove.json?.data?.deleted === true, `${remove.url} expected deleted true`);
     createdPostId = null;
+  });
+
+  await record('admin blog taxonomy delete removes temporary terms', async () => {
+    const removeCategory = await request(`/api/admin/sites/${createdSiteId}/blog/categories/${createdCategoryId}`, { method: 'DELETE' });
+    assert(removeCategory.response.status === 200, `${removeCategory.url} expected 200, got ${removeCategory.response.status}`);
+    assert(removeCategory.json?.data?.deleted === true, `${removeCategory.url} expected deleted category`);
+    createdCategoryId = null;
+
+    const removeTag = await request(`/api/admin/sites/${createdSiteId}/blog/tags/${createdTagId}`, { method: 'DELETE' });
+    assert(removeTag.response.status === 200, `${removeTag.url} expected 200, got ${removeTag.response.status}`);
+    assert(removeTag.json?.data?.deleted === true, `${removeTag.url} expected deleted tag`);
+    createdTagId = null;
   });
 
   await record('admin sites delete removes temporary site', async () => {

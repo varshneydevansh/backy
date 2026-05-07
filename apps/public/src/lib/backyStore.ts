@@ -127,6 +127,29 @@ interface StoreBlogPost {
   scheduledAt: string | null;
 }
 
+interface StoreBlogCategory {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  color: string | null;
+  createdAt: string;
+  updatedAt: string;
+  postCount?: number;
+}
+
+interface StoreBlogTag {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+  postCount?: number;
+}
+
 interface ContentRevision {
   id: string;
   siteId: string;
@@ -691,6 +714,50 @@ const BLOG_POSTS: StoreBlogPost[] = [
   },
 ];
 
+const BLOG_CATEGORIES: StoreBlogCategory[] = [
+  {
+    id: 'cat-news',
+    siteId: 'site-demo',
+    name: 'News',
+    slug: 'news',
+    description: 'Product news and release notes.',
+    color: '#2563eb',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  },
+  {
+    id: 'cat-engineering',
+    siteId: 'site-demo',
+    name: 'Engineering',
+    slug: 'engineering',
+    description: 'Technical notes about Backy CMS architecture.',
+    color: '#059669',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  },
+];
+
+const BLOG_TAGS: StoreBlogTag[] = [
+  {
+    id: 'tag-getting-started',
+    siteId: 'site-demo',
+    name: 'Getting Started',
+    slug: 'getting-started',
+    description: 'Beginner-friendly onboarding content.',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  },
+  {
+    id: 'tag-editor',
+    siteId: 'site-demo',
+    name: 'Editor',
+    slug: 'editor',
+    description: 'Visual editor and rendering parity.',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  },
+];
+
 const CONTENT_REVISIONS: ContentRevision[] = [];
 const PREVIEW_TOKENS: PreviewToken[] = [];
 
@@ -809,6 +876,8 @@ interface AdminContentSnapshot {
   sites?: StoreSite[];
   pages?: StorePage[];
   blogPosts?: StoreBlogPost[];
+  blogCategories?: StoreBlogCategory[];
+  blogTags?: StoreBlogTag[];
   users?: StoreUser[];
   settings?: StoreSettings;
   revisions?: ContentRevision[];
@@ -914,6 +983,14 @@ function refreshPersistedAdminContent() {
       BLOG_POSTS.splice(0, BLOG_POSTS.length, ...parsed.blogPosts);
     }
 
+    if (Array.isArray(parsed.blogCategories)) {
+      BLOG_CATEGORIES.splice(0, BLOG_CATEGORIES.length, ...parsed.blogCategories);
+    }
+
+    if (Array.isArray(parsed.blogTags)) {
+      BLOG_TAGS.splice(0, BLOG_TAGS.length, ...parsed.blogTags);
+    }
+
     if (Array.isArray(parsed.users)) {
       USER_LIST.splice(0, USER_LIST.length, ...parsed.users);
     }
@@ -951,6 +1028,8 @@ function persistAdminContent() {
           sites: SITE_LIST,
           pages: PAGE_LIST,
           blogPosts: BLOG_POSTS,
+          blogCategories: BLOG_CATEGORIES,
+          blogTags: BLOG_TAGS,
           users: USER_LIST,
           settings: SETTINGS,
           revisions: CONTENT_REVISIONS,
@@ -2545,6 +2624,18 @@ export function deleteAdminSite(siteId: string): boolean {
     }
   }
 
+  for (let categoryIndex = BLOG_CATEGORIES.length - 1; categoryIndex >= 0; categoryIndex -= 1) {
+    if (BLOG_CATEGORIES[categoryIndex].siteId === siteId) {
+      BLOG_CATEGORIES.splice(categoryIndex, 1);
+    }
+  }
+
+  for (let tagIndex = BLOG_TAGS.length - 1; tagIndex >= 0; tagIndex -= 1) {
+    if (BLOG_TAGS[tagIndex].siteId === siteId) {
+      BLOG_TAGS.splice(tagIndex, 1);
+    }
+  }
+
   for (let revisionIndex = CONTENT_REVISIONS.length - 1; revisionIndex >= 0; revisionIndex -= 1) {
     if (CONTENT_REVISIONS[revisionIndex].siteId === siteId) {
       CONTENT_REVISIONS.splice(revisionIndex, 1);
@@ -2960,6 +3051,10 @@ export function getBlogPosts(
   params: {
     slug?: string;
     status?: StoreBlogPost['status'];
+    categoryId?: string;
+    categorySlug?: string;
+    tagId?: string;
+    tagSlug?: string;
     limit?: number;
     offset?: number;
     includeUnpublished?: boolean;
@@ -2968,6 +3063,10 @@ export function getBlogPosts(
   const {
     slug,
     status,
+    categoryId,
+    categorySlug,
+    tagId,
+    tagSlug,
     limit = 20,
     offset = 0,
     includeUnpublished = false,
@@ -2983,6 +3082,24 @@ export function getBlogPosts(
 
   if (status) {
     posts = posts.filter((post) => post.status === status);
+  }
+
+  const normalizedCategoryId = sanitizeString(categoryId);
+  const categoryBySlug = categorySlug
+    ? getBlogCategoryByIdOrSlug(siteId, categorySlug)
+    : undefined;
+  const effectiveCategoryId = normalizedCategoryId || categoryBySlug?.id || '';
+  if (effectiveCategoryId) {
+    posts = posts.filter((post) => post.categoryIds.includes(effectiveCategoryId));
+  }
+
+  const normalizedTagId = sanitizeString(tagId);
+  const tagBySlug = tagSlug
+    ? getBlogTagByIdOrSlug(siteId, tagSlug)
+    : undefined;
+  const effectiveTagId = normalizedTagId || tagBySlug?.id || '';
+  if (effectiveTagId) {
+    posts = posts.filter((post) => post.tagIds.includes(effectiveTagId));
   }
 
   if (slug) {
@@ -3004,6 +3121,196 @@ export function getBlogPosts(
     posts: clone(paginated),
     pagination: getPagination(posts.length, limit, offset),
   };
+}
+
+const withCategoryPostCount = (category: StoreBlogCategory): StoreBlogCategory => ({
+  ...category,
+  postCount: BLOG_POSTS.filter(
+    (post) =>
+      post.siteId === category.siteId &&
+      post.categoryIds.includes(category.id) &&
+      post.status !== 'archived',
+  ).length,
+});
+
+const withTagPostCount = (tag: StoreBlogTag): StoreBlogTag => ({
+  ...tag,
+  postCount: BLOG_POSTS.filter(
+    (post) =>
+      post.siteId === tag.siteId &&
+      post.tagIds.includes(tag.id) &&
+      post.status !== 'archived',
+  ).length,
+});
+
+export function listBlogCategories(siteId: string): StoreBlogCategory[] {
+  ensurePersistedAdminContentLoaded();
+  return clone(BLOG_CATEGORIES.filter((category) => category.siteId === siteId).map(withCategoryPostCount));
+}
+
+export function listBlogTags(siteId: string): StoreBlogTag[] {
+  ensurePersistedAdminContentLoaded();
+  return clone(BLOG_TAGS.filter((tag) => tag.siteId === siteId).map(withTagPostCount));
+}
+
+export function getBlogCategoryByIdOrSlug(siteId: string, identifier: string): StoreBlogCategory | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const normalized = normalizeIdentifier(identifier);
+  const category = BLOG_CATEGORIES.find(
+    (item) =>
+      item.siteId === siteId &&
+      (normalizeIdentifier(item.id) === normalized || normalizeIdentifier(item.slug) === normalized),
+  );
+
+  return category ? clone(withCategoryPostCount(category)) : undefined;
+}
+
+export function getBlogTagByIdOrSlug(siteId: string, identifier: string): StoreBlogTag | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const normalized = normalizeIdentifier(identifier);
+  const tag = BLOG_TAGS.find(
+    (item) =>
+      item.siteId === siteId &&
+      (normalizeIdentifier(item.id) === normalized || normalizeIdentifier(item.slug) === normalized),
+  );
+
+  return tag ? clone(withTagPostCount(tag)) : undefined;
+}
+
+export function createAdminBlogCategory(siteId: string, input: Record<string, unknown>): StoreBlogCategory {
+  ensurePersistedAdminContentLoaded();
+
+  const now = new Date().toISOString();
+  const name = sanitizeString(input.name) || 'Untitled category';
+  const slug = normalizeSlugInput(input.slug || name, 'category');
+  const category: StoreBlogCategory = {
+    id: sanitizeString(input.id) || createRuntimeId('cat'),
+    siteId,
+    name,
+    slug,
+    description: sanitizeString(input.description) || null,
+    color: sanitizeString(input.color) || null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  BLOG_CATEGORIES.unshift(category);
+  persistAdminContent();
+  return clone(withCategoryPostCount(category));
+}
+
+export function updateAdminBlogCategory(
+  siteId: string,
+  categoryId: string,
+  input: Record<string, unknown>,
+): StoreBlogCategory | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = BLOG_CATEGORIES.findIndex((category) => category.siteId === siteId && category.id === categoryId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const current = BLOG_CATEGORIES[index];
+  const updated: StoreBlogCategory = {
+    ...current,
+    name: input.name === undefined ? current.name : sanitizeString(input.name) || current.name,
+    slug: input.slug === undefined ? current.slug : normalizeSlugInput(input.slug, current.slug),
+    description: input.description === undefined ? current.description : sanitizeString(input.description) || null,
+    color: input.color === undefined ? current.color : sanitizeString(input.color) || null,
+    updatedAt: new Date().toISOString(),
+  };
+
+  BLOG_CATEGORIES[index] = updated;
+  persistAdminContent();
+  return clone(withCategoryPostCount(updated));
+}
+
+export function deleteAdminBlogCategory(siteId: string, categoryId: string): boolean {
+  ensurePersistedAdminContentLoaded();
+
+  const index = BLOG_CATEGORIES.findIndex((category) => category.siteId === siteId && category.id === categoryId);
+  if (index === -1) {
+    return false;
+  }
+
+  BLOG_CATEGORIES.splice(index, 1);
+  BLOG_POSTS.forEach((post) => {
+    if (post.siteId === siteId && post.categoryIds.includes(categoryId)) {
+      post.categoryIds = post.categoryIds.filter((id) => id !== categoryId);
+      post.updatedAt = new Date().toISOString();
+    }
+  });
+  persistAdminContent();
+  return true;
+}
+
+export function createAdminBlogTag(siteId: string, input: Record<string, unknown>): StoreBlogTag {
+  ensurePersistedAdminContentLoaded();
+
+  const now = new Date().toISOString();
+  const name = sanitizeString(input.name) || 'Untitled tag';
+  const slug = normalizeSlugInput(input.slug || name, 'tag');
+  const tag: StoreBlogTag = {
+    id: sanitizeString(input.id) || createRuntimeId('tag'),
+    siteId,
+    name,
+    slug,
+    description: sanitizeString(input.description) || null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  BLOG_TAGS.unshift(tag);
+  persistAdminContent();
+  return clone(withTagPostCount(tag));
+}
+
+export function updateAdminBlogTag(
+  siteId: string,
+  tagId: string,
+  input: Record<string, unknown>,
+): StoreBlogTag | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = BLOG_TAGS.findIndex((tag) => tag.siteId === siteId && tag.id === tagId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const current = BLOG_TAGS[index];
+  const updated: StoreBlogTag = {
+    ...current,
+    name: input.name === undefined ? current.name : sanitizeString(input.name) || current.name,
+    slug: input.slug === undefined ? current.slug : normalizeSlugInput(input.slug, current.slug),
+    description: input.description === undefined ? current.description : sanitizeString(input.description) || null,
+    updatedAt: new Date().toISOString(),
+  };
+
+  BLOG_TAGS[index] = updated;
+  persistAdminContent();
+  return clone(withTagPostCount(updated));
+}
+
+export function deleteAdminBlogTag(siteId: string, tagId: string): boolean {
+  ensurePersistedAdminContentLoaded();
+
+  const index = BLOG_TAGS.findIndex((tag) => tag.siteId === siteId && tag.id === tagId);
+  if (index === -1) {
+    return false;
+  }
+
+  BLOG_TAGS.splice(index, 1);
+  BLOG_POSTS.forEach((post) => {
+    if (post.siteId === siteId && post.tagIds.includes(tagId)) {
+      post.tagIds = post.tagIds.filter((id) => id !== tagId);
+      post.updatedAt = new Date().toISOString();
+    }
+  });
+  persistAdminContent();
+  return true;
 }
 
 export function getAdminBlogPostById(siteId: string, postId: string): StoreBlogPost | undefined {

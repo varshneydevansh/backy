@@ -29,6 +29,8 @@ The rule is simple: a custom frontend can look completely different from the Bac
 3. Fetch supporting data.
    - media: `GET /api/sites/:siteId/media`
    - blog: `GET /api/sites/:siteId/blog`
+   - blog categories: `GET /api/sites/:siteId/blog/categories`
+   - blog tags: `GET /api/sites/:siteId/blog/tags`
    - comments: `GET /api/sites/:siteId/pages/:pageId/comments?status=approved`
 
 4. Submit interactions.

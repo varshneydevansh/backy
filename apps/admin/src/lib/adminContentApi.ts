@@ -159,7 +159,32 @@ interface ApiBlogPost {
   status?: AdminSiteStatus;
   authorId?: string | null;
   meta?: Record<string, unknown>;
+  categoryIds?: string[];
+  tagIds?: string[];
   publishedAt?: string | null;
+  updatedAt?: string;
+  createdAt?: string;
+}
+
+interface ApiBlogCategory {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  color?: string | null;
+  postCount?: number;
+  updatedAt?: string;
+  createdAt?: string;
+}
+
+interface ApiBlogTag {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  postCount?: number;
   updatedAt?: string;
   createdAt?: string;
 }
@@ -168,6 +193,46 @@ interface ApiListBlogResponse {
   success: boolean;
   data?: {
     posts: ApiBlogPost[];
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiListBlogCategoriesResponse {
+  success: boolean;
+  data?: {
+    categories: ApiBlogCategory[];
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiBlogCategoryResponse {
+  success: boolean;
+  data?: {
+    category: ApiBlogCategory;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiListBlogTagsResponse {
+  success: boolean;
+  data?: {
+    tags: ApiBlogTag[];
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiBlogTagResponse {
+  success: boolean;
+  data?: {
+    tag: ApiBlogTag;
   };
   error?: {
     message?: string;
@@ -262,6 +327,8 @@ export interface BlogPostInput {
   content?: unknown;
   meta?: Record<string, unknown>;
   authorId?: string | null;
+  categoryIds?: string[];
+  tagIds?: string[];
 }
 
 export interface BlogPostUpdateInput {
@@ -272,8 +339,59 @@ export interface BlogPostUpdateInput {
   content?: unknown;
   meta?: Record<string, unknown>;
   authorId?: string | null;
+  categoryIds?: string[];
+  tagIds?: string[];
   revisionNote?: string;
   updatedBy?: string;
+}
+
+export interface BlogCategoryInput {
+  name: string;
+  slug: string;
+  description?: string | null;
+  color?: string | null;
+}
+
+export interface BlogCategoryUpdateInput {
+  name?: string;
+  slug?: string;
+  description?: string | null;
+  color?: string | null;
+}
+
+export interface BlogTagInput {
+  name: string;
+  slug: string;
+  description?: string | null;
+}
+
+export interface BlogTagUpdateInput {
+  name?: string;
+  slug?: string;
+  description?: string | null;
+}
+
+export interface BlogCategory {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  color: string | null;
+  postCount: number;
+  updatedAt?: string;
+  createdAt?: string;
+}
+
+export interface BlogTag {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  postCount: number;
+  updatedAt?: string;
+  createdAt?: string;
 }
 
 export interface ContentRevision {
@@ -375,6 +493,29 @@ const toStorePost = (post: ApiBlogPost): BlogPost => ({
   status: toContentStatus(post.status, post.status === 'published'),
   author: post.authorId || 'admin',
   publishedAt: post.publishedAt || post.updatedAt || post.createdAt || new Date().toISOString(),
+});
+
+const toBlogCategory = (category: ApiBlogCategory): BlogCategory => ({
+  id: category.id,
+  siteId: category.siteId,
+  name: category.name,
+  slug: category.slug,
+  description: category.description || null,
+  color: category.color || null,
+  postCount: category.postCount || 0,
+  updatedAt: category.updatedAt,
+  createdAt: category.createdAt,
+});
+
+const toBlogTag = (tag: ApiBlogTag): BlogTag => ({
+  id: tag.id,
+  siteId: tag.siteId,
+  name: tag.name,
+  slug: tag.slug,
+  description: tag.description || null,
+  postCount: tag.postCount || 0,
+  updatedAt: tag.updatedAt,
+  createdAt: tag.createdAt,
 });
 
 const toLastActiveLabel = (user: ApiUser): string => {
@@ -753,6 +894,122 @@ export async function listBlogPosts(siteId: string): Promise<BlogPost[]> {
   }
 
   return payload.data.posts.map(toStorePost);
+}
+
+export async function listBlogCategories(siteId: string): Promise<BlogCategory[]> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/categories`);
+  const payload = await readJson<ApiListBlogCategoriesResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load blog categories');
+  }
+
+  return payload.data.categories.map(toBlogCategory);
+}
+
+export async function createBlogCategory(siteId: string, input: BlogCategoryInput): Promise<BlogCategory> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/categories`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiBlogCategoryResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to create blog category');
+  }
+
+  return toBlogCategory(payload.data.category);
+}
+
+export async function updateBlogCategory(
+  siteId: string,
+  categoryId: string,
+  input: BlogCategoryUpdateInput,
+): Promise<BlogCategory> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/categories/${categoryId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiBlogCategoryResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to save blog category');
+  }
+
+  return toBlogCategory(payload.data.category);
+}
+
+export async function deleteBlogCategory(siteId: string, categoryId: string): Promise<void> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/categories/${categoryId}`, {
+    method: 'DELETE',
+  });
+  const payload = await readJson<ApiDeleteResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.deleted) {
+    throw new Error(payload.error?.message || 'Unable to delete blog category');
+  }
+}
+
+export async function listBlogTags(siteId: string): Promise<BlogTag[]> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/tags`);
+  const payload = await readJson<ApiListBlogTagsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load blog tags');
+  }
+
+  return payload.data.tags.map(toBlogTag);
+}
+
+export async function createBlogTag(siteId: string, input: BlogTagInput): Promise<BlogTag> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/tags`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiBlogTagResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to create blog tag');
+  }
+
+  return toBlogTag(payload.data.tag);
+}
+
+export async function updateBlogTag(siteId: string, tagId: string, input: BlogTagUpdateInput): Promise<BlogTag> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/tags/${tagId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiBlogTagResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to save blog tag');
+  }
+
+  return toBlogTag(payload.data.tag);
+}
+
+export async function deleteBlogTag(siteId: string, tagId: string): Promise<void> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/tags/${tagId}`, {
+    method: 'DELETE',
+  });
+  const payload = await readJson<ApiDeleteResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.deleted) {
+    throw new Error(payload.error?.message || 'Unable to delete blog tag');
+  }
 }
 
 export async function createBlogPost(siteId: string, input: BlogPostInput): Promise<BlogPost> {

@@ -1,15 +1,16 @@
 /**
- * Admin blog posts endpoint.
+ * Admin blog tags endpoint.
  *
- * GET  /api/admin/sites/[siteId]/blog
- * POST /api/admin/sites/[siteId]/blog
+ * GET  /api/admin/sites/[siteId]/blog/tags
+ * POST /api/admin/sites/[siteId]/blog/tags
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  createAdminBlogPost,
-  getBlogPosts,
+  createAdminBlogTag,
+  getBlogTagByIdOrSlug,
   getSiteByIdOrSlug,
+  listBlogTags,
 } from '@/lib/backyStore';
 
 export const runtime = 'nodejs';
@@ -53,50 +54,26 @@ const normalizeSlug = (value: unknown): string => (
     : ''
 );
 
-const parseStatusFilter = (value: string | null) => {
-  if (value === 'draft' || value === 'published' || value === 'scheduled' || value === 'archived') {
-    return value;
-  }
-
-  return undefined;
-};
-
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { siteId } = await params;
-    const { searchParams } = new URL(request.url);
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const limit = Math.max(1, Math.min(100, Number(searchParams.get('limit') || 50)));
-    const offset = Math.max(0, Number(searchParams.get('offset') || 0));
-    const status = parseStatusFilter(searchParams.get('status'));
-    const payload = getBlogPosts(site.id, {
-      includeUnpublished: true,
-      status,
-      categoryId: searchParams.get('categoryId') || undefined,
-      categorySlug: searchParams.get('categorySlug') || undefined,
-      tagId: searchParams.get('tagId') || undefined,
-      tagSlug: searchParams.get('tagSlug') || undefined,
-      limit,
-      offset,
-    });
-
     return NextResponse.json({
       success: true,
       requestId,
       data: {
-        posts: payload.posts,
-        pagination: payload.pagination,
+        tags: listBlogTags(site.id),
       },
     });
   } catch (error) {
-    console.error('Admin blog list API error:', error);
+    console.error('Admin blog tags list API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }
@@ -113,29 +90,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await parseJsonBody(request);
-    const title = typeof body.title === 'string' ? body.title.trim() : '';
-    const slug = normalizeSlug(body.slug || title);
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const slug = normalizeSlug(body.slug || name);
 
-    if (!title) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Post title is required', requestId);
+    if (!name) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'Tag name is required', requestId);
     }
 
     if (!slug) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Post slug is required', requestId);
+      return errorResponse(400, 'VALIDATION_ERROR', 'Tag slug is required', requestId);
     }
 
-    const conflict = getBlogPosts(site.id, {
-      includeUnpublished: true,
-      slug,
-    }).posts[0];
-
-    if (conflict) {
-      return errorResponse(409, 'SLUG_CONFLICT', 'A post with this slug already exists', requestId);
+    if (getBlogTagByIdOrSlug(site.id, slug)) {
+      return errorResponse(409, 'SLUG_CONFLICT', 'A tag with this slug already exists', requestId);
     }
 
-    const post = createAdminBlogPost(site.id, {
+    const tag = createAdminBlogTag(site.id, {
       ...body,
-      title,
+      name,
       slug,
     });
 
@@ -144,18 +116,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         success: true,
         requestId,
         data: {
-          post,
+          tag,
         },
       },
       { status: 201 },
     );
   } catch (error) {
-    console.error('Admin blog create API error:', error);
-    return errorResponse(
-      500,
-      'INTERNAL_SERVER_ERROR',
-      error instanceof Error ? error.message : 'Internal server error',
-      requestId,
-    );
+    console.error('Admin blog tag create API error:', error);
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }
