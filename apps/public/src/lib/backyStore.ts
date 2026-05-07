@@ -2916,6 +2916,87 @@ export function createMediaItem(
   return clone(item);
 }
 
+export function updateMediaItem(
+  siteId: string,
+  mediaId: string,
+  input: Record<string, unknown>,
+): MediaItem | undefined {
+  ensurePersistedMediaLoaded();
+
+  const index = MEDIA_LIBRARY.findIndex((item) => item.siteId === siteId && item.id === mediaId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const current = MEDIA_LIBRARY[index];
+  const scope = sanitizeString(input.scope);
+  const visibility = sanitizeString(input.visibility);
+  const rawTags = input.tags;
+  const pageIds = Array.isArray(input.pageIds)
+    ? input.pageIds.map(sanitizeString).filter(Boolean)
+    : current.pageIds;
+  const postIds = Array.isArray(input.postIds)
+    ? input.postIds.map(sanitizeString).filter(Boolean)
+    : current.postIds;
+  const nextScope = scope === 'page' || scope === 'post' || scope === 'global'
+    ? scope
+    : current.scope || 'global';
+  const scopeTargetId = input.scopeTargetId === undefined
+    ? current.scopeTargetId || null
+    : sanitizeString(input.scopeTargetId) || null;
+
+  const updated: MediaItem = {
+    ...current,
+    originalName: input.originalName === undefined
+      ? current.originalName
+      : sanitizeString(input.originalName) || current.originalName,
+    folderId: input.folderId === undefined ? current.folderId : sanitizeString(input.folderId) || null,
+    pageIds: nextScope === 'page' && scopeTargetId && !pageIds.includes(scopeTargetId)
+      ? [...pageIds, scopeTargetId]
+      : pageIds,
+    postIds: nextScope === 'post' && scopeTargetId && !postIds.includes(scopeTargetId)
+      ? [...postIds, scopeTargetId]
+      : postIds,
+    tags: Array.isArray(rawTags)
+      ? rawTags.map(sanitizeString).filter(Boolean)
+      : typeof rawTags === 'string'
+        ? rawTags.split(',').map((tag) => tag.trim()).filter(Boolean)
+        : current.tags,
+    metadata: input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata)
+      ? {
+          ...current.metadata,
+          ...input.metadata as Record<string, unknown>,
+        }
+      : current.metadata,
+    altText: input.altText === undefined ? current.altText : sanitizeString(input.altText) || null,
+    caption: input.caption === undefined ? current.caption : sanitizeString(input.caption) || null,
+    uploadedBy: input.uploadedBy === undefined ? current.uploadedBy : sanitizeString(input.uploadedBy) || null,
+    scope: nextScope,
+    scopeTargetId,
+    visibility: visibility === 'private' || visibility === 'public'
+      ? visibility
+      : current.visibility || 'public',
+    updatedAt: new Date().toISOString(),
+  };
+
+  MEDIA_LIBRARY[index] = updated;
+  persistRuntimeMediaCatalog();
+  return clone(updated);
+}
+
+export function deleteMediaItem(siteId: string, mediaId: string): MediaItem | undefined {
+  ensurePersistedMediaLoaded();
+
+  const index = MEDIA_LIBRARY.findIndex((item) => item.siteId === siteId && item.id === mediaId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const [removed] = MEDIA_LIBRARY.splice(index, 1);
+  persistRuntimeMediaCatalog();
+  return clone(removed);
+}
+
 export function listFormsBySite(siteId: string, filters: { pageId?: string; postId?: string } = {}): FormDefinition[] {
   const staticForms = FORM_LIBRARY.filter(
     (form) => form.siteId === siteId && matchesFormContextFilter(form, filters),

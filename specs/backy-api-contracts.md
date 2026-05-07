@@ -138,7 +138,10 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - current implementation supports `scope`, `visibility`, `type`, `pageId`, `postId`, `limit`, `offset`
 
 - `PATCH /api/admin/sites/:siteId/media/:mediaId`
-  - Update metadata (alt, caption, tags, visibility)
+  - Current implementation updates original name, folder, tags, alt text, caption, scope, scope target, visibility, page/post references, and metadata in the local runtime catalog.
+
+- `DELETE /api/admin/sites/:siteId/media/:mediaId`
+  - Current implementation deletes the catalog record and removes local uploaded files under `/public/uploads/sites/:siteId/...` when present.
 
 - `POST /api/admin/sites/:siteId/media/:mediaId/bind`
   - bind/unbind to page/post contexts.
