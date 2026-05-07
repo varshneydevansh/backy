@@ -3,10 +3,11 @@
  */
 
 import { useCallback, useEffect, useState, type DragEvent } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
-import { Edit3, File, Folder, FolderPlus, Image as ImageIcon, Save, Trash2, Upload, X } from 'lucide-react';
+import { createFileRoute, Link } from '@tanstack/react-router';
+import { Edit3, File, FileText, Folder, FolderPlus, Image as ImageIcon, Layout, Save, Trash2, Upload, X } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { listBlogPosts, listPages } from '@/lib/adminContentApi';
 import {
   createMediaFolder,
   deleteMediaFolder,
@@ -48,8 +49,12 @@ function MediaPage() {
     visibility: 'public' as 'public' | 'private',
   });
   const files = useStore((state) => state.media);
+  const pages = useStore((state) => state.pages);
+  const posts = useStore((state) => state.posts);
   const addMedia = useStore((state) => state.addMedia);
   const setMedia = useStore((state) => state.setMedia);
+  const setPages = useStore((state) => state.setPages);
+  const setPosts = useStore((state) => state.setPosts);
   const deleteMedia = useStore((state) => state.deleteMedia);
   const siteId = getDefaultMediaSiteId();
 
@@ -78,6 +83,32 @@ function MediaPage() {
   useEffect(() => {
     void loadLibrary();
   }, [loadLibrary]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadReferenceTargets = async () => {
+      try {
+        const [backendPages, backendPosts] = await Promise.all([
+          listPages(siteId),
+          listBlogPosts(siteId),
+        ]);
+
+        if (!cancelled) {
+          setPages(backendPages);
+          setPosts(backendPosts);
+        }
+      } catch {
+        // Keep any local page/post cache available for reference labels.
+      }
+    };
+
+    void loadReferenceTargets();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [setPages, setPosts, siteId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -279,6 +310,19 @@ function MediaPage() {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete folder.');
     }
   };
+
+  const referencedPages = selectedAsset
+    ? (selectedAsset.targetPageIds || []).map((pageId) => ({
+        id: pageId,
+        page: pages.find((page) => page.id === pageId),
+      }))
+    : [];
+  const referencedPosts = selectedAsset
+    ? (selectedAsset.targetPostIds || []).map((postId) => ({
+        id: postId,
+        post: posts.find((post) => post.id === postId),
+      }))
+    : [];
 
   return (
     <PageShell
@@ -532,7 +576,7 @@ function MediaPage() {
 
       {selectedAsset && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-xl rounded-xl border border-border bg-background shadow-xl">
+          <div className="w-full max-w-3xl rounded-xl border border-border bg-background shadow-xl">
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
               <div>
                 <h2 className="text-lg font-semibold">Media details</h2>
@@ -547,7 +591,7 @@ function MediaPage() {
               </button>
             </div>
 
-            <div className="grid gap-5 p-5 md:grid-cols-[180px_1fr]">
+            <div className="grid max-h-[75vh] gap-5 overflow-y-auto p-5 md:grid-cols-[180px_1fr]">
               <div className="aspect-square overflow-hidden rounded-lg bg-muted">
                 {selectedAsset.type === 'image' && selectedAsset.url ? (
                   <img src={selectedAsset.url} alt={metadataForm.altText || selectedAsset.name} className="h-full w-full object-cover" />
@@ -626,6 +670,57 @@ function MediaPage() {
                     <option value="private">Private</option>
                   </select>
                 </div>
+              </div>
+
+              <div className="md:col-span-2 rounded-xl border border-border bg-muted/30 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="font-medium">Used in</div>
+                  <div className="text-xs text-muted-foreground">
+                    {referencedPages.length + referencedPosts.length} references
+                  </div>
+                </div>
+
+                {referencedPages.length === 0 && referencedPosts.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border bg-background px-4 py-3 text-sm text-muted-foreground">
+                    No page or post references are tracked for this asset yet.
+                  </div>
+                ) : (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {referencedPages.map(({ id, page }) => (
+                      <Link
+                        key={`page-${id}`}
+                        to="/pages/$pageId/edit"
+                        params={{ pageId: id }}
+                        className="flex items-start gap-3 rounded-lg border border-border bg-background px-3 py-3 hover:bg-accent"
+                      >
+                        <Layout className="mt-0.5 h-4 w-4 text-primary" />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium">{page?.title || id}</span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            Page{page?.slug ? ` /${page.slug}` : ''}
+                          </span>
+                        </span>
+                      </Link>
+                    ))}
+
+                    {referencedPosts.map(({ id, post }) => (
+                      <Link
+                        key={`post-${id}`}
+                        to="/blog/$postId"
+                        params={{ postId: id }}
+                        className="flex items-start gap-3 rounded-lg border border-border bg-background px-3 py-3 hover:bg-accent"
+                      >
+                        <FileText className="mt-0.5 h-4 w-4 text-primary" />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium">{post?.title || id}</span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            Post{post?.slug ? ` /blog/${post.slug}` : ''}
+                          </span>
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
