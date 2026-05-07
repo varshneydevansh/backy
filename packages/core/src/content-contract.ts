@@ -127,7 +127,7 @@ export interface BackyContentElement extends BackyElementLayout {
   children: BackyContentElement[];
   props: Record<string, BackyJsonValue>;
   styles?: Record<string, BackyJsonValue>;
-  responsive?: Record<BackyBreakpoint, BackyResponsiveElementOverride>;
+  responsive?: Partial<Record<BackyBreakpoint, BackyResponsiveElementOverride>>;
   tokenRefs?: Record<string, string>;
   actions?: BackyElementAction[];
   dataBindings?: BackyDataBinding[];

@@ -1,4 +1,10 @@
 import {
+  canvasElementsToBackyContentDocument,
+  type BackyContentKind,
+  type BackyContentStatus,
+} from '@backy-cms/core';
+
+import {
   getCanonicalPathForPage,
   getCollectionByIdOrSlug,
   getCollectionRecordByIdOrSlug,
@@ -38,6 +44,16 @@ interface DatasetManifest extends JsonObject {
   pagination?: JsonObject;
 }
 
+interface CanonicalContentPayloadInput {
+  id: string;
+  kind: BackyContentKind;
+  title: string;
+  status?: BackyContentStatus;
+  locale: string;
+  version: string;
+  elements: RenderElement[];
+}
+
 const isRecord = (value: unknown): value is JsonObject => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
@@ -73,6 +89,28 @@ const normalizeElement = (raw: unknown): RenderElement | null => {
     styles: isRecord(raw.styles) ? raw.styles : {},
     actions: Array.isArray(raw.actions) ? raw.actions.filter(isRecord) : [],
     dataBindings: Array.isArray(raw.dataBindings) ? raw.dataBindings.filter(isRecord) : [],
+  };
+};
+
+const buildCanonicalContentPayload = (input: CanonicalContentPayloadInput) => {
+  const document = canvasElementsToBackyContentDocument({
+    id: input.id,
+    kind: input.kind,
+    title: input.title,
+    status: input.status,
+    locale: input.locale,
+    version: input.version,
+    elements: input.elements,
+  });
+
+  return {
+    schemaVersion: document.schemaVersion,
+    id: document.id,
+    kind: document.kind,
+    title: document.title,
+    locale: document.locale,
+    version: typeof document.version === 'string' ? document.version : input.version,
+    elements: document.elements,
   };
 };
 
@@ -1056,15 +1094,15 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
         canonical,
         params: {},
       },
-      content: {
-        schemaVersion: 'backy.content.v1',
+      content: buildCanonicalContentPayload({
         id: page.id,
         kind: 'page',
         title: page.title,
+        status: page.status,
         locale: 'en',
         version: page.updatedAt,
         elements: payloadElements,
-      },
+      }),
       assets: {
         media: mediaPayload.media,
         fonts: buildFontAssets(site),
@@ -1159,15 +1197,15 @@ export function buildPublicCollectionItemRenderPayload(
           recordSlug: record.slug,
         },
       },
-      content: {
-        schemaVersion: 'backy.content.v1',
+      content: buildCanonicalContentPayload({
         id: record.id,
         kind: 'dynamicItem',
         title,
+        status: record.status,
         locale: 'en',
         version: record.updatedAt,
         elements: payloadElements,
-      },
+      }),
       assets: {
         media: mediaPayload.media,
         fonts: buildFontAssets(site),
@@ -1253,15 +1291,15 @@ export function buildPublicBlogPostRenderPayload(
           slug: post.slug,
         },
       },
-      content: {
-        schemaVersion: 'backy.content.v1',
+      content: buildCanonicalContentPayload({
         id: post.id,
         kind: 'post',
         title: post.title,
+        status: post.status,
         locale: 'en',
         version: post.updatedAt,
         elements: payloadElements,
-      },
+      }),
       assets: {
         media: mediaPayload.media,
         fonts: buildFontAssets(site),

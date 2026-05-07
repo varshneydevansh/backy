@@ -139,8 +139,14 @@ The next implementation should not start by adding more UI screens. The product 
 - **Acceptance Criteria**:
   - Existing mock pages can render through the public renderer after migration.
   - Migration is additive and does not delete existing stored content.
+- **Current progress**:
+  - `packages/core/src/content-migrations.ts` now normalizes current canvas-shaped `elements[]` payloads into canonical `BackyContentDocument` data.
+  - The migration keeps nested children, responsive overrides, JSON-safe props/styles, actions, data bindings, asset ids, accessibility hints, duplicate-id suffixing, animation metadata, canvas size metadata, and custom CSS metadata.
+  - Public `/render` payload construction now runs page, post, and dynamic item content through the core migration helper before returning the schema-compatible content subset.
 - **Validation**:
   - Add tests for current sample page content.
+  - Current command: `npm run test:content-contract --workspace @backy-cms/core`.
+  - Current command: `npm run test:admin-contract --workspace @backy/public`.
 
 ## Sprint 2: Durable Data and Service Boundary
 
