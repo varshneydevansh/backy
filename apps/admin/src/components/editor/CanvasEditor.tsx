@@ -716,31 +716,35 @@ export function CanvasEditor({
         const item: ComponentLibraryItem = JSON.parse(data);
         const normalizedType = normalizeElementType(item.type);
 
-        // Calculate drop position relative to canvas
-        const canvas = e.currentTarget as HTMLDivElement;
+        const canvas = canvasViewportRef.current?.querySelector<HTMLElement>('[data-testid="editor-canvas"]');
+        if (!canvas) {
+          return;
+        }
+
         const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const isInsideCanvas =
+          e.clientX >= rect.left &&
+          e.clientX <= rect.right &&
+          e.clientY >= rect.top &&
+          e.clientY <= rect.bottom;
 
-        // Create new element
-        const newElement = createCanvasElement(normalizedType, x, y);
-        const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
-        const isNested = selectedElement && canAcceptNestedDrop(selectedElement.type);
-        const normalized = normalizePastedElement(newElement);
-        const result = isNested
-          ? insertElementAsChild(elements, selectedElement.id, normalized)
-          : { elements: [...elements, normalized], updated: false };
+        if (!isInsideCanvas) {
+          return;
+        }
 
-        const newElements = result.updated || !isNested
-          ? result.elements
-          : [...elements, normalized];
+        const x = Math.round(Math.max(0, e.clientX - rect.left) / 10) * 10;
+        const y = Math.round(Math.max(0, e.clientY - rect.top) / 10) * 10;
+        const newElement = {
+          ...createCanvasElement(normalizedType, x, y),
+          zIndex: Math.max(walkTreeMaxZ(elements), 0) + 1,
+        };
 
-        updateElementsWithHistory(newElements, normalized.id);
+        updateElementsWithHistory([...elements, newElement], newElement.id);
       } catch (err) {
         console.error('Failed to drop element:', err);
       }
     },
-    [elements, selectedId, updateElementsWithHistory]
+    [elements, updateElementsWithHistory]
   );
 
   /**

@@ -60,6 +60,20 @@ const sanitizeText = (value: unknown): string => {
   return '';
 };
 
+const GRID_SIZE = 10;
+
+const snapToGrid = (value: number): number => (
+  Math.round(Math.max(0, value) / GRID_SIZE) * GRID_SIZE
+);
+
+const clampToCanvas = (
+  value: number,
+  dimension: number,
+  canvasDimension: number,
+): number => (
+  Math.max(0, Math.min(value, Math.max(0, canvasDimension - dimension)))
+);
+
 interface TreeUpdateResult {
   elements: CanvasElement[];
   updated: boolean;
@@ -468,6 +482,7 @@ export function Canvas({
 }: CanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isDropActive, setIsDropActive] = useState(false);
   const { clearActiveEditor } = useActiveEditor();
   const elementsRef = useRef(elements);
   const debugTextInteraction = useCallback((..._args: unknown[]) => {
@@ -626,7 +641,7 @@ export function Canvas({
    * Handle mouse down on an element
    */
   const handleMouseDown = useCallback(
-    (e: React.MouseEvent | React.PointerEvent, elementId: string) => {
+    (e: React.PointerEvent, elementId: string) => {
       if (isPreview) return;
       if ('button' in e && e.button !== 0) return;
 
@@ -654,6 +669,8 @@ export function Canvas({
       debugTextInteraction('handleMouseDown started drag', { elementId, x: e.clientX, y: e.clientY });
 
       e.preventDefault();
+      e.stopPropagation();
+      e.currentTarget.setPointerCapture?.(e.pointerId);
       onSelect(elementId);
 
       if (editingId) {
@@ -739,10 +756,10 @@ export function Canvas({
       onElementsChange(
         updateElementById(elementsRef.current, resizeState.elementId, (element) => ({
           ...element,
-          x: Math.round(newX / 10) * 10,
-          y: Math.round(newY / 10) * 10,
-          width: Math.round(newWidth / 10) * 10,
-          height: Math.round(newHeight / 10) * 10,
+          x: snapToGrid(clampToCanvas(newX, newWidth, size.width)),
+          y: snapToGrid(clampToCanvas(newY, newHeight, size.height)),
+          width: snapToGrid(newWidth),
+          height: snapToGrid(newHeight),
         })).elements
       );
       return;
@@ -760,11 +777,11 @@ export function Canvas({
     onElementsChange(
       updateElementById(elementsRef.current, dragState.elementId, (element) => ({
         ...element,
-        x: Math.round(newX / 10) * 10,
-        y: Math.round(newY / 10) * 10,
+        x: snapToGrid(clampToCanvas(newX, element.width, size.width)),
+        y: snapToGrid(clampToCanvas(newY, element.height, size.height)),
       })).elements
     );
-  }, [dragState, isPreview, onElementsChange, resizeState]);
+  }, [dragState, isPreview, onElementsChange, resizeState, size.height, size.width]);
 
   const handleGlobalElementUp = useCallback(() => {
     setDragState(null);
@@ -799,15 +816,20 @@ export function Canvas({
   const handleCanvasElementDrop = useCallback(
     (event: React.DragEvent, forcedParentId?: string) => {
       event.preventDefault();
+      event.stopPropagation();
 
       try {
         const rawData = event.dataTransfer.getData('application/json');
         const item = JSON.parse(rawData) as { type: string };
         const normalizedType = normalizeCanvasElementType(item.type);
 
-        const parsedX = event.clientX - (canvasRef.current?.getBoundingClientRect().left || 0);
-        const parsedY = event.clientY - (canvasRef.current?.getBoundingClientRect().top || 0);
-        const toNumber = (value: number) => Math.round(Math.max(0, value / 10) * 10);
+        const canvasRect = canvasRef.current?.getBoundingClientRect();
+        if (!canvasRect) {
+          return;
+        }
+
+        const parsedX = snapToGrid(event.clientX - canvasRect.left);
+        const parsedY = snapToGrid(event.clientY - canvasRect.top);
 
         if (forcedParentId) {
           const parent = findElementById(elements, forcedParentId);
@@ -821,8 +843,8 @@ export function Canvas({
             const hostRect = dropHost.getBoundingClientRect();
             const child = createCanvasElement(
               normalizedType as CanvasElement['type'],
-              toNumber(event.clientX - hostRect.left),
-              toNumber(event.clientY - hostRect.top),
+              snapToGrid(event.clientX - hostRect.left),
+              snapToGrid(event.clientY - hostRect.top),
             );
             const withChild = insertElementAsChild(elements, forcedParentId, child);
 
@@ -837,8 +859,8 @@ export function Canvas({
 
         const rootElement = createCanvasElement(
           normalizedType as CanvasElement['type'],
-          toNumber(parsedX),
-          toNumber(parsedY)
+          parsedX,
+          parsedY
         );
 
         onElementsChange([...elements, rootElement]);
@@ -990,8 +1012,9 @@ export function Canvas({
     <div
       ref={canvasRef}
       className={cn(
-        'relative overflow-hidden bg-white shadow-[0_18px_55px_rgba(15,23,42,0.16)]',
-        !isPreview && 'cursor-default ring-1 ring-slate-200'
+        'relative overflow-hidden bg-white shadow-[0_18px_55px_rgba(15,23,42,0.16)] transition-shadow',
+        !isPreview && 'cursor-default ring-1 ring-slate-200',
+        isDropActive && !isPreview && 'ring-2 ring-sky-500 shadow-[0_22px_70px_rgba(14,165,233,0.24)]'
       )}
       style={{
         width: size.width,
@@ -1002,6 +1025,28 @@ export function Canvas({
       onMouseUp={handleMouseUp}
       onClick={handleCanvasClick}
       onDoubleClick={handleCanvasDoubleClick}
+      onDragOver={(event) => {
+        if (!isPreview) {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+        }
+      }}
+      onDragEnter={(event) => {
+        if (!isPreview) {
+          event.preventDefault();
+          setIsDropActive(true);
+        }
+      }}
+      onDragLeave={(event) => {
+        if (!isPreview && !event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setIsDropActive(false);
+        }
+      }}
+      onDrop={(event) => {
+        setIsDropActive(false);
+        handleCanvasElementDrop(event);
+      }}
+      data-testid="editor-canvas"
     >
       {/* Grid Background */}
       {!isPreview && (
@@ -1017,6 +1062,12 @@ export function Canvas({
         />
       )}
 
+      {!isPreview && elements.length === 0 && (
+        <div className="pointer-events-none absolute inset-10 flex items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50/70 text-sm font-medium text-slate-500">
+          Drop components onto the canvas
+        </div>
+      )}
+
       {/* Canvas Elements */}
       {elements.map((element) => (
           <CanvasElementComponent
@@ -1024,8 +1075,9 @@ export function Canvas({
             element={element}
             isSelected={element.id === selectedId}
             selectedId={selectedId}
+            draggingId={dragState?.elementId ?? resizeState?.elementId ?? null}
             isPreview={isPreview}
-            onPointerDown={(e) => handleMouseDown(e, element.id)}
+            onPointerDown={handleMouseDown}
             onResizeStart={handleResizeStart}
             onClick={(e) => {
               e.stopPropagation();
@@ -1072,8 +1124,9 @@ interface CanvasElementComponentProps {
   element: CanvasElement;
   isSelected: boolean;
   selectedId: string | null;
+  draggingId: string | null;
   isPreview: boolean;
-  onPointerDown: (e: React.PointerEvent, elementId?: string) => void;
+  onPointerDown: (e: React.PointerEvent, elementId: string) => void;
   onResizeStart: (e: React.MouseEvent, elementId: string, handle: 'nw' | 'ne' | 'sw' | 'se') => void;
   onClick: (e: React.MouseEvent) => void;
   onSelectElement: (elementId: string) => void;
@@ -1089,6 +1142,7 @@ function CanvasElementComponent({
   element,
   isSelected,
   selectedId,
+  draggingId,
   isPreview,
   onPointerDown,
   onResizeStart,
@@ -1114,8 +1168,9 @@ function CanvasElementComponent({
           element={child}
           isSelected={child.id === resolvedSelectedId}
           selectedId={resolvedSelectedId}
+          draggingId={draggingId}
           isPreview={isPreview}
-          onPointerDown={(event) => onPointerDown(event, child.id)}
+          onPointerDown={onPointerDown}
           onResizeStart={onResizeStart}
           onClick={(event) => {
             event.stopPropagation();
@@ -2223,13 +2278,16 @@ function CanvasElementComponent({
   };
 
   const isTextElement = isTextEditableElement(normalizeCanvasElementType(element.type) as CanvasElement['type']);
+  const isBeingMoved = draggingId === element.id;
 
   return (
       <div
       className={cn(
-        'absolute',
+        'absolute touch-none',
         !isPreview && !isEditing && 'cursor-move select-none',
-        isSelected && !isPreview && 'ring-2 ring-sky-500 ring-offset-1 ring-offset-white'
+        !isPreview && !isSelected && 'hover:ring-1 hover:ring-sky-300 hover:ring-offset-1 hover:ring-offset-white',
+        isSelected && !isPreview && 'ring-2 ring-sky-500 ring-offset-1 ring-offset-white',
+        isBeingMoved && !isPreview && 'opacity-95 shadow-[0_16px_40px_rgba(14,165,233,0.22)]'
       )}
       data-element-id={element.id}
       data-backy-text-editor={isTextElement ? 'true' : undefined}
@@ -2259,8 +2317,10 @@ function CanvasElementComponent({
       {/* Resize Handles (only when selected and not in preview) */}
       {isSelected && !isPreview && (
         <>
-          <div className="pointer-events-none absolute -top-7 left-0 rounded bg-sky-600 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-white shadow-sm">
-            {normalizeCanvasElementType(element.type)}
+          <div className="pointer-events-none absolute -top-8 left-0 flex items-center gap-2 rounded bg-sky-600 px-2 py-1 text-[11px] font-medium text-white shadow-sm">
+            <span className="uppercase tracking-wide">{normalizeCanvasElementType(element.type)}</span>
+            <span className="h-3 w-px bg-white/40" />
+            <span>{element.x}, {element.y}</span>
           </div>
           <ResizeHandle position="nw" onMouseDown={(e) => onResizeStart(e, element.id, 'nw')} />
           <ResizeHandle position="ne" onMouseDown={(e) => onResizeStart(e, element.id, 'ne')} />
@@ -2314,12 +2374,17 @@ function SelectionInfo({ elements, selectedId }: SelectionInfoProps) {
 
   return (
     <div className="absolute bottom-4 left-4 rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-xs shadow-lg backdrop-blur">
-      <div className="flex items-center gap-4">
-        <span className="font-medium text-sky-700">{element.type}</span>
-        <span>X: {element.x}px</span>
-        <span>Y: {element.y}px</span>
-        <span>W: {element.width}px</span>
-        <span>H: {element.height}px</span>
+      <div className="flex items-center gap-3">
+        <span className="rounded bg-sky-50 px-2 py-0.5 font-semibold uppercase tracking-wide text-sky-700">{element.type}</span>
+        <span className="text-slate-500">X</span>
+        <span className="font-medium text-slate-800">{element.x}</span>
+        <span className="text-slate-500">Y</span>
+        <span className="font-medium text-slate-800">{element.y}</span>
+        <span className="h-4 w-px bg-slate-200" />
+        <span className="text-slate-500">W</span>
+        <span className="font-medium text-slate-800">{element.width}</span>
+        <span className="text-slate-500">H</span>
+        <span className="font-medium text-slate-800">{element.height}</span>
       </div>
     </div>
   );
