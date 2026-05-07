@@ -389,6 +389,19 @@ interface ApiCollectionRecordResponse {
   };
 }
 
+interface ApiImportCollectionRecordsResponse {
+  success: boolean;
+  data?: {
+    collection: ApiCollection;
+    records: ApiCollectionRecord[];
+    import: CollectionRecordImportResult;
+  };
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
 export interface SiteCreateInput {
   name: string;
   slug: string;
@@ -619,6 +632,20 @@ export interface CollectionRecordListFilters {
   sortDirection?: 'asc' | 'desc';
   limit?: number;
   offset?: number;
+}
+
+export interface CollectionRecordImportError {
+  row: number;
+  slug?: string;
+  message: string;
+  details?: unknown;
+}
+
+export interface CollectionRecordImportResult {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: CollectionRecordImportError[];
 }
 
 const getEnvValue = (key: string): string => {
@@ -1546,6 +1573,31 @@ export async function exportCollectionRecordsCsv(
   }
 
   return response.blob();
+}
+
+export async function importCollectionRecordsCsv(
+  siteId: string,
+  collectionId: string,
+  csv: string,
+  options: { upsert?: boolean } = {},
+): Promise<CollectionRecordImportResult> {
+  const query = new URLSearchParams();
+  if (options.upsert) query.set('upsert', 'true');
+
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records/import?${query.toString()}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+    },
+    body: csv,
+  });
+  const payload = await readJson<ApiImportCollectionRecordsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to import collection records');
+  }
+
+  return payload.data.import;
 }
 
 export async function createCollectionRecord(

@@ -686,6 +686,23 @@ try {
     assert(adminCsvExport.text.startsWith('id,slug,status,createdAt,updatedAt,publishedAt,scheduledAt,title,summary,rank'), `${adminCsvExport.url} missing CSV header`);
     assert(adminCsvExport.text.includes(collectionRecordSlug) && adminCsvExport.text.includes('Collection Record'), `${adminCsvExport.url} missing exported collection record`);
 
+    const importedCollectionRecordSlug = `${collectionRecordSlug}-imported`;
+    const importCsv = [
+      'slug,status,title,summary,rank',
+      `${importedCollectionRecordSlug},published,Imported Collection Record,"Imported, structured content",2`,
+    ].join('\n');
+    const importRecords = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records/import?upsert=true`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'text/csv; charset=utf-8',
+      },
+      body: importCsv,
+    });
+    assert(importRecords.response.status === 200, `${importRecords.url} expected 200, got ${importRecords.response.status}`);
+    assert(importRecords.json?.data?.import?.created === 1, `${importRecords.url} expected one imported record`);
+    assert(importRecords.json?.data?.records?.[0]?.slug === importedCollectionRecordSlug, `${importRecords.url} returned wrong imported record`);
+    assert(importRecords.json?.data?.records?.[0]?.values?.summary === 'Imported, structured content', `${importRecords.url} did not parse quoted CSV field`);
+
     const dynamicItemPath = `/${collectionSlug}/${collectionRecordSlug}`;
     const dynamicResolve = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(dynamicItemPath)}`);
     assert(dynamicResolve.response.status === 200, `${dynamicResolve.url} expected 200, got ${dynamicResolve.response.status}`);

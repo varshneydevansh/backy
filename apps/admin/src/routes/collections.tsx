@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import {
   Database,
@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Save,
   Trash2,
+  Upload,
 } from 'lucide-react';
 import {
   createCollection,
@@ -15,6 +16,7 @@ import {
   deleteCollection,
   deleteCollectionRecord,
   exportCollectionRecordsCsv,
+  importCollectionRecordsCsv,
   listCollectionRecords,
   listCollections,
   updateCollection,
@@ -144,7 +146,10 @@ function CollectionsPage() {
   const [isSavingCollection, setIsSavingCollection] = useState(false);
   const [isSavingRecord, setIsSavingRecord] = useState(false);
   const [isExportingRecords, setIsExportingRecords] = useState(false);
+  const [isImportingRecords, setIsImportingRecords] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const activeSite = useMemo(
     () => sites.find((site) => (site.publicSiteId || site.id) === selectedSiteId) || sites[0],
@@ -213,6 +218,7 @@ function CollectionsPage() {
   const loadCollections = async () => {
     setIsLoading(true);
     setError(null);
+    setNotice(null);
     try {
       const backendCollections = await listCollections(activeSiteId);
       setCollections(backendCollections);
@@ -305,6 +311,7 @@ function CollectionsPage() {
     event.preventDefault();
     setIsSavingCollection(true);
     setError(null);
+    setNotice(null);
 
     const fields = collectionForm.fields
       .filter((field) => field.key.trim() && field.label.trim())
@@ -347,6 +354,7 @@ function CollectionsPage() {
     }
 
     setError(null);
+    setNotice(null);
     try {
       await deleteCollection(activeSiteId, collection.id);
       const remaining = collections.filter((item) => item.id !== collection.id);
@@ -370,6 +378,7 @@ function CollectionsPage() {
 
     setIsSavingRecord(true);
     setError(null);
+    setNotice(null);
 
     try {
       const values = Object.fromEntries(
@@ -409,6 +418,7 @@ function CollectionsPage() {
     }
 
     setError(null);
+    setNotice(null);
     try {
       await deleteCollectionRecord(activeSiteId, activeCollection.id, record.id);
       setRecords((prev) => prev.filter((item) => item.id !== record.id));
@@ -425,6 +435,7 @@ function CollectionsPage() {
 
     setIsExportingRecords(true);
     setError(null);
+    setNotice(null);
     try {
       const blob = await exportCollectionRecordsCsv(activeSiteId, activeCollection.id, {
         search: recordFilters.search.trim() || undefined,
@@ -447,6 +458,32 @@ function CollectionsPage() {
       setError(exportError instanceof Error ? exportError.message : 'Unable to export collection records');
     } finally {
       setIsExportingRecords(false);
+    }
+  };
+
+  const handleImportRecords = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (!activeCollection) return;
+
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImportingRecords(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const csv = await file.text();
+      const result = await importCollectionRecordsCsv(activeSiteId, activeCollection.id, csv, { upsert: true });
+      setNotice(`${result.created} created, ${result.updated} updated, ${result.skipped} skipped from ${file.name}.`);
+      if (result.errors.length > 0) {
+        const firstError = result.errors[0];
+        setError(`Row ${firstError.row} skipped: ${firstError.message}`);
+      }
+      await loadRecords(activeCollection.id);
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : 'Unable to import collection records');
+    } finally {
+      setIsImportingRecords(false);
+      event.target.value = '';
     }
   };
 
@@ -478,6 +515,12 @@ function CollectionsPage() {
       {error && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {error}
+        </div>
+      )}
+
+      {notice && (
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          {notice}
         </div>
       )}
 
@@ -729,6 +772,22 @@ function CollectionsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
+                  <input
+                    ref={importInputRef}
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="hidden"
+                    onChange={(event) => void handleImportRecords(event)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => importInputRef.current?.click()}
+                    disabled={isImportingRecords}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
+                  >
+                    <Upload className="h-4 w-4" />
+                    {isImportingRecords ? 'Importing...' : 'Import CSV'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => void handleExportRecords()}
