@@ -286,18 +286,6 @@ function EditBlogPostPage() {
             status,
             locale: 'en',
         });
-        const localUpdate = {
-            title,
-            slug,
-            excerpt,
-            content,
-            status,
-            scheduledAt: status === 'scheduled' ? scheduledAt : null,
-            author: selectedAuthorId,
-            categoryIds: selectedCategoryIds,
-            tagIds: selectedTagIds,
-        };
-
         try {
             const savedPost = await updateBlogPost(activeSiteId, postId, {
                 title,
@@ -321,11 +309,9 @@ function EditBlogPostPage() {
             setWorkflowNotice('Post saved and revision snapshot recorded.');
             void loadPostReadiness();
         } catch (error) {
-            updatePost(postId, localUpdate);
-            setPost((current) => current ? { ...current, ...localUpdate } : current);
             setSaveWarning(error instanceof Error
-                ? `${error.message}. Changes were kept locally in this browser.`
-                : 'Backend save failed. Changes were kept locally in this browser.');
+                ? `${error.message}. Changes were not persisted.`
+                : 'Backend save failed. Changes were not persisted.');
         } finally {
             setIsLoading(false);
         }

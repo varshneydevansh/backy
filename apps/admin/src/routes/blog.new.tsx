@@ -35,7 +35,7 @@ export const Route = createFileRoute('/blog/new')({
 
 function NewBlogPostPage() {
     const navigate = useNavigate();
-    const { sites, posts, addPost, setPosts } = useStore();
+    const { sites, posts, setPosts } = useStore();
     const { user } = useAuthStore();
 
     const [isLoading, setIsLoading] = useState(false);
@@ -163,17 +163,6 @@ function NewBlogPostPage() {
             navigate({ to: '/blog' });
         } catch (createError) {
             setError(createError instanceof Error ? createError.message : 'Unable to create post');
-            addPost({
-                title,
-                slug,
-                excerpt,
-                content,
-                status,
-                scheduledAt: status === 'scheduled' ? scheduledAt : null,
-                author: authors.find((author) => author.id === selectedAuthorId)?.name || user?.fullName || 'Anonymous',
-                categoryIds: selectedCategoryIds,
-                tagIds: selectedTagIds,
-            });
         } finally {
             setIsLoading(false);
         }
@@ -194,7 +183,7 @@ function NewBlogPostPage() {
             <div className="max-w-[1400px] mx-auto pb-20">
                 {error && (
                     <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                        {error}. A local draft copy was kept in this browser.
+                        {error}. The post was not created because the backend did not persist it.
                     </div>
                 )}
 

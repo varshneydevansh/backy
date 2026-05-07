@@ -17,7 +17,7 @@ export const Route = createFileRoute('/pages/new')({
 
 function NewPageRoute() {
     const navigate = useNavigate();
-    const { sites, pages, addPage, setPages } = useStore();
+    const { sites, pages, setPages } = useStore();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -55,7 +55,6 @@ function NewPageRoute() {
             navigate({ to: '/pages' });
         } catch (createError) {
             setError(createError instanceof Error ? createError.message : 'Unable to create page');
-            addPage(input);
         } finally {
             setIsLoading(false);
         }
@@ -74,7 +73,7 @@ function NewPageRoute() {
             <div className="max-w-2xl mx-auto">
                 {error && (
                     <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                        {error}. A local draft copy was kept in this browser.
+                        {error}. The page was not created because the backend did not persist it.
                     </div>
                 )}
 

@@ -249,15 +249,6 @@ function PageEditorRoute() {
       status: settings.status,
       locale: 'en',
     });
-    const localUpdate = {
-      content,
-      title: settings.title,
-      slug: settings.slug,
-      status: settings.status,
-      scheduledAt: settings.status === 'scheduled' ? settings.scheduledAt || null : null,
-      meta: settings.meta,
-    };
-
     try {
       const savedPage = await updatePageFromApi(siteId, pageId, {
         title: settings.title,
@@ -275,11 +266,9 @@ function PageEditorRoute() {
       setWorkflowNotice('Page saved and revision snapshot recorded.');
       void loadPageReadiness();
     } catch (error) {
-      updatePage(pageId, localUpdate);
-      setPage((current) => current ? { ...current, ...localUpdate } : current);
       setSaveWarning(error instanceof Error
-        ? `${error.message}. Changes were kept locally in this browser.`
-        : 'Backend save failed. Changes were kept locally in this browser.');
+        ? `${error.message}. Changes were not persisted.`
+        : 'Backend save failed. Changes were not persisted.');
     }
   };
 
