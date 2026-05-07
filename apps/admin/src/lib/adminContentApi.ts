@@ -610,6 +610,17 @@ export interface CollectionRecordInput {
   values: Record<string, unknown>;
 }
 
+export interface CollectionRecordListFilters {
+  status?: Page['status'] | '';
+  search?: string;
+  fieldKey?: string;
+  fieldValue?: string;
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
+
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
   return env[key]?.trim() ?? '';
@@ -1489,8 +1500,19 @@ export async function deleteCollection(siteId: string, collectionId: string): Pr
 export async function listCollectionRecords(
   siteId: string,
   collectionId: string,
+  filters: CollectionRecordListFilters = {},
 ): Promise<CollectionRecord[]> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records?limit=100`);
+  const query = new URLSearchParams();
+  query.set('limit', String(filters.limit || 100));
+  query.set('offset', String(filters.offset || 0));
+  if (filters.status) query.set('status', filters.status);
+  if (filters.search) query.set('q', filters.search);
+  if (filters.fieldKey) query.set('fieldKey', filters.fieldKey);
+  if (filters.fieldValue) query.set('fieldValue', filters.fieldValue);
+  if (filters.sortBy) query.set('sortBy', filters.sortBy);
+  if (filters.sortDirection) query.set('sortDirection', filters.sortDirection);
+
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records?${query.toString()}`);
   const payload = await readJson<ApiListCollectionRecordsResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {

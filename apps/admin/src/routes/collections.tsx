@@ -107,6 +107,8 @@ const parseRecordValue = (field: CollectionField, value: string): unknown => {
   return value;
 };
 
+type RecordStatusFilter = CollectionRecord['status'] | '';
+
 function CollectionsPage() {
   const { sites } = useStore();
   const [selectedSiteId, setSelectedSiteId] = useState('');
@@ -127,7 +129,16 @@ function CollectionsPage() {
     status: 'published' as CollectionRecord['status'],
     values: {} as Record<string, string>,
   });
+  const [recordFilters, setRecordFilters] = useState({
+    search: '',
+    status: '' as RecordStatusFilter,
+    fieldKey: '',
+    fieldValue: '',
+    sortBy: 'updatedAt',
+    sortDirection: 'desc' as 'asc' | 'desc',
+  });
   const [isLoading, setIsLoading] = useState(false);
+  const [isRecordsLoading, setIsRecordsLoading] = useState(false);
   const [isSavingCollection, setIsSavingCollection] = useState(false);
   const [isSavingRecord, setIsSavingRecord] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -158,6 +169,14 @@ function CollectionsPage() {
     setSelectedCollectionId(null);
     setSelectedRecordId(null);
     setRecords([]);
+    setRecordFilters({
+      search: '',
+      status: '',
+      fieldKey: '',
+      fieldValue: '',
+      sortBy: 'updatedAt',
+      sortDirection: 'desc',
+    });
     setCollectionForm({
       name: '',
       slug: '',
@@ -172,6 +191,11 @@ function CollectionsPage() {
   const selectCollection = (collection: Collection) => {
     setSelectedCollectionId(collection.id);
     setSelectedRecordId(null);
+    setRecordFilters((prev) => ({
+      ...prev,
+      fieldKey: '',
+      fieldValue: '',
+    }));
     setCollectionForm({
       name: collection.name,
       slug: collection.slug,
@@ -205,13 +229,23 @@ function CollectionsPage() {
   };
 
   const loadRecords = async (collectionId: string) => {
+    setIsRecordsLoading(true);
     setError(null);
     try {
-      const backendRecords = await listCollectionRecords(activeSiteId, collectionId);
+      const backendRecords = await listCollectionRecords(activeSiteId, collectionId, {
+        search: recordFilters.search.trim() || undefined,
+        status: recordFilters.status || undefined,
+        fieldKey: recordFilters.fieldKey || undefined,
+        fieldValue: recordFilters.fieldValue.trim() || undefined,
+        sortBy: recordFilters.sortBy || undefined,
+        sortDirection: recordFilters.sortDirection,
+      });
       setRecords(backendRecords);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load collection records');
       setRecords([]);
+    } finally {
+      setIsRecordsLoading(false);
     }
   };
 
@@ -225,7 +259,7 @@ function CollectionsPage() {
       void loadRecords(selectedCollectionId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCollectionId, activeSiteId]);
+  }, [selectedCollectionId, activeSiteId, recordFilters.search, recordFilters.status, recordFilters.fieldKey, recordFilters.fieldValue, recordFilters.sortBy, recordFilters.sortDirection]);
 
   useEffect(() => {
     if (!selectedRecord || !activeCollection) {
@@ -356,6 +390,9 @@ function CollectionsPage() {
           : [saved, ...prev];
       });
       setSelectedRecordId(saved.id);
+      if (activeCollection) {
+        void loadRecords(activeCollection.id);
+      }
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save collection record');
     } finally {
@@ -653,7 +690,10 @@ function CollectionsPage() {
               <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <div>
                   <h2 className="text-sm font-semibold">Records</h2>
-                  <p className="text-xs text-muted-foreground">{records.length} items in {activeCollection.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {records.length} items in {activeCollection.name}
+                    {isRecordsLoading ? ' • Loading...' : ''}
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -666,6 +706,92 @@ function CollectionsPage() {
                   <Plus className="h-4 w-4" />
                   New record
                 </button>
+              </div>
+
+              <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(180px,1fr)_150px_160px_minmax(160px,1fr)_180px_140px]">
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Search</span>
+                  <input
+                    value={recordFilters.search}
+                    onChange={(event) => setRecordFilters((prev) => ({ ...prev, search: event.target.value }))}
+                    className="w-full rounded-lg border bg-background px-3 py-2"
+                    placeholder="Search values"
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Status</span>
+                  <select
+                    value={recordFilters.status}
+                    onChange={(event) => setRecordFilters((prev) => ({
+                      ...prev,
+                      status: event.target.value as RecordStatusFilter,
+                    }))}
+                    className="w-full rounded-lg border bg-background px-3 py-2"
+                  >
+                    <option value="">All</option>
+                    <option value="published">Published</option>
+                    <option value="draft">Draft</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Field</span>
+                  <select
+                    value={recordFilters.fieldKey}
+                    onChange={(event) => setRecordFilters((prev) => ({
+                      ...prev,
+                      fieldKey: event.target.value,
+                      fieldValue: event.target.value ? prev.fieldValue : '',
+                    }))}
+                    className="w-full rounded-lg border bg-background px-3 py-2"
+                  >
+                    <option value="">Any field</option>
+                    {activeCollection.fields.map((field) => (
+                      <option key={field.key} value={field.key}>{field.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Field value</span>
+                  <input
+                    value={recordFilters.fieldValue}
+                    onChange={(event) => setRecordFilters((prev) => ({ ...prev, fieldValue: event.target.value }))}
+                    disabled={!recordFilters.fieldKey}
+                    className="w-full rounded-lg border bg-background px-3 py-2 disabled:opacity-60"
+                    placeholder="Contains"
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Sort by</span>
+                  <select
+                    value={recordFilters.sortBy}
+                    onChange={(event) => setRecordFilters((prev) => ({ ...prev, sortBy: event.target.value }))}
+                    className="w-full rounded-lg border bg-background px-3 py-2"
+                  >
+                    <option value="updatedAt">Updated</option>
+                    <option value="createdAt">Created</option>
+                    <option value="slug">Slug</option>
+                    <option value="status">Status</option>
+                    {activeCollection.fields.map((field) => (
+                      <option key={field.key} value={field.key}>{field.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Direction</span>
+                  <select
+                    value={recordFilters.sortDirection}
+                    onChange={(event) => setRecordFilters((prev) => ({
+                      ...prev,
+                      sortDirection: event.target.value === 'asc' ? 'asc' : 'desc',
+                    }))}
+                    className="w-full rounded-lg border bg-background px-3 py-2"
+                  >
+                    <option value="desc">Descending</option>
+                    <option value="asc">Ascending</option>
+                  </select>
+                </label>
               </div>
 
               <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_360px]">
