@@ -8,12 +8,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { Archive, CheckCircle2, History, RotateCcw } from 'lucide-react';
+import { Archive, CheckCircle2, ExternalLink, Eye, History, RotateCcw } from 'lucide-react';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
 import { PageSettings } from '@/components/editor/PageSettingsModal';
 import {
   archivePage,
+  createPagePreview,
   getPage,
   listPageRevisions,
   publishPage,
@@ -49,6 +50,9 @@ function PageEditorRoute() {
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
   const [workflowNotice, setWorkflowNotice] = useState<string | null>(null);
   const [isWorkflowBusy, setIsWorkflowBusy] = useState(false);
+  const [isPreviewBusy, setIsPreviewBusy] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewExpiresAt, setPreviewExpiresAt] = useState<string | null>(null);
   const [revisions, setRevisions] = useState<ContentRevision[]>([]);
 
   useEffect(() => {
@@ -254,6 +258,23 @@ function PageEditorRoute() {
     }
   };
 
+  const generatePreview = async () => {
+    setIsPreviewBusy(true);
+    setSaveWarning(null);
+
+    try {
+      const preview = await createPagePreview(siteId, pageId);
+      setPreviewUrl(preview.url);
+      setPreviewExpiresAt(preview.expiresAt);
+      setWorkflowNotice('Preview link created.');
+      window.open(preview.url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      setSaveWarning(error instanceof Error ? error.message : 'Unable to create page preview.');
+    } finally {
+      setIsPreviewBusy(false);
+    }
+  };
+
   const restoreRevision = async (revision: ContentRevision) => {
     if (!confirm(`Restore "${revision.snapshotTitle}" from this revision?`)) {
       return;
@@ -292,7 +313,16 @@ function PageEditorRoute() {
           <StatusBadge status={page.status} />
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            disabled={isPreviewBusy}
+            onClick={() => void generatePreview()}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-800 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Eye className="h-4 w-4" />
+            Preview
+          </button>
           <button
             type="button"
             disabled={isWorkflowBusy || page.status === 'published'}
@@ -317,6 +347,20 @@ function PageEditorRoute() {
           <div className="mt-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800">
             {workflowNotice}
           </div>
+        )}
+
+        {previewUrl && (
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <span className="min-w-0 truncate">
+              Preview expires {previewExpiresAt ? new Date(previewExpiresAt).toLocaleTimeString() : 'soon'}
+            </span>
+            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+          </a>
         )}
 
         <div className="mt-3 space-y-2">

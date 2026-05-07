@@ -88,6 +88,22 @@ interface ApiRevisionListResponse {
   };
 }
 
+interface ApiPreviewResponse {
+  success: boolean;
+  data?: {
+    previewToken: string;
+    expiresAt: string;
+    targetType: 'page' | 'post';
+    targetId: string;
+    renderUrl?: string;
+    pageApiUrl?: string;
+    postApiUrl?: string;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiDeleteResponse {
   success: boolean;
   data?: {
@@ -193,6 +209,12 @@ export interface ContentRevision {
   createdAt: string;
   snapshotTitle: string;
   snapshotStatus: Page['status'] | BlogPost['status'];
+}
+
+export interface PreviewLink {
+  previewToken: string;
+  expiresAt: string;
+  url: string;
 }
 
 const getEnvValue = (key: string): string => {
@@ -473,6 +495,27 @@ export async function rollbackPage(siteId: string, pageId: string, revisionId: s
   return toStorePage(payload.data.page);
 }
 
+export async function createPagePreview(siteId: string, pageId: string): Promise<PreviewLink> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/preview`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ ttlSeconds: 3600 }),
+  });
+  const payload = await readJson<ApiPreviewResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.renderUrl) {
+    throw new Error(payload.error?.message || 'Unable to create page preview');
+  }
+
+  return {
+    previewToken: payload.data.previewToken,
+    expiresAt: payload.data.expiresAt,
+    url: payload.data.renderUrl,
+  };
+}
+
 export async function deletePage(siteId: string, pageId: string): Promise<void> {
   const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}`, {
     method: 'DELETE',
@@ -596,6 +639,27 @@ export async function rollbackBlogPost(siteId: string, postId: string, revisionI
   }
 
   return toStorePost(payload.data.post);
+}
+
+export async function createBlogPostPreview(siteId: string, postId: string): Promise<PreviewLink> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/preview`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ ttlSeconds: 3600 }),
+  });
+  const payload = await readJson<ApiPreviewResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.postApiUrl) {
+    throw new Error(payload.error?.message || 'Unable to create post preview');
+  }
+
+  return {
+    previewToken: payload.data.previewToken,
+    expiresAt: payload.data.expiresAt,
+    url: payload.data.postApiUrl,
+  };
 }
 
 export async function deleteBlogPost(siteId: string, postId: string): Promise<void> {

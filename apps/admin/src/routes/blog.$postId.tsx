@@ -4,9 +4,10 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { Archive, ArrowLeft, CheckCircle2, FileText, History, RotateCcw, Save, Trash2 } from 'lucide-react';
+import { Archive, ArrowLeft, CheckCircle2, ExternalLink, Eye, FileText, History, RotateCcw, Save, Trash2 } from 'lucide-react';
 import {
     archiveBlogPost,
+    createBlogPostPreview,
     deleteBlogPost,
     getBlogPost,
     listBlogPostRevisions,
@@ -48,6 +49,9 @@ function EditBlogPostPage() {
     const [saveWarning, setSaveWarning] = useState<string | null>(null);
     const [workflowNotice, setWorkflowNotice] = useState<string | null>(null);
     const [isWorkflowBusy, setIsWorkflowBusy] = useState(false);
+    const [isPreviewBusy, setIsPreviewBusy] = useState(false);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [previewExpiresAt, setPreviewExpiresAt] = useState<string | null>(null);
     const [revisions, setRevisions] = useState<ContentRevision[]>([]);
 
     // Initialize State from Post
@@ -255,6 +259,23 @@ function EditBlogPostPage() {
         }
     };
 
+    const generatePreview = async () => {
+        setIsPreviewBusy(true);
+        setSaveWarning(null);
+
+        try {
+            const preview = await createBlogPostPreview(activeSiteId, postId);
+            setPreviewUrl(preview.url);
+            setPreviewExpiresAt(preview.expiresAt);
+            setWorkflowNotice('Preview link created.');
+            window.open(preview.url, '_blank', 'noopener,noreferrer');
+        } catch (error) {
+            setSaveWarning(error instanceof Error ? error.message : 'Unable to create post preview.');
+        } finally {
+            setIsPreviewBusy(false);
+        }
+    };
+
     const restoreRevision = async (revision: ContentRevision) => {
         if (!confirm(`Restore "${revision.snapshotTitle}" from this revision?`)) {
             return;
@@ -326,8 +347,17 @@ function EditBlogPostPage() {
                                     className="w-full text-4xl font-bold bg-transparent border-none placeholder:text-muted-foreground/50 focus:ring-0 px-0"
                                 />
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center justify-end gap-2">
                                 <StatusBadge status={status} />
+                                <button
+                                    type="button"
+                                    disabled={isPreviewBusy}
+                                    onClick={() => void generatePreview()}
+                                    className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    <Eye className="w-4 h-4" />
+                                    Preview
+                                </button>
                                 <button
                                     type="button"
                                     disabled={isWorkflowBusy || status === 'published'}
@@ -368,6 +398,19 @@ function EditBlogPostPage() {
                                 placeholder="post-slug"
                             />
                         </div>
+                        {previewUrl && (
+                            <a
+                                href={previewUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex max-w-full items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                            >
+                                <span className="truncate">
+                                    Preview expires {previewExpiresAt ? new Date(previewExpiresAt).toLocaleTimeString() : 'soon'}
+                                </span>
+                                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                            </a>
+                        )}
                     </div>
 
                     {(workflowNotice || revisions.length > 0) && (
