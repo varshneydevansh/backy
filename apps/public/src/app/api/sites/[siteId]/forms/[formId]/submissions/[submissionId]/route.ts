@@ -7,7 +7,8 @@ import {
   buildContactShareFromSubmission,
   trackWebhookEvent,
 } from '@/lib/backyStore';
-import type { FormSubmission } from '@backy-cms/core';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import type { Contact, FormDefinition, FormSubmission } from '@backy-cms/core';
 
 interface RouteParams {
   params: Promise<{
@@ -96,6 +97,80 @@ function parseBody(raw: unknown) {
   };
 }
 
+const parseShareValue = (values: Record<string, unknown>, field?: string): string | null => {
+  if (!field) return null;
+  const value = values[field];
+  if (typeof value === 'string') return value.trim() || null;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return null;
+};
+
+const normalizeIdentifier = (value: string) => value.trim().toLowerCase();
+
+const buildRepositoryContactShare = async (
+  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
+  form: FormDefinition,
+  submission: FormSubmission,
+  contactShareOverride?: ContactShareOverridePayload,
+): Promise<Contact | null> => {
+  const resolvedShare = {
+    enabled: contactShareOverride?.enabled !== undefined
+      ? contactShareOverride.enabled
+      : form.contactShare?.enabled ?? false,
+    nameField: contactShareOverride?.nameField || form.contactShare?.nameField,
+    emailField: contactShareOverride?.emailField || form.contactShare?.emailField,
+    phoneField: contactShareOverride?.phoneField || form.contactShare?.phoneField,
+    notesField: contactShareOverride?.notesField || form.contactShare?.notesField,
+    dedupeByEmail: contactShareOverride?.dedupeByEmail ?? form.contactShare?.dedupeByEmail,
+  };
+
+  if (!resolvedShare.enabled || submission.status === 'spam') return null;
+
+  const name = parseShareValue(submission.values, resolvedShare.nameField);
+  const email = parseShareValue(submission.values, resolvedShare.emailField);
+  const phone = parseShareValue(submission.values, resolvedShare.phoneField);
+  const notes = parseShareValue(submission.values, resolvedShare.notesField);
+  if (!name && !email && !phone) return null;
+
+  const existing = resolvedShare.dedupeByEmail !== false && email
+    ? (await repositories.forms.listContacts({
+        siteId: form.siteId,
+        formId: form.id,
+        search: email,
+        limit: 100,
+        offset: 0,
+      })).items.find((contact) => normalizeIdentifier(contact.email || '') === normalizeIdentifier(email))
+    : null;
+  const mergedNotes = [existing?.notes, notes].filter(Boolean).join(existing?.notes ? '\n' : '');
+
+  if (existing) {
+    return (await repositories.forms.updateContact(form.siteId, existing.id, {
+      name: name ?? existing.name,
+      email: email ?? existing.email,
+      phone: phone ?? existing.phone,
+      notes: mergedNotes,
+      sourceValues: submission.values,
+      status: 'new',
+    })).item;
+  }
+
+  return (await repositories.forms.createContact({
+    siteId: form.siteId,
+    formId: form.id,
+    pageId: submission.pageId ?? null,
+    postId: submission.postId ?? null,
+    name,
+    email,
+    phone,
+    notes,
+    sourceValues: submission.values,
+    status: 'new',
+    sourceSubmissionId: submission.id,
+    requestId: submission.requestId,
+    sourceIpHash: submission.ipHash,
+  })).item;
+};
+
 async function notifyContactWebhook(params: {
   formId: string;
   eventType: 'contact-shared' | 'contact-status';
@@ -182,6 +257,33 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, formId, submissionId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      if (!site || !site.isPublished) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const form = await repositories.forms.getById(site.id, formId);
+      if (!form) {
+        return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+      }
+
+      const submission = await repositories.forms.getSubmissionById(site.id, form.id, submissionId);
+      if (!submission) {
+        return errorResponse(404, 'SUBMISSION_NOT_FOUND', 'Submission not found', requestId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          submission,
+        },
+        submission,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
@@ -216,6 +318,52 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, formId, submissionId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      if (!site || !site.isPublished) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const form = await repositories.forms.getById(site.id, formId);
+      if (!form) {
+        return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+      }
+
+      const submission = await repositories.forms.getSubmissionById(site.id, form.id, submissionId);
+      if (!submission) {
+        return errorResponse(404, 'SUBMISSION_NOT_FOUND', 'Submission not found', requestId);
+      }
+
+      const body = parseBody(await request.json().catch(() => null));
+      if (!body || !body.status) {
+        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status is required.', requestId);
+      }
+
+      const updated = (await repositories.forms.updateSubmission(site.id, submission.id, {
+        status: body.status,
+        reviewedBy: body.reviewedBy,
+        reviewedAt: new Date().toISOString(),
+        adminNotes: body.adminNotes,
+      })).item;
+
+      const shouldShareContact = body.contactShareOverride?.enabled !== undefined
+        ? body.contactShareOverride.enabled
+        : form.contactShare?.enabled === true;
+      if (updated.status === 'approved' && shouldShareContact) {
+        await buildRepositoryContactShare(repositories, form, updated, body.contactShareOverride);
+      }
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          submission: updated,
+        },
+        submission: updated,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);

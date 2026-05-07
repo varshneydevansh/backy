@@ -7,6 +7,7 @@ import {
   trackWebhookEvent,
   updateContactStatus,
 } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
   params: Promise<{
@@ -139,6 +140,42 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, formId, contactId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      if (!site || !site.isPublished) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const form = await repositories.forms.getById(site.id, formId);
+      if (!form) {
+        return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+      }
+
+      const body = parseBody(await request.json().catch(() => null));
+      if (!body) {
+        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status is required.', requestId);
+      }
+
+      const contact = await repositories.forms.getContactById(site.id, form.id, contactId);
+      if (!contact) {
+        return errorResponse(404, 'CONTACT_NOT_FOUND', 'Contact not found', requestId);
+      }
+
+      const updated = (await repositories.forms.updateContact(site.id, contact.id, {
+        status: body.status,
+      })).item;
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          contact: updated,
+        },
+        contact: updated,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);

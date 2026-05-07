@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { BackyJsonValue, Contact, FormDefinition, FormSubmission } from '@backy-cms/core';
 import {
   attachCollectionRecordToSubmission,
   buildContactShareFromSubmission,
@@ -9,7 +10,10 @@ import {
   getSiteByIdOrSlug,
   trackWebhookEvent,
   validateAndClassifyFormSubmission,
+  validateCollectionRecordValues,
+  type StoreCollection,
 } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
   params: Promise<{
@@ -160,6 +164,180 @@ function extractIpHash(request: NextRequest): string | null {
     .find(Boolean) || null;
 }
 
+const toJsonRecord = (value: Record<string, unknown>): Record<string, BackyJsonValue> => (
+  value as Record<string, BackyJsonValue>
+);
+
+const parseShareValue = (values: Record<string, unknown>, field?: string): string | null => {
+  if (!field) return null;
+  const value = values[field];
+  if (typeof value === 'string') return value.trim() || null;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return null;
+};
+
+const normalizeIdentifier = (value: string) => value.trim().toLowerCase();
+
+const buildRepositoryContactShare = async (
+  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
+  form: FormDefinition,
+  values: Record<string, unknown>,
+  submission: FormSubmission,
+  contactShareOverride?: ContactShareOverridePayload,
+): Promise<Contact | null> => {
+  const resolvedShare = {
+    enabled: contactShareOverride?.enabled !== undefined
+      ? contactShareOverride.enabled
+      : form.contactShare?.enabled ?? false,
+    nameField: contactShareOverride?.nameField || form.contactShare?.nameField,
+    emailField: contactShareOverride?.emailField || form.contactShare?.emailField,
+    phoneField: contactShareOverride?.phoneField || form.contactShare?.phoneField,
+    notesField: contactShareOverride?.notesField || form.contactShare?.notesField,
+    dedupeByEmail: contactShareOverride?.dedupeByEmail ?? form.contactShare?.dedupeByEmail,
+  };
+
+  if (!resolvedShare.enabled || submission.status === 'spam') {
+    return null;
+  }
+
+  const name = parseShareValue(values, resolvedShare.nameField);
+  const email = parseShareValue(values, resolvedShare.emailField);
+  const phone = parseShareValue(values, resolvedShare.phoneField);
+  const notes = parseShareValue(values, resolvedShare.notesField);
+
+  if (!name && !email && !phone) {
+    return null;
+  }
+
+  const dedupeByEmail = resolvedShare.dedupeByEmail !== false;
+  const existing = dedupeByEmail && email
+    ? (await repositories.forms.listContacts({
+        siteId: form.siteId,
+        formId: form.id,
+        search: email,
+        limit: 100,
+        offset: 0,
+      })).items.find((contact) => normalizeIdentifier(contact.email || '') === normalizeIdentifier(email))
+    : null;
+  const mergedNotes = [existing?.notes, notes].filter(Boolean).join(existing?.notes ? '\n' : '');
+
+  if (existing) {
+    return (await repositories.forms.updateContact(form.siteId, existing.id, {
+      name: name ?? existing.name,
+      email: email ?? existing.email,
+      phone: phone ?? existing.phone,
+      notes: mergedNotes,
+      sourceValues: values,
+      status: 'new',
+    })).item;
+  }
+
+  return (await repositories.forms.createContact({
+    siteId: form.siteId,
+    formId: form.id,
+    pageId: submission.pageId ?? null,
+    postId: submission.postId ?? null,
+    name,
+    email,
+    phone,
+    notes,
+    sourceValues: values,
+    status: 'new',
+    sourceSubmissionId: submission.id,
+    requestId: submission.requestId,
+    sourceIpHash: submission.ipHash,
+  })).item;
+};
+
+const createRepositoryCollectionRecordFromSubmission = async (
+  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
+  siteId: string,
+  form: FormDefinition,
+  values: Record<string, unknown>,
+  submission: FormSubmission,
+): Promise<{
+  record: FormSubmission['collectionRecord'];
+  errors: Array<{ field: string; message: string }>;
+}> => {
+  const target = form.collectionTarget;
+  if (!target?.enabled) {
+    return { record: null, errors: [] };
+  }
+
+  const collection = await repositories.collections.getById(siteId, target.collectionId)
+    || await repositories.collections.getBySlug(siteId, target.collectionId);
+  if (!collection || collection.status !== 'published') {
+    return {
+      record: null,
+      errors: [{ field: 'collectionId', message: 'Target collection is not published or does not exist.' }],
+    };
+  }
+
+  if (!collection.permissions.publicCreate) {
+    return {
+      record: null,
+      errors: [{ field: 'collectionId', message: 'Target collection does not allow public creation.' }],
+    };
+  }
+
+  const fieldKeys = new Set(collection.fields.map((field) => field.key));
+  const fieldMap = target.fieldMap || {};
+  const mappedValues = Object.entries(values).reduce<Record<string, unknown>>((acc, [sourceKey, value]) => {
+    const mappedKey = typeof fieldMap[sourceKey] === 'string' && fieldMap[sourceKey].trim().length > 0
+      ? fieldMap[sourceKey].trim()
+      : sourceKey;
+    if (fieldKeys.has(mappedKey)) {
+      acc[mappedKey] = value;
+    }
+    return acc;
+  }, {});
+
+  if (fieldKeys.has('sourceSubmissionId')) {
+    mappedValues.sourceSubmissionId = submission.id;
+  }
+
+  const validationErrors = validateCollectionRecordValues(collection as unknown as StoreCollection, mappedValues);
+  if (validationErrors.length > 0) {
+    return { record: null, errors: validationErrors };
+  }
+
+  const slugSource = target.slugField
+    ? values[target.slugField] ?? mappedValues[target.slugField]
+    : mappedValues.slug || mappedValues.title || mappedValues.name;
+  const baseSlug = String(slugSource || `${form.id}-${submission.id}`)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'submission';
+  let slug = baseSlug;
+  let suffix = 2;
+  while (await repositories.collections.getRecordBySlug(siteId, collection.id, slug)) {
+    slug = `${baseSlug}-${suffix}`;
+    suffix += 1;
+  }
+
+  const saved = (await repositories.collections.createRecord({
+    siteId,
+    collectionId: collection.id,
+    slug,
+    status: 'draft',
+    values: toJsonRecord(mappedValues),
+  })).item;
+
+  return {
+    record: {
+      siteId,
+      collectionId: collection.id,
+      collectionSlug: collection.slug,
+      recordId: saved.id,
+      recordSlug: saved.slug,
+      status: saved.status,
+      createdAt: saved.createdAt,
+    },
+    errors: [],
+  };
+};
+
 async function notifyContactWebhook(params: {
   formId: string;
   eventType: 'contact-shared' | 'contact-status';
@@ -246,6 +424,48 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, formId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      if (!site || !site.isPublished) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
+      }
+
+      const form = await repositories.forms.getById(site.id, formId);
+      if (!form || !form.isActive) {
+        return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', responseRequestId);
+      }
+
+      const { searchParams } = new URL(request.url);
+      const status = parseStatus(searchParams.get('status'));
+      const requestId = parseRequestId(searchParams.get('requestId'));
+      const limit = parseLimit(searchParams.get('limit'));
+      const offset = parseOffset(searchParams.get('offset'));
+      const result = await repositories.forms.listSubmissions({
+        siteId: site.id,
+        formId: form.id,
+        status: status === 'all' ? undefined : status,
+        requestId,
+        limit,
+        offset,
+      });
+      const submissions = {
+        data: result.items,
+        pagination: result.pagination,
+      };
+
+      return NextResponse.json({
+        success: true,
+        requestId: responseRequestId,
+        data: {
+          form,
+          submissions,
+        },
+        form,
+        submissions,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
@@ -290,6 +510,121 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, formId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      if (!site || !site.isPublished) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
+      }
+
+      const form = await repositories.forms.getById(site.id, formId);
+      if (!form) {
+        return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', responseRequestId);
+      }
+
+      if (!form.isActive) {
+        return errorResponse(400, 'FORM_INACTIVE', 'Form is not active', responseRequestId);
+      }
+
+      const parsed = parseRequestBody(await request.json().catch(() => null));
+      if (!parsed) {
+        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload', responseRequestId);
+      }
+
+      const requestId = normalizeRequestId(parsed.requestId);
+      const ipHash = extractIpHash(request);
+      const classification = validateAndClassifyFormSubmission(
+        form,
+        parsed.values,
+        {
+          honeypot: parsed.honeypot,
+          ipHash,
+          requestId,
+          rateLimitBypass: parsed.rateLimitBypass,
+          startedAt: parsed.startedAt,
+        },
+      );
+
+      if (!classification.ok) {
+        return NextResponse.json(
+          {
+            success: false,
+            requestId,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: classification.spamMessage || 'Submission blocked.',
+            },
+            errorMessage: classification.spamMessage || 'Submission blocked.',
+            status: classification.status,
+            validation: classification.validation,
+            spamFlags: classification.spamFlags,
+            message: classification.spamMessage || 'Submission blocked.',
+          },
+          { status: 422 },
+        );
+      }
+
+      let submission = (await repositories.forms.createSubmission({
+        siteId: site.id,
+        formId: form.id,
+        values: parsed.values,
+        pageId: parsed.pageId,
+        postId: parsed.postId,
+        ipHash,
+        userAgent: request.headers.get('user-agent') || undefined,
+        requestId,
+        status: classification.status,
+        reviewedBy: null,
+        reviewedAt: null,
+        adminNotes: null,
+        collectionRecord: null,
+        collectionRecordErrors: [],
+      })).item;
+
+      let contact: Contact | null = null;
+      let collectionRecordResult: Awaited<ReturnType<typeof createRepositoryCollectionRecordFromSubmission>> | null = null;
+      if (classification.status === 'approved' || classification.status === 'pending') {
+        contact = await buildRepositoryContactShare(repositories, form, parsed.values, submission, parsed.contactShareOverride);
+        collectionRecordResult = await createRepositoryCollectionRecordFromSubmission(
+          repositories,
+          site.id,
+          form,
+          parsed.values,
+          submission,
+        );
+        submission = (await repositories.forms.updateSubmission(site.id, submission.id, {
+          collectionRecord: collectionRecordResult.record,
+          collectionRecordErrors: collectionRecordResult.errors,
+        })).item;
+      }
+
+      return NextResponse.json(
+        {
+          success: true,
+          requestId,
+          status: submission.status,
+          message: submission.status === 'pending'
+            ? 'Submission received and awaiting moderation.'
+            : 'Submission received.',
+          data: {
+            status: submission.status,
+            message: submission.status === 'pending'
+              ? 'Submission received and awaiting moderation.'
+              : 'Submission received.',
+            submission,
+            contact,
+            collectionRecord: collectionRecordResult?.record || null,
+            collectionRecordErrors: collectionRecordResult?.errors || [],
+          },
+          submission,
+          contact,
+          collectionRecord: collectionRecordResult?.record || null,
+          collectionRecordErrors: collectionRecordResult?.errors || [],
+        },
+        { status: 201 },
+      );
+    }
+
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
