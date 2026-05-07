@@ -614,6 +614,91 @@ const dragElement = async (client, elementId, deltaX, deltaY) => {
   };
 };
 
+const getMoveHandleBox = async (client, elementId) => {
+  const { result } = await client.send('Runtime.evaluate', {
+    expression: `(() => {
+      const handle = document.querySelector('[data-element-id="${elementId}"] [data-role="canvas-move-handle"]');
+      if (!handle) return null;
+      const rect = handle.getBoundingClientRect();
+      return {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      };
+    })()`,
+    returnByValue: true,
+  });
+
+  return result.value || null;
+};
+
+const dragSelectionHandle = async (client, elementId, deltaX, deltaY) => {
+  await selectElement(client, elementId);
+  const before = await getElementBox(client, elementId);
+  assert(before, `Missing element ${elementId} before move-handle drag`);
+  const handle = await getMoveHandleBox(client, elementId);
+  assert(handle, `Missing move handle for selected element ${elementId}`);
+
+  const startX = Math.round(handle.x + Math.min(handle.width / 2, 56));
+  const startY = Math.round(handle.y + Math.min(handle.height / 2, 12));
+  const endX = startX + deltaX;
+  const endY = startY + deltaY;
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: startX,
+    y: startY,
+    button: 'none',
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: startX,
+    y: startY,
+    button: 'left',
+    buttons: 1,
+    clickCount: 1,
+  });
+
+  for (let step = 1; step <= 8; step += 1) {
+    await client.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x: Math.round(startX + (deltaX * step) / 8),
+      y: Math.round(startY + (deltaY * step) / 8),
+      button: 'left',
+      buttons: 1,
+    });
+    await sleep(30);
+  }
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: endX,
+    y: endY,
+    button: 'left',
+    buttons: 0,
+    clickCount: 1,
+  });
+  await sleep(300);
+
+  const after = await getElementBox(client, elementId);
+  assert(after, `Element ${elementId} disappeared after move-handle drag`);
+
+  const actualDeltaX = Math.round(after.x - before.x);
+  const actualDeltaY = Math.round(after.y - before.y);
+  assert(
+    Math.abs(actualDeltaX - deltaX) <= 12 && Math.abs(actualDeltaY - deltaY) <= 12,
+    `${elementId} move handle did not drag correctly: expected ${deltaX},${deltaY}; got ${actualDeltaX},${actualDeltaY}`,
+  );
+
+  return {
+    elementId,
+    before: { x: Math.round(before.x), y: Math.round(before.y), left: before.left, top: before.top },
+    after: { x: Math.round(after.x), y: Math.round(after.y), left: after.left, top: after.top },
+    delta: { x: actualDeltaX, y: actualDeltaY },
+  };
+};
+
 const resizeElement = async (client, elementId, deltaX, deltaY) => {
   const selectionBox = await getElementBox(client, elementId);
   assert(selectionBox, `Missing element ${elementId}`);
@@ -782,6 +867,13 @@ const main = async () => {
           await dragElement(client, 'smoke-child-button', 40, 20),
           await dragElement(client, 'smoke-form', 60, 30),
         ];
+    const moveHandleDrags = EDITOR_PATH
+      ? [
+          await dragSelectionHandle(client, 'home-heading', 40, 20),
+        ]
+      : [
+          await dragSelectionHandle(client, 'smoke-heading', 40, 20),
+        ];
     const resizes = EDITOR_PATH ? [] : [
       await resizeElement(client, 'smoke-image', 50, 40),
       await resizeElement(client, 'smoke-form', 50, 40),
@@ -865,6 +957,7 @@ const main = async () => {
       ok: true,
       url: `${ADMIN_BASE_URL}${editorPath}`,
       drags,
+      moveHandleDrags,
       resizes,
       keyboard,
       persistedState,

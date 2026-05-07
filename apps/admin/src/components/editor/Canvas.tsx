@@ -563,6 +563,8 @@ const EDITOR_ACTIVATION_EVENT = 'backy-open-text-editor';
 
 type DragInteraction = {
   elementId: string;
+  inputType: 'pointer' | 'mouse';
+  pointerId?: number;
   startX: number;
   startY: number;
   initialX: number;
@@ -572,12 +574,41 @@ type DragInteraction = {
 type ResizeInteraction = {
   elementId: string;
   handle: 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w';
+  inputType: 'pointer' | 'mouse';
+  pointerId?: number;
   startX: number;
   startY: number;
   initialX: number;
   initialY: number;
   initialWidth: number;
   initialHeight: number;
+};
+
+const getPointerDetails = (event: React.PointerEvent | React.MouseEvent) => {
+  if ('pointerId' in event && event.pointerId !== undefined) {
+    return {
+      inputType: 'pointer' as const,
+      pointerId: event.pointerId,
+    };
+  }
+
+  return {
+    inputType: 'mouse' as const,
+    pointerId: undefined,
+  };
+};
+
+const matchesInteractionInput = (
+  event: MouseEvent | PointerEvent,
+  interaction: Pick<DragInteraction | ResizeInteraction, 'inputType' | 'pointerId'>,
+) => {
+  if (interaction.inputType === 'mouse') {
+    return !('pointerId' in event);
+  }
+
+  return 'pointerId' in event && (
+    interaction.pointerId === undefined || event.pointerId === interaction.pointerId
+  );
 };
 
 // ============================================
@@ -808,6 +839,7 @@ export function Canvas({
 
       const nextDragState: DragInteraction = {
         elementId,
+        ...getPointerDetails(e),
         startX: e.clientX,
         startY: e.clientY,
         initialX: clickedElement.x,
@@ -840,6 +872,7 @@ export function Canvas({
       const nextResizeState: ResizeInteraction = {
         elementId,
         handle,
+        ...getPointerDetails(e),
         startX: e.clientX,
         startY: e.clientY,
         initialX: element.x,
@@ -866,9 +899,13 @@ export function Canvas({
     }
 
     const activeResizeState = resizeStateRef.current;
-      const activeDragState = dragStateRef.current;
+    const activeDragState = dragStateRef.current;
 
     if (activeResizeState) {
+      if (!matchesInteractionInput(event, activeResizeState)) {
+        return;
+      }
+
       setAlignmentGuides([]);
       const deltaX = toCanvasDelta(event.clientX - activeResizeState.startX);
       const deltaY = toCanvasDelta(event.clientY - activeResizeState.startY);
@@ -918,6 +955,10 @@ export function Canvas({
       return;
     }
 
+    if (!matchesInteractionInput(event, activeDragState)) {
+      return;
+    }
+
     const deltaX = toCanvasDelta(event.clientX - activeDragState.startX);
     const deltaY = toCanvasDelta(event.clientY - activeDragState.startY);
     const newX = activeDragState.initialX + deltaX;
@@ -949,9 +990,17 @@ export function Canvas({
     onElementsChange(result.elements, { transient: true, selectedId: activeDragState.elementId });
   }, [isPreview, onElementsChange, size.height, size.width, toCanvasDelta]);
 
-  const handleGlobalElementUp = useCallback(() => {
-    const activeElementId = dragStateRef.current?.elementId || resizeStateRef.current?.elementId || selectedId;
-    const hadActiveTransform = Boolean(dragStateRef.current || resizeStateRef.current);
+  const handleGlobalElementUp = useCallback((event?: MouseEvent | PointerEvent) => {
+    const activeDragState = dragStateRef.current;
+    const activeResizeState = resizeStateRef.current;
+    const activeInteraction = activeDragState || activeResizeState;
+
+    if (event && activeInteraction && !matchesInteractionInput(event, activeInteraction)) {
+      return;
+    }
+
+    const activeElementId = activeDragState?.elementId || activeResizeState?.elementId || selectedId;
+    const hadActiveTransform = Boolean(activeInteraction);
     dragStateRef.current = null;
     resizeStateRef.current = null;
     setDragState(null);
@@ -967,15 +1016,24 @@ export function Canvas({
       return;
     }
 
-    if (dragState) {
+    if (dragState?.inputType === 'pointer') {
       window.addEventListener('pointermove', handleGlobalElementMove);
       window.addEventListener('pointerup', handleGlobalElementUp);
       window.addEventListener('pointercancel', handleGlobalElementUp);
+    }
+
+    if (dragState?.inputType === 'mouse') {
       window.addEventListener('mousemove', handleGlobalElementMove);
       window.addEventListener('mouseup', handleGlobalElementUp);
     }
 
-    if (resizeState) {
+    if (resizeState?.inputType === 'pointer') {
+      window.addEventListener('pointermove', handleGlobalElementMove);
+      window.addEventListener('pointerup', handleGlobalElementUp);
+      window.addEventListener('pointercancel', handleGlobalElementUp);
+    }
+
+    if (resizeState?.inputType === 'mouse') {
       window.addEventListener('mousemove', handleGlobalElementMove);
       window.addEventListener('mouseup', handleGlobalElementUp);
     }
@@ -1111,8 +1169,8 @@ export function Canvas({
   /**
    * Handle mouse up to end dragging/resizing
    */
-  const handleMouseUp = useCallback(() => {
-    handleGlobalElementUp();
+  const handleMouseUp = useCallback((event: React.MouseEvent) => {
+    handleGlobalElementUp(event.nativeEvent);
   }, [handleGlobalElementUp]);
 
   /**
@@ -1199,8 +1257,8 @@ export function Canvas({
       }}
       onMouseUp={handleMouseUp}
       onPointerMove={(event) => handleGlobalElementMove(event.nativeEvent)}
-      onPointerUp={handleGlobalElementUp}
-      onPointerCancel={handleGlobalElementUp}
+      onPointerUp={(event) => handleGlobalElementUp(event.nativeEvent)}
+      onPointerCancel={(event) => handleGlobalElementUp(event.nativeEvent)}
       onMouseMove={(event) => handleGlobalElementMove(event.nativeEvent)}
       onClick={handleCanvasClick}
       onDoubleClick={handleCanvasDoubleClick}
@@ -2532,7 +2590,17 @@ function CanvasElementComponent({
       {/* Resize Handles (only when selected and not in preview) */}
       {isSelected && !isPreview && (
         <>
-          <div className="pointer-events-none absolute -top-8 left-0 flex items-center gap-2 rounded bg-sky-600 px-2 py-1 text-[11px] font-medium text-white shadow-sm">
+          <div
+            className="pointer-events-auto absolute -top-8 left-0 z-[90] flex cursor-move touch-none select-none items-center gap-2 rounded bg-sky-600 px-2 py-1 text-[11px] font-medium text-white shadow-sm"
+            data-role="canvas-move-handle"
+            title="Drag selected element"
+          >
+            <span className="grid h-3 w-2 grid-cols-2 gap-[2px]" aria-hidden="true">
+              <span className="rounded-full bg-white/80" />
+              <span className="rounded-full bg-white/80" />
+              <span className="rounded-full bg-white/80" />
+              <span className="rounded-full bg-white/80" />
+            </span>
             <span className="uppercase tracking-wide">{normalizeCanvasElementType(element.type)}</span>
             {isLocked && <span className="rounded bg-white/20 px-1 uppercase">locked</span>}
             {isHidden && <span className="rounded bg-white/20 px-1 uppercase">hidden</span>}
