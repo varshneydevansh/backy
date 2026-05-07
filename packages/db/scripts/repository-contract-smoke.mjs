@@ -2,9 +2,11 @@
 
 import { createBackyContentDocument } from '../../core/dist/index.mjs';
 import {
+  createDatabaseRepositories,
   createPageRepository,
   createPostRepository,
   createSiteRepository,
+  createUnimplementedRepositoryProxy,
 } from '../dist/index.js';
 import {
   blogPosts,
@@ -167,6 +169,16 @@ const createFakeDb = () => {
 };
 
 const db = createFakeDb();
+const repositorySet = createDatabaseRepositories({
+  adapter: {
+    type: 'postgres',
+    db,
+    isConnected: async () => true,
+    close: async () => undefined,
+  },
+});
+assert(repositorySet.sites && repositorySet.pages && repositorySet.posts, 'Expected repository set factories');
+
 const siteRepository = createSiteRepository(db);
 const pageRepository = createPageRepository(db);
 const postRepository = createPostRepository(db);
@@ -290,5 +302,13 @@ assert((await postRepository.checkSlug({ siteId: site.id, slug: post.slug })).co
 assert(await pageRepository.delete(site.id, publishedPage.id), 'Expected page delete');
 assert(await postRepository.delete(site.id, archivedPost.id), 'Expected post delete');
 assert(await siteRepository.delete(site.id), 'Expected site delete');
+
+let unimplementedBlocked = false;
+try {
+  createUnimplementedRepositoryProxy('media');
+} catch {
+  unimplementedBlocked = true;
+}
+assert(unimplementedBlocked, 'Expected unimplemented repository proxy to fail loudly');
 
 console.log('Backy DB repository smoke passed');

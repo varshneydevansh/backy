@@ -229,6 +229,7 @@ The next implementation should not start by adding more UI screens. The product 
   - Slug uniqueness and status filters are enforced.
 - **Current progress**:
   - `packages/db/src/repositories/site-page-post.ts` now exports Drizzle-backed site, page, and post repository factories.
+  - `packages/db/src/repositories/factory.ts` exposes `createDatabaseRepositories` as the initial server-side repository set for database mode.
   - Page and post repositories persist canonical `BackyContentDocument` payloads and normalize legacy JSON content on read.
   - Slug checks are exposed for sites, pages, and posts; list methods enforce status filters and unpublished visibility defaults.
 - **Validation**:
