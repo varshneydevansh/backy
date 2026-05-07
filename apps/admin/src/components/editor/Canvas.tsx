@@ -699,7 +699,7 @@ export function Canvas({
     [elements, isPreview]
   );
 
-  const handleGlobalElementMove = useCallback((event: MouseEvent) => {
+  const handleGlobalElementMove = useCallback((event: MouseEvent | PointerEvent) => {
     if (isPreview) {
       return;
     }
@@ -776,9 +776,21 @@ export function Canvas({
       return;
     }
 
-    window.addEventListener('mousemove', handleGlobalElementMove);
-    window.addEventListener('mouseup', handleGlobalElementUp);
+    if (dragState) {
+      window.addEventListener('pointermove', handleGlobalElementMove);
+      window.addEventListener('pointerup', handleGlobalElementUp);
+      window.addEventListener('pointercancel', handleGlobalElementUp);
+    }
+
+    if (resizeState) {
+      window.addEventListener('mousemove', handleGlobalElementMove);
+      window.addEventListener('mouseup', handleGlobalElementUp);
+    }
+
     return () => {
+      window.removeEventListener('pointermove', handleGlobalElementMove);
+      window.removeEventListener('pointerup', handleGlobalElementUp);
+      window.removeEventListener('pointercancel', handleGlobalElementUp);
       window.removeEventListener('mousemove', handleGlobalElementMove);
       window.removeEventListener('mouseup', handleGlobalElementUp);
     };
