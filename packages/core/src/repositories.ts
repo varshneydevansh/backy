@@ -308,6 +308,7 @@ export interface BackyCollection {
   siteId: string;
   name: string;
   slug: string;
+  routePattern?: string | null;
   description?: string | null;
   status: PublishStatus;
   fields: BackyCollectionField[];
@@ -333,6 +334,7 @@ export interface BackyCollectionCreateInput {
   siteId: string;
   name: string;
   slug: string;
+  routePattern?: string | null;
   description?: string | null;
   status?: PublishStatus;
   fields: BackyCollectionField[];

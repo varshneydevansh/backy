@@ -106,7 +106,10 @@
                   "name": { "type": "string", "minLength": 1 },
                   "fields": { "type": "array" },
                   "recordsUrl": { "type": "string", "minLength": 1 },
-                  "dynamicRoutePattern": { "type": "string", "minLength": 1 }
+                  "routePattern": { "type": "string", "minLength": 1 },
+                  "dynamicRoutePattern": { "type": "string", "minLength": 1 },
+                  "dynamicRouteResolveUrl": { "type": "string", "minLength": 1 },
+                  "dynamicRouteRenderUrl": { "type": "string", "minLength": 1 }
                 },
                 "required": ["id", "slug", "name", "fields", "recordsUrl", "dynamicRoutePattern"]
               }

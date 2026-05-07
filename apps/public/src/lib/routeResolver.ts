@@ -10,6 +10,7 @@ import {
   type StorePage,
   type StoreSite,
 } from './backyStore';
+import { matchCollectionItemRoute } from './collectionRoutes';
 
 type ResolvedPageRoute = {
   type: 'page';
@@ -133,19 +134,15 @@ export function resolveSiteRoute(
     || getPageByPath(site.id, pagePath);
 
   if (!page) {
-    const dynamicItemMatch = path.match(/^\/([^/]+)\/([^/]+)$/);
+    const dynamicItemMatch = matchCollectionItemRoute(path, listCollections(site.id));
     if (!dynamicItemMatch) {
       return null;
     }
 
-    const collectionSlug = decodeURIComponent(dynamicItemMatch[1]);
-    const recordSlug = decodeURIComponent(dynamicItemMatch[2]);
-    const collection = listCollections(site.id).find((item) => item.slug === collectionSlug);
-    const record = collection
-      ? getCollectionRecordByIdOrSlug(site.id, collection.id, recordSlug)
-      : undefined;
+    const { collection, recordSlug, canonical, params } = dynamicItemMatch;
+    const record = getCollectionRecordByIdOrSlug(site.id, collection.id, recordSlug);
 
-    if (!collection || !record) {
+    if (!record) {
       return null;
     }
 
@@ -154,15 +151,13 @@ export function resolveSiteRoute(
       : typeof record.values.name === 'string' && record.values.name.length > 0
         ? record.values.name
         : record.slug;
-    const canonical = `/${collection.slug}/${record.slug}`;
-
     return {
       type: 'dynamicItem',
       path,
       status: record.status,
       canonical,
       params: {
-        collectionSlug: collection.slug,
+        ...params,
         recordSlug: record.slug,
       },
       resource: {

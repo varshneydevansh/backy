@@ -21,12 +21,20 @@ import {
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { normalizeCollectionRoutePattern } from '@/lib/collectionRoutes';
 
 interface RouteParams {
   params: Promise<{
     siteId: string;
   }>;
 }
+
+type ManifestCollectionRoute = {
+  id: string;
+  slug: string;
+  name: string;
+  routePattern?: string | null;
+};
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -61,6 +69,26 @@ const collectionField = (field: BackyCollection['fields'][number], index: number
   sortOrder: index,
   options: field.options,
   referenceCollectionId: field.referenceCollectionId,
+});
+
+const collectionRoutePattern = (collection: Pick<ManifestCollectionRoute, 'slug' | 'routePattern'>) => (
+  normalizeCollectionRoutePattern(collection.routePattern, collection.slug)
+);
+
+const dynamicCollectionRoutePatterns = (
+  siteId: string,
+  collections: ManifestCollectionRoute[],
+) => collections.map((collection) => {
+  const pattern = collectionRoutePattern(collection);
+  return {
+    type: 'dynamicCollectionItem',
+    collectionId: collection.id,
+    collectionSlug: collection.slug,
+    collectionName: collection.name,
+    pattern,
+    resolveUrl: `/api/sites/${siteId}/resolve?path=${pattern}`,
+    renderUrl: `/api/sites/${siteId}/render?path=${pattern}`,
+  };
 });
 
 const repositoryNavigation = (pages: BackyPage[]) => ({
@@ -199,12 +227,7 @@ const buildRepositoryManifest = (
           resolveUrl: `/api/sites/${input.site.id}/resolve?path=/blog/:postSlug`,
           renderUrl: `/api/sites/${input.site.id}/render?path=/blog/:postSlug`,
         },
-        {
-          type: 'dynamicCollectionItem',
-          pattern: '/:collectionSlug/:recordSlug',
-          resolveUrl: `/api/sites/${input.site.id}/resolve?path=/:collectionSlug/:recordSlug`,
-          renderUrl: `/api/sites/${input.site.id}/render?path=/:collectionSlug/:recordSlug`,
-        },
+        ...dynamicCollectionRoutePatterns(input.site.id, publicCollections),
       ],
       modules: {
         pages: {
@@ -249,7 +272,10 @@ const buildRepositoryManifest = (
           permissions: collection.permissions,
           fields: collection.fields.map(collectionField),
           recordsUrl: `/api/sites/${input.site.id}/collections/${collection.id}/records`,
-          dynamicRoutePattern: `/${collection.slug}/:recordSlug`,
+          routePattern: collectionRoutePattern(collection),
+          dynamicRoutePattern: collectionRoutePattern(collection),
+          dynamicRouteResolveUrl: `/api/sites/${input.site.id}/resolve?path=${collectionRoutePattern(collection)}`,
+          dynamicRouteRenderUrl: `/api/sites/${input.site.id}/render?path=${collectionRoutePattern(collection)}`,
         })),
         reusableSections: {
           count: input.reusableSections.length,
@@ -454,12 +480,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             resolveUrl: `/api/sites/${site.id}/resolve?path=/blog/:postSlug`,
             renderUrl: `/api/sites/${site.id}/render?path=/blog/:postSlug`,
           },
-          {
-            type: 'dynamicCollectionItem',
-            pattern: '/:collectionSlug/:recordSlug',
-            resolveUrl: `/api/sites/${site.id}/resolve?path=/:collectionSlug/:recordSlug`,
-            renderUrl: `/api/sites/${site.id}/render?path=/:collectionSlug/:recordSlug`,
-          },
+          ...dynamicCollectionRoutePatterns(site.id, collections),
         ],
         modules: {
           pages: {
@@ -510,7 +531,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               referenceCollectionId: field.referenceCollectionId,
             })),
             recordsUrl: `/api/sites/${site.id}/collections/${collection.id}/records`,
-            dynamicRoutePattern: `/${collection.slug}/:recordSlug`,
+            routePattern: collectionRoutePattern(collection),
+            dynamicRoutePattern: collectionRoutePattern(collection),
+            dynamicRouteResolveUrl: `/api/sites/${site.id}/resolve?path=${collectionRoutePattern(collection)}`,
+            dynamicRouteRenderUrl: `/api/sites/${site.id}/render?path=${collectionRoutePattern(collection)}`,
           })),
           reusableSections: {
             count: reusableSections.length,

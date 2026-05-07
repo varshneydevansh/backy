@@ -145,7 +145,10 @@ export interface BackyCollectionSchema {
   permissions?: Record<string, boolean>;
   fields: BackyFieldSchema[];
   recordsUrl?: string;
+  routePattern?: string;
   dynamicRoutePattern?: string;
+  dynamicRouteResolveUrl?: string;
+  dynamicRouteRenderUrl?: string;
   [key: string]: unknown;
 }
 

@@ -101,6 +101,29 @@ const getPublicBaseUrl = () => {
   return typeof window !== 'undefined' ? window.location.origin : '';
 };
 
+const defaultCollectionRoutePattern = (collectionSlug: string) => `/${collectionSlug || 'collection'}/:recordSlug`;
+
+const normalizeCollectionRoutePattern = (routePattern: string | null | undefined, collectionSlug: string) => {
+  const fallback = defaultCollectionRoutePattern(collectionSlug);
+  const raw = routePattern?.trim() || '';
+  if (!raw) return fallback;
+
+  const withLeadingSlash = raw.startsWith('/') ? raw : `/${raw}`;
+  const compact = withLeadingSlash.replace(/\/{2,}/g, '/').replace(/\/$/, '') || '/';
+  return compact.split('/').includes(':recordSlug') ? compact : fallback;
+};
+
+const buildCollectionRecordRoutePath = (collection: Collection, recordSlug: string) => (
+  normalizeCollectionRoutePattern(collection.routePattern, collection.slug)
+    .split('/')
+    .map((segment) => {
+      if (segment === ':collectionSlug') return encodeURIComponent(collection.slug);
+      if (segment === ':recordSlug') return encodeURIComponent(recordSlug);
+      return segment;
+    })
+    .join('/') || '/'
+);
+
 const formatValue = (value: unknown): string => {
   if (value === null || value === undefined) return '';
   if (Array.isArray(value)) return value.map(formatValue).join(', ');
@@ -192,6 +215,7 @@ function CollectionsPage() {
   const [collectionForm, setCollectionForm] = useState({
     name: '',
     slug: '',
+    routePattern: '',
     description: '',
     status: 'published' as Collection['status'],
     permissions: DEFAULT_PERMISSIONS,
@@ -312,6 +336,7 @@ function CollectionsPage() {
     setCollectionForm({
       name: '',
       slug: '',
+      routePattern: '',
       description: '',
       status: 'published',
       permissions: DEFAULT_PERMISSIONS,
@@ -336,6 +361,7 @@ function CollectionsPage() {
     setCollectionForm({
       name: collection.name,
       slug: collection.slug,
+      routePattern: normalizeCollectionRoutePattern(collection.routePattern, collection.slug),
       description: collection.description || '',
       status: collection.status,
       permissions: collection.permissions,
@@ -478,9 +504,11 @@ function CollectionsPage() {
       }));
 
     try {
+      const collectionSlug = normalizeSlug(collectionForm.slug || collectionForm.name, 'collection');
       const payload = {
         name: collectionForm.name.trim(),
-        slug: normalizeSlug(collectionForm.slug || collectionForm.name, 'collection'),
+        slug: collectionSlug,
+        routePattern: collectionForm.routePattern.trim() || defaultCollectionRoutePattern(collectionSlug),
         description: collectionForm.description.trim() || null,
         status: collectionForm.status,
         permissions: collectionForm.permissions,
@@ -839,12 +867,31 @@ function CollectionsPage() {
                 <span className="font-medium">Slug</span>
                 <input
                   value={collectionForm.slug}
-                  onChange={(event) => setCollectionForm((prev) => ({
-                    ...prev,
-                    slug: normalizeSlug(event.target.value, 'collection'),
-                  }))}
+                  onChange={(event) => setCollectionForm((prev) => {
+                    const nextSlug = normalizeSlug(event.target.value, 'collection');
+                    const previousDefault = defaultCollectionRoutePattern(prev.slug);
+                    return {
+                      ...prev,
+                      slug: nextSlug,
+                      routePattern: !prev.routePattern || prev.routePattern === previousDefault
+                        ? defaultCollectionRoutePattern(nextSlug)
+                        : prev.routePattern,
+                    };
+                  })}
                   className="w-full rounded-lg border bg-background px-3 py-2"
                   required
+                />
+              </label>
+              <label className="space-y-1 text-sm lg:col-span-2">
+                <span className="font-medium">Dynamic route</span>
+                <input
+                  value={collectionForm.routePattern}
+                  onChange={(event) => setCollectionForm((prev) => ({
+                    ...prev,
+                    routePattern: event.target.value,
+                  }))}
+                  className="w-full rounded-lg border bg-background px-3 py-2"
+                  placeholder={defaultCollectionRoutePattern(collectionForm.slug)}
                 />
               </label>
               <label className="space-y-1 text-sm">
@@ -1231,7 +1278,8 @@ function CollectionsPage() {
                           </td>
                         </tr>
                       ) : records.map((record) => {
-                        const href = `${dynamicBaseUrl}/sites/${activeSiteSlug}/${activeCollection.slug}/${record.slug}`;
+                        const routePath = buildCollectionRecordRoutePath(activeCollection, record.slug);
+                        const href = `${dynamicBaseUrl}/sites/${activeSiteSlug}${routePath}`;
                         return (
                           <tr key={record.id} className={record.id === selectedRecordId ? 'bg-primary/5' : ''}>
                             <td className="px-4 py-3">
@@ -1260,7 +1308,7 @@ function CollectionsPage() {
                                 rel="noreferrer"
                                 className="inline-flex items-center gap-1 text-primary hover:underline"
                               >
-                                /{activeCollection.slug}/{record.slug}
+                                {routePath}
                                 <ExternalLink className="h-3 w-3" />
                               </a>
                             </td>

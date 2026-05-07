@@ -15,6 +15,7 @@ import {
   updateAdminCollection,
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { isValidCollectionRoutePattern, normalizeCollectionRoutePattern } from '@/lib/collectionRoutes';
 
 export const runtime = 'nodejs';
 
@@ -63,6 +64,18 @@ const parseStatus = (value: unknown): PublishStatus | undefined => (
     ? value
     : undefined
 );
+
+const parseRoutePattern = (value: unknown, slug: string): string | undefined | null => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isValidCollectionRoutePattern(value)) {
+    return null;
+  }
+
+  return normalizeCollectionRoutePattern(value, slug);
+};
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -138,6 +151,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const fields = body.fields === undefined ? undefined : toCollectionFields(body.fields);
+      const routePattern = parseRoutePattern(body.routePattern, nextSlug || collection.slug);
+      if (body.routePattern !== undefined && routePattern === null) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Collection route pattern must include :recordSlug', requestId);
+      }
+
       const updated = (await repositories.collections.update(site.id, collection.id, {
         ...(typeof body.name === 'string' ? { name: body.name.trim() } : {}),
         ...(body.description === undefined ? {} : { description: typeof body.description === 'string' ? body.description : null }),
@@ -145,6 +163,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ...(fields === undefined ? {} : { fields }),
         ...(body.permissions === undefined ? {} : { permissions: toCollectionPermissions(body.permissions) }),
         ...(nextSlug ? { slug: nextSlug } : {}),
+        ...(routePattern === undefined ? {} : { routePattern }),
       })).item;
 
       return NextResponse.json({ success: true, requestId, data: { collection: updated } });
@@ -175,9 +194,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    const routePattern = parseRoutePattern(body.routePattern, nextSlug || collection.slug);
+    if (body.routePattern !== undefined && routePattern === null) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'Collection route pattern must include :recordSlug', requestId);
+    }
+
     const updated = updateAdminCollection(site.id, collection.id, {
       ...body,
       ...(nextSlug ? { slug: nextSlug } : {}),
+      ...(routePattern === undefined ? {} : { routePattern }),
     });
 
     if (!updated) {

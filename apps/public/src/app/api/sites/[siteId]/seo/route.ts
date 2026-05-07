@@ -11,6 +11,7 @@ import type { BackyCollection, BackyCollectionRecord, BackyPage, BackyPost, Site
 import { getSiteByIdOrSlug } from '@/lib/backyStore';
 import { buildRobotsTxt, buildSeoDiscovery, buildSitemapXml, type SeoDiscovery, type SeoRoute } from '@/lib/seoDiscovery';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { buildCollectionItemPath } from '@/lib/collectionRoutes';
 
 interface RouteParams {
   params: Promise<{
@@ -133,7 +134,7 @@ const recordImage = (record: BackyCollectionRecord): string | undefined => {
 };
 
 const dynamicItemSeoRoute = (collection: BackyCollection, record: BackyCollectionRecord): SeoRoute => {
-  const canonical = `/${collection.slug}/${record.slug}`;
+  const canonical = buildCollectionItemPath(collection, record.slug);
   const title = recordTitle(record);
   const description = recordDescription(record);
 

@@ -11,17 +11,18 @@ import { notFound } from 'next/navigation';
 import type { BackyPage, Site } from '@backy-cms/core';
 import {
     getCanonicalPathForPage,
-    getCollectionByIdOrSlug,
     getCollectionRecordByIdOrSlug,
     getMediaList,
     getPageByPath,
     getSiteByIdOrSlug,
+    listCollections,
     validatePreviewToken,
 } from '@/lib/backyStore';
 import { PageRenderer, type PageContent } from '@/components/PageRenderer';
 import AnimationHydrator from '@/components/AnimationHydrator';
 import { buildCollectionItemContent, resolveElementDataBindings } from '@/lib/renderPayload';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { buildCollectionItemPath, matchCollectionItemRoute } from '@/lib/collectionRoutes';
 import type { Metadata } from 'next';
 
 type HostedSite =
@@ -67,17 +68,16 @@ async function getPage(siteId: string, pageSlug: string, previewToken?: string) 
 }
 
 function getDynamicCollectionItem(siteId: string, pathParts: string[] | undefined) {
-    if (!pathParts || pathParts.length !== 2) {
+    const path = pathParts && pathParts.length > 0 ? `/${pathParts.join('/')}` : '/';
+    const dynamicItemMatch = matchCollectionItemRoute(path, listCollections(siteId));
+    if (!dynamicItemMatch) {
         return null;
     }
 
-    const [collectionSlug, recordSlug] = pathParts;
-    const collection = getCollectionByIdOrSlug(siteId, collectionSlug);
-    const record = collection
-        ? getCollectionRecordByIdOrSlug(siteId, collection.id, recordSlug)
-        : undefined;
+    const { collection, recordSlug, canonical } = dynamicItemMatch;
+    const record = getCollectionRecordByIdOrSlug(siteId, collection.id, recordSlug);
 
-    return collection && record ? { collection, record } : null;
+    return collection && record ? { collection, record, canonical } : null;
 }
 
 function getCollectionRecordTitle(record: { slug: string; values: Record<string, unknown> }) {
@@ -241,7 +241,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
             || dynamicItem.collection.description
             || '';
         const description = typeof descriptionValue === 'string' ? descriptionValue : '';
-        const canonicalPath = `/${dynamicItem.collection.slug}/${dynamicItem.record.slug}`;
+        const canonicalPath = dynamicItem.canonical;
 
         return {
             title,
@@ -364,7 +364,7 @@ export default async function SitePage({ params, searchParams }: PageProps) {
                 theme={site.theme}
                 fontAssets={fontAssets}
                 siteId={site.id}
-                pageSlug={`${dynamicItem.collection.slug}/${dynamicItem.record.slug}`}
+                pageSlug={buildCollectionItemPath(dynamicItem.collection, dynamicItem.record.slug).replace(/^\//, '')}
             />
 
             {/* Client-side animation hydration */}

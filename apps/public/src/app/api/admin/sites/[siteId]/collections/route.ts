@@ -14,6 +14,7 @@ import {
   listCollections,
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { isValidCollectionRoutePattern, normalizeCollectionRoutePattern } from '@/lib/collectionRoutes';
 
 export const runtime = 'nodejs';
 
@@ -61,6 +62,18 @@ const parseStatus = (value: unknown): PublishStatus | undefined => (
     ? value
     : undefined
 );
+
+const parseRoutePattern = (value: unknown, slug: string): string | undefined | null => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isValidCollectionRoutePattern(value)) {
+    return null;
+  }
+
+  return normalizeCollectionRoutePattern(value, slug);
+};
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -141,10 +154,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(409, 'SLUG_CONFLICT', 'A collection with this slug already exists', requestId);
       }
 
+      const routePattern = parseRoutePattern(body.routePattern, slug);
+      if (body.routePattern !== undefined && routePattern === null) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Collection route pattern must include :recordSlug', requestId);
+      }
+
       const collection = (await repositories.collections.create({
         siteId: site.id,
         name,
         slug,
+        routePattern,
         description: typeof body.description === 'string' ? body.description : null,
         status: parseStatus(body.status) || 'draft',
         fields: toCollectionFields(body.fields),
@@ -179,10 +198,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(409, 'SLUG_CONFLICT', 'A collection with this slug already exists', requestId);
     }
 
+    const routePattern = parseRoutePattern(body.routePattern, slug);
+    if (body.routePattern !== undefined && routePattern === null) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'Collection route pattern must include :recordSlug', requestId);
+    }
+
     const collection = createAdminCollection(site.id, {
       ...body,
       name,
       slug,
+      ...(routePattern === undefined ? {} : { routePattern }),
     });
 
     return NextResponse.json(

@@ -19,6 +19,7 @@ import {
   type StorePage,
   type StoreSite,
 } from './backyStore';
+import { buildCollectionItemPath } from './collectionRoutes';
 
 type JsonObject = Record<string, unknown>;
 
@@ -1166,7 +1167,7 @@ export function buildPublicCollectionItemRenderPayload(
     visibility: 'public',
     limit: 100,
   });
-  const canonical = `/${collection.slug}/${record.slug}`;
+  const canonical = buildCollectionItemPath(collection, record.slug);
   const actions = collectElementActions(elements);
   const dataBindings = collectDataBindingManifest(site.id, elements);
   const navigation = getSiteNavigation(site.id);

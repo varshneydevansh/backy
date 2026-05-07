@@ -18,6 +18,7 @@ import type {
   CommentReportReason,
   CommentStatus,
 } from '@backy-cms/core';
+import { defaultCollectionRoutePattern, normalizeCollectionRoutePattern } from './collectionRoutes';
 
 interface PageMeta {
   title: string;
@@ -266,6 +267,7 @@ interface StoreCollection {
   siteId: string;
   name: string;
   slug: string;
+  routePattern?: string | null;
   description: string | null;
   status: 'draft' | 'published' | 'archived';
   fields: StoreCollectionField[];
@@ -876,6 +878,7 @@ const COLLECTIONS: StoreCollection[] = [
     siteId: 'site-demo',
     name: 'Team Members',
     slug: 'team',
+    routePattern: '/team/:recordSlug',
     description: 'Demo collection for dynamic team profile pages.',
     status: 'published',
     fields: [
@@ -3537,6 +3540,7 @@ export function createAdminCollection(siteId: string, input: Record<string, unkn
     siteId,
     name,
     slug,
+    routePattern: normalizeCollectionRoutePattern(sanitizeString(input.routePattern), slug),
     description: sanitizeString(input.description) || null,
     status: parseStatusInput(input.status, ['draft', 'published', 'archived'] as const, 'draft'),
     fields: normalizeCollectionFields(input.fields),
@@ -3563,10 +3567,23 @@ export function updateAdminCollection(
   }
 
   const current = COLLECTIONS[index];
+  const nextSlug = input.slug === undefined ? current.slug : normalizeSlugInput(input.slug, current.slug);
+  const currentDefaultRoutePattern = defaultCollectionRoutePattern({ slug: current.slug });
+  const currentRoutePattern = normalizeCollectionRoutePattern(current.routePattern, current.slug);
+  const shouldRefreshDefaultRoutePattern = (
+    input.routePattern === undefined
+    && nextSlug !== current.slug
+    && currentRoutePattern === currentDefaultRoutePattern
+  );
   const updated: StoreCollection = {
     ...current,
     name: input.name === undefined ? current.name : sanitizeString(input.name) || current.name,
-    slug: input.slug === undefined ? current.slug : normalizeSlugInput(input.slug, current.slug),
+    slug: nextSlug,
+    routePattern: input.routePattern === undefined
+      ? shouldRefreshDefaultRoutePattern
+        ? defaultCollectionRoutePattern({ slug: nextSlug })
+        : current.routePattern
+      : normalizeCollectionRoutePattern(sanitizeString(input.routePattern), nextSlug),
     description: input.description === undefined ? current.description : sanitizeString(input.description) || null,
     status: input.status === undefined
       ? current.status

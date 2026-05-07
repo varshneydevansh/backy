@@ -1203,6 +1203,7 @@ try {
       body: JSON.stringify({
         name: 'Admin Contract Collection',
         slug: collectionSlug,
+        routePattern: `/directory/:recordSlug`,
         status: 'published',
         fields: [
           { key: 'title', label: 'Title', type: 'text', required: true, unique: true },
@@ -1222,6 +1223,7 @@ try {
     assert(createCollection.response.status === 201, `${createCollection.url} expected 201, got ${createCollection.response.status}`);
     assert(createCollection.json?.success === true, `${createCollection.url} expected success envelope`);
     assert(createCollection.json?.data?.collection?.slug === collectionSlug, `${createCollection.url} returned wrong collection slug`);
+    assert(createCollection.json?.data?.collection?.routePattern === '/directory/:recordSlug', `${createCollection.url} returned wrong collection route pattern`);
     assert(createCollection.json?.data?.collection?.fields?.some((field) => field.key === 'title' && field.required === true), `${createCollection.url} missing title field schema`);
     createdCollectionId = createCollection.json.data.collection.id;
 
@@ -1245,6 +1247,7 @@ try {
     assert(publicCollections.json?.data?.collections?.some((collection) => collection.id === createdCollectionId), `${publicCollections.url} missing public collection in data envelope`);
     assert(publicCollections.json?.collections?.some((collection) => collection.id === createdCollectionId), `${publicCollections.url} missing public collection`);
     const publicCollectionSchema = publicCollections.json?.collections?.find((collection) => collection.id === createdCollectionId);
+    assert(publicCollectionSchema?.routePattern === '/directory/:recordSlug', `${publicCollections.url} missing collection route pattern`);
     assert(publicCollectionSchema?.fields?.some((field) => field.key === 'category' && field.type === 'select' && field.options?.includes('Featured')), `${publicCollections.url} missing select option schema`);
     assert(publicCollectionSchema?.fields?.some((field) => field.key === 'labels' && field.type === 'tags' && field.options?.includes('Evergreen')), `${publicCollections.url} missing tags option schema`);
 
@@ -1601,7 +1604,13 @@ try {
       assert(frontendManifest.json?.data?.endpoints?.formContacts === `/api/sites/${createdSiteId}/forms/{formId}/contacts`, `${frontendManifest.url} missing form contacts endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.commentReport === `/api/sites/${createdSiteId}/comments/{commentId}/report`, `${frontendManifest.url} missing comment report endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.events === `/api/sites/${createdSiteId}/events`, `${frontendManifest.url} missing events endpoint`);
-      assert(frontendManifest.json?.data?.modules?.collections?.some((collection) => collection.id === createdCollectionId && collection.dynamicRoutePattern === `/${collectionSlug}/:recordSlug`), `${frontendManifest.url} missing collection manifest`);
+      assert(frontendManifest.json?.data?.modules?.collections?.some((collection) => (
+        collection.id === createdCollectionId
+        && collection.routePattern === '/directory/:recordSlug'
+        && collection.dynamicRoutePattern === '/directory/:recordSlug'
+        && collection.dynamicRouteResolveUrl === `/api/sites/${createdSiteId}/resolve?path=/directory/:recordSlug`
+        && collection.dynamicRouteRenderUrl === `/api/sites/${createdSiteId}/render?path=/directory/:recordSlug`
+      )), `${frontendManifest.url} missing collection manifest`);
       assert(frontendManifest.json?.data?.modules?.reusableSections?.items?.some((section) => (
         section.id === manifestReusableSectionId &&
         section.detailUrl === `/api/sites/${createdSiteId}/reusable-sections/${manifestReusableSectionId}` &&
@@ -1843,7 +1852,7 @@ try {
     assert(bulkDelete.response.status === 200, `${bulkDelete.url} expected 200, got ${bulkDelete.response.status}`);
     assert(bulkDelete.json?.data?.deleted === 2, `${bulkDelete.url} expected two bulk-deleted records`);
 
-    const dynamicItemPath = `/${collectionSlug}/${collectionRecordSlug}`;
+    const dynamicItemPath = `/directory/${collectionRecordSlug}`;
     const dynamicResolve = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(dynamicItemPath)}`);
     assert(dynamicResolve.response.status === 200, `${dynamicResolve.url} expected 200, got ${dynamicResolve.response.status}`);
     assert(dynamicResolve.json?.data?.route?.type === 'dynamicItem', `${dynamicResolve.url} expected dynamic item route`);

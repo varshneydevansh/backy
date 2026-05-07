@@ -9,6 +9,7 @@ import type { BackyCollectionRecord, BackyPage, Site } from '@backy-cms/core';
 import { getSiteByIdOrSlug, getSiteNavigation } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRoutePath, resolveSiteRoute } from '@/lib/routeResolver';
+import { matchCollectionItemRoute } from '@/lib/collectionRoutes';
 
 interface RouteParams {
   params: Promise<{
@@ -179,21 +180,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         ? await repositories.contentWorkflows.validatePreviewToken(site.id, 'page', page.id, previewToken)
         : false;
       if (!page || (!isPubliclyReadable(page) && !canPreviewPage)) {
-        const dynamicItemMatch = path.match(/^\/([^/]+)\/([^/]+)$/);
+        const collections = await repositories.collections.list({
+          siteId: site.id,
+          status: 'published',
+          includeUnpublished: false,
+          limit: 100,
+          offset: 0,
+        });
+        const dynamicItemMatch = matchCollectionItemRoute(
+          path,
+          collections.items.filter((collection) => collection.status === 'published' && collection.permissions.publicRead),
+        );
         if (!dynamicItemMatch) {
           return errorResponse(404, 'ROUTE_NOT_FOUND', 'Route not found', requestId, path);
         }
 
-        const collectionSlug = decodeURIComponent(dynamicItemMatch[1]);
-        const recordSlug = decodeURIComponent(dynamicItemMatch[2]);
-        const collection = await repositories.collections.getBySlug(site.id, collectionSlug);
-        const record = collection
-          ? await repositories.collections.getRecordBySlug(site.id, collection.id, recordSlug)
-          : null;
+        const { collection, recordSlug, params, canonical } = dynamicItemMatch;
+        const record = await repositories.collections.getRecordBySlug(site.id, collection.id, recordSlug);
 
         if (
-          !collection
-          || !record
+          !record
           || collection.status !== 'published'
           || !collection.permissions.publicRead
           || !isPubliclyReadable(record)
@@ -201,7 +207,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           return errorResponse(404, 'ROUTE_NOT_FOUND', 'Route not found', requestId, path);
         }
 
-        const canonical = `/${collection.slug}/${record.slug}`;
         return NextResponse.json({
           success: true,
           requestId,
@@ -218,7 +223,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               status: record.status,
               canonical,
               params: {
-                collectionSlug: collection.slug,
+                ...params,
                 recordSlug: record.slug,
               },
               resource: {

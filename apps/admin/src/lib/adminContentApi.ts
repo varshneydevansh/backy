@@ -763,6 +763,7 @@ export interface Collection {
   siteId: string;
   name: string;
   slug: string;
+  routePattern?: string | null;
   description: string | null;
   status: 'draft' | 'published' | 'archived';
   fields: CollectionField[];
@@ -787,6 +788,7 @@ export interface CollectionRecord {
 export interface CollectionInput {
   name: string;
   slug: string;
+  routePattern?: string | null;
   description?: string | null;
   status?: Collection['status'];
   fields?: CollectionField[];

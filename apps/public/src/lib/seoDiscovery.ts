@@ -6,6 +6,7 @@ import {
   listCollections,
   type StoreSite,
 } from '@/lib/backyStore';
+import { buildCollectionItemPath } from '@/lib/collectionRoutes';
 
 export interface SeoRoute {
   type: 'page' | 'post' | 'dynamicItem';
@@ -176,7 +177,7 @@ export const buildSeoRoutes = (siteId: string): SeoRoute[] => {
 
   const dynamicItems: SeoRoute[] = listCollections(siteId).flatMap((collection) => (
     listCollectionRecords(siteId, collection.id, { limit: 1000 }).records.map((record) => {
-      const canonical = `/${collection.slug}/${record.slug}`;
+      const canonical = buildCollectionItemPath(collection, record.slug);
       const title = recordTitle(record.values, record.slug);
       const description = recordDescription(record.values);
       return {

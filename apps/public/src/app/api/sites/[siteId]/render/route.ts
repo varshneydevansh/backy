@@ -8,10 +8,10 @@ import { NextRequest } from 'next/server';
 import type { BackyCollection, BackyCollectionRecord, BackyPage, BackyPost, Site } from '@backy-cms/core';
 import {
   getBlogPosts,
-  getCollectionByIdOrSlug,
   getCollectionRecordByIdOrSlug,
   getPageByPath,
   getSiteByIdOrSlug,
+  listCollections,
   validatePreviewToken,
   type StoreBlogPost,
   type StoreCollection,
@@ -27,6 +27,7 @@ import {
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRoutePath } from '@/lib/routeResolver';
+import { matchCollectionItemRoute } from '@/lib/collectionRoutes';
 
 interface RouteParams {
   params: Promise<{
@@ -148,6 +149,7 @@ const repositoryCollectionToStoreCollection = (collection: BackyCollection): Sto
   siteId: collection.siteId,
   name: collection.name,
   slug: collection.slug,
+  routePattern: collection.routePattern || null,
   description: collection.description || null,
   status: collection.status === 'published' || collection.status === 'archived' ? collection.status : 'draft',
   fields: collection.fields.map((field, index) => ({
@@ -246,14 +248,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const dynamicItemMatch = path.match(/^\/([^/]+)\/([^/]+)$/);
+      const collections = await repositories.collections.list({
+        siteId: site.id,
+        status: 'published',
+        includeUnpublished: false,
+        limit: 100,
+        offset: 0,
+      });
+      const dynamicItemMatch = matchCollectionItemRoute(
+        path,
+        collections.items.filter((collection) => collection.status === 'published' && collection.permissions.publicRead),
+      );
       if (dynamicItemMatch) {
-        const collectionSlug = decodeURIComponent(dynamicItemMatch[1]);
-        const recordSlug = decodeURIComponent(dynamicItemMatch[2]);
-        const collection = await repositories.collections.getBySlug(site.id, collectionSlug);
-        const record = collection
-          ? await repositories.collections.getRecordBySlug(site.id, collection.id, recordSlug)
-          : null;
+        const { collection, recordSlug } = dynamicItemMatch;
+        const record = await repositories.collections.getRecordBySlug(site.id, collection.id, recordSlug);
 
         if (
           collection
@@ -339,14 +347,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const dynamicItemMatch = path.match(/^\/([^/]+)\/([^/]+)$/);
+    const dynamicItemMatch = matchCollectionItemRoute(path, listCollections(site.id));
     if (dynamicItemMatch) {
-      const collectionSlug = decodeURIComponent(dynamicItemMatch[1]);
-      const recordSlug = decodeURIComponent(dynamicItemMatch[2]);
-      const collection = getCollectionByIdOrSlug(site.id, collectionSlug);
-      const record = collection
-        ? getCollectionRecordByIdOrSlug(site.id, collection.id, recordSlug)
-        : undefined;
+      const { collection, recordSlug } = dynamicItemMatch;
+      const record = getCollectionRecordByIdOrSlug(site.id, collection.id, recordSlug);
 
       if (collection && record) {
         return publicContractJson(
