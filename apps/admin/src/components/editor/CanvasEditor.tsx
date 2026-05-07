@@ -48,6 +48,7 @@ import {
   BREAKPOINT_CANVAS_SIZE,
   DEFAULT_CANVAS_SIZE,
   createCanvasElementFromLibraryItem,
+  createCanvasElementsFromReusableContent,
 } from '@/components/editor/editorCatalog';
 import { buildCustomFontFaces, buildGoogleFontImportUrl, getFontFamilyOptions } from '@/components/editor/fontCatalog';
 import type {
@@ -57,6 +58,11 @@ import type {
 } from '@/types/editor';
 import { useStore } from '@/stores/mockStore';
 import { listMedia } from '@/lib/mediaApi';
+import {
+  createReusableSection,
+  listReusableSections,
+  type ReusableSection,
+} from '@/lib/adminContentApi';
 
 const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
   'text',
@@ -219,9 +225,14 @@ export function CanvasEditor({
   const media = useStore((state) => state.media);
   const setMedia = useStore((state) => state.setMedia);
   const fontOptions = useMemo(() => getFontFamilyOptions(media), [media]);
+  const activeSiteId = mediaContext?.siteId;
+  const [reusableSections, setReusableSections] = useState<ReusableSection[]>([]);
+  const [reusableSectionsLoading, setReusableSectionsLoading] = useState(false);
+  const [reusableSectionsError, setReusableSectionsError] = useState<string | null>(null);
+  const [isSavingReusableSection, setIsSavingReusableSection] = useState(false);
 
   useEffect(() => {
-    const siteId = mediaContext?.siteId;
+    const siteId = activeSiteId;
     if (!siteId) {
       return;
     }
@@ -244,7 +255,7 @@ export function CanvasEditor({
     return () => {
       cancelled = true;
     };
-  }, [mediaContext?.siteId, setMedia]);
+  }, [activeSiteId, setMedia]);
 
   // Load fonts
   useEffect(() => {
@@ -395,6 +406,43 @@ export function CanvasEditor({
 
     return null;
   }, []);
+
+  const toReusableTemplateElement = useCallback((
+    element: CanvasElement,
+    isRoot = true,
+  ): CanvasElement => {
+    const templateElement: CanvasElement = JSON.parse(JSON.stringify(element)) as CanvasElement;
+    delete templateElement.parentId;
+    if (isRoot) {
+      templateElement.x = 0;
+      templateElement.y = 0;
+    }
+    templateElement.children = templateElement.children?.map((child) => toReusableTemplateElement(child, false));
+    return templateElement;
+  }, []);
+
+  const loadReusableSections = useCallback(async () => {
+    if (!activeSiteId) {
+      setReusableSections([]);
+      setReusableSectionsError(null);
+      return;
+    }
+
+    setReusableSectionsLoading(true);
+    setReusableSectionsError(null);
+    try {
+      const sections = await listReusableSections(activeSiteId, { status: 'active' });
+      setReusableSections(sections);
+    } catch (error) {
+      setReusableSectionsError(error instanceof Error ? error.message : 'Unable to load reusable sections');
+    } finally {
+      setReusableSectionsLoading(false);
+    }
+  }, [activeSiteId]);
+
+  useEffect(() => {
+    void loadReusableSections();
+  }, [loadReusableSections]);
 
   useEffect(() => {
     historyIndexRef.current = historyIndex;
@@ -919,6 +967,56 @@ export function CanvasEditor({
     // Placeholder for drag analytics/hooks.
   }, []);
 
+  const handleSaveSelectionAsReusableSection = useCallback(async () => {
+    if (!activeSiteId || !selectedId || isSavingReusableSection) {
+      return;
+    }
+
+    const selectedElement = findElementById(elements, selectedId);
+    if (!selectedElement) {
+      return;
+    }
+
+    const fallbackName = selectedElement.name || `${selectedElement.type} section`;
+    const name = window.prompt('Save selected element as a reusable section', fallbackName);
+    if (!name?.trim()) {
+      return;
+    }
+
+    const root = toReusableTemplateElement(selectedElement);
+    setIsSavingReusableSection(true);
+    try {
+      const section = await createReusableSection(activeSiteId, {
+        name: name.trim(),
+        category: selectedElement.type === 'section' ? 'layout' : 'saved',
+        tags: [mode, selectedElement.type],
+        sourceElementId: selectedElement.id,
+        content: {
+          canvasSize: {
+            width: root.width,
+            height: root.height,
+          },
+          elements: [root],
+        },
+        createdBy: 'admin',
+        updatedBy: 'admin',
+      });
+      setReusableSections((current) => [section, ...current.filter((item) => item.id !== section.id)]);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Unable to save reusable section');
+    } finally {
+      setIsSavingReusableSection(false);
+    }
+  }, [
+    activeSiteId,
+    elements,
+    findElementById,
+    isSavingReusableSection,
+    mode,
+    selectedId,
+    toReusableTemplateElement,
+  ]);
+
   /**
    * Handle canvas drop
    */
@@ -949,6 +1047,20 @@ export function CanvasEditor({
 
         const x = Math.round(Math.max(0, (e.clientX - rect.left) / activeCanvasScale) / 10) * 10;
         const y = Math.round(Math.max(0, (e.clientY - rect.top) / activeCanvasScale) / 10) * 10;
+
+        if (item.reusableContent?.elements?.length) {
+          const newElements = createCanvasElementsFromReusableContent(
+            item.reusableContent,
+            x,
+            y,
+            Math.max(walkTreeMaxZ(elements), 0) + 1,
+          );
+          if (newElements.length) {
+            updateElementsWithHistory([...elements, ...newElements], newElements[0].id);
+          }
+          return;
+        }
+
         const newElement = {
           ...createCanvasElementFromLibraryItem({ ...item, type: normalizedType }, x, y),
           zIndex: Math.max(walkTreeMaxZ(elements), 0) + 1,
@@ -1583,7 +1695,18 @@ export function CanvasEditor({
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Sidebar - Component Library */}
-          {!isPreview && <ComponentLibrary onDragStart={handleDragStart} />}
+          {!isPreview && (
+            <ComponentLibrary
+              onDragStart={handleDragStart}
+              reusableSections={reusableSections}
+              reusableSectionsLoading={reusableSectionsLoading}
+              reusableSectionsError={reusableSectionsError}
+              canSaveSelection={Boolean(activeSiteId && selectedId)}
+              isSavingReusableSection={isSavingReusableSection}
+              onRefreshReusableSections={loadReusableSections}
+              onSaveSelectionAsReusableSection={handleSaveSelectionAsReusableSection}
+            />
+          )}
 
           {/* Center - Canvas */}
           <div

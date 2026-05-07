@@ -207,7 +207,7 @@ This plan is part of the full set under:
 - **Current progress**:
   - `ComponentLibraryItem` now supports stable IDs, root styles, and nested `defaultChildren`.
   - The editor catalog includes composed hero, feature-grid, and lead-capture form presets, and canvas drop paths instantiate those presets as normal nested editable elements.
-  - Admin reusable-section APIs now persist saved canvas section patterns with category/tag/status filtering, so backend storage exists before the editor save/insert UI is wired.
+  - Admin reusable-section APIs now persist saved canvas section patterns with category/tag/status filtering, and the editor library can save selected element trees plus reload/insert active saved sections as cloned editable canvas elements.
 
 ### Task 5.2: Preset and style inheritance
 - **Location**: `apps/admin/src/components/editor/PropertyPanel.tsx`, `apps/public/src/components/PageRenderer.tsx`

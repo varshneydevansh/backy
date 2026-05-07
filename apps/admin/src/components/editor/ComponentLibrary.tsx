@@ -13,7 +13,7 @@
  * @license MIT
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Type,
   Heading,
@@ -38,10 +38,13 @@ import {
   Circle,
   Sparkles,
   LayoutGrid,
+  BookmarkPlus,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ComponentLibraryItem } from '@/types/editor';
 import { CANVAS_COMPONENT_LIBRARY } from '@/components/editor/editorCatalog';
+import type { ReusableSection } from '@/lib/adminContentApi';
 
 // ============================================
 // COMPONENT LIBRARY ITEMS
@@ -56,6 +59,13 @@ const LIBRARY_ITEMS: ComponentLibraryItem[] = CANVAS_COMPONENT_LIBRARY;
 interface ComponentLibraryProps {
   /** Callback when a component is dragged */
   onDragStart?: (item: ComponentLibraryItem) => void;
+  reusableSections?: ReusableSection[];
+  reusableSectionsLoading?: boolean;
+  reusableSectionsError?: string | null;
+  canSaveSelection?: boolean;
+  isSavingReusableSection?: boolean;
+  onRefreshReusableSections?: () => void;
+  onSaveSelectionAsReusableSection?: () => void;
 }
 
 /**
@@ -64,12 +74,57 @@ interface ComponentLibraryProps {
  * Displays available components organized by category.
  * Users can drag components onto the canvas.
  */
-export function ComponentLibrary({ onDragStart }: ComponentLibraryProps) {
+export function ComponentLibrary({
+  onDragStart,
+  reusableSections = [],
+  reusableSectionsLoading = false,
+  reusableSectionsError = null,
+  canSaveSelection = false,
+  isSavingReusableSection = false,
+  onRefreshReusableSections,
+  onSaveSelectionAsReusableSection,
+}: ComponentLibraryProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
+  const reusableItems = useMemo<ComponentLibraryItem[]>(() => (
+    reusableSections
+      .map((section) => {
+        const root = section.content.elements?.[0];
+        if (!root) {
+          return null;
+        }
+
+        return {
+          id: `reusable-section:${section.id}`,
+          type: root.type,
+          name: section.name,
+          icon: 'Sparkles',
+          category: 'saved',
+          description: section.description || `Saved ${section.category || 'section'} template`,
+          defaultProps: root.props,
+          defaultStyles: root.styles,
+          defaultSize: {
+            width: root.width || section.content.canvasSize?.width || 640,
+            height: root.height || section.content.canvasSize?.height || 360,
+          },
+          reusableContent: {
+            ...section.content,
+            sectionId: section.id,
+            slug: section.slug,
+          },
+        } satisfies ComponentLibraryItem;
+      })
+      .filter(Boolean)
+  ), [reusableSections]);
+
+  const libraryItems = useMemo(
+    () => [...LIBRARY_ITEMS, ...reusableItems],
+    [reusableItems],
+  );
+
   // Filter items
-  const filteredItems = LIBRARY_ITEMS.filter((item) => {
+  const filteredItems = libraryItems.filter((item) => {
     const matchesSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.description?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -94,6 +149,7 @@ export function ComponentLibrary({ onDragStart }: ComponentLibraryProps) {
     { id: 'media', name: 'Media', color: 'bg-purple-500' },
     { id: 'layout', name: 'Layout', color: 'bg-green-500' },
     { id: 'form', name: 'Form', color: 'bg-orange-500' },
+    { id: 'saved', name: 'Saved', color: 'bg-sky-500' },
     { id: 'advanced', name: 'Advanced', color: 'bg-red-500' },
   ];
 
@@ -149,6 +205,37 @@ export function ComponentLibrary({ onDragStart }: ComponentLibraryProps) {
             </button>
           ))}
         </div>
+
+        <div className="mt-2 grid grid-cols-[1fr_auto] gap-1">
+          <button
+            type="button"
+            onClick={onSaveSelectionAsReusableSection}
+            disabled={!canSaveSelection || isSavingReusableSection}
+            className={cn(
+              'inline-flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
+              canSaveSelection && !isSavingReusableSection
+                ? 'bg-sky-50 text-sky-700 hover:bg-sky-100'
+                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+            )}
+            title={canSaveSelection ? 'Save the selected element as a reusable section' : 'Select an element to save it as a reusable section'}
+          >
+            <BookmarkPlus className="h-3.5 w-3.5" />
+            <span className="truncate">{isSavingReusableSection ? 'Saving...' : 'Save selection'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={onRefreshReusableSections}
+            disabled={reusableSectionsLoading}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-50"
+            title="Refresh saved sections"
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', reusableSectionsLoading && 'animate-spin')} />
+          </button>
+        </div>
+
+        {reusableSectionsError && (
+          <p className="mt-2 text-xs text-red-600">{reusableSectionsError}</p>
+        )}
       </div>
 
       {/* Components List */}

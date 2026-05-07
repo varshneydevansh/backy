@@ -16,7 +16,10 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
 import type { CanvasElement, CanvasSize, ComponentLibraryItem } from '@/types/editor';
-import { createCanvasElementFromLibraryItem } from '@/components/editor/editorCatalog';
+import {
+  createCanvasElementFromLibraryItem,
+  createCanvasElementsFromReusableContent,
+} from '@/components/editor/editorCatalog';
 import { RichTextBlock } from './blocks/RichTextBlock';
 import { useActiveEditor } from './ActiveEditorContext';
 import {
@@ -262,6 +265,14 @@ const insertElementAsChild = (
 
   return { elements: next, updated: inserted };
 };
+
+const getMaxZIndex = (elements: CanvasElement[]): number => (
+  elements.reduce((max, element) => Math.max(
+    max,
+    element.zIndex || 0,
+    element.children?.length ? getMaxZIndex(element.children) : 0,
+  ), 0)
+);
 
 const canAcceptNestedDrop = (elementType: CanvasElement['type']): boolean => {
   const normalizedType = normalizeCanvasElementType(elementType);
@@ -1075,10 +1086,36 @@ export function Canvas({
 
           if (isDropTarget && dropHost) {
             const hostRect = dropHost.getBoundingClientRect();
+            const childX = snapToGrid(toCanvasDelta(event.clientX - hostRect.left));
+            const childY = snapToGrid(toCanvasDelta(event.clientY - hostRect.top));
+
+            if (item.reusableContent?.elements?.length) {
+              const reusableChildren = createCanvasElementsFromReusableContent(
+                item.reusableContent,
+                childX,
+                childY,
+                getMaxZIndex(parent.children || []) + 1,
+              );
+              let nextElements = elements;
+              let inserted = false;
+              for (const child of reusableChildren) {
+                const next = insertElementAsChild(nextElements, forcedParentId, child);
+                nextElements = next.elements;
+                inserted = inserted || next.updated;
+              }
+
+              if (inserted) {
+                onElementsChange(nextElements);
+                onSelect(reusableChildren[0]?.id || forcedParentId);
+              }
+
+              return;
+            }
+
             const child = createCanvasElementFromLibraryItem(
               { ...item, type: normalizedType as CanvasElement['type'] },
-              snapToGrid(toCanvasDelta(event.clientX - hostRect.left)),
-              snapToGrid(toCanvasDelta(event.clientY - hostRect.top)),
+              childX,
+              childY,
             );
             const withChild = insertElementAsChild(elements, forcedParentId, child);
 
@@ -1089,6 +1126,22 @@ export function Canvas({
 
             return;
           }
+        }
+
+        if (item.reusableContent?.elements?.length) {
+          const reusableElements = createCanvasElementsFromReusableContent(
+            item.reusableContent,
+            parsedX,
+            parsedY,
+            getMaxZIndex(elements) + 1,
+          );
+
+          if (reusableElements.length) {
+            onElementsChange([...elements, ...reusableElements]);
+            onSelect(reusableElements[0].id);
+          }
+
+          return;
         }
 
         const rootElement = createCanvasElementFromLibraryItem(

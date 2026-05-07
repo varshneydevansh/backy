@@ -114,6 +114,16 @@ export interface ComponentLibraryItem {
   defaultSize?: { width: number; height: number }; // Default size
   defaultStyles?: CSSProperties; // Default root styles
   defaultChildren?: ComponentLibraryChild[]; // Nested preset elements
+  reusableContent?: ReusableSectionContent; // Saved section/template content from the backend
+}
+
+export interface ReusableSectionContent {
+  elements: CanvasElement[];
+  canvasSize?: CanvasSize;
+  customCSS?: string;
+  customJS?: string;
+  sectionId?: string;
+  slug?: string;
 }
 
 /** Nested child in a composed component preset */

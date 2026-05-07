@@ -711,6 +711,60 @@ const createPresetChild = (child: ComponentLibraryChild, zIndex: number): Canvas
   children: child.children?.map((nestedChild, index) => createPresetChild(nestedChild, index + 1)),
 });
 
+const cloneReusableElement = (
+  element: CanvasElement,
+  options: {
+    root: boolean;
+    originX: number;
+    originY: number;
+    targetX: number;
+    targetY: number;
+    zIndex: number;
+  },
+): CanvasElement => {
+  const rest: CanvasElement = { ...element };
+  delete rest.parentId;
+
+  return {
+    ...rest,
+    id: generateId(),
+    x: options.root ? options.targetX + (element.x - options.originX) : element.x,
+    y: options.root ? options.targetY + (element.y - options.originY) : element.y,
+    zIndex: options.root ? options.zIndex : element.zIndex,
+    props: cloneDefaultProps(element.props || {}),
+    styles: cloneDefaultStyles(element.styles),
+    children: element.children?.map((child) => cloneReusableElement(child, {
+      ...options,
+      root: false,
+      zIndex: child.zIndex || 1,
+    })),
+  };
+};
+
+export function createCanvasElementsFromReusableContent(
+  content: ComponentLibraryItem['reusableContent'],
+  x: number,
+  y: number,
+  zIndexStart = 1,
+): CanvasElement[] {
+  const roots = Array.isArray(content?.elements) ? content.elements : [];
+  if (!roots.length) {
+    return [];
+  }
+
+  const originX = Math.min(...roots.map((element) => element.x || 0));
+  const originY = Math.min(...roots.map((element) => element.y || 0));
+
+  return roots.map((element, index) => cloneReusableElement(element, {
+    root: true,
+    originX,
+    originY,
+    targetX: x,
+    targetY: y,
+    zIndex: zIndexStart + index,
+  }));
+}
+
 export function createCanvasElement(
   type: ElementType,
   x: number,

@@ -1,4 +1,5 @@
 import type { BlogPost, Page, Site, User } from '@/stores/mockStore';
+import type { CanvasElement, CanvasSize } from '@/types/editor';
 
 type AdminSiteStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 
@@ -434,6 +435,50 @@ interface ApiImportCollectionRecordsResponse {
   };
 }
 
+interface ApiReusableSectionContent {
+  elements: CanvasElement[];
+  canvasSize?: CanvasSize;
+  customCSS?: string;
+  customJS?: string;
+}
+
+interface ApiReusableSection {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  category: string;
+  status: 'active' | 'archived';
+  tags: string[];
+  content: ApiReusableSectionContent;
+  sourceElementId?: string | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface ApiListReusableSectionsResponse {
+  success: boolean;
+  data?: {
+    sections: ApiReusableSection[];
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiReusableSectionResponse {
+  success: boolean;
+  data?: {
+    section: ApiReusableSection;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 export interface SiteCreateInput {
   name: string;
   slug: string;
@@ -700,6 +745,50 @@ export interface CollectionRecordImportResult {
   errors: CollectionRecordImportError[];
 }
 
+export interface ReusableSectionContent {
+  elements: CanvasElement[];
+  canvasSize?: CanvasSize;
+  customCSS?: string;
+  customJS?: string;
+}
+
+export interface ReusableSection {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  category: string;
+  status: 'active' | 'archived';
+  tags: string[];
+  content: ReusableSectionContent;
+  sourceElementId: string | null;
+  createdBy: string | null;
+  updatedBy: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ReusableSectionInput {
+  name: string;
+  slug?: string;
+  description?: string | null;
+  category?: string;
+  status?: 'active' | 'archived';
+  tags?: string[];
+  content: ReusableSectionContent;
+  sourceElementId?: string | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+}
+
+export interface ReusableSectionListFilters {
+  status?: 'active' | 'archived' | 'all';
+  category?: string;
+  tag?: string;
+  search?: string;
+}
+
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
   return env[key]?.trim() ?? '';
@@ -899,6 +988,28 @@ const toCollectionRecord = (record: ApiCollectionRecord): CollectionRecord => ({
   updatedAt: record.updatedAt,
   publishedAt: record.publishedAt || null,
   scheduledAt: record.scheduledAt || null,
+});
+
+const toReusableSection = (section: ApiReusableSection): ReusableSection => ({
+  id: section.id,
+  siteId: section.siteId,
+  name: section.name,
+  slug: section.slug,
+  description: section.description || null,
+  category: section.category || 'general',
+  status: section.status || 'active',
+  tags: section.tags || [],
+  content: {
+    elements: Array.isArray(section.content?.elements) ? section.content.elements : [],
+    canvasSize: section.content?.canvasSize,
+    customCSS: section.content?.customCSS,
+    customJS: section.content?.customJS,
+  },
+  sourceElementId: section.sourceElementId || null,
+  createdBy: section.createdBy || null,
+  updatedBy: section.updatedBy || null,
+  createdAt: section.createdAt,
+  updatedAt: section.updatedAt,
 });
 
 export class AdminContentApiError extends Error {
@@ -1756,5 +1867,56 @@ export async function deleteCollectionRecord(
 
   if (!response.ok || !payload.success || !payload.data?.deleted) {
     throw new Error(payload.error?.message || 'Unable to delete collection record');
+  }
+}
+
+export async function listReusableSections(
+  siteId: string,
+  filters: ReusableSectionListFilters = {},
+): Promise<ReusableSection[]> {
+  const query = new URLSearchParams();
+  query.set('status', filters.status || 'active');
+  if (filters.category) query.set('category', filters.category);
+  if (filters.tag) query.set('tag', filters.tag);
+  if (filters.search) query.set('search', filters.search);
+
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections?${query.toString()}`);
+  const payload = await readJson<ApiListReusableSectionsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load reusable sections');
+  }
+
+  return payload.data.sections.map(toReusableSection);
+}
+
+export async function createReusableSection(
+  siteId: string,
+  input: ReusableSectionInput,
+): Promise<ReusableSection> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiReusableSectionResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to save reusable section');
+  }
+
+  return toReusableSection(payload.data.section);
+}
+
+export async function deleteReusableSection(siteId: string, sectionId: string): Promise<void> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections/${sectionId}`, {
+    method: 'DELETE',
+  });
+  const payload = await readJson<ApiDeleteResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.deleted) {
+    throw new Error(payload.error?.message || 'Unable to delete reusable section');
   }
 }
