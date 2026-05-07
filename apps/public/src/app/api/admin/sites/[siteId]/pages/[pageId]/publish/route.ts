@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { BackyPage } from '@backy-cms/core';
 import { getAdminPageById, getSiteByIdOrSlug, publishAdminPage } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { buildSiteReadiness } from '@/lib/siteReadiness';
 
 export const runtime = 'nodejs';
@@ -27,11 +29,55 @@ const errorResponse = (
   }, { status })
 );
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const adminPageFromRepositoryPage = (page: BackyPage) => {
+  const canvasSize = isRecord(page.content.metadata?.canvasSize)
+    ? page.content.metadata.canvasSize
+    : { width: 1200, height: 900 };
+  return {
+    ...page,
+    content: {
+      elements: page.content.elements,
+      canvasSize,
+      customCSS: typeof page.content.metadata?.customCSS === 'string' ? page.content.metadata.customCSS : undefined,
+      contentDocument: page.content,
+    },
+  };
+};
+
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { siteId, pageId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const currentPage = await repositories.pages.getById(site.id, pageId);
+
+      if (!currentPage) {
+        return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
+      }
+
+      const published = await repositories.pages.publish(site.id, pageId);
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          page: adminPageFromRepositoryPage(published.item),
+        },
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
