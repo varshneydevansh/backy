@@ -455,6 +455,8 @@ interface CanvasProps {
   onSizeChange?: (newSize: CanvasSize) => void;
   /** Whether canvas is in preview mode */
   isPreview?: boolean;
+  /** Visual viewport scale applied by the editor shell */
+  viewportScale?: number;
 }
 
 const EDITOR_ACTIVATION_EVENT = 'backy-open-text-editor';
@@ -501,6 +503,7 @@ export function Canvas({
   size,
   onSizeChange,
   isPreview = false,
+  viewportScale = 1,
 }: CanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -511,6 +514,10 @@ export function Canvas({
   const resizeStateRef = useRef<ResizeInteraction | null>(null);
   const debugTextInteraction = useCallback((..._args: unknown[]) => {
   }, []);
+  const safeViewportScale = Number.isFinite(viewportScale) && viewportScale > 0
+    ? viewportScale
+    : 1;
+  const toCanvasDelta = useCallback((value: number) => value / safeViewportScale, [safeViewportScale]);
 
   const getTargetElement = useCallback((target: EventTarget | null) => {
     if (!target) return null;
@@ -752,8 +759,8 @@ export function Canvas({
     const activeDragState = dragStateRef.current;
 
     if (activeResizeState) {
-      const deltaX = event.clientX - activeResizeState.startX;
-      const deltaY = event.clientY - activeResizeState.startY;
+      const deltaX = toCanvasDelta(event.clientX - activeResizeState.startX);
+      const deltaY = toCanvasDelta(event.clientY - activeResizeState.startY);
 
       let newX = activeResizeState.initialX;
       let newY = activeResizeState.initialY;
@@ -800,8 +807,8 @@ export function Canvas({
       return;
     }
 
-    const deltaX = event.clientX - activeDragState.startX;
-    const deltaY = event.clientY - activeDragState.startY;
+    const deltaX = toCanvasDelta(event.clientX - activeDragState.startX);
+    const deltaY = toCanvasDelta(event.clientY - activeDragState.startY);
     const newX = activeDragState.initialX + deltaX;
     const newY = activeDragState.initialY + deltaY;
 
@@ -813,7 +820,7 @@ export function Canvas({
       })).elements,
       { transient: true, selectedId: activeDragState.elementId },
     );
-  }, [isPreview, onElementsChange, size.height, size.width]);
+  }, [isPreview, onElementsChange, size.height, size.width, toCanvasDelta]);
 
   const handleGlobalElementUp = useCallback(() => {
     const hadActiveTransform = Boolean(dragStateRef.current || resizeStateRef.current);
@@ -866,8 +873,8 @@ export function Canvas({
           return;
         }
 
-        const parsedX = snapToGrid(event.clientX - canvasRect.left);
-        const parsedY = snapToGrid(event.clientY - canvasRect.top);
+        const parsedX = snapToGrid(toCanvasDelta(event.clientX - canvasRect.left));
+        const parsedY = snapToGrid(toCanvasDelta(event.clientY - canvasRect.top));
 
         if (forcedParentId) {
           const parent = findElementById(elements, forcedParentId);
@@ -881,8 +888,8 @@ export function Canvas({
             const hostRect = dropHost.getBoundingClientRect();
             const child = createCanvasElement(
               normalizedType as CanvasElement['type'],
-              snapToGrid(event.clientX - hostRect.left),
-              snapToGrid(event.clientY - hostRect.top),
+              snapToGrid(toCanvasDelta(event.clientX - hostRect.left)),
+              snapToGrid(toCanvasDelta(event.clientY - hostRect.top)),
             );
             const withChild = insertElementAsChild(elements, forcedParentId, child);
 
@@ -907,7 +914,7 @@ export function Canvas({
         console.error('Failed to drop element:', error);
       }
     },
-    [elements, onElementsChange, onSelect]
+    [elements, onElementsChange, onSelect, toCanvasDelta]
   );
 
   const handleElementPropsUpdate = useCallback(
@@ -945,13 +952,13 @@ export function Canvas({
 
   const handleGlobalMouseMove = useCallback((e: MouseEvent) => {
     if (canvasResizeState && onSizeChange) {
-      const deltaY = e.clientY - canvasResizeState.startY;
+      const deltaY = toCanvasDelta(e.clientY - canvasResizeState.startY);
       const newHeight = Math.max(size.minHeight || 600, canvasResizeState.initialHeight + deltaY);
       // Snap to 10
       const snappedHeight = Math.round(newHeight / 10) * 10;
       onSizeChange({ ...size, height: snappedHeight });
     }
-  }, [canvasResizeState, onSizeChange, size]);
+  }, [canvasResizeState, onSizeChange, size, toCanvasDelta]);
 
   const handleGlobalMouseUp = useCallback(() => {
     if (canvasResizeState) {

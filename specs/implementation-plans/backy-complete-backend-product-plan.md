@@ -493,7 +493,7 @@ The next implementation should not start by adding more UI screens. The product 
 
 - **High / patched, needs browser smoke**: Canvas elements select but do not drag reliably in the current editor runtime.
   - Repro area: `apps/admin/src/components/editor/Canvas.tsx`
-  - Latest patch: root drops now resolve against the actual canvas rect, pasteboard drops outside the canvas are ignored, pointer capture is used for element movement, nested children receive their own drag ids, drag/resize coordinates snap/clamp inside the canvas, active transforms are ref-backed so pointer movement is available immediately, and drag/resize creates one undo entry on release instead of one entry per move. Arrow-key nudging now moves selected unlocked elements inside canvas bounds.
+  - Latest patch: root drops now resolve against the actual canvas rect, pasteboard drops outside the canvas are ignored, pointer capture is used for element movement, nested children receive their own drag ids, drag/resize coordinates snap/clamp inside the canvas, active transforms are ref-backed so pointer movement is available immediately, and drag/resize creates one undo entry on release instead of one entry per move. Arrow-key nudging now moves selected unlocked elements inside canvas bounds. Canvas zoom/fit controls are scale-aware for drag, resize, drop, and canvas-height resize math.
   - Remaining validation: browser smoke for text/image/container drag, nested child drag, resize, undo after drag, keyboard nudging, and save/reload persistence.
 - **High**: Right-side text controls and canvas text editing still need selection preservation tests after focus moves between canvas and property panel.
 - **High**: Breakpoint controls currently change canvas dimensions, but true per-breakpoint element overrides are not complete.
@@ -539,6 +539,7 @@ The next implementation should not start by adding more UI screens. The product 
   - Layers panel is wired into the editor shell and persists `visible`/`locked` flags on canvas elements.
   - Root layer reordering updates z-index order, lock blocks canvas drag/resize/delete, and hidden elements are skipped by the public renderer.
   - Canvas drag/resize now uses transient move state with single history commits, and selected elements support arrow-key nudging with Shift for larger moves.
+  - The editor viewport now has scale-aware zoom in/out and fit controls in the canvas status bar.
   - Nested children are displayed and selectable in the layer tree, but nested drag-reorder and multi-select transforms are still open.
 - **Dependencies**: Task 7.1
 - **Acceptance Criteria**:

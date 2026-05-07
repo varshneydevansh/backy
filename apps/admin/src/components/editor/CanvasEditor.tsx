@@ -25,6 +25,9 @@ import {
   Undo,
   Redo,
   Settings,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
 } from 'lucide-react';
 import { cn, generateId } from '@/lib/utils';
 import { Canvas } from '@/components/editor/Canvas';
@@ -297,7 +300,40 @@ export function CanvasEditor({
     null
   );
   const [canvasScale, setCanvasScale] = useState(1);
+  const [canvasZoom, setCanvasZoom] = useState(1);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
+  const activeCanvasScale = isPreview ? canvasScale : canvasZoom;
+  const scaledCanvasWidth = Math.max(1, Math.round(size.width * activeCanvasScale));
+  const scaledCanvasHeight = Math.max(1, Math.round(size.height * activeCanvasScale));
+  const zoomPercent = Math.round(activeCanvasScale * 100);
+
+  const clampCanvasZoom = useCallback((value: number) => {
+    if (!Number.isFinite(value)) {
+      return 1;
+    }
+    return Math.min(2, Math.max(0.25, value));
+  }, []);
+
+  const handleZoomIn = useCallback(() => {
+    setCanvasZoom((current) => clampCanvasZoom(Number((current + 0.1).toFixed(2))));
+  }, [clampCanvasZoom]);
+
+  const handleZoomOut = useCallback(() => {
+    setCanvasZoom((current) => clampCanvasZoom(Number((current - 0.1).toFixed(2))));
+  }, [clampCanvasZoom]);
+
+  const handleFitCanvas = useCallback(() => {
+    const container = canvasViewportRef.current;
+    if (!container) {
+      setCanvasZoom(1);
+      return;
+    }
+
+    const availableWidth = Math.max(container.clientWidth - 96, 1);
+    const availableHeight = Math.max(container.clientHeight - 120, 1);
+    const nextScale = Math.min(1.5, availableWidth / size.width, availableHeight / size.height);
+    setCanvasZoom(clampCanvasZoom(Number(nextScale.toFixed(2))));
+  }, [clampCanvasZoom, size.height, size.width]);
 
   const canAcceptNestedDrop = (elementType: CanvasElement['type']): boolean => {
     const normalizedType = normalizeElementType(elementType);
@@ -862,8 +898,8 @@ export function CanvasEditor({
           return;
         }
 
-        const x = Math.round(Math.max(0, e.clientX - rect.left) / 10) * 10;
-        const y = Math.round(Math.max(0, e.clientY - rect.top) / 10) * 10;
+        const x = Math.round(Math.max(0, (e.clientX - rect.left) / activeCanvasScale) / 10) * 10;
+        const y = Math.round(Math.max(0, (e.clientY - rect.top) / activeCanvasScale) / 10) * 10;
         const newElement = {
           ...createCanvasElement(normalizedType, x, y),
           zIndex: Math.max(walkTreeMaxZ(elements), 0) + 1,
@@ -874,7 +910,7 @@ export function CanvasEditor({
         console.error('Failed to drop element:', err);
       }
     },
-    [elements, updateElementsWithHistory]
+    [activeCanvasScale, elements, updateElementsWithHistory]
   );
 
   /**
@@ -1436,7 +1472,7 @@ export function CanvasEditor({
           {/* Center - Canvas */}
           <div
             ref={canvasViewportRef}
-            className="flex-1 overflow-auto p-8"
+            className="relative flex-1 overflow-auto p-8 pb-20"
             style={{
               backgroundColor: '#eef2f7',
               backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(100,116,139,0.28) 1px, transparent 0)',
@@ -1449,10 +1485,8 @@ export function CanvasEditor({
               <div
                 className="relative"
                 style={{
-                  transform: isPreview ? `scale(${canvasScale})` : undefined,
-                  transformOrigin: 'top center',
-                  width: isPreview ? size.width : undefined,
-                  height: isPreview ? size.height : undefined,
+                  width: scaledCanvasWidth,
+                  minHeight: scaledCanvasHeight + (isPreview ? 0 : 32),
                 }}
               >
                 {!isPreview && (
@@ -1461,23 +1495,67 @@ export function CanvasEditor({
                     <span>{size.width} x {size.height}px</span>
                   </div>
                 )}
-                <Canvas
-                  elements={elements}
-                  onElementsChange={handleElementsChange}
-                  selectedId={selectedId}
-                  onSelect={handleSelect}
-                  size={size}
-                  onSizeChange={(newSize) => {
-                    setSize(newSize);
-                    markChanges();
-                    if (onChange) {
-                      onChange(elements, pageSettings, newSize);
-                    }
+                <div
+                  style={{
+                    width: size.width,
+                    height: size.height,
+                    transform: `scale(${activeCanvasScale})`,
+                    transformOrigin: 'top left',
                   }}
-                  isPreview={isPreview}
-                />
+                >
+                  <Canvas
+                    elements={elements}
+                    onElementsChange={handleElementsChange}
+                    selectedId={selectedId}
+                    onSelect={handleSelect}
+                    size={size}
+                    onSizeChange={(newSize) => {
+                      setSize(newSize);
+                      markChanges();
+                      if (onChange) {
+                        onChange(elements, pageSettings, newSize);
+                      }
+                    }}
+                    isPreview={isPreview}
+                    viewportScale={activeCanvasScale}
+                  />
+                </div>
               </div>
             </div>
+
+            {!isPreview && (
+              <div className="absolute bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur">
+                <button
+                  type="button"
+                  onClick={handleZoomOut}
+                  className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+                  title="Zoom out"
+                  aria-label="Zoom out"
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </button>
+                <span className="min-w-12 text-center tabular-nums">{zoomPercent}%</span>
+                <button
+                  type="button"
+                  onClick={handleZoomIn}
+                  className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+                  title="Zoom in"
+                  aria-label="Zoom in"
+                >
+                  <ZoomIn className="h-4 w-4" />
+                </button>
+                <div className="mx-1 h-5 w-px bg-slate-200" />
+                <button
+                  type="button"
+                  onClick={handleFitCanvas}
+                  className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+                  title="Fit canvas"
+                  aria-label="Fit canvas"
+                >
+                  <Maximize2 className="h-4 w-4" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Right Sidebar - Property Panel */}
