@@ -123,6 +123,17 @@ interface StoreBlogPost {
   scheduledAt: string | null;
 }
 
+interface ContentRevision {
+  id: string;
+  siteId: string;
+  targetType: 'page' | 'post';
+  targetId: string;
+  snapshot: StorePage | StoreBlogPost;
+  note: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
 interface Pagination {
   total: number;
   limit: number;
@@ -607,6 +618,8 @@ const BLOG_POSTS: StoreBlogPost[] = [
   },
 ];
 
+const CONTENT_REVISIONS: ContentRevision[] = [];
+
 const MEDIA_LIBRARY: MediaItem[] = [
   {
     id: 'media-demo-hero',
@@ -703,6 +716,7 @@ interface AdminContentSnapshot {
   sites?: StoreSite[];
   pages?: StorePage[];
   blogPosts?: StoreBlogPost[];
+  revisions?: ContentRevision[];
 }
 
 function ensurePersistedMediaLoaded() {
@@ -772,6 +786,10 @@ function ensurePersistedAdminContentLoaded() {
     if (Array.isArray(parsed.blogPosts)) {
       BLOG_POSTS.splice(0, BLOG_POSTS.length, ...parsed.blogPosts);
     }
+
+    if (Array.isArray(parsed.revisions)) {
+      CONTENT_REVISIONS.splice(0, CONTENT_REVISIONS.length, ...parsed.revisions);
+    }
   } catch (error) {
     console.error('Unable to load persisted admin content:', error);
   }
@@ -787,6 +805,7 @@ function persistAdminContent() {
           sites: SITE_LIST,
           pages: PAGE_LIST,
           blogPosts: BLOG_POSTS,
+          revisions: CONTENT_REVISIONS,
         } satisfies AdminContentSnapshot,
         null,
         2,
@@ -1580,6 +1599,27 @@ function parseStatusInput<T extends string>(
   return allowed.includes(normalized as T) ? normalized as T : fallback;
 }
 
+function createContentRevision(
+  targetType: ContentRevision['targetType'],
+  snapshot: StorePage | StoreBlogPost,
+  note?: string | null,
+  createdBy?: string | null,
+): ContentRevision {
+  const revision: ContentRevision = {
+    id: createRuntimeId('rev'),
+    siteId: snapshot.siteId,
+    targetType,
+    targetId: snapshot.id,
+    snapshot: clone(snapshot),
+    note: note || null,
+    createdBy: createdBy || 'admin',
+    createdAt: new Date().toISOString(),
+  };
+
+  CONTENT_REVISIONS.unshift(revision);
+  return revision;
+}
+
 function getValueAsString(values: Record<string, unknown>, key: string): string {
   return sanitizeString(values[key] || '');
 }
@@ -2157,6 +2197,12 @@ export function deleteAdminSite(siteId: string): boolean {
     }
   }
 
+  for (let revisionIndex = CONTENT_REVISIONS.length - 1; revisionIndex >= 0; revisionIndex -= 1) {
+    if (CONTENT_REVISIONS[revisionIndex].siteId === siteId) {
+      CONTENT_REVISIONS.splice(revisionIndex, 1);
+    }
+  }
+
   persistAdminContent();
   return true;
 }
@@ -2290,6 +2336,7 @@ export function updateAdminPage(
   const metaInput = toRecord(input.meta);
   const contentInput = toRecord(input.content);
   const canvasSizeInput = toRecord(contentInput.canvasSize);
+  createContentRevision('page', current, sanitizeString(input.revisionNote) || 'Before page update', sanitizeString(input.updatedBy));
 
   const updated: StorePage = {
     ...current,
@@ -2349,6 +2396,14 @@ export function deleteAdminPage(siteId: string, pageId: string): boolean {
   }
 
   PAGE_LIST.splice(index, 1);
+
+  for (let revisionIndex = CONTENT_REVISIONS.length - 1; revisionIndex >= 0; revisionIndex -= 1) {
+    const revision = CONTENT_REVISIONS[revisionIndex];
+    if (revision.siteId === siteId && revision.targetType === 'page' && revision.targetId === pageId) {
+      CONTENT_REVISIONS.splice(revisionIndex, 1);
+    }
+  }
+
   persistAdminContent();
   return true;
 }
@@ -2470,6 +2525,7 @@ export function updateAdminBlogPost(
     ? current.status
     : parseStatusInput(input.status, ['draft', 'published', 'scheduled', 'archived'] as const, current.status);
   const metaInput = toRecord(input.meta);
+  createContentRevision('post', current, sanitizeString(input.revisionNote) || 'Before post update', sanitizeString(input.updatedBy));
 
   const updated: StoreBlogPost = {
     ...current,
@@ -2523,8 +2579,220 @@ export function deleteAdminBlogPost(siteId: string, postId: string): boolean {
   }
 
   BLOG_POSTS.splice(index, 1);
+
+  for (let revisionIndex = CONTENT_REVISIONS.length - 1; revisionIndex >= 0; revisionIndex -= 1) {
+    const revision = CONTENT_REVISIONS[revisionIndex];
+    if (revision.siteId === siteId && revision.targetType === 'post' && revision.targetId === postId) {
+      CONTENT_REVISIONS.splice(revisionIndex, 1);
+    }
+  }
+
   persistAdminContent();
   return true;
+}
+
+export function listContentRevisions(
+  siteId: string,
+  targetType: ContentRevision['targetType'],
+  targetId: string,
+  params: { limit?: number; offset?: number } = {},
+): { revisions: ContentRevision[]; pagination: Pagination } {
+  ensurePersistedAdminContentLoaded();
+
+  const { limit = 25, offset = 0 } = params;
+  const revisions = CONTENT_REVISIONS.filter(
+    (revision) =>
+      revision.siteId === siteId &&
+      revision.targetType === targetType &&
+      revision.targetId === targetId,
+  );
+
+  return {
+    revisions: clone(revisions.slice(offset, offset + limit)),
+    pagination: getPagination(revisions.length, limit, offset),
+  };
+}
+
+export function publishAdminPage(siteId: string, pageId: string, actor = 'admin'): StorePage | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = PAGE_LIST.findIndex((page) => page.siteId === siteId && page.id === pageId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const current = PAGE_LIST[index];
+  createContentRevision('page', current, 'Before publish', actor);
+
+  const now = new Date().toISOString();
+  const updated: StorePage = {
+    ...current,
+    status: 'published',
+    publishedAt: now,
+    scheduledAt: null,
+    updatedAt: now,
+    meta: {
+      ...current.meta,
+      noIndex: false,
+    },
+  };
+
+  PAGE_LIST[index] = updated;
+  persistAdminContent();
+  return clone(updated);
+}
+
+export function archiveAdminPage(siteId: string, pageId: string, actor = 'admin'): StorePage | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = PAGE_LIST.findIndex((page) => page.siteId === siteId && page.id === pageId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const current = PAGE_LIST[index];
+  createContentRevision('page', current, 'Before archive', actor);
+
+  const updated: StorePage = {
+    ...current,
+    status: 'archived',
+    scheduledAt: null,
+    updatedAt: new Date().toISOString(),
+    meta: {
+      ...current.meta,
+      noIndex: true,
+    },
+  };
+
+  PAGE_LIST[index] = updated;
+  persistAdminContent();
+  return clone(updated);
+}
+
+export function rollbackAdminPage(
+  siteId: string,
+  pageId: string,
+  revisionId: string,
+  actor = 'admin',
+): StorePage | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = PAGE_LIST.findIndex((page) => page.siteId === siteId && page.id === pageId);
+  const revision = CONTENT_REVISIONS.find(
+    (item) =>
+      item.id === revisionId &&
+      item.siteId === siteId &&
+      item.targetType === 'page' &&
+      item.targetId === pageId,
+  );
+
+  if (index === -1 || !revision) {
+    return undefined;
+  }
+
+  const current = PAGE_LIST[index];
+  createContentRevision('page', current, `Before rollback to ${revisionId}`, actor);
+
+  const snapshot = revision.snapshot as StorePage;
+  const updated: StorePage = {
+    ...snapshot,
+    updatedAt: new Date().toISOString(),
+  };
+
+  PAGE_LIST[index] = updated;
+  persistAdminContent();
+  return clone(updated);
+}
+
+export function publishAdminBlogPost(siteId: string, postId: string, actor = 'admin'): StoreBlogPost | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = BLOG_POSTS.findIndex((post) => post.siteId === siteId && post.id === postId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const current = BLOG_POSTS[index];
+  createContentRevision('post', current, 'Before publish', actor);
+
+  const now = new Date().toISOString();
+  const updated: StoreBlogPost = {
+    ...current,
+    status: 'published',
+    publishedAt: now,
+    scheduledAt: null,
+    updatedAt: now,
+    meta: {
+      ...current.meta,
+      noIndex: false,
+    },
+  };
+
+  BLOG_POSTS[index] = updated;
+  persistAdminContent();
+  return clone(updated);
+}
+
+export function archiveAdminBlogPost(siteId: string, postId: string, actor = 'admin'): StoreBlogPost | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = BLOG_POSTS.findIndex((post) => post.siteId === siteId && post.id === postId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const current = BLOG_POSTS[index];
+  createContentRevision('post', current, 'Before archive', actor);
+
+  const updated: StoreBlogPost = {
+    ...current,
+    status: 'archived',
+    scheduledAt: null,
+    updatedAt: new Date().toISOString(),
+    meta: {
+      ...current.meta,
+      noIndex: true,
+    },
+  };
+
+  BLOG_POSTS[index] = updated;
+  persistAdminContent();
+  return clone(updated);
+}
+
+export function rollbackAdminBlogPost(
+  siteId: string,
+  postId: string,
+  revisionId: string,
+  actor = 'admin',
+): StoreBlogPost | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = BLOG_POSTS.findIndex((post) => post.siteId === siteId && post.id === postId);
+  const revision = CONTENT_REVISIONS.find(
+    (item) =>
+      item.id === revisionId &&
+      item.siteId === siteId &&
+      item.targetType === 'post' &&
+      item.targetId === postId,
+  );
+
+  if (index === -1 || !revision) {
+    return undefined;
+  }
+
+  const current = BLOG_POSTS[index];
+  createContentRevision('post', current, `Before rollback to ${revisionId}`, actor);
+
+  const snapshot = revision.snapshot as StoreBlogPost;
+  const updated: StoreBlogPost = {
+    ...snapshot,
+    updatedAt: new Date().toISOString(),
+  };
+
+  BLOG_POSTS[index] = updated;
+  persistAdminContent();
+  return clone(updated);
 }
 
 export function getMediaList(
@@ -3520,4 +3788,4 @@ export function getMediaById(siteId: string, id: string): MediaItem | undefined 
   return item ? clone(item) : undefined;
 }
 
-export { type Pagination, type StoreBlogPost, type StorePage, type StoreSite };
+export { type ContentRevision, type Pagination, type StoreBlogPost, type StorePage, type StoreSite };

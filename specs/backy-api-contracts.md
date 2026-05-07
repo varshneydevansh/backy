@@ -123,7 +123,7 @@ Public page payload should include:
 - `DELETE /api/admin/sites/:siteId/pages/:pageId`
   - Deletes the page from the runtime adapter.
 
-Current sites/pages admin endpoints are intentionally local file-backed. Production completion still requires authenticated database persistence, RBAC, audit events, revisions, preview tokens, and cache invalidation.
+Current sites/pages admin endpoints are intentionally local file-backed. Production completion still requires authenticated database persistence, RBAC, preview tokens, cache invalidation, workflow audit events, and contract tests.
 
 ### 3.3 Media
 - `POST /api/admin/sites/:siteId/media`
@@ -175,15 +175,37 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 - `DELETE /api/admin/sites/:siteId/blog/:postId`
   - Deletes the post from the runtime adapter.
 
-Current blog admin endpoints are local file-backed through `data/backy/admin-content.json`. Production completion still requires authenticated database persistence, RBAC, author/category/tag APIs, revisions, preview tokens, publish endpoints, and cache invalidation.
+Current blog admin endpoints are local file-backed through `data/backy/admin-content.json`. Production completion still requires authenticated database persistence, RBAC, author/category/tag APIs, preview tokens, cache invalidation, workflow audit events, and contract tests.
 
 ### 3.7 Publish and revisions
-- `POST /api/admin/sites/:siteId/pages/:pageId/publish`
-- `POST /api/admin/sites/:siteId/pages/:pageId/archive`
-- `POST /api/admin/sites/:siteId/pages/:pageId/rollback`
-- `POST /api/admin/sites/:siteId/pages/:pageId/resolve-conflict`
+- `GET /api/admin/sites/:siteId/pages/:pageId/revisions`
+  - Returns local revision history for the page with pagination metadata.
 
-- Blog equivalents: `/blogs`, `/blogs/:postId`, `/blogs/:postId/publish`, `/blogs/:postId/archive`, `/blogs/:postId/rollback`
+- `POST /api/admin/sites/:siteId/pages/:pageId/publish`
+  - Publishes the page, clears scheduled state, sets `publishedAt`, and stores a rollback snapshot.
+
+- `POST /api/admin/sites/:siteId/pages/:pageId/archive`
+  - Archives the page, clears scheduled state, marks it `noIndex`, and stores a rollback snapshot.
+
+- `POST /api/admin/sites/:siteId/pages/:pageId/rollback`
+  - Body: `{ revisionId }`
+  - Restores a previous page snapshot and stores a rollback snapshot of the current state.
+
+- `GET /api/admin/sites/:siteId/blog/:postId/revisions`
+  - Returns local revision history for the post with pagination metadata.
+
+- `POST /api/admin/sites/:siteId/blog/:postId/publish`
+  - Publishes the post, clears scheduled state, sets `publishedAt`, and stores a rollback snapshot.
+
+- `POST /api/admin/sites/:siteId/blog/:postId/archive`
+  - Archives the post, clears scheduled state, marks it `noIndex`, and stores a rollback snapshot.
+
+- `POST /api/admin/sites/:siteId/blog/:postId/rollback`
+  - Body: `{ revisionId }`
+  - Restores a previous post snapshot and stores a rollback snapshot of the current state.
+
+- `POST /api/admin/sites/:siteId/pages/:pageId/resolve-conflict`
+  - Future workflow endpoint for merge/conflict resolution once collaborative editing is implemented.
 
 ---
 
