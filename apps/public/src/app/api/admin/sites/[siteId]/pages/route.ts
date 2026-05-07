@@ -7,11 +7,18 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  canvasElementsToBackyContentDocument,
+  isBackyContentDocument,
+  type BackyContentDocument,
+  type BackyPage,
+} from '@backy-cms/core';
+import {
   createAdminPage,
   getPageBySlug,
   getPageSummary,
   getSiteByIdOrSlug,
 } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
@@ -54,12 +61,97 @@ const normalizeSlug = (value: unknown): string => (
     : ''
 );
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const statusFromInput = (value: unknown): 'draft' | 'published' | 'scheduled' | 'archived' => (
+  value === 'published' || value === 'scheduled' || value === 'archived' ? value : 'draft'
+);
+
+const contentDocumentFromInput = (
+  rawContent: unknown,
+  input: {
+    id: string;
+    title: string;
+    slug: string;
+    status: 'draft' | 'published' | 'scheduled' | 'archived';
+  },
+): BackyContentDocument => {
+  if (isBackyContentDocument(rawContent)) {
+    return rawContent;
+  }
+  if (isRecord(rawContent) && isBackyContentDocument(rawContent.contentDocument)) {
+    return rawContent.contentDocument;
+  }
+
+  return canvasElementsToBackyContentDocument({
+    id: input.id,
+    kind: 'page',
+    title: input.title,
+    slug: input.slug,
+    status: input.status,
+    elements: isRecord(rawContent) ? rawContent : [],
+    canvasSize: isRecord(rawContent) ? rawContent.canvasSize : undefined,
+    customCSS: isRecord(rawContent) && typeof rawContent.customCSS === 'string' ? rawContent.customCSS : undefined,
+  });
+};
+
+const adminPageFromRepositoryPage = (page: BackyPage, includeContent = true) => {
+  const base = {
+    ...page,
+    content: undefined,
+  };
+  if (!includeContent) {
+    const { content, ...summary } = base;
+    void content;
+    return summary;
+  }
+  const canvasSize = isRecord(page.content.metadata?.canvasSize)
+    ? page.content.metadata.canvasSize
+    : { width: 1200, height: 900 };
+  return {
+    ...page,
+    content: {
+      elements: page.content.elements,
+      canvasSize,
+      customCSS: typeof page.content.metadata?.customCSS === 'string' ? page.content.metadata.customCSS : undefined,
+      contentDocument: page.content,
+    },
+  };
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { siteId } = await params;
     const { searchParams } = new URL(request.url);
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const includeUnpublished = searchParams.get('includeUnpublished') !== 'false';
+      const result = await repositories.pages.list({
+        siteId: site.id,
+        includeUnpublished,
+        status: includeUnpublished ? 'all' : 'published',
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          pages: result.items.map((page) => adminPageFromRepositoryPage(page, false)),
+          pagination: result.pagination,
+        },
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -93,6 +185,56 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const body = await parseJsonBody(request);
+      const title = typeof body.title === 'string' ? body.title.trim() : '';
+      const slug = normalizeSlug(body.slug || title);
+      const status = statusFromInput(body.status);
+
+      if (!title) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Page title is required', requestId);
+      }
+      if (!slug) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Page slug is required', requestId);
+      }
+
+      const slugCheck = await repositories.pages.checkSlug({ siteId: site.id, slug });
+      if (!slugCheck.available) {
+        return errorResponse(409, 'SLUG_CONFLICT', 'A page with this slug already exists', requestId);
+      }
+
+      const pageId = typeof body.id === 'string' && body.id.trim().length > 0 ? body.id.trim() : `page_${slug}`;
+      const created = await repositories.pages.create({
+        siteId: site.id,
+        title,
+        slug,
+        description: typeof body.description === 'string' ? body.description : null,
+        status,
+        scheduledAt: typeof body.scheduledAt === 'string' ? body.scheduledAt : null,
+        isHomepage: typeof body.isHomepage === 'boolean' ? body.isHomepage : false,
+        content: contentDocumentFromInput(body.content, { id: pageId, title, slug, status }),
+        meta: isRecord(body.meta) ? body.meta : undefined,
+      });
+
+      return NextResponse.json(
+        {
+          success: true,
+          requestId,
+          data: {
+            page: adminPageFromRepositoryPage(created.item),
+          },
+        },
+        { status: 201 },
+      );
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
