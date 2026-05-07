@@ -140,12 +140,55 @@ async function createSdkSmokeFixture() {
   const pageId = page.json?.data?.page?.id;
   assert(pageId, 'temporary SDK smoke page missing id');
 
+  const reusableSection = await request(`/api/admin/sites/${siteId}/reusable-sections`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: 'SDK Smoke Reusable Section',
+      slug: `sdk-smoke-section-${unique}`,
+      description: 'Temporary reusable section for SDK smoke.',
+      category: 'layout',
+      tags: ['sdk', 'template'],
+      content: {
+        canvasSize: { width: 720, height: 240 },
+        elements: [
+          {
+            id: 'sdk-smoke-section-root',
+            type: 'section',
+            x: 0,
+            y: 0,
+            width: 720,
+            height: 240,
+            zIndex: 1,
+            props: { backgroundColor: '#f8fafc' },
+            children: [
+              {
+                id: 'sdk-smoke-section-heading',
+                type: 'heading',
+                x: 48,
+                y: 48,
+                width: 520,
+                height: 72,
+                zIndex: 1,
+                props: { content: 'SDK reusable section', level: 'h2' },
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  });
+  assert(reusableSection.response.status === 201, `${reusableSection.url} expected reusable section create 201, got ${reusableSection.response.status}`);
+  const reusableSectionId = reusableSection.json?.data?.section?.id;
+  assert(reusableSectionId, 'temporary SDK smoke reusable section missing id');
+
   return {
     siteId,
     siteSlug,
     pageId,
     pageSlug,
     collectionId,
+    reusableSectionId,
   };
 }
 
@@ -165,7 +208,8 @@ const client = createBackyClient({
 let identifier = configuredIdentifier;
 if (!identifier) {
   const sites = await client.sites();
-  const firstSite = sites.data.sites.find((candidate) => candidate.isPublished !== false);
+  const publishedSites = sites.data.sites.filter((candidate) => candidate.isPublished !== false);
+  const firstSite = publishedSites.find((candidate) => candidate.slug === 'demo' || candidate.id === 'site-demo') || publishedSites[0];
   assert(firstSite?.slug || firstSite?.id, 'sites() did not return a published site to smoke');
   identifier = String(firstSite.slug || firstSite.id);
 }
@@ -176,6 +220,7 @@ assert(site.data.site?.id, 'discoverSite() did not return a site id');
 const manifest = await client.manifest();
 assert(manifest.data.capabilities?.renderPayload === true, 'manifest() missing render payload capability');
 assert(typeof manifest.data.endpoints?.render === 'string', 'manifest() missing render endpoint');
+const smokePath = manifest.data.modules?.pages?.items?.find?.((page) => typeof page.path === 'string')?.path || '/';
 
 const cachedManifest = await client.manifestCached();
 assert(cachedManifest.notModified === false, 'manifestCached() first request should return a body');
@@ -195,17 +240,17 @@ assert(cachedOpenapi.body.openapi === '3.1.0', 'openapiCached() did not return a
 const revalidatedOpenapi = await client.openapiCached({ etag: cachedOpenapi.meta.etag });
 assert(revalidatedOpenapi.notModified === true, 'openapiCached() did not return notModified for matching ETag');
 
-const resolved = await client.resolve('/');
+const resolved = await client.resolve(smokePath);
 assert(resolved.data.route, 'resolve() did not return a route');
 
-const rendered = await client.render('/');
+const rendered = await client.render(smokePath);
 assert(rendered.data, 'render() did not return a payload envelope');
 
-const cachedRender = await client.renderCached('/');
+const cachedRender = await client.renderCached(smokePath);
 assert(cachedRender.notModified === false, 'renderCached() first request should return a body');
 assert(cachedRender.meta.etag, 'renderCached() missing response ETag');
 assert(cachedRender.body.data.content?.elements, 'renderCached() did not return a render payload');
-const revalidatedRender = await client.renderCached('/', { etag: cachedRender.meta.etag });
+const revalidatedRender = await client.renderCached(smokePath, { etag: cachedRender.meta.etag });
 assert(revalidatedRender.notModified === true, 'renderCached() did not return notModified for matching ETag');
 
 const navigation = await client.navigation();
@@ -213,6 +258,13 @@ assert(navigation.data.navigation, 'navigation() missing navigation data');
 
 const media = await client.media({ limit: 5 });
 assert(media.data.media || media.data.pagination, 'media() missing media list data');
+
+const reusableSections = await client.reusableSections();
+assert(Array.isArray(reusableSections.data.sections), 'reusableSections() missing sections array');
+if (reusableSections.data.sections.length > 0) {
+  const reusableSection = await client.reusableSection(reusableSections.data.sections[0].id);
+  assert(reusableSection.data.section?.content?.elements, 'reusableSection() missing reusable section content');
+}
 
 const forms = await client.forms();
 assert(Array.isArray(forms.data.forms), 'forms() missing forms array');
@@ -240,6 +292,18 @@ if (runWriteSmoke) {
       fixtureManifest.data.modules?.forms?.some?.((form) => form.id === 'sdk-smoke-form'),
       'fixture manifest missing SDK smoke form',
     );
+    assert(
+      fixtureManifest.data.modules?.reusableSections?.items?.some?.((section) => section.id === fixture.reusableSectionId),
+      'fixture manifest missing SDK smoke reusable section',
+    );
+
+    const savedSections = await writeClient.reusableSections({ tag: 'sdk' });
+    assert(savedSections.data.sections?.some?.((section) => section.id === fixture.reusableSectionId), 'reusableSections() missing SDK smoke reusable section');
+    writeChecks.push('reusableSections');
+
+    const savedSection = await writeClient.reusableSection(fixture.reusableSectionId);
+    assert(savedSection.data.section?.content?.elements?.[0]?.id === 'sdk-smoke-section-root', 'reusableSection() missing SDK smoke section detail');
+    writeChecks.push('reusableSection');
 
     const createdRecord = await writeClient.createRecord(fixture.collectionId, {
       title: 'SDK Public Record',
@@ -386,6 +450,7 @@ console.log(JSON.stringify({
     'renderCached',
     'navigation',
     'media',
+    'reusableSections',
     'forms',
     'siteComments',
     'events',

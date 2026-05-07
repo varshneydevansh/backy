@@ -175,6 +175,28 @@ export interface BackyCollectionRecord<TValues extends Record<string, unknown> =
   [key: string]: unknown;
 }
 
+export interface BackyReusableSection {
+  id: string;
+  siteId?: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  category?: string;
+  status?: 'active' | 'archived' | string;
+  tags?: string[];
+  content: {
+    elements: BackyElement[];
+    canvasSize?: Record<string, unknown>;
+    customCSS?: string;
+    customJS?: string;
+    [key: string]: unknown;
+  };
+  sourceElementId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
 export interface BackyFormDefinition {
   id: string;
   title?: string;
@@ -300,6 +322,14 @@ export interface BackyFrontendManifest {
     pages?: { count: number; items: Array<Record<string, unknown>> };
     blog?: Record<string, unknown>;
     collections?: BackyCollectionSchema[];
+    reusableSections?: {
+      count?: number;
+      listUrl?: string;
+      categories?: string[];
+      tags?: string[];
+      items?: Array<Record<string, unknown>>;
+      [key: string]: unknown;
+    };
     forms?: BackyFormDefinition[];
     media?: Record<string, unknown>;
     [key: string]: unknown;
@@ -466,6 +496,17 @@ export class BackyClient {
 
   collection(collectionId: string): Promise<BackyEnvelope<{ collection: BackyCollectionSchema }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}`);
+  }
+
+  reusableSections(options: { category?: string; tag?: string; search?: string; siteId?: string } = {}): Promise<BackyEnvelope<{ sections: BackyReusableSection[]; pagination: BackyPagination }>> {
+    const { siteId, ...query } = options;
+    return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/reusable-sections`, {
+      query,
+    });
+  }
+
+  reusableSection(sectionId: string, siteId = this.requireSiteId()): Promise<BackyEnvelope<{ section: BackyReusableSection }>> {
+    return this.request(`/api/sites/${encodeURIComponent(siteId)}/reusable-sections/${encodeURIComponent(sectionId)}`);
   }
 
   records<TValues extends Record<string, unknown> = Record<string, unknown>>(

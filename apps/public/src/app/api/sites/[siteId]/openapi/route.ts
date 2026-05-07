@@ -5,7 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { getSiteByIdOrSlug, listCollections, listFormsBySite } from '@/lib/backyStore';
+import { getSiteByIdOrSlug, listCollections, listFormsBySite, listReusableSections } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 
 interface RouteParams {
@@ -75,8 +75,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const origin = new URL(request.url).origin;
     const collections = listCollections(site.id);
     const forms = listFormsBySite(site.id);
+    const reusableSections = listReusableSections(site.id, { status: 'active' });
     const collectionIds = collections.map((collection) => collection.id);
     const formIds = forms.map((form) => form.id);
+    const reusableSectionIds = reusableSections.map((section) => section.id);
 
     return publicContractJson({
       openapi: '3.1.0',
@@ -301,6 +303,48 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             responses: {
               '201': {
                 description: 'Draft record created',
+              },
+            },
+          },
+        },
+        [`/api/sites/${site.id}/reusable-sections`]: {
+          get: {
+            tags: ['Content'],
+            summary: 'List active reusable section templates',
+            operationId: 'listBackyReusableSections',
+            parameters: [
+              queryParameter('category', { type: 'string' }, 'Filter by saved section category'),
+              queryParameter('tag', { type: 'string' }, 'Filter by saved section tag'),
+              queryParameter('search', { type: 'string' }, 'Search saved section name, slug, description, category, or tags'),
+            ],
+            responses: {
+              '200': {
+                description: 'Reusable section list',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/ReusableSectionListEnvelope' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        [`/api/sites/${site.id}/reusable-sections/{sectionId}`]: {
+          get: {
+            tags: ['Content'],
+            summary: 'Fetch an active reusable section template',
+            operationId: 'getBackyReusableSection',
+            parameters: [
+              pathParameter('sectionId', 'Reusable section ID or slug', reusableSectionIds),
+            ],
+            responses: {
+              '200': {
+                description: 'Reusable section detail',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/ReusableSectionEnvelope' },
+                  },
+                },
               },
             },
           },
@@ -930,6 +974,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               },
             }),
           },
+          ReusableSectionListEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['sections', 'pagination'],
+            properties: {
+              sections: { type: 'array', items: { type: 'object', additionalProperties: true } },
+              pagination: { type: 'object', additionalProperties: true },
+            },
+          }),
+          ReusableSectionEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['section'],
+            properties: {
+              section: { type: 'object', additionalProperties: true },
+            },
+          }),
           FormListEnvelope: envelopeSchema({
             type: 'object',
             required: ['forms', 'total', 'pagination'],
@@ -1046,6 +1105,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         contractVersion: 'backy.ai-frontend.v1',
         collectionIds,
         formIds,
+        reusableSectionIds,
       },
     }, {
       requestId,

@@ -39,6 +39,7 @@ The rule is simple: a custom frontend can look completely different from the Bac
    - blog authors: `GET /api/sites/:siteId/blog/authors`
    - collections: `GET /api/sites/:siteId/collections`
    - collection records: `GET /api/sites/:siteId/collections/:collectionId/records`
+   - reusable sections: `GET /api/sites/:siteId/reusable-sections`
    - comments: `GET /api/sites/:siteId/pages/:pageId/comments?status=approved`
 
 4. Submit interactions.
@@ -68,15 +69,27 @@ Backy exposes a site-level discovery endpoint:
 
 - `GET /api/sites/:siteId/manifest`
 
-It returns `frontend-manifest.schema.json` and gives custom frontends a single bootstrap document for site identity, theme tokens, public endpoint URLs, route patterns, module capabilities, navigation, page/blog/collection/form/media summaries, collection field schemas, form submit URLs, and form-to-collection targets. This mirrors the role of REST discovery in a WordPress-like frontend integration while keeping Backy's render payload as the page/post/item-specific contract.
+It returns `frontend-manifest.schema.json` and gives custom frontends a single bootstrap document for site identity, theme tokens, public endpoint URLs, route patterns, module capabilities, navigation, page/blog/collection/reusable-section/form/media summaries, collection field schemas, form submit URLs, and form-to-collection targets. This mirrors the role of REST discovery in a WordPress-like frontend integration while keeping Backy's render payload as the page/post/item-specific contract.
 
-The manifest advertises a site-scoped OpenAPI export at `GET /api/sites/:siteId/openapi`. That document describes the current public discovery, route resolution, render, navigation, media, collection, form, comment, report, contact, and interaction-event operations for the selected site and includes Backy-specific vendor metadata for available collection and form ids. Manifest `endpoints` also include template URLs for form detail/submissions/contacts, page/blog comments, comment reports, and interaction events so generated frontends do not have to hardcode Backy route shapes.
+The manifest advertises a site-scoped OpenAPI export at `GET /api/sites/:siteId/openapi`. That document describes the current public discovery, route resolution, render, navigation, media, collection, reusable-section, form, comment, report, contact, and interaction-event operations for the selected site and includes Backy-specific vendor metadata for available collection, reusable-section, and form ids. Manifest `endpoints` also include template URLs for reusable section detail, form detail/submissions/contacts, page/blog comments, comment reports, and interaction events so generated frontends do not have to hardcode Backy route shapes.
 
 Published manifest and OpenAPI responses include short public discovery cache headers, ETags with `If-None-Match` 304 support, plus the same Backy contract/request/site headers. Draft/hidden discovery responses are `no-store`.
 
 ## JavaScript SDK starter
 
-`packages/sdk-js` provides the current TypeScript client for custom frontends. It uses only public Backy APIs and exposes helpers for site discovery, manifest/OpenAPI bootstrap, route resolution, render payloads, navigation, media, collections/records, forms/submissions/contacts, comments/reports, and interaction events. Its exported types now cover the main public contract objects (`BackyRenderPayload`, content documents/elements, media/font assets, collection schemas/records, form submissions/contacts, comments, events, response metadata, and conditional 304 results) so frontends can consume Backy with stronger compile-time guarantees. `manifestCached`, `openapiCached`, and `renderCached` expose cache/contract headers and send `If-None-Match` when an ETag is provided, letting custom frontends reuse cached discovery/render payloads without dropping to raw `fetch`. The smoke command `npm run test:smoke --workspace @backy/sdk-js` validates read flows, SDK ETag/304 helpers, and SDK public writes for collection records, form submissions, form contacts, page comments, comment moderation, comment reports, and interaction events against a temporary site, building confidence that a frontend can consume the public API surface without importing admin/editor code.
+`packages/sdk-js` provides the current TypeScript client for custom frontends. It uses only public Backy APIs and exposes helpers for site discovery, manifest/OpenAPI bootstrap, route resolution, render payloads, navigation, media, collections/records, reusable sections, forms/submissions/contacts, comments/reports, and interaction events. Its exported types now cover the main public contract objects (`BackyRenderPayload`, content documents/elements, media/font assets, collection schemas/records, reusable sections, form submissions/contacts, comments, events, response metadata, and conditional 304 results) so frontends can consume Backy with stronger compile-time guarantees. `manifestCached`, `openapiCached`, and `renderCached` expose cache/contract headers and send `If-None-Match` when an ETag is provided, letting custom frontends reuse cached discovery/render payloads without dropping to raw `fetch`. The smoke command `npm run test:smoke --workspace @backy/sdk-js` validates read flows, SDK ETag/304 helpers, reusable-section reads, and SDK public writes for collection records, form submissions, form contacts, page comments, comment moderation, comment reports, and interaction events against a temporary site, building confidence that a frontend can consume the public API surface without importing admin/editor code.
+
+## Current reusable section endpoints
+
+Backy now exposes active saved editor sections as public frontend templates:
+
+- `GET /api/sites/:siteId/reusable-sections`
+- `GET /api/sites/:siteId/reusable-sections/:sectionId`
+- `GET /api/admin/sites/:siteId/reusable-sections`
+- `POST /api/admin/sites/:siteId/reusable-sections`
+- `GET/PATCH/DELETE /api/admin/sites/:siteId/reusable-sections/:sectionId`
+
+Public reusable-section reads only return active sections for published sites. Each section keeps its normal canvas `content.elements` and `canvasSize`, so a custom frontend, generated frontend, or default Backy frontend can treat saved sections as reusable page-building templates without importing admin code. The manifest exposes `capabilities.reusableSections`, `endpoints.reusableSections`, `endpoints.reusableSectionDetail`, and `modules.reusableSections` with count/category/tag/item summaries. The OpenAPI export includes list/detail operations and `x-backy.reusableSectionIds`.
 
 ## Current font asset contract
 

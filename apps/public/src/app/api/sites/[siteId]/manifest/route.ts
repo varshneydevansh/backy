@@ -16,6 +16,7 @@ import {
   listBlogTags,
   listCollections,
   listFormsBySite,
+  listReusableSections,
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 
@@ -56,6 +57,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const posts = getBlogPosts(site.id, { limit: 100 }).posts;
     const collections = listCollections(site.id);
     const forms = listFormsBySite(site.id);
+    const reusableSections = listReusableSections(site.id, { status: 'active' });
     const media = getMediaList(site.id, { visibility: 'public', limit: 1000 });
     const categories = listBlogCategories(site.id);
     const tags = listBlogTags(site.id);
@@ -105,6 +107,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           publicCollectionCreate: collections.some((collection) => collection.permissions.publicCreate),
           collectionWriteForms: forms.some((form) => form.collectionTarget?.enabled),
           dynamicItemRoutes: collections.length > 0,
+          reusableSections: reusableSections.length > 0,
           previewTokens: true,
         },
         endpoints: {
@@ -121,6 +124,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           blogTags: `/api/sites/${site.id}/blog/tags`,
           blogAuthors: `/api/sites/${site.id}/blog/authors`,
           collections: `/api/sites/${site.id}/collections`,
+          reusableSections: `/api/sites/${site.id}/reusable-sections`,
+          reusableSectionDetail: `/api/sites/${site.id}/reusable-sections/{sectionId}`,
           forms: `/api/sites/${site.id}/forms`,
           formDetail: `/api/sites/${site.id}/forms/{formId}`,
           formSubmissions: `/api/sites/${site.id}/forms/{formId}/submissions`,
@@ -207,6 +212,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             recordsUrl: `/api/sites/${site.id}/collections/${collection.id}/records`,
             dynamicRoutePattern: `/${collection.slug}/:recordSlug`,
           })),
+          reusableSections: {
+            count: reusableSections.length,
+            listUrl: `/api/sites/${site.id}/reusable-sections`,
+            categories: Array.from(new Set(reusableSections.map((section) => section.category))).sort(),
+            tags: Array.from(new Set(reusableSections.flatMap((section) => section.tags))).sort(),
+            items: reusableSections.map((section) => ({
+              id: section.id,
+              slug: section.slug,
+              name: section.name,
+              description: section.description,
+              category: section.category,
+              tags: section.tags,
+              detailUrl: `/api/sites/${site.id}/reusable-sections/${section.id}`,
+              canvasSize: section.content.canvasSize,
+              elementCount: section.content.elements.length,
+            })),
+          },
           forms: forms.map((form) => ({
             id: form.id,
             title: form.title,

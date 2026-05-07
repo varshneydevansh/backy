@@ -128,6 +128,15 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Admin collection records support `POST /api/admin/sites/:siteId/collections/:collectionId/records/import?upsert=true` for backend-validated CSV import.
   - Current implementation is backed by the same runtime JSON adapter as admin content. `/render` now surfaces dataset, binding, field, field option/reference, and record manifests for collection-bound elements and generated dynamic item pages, but production completion still needs DB-backed indexes, custom dynamic route templates, and authenticated visitor-write policies.
 
+- `GET /api/sites/:siteId/reusable-sections`
+- `GET /api/sites/:siteId/reusable-sections/:sectionId`
+  - Public reusable section/template contract for custom frontends and default generated frontends.
+  - List/detail responses use `{ success, requestId, data }`; legacy top-level `sections`, `section`, and `pagination` remain for compatibility.
+  - Public reads require a published site and only expose reusable sections with `status: "active"`.
+  - List filters: `category`, `tag`, and `search`.
+  - Each section keeps normal canvas `content.elements` and `canvasSize`, so frontends can render or clone saved page sections without importing admin/editor internals.
+  - The frontend manifest advertises `capabilities.reusableSections`, `endpoints.reusableSections`, `endpoints.reusableSectionDetail`, and `modules.reusableSections`; the site-scoped OpenAPI export includes reusable-section list/detail operations and `x-backy.reusableSectionIds`.
+
 ### 2.2 Render payload
 Public page payload should include:
 - `content` in shared editor schema
@@ -283,7 +292,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 - `DELETE /api/admin/sites/:siteId/reusable-sections/:sectionId`
   - Deletes the saved section from the current runtime adapter.
 
-Current reusable-section endpoints persist to `data/backy/admin-content.json`. The editor library can load active sections, save the selected element tree, rename/delete saved entries, and insert saved sections as cloned editable canvas elements. Production completion still requires synced reusable block instances, richer metadata management, import/export, DB persistence, RBAC, audit events, and public/template registry exposure.
+Current reusable-section endpoints persist to `data/backy/admin-content.json`. The editor library can load active sections, save the selected element tree, rename/delete saved entries, and insert saved sections as cloned editable canvas elements. Active sections are also exposed through the public reusable-section endpoints, manifest, OpenAPI document, and SDK for custom frontends. Production completion still requires synced reusable block instances, richer metadata management, import/export, DB persistence, RBAC, and audit events.
 
 ### 3.5 Forms
 - `POST /api/admin/sites/:siteId/forms`

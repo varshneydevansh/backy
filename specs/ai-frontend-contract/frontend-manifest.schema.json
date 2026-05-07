@@ -50,13 +50,14 @@
             "forms",
             "collectionSchemas",
             "collectionRecords",
+            "reusableSections",
             "dynamicItemRoutes"
           ]
         },
         "endpoints": {
           "type": "object",
           "additionalProperties": { "type": "string" },
-          "required": ["site", "manifest", "openapi", "resolve", "render", "navigation", "media", "pages", "blog", "collections", "forms"]
+          "required": ["site", "manifest", "openapi", "resolve", "render", "navigation", "media", "pages", "blog", "collections", "reusableSections", "forms"]
         },
         "routePatterns": {
           "type": "array",
@@ -125,6 +126,32 @@
                 "required": ["id", "active", "fields", "submitUrl"]
               }
             },
+            "reusableSections": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "count": { "type": "number", "minimum": 0 },
+                "listUrl": { "type": "string", "minLength": 1 },
+                "categories": { "type": "array" },
+                "tags": { "type": "array" },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "id": { "type": "string", "minLength": 1 },
+                      "slug": { "type": "string", "minLength": 1 },
+                      "name": { "type": "string", "minLength": 1 },
+                      "detailUrl": { "type": "string", "minLength": 1 },
+                      "elementCount": { "type": "number", "minimum": 0 }
+                    },
+                    "required": ["id", "slug", "name", "detailUrl", "elementCount"]
+                  }
+                }
+              },
+              "required": ["count", "listUrl", "categories", "tags", "items"]
+            },
             "media": {
               "type": "object",
               "properties": {
@@ -137,7 +164,7 @@
               "required": ["count", "publicCount", "fontCount", "types", "listUrl"]
             }
           },
-          "required": ["pages", "blog", "collections", "forms", "media"]
+          "required": ["pages", "blog", "collections", "forms", "reusableSections", "media"]
         },
         "navigation": { "type": "object" }
       },
