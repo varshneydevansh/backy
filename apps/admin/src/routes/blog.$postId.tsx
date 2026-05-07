@@ -2,7 +2,7 @@
  * BACKY CMS - EDIT BLOG POST (HYBRID LAYOUT)
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Archive, ArrowLeft, CheckCircle2, ExternalLink, Eye, FileText, History, RotateCcw, Save, Trash2 } from 'lucide-react';
 import {
@@ -10,10 +10,14 @@ import {
     createBlogPostPreview,
     deleteBlogPost,
     getBlogPost,
+    listBlogCategories,
     listBlogPostRevisions,
+    listBlogTags,
     publishBlogPost,
     rollbackBlogPost,
     updateBlogPost,
+    type BlogCategory,
+    type BlogTag,
     type ContentRevision,
 } from '@/lib/adminContentApi';
 import { useStore, type BlogPost, type ContentStatus } from '@/stores/mockStore';
@@ -53,12 +57,16 @@ function EditBlogPostPage() {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [previewExpiresAt, setPreviewExpiresAt] = useState<string | null>(null);
     const [revisions, setRevisions] = useState<ContentRevision[]>([]);
+    const [categories, setCategories] = useState<BlogCategory[]>([]);
+    const [tags, setTags] = useState<BlogTag[]>([]);
 
     // Initialize State from Post
     const [title, setTitle] = useState(post?.title || '');
     const [slug, setSlug] = useState(post?.slug || '');
     const [excerpt, setExcerpt] = useState(post?.excerpt || '');
     const [status, setStatus] = useState<ContentStatus>(post?.status || 'draft');
+    const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(post?.categoryIds || []);
+    const [selectedTagIds, setSelectedTagIds] = useState<string[]>(post?.tagIds || []);
 
     useEffect(() => {
         let cancelled = false;
@@ -77,11 +85,15 @@ function EditBlogPostPage() {
                     setSlug(backendPost.slug);
                     setExcerpt(backendPost.excerpt);
                     setStatus(backendPost.status);
+                    setSelectedCategoryIds(backendPost.categoryIds || []);
+                    setSelectedTagIds(backendPost.tagIds || []);
                 }
             } catch (error) {
                 if (!cancelled) {
                     if (localFallbackPost) {
                         setPost(localFallbackPost);
+                        setSelectedCategoryIds(localFallbackPost.categoryIds || []);
+                        setSelectedTagIds(localFallbackPost.tagIds || []);
                         setLoadError(error instanceof Error ? error.message : 'Unable to load backend post.');
                     } else {
                         setPost(null);
@@ -101,6 +113,34 @@ function EditBlogPostPage() {
             cancelled = true;
         };
     }, [activeSiteId, postId, storePostId, updatePost]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadTaxonomy = async () => {
+            try {
+                const [backendCategories, backendTags] = await Promise.all([
+                    listBlogCategories(activeSiteId),
+                    listBlogTags(activeSiteId),
+                ]);
+                if (!cancelled) {
+                    setCategories(backendCategories);
+                    setTags(backendTags);
+                }
+            } catch {
+                if (!cancelled) {
+                    setCategories([]);
+                    setTags([]);
+                }
+            }
+        };
+
+        void loadTaxonomy();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeSiteId]);
 
     // Canvas State (Content Body)
     const { elements: savedElements, canvasSize: savedCanvasSize } = useMemo(
@@ -202,6 +242,8 @@ function EditBlogPostPage() {
             excerpt,
             content,
             status,
+            categoryIds: selectedCategoryIds,
+            tagIds: selectedTagIds,
         };
 
         try {
@@ -215,6 +257,8 @@ function EditBlogPostPage() {
                     title,
                     description: excerpt,
                 },
+                categoryIds: selectedCategoryIds,
+                tagIds: selectedTagIds,
                 revisionNote: 'Before blog editor save',
                 updatedBy: 'admin',
             });
@@ -239,6 +283,20 @@ function EditBlogPostPage() {
         setSlug(nextPost.slug);
         setExcerpt(nextPost.excerpt);
         setStatus(nextPost.status);
+        setSelectedCategoryIds(nextPost.categoryIds || []);
+        setSelectedTagIds(nextPost.tagIds || []);
+    };
+
+    const toggleSelection = (
+        id: string,
+        selectedIds: string[],
+        setSelectedIds: Dispatch<SetStateAction<string[]>>,
+    ) => {
+        setSelectedIds(
+            selectedIds.includes(id)
+                ? selectedIds.filter((selectedId) => selectedId !== id)
+                : [...selectedIds, id],
+        );
     };
 
     const applyWorkflow = async (action: 'publish' | 'archive') => {
@@ -500,6 +558,40 @@ function EditBlogPostPage() {
                                     <option value="scheduled">Scheduled</option>
                                     <option value="archived">Archived</option>
                                 </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Categories</label>
+                                <div className="grid gap-2 rounded-lg border bg-background p-3">
+                                    {categories.length === 0 ? (
+                                        <div className="text-sm text-muted-foreground">No categories yet.</div>
+                                    ) : categories.map((category) => (
+                                        <label key={category.id} className="flex items-center gap-2 text-sm">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedCategoryIds.includes(category.id)}
+                                                onChange={() => toggleSelection(category.id, selectedCategoryIds, setSelectedCategoryIds)}
+                                            />
+                                            <span>{category.name}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Tags</label>
+                                <div className="grid gap-2 rounded-lg border bg-background p-3">
+                                    {tags.length === 0 ? (
+                                        <div className="text-sm text-muted-foreground">No tags yet.</div>
+                                    ) : tags.map((tag) => (
+                                        <label key={tag.id} className="flex items-center gap-2 text-sm">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedTagIds.includes(tag.id)}
+                                                onChange={() => toggleSelection(tag.id, selectedTagIds, setSelectedTagIds)}
+                                            />
+                                            <span>{tag.name}</span>
+                                        </label>
+                                    ))}
+                                </div>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-2">Excerpt</label>

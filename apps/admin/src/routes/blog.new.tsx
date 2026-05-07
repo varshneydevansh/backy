@@ -2,10 +2,16 @@
  * BACKY CMS - NEW BLOG POST (HYBRID LAYOUT)
  */
 
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, Save, FileText } from 'lucide-react';
-import { createBlogPost } from '@/lib/adminContentApi';
+import {
+    createBlogPost,
+    listBlogCategories,
+    listBlogTags,
+    type BlogCategory,
+    type BlogTag,
+} from '@/lib/adminContentApi';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
@@ -38,6 +44,50 @@ function NewBlogPostPage() {
     const [slug, setSlug] = useState('');
     const [excerpt, setExcerpt] = useState('');
     const [status, setStatus] = useState<'draft' | 'published'>('draft');
+    const [categories, setCategories] = useState<BlogCategory[]>([]);
+    const [tags, setTags] = useState<BlogTag[]>([]);
+    const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+    const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadTaxonomy = async () => {
+            try {
+                const [backendCategories, backendTags] = await Promise.all([
+                    listBlogCategories(activeSiteId),
+                    listBlogTags(activeSiteId),
+                ]);
+                if (!cancelled) {
+                    setCategories(backendCategories);
+                    setTags(backendTags);
+                }
+            } catch {
+                if (!cancelled) {
+                    setCategories([]);
+                    setTags([]);
+                }
+            }
+        };
+
+        void loadTaxonomy();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeSiteId]);
+
+    const toggleSelection = (
+        id: string,
+        selectedIds: string[],
+        setSelectedIds: Dispatch<SetStateAction<string[]>>,
+    ) => {
+        setSelectedIds(
+            selectedIds.includes(id)
+                ? selectedIds.filter((selectedId) => selectedId !== id)
+                : [...selectedIds, id],
+        );
+    };
 
     // Canvas State
     const initialElements: CanvasElement[] = useMemo(() => [
@@ -78,6 +128,8 @@ function NewBlogPostPage() {
             status,
             author: user?.fullName || 'Anonymous',
             authorId: user?.id || 'admin',
+            categoryIds: selectedCategoryIds,
+            tagIds: selectedTagIds,
             content: JSON.parse(content),
             meta: {
                 title,
@@ -98,6 +150,8 @@ function NewBlogPostPage() {
                 content,
                 status,
                 author: user?.fullName || 'Anonymous',
+                categoryIds: selectedCategoryIds,
+                tagIds: selectedTagIds,
             });
         } finally {
             setIsLoading(false);
@@ -193,6 +247,40 @@ function NewBlogPostPage() {
                                     <option value="draft">Draft</option>
                                     <option value="published">Published</option>
                                 </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Categories</label>
+                                <div className="grid gap-2 rounded-lg border bg-background p-3">
+                                    {categories.length === 0 ? (
+                                        <div className="text-sm text-muted-foreground">No categories yet.</div>
+                                    ) : categories.map((category) => (
+                                        <label key={category.id} className="flex items-center gap-2 text-sm">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedCategoryIds.includes(category.id)}
+                                                onChange={() => toggleSelection(category.id, selectedCategoryIds, setSelectedCategoryIds)}
+                                            />
+                                            <span>{category.name}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-2">Tags</label>
+                                <div className="grid gap-2 rounded-lg border bg-background p-3">
+                                    {tags.length === 0 ? (
+                                        <div className="text-sm text-muted-foreground">No tags yet.</div>
+                                    ) : tags.map((tag) => (
+                                        <label key={tag.id} className="flex items-center gap-2 text-sm">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedTagIds.includes(tag.id)}
+                                                onChange={() => toggleSelection(tag.id, selectedTagIds, setSelectedTagIds)}
+                                            />
+                                            <span>{tag.name}</span>
+                                        </label>
+                                    ))}
+                                </div>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-2">Excerpt</label>

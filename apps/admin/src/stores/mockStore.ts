@@ -46,6 +46,8 @@ export interface BlogPost {
     content: string;
     status: ContentStatus;
     author: string;
+    categoryIds?: string[];
+    tagIds?: string[];
     publishedAt: string;
 }
 

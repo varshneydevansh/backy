@@ -492,6 +492,8 @@ const toStorePost = (post: ApiBlogPost): BlogPost => ({
   content: stringifyContent(post.content),
   status: toContentStatus(post.status, post.status === 'published'),
   author: post.authorId || 'admin',
+  categoryIds: post.categoryIds || [],
+  tagIds: post.tagIds || [],
   publishedAt: post.publishedAt || post.updatedAt || post.createdAt || new Date().toISOString(),
 });
 
@@ -885,8 +887,16 @@ export async function deletePage(siteId: string, pageId: string): Promise<void> 
   }
 }
 
-export async function listBlogPosts(siteId: string): Promise<BlogPost[]> {
-  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog?limit=100`);
+export async function listBlogPosts(
+  siteId: string,
+  filters: { status?: BlogPost['status']; categoryId?: string; tagId?: string } = {},
+): Promise<BlogPost[]> {
+  const query = new URLSearchParams({ limit: '100' });
+  if (filters.status) query.set('status', filters.status);
+  if (filters.categoryId) query.set('categoryId', filters.categoryId);
+  if (filters.tagId) query.set('tagId', filters.tagId);
+
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog?${query.toString()}`);
   const payload = await readJson<ApiListBlogResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {

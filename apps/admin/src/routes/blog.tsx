@@ -7,7 +7,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
 import { Plus, FileText, Edit, Trash2 } from 'lucide-react';
-import { deleteBlogPost, listBlogPosts } from '@/lib/adminContentApi';
+import {
+  deleteBlogPost,
+  listBlogCategories,
+  listBlogPosts,
+  listBlogTags,
+  type BlogCategory,
+  type BlogTag,
+} from '@/lib/adminContentApi';
 import { useStore, type BlogPost } from '@/stores/mockStore';
 import { useDataTable, type Column } from '@/hooks/useDataTable';
 import { PageShell } from '@/components/layout/PageShell';
@@ -36,6 +43,10 @@ function BlogListView() {
   const { sites, posts, setPosts, deletePost } = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<BlogCategory[]>([]);
+  const [tags, setTags] = useState<BlogTag[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
+  const [selectedTagId, setSelectedTagId] = useState('');
   const activeSiteId = useMemo(
     () => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo',
     [sites],
@@ -49,9 +60,18 @@ function BlogListView() {
       setError(null);
 
       try {
-        const backendPosts = await listBlogPosts(activeSiteId);
+        const [backendPosts, backendCategories, backendTags] = await Promise.all([
+          listBlogPosts(activeSiteId, {
+            categoryId: selectedCategoryId || undefined,
+            tagId: selectedTagId || undefined,
+          }),
+          listBlogCategories(activeSiteId),
+          listBlogTags(activeSiteId),
+        ]);
         if (!cancelled) {
           setPosts(backendPosts);
+          setCategories(backendCategories);
+          setTags(backendTags);
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -69,7 +89,16 @@ function BlogListView() {
     return () => {
       cancelled = true;
     };
-  }, [activeSiteId, setPosts]);
+  }, [activeSiteId, selectedCategoryId, selectedTagId, setPosts]);
+
+  const categoryById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category])),
+    [categories],
+  );
+  const tagById = useMemo(
+    () => new Map(tags.map((tag) => [tag.id, tag])),
+    [tags],
+  );
 
   const handleDeletePost = async (post: BlogPost) => {
     if (!confirm('Delete this post?')) {
@@ -113,6 +142,20 @@ function BlogListView() {
       key: 'author',
       label: 'Author',
       sortable: true,
+    },
+    {
+      key: 'categoryIds',
+      label: 'Taxonomy',
+      render: (post) => (
+        <div className="space-y-1 text-xs text-muted-foreground">
+          <div>
+            {(post.categoryIds || []).map((id) => categoryById.get(id)?.name).filter(Boolean).join(', ') || 'Uncategorized'}
+          </div>
+          <div>
+            {(post.tagIds || []).map((id) => tagById.get(id)?.name).filter(Boolean).join(', ') || 'No tags'}
+          </div>
+        </div>
+      )
     },
     {
       key: 'publishedAt',
@@ -194,6 +237,36 @@ function BlogListView() {
             className="w-full pl-4 pr-4 py-2 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
+        <select
+          value={selectedCategoryId}
+          onChange={(event) => {
+            setSelectedCategoryId(event.target.value);
+            setCurrentPage(1);
+          }}
+          className="w-48 rounded-lg border bg-background px-3 py-2 text-sm"
+        >
+          <option value="">All categories</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={selectedTagId}
+          onChange={(event) => {
+            setSelectedTagId(event.target.value);
+            setCurrentPage(1);
+          }}
+          className="w-44 rounded-lg border bg-background px-3 py-2 text-sm"
+        >
+          <option value="">All tags</option>
+          {tags.map((tag) => (
+            <option key={tag.id} value={tag.id}>
+              {tag.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       <DataGrid
