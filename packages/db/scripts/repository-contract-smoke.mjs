@@ -3,6 +3,7 @@
 import { createBackyContentDocument } from '../../core/dist/index.mjs';
 import {
   createDatabaseRepositories,
+  createMediaRepository,
   createPageRepository,
   createPostRepository,
   createSiteRepository,
@@ -10,6 +11,8 @@ import {
 } from '../dist/index.js';
 import {
   blogPosts,
+  media,
+  mediaFolders,
   pages,
   sites,
 } from '../dist/schema/index.js';
@@ -24,6 +27,8 @@ const tableName = (table) => {
   if (table === sites) return 'sites';
   if (table === pages) return 'pages';
   if (table === blogPosts) return 'blogPosts';
+  if (table === media) return 'media';
+  if (table === mediaFolders) return 'mediaFolders';
   throw new Error('Unknown table passed to fake DB');
 };
 
@@ -32,11 +37,15 @@ const createFakeDb = () => {
     sites: [],
     pages: [],
     blogPosts: [],
+    media: [],
+    mediaFolders: [],
   };
   const counters = {
     sites: 0,
     pages: 0,
     blogPosts: 0,
+    media: 0,
+    mediaFolders: 0,
   };
 
   const now = () => new Date().toISOString();
@@ -87,21 +96,54 @@ const createFakeDb = () => {
         ...values,
       };
     }
+    if (name === 'blogPosts') {
+      return {
+        id: nextId(name),
+        siteId: 'site_default',
+        title: 'Untitled post',
+        slug: 'untitled',
+        excerpt: null,
+        content: { elements: [] },
+        contentFormat: 'editor',
+        featuredImageId: null,
+        authorId: null,
+        status: 'draft',
+        publishedAt: null,
+        scheduledAt: null,
+        meta: {},
+        viewCount: 0,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'mediaFolders') {
+      return {
+        id: nextId(name),
+        siteId: 'site_default',
+        parentId: null,
+        name: 'Untitled folder',
+        sortOrder: 0,
+        createdAt: timestamp,
+        ...values,
+      };
+    }
     return {
       id: nextId(name),
       siteId: 'site_default',
-      title: 'Untitled post',
-      slug: 'untitled',
-      excerpt: null,
-      content: { elements: [] },
-      contentFormat: 'editor',
-      featuredImageId: null,
-      authorId: null,
-      status: 'draft',
-      publishedAt: null,
-      scheduledAt: null,
-      meta: {},
-      viewCount: 0,
+      filename: 'asset.bin',
+      originalName: 'asset.bin',
+      mimeType: 'application/octet-stream',
+      sizeBytes: 0,
+      type: 'other',
+      url: '/uploads/asset.bin',
+      thumbnailUrl: null,
+      folderId: null,
+      tags: [],
+      metadata: {},
+      altText: null,
+      caption: null,
+      uploadedBy: null,
       createdAt: timestamp,
       updatedAt: timestamp,
       ...values,
@@ -178,10 +220,12 @@ const repositorySet = createDatabaseRepositories({
   },
 });
 assert(repositorySet.sites && repositorySet.pages && repositorySet.posts, 'Expected repository set factories');
+assert(repositorySet.media, 'Expected media repository factory');
 
 const siteRepository = createSiteRepository(db);
 const pageRepository = createPageRepository(db);
 const postRepository = createPostRepository(db);
+const mediaRepository = createMediaRepository(db);
 
 const site = (await siteRepository.create({
   teamId: 'team_contract',
@@ -298,6 +342,55 @@ assert((await postRepository.list({ siteId: site.id, includeUnpublished: true })
 const archivedPost = (await postRepository.archive(site.id, post.id)).item;
 assert(archivedPost.status === 'archived', 'Expected archived post');
 assert((await postRepository.checkSlug({ siteId: site.id, slug: post.slug })).conflictingId === post.id, 'Expected post slug conflict');
+
+db.state.mediaFolders.push({
+  id: 'folder_assets',
+  siteId: site.id,
+  parentId: null,
+  name: 'Assets',
+  sortOrder: 10,
+  createdAt: new Date().toISOString(),
+});
+
+const mediaItem = (await mediaRepository.create({
+  siteId: site.id,
+  filename: 'hero.jpg',
+  originalName: 'Hero Image.jpg',
+  mimeType: 'image/jpeg',
+  size: 128000,
+  url: '/uploads/sites/repo-contract/hero.jpg',
+  type: 'image',
+  folderId: 'folder_assets',
+  altText: 'Hero image',
+  caption: 'Homepage hero',
+  visibility: 'public',
+  metadata: {
+    width: 1600,
+    height: 900,
+    tags: ['hero', 'image'],
+    scope: 'page',
+    scopeTargetId: page.id,
+    pageIds: [page.id],
+  },
+  uploadedBy: 'user_admin',
+})).item;
+assert(mediaItem.sizeBytes === 128000, 'Expected media size normalization');
+assert(mediaItem.tags.includes('hero'), 'Expected media tags from metadata');
+assert(mediaItem.visibility === 'public', 'Expected media visibility metadata');
+assert(mediaItem.scope === 'page' && mediaItem.scopeTargetId === page.id, 'Expected media scope metadata');
+assert(mediaItem.pageIds.includes(page.id), 'Expected media page binding metadata');
+assert((await mediaRepository.getById(site.id, mediaItem.id))?.url === mediaItem.url, 'Expected media getById');
+assert((await mediaRepository.list({ siteId: site.id, type: 'image', visibility: 'public' })).items.length === 1, 'Expected media list filter');
+const updatedMedia = (await mediaRepository.update(site.id, mediaItem.id, {
+  altText: 'Updated hero image',
+  visibility: 'private',
+  tags: ['updated'],
+})).item;
+assert(updatedMedia.altText === 'Updated hero image', 'Expected media alt update');
+assert(updatedMedia.visibility === 'private', 'Expected media visibility update');
+assert(updatedMedia.tags.includes('updated'), 'Expected media tags update');
+assert((await mediaRepository.listFolders(site.id)).some((folder) => folder.id === 'folder_assets'), 'Expected media folders');
+assert(await mediaRepository.delete(site.id, mediaItem.id), 'Expected media delete');
 
 assert(await pageRepository.delete(site.id, publishedPage.id), 'Expected page delete');
 assert(await postRepository.delete(site.id, archivedPost.id), 'Expected post delete');

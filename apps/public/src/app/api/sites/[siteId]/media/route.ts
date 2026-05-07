@@ -7,7 +7,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import type { MediaItem } from '@backy-cms/core';
 import { getMediaList, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
     params: Promise<{
@@ -32,6 +34,27 @@ const errorResponse = (status: number, code: string, message: string, requestId:
     )
 );
 
+const mediaTypeFromInput = (value: string | null): MediaItem['type'] | undefined => (
+    value === 'image' ||
+    value === 'video' ||
+    value === 'audio' ||
+    value === 'document' ||
+    value === 'font' ||
+    value === 'other'
+        ? value
+        : undefined
+);
+
+const paginateMedia = (items: MediaItem[], limit: number, offset: number) => ({
+    media: items.slice(offset, offset + limit),
+    pagination: {
+        total: items.length,
+        limit,
+        offset,
+        hasMore: offset + limit < items.length,
+    },
+});
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
     const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -47,6 +70,37 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const search = searchParams.get('search') || searchParams.get('q');
         const tag = searchParams.get('tag');
         const folderId = searchParams.has('folderId') ? searchParams.get('folderId') : undefined;
+
+        if (!shouldUseDemoStoreFallback()) {
+            const repositories = await getRequiredDatabaseRepositories();
+            const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+            if (!site || !site.isPublished) {
+                return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+            }
+
+            const result = await repositories.media.list({
+                siteId: site.id,
+                type: mediaTypeFromInput(type) || 'all',
+                folderId,
+                visibility: 'public',
+                search: search || undefined,
+                limit: 100,
+                offset: 0,
+            });
+            const filtered = result.items
+                .filter((item) => scope ? item.scope === scope : true)
+                .filter((item) => pageId ? item.pageIds.includes(pageId) || (item.scope === 'page' && item.scopeTargetId === pageId) : true)
+                .filter((item) => postId ? item.postIds.includes(postId) || (item.scope === 'post' && item.scopeTargetId === postId) : true)
+                .filter((item) => tag ? item.tags.includes(tag) : true);
+            const mediaPayload = paginateMedia(filtered, limit, offset);
+
+            return NextResponse.json({
+                success: true,
+                requestId,
+                data: mediaPayload,
+                ...mediaPayload,
+            });
+        }
 
         const site = getSiteByIdOrSlug(siteId);
         if (!site) {

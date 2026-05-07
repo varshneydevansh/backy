@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
   params: Promise<{
@@ -36,6 +37,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, mediaId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site || !site.isPublished) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const media = await repositories.media.getById(site.id, mediaId);
+
+      if (!media || media.visibility !== 'public') {
+        return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media not found', requestId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          media,
+        },
+        media,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {

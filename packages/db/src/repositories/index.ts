@@ -1,4 +1,7 @@
 export {
+    createMediaRepository,
+} from './media';
+export {
     createPageRepository,
     createPostRepository,
     createSiteRepository,
