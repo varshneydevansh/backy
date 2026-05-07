@@ -8,6 +8,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSettings, regenerateAdminApiKeys, updateAdminSettings } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import type { BackyJsonObject, BackySettings } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
 
@@ -42,10 +44,39 @@ const normalizeDeliveryMode = (value: unknown): 'managed-hosting' | 'custom-fron
   value === 'managed-hosting' || value === 'custom-frontend' ? value : null
 );
 
+const toAdminSettings = (settings: BackySettings) => ({
+  deliveryMode: settings.deliveryMode === 'custom-frontend' ? 'custom-frontend' : 'managed-hosting',
+  apiKeys: {
+    publicApiKey: settings.apiKeys.publicKey || '',
+    adminApiKey: settings.apiKeys.secretKeyId || '',
+  },
+  storage: settings.storage || {},
+  auth: settings.auth || {},
+  integrations: settings.integrations || {},
+  updatedAt: settings.updatedAt,
+});
+
+const parseJsonObject = (value: unknown): BackyJsonObject | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value) ? value as BackyJsonObject : undefined
+);
+
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const settings = await repositories.settings.get();
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          settings: toAdminSettings(settings),
+        },
+      });
+    }
+
     return NextResponse.json({
       success: true,
       requestId,
@@ -77,6 +108,34 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const apiKeysInput = body.apiKeys && typeof body.apiKeys === 'object' && !Array.isArray(body.apiKeys)
+        ? body.apiKeys as Record<string, unknown>
+        : {};
+      const storage = parseJsonObject(body.storage);
+      const auth = parseJsonObject(body.auth);
+      const integrations = parseJsonObject(body.integrations);
+      const settings = (await repositories.settings.update({
+        ...(deliveryMode ? { deliveryMode } : {}),
+        apiKeys: {
+          ...(typeof apiKeysInput.publicApiKey === 'string' ? { publicKey: apiKeysInput.publicApiKey.trim() } : {}),
+          ...(typeof apiKeysInput.adminApiKey === 'string' ? { secretKeyId: apiKeysInput.adminApiKey.trim() } : {}),
+        },
+        ...(storage ? { storage } : {}),
+        ...(auth ? { auth } : {}),
+        ...(integrations ? { integrations } : {}),
+      })).item;
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          settings: toAdminSettings(settings),
+        },
+      });
+    }
+
     const settings = updateAdminSettings({
       ...body,
       ...(deliveryMode ? { deliveryMode } : {}),
@@ -106,6 +165,23 @@ export async function POST(request: NextRequest) {
     }
 
     const keyScope = body.scope === 'public' || body.scope === 'admin' ? body.scope : 'all';
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const settings = (await repositories.settings.update({
+        rotatePublicKey: keyScope === 'all' || keyScope === 'public',
+        rotateSecretKey: keyScope === 'all' || keyScope === 'admin',
+      })).item;
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          settings: toAdminSettings(settings),
+        },
+      });
+    }
+
     const settings = regenerateAdminApiKeys(keyScope);
 
     return NextResponse.json({
