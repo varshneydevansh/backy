@@ -405,6 +405,19 @@ export interface BackyMediaListInput extends BackyPaginationInput {
   search?: string;
 }
 
+export interface BackyMediaFolderCreateInput {
+  siteId: string;
+  name: string;
+  parentId?: string | null;
+  sortOrder?: number;
+}
+
+export interface BackyMediaFolderUpdateInput {
+  name?: string;
+  parentId?: string | null;
+  sortOrder?: number;
+}
+
 export interface BackyFormListInput extends BackyPaginationInput {
   siteId: string;
   pageId?: string;
@@ -725,6 +738,10 @@ export interface BackyMediaRepository {
   update(siteId: string, mediaId: string, input: BackyMediaUpdateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<MediaItem>>;
   delete(siteId: string, mediaId: string, context?: BackyRepositoryContext): Promise<boolean>;
   listFolders(siteId: string, context?: BackyRepositoryContext): Promise<MediaFolder[]>;
+  getFolderById(siteId: string, folderId: string, context?: BackyRepositoryContext): Promise<MediaFolder | null>;
+  createFolder(input: BackyMediaFolderCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<MediaFolder>>;
+  updateFolder(siteId: string, folderId: string, input: BackyMediaFolderUpdateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<MediaFolder>>;
+  deleteFolder(siteId: string, folderId: string, context?: BackyRepositoryContext): Promise<boolean>;
 }
 
 export interface BackyFormRepository {

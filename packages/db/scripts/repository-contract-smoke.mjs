@@ -696,14 +696,18 @@ const archivedPost = (await postRepository.archive(site.id, post.id)).item;
 assert(archivedPost.status === 'archived', 'Expected archived post');
 assert((await postRepository.checkSlug({ siteId: site.id, slug: post.slug })).conflictingId === post.id, 'Expected post slug conflict');
 
-db.state.mediaFolders.push({
-  id: 'folder_assets',
+const mediaFolder = (await mediaRepository.createFolder({
   siteId: site.id,
   parentId: null,
   name: 'Assets',
   sortOrder: 10,
-  createdAt: new Date().toISOString(),
-});
+})).item;
+assert(mediaFolder.name === 'Assets', 'Expected media folder create');
+const updatedMediaFolder = (await mediaRepository.updateFolder(site.id, mediaFolder.id, {
+  name: 'Brand assets',
+  sortOrder: 20,
+})).item;
+assert(updatedMediaFolder.name === 'Brand assets' && updatedMediaFolder.sortOrder === 20, 'Expected media folder update');
 
 const mediaItem = (await mediaRepository.create({
   siteId: site.id,
@@ -713,7 +717,7 @@ const mediaItem = (await mediaRepository.create({
   size: 128000,
   url: '/uploads/sites/repo-contract/hero.jpg',
   type: 'image',
-  folderId: 'folder_assets',
+  folderId: mediaFolder.id,
   altText: 'Hero image',
   caption: 'Homepage hero',
   visibility: 'public',
@@ -742,7 +746,10 @@ const updatedMedia = (await mediaRepository.update(site.id, mediaItem.id, {
 assert(updatedMedia.altText === 'Updated hero image', 'Expected media alt update');
 assert(updatedMedia.visibility === 'private', 'Expected media visibility update');
 assert(updatedMedia.tags.includes('updated'), 'Expected media tags update');
-assert((await mediaRepository.listFolders(site.id)).some((folder) => folder.id === 'folder_assets'), 'Expected media folders');
+assert((await mediaRepository.listFolders(site.id)).some((folder) => folder.id === mediaFolder.id), 'Expected media folders');
+assert((await mediaRepository.getFolderById(site.id, mediaFolder.id))?.name === 'Brand assets', 'Expected media folder getById');
+assert(await mediaRepository.deleteFolder(site.id, mediaFolder.id), 'Expected media folder delete');
+assert((await mediaRepository.getById(site.id, mediaItem.id))?.folderId === null, 'Expected media folder delete to detach media assets');
 assert(await mediaRepository.delete(site.id, mediaItem.id), 'Expected media delete');
 
 const collection = (await collectionRepository.create({

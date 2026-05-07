@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createMediaFolder, getSiteByIdOrSlug, listMediaFolders } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
@@ -26,11 +27,36 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
   }
 };
 
+const nullableString = (value: unknown): string | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+};
+
+const numberFromInput = (value: unknown): number | undefined => {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { siteId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const folders = await repositories.media.listFolders(site.id);
+      return NextResponse.json({ success: true, requestId, data: { folders } });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -51,7 +77,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
-    const site = getSiteByIdOrSlug(siteId);
+    const repositories = !shouldUseDemoStoreFallback() ? await getRequiredDatabaseRepositories() : null;
+    const repositorySite = repositories ? await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId) : null;
+    const site = repositorySite || getSiteByIdOrSlug(siteId);
 
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
@@ -64,7 +92,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Folder name is required', requestId);
     }
 
-    const folder = createMediaFolder(site.id, body);
+    const parentId = nullableString(body.parentId);
+    if (repositories && parentId && !await repositories.media.getFolderById(site.id, parentId)) {
+      return errorResponse(404, 'PARENT_FOLDER_NOT_FOUND', 'Parent media folder not found', requestId);
+    }
+
+    const folder = repositories
+      ? (await repositories.media.createFolder({
+          siteId: site.id,
+          name,
+          parentId,
+          sortOrder: numberFromInput(body.sortOrder),
+        })).item
+      : createMediaFolder(site.id, body);
 
     return NextResponse.json({ success: true, requestId, data: { folder } }, { status: 201 });
   } catch (error) {

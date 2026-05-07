@@ -14,6 +14,7 @@ let createdUserId = null;
 let createdCollectionId = null;
 let createdCollectionRecordId = null;
 let createdMediaId = null;
+let createdMediaFolderId = null;
 let createdReusableSectionId = null;
 let originalDeliveryMode = null;
 
@@ -76,6 +77,10 @@ async function cleanup() {
 
   if (createdSiteId && createdReusableSectionId) {
     await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (createdSiteId && createdMediaFolderId) {
+    await request(`/api/admin/sites/${createdSiteId}/media/folders/${createdMediaFolderId}`, { method: 'DELETE' }).catch(() => {});
   }
 
   if (createdSiteId && createdMediaId) {
@@ -319,6 +324,68 @@ try {
       body: JSON.stringify({ visibility: 'public' }),
     });
     assert(publicUpdate.response.status === 200, `${publicUpdate.url} expected 200, got ${publicUpdate.response.status}`);
+  });
+
+  await record('admin media folders create/list/update/delete and detach assets', async () => {
+    const create = await request(`/api/admin/sites/${createdSiteId}/media/folders`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Contract Assets',
+        sortOrder: 7,
+      }),
+    });
+    assert(create.response.status === 201, `${create.url} expected 201, got ${create.response.status}`);
+    assert(create.json?.success === true, `${create.url} expected success envelope`);
+    assert(create.json?.data?.folder?.name === 'Contract Assets', `${create.url} expected created folder name`);
+    createdMediaFolderId = create.json.data.folder.id;
+
+    const list = await request(`/api/admin/sites/${createdSiteId}/media/folders`);
+    assert(list.response.status === 200, `${list.url} expected 200, got ${list.response.status}`);
+    assert(list.json?.data?.folders?.some((folder) => folder.id === createdMediaFolderId), `${list.url} missing created folder`);
+
+    const assignMedia = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        folderId: createdMediaFolderId,
+      }),
+    });
+    assert(assignMedia.response.status === 200, `${assignMedia.url} expected 200, got ${assignMedia.response.status}`);
+    assert(assignMedia.json?.data?.media?.folderId === createdMediaFolderId, `${assignMedia.url} did not assign media folder`);
+
+    const folderMedia = await request(`/api/admin/sites/${createdSiteId}/media?folderId=${createdMediaFolderId}&type=font`);
+    assert(folderMedia.response.status === 200, `${folderMedia.url} expected 200, got ${folderMedia.response.status}`);
+    assert(folderMedia.json?.data?.media?.some((item) => item.id === createdMediaId), `${folderMedia.url} missing folder-scoped media`);
+
+    const update = await request(`/api/admin/sites/${createdSiteId}/media/folders/${createdMediaFolderId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Contract Brand Assets',
+        sortOrder: 11,
+      }),
+    });
+    assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
+    assert(update.json?.data?.folder?.name === 'Contract Brand Assets', `${update.url} did not update folder name`);
+    assert(update.json?.data?.folder?.sortOrder === 11, `${update.url} did not update folder sort order`);
+
+    const remove = await request(`/api/admin/sites/${createdSiteId}/media/folders/${createdMediaFolderId}`, { method: 'DELETE' });
+    assert(remove.response.status === 200, `${remove.url} expected 200, got ${remove.response.status}`);
+    assert(remove.json?.data?.deleted === true, `${remove.url} expected deleted true`);
+    createdMediaFolderId = null;
+
+    const detachedMedia = await request(`/api/admin/sites/${createdSiteId}/media?type=font`);
+    assert(detachedMedia.response.status === 200, `${detachedMedia.url} expected 200, got ${detachedMedia.response.status}`);
+    assert(detachedMedia.json?.data?.media?.some((item) => (
+      item.id === createdMediaId && item.folderId === null
+    )), `${detachedMedia.url} did not detach media from deleted folder`);
   });
 
   await record('admin pages create/list/detail/update/delete works for temporary site', async () => {

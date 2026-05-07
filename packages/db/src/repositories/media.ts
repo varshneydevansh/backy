@@ -1,6 +1,8 @@
 import {
     type BackyListResult,
     type BackyMediaCreateInput,
+    type BackyMediaFolderCreateInput,
+    type BackyMediaFolderUpdateInput,
     type BackyMediaListInput,
     type BackyMediaRepository,
     type BackyMediaUpdateInput,
@@ -253,6 +255,39 @@ export function createMediaRepository(db: DatabaseInstance): BackyMediaRepositor
         async listFolders(siteId: string): Promise<MediaFolder[]> {
             const rows = await database.select().from(mediaFolders).where(eq(mediaFolders.siteId, siteId)).orderBy(mediaFolders.sortOrder) as MediaFolderRow[];
             return rows.map(toMediaFolder);
+        },
+
+        async getFolderById(siteId: string, folderId: string): Promise<MediaFolder | null> {
+            const row = await firstOrNull<MediaFolderRow>(
+                database.select().from(mediaFolders).where(and(eq(mediaFolders.siteId, siteId), eq(mediaFolders.id, folderId))).limit(1),
+            );
+            return row ? toMediaFolder(row) : null;
+        },
+
+        async createFolder(input: BackyMediaFolderCreateInput): Promise<BackyRepositoryMutationResult<MediaFolder>> {
+            const [row] = await database.insert(mediaFolders).values({
+                siteId: input.siteId,
+                parentId: input.parentId || null,
+                name: input.name,
+                sortOrder: Number.isFinite(input.sortOrder) ? input.sortOrder : 0,
+            }).returning() as MediaFolderRow[];
+            return { item: toMediaFolder(row) };
+        },
+
+        async updateFolder(siteId: string, folderId: string, input: BackyMediaFolderUpdateInput): Promise<BackyRepositoryMutationResult<MediaFolder>> {
+            const updates: Record<string, unknown> = {};
+            if (input.name !== undefined) updates.name = input.name;
+            if (input.parentId !== undefined) updates.parentId = input.parentId;
+            if (input.sortOrder !== undefined && Number.isFinite(input.sortOrder)) updates.sortOrder = input.sortOrder;
+
+            const [row] = await database.update(mediaFolders).set(updates).where(and(eq(mediaFolders.siteId, siteId), eq(mediaFolders.id, folderId))).returning() as MediaFolderRow[];
+            return { item: toMediaFolder(row) };
+        },
+
+        async deleteFolder(siteId: string, folderId: string): Promise<boolean> {
+            await database.update(media).set({ folderId: null, updatedAt: new Date() }).where(and(eq(media.siteId, siteId), eq(media.folderId, folderId))).returning();
+            await database.delete(mediaFolders).where(and(eq(mediaFolders.siteId, siteId), eq(mediaFolders.id, folderId)));
+            return true;
         },
     };
 }
