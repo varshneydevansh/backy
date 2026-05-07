@@ -471,6 +471,52 @@ export interface BackyReusableSectionListInput extends BackyPaginationInput {
   search?: string;
 }
 
+export type BackyContentTargetType = 'page' | 'post';
+
+export interface BackyContentRevision {
+  id: string;
+  siteId: string;
+  targetType: BackyContentTargetType;
+  targetId: string;
+  snapshot: BackyJsonObject;
+  note?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+}
+
+export interface BackyContentRevisionCreateInput {
+  siteId: string;
+  targetType: BackyContentTargetType;
+  targetId: string;
+  snapshot: BackyJsonObject;
+  note?: string | null;
+  createdBy?: string | null;
+}
+
+export interface BackyContentRevisionListInput extends BackyPaginationInput {
+  siteId: string;
+  targetType: BackyContentTargetType;
+  targetId: string;
+}
+
+export interface BackyPreviewToken {
+  token: string;
+  siteId: string;
+  targetType: BackyContentTargetType;
+  targetId: string;
+  createdAt: string;
+  expiresAt: string;
+  createdBy?: string | null;
+}
+
+export interface BackyPreviewTokenCreateInput {
+  siteId: string;
+  targetType: BackyContentTargetType;
+  targetId: string;
+  ttlSeconds?: number;
+  createdBy?: string | null;
+}
+
 export type BackyUserRole = 'owner' | 'admin' | 'editor' | 'viewer';
 export type BackyUserStatus = 'active' | 'inactive' | 'invited' | 'suspended';
 
@@ -645,6 +691,15 @@ export interface BackyReusableSectionRepository {
   delete(siteId: string, sectionId: string, context?: BackyRepositoryContext): Promise<boolean>;
 }
 
+export interface BackyContentWorkflowRepository {
+  listRevisions(input: BackyContentRevisionListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyContentRevision>>;
+  getRevisionById(siteId: string, targetType: BackyContentTargetType, targetId: string, revisionId: string, context?: BackyRepositoryContext): Promise<BackyContentRevision | null>;
+  createRevision(input: BackyContentRevisionCreateInput, context?: BackyRepositoryContext): Promise<BackyContentRevision>;
+  createPreviewToken(input: BackyPreviewTokenCreateInput, context?: BackyRepositoryContext): Promise<BackyPreviewToken>;
+  validatePreviewToken(siteId: string, targetType: BackyContentTargetType, targetId: string, token: string, context?: BackyRepositoryContext): Promise<boolean>;
+  deletePreviewTokensForTarget(siteId: string, targetType: BackyContentTargetType, targetId: string, context?: BackyRepositoryContext): Promise<number>;
+}
+
 export interface BackyUserRepository {
   list(input: BackyUserListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyUser>>;
   getById(userId: string, context?: BackyRepositoryContext): Promise<BackyUser | null>;
@@ -673,6 +728,7 @@ export interface BackyRepositories {
   forms: BackyFormRepository;
   comments: BackyCommentRepository;
   reusableSections: BackyReusableSectionRepository;
+  contentWorkflows: BackyContentWorkflowRepository;
   users: BackyUserRepository;
   settings: BackySettingsRepository;
   auditLogs: BackyAuditLogRepository;

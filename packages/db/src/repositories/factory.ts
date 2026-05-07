@@ -3,6 +3,7 @@ import type { DatabaseAdapter } from '../adapters';
 import { createAuditLogRepository } from './audit-logs';
 import { createCollectionRepository } from './collections';
 import { createCommentRepository } from './comments';
+import { createContentWorkflowRepository } from './content-workflows';
 import { createFormRepository } from './forms';
 import { createMediaRepository } from './media';
 import { createReusableSectionRepository } from './reusable-sections';
@@ -14,7 +15,7 @@ import {
     createSiteRepository,
 } from './site-page-post';
 
-type ImplementedBackyRepositories = Pick<BackyRepositories, 'sites' | 'pages' | 'posts' | 'media' | 'collections' | 'forms' | 'comments' | 'reusableSections' | 'users' | 'settings' | 'auditLogs'>;
+type ImplementedBackyRepositories = Pick<BackyRepositories, 'sites' | 'pages' | 'posts' | 'media' | 'collections' | 'forms' | 'comments' | 'reusableSections' | 'contentWorkflows' | 'users' | 'settings' | 'auditLogs'>;
 
 export interface DatabaseRepositoryFactoryInput {
     adapter: DatabaseAdapter;
@@ -32,6 +33,7 @@ export function createDatabaseRepositories(
         forms: createFormRepository(input.adapter.db),
         comments: createCommentRepository(input.adapter.db),
         reusableSections: createReusableSectionRepository(input.adapter.db),
+        contentWorkflows: createContentWorkflowRepository(input.adapter.db),
         users: createUserRepository(input.adapter.db),
         settings: createSettingsRepository(input.adapter.db),
         auditLogs: createAuditLogRepository(input.adapter.db),

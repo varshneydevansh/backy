@@ -8,6 +8,9 @@ export {
     createCommentRepository,
 } from './comments';
 export {
+    createContentWorkflowRepository,
+} from './content-workflows';
+export {
     createFormRepository,
 } from './forms';
 export {

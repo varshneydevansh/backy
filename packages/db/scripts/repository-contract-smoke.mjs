@@ -5,6 +5,7 @@ import {
   createAuditLogRepository,
   createCollectionRepository,
   createCommentRepository,
+  createContentWorkflowRepository,
   createDatabaseRepositories,
   createFormRepository,
   createMediaRepository,
@@ -22,6 +23,7 @@ import {
   comments,
   contentCollectionRecords,
   contentCollections,
+  contentRevisions,
   formContacts,
   formDefinitions,
   formSubmissions,
@@ -29,6 +31,7 @@ import {
   mediaFolders,
   pages,
   platformSettings,
+  previewTokens,
   profiles,
   reusableSections,
   sites,
@@ -45,12 +48,14 @@ const tableName = (table) => {
   if (table === sites) return 'sites';
   if (table === pages) return 'pages';
   if (table === platformSettings) return 'platformSettings';
+  if (table === previewTokens) return 'previewTokens';
   if (table === profiles) return 'profiles';
   if (table === reusableSections) return 'reusableSections';
   if (table === blogPosts) return 'blogPosts';
   if (table === comments) return 'comments';
   if (table === contentCollections) return 'contentCollections';
   if (table === contentCollectionRecords) return 'contentCollectionRecords';
+  if (table === contentRevisions) return 'contentRevisions';
   if (table === formDefinitions) return 'formDefinitions';
   if (table === formSubmissions) return 'formSubmissions';
   if (table === formContacts) return 'formContacts';
@@ -65,12 +70,14 @@ const createFakeDb = () => {
     sites: [],
     pages: [],
     platformSettings: [],
+    previewTokens: [],
     profiles: [],
     reusableSections: [],
     blogPosts: [],
     comments: [],
     contentCollections: [],
     contentCollectionRecords: [],
+    contentRevisions: [],
     formDefinitions: [],
     formSubmissions: [],
     formContacts: [],
@@ -82,12 +89,14 @@ const createFakeDb = () => {
     sites: 0,
     pages: 0,
     platformSettings: 0,
+    previewTokens: 0,
     profiles: 0,
     reusableSections: 0,
     blogPosts: 0,
     comments: 0,
     contentCollections: 0,
     contentCollectionRecords: 0,
+    contentRevisions: 0,
     formDefinitions: 0,
     formSubmissions: 0,
     formContacts: 0,
@@ -166,6 +175,18 @@ const createFakeDb = () => {
         auth: {},
         integrations: {},
         updatedAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'previewTokens') {
+      return {
+        token: `preview_${nextId(name)}`,
+        siteId: 'site_default',
+        targetType: 'page',
+        targetId: 'pages_1',
+        createdAt: timestamp,
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+        createdBy: null,
         ...values,
       };
     }
@@ -252,6 +273,19 @@ const createFakeDb = () => {
         scheduledAt: null,
         createdAt: timestamp,
         updatedAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'contentRevisions') {
+      return {
+        id: nextId(name),
+        siteId: 'site_default',
+        targetType: 'page',
+        targetId: 'pages_1',
+        snapshot: {},
+        note: null,
+        createdBy: null,
+        createdAt: timestamp,
         ...values,
       };
     }
@@ -467,6 +501,7 @@ assert(repositorySet.collections, 'Expected collection repository factory');
 assert(repositorySet.forms, 'Expected form repository factory');
 assert(repositorySet.comments, 'Expected comment repository factory');
 assert(repositorySet.reusableSections, 'Expected reusable section repository factory');
+assert(repositorySet.contentWorkflows, 'Expected content workflow repository factory');
 assert(repositorySet.users, 'Expected user repository factory');
 assert(repositorySet.settings, 'Expected settings repository factory');
 assert(repositorySet.auditLogs, 'Expected audit log repository factory');
@@ -479,6 +514,7 @@ const collectionRepository = createCollectionRepository(db);
 const formRepository = createFormRepository(db);
 const commentRepository = createCommentRepository(db);
 const auditLogRepository = createAuditLogRepository(db);
+const contentWorkflowRepository = createContentWorkflowRepository(db);
 const userRepository = createUserRepository(db);
 const settingsRepository = createSettingsRepository(db);
 const reusableSectionRepository = createReusableSectionRepository(db);
@@ -970,6 +1006,38 @@ const archivedReusableSection = (await reusableSectionRepository.update(site.id,
 })).item;
 assert(archivedReusableSection.status === 'archived', 'Expected reusable section update');
 assert(await reusableSectionRepository.delete(site.id, reusableSection.id), 'Expected reusable section delete');
+
+const revision = await contentWorkflowRepository.createRevision({
+  siteId: site.id,
+  targetType: 'page',
+  targetId: publishedPage.id,
+  snapshot: {
+    id: publishedPage.id,
+    title: publishedPage.title,
+    content: publishedPage.content,
+  },
+  note: 'Before workflow change',
+  createdBy: 'user_admin',
+});
+assert(revision.id === 'contentRevisions_1', 'Expected fake content revision id');
+assert((await contentWorkflowRepository.listRevisions({
+  siteId: site.id,
+  targetType: 'page',
+  targetId: publishedPage.id,
+})).items.length === 1, 'Expected content revision list');
+assert((await contentWorkflowRepository.getRevisionById(site.id, 'page', publishedPage.id, revision.id))?.note === 'Before workflow change', 'Expected content revision getById');
+
+const preview = await contentWorkflowRepository.createPreviewToken({
+  siteId: site.id,
+  targetType: 'page',
+  targetId: publishedPage.id,
+  ttlSeconds: 600,
+  createdBy: 'user_admin',
+});
+assert(preview.token.startsWith('preview_'), 'Expected preview token');
+assert(await contentWorkflowRepository.validatePreviewToken(site.id, 'page', publishedPage.id, preview.token), 'Expected valid preview token');
+assert(await contentWorkflowRepository.deletePreviewTokensForTarget(site.id, 'page', publishedPage.id) === 1, 'Expected preview token cleanup');
+assert(!(await contentWorkflowRepository.validatePreviewToken(site.id, 'page', publishedPage.id, preview.token)), 'Expected preview token invalid after cleanup');
 
 assert(await pageRepository.delete(site.id, publishedPage.id), 'Expected page delete');
 assert(await postRepository.delete(site.id, archivedPost.id), 'Expected post delete');

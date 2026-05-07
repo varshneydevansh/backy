@@ -501,6 +501,41 @@ export const reusableSections = pgTable('reusable_sections', {
 });
 
 // ==========================================================================
+// CONTENT WORKFLOWS - Revisions and preview tokens
+// ==========================================================================
+
+/**
+ * Content revisions - immutable page/post snapshots for history and rollback.
+ */
+export const contentRevisions = pgTable('content_revisions', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    siteId: uuid('site_id')
+        .references(() => sites.id, { onDelete: 'cascade' })
+        .notNull(),
+    targetType: text('target_type').notNull(),
+    targetId: text('target_id').notNull(),
+    snapshot: jsonb('snapshot').default({}).notNull(),
+    note: text('note'),
+    createdBy: text('created_by'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+/**
+ * Preview tokens - short-lived access tokens for draft page/post preview.
+ */
+export const previewTokens = pgTable('preview_tokens', {
+    token: text('token').primaryKey(),
+    siteId: uuid('site_id')
+        .references(() => sites.id, { onDelete: 'cascade' })
+        .notNull(),
+    targetType: text('target_type').notNull(),
+    targetId: text('target_id').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    expiresAt: timestamp('expires_at').notNull(),
+    createdBy: text('created_by'),
+});
+
+// ==========================================================================
 // COMMENTS - Public page/post discussions and moderation state
 // ==========================================================================
 
@@ -651,6 +686,8 @@ export const sitesRelations = relations(sites, ({ one, many }) => ({
     forms: many(formDefinitions),
     comments: many(comments),
     reusableSections: many(reusableSections),
+    contentRevisions: many(contentRevisions),
+    previewTokens: many(previewTokens),
 }));
 
 export const pagesRelations = relations(pages, ({ one }) => ({
@@ -742,6 +779,20 @@ export const commentsRelations = relations(comments, ({ one }) => ({
 export const reusableSectionsRelations = relations(reusableSections, ({ one }) => ({
     site: one(sites, {
         fields: [reusableSections.siteId],
+        references: [sites.id],
+    }),
+}));
+
+export const contentRevisionsRelations = relations(contentRevisions, ({ one }) => ({
+    site: one(sites, {
+        fields: [contentRevisions.siteId],
+        references: [sites.id],
+    }),
+}));
+
+export const previewTokensRelations = relations(previewTokens, ({ one }) => ({
+    site: one(sites, {
+        fields: [previewTokens.siteId],
         references: [sites.id],
     }),
 }));
