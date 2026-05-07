@@ -10,6 +10,7 @@ import {
   createMediaRepository,
   createPageRepository,
   createPostRepository,
+  createSettingsRepository,
   createSiteRepository,
   createUnimplementedRepositoryProxy,
   createUserRepository,
@@ -26,6 +27,7 @@ import {
   media,
   mediaFolders,
   pages,
+  platformSettings,
   profiles,
   sites,
 } from '../dist/schema/index.js';
@@ -40,6 +42,7 @@ const tableName = (table) => {
   if (table === activityLogs) return 'activityLogs';
   if (table === sites) return 'sites';
   if (table === pages) return 'pages';
+  if (table === platformSettings) return 'platformSettings';
   if (table === profiles) return 'profiles';
   if (table === blogPosts) return 'blogPosts';
   if (table === comments) return 'comments';
@@ -58,6 +61,7 @@ const createFakeDb = () => {
     activityLogs: [],
     sites: [],
     pages: [],
+    platformSettings: [],
     profiles: [],
     blogPosts: [],
     comments: [],
@@ -73,6 +77,7 @@ const createFakeDb = () => {
     activityLogs: 0,
     sites: 0,
     pages: 0,
+    platformSettings: 0,
     profiles: 0,
     blogPosts: 0,
     comments: 0,
@@ -143,6 +148,18 @@ const createFakeDb = () => {
         isActive: true,
         status: 'active',
         createdAt: timestamp,
+        updatedAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'platformSettings') {
+      return {
+        id: 'default',
+        deliveryMode: 'managed-hosting',
+        apiKeys: {},
+        storage: {},
+        auth: {},
+        integrations: {},
         updatedAt: timestamp,
         ...values,
       };
@@ -426,6 +443,7 @@ assert(repositorySet.collections, 'Expected collection repository factory');
 assert(repositorySet.forms, 'Expected form repository factory');
 assert(repositorySet.comments, 'Expected comment repository factory');
 assert(repositorySet.users, 'Expected user repository factory');
+assert(repositorySet.settings, 'Expected settings repository factory');
 assert(repositorySet.auditLogs, 'Expected audit log repository factory');
 
 const siteRepository = createSiteRepository(db);
@@ -437,6 +455,7 @@ const formRepository = createFormRepository(db);
 const commentRepository = createCommentRepository(db);
 const auditLogRepository = createAuditLogRepository(db);
 const userRepository = createUserRepository(db);
+const settingsRepository = createSettingsRepository(db);
 
 const site = (await siteRepository.create({
   teamId: 'team_contract',
@@ -883,6 +902,23 @@ const activeUser = (await userRepository.update(user.id, {
 })).item;
 assert(activeUser.status === 'active' && activeUser.role === 'admin', 'Expected user update');
 assert(await userRepository.delete(activeUser.id), 'Expected user delete');
+
+const settings = await settingsRepository.get();
+assert(settings.deliveryMode === 'managed-hosting', 'Expected default settings delivery mode');
+assert(settings.apiKeys.publicKey, 'Expected default public API key');
+const updatedSettings = (await settingsRepository.update({
+  deliveryMode: 'custom-frontend',
+  apiKeys: {
+    publicKey: 'pk_manual_contract',
+    secretKeyId: 'sk_manual_contract',
+  },
+  storage: { provider: 's3' },
+  rotatePublicKey: true,
+})).item;
+assert(updatedSettings.deliveryMode === 'custom-frontend', 'Expected settings delivery mode update');
+assert(updatedSettings.apiKeys.publicKey !== 'pk_manual_contract', 'Expected public key rotation');
+assert(updatedSettings.apiKeys.secretKeyId === 'sk_manual_contract', 'Expected secret key manual update');
+assert(updatedSettings.storage?.provider === 's3', 'Expected settings storage update');
 
 assert(await pageRepository.delete(site.id, publishedPage.id), 'Expected page delete');
 assert(await postRepository.delete(site.id, archivedPost.id), 'Expected post delete');

@@ -19,6 +19,9 @@ export {
     createSiteRepository,
 } from './site-page-post';
 export {
+    createSettingsRepository,
+} from './settings';
+export {
     createUserRepository,
 } from './users';
 export {

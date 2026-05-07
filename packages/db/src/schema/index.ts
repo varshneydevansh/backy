@@ -458,6 +458,23 @@ export const formContacts = pgTable('form_contacts', {
 });
 
 // ==========================================================================
+// PLATFORM SETTINGS - Runtime/admin configuration
+// ==========================================================================
+
+/**
+ * Platform settings - singleton-style configuration for delivery mode and integrations.
+ */
+export const platformSettings = pgTable('platform_settings', {
+    id: text('id').primaryKey(),
+    deliveryMode: text('delivery_mode').default('managed-hosting').notNull(),
+    apiKeys: jsonb('api_keys').default({}).notNull(),
+    storage: jsonb('storage').default({}).notNull(),
+    auth: jsonb('auth').default({}).notNull(),
+    integrations: jsonb('integrations').default({}).notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// ==========================================================================
 // COMMENTS - Public page/post discussions and moderation state
 // ==========================================================================
 

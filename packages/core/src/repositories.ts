@@ -455,7 +455,7 @@ export interface BackyUserListInput extends BackyPaginationInput {
 }
 
 export interface BackySettings {
-  deliveryMode: 'demo' | 'database';
+  deliveryMode: 'demo' | 'database' | 'managed-hosting' | 'custom-frontend';
   apiKeys: {
     publicKey?: string;
     secretKeyId?: string;
@@ -470,6 +470,7 @@ export interface BackySettingsUpdateInput {
   deliveryMode?: BackySettings['deliveryMode'];
   rotatePublicKey?: boolean;
   rotateSecretKey?: boolean;
+  apiKeys?: Partial<BackySettings['apiKeys']>;
   storage?: BackyJsonObject;
   auth?: BackyJsonObject;
   integrations?: BackyJsonObject;
