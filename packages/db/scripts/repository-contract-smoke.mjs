@@ -2,6 +2,7 @@
 
 import { createBackyContentDocument } from '../../core/dist/index.mjs';
 import {
+  createCollectionRepository,
   createDatabaseRepositories,
   createMediaRepository,
   createPageRepository,
@@ -11,6 +12,8 @@ import {
 } from '../dist/index.js';
 import {
   blogPosts,
+  contentCollectionRecords,
+  contentCollections,
   media,
   mediaFolders,
   pages,
@@ -27,6 +30,8 @@ const tableName = (table) => {
   if (table === sites) return 'sites';
   if (table === pages) return 'pages';
   if (table === blogPosts) return 'blogPosts';
+  if (table === contentCollections) return 'contentCollections';
+  if (table === contentCollectionRecords) return 'contentCollectionRecords';
   if (table === media) return 'media';
   if (table === mediaFolders) return 'mediaFolders';
   throw new Error('Unknown table passed to fake DB');
@@ -37,6 +42,8 @@ const createFakeDb = () => {
     sites: [],
     pages: [],
     blogPosts: [],
+    contentCollections: [],
+    contentCollectionRecords: [],
     media: [],
     mediaFolders: [],
   };
@@ -44,6 +51,8 @@ const createFakeDb = () => {
     sites: 0,
     pages: 0,
     blogPosts: 0,
+    contentCollections: 0,
+    contentCollectionRecords: 0,
     media: 0,
     mediaFolders: 0,
   };
@@ -125,6 +134,41 @@ const createFakeDb = () => {
         name: 'Untitled folder',
         sortOrder: 0,
         createdAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'contentCollections') {
+      return {
+        id: nextId(name),
+        siteId: 'site_default',
+        name: 'Untitled collection',
+        slug: 'untitled-collection',
+        description: null,
+        status: 'draft',
+        fields: [],
+        permissions: {
+          publicRead: true,
+          publicCreate: false,
+          publicUpdate: false,
+          publicDelete: false,
+        },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'contentCollectionRecords') {
+      return {
+        id: nextId(name),
+        siteId: 'site_default',
+        collectionId: 'contentCollections_1',
+        slug: 'untitled-record',
+        status: 'draft',
+        values: {},
+        publishedAt: null,
+        scheduledAt: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
         ...values,
       };
     }
@@ -221,11 +265,13 @@ const repositorySet = createDatabaseRepositories({
 });
 assert(repositorySet.sites && repositorySet.pages && repositorySet.posts, 'Expected repository set factories');
 assert(repositorySet.media, 'Expected media repository factory');
+assert(repositorySet.collections, 'Expected collection repository factory');
 
 const siteRepository = createSiteRepository(db);
 const pageRepository = createPageRepository(db);
 const postRepository = createPostRepository(db);
 const mediaRepository = createMediaRepository(db);
+const collectionRepository = createCollectionRepository(db);
 
 const site = (await siteRepository.create({
   teamId: 'team_contract',
@@ -391,6 +437,84 @@ assert(updatedMedia.visibility === 'private', 'Expected media visibility update'
 assert(updatedMedia.tags.includes('updated'), 'Expected media tags update');
 assert((await mediaRepository.listFolders(site.id)).some((folder) => folder.id === 'folder_assets'), 'Expected media folders');
 assert(await mediaRepository.delete(site.id, mediaItem.id), 'Expected media delete');
+
+const collection = (await collectionRepository.create({
+  siteId: site.id,
+  name: 'Products',
+  slug: 'products',
+  description: 'Catalog content',
+  status: 'published',
+  fields: [
+    {
+      id: 'field_title',
+      key: 'title',
+      label: 'Title',
+      type: 'text',
+      required: true,
+    },
+    {
+      id: 'field_price',
+      key: 'price',
+      label: 'Price',
+      type: 'number',
+    },
+  ],
+  permissions: {
+    publicRead: true,
+    publicCreate: true,
+  },
+})).item;
+assert(collection.id === 'contentCollections_1', 'Expected fake collection id');
+assert(collection.permissions.publicCreate, 'Expected collection permissions');
+assert((await collectionRepository.getBySlug(site.id, 'products'))?.id === collection.id, 'Expected collection getBySlug');
+assert((await collectionRepository.list({ siteId: site.id })).items.length === 1, 'Expected published collection list');
+
+const draftCollection = (await collectionRepository.create({
+  siteId: site.id,
+  name: 'Internal Notes',
+  slug: 'internal-notes',
+  status: 'draft',
+  fields: [],
+})).item;
+assert((await collectionRepository.list({ siteId: site.id })).items.length === 1, 'Expected draft collection hidden by default');
+assert((await collectionRepository.list({ siteId: site.id, includeUnpublished: true })).items.length === 2, 'Expected draft collection with includeUnpublished');
+const updatedCollection = (await collectionRepository.update(site.id, collection.id, {
+  status: 'published',
+  description: 'Published later',
+})).item;
+assert(updatedCollection.status === 'published' && updatedCollection.description === 'Published later', 'Expected collection update');
+
+const record = (await collectionRepository.createRecord({
+  siteId: site.id,
+  collectionId: collection.id,
+  slug: 'starter-pack',
+  status: 'draft',
+  values: {
+    title: 'Starter Pack',
+    price: 49,
+  },
+})).item;
+assert(record.id === 'contentCollectionRecords_1', 'Expected fake collection record id');
+assert((await collectionRepository.listRecords({ siteId: site.id, collectionId: collection.id })).items.length === 0, 'Expected draft records hidden by default');
+const publishedRecord = (await collectionRepository.updateRecord(site.id, collection.id, record.id, {
+  status: 'published',
+  values: {
+    title: 'Starter Pack',
+    price: 59,
+  },
+})).item;
+assert(publishedRecord.status === 'published' && publishedRecord.publishedAt, 'Expected published collection record');
+assert(publishedRecord.values.price === 59, 'Expected record values update');
+assert((await collectionRepository.getRecordBySlug(site.id, collection.id, 'starter-pack'))?.id === record.id, 'Expected record getBySlug');
+assert((await collectionRepository.listRecords({
+  siteId: site.id,
+  collectionId: collection.id,
+  fieldKey: 'price',
+  fieldValue: 59,
+})).items.length === 1, 'Expected field value filter');
+assert(await collectionRepository.deleteRecord(site.id, collection.id, record.id), 'Expected collection record delete');
+assert(await collectionRepository.delete(site.id, updatedCollection.id), 'Expected collection delete');
+assert(await collectionRepository.delete(site.id, collection.id), 'Expected published collection delete');
 
 assert(await pageRepository.delete(site.id, publishedPage.id), 'Expected page delete');
 assert(await postRepository.delete(site.id, archivedPost.id), 'Expected post delete');

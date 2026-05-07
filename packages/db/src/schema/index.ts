@@ -314,6 +314,58 @@ export const mediaFolders = pgTable('media_folders', {
 });
 
 // ==========================================================================
+// CMS COLLECTIONS - Structured content models and records
+// ==========================================================================
+
+/**
+ * Content collections - dynamic CMS data models similar to Wix CMS collections.
+ */
+export const contentCollections = pgTable('content_collections', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    siteId: uuid('site_id')
+        .references(() => sites.id, { onDelete: 'cascade' })
+        .notNull(),
+
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    description: text('description'),
+
+    status: text('status').$type<PublishStatus>().default('draft').notNull(),
+    fields: jsonb('fields').default([]).notNull(),
+    permissions: jsonb('permissions').default({
+        publicRead: true,
+        publicCreate: false,
+        publicUpdate: false,
+        publicDelete: false,
+    }).notNull(),
+
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+/**
+ * Content collection records - structured entries for dynamic pages and public APIs.
+ */
+export const contentCollectionRecords = pgTable('content_collection_records', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    siteId: uuid('site_id')
+        .references(() => sites.id, { onDelete: 'cascade' })
+        .notNull(),
+    collectionId: uuid('collection_id')
+        .references(() => contentCollections.id, { onDelete: 'cascade' })
+        .notNull(),
+
+    slug: text('slug').notNull(),
+    status: text('status').$type<PublishStatus>().default('draft').notNull(),
+    values: jsonb('values').default({}).notNull(),
+
+    publishedAt: timestamp('published_at'),
+    scheduledAt: timestamp('scheduled_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// ==========================================================================
 // DOMAINS - Custom domain mapping
 // ==========================================================================
 
@@ -419,6 +471,7 @@ export const sitesRelations = relations(sites, ({ one, many }) => ({
     pages: many(pages),
     blogPosts: many(blogPosts),
     media: many(media),
+    collections: many(contentCollections),
 }));
 
 export const pagesRelations = relations(pages, ({ one }) => ({
@@ -447,5 +500,24 @@ export const mediaRelations = relations(media, ({ one }) => ({
     site: one(sites, {
         fields: [media.siteId],
         references: [sites.id],
+    }),
+}));
+
+export const contentCollectionsRelations = relations(contentCollections, ({ one, many }) => ({
+    site: one(sites, {
+        fields: [contentCollections.siteId],
+        references: [sites.id],
+    }),
+    records: many(contentCollectionRecords),
+}));
+
+export const contentCollectionRecordsRelations = relations(contentCollectionRecords, ({ one }) => ({
+    site: one(sites, {
+        fields: [contentCollectionRecords.siteId],
+        references: [sites.id],
+    }),
+    collection: one(contentCollections, {
+        fields: [contentCollectionRecords.collectionId],
+        references: [contentCollections.id],
     }),
 }));

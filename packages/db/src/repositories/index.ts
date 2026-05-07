@@ -1,4 +1,7 @@
 export {
+    createCollectionRepository,
+} from './collections';
+export {
     createMediaRepository,
 } from './media';
 export {
