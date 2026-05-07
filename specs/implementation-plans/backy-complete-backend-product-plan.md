@@ -491,10 +491,10 @@ The next implementation should not start by adding more UI screens. The product 
 
 #### Confirmed editor bugs to reproduce/fix first
 
-- **High**: Canvas elements select but do not drag reliably in the current editor runtime.
+- **High / patched, needs browser smoke**: Canvas elements select but do not drag reliably in the current editor runtime.
   - Repro area: `apps/admin/src/components/editor/Canvas.tsx`
-  - Likely interaction paths: `handleMouseDown`, `handleMouseMove`, pointer event wrappers, text-editor child event guards, selected/editing state transitions.
-  - Acceptance: selected text/image/container elements can be dragged on canvas, commit history on drag end, and undo restores prior position.
+  - Latest patch: root drops now resolve against the actual canvas rect, pasteboard drops outside the canvas are ignored, pointer capture is used for element movement, nested children receive their own drag ids, and drag/resize coordinates snap/clamp inside the canvas.
+  - Remaining validation: browser smoke for text/image/container drag, nested child drag, resize, undo after drag, and save/reload persistence.
 - **High**: Right-side text controls and canvas text editing still need selection preservation tests after focus moves between canvas and property panel.
 - **High**: Breakpoint controls currently change canvas dimensions, but true per-breakpoint element overrides are not complete.
 - **Medium**: Site workflow panel depends on public API server and should show a clear setup/offline state instead of raw JSON parse errors.
