@@ -36,6 +36,8 @@ import {
   MessageSquare,
   CheckSquare,
   Circle,
+  Sparkles,
+  LayoutGrid,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ComponentLibraryItem } from '@/types/editor';
@@ -159,7 +161,7 @@ export function ComponentLibrary({ onDragStart }: ComponentLibraryProps) {
             <div className="space-y-1">
               {items.map((item) => (
                 <LibraryItem
-                  key={item.type}
+                  key={item.id ?? item.type}
                   item={item}
                   onDragStart={() => onDragStart?.(item)}
                 />
@@ -226,6 +228,10 @@ function LibraryItem({ item, onDragStart }: LibraryItemProps) {
         return CheckSquare;
       case 'Circle':
         return Circle;
+      case 'Sparkles':
+        return Sparkles;
+      case 'LayoutGrid':
+        return LayoutGrid;
       default:
         return Square;
     }

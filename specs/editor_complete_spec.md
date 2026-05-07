@@ -443,7 +443,9 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ❌ Responsive breakpoint editing
 - ❌ Media upload modal
 - ❌ Element locking
-- ❌ Page templates
+- ⚠️ Page templates
+  - Static composed library presets now exist for hero, feature-grid, and lead-capture form sections.
+  - Still missing persisted site/page/blog template registry, saved user sections, synced reusable blocks, and import/export.
 
 ## Priority Order
 **Phase 1: Critical Fixes (Immediate)**

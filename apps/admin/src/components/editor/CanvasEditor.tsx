@@ -47,7 +47,7 @@ import type { MediaContext } from '@/components/editor/MediaLibraryModal';
 import {
   BREAKPOINT_CANVAS_SIZE,
   DEFAULT_CANVAS_SIZE,
-  createCanvasElement,
+  createCanvasElementFromLibraryItem,
 } from '@/components/editor/editorCatalog';
 import { buildCustomFontFaces, buildGoogleFontImportUrl, getFontFamilyOptions } from '@/components/editor/fontCatalog';
 import type {
@@ -950,7 +950,7 @@ export function CanvasEditor({
         const x = Math.round(Math.max(0, (e.clientX - rect.left) / activeCanvasScale) / 10) * 10;
         const y = Math.round(Math.max(0, (e.clientY - rect.top) / activeCanvasScale) / 10) * 10;
         const newElement = {
-          ...createCanvasElement(normalizedType, x, y),
+          ...createCanvasElementFromLibraryItem({ ...item, type: normalizedType }, x, y),
           zIndex: Math.max(walkTreeMaxZ(elements), 0) + 1,
         };
 

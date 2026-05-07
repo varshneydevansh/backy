@@ -104,6 +104,7 @@ export interface CanvasElement {
 
 /** Item in the component library sidebar */
 export interface ComponentLibraryItem {
+  id?: string; // Stable catalog id when multiple items share the same element type
   type: ElementType;
   name: string;    // Display name
   icon: string;    // Icon identifier  
@@ -111,6 +112,21 @@ export interface ComponentLibraryItem {
   description?: string; // Optional tooltip description
   defaultProps?: Record<string, unknown>; // Default props when adding element
   defaultSize?: { width: number; height: number }; // Default size
+  defaultStyles?: CSSProperties; // Default root styles
+  defaultChildren?: ComponentLibraryChild[]; // Nested preset elements
+}
+
+/** Nested child in a composed component preset */
+export interface ComponentLibraryChild {
+  type: ElementType;
+  name?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  props?: Record<string, unknown>;
+  styles?: CSSProperties;
+  children?: ComponentLibraryChild[];
 }
 
 /** Element-specific props union type */

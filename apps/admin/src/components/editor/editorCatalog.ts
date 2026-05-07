@@ -1,7 +1,9 @@
 import { generateId } from '@/lib/utils';
+import type { CSSProperties } from 'react';
 import type {
   CanvasElement,
   CanvasSize,
+  ComponentLibraryChild,
   ComponentLibraryItem,
   ElementType,
 } from '@/types/editor';
@@ -48,6 +50,9 @@ export interface SavedCanvasPayload {
 
 const cloneDefaultProps = (value: Record<string, unknown>): Record<string, unknown> =>
   JSON.parse(JSON.stringify(value));
+
+const cloneDefaultStyles = (value?: CSSProperties): CSSProperties | undefined =>
+  value ? JSON.parse(JSON.stringify(value)) as CSSProperties : undefined;
 
 // ============================================
 // COMPONENT LIBRARY DEFINITIONS
@@ -149,6 +154,195 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
     },
     defaultSize: { width: 1200, height: 280 },
     description: 'Full-width section for major page blocks',
+  },
+  {
+    id: 'hero-section',
+    type: 'section',
+    name: 'Hero section',
+    icon: 'Sparkles',
+    category: 'layout',
+    defaultProps: {
+      backgroundColor: '#0f172a',
+      borderRadius: 0,
+      padding: 0,
+    },
+    defaultSize: { width: 1200, height: 520 },
+    description: 'Composed hero with headline, copy, button, and media frame',
+    defaultChildren: [
+      {
+        type: 'heading',
+        x: 72,
+        y: 82,
+        width: 560,
+        height: 118,
+        props: {
+          content: 'Build your site without starting from a blank page',
+          level: 'h1',
+          fontSize: 46,
+          fontWeight: '800',
+          lineHeight: 1.08,
+          color: '#ffffff',
+        },
+      },
+      {
+        type: 'paragraph',
+        x: 76,
+        y: 222,
+        width: 500,
+        height: 86,
+        props: {
+          content: 'A reusable section preset made from editable Backy elements. Replace text, swap media, and adapt it for every breakpoint.',
+          fontSize: 18,
+          lineHeight: 1.55,
+          color: '#cbd5e1',
+        },
+      },
+      {
+        type: 'button',
+        x: 76,
+        y: 332,
+        width: 172,
+        height: 52,
+        props: {
+          label: 'Start editing',
+          backgroundColor: '#22c55e',
+          color: '#052e16',
+          borderRadius: 8,
+          fontSize: 16,
+          fontWeight: '700',
+        },
+      },
+      {
+        type: 'box',
+        x: 700,
+        y: 72,
+        width: 420,
+        height: 340,
+        props: {
+          backgroundColor: '#ffffff',
+          borderRadius: 8,
+          borderColor: '#334155',
+          borderWidth: 1,
+          borderStyle: 'solid',
+          boxShadow: '0 24px 70px rgba(2, 6, 23, 0.35)',
+        },
+        children: [
+          {
+            type: 'image',
+            x: 24,
+            y: 24,
+            width: 372,
+            height: 210,
+            props: {
+              src: '/placeholder-image.jpg',
+              alt: 'Hero media',
+              objectFit: 'cover',
+              borderRadius: 6,
+            },
+          },
+          {
+            type: 'text',
+            x: 28,
+            y: 254,
+            width: 260,
+            height: 44,
+            props: {
+              content: 'Drag in your own image or video',
+              fontSize: 18,
+              fontWeight: '700',
+              color: '#0f172a',
+            },
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'feature-grid-section',
+    type: 'section',
+    name: 'Feature grid',
+    icon: 'LayoutGrid',
+    category: 'layout',
+    defaultProps: {
+      backgroundColor: '#ffffff',
+      borderRadius: 0,
+      padding: 0,
+    },
+    defaultSize: { width: 1200, height: 460 },
+    description: 'Reusable three-card feature section with editable nested blocks',
+    defaultChildren: [
+      {
+        type: 'heading',
+        x: 72,
+        y: 56,
+        width: 520,
+        height: 64,
+        props: {
+          content: 'Reusable blocks for repeatable page systems',
+          level: 'h2',
+          fontSize: 34,
+          fontWeight: '800',
+          color: '#111827',
+        },
+      },
+      {
+        type: 'paragraph',
+        x: 74,
+        y: 126,
+        width: 620,
+        height: 48,
+        props: {
+          content: 'Each card is a nested element group, so teams can edit copy, spacing, and styles without rebuilding the section.',
+          fontSize: 16,
+          lineHeight: 1.5,
+          color: '#4b5563',
+        },
+      },
+      ...['Content model', 'Media workflow', 'Responsive sizing'].map((title, index) => ({
+        type: 'box' as ElementType,
+        x: 72 + index * 360,
+        y: 220,
+        width: 320,
+        height: 170,
+        props: {
+          backgroundColor: '#f8fafc',
+          borderRadius: 8,
+          borderColor: '#e2e8f0',
+          borderWidth: 1,
+          borderStyle: 'solid',
+          padding: 18,
+        },
+        children: [
+          {
+            type: 'heading' as ElementType,
+            x: 20,
+            y: 22,
+            width: 260,
+            height: 38,
+            props: {
+              content: title,
+              level: 'h3',
+              fontSize: 21,
+              fontWeight: '750',
+              color: '#0f172a',
+            },
+          },
+          {
+            type: 'paragraph' as ElementType,
+            x: 20,
+            y: 76,
+            width: 260,
+            height: 70,
+            props: {
+              content: 'Swap this text, bind it to CMS data, or save the section as a future template.',
+              fontSize: 14,
+              lineHeight: 1.5,
+              color: '#475569',
+            },
+          },
+        ],
+      })),
+    ],
   },
   {
     type: 'header',
@@ -277,6 +471,79 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
     },
     defaultSize: { width: 300, height: 200 },
     description: 'Form container',
+  },
+  {
+    id: 'lead-capture-form',
+    type: 'form',
+    name: 'Lead capture form',
+    icon: 'FormInput',
+    category: 'form',
+    defaultProps: {
+      formTitle: 'Request access',
+      backgroundColor: '#ffffff',
+      borderRadius: 8,
+      borderColor: '#e5e7eb',
+      padding: 18,
+      successMessage: 'Thanks. We will follow up soon.',
+    },
+    defaultSize: { width: 420, height: 430 },
+    description: 'Composed form with name, email, message, and submit button',
+    defaultChildren: [
+      {
+        type: 'input',
+        x: 22,
+        y: 80,
+        width: 360,
+        height: 54,
+        props: {
+          label: 'Name',
+          name: 'name',
+          placeholder: 'Your name',
+          required: true,
+        },
+      },
+      {
+        type: 'input',
+        x: 22,
+        y: 150,
+        width: 360,
+        height: 54,
+        props: {
+          label: 'Email',
+          name: 'email',
+          inputType: 'email',
+          placeholder: 'you@example.com',
+          required: true,
+        },
+      },
+      {
+        type: 'textarea',
+        x: 22,
+        y: 220,
+        width: 360,
+        height: 96,
+        props: {
+          label: 'What are you building?',
+          name: 'message',
+          placeholder: 'Tell us about your project',
+          required: false,
+        },
+      },
+      {
+        type: 'button',
+        x: 22,
+        y: 338,
+        width: 170,
+        height: 48,
+        props: {
+          label: 'Submit request',
+          backgroundColor: '#111827',
+          color: '#ffffff',
+          borderRadius: 8,
+          fontWeight: '700',
+        },
+      },
+    ],
   },
   {
     type: 'input',
@@ -424,9 +691,25 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
 
 const CANVAS_ITEM_BY_TYPE: Record<ElementType, ComponentLibraryItem | undefined> =
   CANVAS_COMPONENT_LIBRARY.reduce((acc, item) => {
-    acc[item.type] = item;
+    if (!acc[item.type]) {
+      acc[item.type] = item;
+    }
     return acc;
   }, {} as Record<ElementType, ComponentLibraryItem | undefined>);
+
+const createPresetChild = (child: ComponentLibraryChild, zIndex: number): CanvasElement => ({
+  id: generateId(),
+  type: child.type,
+  name: child.name,
+  x: child.x,
+  y: child.y,
+  width: child.width,
+  height: child.height,
+  zIndex,
+  props: cloneDefaultProps(child.props || {}),
+  styles: cloneDefaultStyles(child.styles),
+  children: child.children?.map((nestedChild, index) => createPresetChild(nestedChild, index + 1)),
+});
 
 export function createCanvasElement(
   type: ElementType,
@@ -447,6 +730,26 @@ export function createCanvasElement(
     height: size.height,
     zIndex: 1,
     props,
+    ...overrides,
+  };
+}
+
+export function createCanvasElementFromLibraryItem(
+  item: ComponentLibraryItem,
+  x: number,
+  y: number,
+  overrides: Partial<CanvasElement> = {}
+): CanvasElement {
+  const base = createCanvasElement(item.type, x, y, {
+    width: item.defaultSize?.width,
+    height: item.defaultSize?.height,
+    props: cloneDefaultProps(item.defaultProps || {}),
+    styles: cloneDefaultStyles(item.defaultStyles),
+  });
+
+  return {
+    ...base,
+    children: item.defaultChildren?.map((child, index) => createPresetChild(child, index + 1)),
     ...overrides,
   };
 }

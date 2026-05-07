@@ -15,8 +15,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
-import type { CanvasElement, CanvasSize } from '@/types/editor';
-import { createCanvasElement } from '@/components/editor/editorCatalog';
+import type { CanvasElement, CanvasSize, ComponentLibraryItem } from '@/types/editor';
+import { createCanvasElementFromLibraryItem } from '@/components/editor/editorCatalog';
 import { RichTextBlock } from './blocks/RichTextBlock';
 import { useActiveEditor } from './ActiveEditorContext';
 import {
@@ -1054,7 +1054,7 @@ export function Canvas({
 
       try {
         const rawData = event.dataTransfer.getData('application/json');
-        const item = JSON.parse(rawData) as { type: string };
+        const item = JSON.parse(rawData) as ComponentLibraryItem;
         const normalizedType = normalizeCanvasElementType(item.type);
 
         const canvasRect = canvasRef.current?.getBoundingClientRect();
@@ -1075,8 +1075,8 @@ export function Canvas({
 
           if (isDropTarget && dropHost) {
             const hostRect = dropHost.getBoundingClientRect();
-            const child = createCanvasElement(
-              normalizedType as CanvasElement['type'],
+            const child = createCanvasElementFromLibraryItem(
+              { ...item, type: normalizedType as CanvasElement['type'] },
               snapToGrid(toCanvasDelta(event.clientX - hostRect.left)),
               snapToGrid(toCanvasDelta(event.clientY - hostRect.top)),
             );
@@ -1091,8 +1091,8 @@ export function Canvas({
           }
         }
 
-        const rootElement = createCanvasElement(
-          normalizedType as CanvasElement['type'],
+        const rootElement = createCanvasElementFromLibraryItem(
+          { ...item, type: normalizedType as CanvasElement['type'] },
           parsedX,
           parsedY
         );
