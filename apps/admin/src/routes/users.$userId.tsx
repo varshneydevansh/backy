@@ -8,6 +8,11 @@ import { Save, Trash2, Mail, ShieldAlert } from 'lucide-react';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { cn } from '@/lib/utils';
+import {
+  deleteUser as deleteBackendUser,
+  getUser as getBackendUser,
+  updateUser as updateBackendUser,
+} from '@/lib/adminContentApi';
 
 export const Route = createFileRoute('/users/$userId')({
   component: EditUserPage,
@@ -16,10 +21,11 @@ export const Route = createFileRoute('/users/$userId')({
 function EditUserPage() {
   const navigate = useNavigate();
   const { userId } = Route.useParams();
-  const { users, updateUser, deleteUser } = useStore();
+  const { users, setUsers, updateUser, deleteUser } = useStore();
   const user = users.find(u => u.id === userId);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [formData, setFormData] = useState<{
     fullName: string;
     email: string;
@@ -40,6 +46,33 @@ function EditUserPage() {
     }
   }, [user]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadUser = async () => {
+      try {
+        const backendUser = await getBackendUser(userId);
+        if (!cancelled) {
+          setUsers([
+            backendUser,
+            ...users.filter((item) => item.id !== backendUser.id),
+          ]);
+          setNotice(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setNotice('Using local fallback user data because the backend users API is unavailable.');
+        }
+      }
+    };
+
+    void loadUser();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [setUsers, userId]);
+
   if (!user) {
     return (
       <PageShell title="User Not Found" description="The user you requested doesn't exist.">
@@ -53,10 +86,30 @@ function EditUserPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
+    setNotice(null);
 
-    updateUser(userId, formData);
-    navigate({ to: '/users' });
+    try {
+      const saved = await updateBackendUser(userId, formData);
+      setUsers(users.map((item) => (item.id === userId ? saved : item)));
+      navigate({ to: '/users' });
+    } catch {
+      updateUser(userId, formData);
+      setNotice('Backend save failed, so the local fallback user was updated only.');
+      setIsLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm('Remove user?')) return;
+
+    try {
+      await deleteBackendUser(userId);
+      setUsers(users.filter((item) => item.id !== userId));
+      navigate({ to: '/users' });
+    } catch {
+      deleteUser(userId);
+      navigate({ to: '/users' });
+    }
   };
 
   return (
@@ -66,12 +119,7 @@ function EditUserPage() {
       action={
         <div className="flex gap-2">
           <button
-            onClick={() => {
-              if (confirm('Remove user?')) {
-                deleteUser(userId);
-                navigate({ to: '/users' });
-              }
-            }}
+            onClick={() => void handleDelete()}
             className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
           >
             <Trash2 className="w-5 h-5" />
@@ -81,6 +129,11 @@ function EditUserPage() {
     >
       <div className="max-w-md mx-auto">
         <form onSubmit={handleSubmit} className="space-y-8">
+          {notice && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              {notice}
+            </div>
+          )}
 
           <div className="bg-card border border-border rounded-xl p-6 space-y-6 shadow-sm">
             {/* Name */}

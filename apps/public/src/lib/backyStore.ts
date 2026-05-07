@@ -148,6 +148,18 @@ interface PreviewToken {
   createdBy: string | null;
 }
 
+interface StoreUser {
+  id: string;
+  fullName: string;
+  email: string;
+  role: 'admin' | 'editor' | 'viewer';
+  status: 'active' | 'inactive' | 'invited';
+  createdAt: string;
+  updatedAt: string;
+  lastActiveAt: string | null;
+  invitedAt: string | null;
+}
+
 interface Pagination {
   total: number;
   limit: number;
@@ -276,6 +288,31 @@ const SITE_LIST: StoreSite[] = [
       },
       customCSS: '.site-note{padding:10px;border-radius:8px;background:#fff4dd}',
     },
+  },
+];
+
+const USER_LIST: StoreUser[] = [
+  {
+    id: 'user-admin',
+    fullName: 'Admin User',
+    email: 'admin@backy.io',
+    role: 'admin',
+    status: 'active',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    lastActiveAt: nowIso,
+    invitedAt: null,
+  },
+  {
+    id: 'user-editor',
+    fullName: 'Jane Editor',
+    email: 'jane@backy.io',
+    role: 'editor',
+    status: 'active',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    lastActiveAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    invitedAt: null,
   },
 ];
 
@@ -750,6 +787,7 @@ interface AdminContentSnapshot {
   sites?: StoreSite[];
   pages?: StorePage[];
   blogPosts?: StoreBlogPost[];
+  users?: StoreUser[];
   revisions?: ContentRevision[];
   previewTokens?: PreviewToken[];
 }
@@ -849,6 +887,10 @@ function ensurePersistedAdminContentLoaded() {
       BLOG_POSTS.splice(0, BLOG_POSTS.length, ...parsed.blogPosts);
     }
 
+    if (Array.isArray(parsed.users)) {
+      USER_LIST.splice(0, USER_LIST.length, ...parsed.users);
+    }
+
     if (Array.isArray(parsed.revisions)) {
       CONTENT_REVISIONS.splice(0, CONTENT_REVISIONS.length, ...parsed.revisions);
     }
@@ -871,6 +913,7 @@ function persistAdminContent() {
           sites: SITE_LIST,
           pages: PAGE_LIST,
           blogPosts: BLOG_POSTS,
+          users: USER_LIST,
           revisions: CONTENT_REVISIONS,
           previewTokens: PREVIEW_TOKENS,
         } satisfies AdminContentSnapshot,
@@ -2475,6 +2518,139 @@ export function deleteAdminSite(siteId: string): boolean {
     }
   }
 
+  persistAdminContent();
+  return true;
+}
+
+const normalizeUserRole = (value: unknown, fallback: StoreUser['role'] = 'viewer'): StoreUser['role'] => {
+  if (value === 'admin' || value === 'editor' || value === 'viewer') {
+    return value;
+  }
+
+  return fallback;
+};
+
+const normalizeUserStatus = (
+  value: unknown,
+  fallback: StoreUser['status'] = 'invited',
+): StoreUser['status'] => {
+  if (value === 'active' || value === 'inactive' || value === 'invited') {
+    return value;
+  }
+
+  return fallback;
+};
+
+const normalizeEmail = (value: unknown): string => (
+  typeof value === 'string' ? value.trim().toLowerCase() : ''
+);
+
+export function listAdminUsers(options: { search?: string; role?: string; status?: string } = {}): StoreUser[] {
+  ensurePersistedAdminContentLoaded();
+
+  const search = sanitizeString(options.search).toLowerCase();
+  const role = options.role === 'admin' || options.role === 'editor' || options.role === 'viewer'
+    ? options.role
+    : '';
+  const status = options.status === 'active' || options.status === 'inactive' || options.status === 'invited'
+    ? options.status
+    : '';
+
+  const users = USER_LIST.filter((user) => {
+    const matchesSearch = !search ||
+      user.fullName.toLowerCase().includes(search) ||
+      user.email.toLowerCase().includes(search);
+    const matchesRole = !role || user.role === role;
+    const matchesStatus = !status || user.status === status;
+
+    return matchesSearch && matchesRole && matchesStatus;
+  });
+
+  return clone(users);
+}
+
+export function getAdminUserById(userId: string): StoreUser | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const user = USER_LIST.find((item) => item.id === userId);
+  return user ? clone(user) : undefined;
+}
+
+export function getAdminUserByEmail(email: string): StoreUser | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const normalizedEmail = normalizeEmail(email);
+  const user = USER_LIST.find((item) => item.email.toLowerCase() === normalizedEmail);
+  return user ? clone(user) : undefined;
+}
+
+export function createAdminUser(input: Record<string, unknown>): StoreUser {
+  ensurePersistedAdminContentLoaded();
+
+  const now = new Date().toISOString();
+  const fullName = sanitizeString(input.fullName) || sanitizeString(input.name) || 'Invited user';
+  const email = normalizeEmail(input.email);
+  const status = normalizeUserStatus(input.status, 'invited');
+
+  const user: StoreUser = {
+    id: sanitizeString(input.id) || createRuntimeId('user'),
+    fullName,
+    email,
+    role: normalizeUserRole(input.role, 'viewer'),
+    status,
+    createdAt: now,
+    updatedAt: now,
+    lastActiveAt: status === 'active' ? now : null,
+    invitedAt: now,
+  };
+
+  USER_LIST.unshift(user);
+  persistAdminContent();
+  return clone(user);
+}
+
+export function updateAdminUser(userId: string, input: Record<string, unknown>): StoreUser | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = USER_LIST.findIndex((user) => user.id === userId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const current = USER_LIST[index];
+  const now = new Date().toISOString();
+  const nextStatus = input.status === undefined
+    ? current.status
+    : normalizeUserStatus(input.status, current.status);
+
+  const updated: StoreUser = {
+    ...current,
+    fullName: input.fullName === undefined
+      ? current.fullName
+      : sanitizeString(input.fullName) || current.fullName,
+    email: input.email === undefined
+      ? current.email
+      : normalizeEmail(input.email) || current.email,
+    role: input.role === undefined ? current.role : normalizeUserRole(input.role, current.role),
+    status: nextStatus,
+    updatedAt: now,
+    lastActiveAt: nextStatus === 'active' && !current.lastActiveAt ? now : current.lastActiveAt,
+  };
+
+  USER_LIST[index] = updated;
+  persistAdminContent();
+  return clone(updated);
+}
+
+export function deleteAdminUser(userId: string): boolean {
+  ensurePersistedAdminContentLoaded();
+
+  const index = USER_LIST.findIndex((user) => user.id === userId);
+  if (index === -1) {
+    return false;
+  }
+
+  USER_LIST.splice(index, 1);
   persistAdminContent();
   return true;
 }
@@ -4257,4 +4433,4 @@ export function getMediaById(siteId: string, id: string): MediaItem | undefined 
   return item ? clone(item) : undefined;
 }
 
-export { type ContentRevision, type Pagination, type StoreBlogPost, type StorePage, type StoreSite };
+export { type ContentRevision, type Pagination, type StoreBlogPost, type StorePage, type StoreSite, type StoreUser };

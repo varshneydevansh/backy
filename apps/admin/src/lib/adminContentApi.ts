@@ -1,4 +1,4 @@
-import type { BlogPost, Page, Site } from '@/stores/mockStore';
+import type { BlogPost, Page, Site, User } from '@/stores/mockStore';
 
 type AdminSiteStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 
@@ -110,6 +110,39 @@ interface ApiDeleteResponse {
   data?: {
     deleted: boolean;
     siteId: string;
+    userId?: string;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiUser {
+  id: string;
+  fullName: string;
+  email: string;
+  role: User['role'];
+  status: User['status'] | 'invited';
+  createdAt?: string;
+  updatedAt?: string;
+  lastActiveAt?: string | null;
+  invitedAt?: string | null;
+}
+
+interface ApiListUsersResponse {
+  success: boolean;
+  data?: {
+    users: ApiUser[];
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiUserResponse {
+  success: boolean;
+  data?: {
+    user: ApiUser;
   };
   error?: {
     message?: string;
@@ -157,6 +190,20 @@ export interface SiteCreateInput {
   description?: string;
   customDomain?: string | null;
   status?: Site['status'];
+}
+
+export interface UserInput {
+  fullName: string;
+  email: string;
+  role: User['role'];
+  status?: User['status'] | 'invited';
+}
+
+export interface UserUpdateInput {
+  fullName?: string;
+  email?: string;
+  role?: User['role'];
+  status?: User['status'] | 'invited';
 }
 
 export interface PageCreateInput {
@@ -303,6 +350,27 @@ const toStorePost = (post: ApiBlogPost): BlogPost => ({
   publishedAt: post.publishedAt || post.updatedAt || post.createdAt || new Date().toISOString(),
 });
 
+const toLastActiveLabel = (user: ApiUser): string => {
+  if (user.lastActiveAt) {
+    return new Date(user.lastActiveAt).toLocaleString();
+  }
+
+  if (user.invitedAt || user.status === 'invited') {
+    return 'Invited';
+  }
+
+  return 'Never';
+};
+
+const toStoreUser = (user: ApiUser): User => ({
+  id: user.id,
+  fullName: user.fullName,
+  email: user.email,
+  role: user.role,
+  status: user.status === 'inactive' ? 'inactive' : 'active',
+  lastActive: toLastActiveLabel(user),
+});
+
 const toContentRevision = (revision: ApiRevision): ContentRevision => {
   const snapshot = revision.snapshot;
   return {
@@ -384,6 +452,73 @@ export async function updateSite(siteId: string, input: Partial<SiteCreateInput>
   }
 
   return toStoreSite(payload.data.site);
+}
+
+export async function listUsers(): Promise<User[]> {
+  const response = await fetch(`${getAdminApiBase()}/users`);
+  const payload = await readJson<ApiListUsersResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load users');
+  }
+
+  return payload.data.users.map(toStoreUser);
+}
+
+export async function getUser(userId: string): Promise<User> {
+  const response = await fetch(`${getAdminApiBase()}/users/${userId}`);
+  const payload = await readJson<ApiUserResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load user');
+  }
+
+  return toStoreUser(payload.data.user);
+}
+
+export async function createUser(input: UserInput): Promise<User> {
+  const response = await fetch(`${getAdminApiBase()}/users`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiUserResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to create user');
+  }
+
+  return toStoreUser(payload.data.user);
+}
+
+export async function updateUser(userId: string, input: UserUpdateInput): Promise<User> {
+  const response = await fetch(`${getAdminApiBase()}/users/${userId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiUserResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to save user');
+  }
+
+  return toStoreUser(payload.data.user);
+}
+
+export async function deleteUser(userId: string): Promise<void> {
+  const response = await fetch(`${getAdminApiBase()}/users/${userId}`, {
+    method: 'DELETE',
+  });
+  const payload = await readJson<ApiDeleteResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.deleted) {
+    throw new Error(payload.error?.message || 'Unable to delete user');
+  }
 }
 
 export async function listPages(siteId: string): Promise<Page[]> {

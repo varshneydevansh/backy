@@ -1,0 +1,130 @@
+/**
+ * Admin users endpoint.
+ *
+ * GET  /api/admin/users
+ * POST /api/admin/users
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { createAdminUser, getAdminUserByEmail, listAdminUsers } from '@/lib/backyStore';
+
+export const runtime = 'nodejs';
+
+const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+  NextResponse.json(
+    {
+      success: false,
+      requestId,
+      error: {
+        code,
+        message,
+      },
+    },
+    { status },
+  )
+);
+
+const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+  try {
+    const body = await request.json();
+    return body && typeof body === 'object' && !Array.isArray(body)
+      ? body as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+};
+
+const normalizeEmail = (value: unknown): string => (
+  typeof value === 'string' ? value.trim().toLowerCase() : ''
+);
+
+const normalizeRole = (value: unknown): 'admin' | 'editor' | 'viewer' | null => (
+  value === 'admin' || value === 'editor' || value === 'viewer' ? value : null
+);
+
+const normalizeStatus = (value: unknown): 'active' | 'inactive' | 'invited' | null => (
+  value === 'active' || value === 'inactive' || value === 'invited' ? value : null
+);
+
+export async function GET(request: NextRequest) {
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const users = listAdminUsers({
+      search: searchParams.get('search') || undefined,
+      role: searchParams.get('role') || undefined,
+      status: searchParams.get('status') || undefined,
+    });
+
+    return NextResponse.json({
+      success: true,
+      requestId,
+      data: {
+        users,
+        pagination: {
+          total: users.length,
+          limit: users.length,
+          offset: 0,
+          hasMore: false,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Admin users list API error:', error);
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
+
+  try {
+    const body = await parseJsonBody(request);
+    const fullName = typeof body.fullName === 'string' ? body.fullName.trim() : '';
+    const email = normalizeEmail(body.email);
+    const role = normalizeRole(body.role);
+    const status = normalizeStatus(body.status) || 'invited';
+
+    if (!fullName) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'Full name is required', requestId);
+    }
+
+    if (!email || !email.includes('@')) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'A valid email address is required', requestId);
+    }
+
+    if (!role) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'Role must be admin, editor, or viewer', requestId);
+    }
+
+    if (getAdminUserByEmail(email)) {
+      return errorResponse(409, 'EMAIL_CONFLICT', 'A user with this email already exists', requestId);
+    }
+
+    const user = createAdminUser({
+      ...body,
+      fullName,
+      email,
+      role,
+      status,
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        requestId,
+        data: {
+          user,
+        },
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    console.error('Admin user create API error:', error);
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+  }
+}

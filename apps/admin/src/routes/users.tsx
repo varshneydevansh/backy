@@ -6,12 +6,14 @@
 
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
 import { Plus, User, Edit, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useStore, type User as UserType } from '@/stores/mockStore';
 import { useDataTable, type Column } from '@/hooks/useDataTable';
 import { PageShell } from '@/components/layout/PageShell';
 import { DataGrid } from '@/components/ui/DataGrid';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { deleteUser as deleteBackendUser, listUsers } from '@/lib/adminContentApi';
 
 export const Route = createFileRoute('/users')({
   component: UsersLayout,
@@ -30,7 +32,51 @@ function UsersLayout() {
 
 function UsersListView() {
   const navigate = useNavigate();
-  const { users, deleteUser } = useStore();
+  const { users, setUsers, deleteUser } = useStore();
+  const [isLoading, setIsLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadUsers = async () => {
+      setIsLoading(true);
+      try {
+        const backendUsers = await listUsers();
+        if (!cancelled) {
+          setUsers(backendUsers);
+          setNotice(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setNotice('Using local fallback users because the backend users API is unavailable.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadUsers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [setUsers]);
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm('Remove this user?')) return;
+
+    try {
+      await deleteBackendUser(userId);
+      setUsers(users.filter((user) => user.id !== userId));
+      setNotice(null);
+    } catch {
+      deleteUser(userId);
+      setNotice('Backend delete failed, so the local fallback list was updated only.');
+    }
+  };
 
   const columns: Column<UserType>[] = [
     {
@@ -81,9 +127,7 @@ function UsersListView() {
             <Edit className="w-4 h-4" />
           </button>
           <button
-            onClick={() => {
-              if (confirm('Remove this user?')) deleteUser(user.id);
-            }}
+            onClick={() => void handleDeleteUser(user.id)}
             className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
           >
             <Trash2 className="w-4 h-4" />
@@ -134,6 +178,18 @@ function UsersListView() {
           />
         </div>
       </div>
+
+      {notice && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {notice}
+        </div>
+      )}
+
+      {isLoading && (
+        <div className="mb-4 rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+          Loading users...
+        </div>
+      )}
 
       <DataGrid
         columns={columns}

@@ -8,6 +8,7 @@ import { ArrowLeft, UserPlus } from 'lucide-react';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { cn } from '@/lib/utils';
+import { createUser } from '@/lib/adminContentApi';
 
 export const Route = createFileRoute('/users/new')({
   component: NewUserPage,
@@ -15,8 +16,9 @@ export const Route = createFileRoute('/users/new')({
 
 function NewUserPage() {
   const navigate = useNavigate();
-  const { addUser } = useStore();
+  const { addUser, setUsers, users } = useStore();
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -26,10 +28,22 @@ function NewUserPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
+    setErrorMessage(null);
 
-    addUser(formData);
-    navigate({ to: '/users' });
+    try {
+      const created = await createUser({
+        ...formData,
+        status: 'invited',
+      });
+      setUsers([created, ...users]);
+      navigate({ to: '/users' });
+    } catch (error) {
+      addUser(formData);
+      setErrorMessage(error instanceof Error
+        ? `${error.message}. Added to local fallback users only.`
+        : 'Unable to send invite through the backend. Added to local fallback users only.');
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -45,6 +59,11 @@ function NewUserPage() {
       <div className="max-w-md mx-auto">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="bg-card border border-border rounded-xl p-6 space-y-6 shadow-sm">
+            {errorMessage && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {errorMessage}
+              </div>
+            )}
 
             {/* Name */}
             <div>

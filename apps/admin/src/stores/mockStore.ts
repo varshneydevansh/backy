@@ -116,6 +116,7 @@ interface AppState {
     updatePage: (id: string, updates: Partial<Page>) => void;
 
     addUser: (user: Omit<User, 'id' | 'lastActive' | 'status'>) => void;
+    setUsers: (users: User[]) => void;
     updateUser: (id: string, updates: Partial<User>) => void;
     deleteUser: (id: string) => void;
 
@@ -325,6 +326,8 @@ export const useStore = create<AppState>()(
             })),
 
             // User Actions
+            setUsers: (users) => set({ users }),
+
             addUser: (user) => set((state) => ({
                 users: [{
                     ...user,
