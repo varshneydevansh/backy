@@ -118,6 +118,9 @@ export interface MediaUploadOptions {
   visibility?: MediaVisibility;
   tags?: string[];
   metadata?: Record<string, unknown>;
+  fontFamily?: string;
+  fontWeight?: string;
+  fontStyle?: 'normal' | 'italic' | 'oblique';
   altText?: string;
   caption?: string;
 }
@@ -299,6 +302,10 @@ export async function uploadMedia(file: File, options: MediaUploadOptions = {}):
   if (options.tags?.length) formData.set('tags', options.tags.join(','));
   if (options.altText) formData.set('altText', options.altText);
   if (options.caption) formData.set('caption', options.caption);
+  if (options.metadata) formData.set('metadata', JSON.stringify(options.metadata));
+  if (options.fontFamily) formData.set('fontFamily', options.fontFamily);
+  if (options.fontWeight) formData.set('fontWeight', options.fontWeight);
+  if (options.fontStyle) formData.set('fontStyle', options.fontStyle);
 
   const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/media`, {
     method: 'POST',

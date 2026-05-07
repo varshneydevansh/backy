@@ -82,6 +82,21 @@ const toStringList = (value: FormDataEntryValue | null): string[] => {
     .filter(Boolean);
 };
 
+const parseMetadata = (value: FormDataEntryValue | null): Record<string, unknown> => {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+};
+
 const parseScope = (value: FormDataEntryValue | null): MediaItem['scope'] => {
   if (value === 'page' || value === 'post') {
     return value;
@@ -194,6 +209,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const mediaFolder = mediaType === 'font' ? 'fonts' : `${mediaType}s`;
     const relativePath = `/uploads/sites/${site.id}/${mediaFolder}/${storedFilename}`;
     const absolutePath = join(process.cwd(), 'public', relativePath);
+    const metadata = parseMetadata(formData.get('metadata'));
 
     await mkdir(join(process.cwd(), 'public', 'uploads', 'sites', site.id, mediaFolder), { recursive: true });
     await writeFile(absolutePath, Buffer.from(await file.arrayBuffer()));
@@ -210,6 +226,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       postIds: scope === 'post' && scopeTargetId ? [scopeTargetId] : [],
       tags: toStringList(formData.get('tags')),
       metadata: {
+        ...metadata,
         extension: extension.replace(/^\./, ''),
         ...(mediaType === 'font'
           ? {

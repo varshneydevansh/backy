@@ -366,6 +366,9 @@ The next implementation should not start by adding more UI screens. The product 
 - **Dependencies**: Task 5.1
 - **Acceptance Criteria**:
   - Page/post/template usage is queryable.
+- **Current progress**:
+  - Runtime media APIs persist upload metadata, extension metadata, alt text, captions, tags, folders, visibility, page/post bindings, and uploaded font registration metadata through local file-backed storage.
+  - `npm run test:admin-contract --workspace @backy/public` verifies font upload metadata, metadata merge preservation after edits, public font listing, private visibility hiding, and page media binding.
 - **Validation**:
   - Upload and usage repository tests.
 

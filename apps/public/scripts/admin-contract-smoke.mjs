@@ -228,6 +228,10 @@ try {
     formData.set('fontFamily', 'Contract Sans');
     formData.set('fontWeight', '500');
     formData.set('tags', 'brand,font');
+    formData.set('metadata', JSON.stringify({
+      license: 'contract-smoke',
+      source: 'admin-contract',
+    }));
 
     const upload = await request(`/api/admin/sites/${createdSiteId}/media`, {
       method: 'POST',
@@ -236,6 +240,8 @@ try {
     assert(upload.response.status === 201, `${upload.url} expected 201, got ${upload.response.status}`);
     assert(upload.json?.data?.media?.type === 'font', `${upload.url} expected font media type`);
     assert(upload.json?.data?.media?.metadata?.fontFamily === 'Contract Sans', `${upload.url} expected font family metadata`);
+    assert(upload.json?.data?.media?.metadata?.extension === 'woff2', `${upload.url} expected preserved font extension metadata`);
+    assert(upload.json?.data?.media?.metadata?.license === 'contract-smoke', `${upload.url} expected custom upload metadata`);
     createdMediaId = upload.json.data.media.id;
 
     const update = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, {
@@ -253,12 +259,24 @@ try {
     });
     assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
     assert(update.json?.data?.media?.metadata?.fontFamily === 'Contract Sans Display', `${update.url} expected updated font family metadata`);
+    assert(update.json?.data?.media?.metadata?.extension === 'woff2', `${update.url} lost extension metadata during font update`);
+    assert(update.json?.data?.media?.metadata?.license === 'contract-smoke', `${update.url} lost custom upload metadata during font update`);
 
     const publicFonts = await request(`/api/sites/${createdSiteId}/media?type=font&search=${encodeURIComponent('Contract Sans')}&tag=font`);
     assert(publicFonts.response.status === 200, `${publicFonts.url} expected 200, got ${publicFonts.response.status}`);
     assert(publicFonts.json?.success === true, `${publicFonts.url} expected success envelope`);
-    assert(publicFonts.json?.data?.media?.some((item) => item.id === createdMediaId && item.metadata?.fontFamily === 'Contract Sans Display'), `${publicFonts.url} missing public font media in data envelope`);
-    assert(publicFonts.json?.media?.some((item) => item.id === createdMediaId && item.metadata?.fontFamily === 'Contract Sans Display'), `${publicFonts.url} missing public font media`);
+    assert(publicFonts.json?.data?.media?.some((item) => (
+      item.id === createdMediaId &&
+      item.metadata?.fontFamily === 'Contract Sans Display' &&
+      item.metadata?.extension === 'woff2' &&
+      item.metadata?.license === 'contract-smoke'
+    )), `${publicFonts.url} missing public font media in data envelope`);
+    assert(publicFonts.json?.media?.some((item) => (
+      item.id === createdMediaId &&
+      item.metadata?.fontFamily === 'Contract Sans Display' &&
+      item.metadata?.extension === 'woff2' &&
+      item.metadata?.license === 'contract-smoke'
+    )), `${publicFonts.url} missing public font media`);
 
     const privateUpdate = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, {
       method: 'PATCH',

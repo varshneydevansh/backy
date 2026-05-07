@@ -226,8 +226,9 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 - `POST /api/admin/sites/:siteId/media`
   - multipart upload
   - query/body flags: `scope` (`global|page|post`), `scopeTargetId`, `visibility`
-  - current implementation accepts `file`, `altText`, `caption`, `tags`, `uploadedBy`, plus `fontFamily`, `fontWeight`, and `fontStyle` for font uploads
+  - current implementation accepts `file`, `altText`, `caption`, `tags`, `uploadedBy`, arbitrary JSON `metadata`, plus `fontFamily`, `fontWeight`, and `fontStyle` for font uploads
   - validates image/video/audio/document/font MIME categories and writes local assets under `/public/uploads/sites/:siteId/...`
+  - stores extension metadata automatically and preserves custom upload metadata through later metadata edits
   - returns `{ success, requestId, data: { media } }`
 
 - `GET /api/admin/sites/:siteId/media`
