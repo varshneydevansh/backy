@@ -654,12 +654,13 @@ export function Canvas({
   } | null>(null);
 
   /**
-   * Handle mouse down on an element
+   * Start moving an element from pointer or mouse input.
    */
-  const handleMouseDown = useCallback(
-    (e: React.PointerEvent, elementId: string) => {
+  const handleElementDragStart = useCallback(
+    (e: React.PointerEvent | React.MouseEvent, elementId: string) => {
       if (isPreview) return;
       if ('button' in e && e.button !== 0) return;
+      if (dragStateRef.current || resizeStateRef.current) return;
 
       const eventTarget = getTargetElement(e.target);
       const hitElementId = eventTarget?.closest?.('[data-element-id]')?.getAttribute('data-element-id');
@@ -694,7 +695,9 @@ export function Canvas({
 
       e.preventDefault();
       e.stopPropagation();
-      e.currentTarget.setPointerCapture?.(e.pointerId);
+      if ('pointerId' in e && e.pointerId !== undefined) {
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+      }
       onSelect(elementId);
 
       if (editingId) {
@@ -823,13 +826,14 @@ export function Canvas({
   }, [isPreview, onElementsChange, size.height, size.width, toCanvasDelta]);
 
   const handleGlobalElementUp = useCallback(() => {
+    const activeElementId = dragStateRef.current?.elementId || resizeStateRef.current?.elementId || selectedId;
     const hadActiveTransform = Boolean(dragStateRef.current || resizeStateRef.current);
     dragStateRef.current = null;
     resizeStateRef.current = null;
     setDragState(null);
     setResizeState(null);
     if (hadActiveTransform) {
-      onElementsChange(elementsRef.current, { commit: true, selectedId });
+      onElementsChange(elementsRef.current, { commit: true, selectedId: activeElementId });
     }
   }, [onElementsChange, selectedId]);
 
@@ -842,6 +846,8 @@ export function Canvas({
       window.addEventListener('pointermove', handleGlobalElementMove);
       window.addEventListener('pointerup', handleGlobalElementUp);
       window.addEventListener('pointercancel', handleGlobalElementUp);
+      window.addEventListener('mousemove', handleGlobalElementMove);
+      window.addEventListener('mouseup', handleGlobalElementUp);
     }
 
     if (resizeState) {
@@ -1125,7 +1131,7 @@ export function Canvas({
             selectedId={selectedId}
             draggingId={dragState?.elementId ?? resizeState?.elementId ?? null}
             isPreview={isPreview}
-            onPointerDown={handleMouseDown}
+            onDragStart={handleElementDragStart}
             onResizeStart={handleResizeStart}
             onClick={(e) => {
               e.stopPropagation();
@@ -1174,7 +1180,7 @@ interface CanvasElementComponentProps {
   selectedId: string | null;
   draggingId: string | null;
   isPreview: boolean;
-  onPointerDown: (e: React.PointerEvent, elementId: string) => void;
+  onDragStart: (e: React.PointerEvent | React.MouseEvent, elementId: string) => void;
   onResizeStart: (e: React.MouseEvent, elementId: string, handle: 'nw' | 'ne' | 'sw' | 'se') => void;
   onClick: (e: React.MouseEvent) => void;
   onSelectElement: (elementId: string) => void;
@@ -1192,7 +1198,7 @@ function CanvasElementComponent({
   selectedId,
   draggingId,
   isPreview,
-  onPointerDown,
+  onDragStart,
   onResizeStart,
   onClick,
   onSelectElement,
@@ -1224,7 +1230,7 @@ function CanvasElementComponent({
           selectedId={resolvedSelectedId}
           draggingId={draggingId}
           isPreview={isPreview}
-          onPointerDown={onPointerDown}
+          onDragStart={onDragStart}
           onResizeStart={onResizeStart}
           onClick={(event) => {
             event.stopPropagation();
@@ -2359,12 +2365,19 @@ function CanvasElementComponent({
         ...sharedStyle,
         opacity: isHidden && !isPreview ? 0.25 : sharedStyle.opacity ?? 1,
         pointerEvents: isHidden && !isSelected ? 'none' : undefined,
+        userSelect: !isPreview && !isEditing ? 'none' : sharedStyle.userSelect,
       }}
       onPointerDownCapture={(event) => {
         if (isEditing && isTextElement) {
           return;
         }
-        onPointerDown(event, element.id);
+        onDragStart(event, element.id);
+      }}
+      onMouseDownCapture={(event) => {
+        if (isEditing && isTextElement) {
+          return;
+        }
+        onDragStart(event, element.id);
       }}
       onClick={onClick}
       onDoubleClick={() => onDoubleClick()}
