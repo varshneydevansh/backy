@@ -106,14 +106,241 @@ const collectElementActions = (elements: RenderElement[]): JsonObject[] => {
   return actions;
 };
 
-const collectElementBindings = (elements: RenderElement[]): JsonObject[] => {
+const DATA_BINDING_MODES = ['text', 'html', 'image', 'video', 'audio', 'url', 'boolean', 'number', 'json'];
+const DATA_BINDING_SOURCE_KINDS = ['collection', 'page', 'post', 'site', 'route', 'query', 'auth', 'static'];
+
+const bindingModeForField = (field: string): string => {
+  const normalized = field.toLowerCase();
+  if (normalized.includes('image') || normalized.includes('photo') || normalized.includes('avatar')) {
+    return 'image';
+  }
+  if (normalized.includes('video')) {
+    return 'video';
+  }
+  if (normalized.includes('audio')) {
+    return 'audio';
+  }
+  if (normalized.includes('url') || normalized.includes('href') || normalized.includes('link')) {
+    return 'url';
+  }
+  if (normalized.includes('count') || normalized.includes('total') || normalized.includes('rank') || normalized.includes('number')) {
+    return 'number';
+  }
+  return normalized.includes('html') || normalized.includes('rich') ? 'html' : 'text';
+};
+
+const normalizeBindingMode = (mode: unknown, field: string): string => (
+  typeof mode === 'string' && DATA_BINDING_MODES.includes(mode) ? mode : bindingModeForField(field)
+);
+
+const normalizeBindingSource = (value: unknown): JsonObject | null => {
+  if (!isRecord(value) || typeof value.kind !== 'string' || !DATA_BINDING_SOURCE_KINDS.includes(value.kind)) {
+    return null;
+  }
+
+  const source: JsonObject = {
+    kind: value.kind,
+  };
+
+  if (typeof value.collectionId === 'string') {
+    source.collectionId = value.collectionId;
+  }
+  if (typeof value.field === 'string') {
+    source.field = value.field;
+  }
+  if (typeof value.recordId === 'string') {
+    source.recordId = value.recordId;
+  }
+  if (typeof value.path === 'string') {
+    source.path = value.path;
+  }
+
+  return source;
+};
+
+const normalizeBindingWriteBack = (value: unknown): JsonObject | null => {
+  if (!isRecord(value) || typeof value.enabled !== 'boolean') {
+    return null;
+  }
+
+  const writeBack: JsonObject = {
+    enabled: value.enabled,
+  };
+  if (typeof value.permission === 'string') {
+    writeBack.permission = value.permission;
+  }
+  if (typeof value.endpoint === 'string') {
+    writeBack.endpoint = value.endpoint;
+  }
+
+  return writeBack;
+};
+
+const normalizeBindingPagination = (value: unknown): JsonObject | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const pagination: JsonObject = {};
+  if (typeof value.limit === 'number' && Number.isInteger(value.limit) && value.limit > 0) {
+    pagination.limit = value.limit;
+  }
+  if (typeof value.cursor === 'string') {
+    pagination.cursor = value.cursor;
+  }
+
+  return Object.keys(pagination).length > 0 ? pagination : null;
+};
+
+const normalizeSchemaBinding = (binding: JsonObject, element: RenderElement, index: number): JsonObject | null => {
+  const source = normalizeBindingSource(binding.source);
+  if (!source) {
+    return null;
+  }
+
+  const sourceField = typeof source.field === 'string' && source.field.length > 0 ? source.field : null;
+  const targetPath = typeof binding.targetPath === 'string' && binding.targetPath.length > 0 ? binding.targetPath : 'props.content';
+  const normalized: JsonObject = {
+    id: typeof binding.id === 'string' && binding.id.length > 0
+      ? binding.id
+      : `binding_${element.id}_${sourceField || index}`,
+    elementId: typeof binding.elementId === 'string' && binding.elementId.length > 0 ? binding.elementId : element.id,
+    targetPath,
+    source,
+    mode: normalizeBindingMode(binding.mode, sourceField || targetPath),
+  };
+
+  if ('fallback' in binding) {
+    normalized.fallback = binding.fallback;
+  }
+  if (isRecord(binding.format)) {
+    normalized.format = binding.format;
+  }
+
+  const writeBack = normalizeBindingWriteBack(binding.writeBack);
+  if (writeBack) {
+    normalized.writeBack = writeBack;
+  }
+
+  return normalized;
+};
+
+const normalizeCollectionBinding = (binding: JsonObject, element: RenderElement, index: number): JsonObject | null => {
+  const source = isRecord(binding.source) ? binding.source : {};
+  const collectionId = typeof source.collectionId === 'string' && source.collectionId.length > 0
+    ? source.collectionId
+    : typeof binding.collectionId === 'string' && binding.collectionId.length > 0
+      ? binding.collectionId
+      : null;
+  const field = typeof source.field === 'string' && source.field.length > 0
+    ? source.field
+    : typeof binding.field === 'string' && binding.field.length > 0
+      ? binding.field
+      : null;
+
+  if (!collectionId || !field) {
+    return null;
+  }
+
+  const normalizedSource: JsonObject = {
+    kind: 'collection',
+    collectionId,
+    field,
+  };
+  if (typeof source.recordId === 'string' && source.recordId.length > 0) {
+    normalizedSource.recordId = source.recordId;
+  }
+  if (typeof source.path === 'string' && source.path.length > 0) {
+    normalizedSource.path = source.path;
+  }
+
+  const normalized: JsonObject = {
+    id: typeof binding.id === 'string' && binding.id.length > 0
+      ? binding.id
+      : `binding_${element.id}_${field}_${index}`,
+    elementId: typeof binding.elementId === 'string' && binding.elementId.length > 0 ? binding.elementId : element.id,
+    targetPath: typeof binding.targetPath === 'string' && binding.targetPath.length > 0 ? binding.targetPath : 'props.content',
+    source: normalizedSource,
+    mode: normalizeBindingMode(binding.mode, field),
+  };
+
+  if ('fallback' in binding) {
+    normalized.fallback = binding.fallback;
+  }
+  if (isRecord(binding.format)) {
+    normalized.format = binding.format;
+  }
+
+  const writeBack = normalizeBindingWriteBack(binding.writeBack);
+  if (writeBack) {
+    normalized.writeBack = writeBack;
+  }
+
+  return normalized;
+};
+
+const normalizeElementForPayload = (element: RenderElement): RenderElement => ({
+  ...element,
+  children: element.children.map(normalizeElementForPayload),
+  dataBindings: element.dataBindings
+    ?.map((binding, index) => normalizeCollectionBinding(binding, element, index) || normalizeSchemaBinding(binding, element, index))
+    .filter((binding): binding is JsonObject => !!binding) ?? [],
+});
+
+const collectDataBindingManifest = (elements: RenderElement[]) => {
   const bindings: JsonObject[] = [];
+  const datasets = new Map<string, JsonObject>();
+
   walkElements(elements, (element) => {
-    if (Array.isArray(element.dataBindings)) {
-      bindings.push(...element.dataBindings);
-    }
+    element.dataBindings?.forEach((binding, index) => {
+      const source = isRecord(binding.source) ? binding.source : {};
+      const collectionId = typeof source.collectionId === 'string' && source.collectionId.length > 0
+        ? source.collectionId
+        : typeof binding.collectionId === 'string' && binding.collectionId.length > 0
+          ? binding.collectionId
+          : null;
+      const normalizedBinding = normalizeCollectionBinding(binding, element, index);
+
+      if (!collectionId || !normalizedBinding) {
+        const schemaBinding = normalizeSchemaBinding(binding, element, index);
+        if (schemaBinding) {
+          bindings.push(schemaBinding);
+        }
+        return;
+      }
+
+      const datasetId = typeof binding.datasetId === 'string' && binding.datasetId.length > 0
+        ? binding.datasetId
+        : `dataset_${collectionId}`;
+      const query = isRecord(binding.query)
+        ? { ...binding.query }
+        : isRecord(source.query)
+          ? { ...source.query }
+          : {};
+      const pagination = normalizeBindingPagination(binding.pagination);
+      const sourceRecordId = isRecord(normalizedBinding.source) && typeof normalizedBinding.source.recordId === 'string'
+        ? normalizedBinding.source.recordId
+        : null;
+
+      if (sourceRecordId && !('recordId' in query)) {
+        query.recordId = sourceRecordId;
+      }
+
+      datasets.set(datasetId, {
+        id: datasetId,
+        collectionId,
+        ...(Object.keys(query).length > 0 ? { query } : {}),
+        ...(pagination ? { pagination } : {}),
+      });
+      bindings.push(normalizedBinding);
+    });
   });
-  return bindings;
+
+  return {
+    schemaVersion: 'backy.bindings.v1',
+    datasets: [...datasets.values()],
+    bindings,
+  };
 };
 
 const buildThemeTokens = (site: StoreSite) => ({
@@ -187,6 +414,28 @@ const buildEditableMap = (elements: RenderElement[]): Record<string, JsonObject>
         scope: 'element',
       };
     }
+
+    element.dataBindings?.forEach((binding, index) => {
+      const normalizedBinding = normalizeCollectionBinding(binding, element, index);
+      const source = isRecord(normalizedBinding?.source) ? normalizedBinding.source : null;
+      const field = typeof source?.field === 'string' ? source.field : null;
+
+      if (!normalizedBinding || !source || !field) {
+        return;
+      }
+
+      editableMap[`collection.${source.collectionId}.${element.id}.${field}`] = {
+        elementId: element.id,
+        field: normalizedBinding.targetPath,
+        editable: true,
+        label: `${element.type} ${field}`,
+        valueType: normalizedBinding.mode === 'image' ? 'image' : normalizedBinding.mode === 'html' ? 'richText' : 'string',
+        scope: 'collectionRecord',
+        collectionId: source.collectionId,
+        recordId: source.recordId,
+        sourceField: field,
+      };
+    });
   });
 
   return editableMap;
@@ -237,6 +486,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
   const elements = page.content.elements
     .map(normalizeElement)
     .filter((element): element is RenderElement => !!element);
+  const payloadElements = elements.map(normalizeElementForPayload);
   const mediaPayload = getMediaList(site.id, {
     pageId: page.id,
     visibility: 'public',
@@ -245,7 +495,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
   const forms = listFormsBySite(site.id, { pageId: page.id });
   const canonical = page.isHomepage ? '/' : page.meta.canonical || getCanonicalPathForPage(page);
   const actions = collectElementActions(elements);
-  const bindings = collectElementBindings(elements);
+  const dataBindings = collectDataBindingManifest(elements);
   const navigation = getSiteNavigation(site.id);
 
   return {
@@ -276,7 +526,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
         title: page.title,
         locale: 'en',
         version: page.updatedAt,
-        elements,
+        elements: payloadElements,
       },
       assets: {
         media: mediaPayload.media,
@@ -321,9 +571,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
         jsonLd: [],
       },
       dataBindings: {
-        schemaVersion: 'backy.bindings.v1',
-        datasets: [],
-        bindings,
+        ...dataBindings,
       },
       editableMap: buildEditableMap(elements),
     },
@@ -336,6 +584,7 @@ export function buildPublicBlogPostRenderPayload(
   options: RenderPayloadOptions,
 ) {
   const elements = normalizePostElements(post);
+  const payloadElements = elements.map(normalizeElementForPayload);
   const mediaPayload = getMediaList(site.id, {
     postId: post.id,
     visibility: 'public',
@@ -344,7 +593,7 @@ export function buildPublicBlogPostRenderPayload(
   const forms = listFormsBySite(site.id, { postId: post.id });
   const canonical = post.meta?.canonical || `/blog/${post.slug}`;
   const actions = collectElementActions(elements);
-  const bindings = collectElementBindings(elements);
+  const dataBindings = collectDataBindingManifest(elements);
   const navigation = getSiteNavigation(site.id);
 
   return {
@@ -377,7 +626,7 @@ export function buildPublicBlogPostRenderPayload(
         title: post.title,
         locale: 'en',
         version: post.updatedAt,
-        elements,
+        elements: payloadElements,
       },
       assets: {
         media: mediaPayload.media,
@@ -422,9 +671,7 @@ export function buildPublicBlogPostRenderPayload(
         jsonLd: [],
       },
       dataBindings: {
-        schemaVersion: 'backy.bindings.v1',
-        datasets: [],
-        bindings,
+        ...dataBindings,
       },
       editableMap: buildEditableMap(elements),
     },

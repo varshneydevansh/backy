@@ -100,6 +100,7 @@ try {
   const tagSlug = `admin-contract-tag-${unique}`;
   const collectionSlug = `admin-contract-collection-${unique}`;
   const collectionRecordSlug = `admin-contract-record-${unique}`;
+  const boundPageSlug = `admin-contract-bound-page-${unique}`;
   const adminDevOrigin = 'http://localhost:5173';
 
   await record('api cors allows local admin dev origin', async () => {
@@ -669,6 +670,74 @@ try {
     const publicRecords = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records?slug=${collectionRecordSlug}`);
     assert(publicRecords.response.status === 200, `${publicRecords.url} expected 200, got ${publicRecords.response.status}`);
     assert(publicRecords.json?.records?.[0]?.id === createdCollectionRecordId, `${publicRecords.url} returned wrong public collection record`);
+
+    const createBoundPage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Collection Bound Contract Page',
+        slug: boundPageSlug,
+        status: 'published',
+        content: {
+          canvasSize: { width: 1200, height: 900 },
+          elements: [
+            {
+              id: 'bound_title',
+              type: 'text',
+              x: 100,
+              y: 100,
+              width: 420,
+              height: 80,
+              props: { content: 'Fallback title' },
+              children: [],
+              dataBindings: [
+                {
+                  id: 'bind_bound_title',
+                  datasetId: 'dataset_contract_collection',
+                  targetPath: 'props.content',
+                  source: {
+                    kind: 'collection',
+                    collectionId: createdCollectionId,
+                    field: 'title',
+                    recordId: createdCollectionRecordId,
+                  },
+                  mode: 'text',
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    });
+    assert(createBoundPage.response.status === 201, `${createBoundPage.url} expected 201, got ${createBoundPage.response.status}`);
+    createdPageId = createBoundPage.json.data.page.id;
+
+    const boundRender = await request(`/api/sites/${createdSiteId}/render?path=/${boundPageSlug}`);
+    assert(boundRender.response.status === 200, `${boundRender.url} expected 200, got ${boundRender.response.status}`);
+    validateAiRenderPayload(boundRender.json, 'collection-bound page render payload');
+    assert(
+      boundRender.json?.data?.dataBindings?.datasets?.some((dataset) => dataset.id === 'dataset_contract_collection' && dataset.collectionId === createdCollectionId),
+      `${boundRender.url} missing collection dataset manifest`,
+    );
+    assert(
+      boundRender.json?.data?.dataBindings?.bindings?.some((binding) => (
+        binding.id === 'bind_bound_title'
+        && binding.elementId === 'bound_title'
+        && binding.source?.collectionId === createdCollectionId
+        && binding.source?.field === 'title'
+      )),
+      `${boundRender.url} missing collection binding manifest`,
+    );
+    assert(
+      boundRender.json?.data?.editableMap?.[`collection.${createdCollectionId}.bound_title.title`]?.scope === 'collectionRecord',
+      `${boundRender.url} missing collection record editable map entry`,
+    );
+
+    const removeBoundPage = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, { method: 'DELETE' });
+    assert(removeBoundPage.response.status === 200, `${removeBoundPage.url} expected 200, got ${removeBoundPage.response.status}`);
+    createdPageId = null;
 
     const updateRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records/${createdCollectionRecordId}`, {
       method: 'PATCH',

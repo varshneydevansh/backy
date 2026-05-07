@@ -49,6 +49,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/public/sites/:siteId/render?path=/about` (future stable alias)
   - Returns the external page/post render payload described by `specs/ai-frontend-contract/content-payload.schema.json`.
   - Includes site bootstrap, route, canonical content document, assets, forms/comments/actions, SEO, data bindings, and editable map.
+  - Current data bindings include normalized collection dataset manifests and element binding metadata when canvas elements declare collection `dataBindings`.
   - Current implementation is backed by the public seed adapter; production implementation must use the durable service layer.
   - Draft render access requires `previewToken` created by the admin preview endpoint for that exact page or post.
 
@@ -86,7 +87,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Public CMS collection contract for custom frontends and future dataset bindings.
   - Returns only collections with `status: "published"` and `permissions.publicRead: true`.
   - Returns only published records or scheduled records whose `scheduledAt` has passed.
-  - Current implementation is backed by the same runtime JSON adapter as admin content. Production completion still needs DB-backed querying, indexes, CSV import/export, dataset resolver wiring, dynamic route templates, and authenticated visitor-write policies.
+  - Current implementation is backed by the same runtime JSON adapter as admin content. `/render` now surfaces dataset and binding manifests for collection-bound elements, but production completion still needs DB-backed querying, indexes, CSV import/export, record value hydration, dynamic route templates, and authenticated visitor-write policies.
 
 ### 2.2 Render payload
 Public page payload should include:
@@ -302,7 +303,7 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
   2. Resolve path on route changes: `GET /api/sites/:siteId/resolve?path=/...`.
   3. Fetch page or blog post render payloads: `GET /api/sites/:siteId/render?path=/...`.
   4. If route resolves to a blog post and a custom archive UI is needed, call blog listing/detail APIs.
-  5. If elements bind to structured content, fetch collection records through `GET /api/sites/:siteId/collections/:collectionId/records`.
+  5. If elements bind to structured content, inspect `dataBindings.datasets` from the render payload and fetch collection records through `GET /api/sites/:siteId/collections/:collectionId/records`.
   6. Render from `content` + `theme` + `meta` only; ignore admin-only flags.
   7. Submit interactive blocks using:
      - `POST /api/sites/:siteId/forms/:formId/submissions`

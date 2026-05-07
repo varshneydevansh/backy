@@ -18,7 +18,10 @@
       },
       "scope": {
         "enum": ["site", "page", "post", "template", "element", "collectionRecord"]
-      }
+      },
+      "collectionId": { "type": "string" },
+      "recordId": { "type": "string" },
+      "sourceField": { "type": "string" }
     },
     "required": ["elementId", "field", "editable", "valueType"]
   }
