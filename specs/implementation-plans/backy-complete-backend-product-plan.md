@@ -191,6 +191,7 @@ The next implementation should not start by adding more UI screens. The product 
   - `packages/core/src/repositories.ts` now defines the shared repository contracts for sites, pages, posts, collections/records, media, forms/submissions/contacts, comments, users, settings, and audit logs.
   - Page and post repository entities require canonical `BackyContentDocument` content so DB adapters cannot reintroduce legacy canvas-only storage as the primary contract.
   - `@backy-cms/core/repositories` is exported as a subpath for DB adapters and route handlers.
+  - Admin sites list/detail/create/update/delete route handlers now branch through repository interfaces in database mode while preserving explicit demo-store behavior for local demo mode.
 - **Validation**:
   - Typecheck.
   - Current command: `npm run test:repositories --workspace @backy-cms/core`.
@@ -210,6 +211,7 @@ The next implementation should not start by adding more UI screens. The product 
 - **Current progress**:
   - `@backy/db` now exports `resolveBackyDataRuntimeConfig`, `createBackyRuntimeAdapter`, and an explicit `createDemoAdapter` marker.
   - `apps/public/src/lib/repositoryRuntime.ts` now exposes the server-side bridge that returns database repositories only in database mode and returns a non-repository demo runtime in explicit demo mode.
+  - Runtime config parsing has been split into `@backy/db/runtime-config` so route handlers can inspect mode without bundling optional database drivers.
   - Runtime mode defaults to `database`; demo mode requires `BACKY_DATA_MODE=demo` or legacy `BACKY_DEMO_MODE=true`.
   - Database mode validates required connection config instead of silently falling back to demo data.
 - **Validation**:

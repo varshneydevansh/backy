@@ -6,7 +6,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import type { Site } from '@backy-cms/core';
 import { createAdminSite, getSiteByIdOrSlug, getSites } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
@@ -43,12 +45,41 @@ const normalizeSlug = (value: unknown): string => (
     : ''
 );
 
+const statusForRepositorySite = (site: { isPublished: boolean }) => (
+  site.isPublished ? 'published' : 'draft'
+);
+
+const adminSiteFromRepositorySite = (site: Site | null) => {
+  if (!site) return null;
+  return {
+    ...site,
+    status: statusForRepositorySite(site),
+  };
+};
+
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { searchParams } = new URL(request.url);
     const includeUnpublished = searchParams.get('includeUnpublished') === 'true';
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const result = await repositories.sites.list({
+        status: includeUnpublished ? 'all' : 'published',
+      });
+      const sites = result.items.map((site) => adminSiteFromRepositorySite(site));
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          sites,
+          pagination: result.pagination,
+        },
+      });
+    }
+
     const sites = getSites({ includeUnpublished });
 
     return NextResponse.json({
@@ -84,6 +115,40 @@ export async function POST(request: NextRequest) {
 
     if (!slug) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Site slug is required', requestId);
+    }
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const teamId = typeof body.teamId === 'string' && body.teamId.trim().length > 0 ? body.teamId.trim() : '';
+
+      if (!teamId) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Team ID is required in database mode', requestId);
+      }
+
+      const slugCheck = await repositories.sites.checkSlug({ slug, teamId });
+      if (!slugCheck.available) {
+        return errorResponse(409, 'SLUG_CONFLICT', 'A site with this slug already exists', requestId);
+      }
+
+      const created = await repositories.sites.create({
+        teamId,
+        name,
+        slug,
+        description: typeof body.description === 'string' ? body.description : null,
+        customDomain: typeof body.customDomain === 'string' ? body.customDomain : null,
+        status: body.status === 'published' ? 'published' : 'draft',
+      });
+
+      return NextResponse.json(
+        {
+          success: true,
+          requestId,
+          data: {
+            site: adminSiteFromRepositorySite(created.item),
+          },
+        },
+        { status: 201 },
+      );
     }
 
     if (getSiteByIdOrSlug(slug)) {

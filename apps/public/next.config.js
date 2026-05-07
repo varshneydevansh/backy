@@ -4,7 +4,7 @@ const nextConfig = {
     reactStrictMode: true,
 
     // Keep optional storage provider dependencies lazy at runtime.
-    serverExternalPackages: ['@backy/storage'],
+    serverExternalPackages: ['@backy/storage', '@backy/db'],
 
     // Configure for subdomain routing
     async rewrites() {

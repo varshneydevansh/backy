@@ -1,11 +1,20 @@
 import {
-  createBackyRuntimeAdapter,
   createDatabaseRepositories,
+} from '@backy/db/repositories';
+import type { DatabaseAdapter, DatabaseConfig } from '@backy/db/adapters';
+import {
   resolveBackyDataRuntimeConfig,
   type BackyDataRuntimeConfig,
-} from '@backy/db';
+} from '@backy/db/runtime-config';
 
 type DatabaseRepositories = ReturnType<typeof createDatabaseRepositories>;
+type DatabaseAdapterModule = {
+  createDatabaseAdapter: (config: DatabaseConfig) => Promise<DatabaseAdapter>;
+};
+const importDatabaseAdapters = async (): Promise<DatabaseAdapterModule> => {
+  const dynamicImport = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<DatabaseAdapterModule>;
+  return dynamicImport('@backy/db/adapters');
+};
 
 export type PublicRepositoryRuntime =
   | {
@@ -29,19 +38,24 @@ export function resolvePublicRepositoryRuntimeConfig(
 export async function createPublicRepositoryRuntime(
   config: BackyDataRuntimeConfig = resolvePublicRepositoryRuntimeConfig(),
 ): Promise<PublicRepositoryRuntime> {
-  const runtime = await createBackyRuntimeAdapter(config);
-
-  if (runtime.mode === 'demo') {
+  if (config.mode === 'demo') {
     return {
       mode: 'demo',
       repositories: null,
-      reason: runtime.adapter.reason || 'Explicit Backy demo mode',
+      reason: 'Explicit Backy demo mode',
     };
   }
 
+  if (!config.database) {
+    throw new Error('Database runtime mode requires a database configuration.');
+  }
+
+  const { createDatabaseAdapter } = await importDatabaseAdapters();
+  const adapter = await createDatabaseAdapter(config.database);
+
   return {
     mode: 'database',
-    repositories: createDatabaseRepositories({ adapter: runtime.adapter }),
+    repositories: createDatabaseRepositories({ adapter }),
   };
 }
 
@@ -62,4 +76,23 @@ export async function getRequiredDatabaseRepositories(): Promise<DatabaseReposit
 
 export function resetPublicRepositoryRuntimeForTests(): void {
   cachedRuntime = null;
+}
+
+export function shouldUseDemoStoreFallback(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  const explicitMode = env.BACKY_DATA_MODE;
+  if (explicitMode === 'demo') {
+    return true;
+  }
+  if (explicitMode === 'database') {
+    return false;
+  }
+  if (env.BACKY_DEMO_MODE === 'true') {
+    return true;
+  }
+  if (env.BACKY_DATABASE_URL || env.DATABASE_URL || env.BACKY_DATABASE_TYPE) {
+    return false;
+  }
+  return env.NODE_ENV !== 'production';
 }
