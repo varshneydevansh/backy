@@ -2404,6 +2404,129 @@ export function getBlogPosts(
   };
 }
 
+export function getAdminBlogPostById(siteId: string, postId: string): StoreBlogPost | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const post = BLOG_POSTS.find((item) => item.siteId === siteId && item.id === postId);
+  return post ? clone(post) : undefined;
+}
+
+export function createAdminBlogPost(siteId: string, input: Record<string, unknown>): StoreBlogPost {
+  ensurePersistedAdminContentLoaded();
+
+  const now = new Date().toISOString();
+  const title = sanitizeString(input.title) || 'Untitled post';
+  const slug = normalizeSlugInput(input.slug || title, 'post');
+  const status = parseStatusInput(input.status, ['draft', 'published', 'scheduled', 'archived'] as const, 'draft');
+  const metaInput = toRecord(input.meta);
+
+  const post: StoreBlogPost = {
+    id: sanitizeString(input.id) || createRuntimeId('post'),
+    siteId,
+    title,
+    slug,
+    excerpt: sanitizeString(input.excerpt) || null,
+    content: toRecord(input.content),
+    status,
+    featuredImageId: sanitizeString(input.featuredImageId) || null,
+    authorId: sanitizeString(input.authorId) || 'admin',
+    meta: {
+      title: sanitizeString(metaInput.title) || title,
+      description: sanitizeString(metaInput.description) || sanitizeString(input.excerpt),
+      keywords: Array.isArray(metaInput.keywords) ? metaInput.keywords.map(sanitizeString).filter(Boolean) : undefined,
+      ogImage: sanitizeString(metaInput.ogImage) || null,
+      canonical: sanitizeString(metaInput.canonical) || `/blog/${slug}`,
+      noIndex: parseBooleanInput(metaInput.noIndex, status !== 'published'),
+      noFollow: parseBooleanInput(metaInput.noFollow, false),
+    },
+    categoryIds: Array.isArray(input.categoryIds) ? input.categoryIds.map(sanitizeString).filter(Boolean) : [],
+    tagIds: Array.isArray(input.tagIds) ? input.tagIds.map(sanitizeString).filter(Boolean) : [],
+    createdAt: now,
+    updatedAt: now,
+    publishedAt: status === 'published' ? now : null,
+    scheduledAt: sanitizeString(input.scheduledAt) || null,
+  };
+
+  BLOG_POSTS.unshift(post);
+  persistAdminContent();
+  return clone(post);
+}
+
+export function updateAdminBlogPost(
+  siteId: string,
+  postId: string,
+  input: Record<string, unknown>,
+): StoreBlogPost | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = BLOG_POSTS.findIndex((post) => post.siteId === siteId && post.id === postId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const current = BLOG_POSTS[index];
+  const now = new Date().toISOString();
+  const status = input.status === undefined
+    ? current.status
+    : parseStatusInput(input.status, ['draft', 'published', 'scheduled', 'archived'] as const, current.status);
+  const metaInput = toRecord(input.meta);
+
+  const updated: StoreBlogPost = {
+    ...current,
+    title: input.title === undefined ? current.title : sanitizeString(input.title) || current.title,
+    slug: input.slug === undefined ? current.slug : normalizeSlugInput(input.slug, current.slug),
+    excerpt: input.excerpt === undefined ? current.excerpt : sanitizeString(input.excerpt) || null,
+    content: input.content === undefined ? current.content : toRecord(input.content),
+    status,
+    featuredImageId: input.featuredImageId === undefined
+      ? current.featuredImageId
+      : sanitizeString(input.featuredImageId) || null,
+    authorId: input.authorId === undefined ? current.authorId : sanitizeString(input.authorId) || null,
+    meta: input.meta === undefined
+      ? current.meta
+      : {
+          ...current.meta,
+          title: metaInput.title === undefined ? current.meta.title : sanitizeString(metaInput.title),
+          description: metaInput.description === undefined
+            ? current.meta.description
+            : sanitizeString(metaInput.description),
+          keywords: Array.isArray(metaInput.keywords)
+            ? metaInput.keywords.map(sanitizeString).filter(Boolean)
+            : current.meta.keywords,
+          ogImage: metaInput.ogImage === undefined ? current.meta.ogImage : sanitizeString(metaInput.ogImage) || null,
+          canonical: metaInput.canonical === undefined ? current.meta.canonical : sanitizeString(metaInput.canonical),
+          noIndex: metaInput.noIndex === undefined ? current.meta.noIndex : parseBooleanInput(metaInput.noIndex, false),
+          noFollow: metaInput.noFollow === undefined ? current.meta.noFollow : parseBooleanInput(metaInput.noFollow, false),
+        },
+    categoryIds: Array.isArray(input.categoryIds)
+      ? input.categoryIds.map(sanitizeString).filter(Boolean)
+      : current.categoryIds,
+    tagIds: Array.isArray(input.tagIds)
+      ? input.tagIds.map(sanitizeString).filter(Boolean)
+      : current.tagIds,
+    updatedAt: now,
+    publishedAt: status === 'published' && !current.publishedAt ? now : current.publishedAt,
+    scheduledAt: input.scheduledAt === undefined ? current.scheduledAt : sanitizeString(input.scheduledAt) || null,
+  };
+
+  BLOG_POSTS[index] = updated;
+  persistAdminContent();
+  return clone(updated);
+}
+
+export function deleteAdminBlogPost(siteId: string, postId: string): boolean {
+  ensurePersistedAdminContentLoaded();
+
+  const index = BLOG_POSTS.findIndex((post) => post.siteId === siteId && post.id === postId);
+  if (index === -1) {
+    return false;
+  }
+
+  BLOG_POSTS.splice(index, 1);
+  persistAdminContent();
+  return true;
+}
+
 export function getMediaList(
   siteId: string,
   params: {

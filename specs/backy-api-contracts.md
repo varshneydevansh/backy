@@ -158,7 +158,26 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 - `PATCH /api/admin/sites/:siteId/comments/:commentId`
 - `POST /api/admin/sites/:siteId/comments/:commentId/block-user`
 
-### 3.6 Publish, revisions, and blog
+### 3.6 Blog
+- `GET /api/admin/sites/:siteId/blog?status=&limit=&offset=`
+  - Current implementation returns `{ success, requestId, data: { posts, pagination } }` and includes unpublished posts for admin use.
+
+- `POST /api/admin/sites/:siteId/blog`
+  - Body: `{ title, slug?, excerpt?, status?, content?, meta?, featuredImageId?, authorId?, categoryIds?, tagIds?, scheduledAt? }`
+  - Validates required title, slug format, and per-site slug conflicts.
+
+- `GET /api/admin/sites/:siteId/blog/:postId`
+  - Returns full editable post payload.
+
+- `PATCH /api/admin/sites/:siteId/blog/:postId`
+  - Body supports partial updates for title, slug, excerpt, status, content, SEO meta, featured image, author, categories, tags, and schedule.
+
+- `DELETE /api/admin/sites/:siteId/blog/:postId`
+  - Deletes the post from the runtime adapter.
+
+Current blog admin endpoints are local file-backed through `data/backy/admin-content.json`. Production completion still requires authenticated database persistence, RBAC, author/category/tag APIs, revisions, preview tokens, publish endpoints, and cache invalidation.
+
+### 3.7 Publish and revisions
 - `POST /api/admin/sites/:siteId/pages/:pageId/publish`
 - `POST /api/admin/sites/:siteId/pages/:pageId/archive`
 - `POST /api/admin/sites/:siteId/pages/:pageId/rollback`
