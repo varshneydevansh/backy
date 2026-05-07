@@ -5,6 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import type { BackyPage, BackyPost, Site } from '@backy-cms/core';
 import {
   getBlogPosts,
   getCollectionByIdOrSlug,
@@ -12,6 +13,9 @@ import {
   getPageByPath,
   getSiteByIdOrSlug,
   validatePreviewToken,
+  type StoreBlogPost,
+  type StorePage,
+  type StoreSite,
 } from '@/lib/backyStore';
 import {
   buildPublicBlogPostRenderPayload,
@@ -19,6 +23,7 @@ import {
   buildPublicRenderPayload,
 } from '@/lib/renderPayload';
 import { publicContractJson } from '@/lib/publicContractResponse';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRoutePath } from '@/lib/routeResolver';
 
 interface RouteParams {
@@ -43,6 +48,99 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   )
 );
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null }) => (
+  item.status === 'published' && (!item.scheduledAt || new Date(item.scheduledAt).getTime() <= Date.now())
+);
+
+const repositorySiteToStoreSite = (site: Site): StoreSite => ({
+  id: site.id,
+  name: site.name,
+  slug: site.slug,
+  description: site.description || '',
+  customDomain: site.customDomain || null,
+  status: site.isPublished ? 'published' : 'draft',
+  isPublished: site.isPublished,
+  theme: {
+    colors: isRecord(site.theme?.colors) ? site.theme.colors as Record<string, string> : {},
+    fonts: isRecord(site.theme?.fonts) ? site.theme.fonts as StoreSite['theme']['fonts'] : {},
+    spacing: isRecord(site.theme?.spacing) ? site.theme.spacing as StoreSite['theme']['spacing'] : undefined,
+    customCSS: typeof site.theme?.customCSS === 'string' ? site.theme.customCSS : '',
+  },
+});
+
+const repositoryPageToStorePage = (page: BackyPage): StorePage => {
+  const canvasSize = isRecord(page.content.metadata?.canvasSize)
+    ? page.content.metadata.canvasSize as StorePage['content']['canvasSize']
+    : { width: 1200, height: 900 };
+
+  return {
+    id: page.id,
+    siteId: page.siteId,
+    title: page.title,
+    slug: page.slug,
+    description: page.description,
+    status: page.status,
+    isHomepage: page.isHomepage,
+    content: {
+      elements: page.content.elements as unknown as StorePage['content']['elements'],
+      canvasSize,
+      customCSS: typeof page.content.metadata?.customCSS === 'string' ? page.content.metadata.customCSS : undefined,
+      contentDocument: page.content,
+    },
+    meta: {
+      title: typeof page.meta?.title === 'string' ? page.meta.title : page.title,
+      description: typeof page.meta?.description === 'string' ? page.meta.description : page.description,
+      keywords: Array.isArray(page.meta?.keywords) ? page.meta.keywords.filter((item): item is string => typeof item === 'string') : undefined,
+      ogImage: typeof page.meta?.ogImage === 'string' ? page.meta.ogImage : null,
+      canonical: typeof page.meta?.canonical === 'string' ? page.meta.canonical : null,
+      noIndex: page.meta?.noIndex === true,
+      noFollow: page.meta?.noFollow === true,
+    },
+    createdAt: page.createdAt,
+    updatedAt: page.updatedAt,
+    publishedAt: page.publishedAt,
+    scheduledAt: page.scheduledAt,
+  };
+};
+
+const repositoryPostToStorePost = (post: BackyPost): StoreBlogPost => ({
+  id: post.id,
+  siteId: post.siteId,
+  title: post.title,
+  slug: post.slug,
+  excerpt: post.excerpt,
+  content: {
+    elements: post.content.elements,
+    canvasSize: isRecord(post.content.metadata?.canvasSize)
+      ? post.content.metadata.canvasSize
+      : { width: 1200, height: 900 },
+    customCSS: typeof post.content.metadata?.customCSS === 'string' ? post.content.metadata.customCSS : undefined,
+    contentDocument: post.content,
+  },
+  status: post.status,
+  featuredImageId: post.featuredImageId,
+  authorId: post.authorId,
+  meta: {
+    title: typeof post.meta?.title === 'string' ? post.meta.title : post.title,
+    description: typeof post.meta?.description === 'string' ? post.meta.description : post.excerpt || undefined,
+    keywords: Array.isArray(post.meta?.keywords) ? post.meta.keywords.filter((item): item is string => typeof item === 'string') : undefined,
+    ogImage: typeof post.meta?.ogImage === 'string' ? post.meta.ogImage : null,
+    canonical: typeof post.meta?.canonical === 'string' ? post.meta.canonical : null,
+    noIndex: post.meta?.noIndex === true,
+    noFollow: post.meta?.noFollow === true,
+  },
+  categoryIds: post.categoryIds,
+  tagIds: post.tagIds,
+  createdAt: post.createdAt,
+  updatedAt: post.updatedAt,
+  publishedAt: post.publishedAt,
+  scheduledAt: post.scheduledAt,
+});
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -51,6 +149,54 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { searchParams } = new URL(request.url);
     const path = normalizeRoutePath(searchParams.get('path') || searchParams.get('slug') || '/');
     const previewToken = searchParams.get('previewToken');
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const storeSite = repositorySiteToStoreSite(site);
+      const blogMatch = path.match(/^\/blog\/([^/]+)$/);
+      if (blogMatch) {
+        const slug = decodeURIComponent(blogMatch[1]);
+        const post = await repositories.posts.getBySlug(site.id, slug);
+
+        if (!post || !isPubliclyReadable(post)) {
+          return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+        }
+
+        return publicContractJson(
+          buildPublicBlogPostRenderPayload(storeSite, repositoryPostToStorePost(post), { requestId, path }),
+          {
+            requestId,
+            request,
+            cache: previewToken ? 'private' : 'render',
+            schemaVersion: 'backy.content-payload.v1',
+            siteId: site.id,
+          },
+        );
+      }
+
+      const pagePath = path === '/' ? 'index' : path.slice(1);
+      const page = await repositories.pages.getBySlug(site.id, pagePath);
+      if (page && isPubliclyReadable(page)) {
+        return publicContractJson(
+          buildPublicRenderPayload(storeSite, repositoryPageToStorePage(page), { requestId, path }),
+          {
+            requestId,
+            request,
+            cache: previewToken ? 'private' : 'render',
+            schemaVersion: 'backy.content-payload.v1',
+            siteId: site.id,
+          },
+        );
+      }
+
+      return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
+    }
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
