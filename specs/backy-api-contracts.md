@@ -139,8 +139,11 @@ Public page payload should include:
 - `POST /api/sites/:siteId/forms/:formId/submissions`
 - `POST /api/public/sites/:siteId/forms/:formId/submissions` (optional alias)
   - `GET /api/sites/:siteId/forms` lists public form definitions with `{ success, requestId, data: { forms, total, pagination } }`; legacy top-level `forms` and `total` remain for compatibility.
+  - `GET /api/sites/:siteId/forms/:formId` and `GET /api/sites/:siteId/forms/:formId/submissions` return `{ success, requestId, data: { form, submissions } }` while preserving legacy top-level `form/submissions`.
+  - `GET /api/sites/:siteId/forms/:formId/submissions/:submissionId` and `PATCH /api/sites/:siteId/forms/:formId/submissions/:submissionId` return `{ success, requestId, data: { submission } }` while preserving legacy top-level `submission`.
+  - `GET /api/sites/:siteId/forms/:formId/contacts` and `PATCH /api/sites/:siteId/forms/:formId/contacts/:contactId` return `{ success, requestId, data }` envelopes while preserving legacy contact list/status fields.
   - Body: form values map + optional hidden metadata.
-  - Response: submission id, status, optional message, or detailed validation errors.
+  - Response: `{ success, requestId, data: { submission, contact, collectionRecord, collectionRecordErrors, status, message } }`; legacy top-level `submission/contact/collectionRecord/collectionRecordErrors/status/message` remain for compatibility.
   - Canvas-derived form definitions may include `collectionTarget: { enabled, collectionId, fieldMap, slugField }`.
   - When enabled, accepted non-spam submissions also create a `draft` collection record after `permissions.publicCreate` and collection schema validation pass. The response includes `collectionRecord` and `collectionRecordErrors`, and listed submissions retain a lightweight `collectionRecord` link for admin moderation shortcuts.
 

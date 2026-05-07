@@ -18,6 +18,23 @@ interface RouteParams {
 
 type ContactStatus = 'new' | 'contacted' | 'qualified' | 'archived';
 
+const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+  NextResponse.json(
+    {
+      success: false,
+      requestId,
+      error: {
+        code,
+        message,
+      },
+      errorMessage: message,
+    },
+    { status },
+  )
+);
+
 async function notifyContactStatusWebhook(params: {
   formId: string;
   target: string;
@@ -118,29 +135,28 @@ function parseBody(raw: unknown): { status: ContactStatus } | null {
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
+
   try {
     const { siteId, formId, contactId } = await params;
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return NextResponse.json({ error: 'Site not found' }, { status: 404 });
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
     const form = getFormById(site.id, formId);
     if (!form) {
-      return NextResponse.json({ error: 'Form not found' }, { status: 404 });
+      return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
     }
 
     const body = parseBody(await request.json().catch(() => null));
     if (!body) {
-      return NextResponse.json(
-        { error: 'Invalid payload. status is required.' },
-        { status: 400 },
-      );
+      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status is required.', requestId);
     }
 
     const contact = getContactById(contactId);
     if (!contact || contact.siteId !== site.id || contact.formId !== form.id) {
-      return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
+      return errorResponse(404, 'CONTACT_NOT_FOUND', 'Contact not found', requestId);
     }
 
     const updated = updateContactStatus(contact.id, {
@@ -148,22 +164,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!updated) {
-      return NextResponse.json(
-        { error: 'Unable to update contact' },
-        { status: 409 },
-      );
+      return errorResponse(409, 'CONTACT_UPDATE_FAILED', 'Unable to update contact', requestId);
     }
 
     if (form.notificationWebhook) {
       const sourceSubmission = updated.sourceSubmissionId
         ? getSubmissionById(updated.sourceSubmissionId)
         : null;
-      const requestId = updated.requestId || sourceSubmission?.requestId || undefined;
+      const webhookRequestId = updated.requestId || sourceSubmission?.requestId || requestId;
 
-  void notifyContactStatusWebhook({
+      void notifyContactStatusWebhook({
         formId: form.id,
         target: form.notificationWebhook,
-        requestId,
+        requestId: webhookRequestId,
         contactId: updated.id,
         submissionId: updated.sourceSubmissionId || undefined,
         contactStatus: updated.status,
@@ -171,9 +184,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       });
     }
 
-    return NextResponse.json({ contact: updated });
+    return NextResponse.json({
+      success: true,
+      requestId,
+      data: {
+        contact: updated,
+      },
+      contact: updated,
+    });
   } catch (error) {
     console.error('API Error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }

@@ -26,6 +26,23 @@ interface ContactShareOverridePayload {
   dedupeByEmail?: boolean;
 }
 
+const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+  NextResponse.json(
+    {
+      success: false,
+      requestId,
+      error: {
+        code,
+        message,
+      },
+      errorMessage: message,
+    },
+    { status },
+  )
+);
+
 function parseStatus(raw: unknown): FormSubmission['status'] | null {
   if (raw === 'pending' || raw === 'approved' || raw === 'rejected' || raw === 'spam') {
     return raw;
@@ -161,51 +178,62 @@ async function notifyContactWebhook(params: {
 }
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
+  const requestId = _request.headers.get('x-request-id') || makeRequestId();
+
   try {
     const { siteId, formId, submissionId } = await params;
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return NextResponse.json({ error: 'Site not found' }, { status: 404 });
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
     const form = getFormById(site.id, formId);
     if (!form) {
-      return NextResponse.json({ error: 'Form not found' }, { status: 404 });
+      return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
     }
 
     const submission = getSubmissionById(submissionId);
     if (!submission || submission.formId !== form.id) {
-      return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
+      return errorResponse(404, 'SUBMISSION_NOT_FOUND', 'Submission not found', requestId);
     }
 
-    return NextResponse.json({ submission });
+    return NextResponse.json({
+      success: true,
+      requestId,
+      data: {
+        submission,
+      },
+      submission,
+    });
   } catch (error) {
     console.error('API Error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
+
   try {
     const { siteId, formId, submissionId } = await params;
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return NextResponse.json({ error: 'Site not found' }, { status: 404 });
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
     const form = getFormById(site.id, formId);
     if (!form) {
-      return NextResponse.json({ error: 'Form not found' }, { status: 404 });
+      return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
     }
 
     const submission = getSubmissionById(submissionId);
     if (!submission || submission.formId !== form.id) {
-      return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
+      return errorResponse(404, 'SUBMISSION_NOT_FOUND', 'Submission not found', requestId);
     }
 
     const body = parseBody(await request.json().catch(() => null));
     if (!body || !body.status) {
-      return NextResponse.json({ error: 'Invalid payload. status is required.' }, { status: 400 });
+      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status is required.', requestId);
     }
 
     const nextStatus = body.status;
@@ -216,7 +244,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!updated) {
-      return NextResponse.json({ error: 'Unable to update submission' }, { status: 409 });
+      return errorResponse(409, 'SUBMISSION_UPDATE_FAILED', 'Unable to update submission', requestId);
     }
 
     const shouldShareContact = body?.contactShareOverride?.enabled !== undefined
@@ -247,9 +275,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    return NextResponse.json({ submission: updated });
+    return NextResponse.json({
+      success: true,
+      requestId,
+      data: {
+        submission: updated,
+      },
+      submission: updated,
+    });
   } catch (error) {
     console.error('API Error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }

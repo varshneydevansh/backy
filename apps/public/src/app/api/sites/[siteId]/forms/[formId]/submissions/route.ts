@@ -31,6 +31,23 @@ const SUBMISSION_STATUSES = ['pending', 'approved', 'rejected', 'spam'] as const
 
 type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
 
+const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+  NextResponse.json(
+    {
+      success: false,
+      requestId,
+      error: {
+        code,
+        message,
+      },
+      errorMessage: message,
+    },
+    { status },
+  )
+);
+
 function parseStatus(raw: string | null): SubmissionStatus | 'all' {
   if (
     raw === 'pending' ||
@@ -225,16 +242,18 @@ async function notifyContactWebhook(params: {
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  const responseRequestId = request.headers.get('x-request-id') || makeRequestId();
+
   try {
     const { siteId, formId } = await params;
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return NextResponse.json({ error: 'Site not found' }, { status: 404 });
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
     }
 
     const form = getFormById(site.id, formId);
     if (!form) {
-      return NextResponse.json({ error: 'Form not found' }, { status: 404 });
+      return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', responseRequestId);
     }
 
     const { searchParams } = new URL(request.url);
@@ -251,35 +270,43 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
 
     return NextResponse.json({
+      success: true,
+      requestId: responseRequestId,
+      data: {
+        form,
+        submissions: result,
+      },
       form: form,
       submissions: result,
     });
   } catch (error) {
     console.error('API Error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', responseRequestId);
   }
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  const responseRequestId = request.headers.get('x-request-id') || makeRequestId();
+
   try {
     const { siteId, formId } = await params;
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
-      return NextResponse.json({ error: 'Site not found' }, { status: 404 });
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
     }
 
     const form = getFormById(site.id, formId);
     if (!form) {
-      return NextResponse.json({ error: 'Form not found' }, { status: 404 });
+      return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', responseRequestId);
     }
 
     if (!form.isActive) {
-      return NextResponse.json({ error: 'Form is not active' }, { status: 400 });
+      return errorResponse(400, 'FORM_INACTIVE', 'Form is not active', responseRequestId);
     }
 
     const parsed = parseRequestBody(await request.json().catch(() => null));
     if (!parsed) {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
+      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload', responseRequestId);
     }
 
     const requestId = normalizeRequestId(parsed.requestId);
@@ -300,6 +327,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json(
         {
           success: false,
+          requestId,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: classification.spamMessage || 'Submission blocked.',
+          },
+          errorMessage: classification.spamMessage || 'Submission blocked.',
           status: classification.status,
           validation: classification.validation,
           spamFlags: classification.spamFlags,
@@ -425,10 +458,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json(
       {
         success: true,
+        requestId,
         status: submission.status,
         message: submission.status === 'pending'
           ? 'Submission received and awaiting moderation.'
           : 'Submission received.',
+        data: {
+          status: submission.status,
+          message: submission.status === 'pending'
+            ? 'Submission received and awaiting moderation.'
+            : 'Submission received.',
+          submission,
+          contact,
+          collectionRecord: collectionRecordResult?.record || null,
+          collectionRecordErrors: collectionRecordResult?.errors || [],
+        },
         submission,
         contact,
         collectionRecord: collectionRecordResult?.record || null,
@@ -438,16 +482,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
   } catch (error) {
     console.error('API Error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    );
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', responseRequestId);
   }
 }
 
 export async function PATCH(_request: NextRequest, { params }: RouteParams) {
+  const requestId = _request.headers.get('x-request-id') || makeRequestId();
+  void params;
+
   return NextResponse.json(
-    { error: 'Unsupported method. Use POST for form submissions.' },
+    {
+      success: false,
+      requestId,
+      error: {
+        code: 'METHOD_NOT_ALLOWED',
+        message: 'Unsupported method. Use POST for form submissions.',
+      },
+      errorMessage: 'Unsupported method. Use POST for form submissions.',
+    },
     { status: 405 },
   );
 }
