@@ -1,4 +1,4 @@
-import type { Page, Site } from '@/stores/mockStore';
+import type { BlogPost, Page, Site } from '@/stores/mockStore';
 
 type AdminSiteStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 
@@ -78,6 +78,41 @@ interface ApiDeleteResponse {
   };
 }
 
+interface ApiBlogPost {
+  id: string;
+  siteId: string;
+  title: string;
+  slug: string;
+  excerpt?: string | null;
+  content?: unknown;
+  status?: AdminSiteStatus;
+  authorId?: string | null;
+  meta?: Record<string, unknown>;
+  publishedAt?: string | null;
+  updatedAt?: string;
+  createdAt?: string;
+}
+
+interface ApiListBlogResponse {
+  success: boolean;
+  data?: {
+    posts: ApiBlogPost[];
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiBlogPostResponse {
+  success: boolean;
+  data?: {
+    post: ApiBlogPost;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 export interface SiteCreateInput {
   name: string;
   slug: string;
@@ -103,6 +138,26 @@ export interface PageUpdateInput {
   description?: string;
   meta?: Record<string, unknown>;
   content?: unknown;
+}
+
+export interface BlogPostInput {
+  title: string;
+  slug: string;
+  excerpt?: string;
+  status?: BlogPost['status'];
+  content?: unknown;
+  meta?: Record<string, unknown>;
+  authorId?: string | null;
+}
+
+export interface BlogPostUpdateInput {
+  title?: string;
+  slug?: string;
+  excerpt?: string;
+  status?: BlogPost['status'];
+  content?: unknown;
+  meta?: Record<string, unknown>;
+  authorId?: string | null;
 }
 
 const getEnvValue = (key: string): string => {
@@ -158,6 +213,29 @@ const toStorePage = (page: ApiPage): Page => ({
     description: page.description || '',
   },
   lastUpdated: page.updatedAt || page.createdAt || new Date().toISOString(),
+});
+
+const stringifyContent = (content: unknown): string => {
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (content && typeof content === 'object') {
+    return JSON.stringify(content);
+  }
+
+  return '';
+};
+
+const toStorePost = (post: ApiBlogPost): BlogPost => ({
+  id: post.id,
+  title: post.title,
+  slug: post.slug,
+  excerpt: post.excerpt || '',
+  content: stringifyContent(post.content),
+  status: toAdminSiteStatus(post.status, post.status === 'published') === 'published' ? 'published' : 'draft',
+  author: post.authorId || 'admin',
+  publishedAt: post.publishedAt || post.updatedAt || post.createdAt || new Date().toISOString(),
 });
 
 const readJson = async <T>(response: Response): Promise<T> => {
@@ -294,5 +372,76 @@ export async function deletePage(siteId: string, pageId: string): Promise<void> 
 
   if (!response.ok || !payload.success || !payload.data?.deleted) {
     throw new Error(payload.error?.message || 'Unable to delete page');
+  }
+}
+
+export async function listBlogPosts(siteId: string): Promise<BlogPost[]> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog?limit=100`);
+  const payload = await readJson<ApiListBlogResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load blog posts');
+  }
+
+  return payload.data.posts.map(toStorePost);
+}
+
+export async function createBlogPost(siteId: string, input: BlogPostInput): Promise<BlogPost> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiBlogPostResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to create blog post');
+  }
+
+  return toStorePost(payload.data.post);
+}
+
+export async function getBlogPost(siteId: string, postId: string): Promise<BlogPost> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}`);
+  const payload = await readJson<ApiBlogPostResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load blog post');
+  }
+
+  return toStorePost(payload.data.post);
+}
+
+export async function updateBlogPost(
+  siteId: string,
+  postId: string,
+  input: BlogPostUpdateInput,
+): Promise<BlogPost> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiBlogPostResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to save blog post');
+  }
+
+  return toStorePost(payload.data.post);
+}
+
+export async function deleteBlogPost(siteId: string, postId: string): Promise<void> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}`, {
+    method: 'DELETE',
+  });
+  const payload = await readJson<ApiDeleteResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.deleted) {
+    throw new Error(payload.error?.message || 'Unable to delete blog post');
   }
 }

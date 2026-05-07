@@ -5,6 +5,7 @@
 import { useState, useMemo } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, Save, FileText } from 'lucide-react';
+import { createBlogPost } from '@/lib/adminContentApi';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
@@ -25,10 +26,12 @@ export const Route = createFileRoute('/blog/new')({
 
 function NewBlogPostPage() {
     const navigate = useNavigate();
-    const { addPost } = useStore();
+    const { sites, posts, addPost, setPosts } = useStore();
     const { user } = useAuthStore();
 
     const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const activeSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
 
     // Form State
     const [title, setTitle] = useState('');
@@ -64,21 +67,41 @@ function NewBlogPostPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
-        await new Promise(resolve => setTimeout(resolve, 800));
+        setError(null);
 
     // Serialize canvas elements for storage
         const content = serializeCanvasContent(canvasElements, canvasSize);
-
-        addPost({
+        const input = {
             title,
             slug,
             excerpt,
-            content,
             status,
             author: user?.fullName || 'Anonymous',
-        });
+            authorId: user?.id || 'admin',
+            content: JSON.parse(content),
+            meta: {
+                title,
+                description: excerpt,
+            },
+        };
 
-        navigate({ to: '/blog' });
+        try {
+            const created = await createBlogPost(activeSiteId, input);
+            setPosts([created, ...posts.filter((post) => post.id !== created.id)]);
+            navigate({ to: '/blog' });
+        } catch (createError) {
+            setError(createError instanceof Error ? createError.message : 'Unable to create post');
+            addPost({
+                title,
+                slug,
+                excerpt,
+                content,
+                status,
+                author: user?.fullName || 'Anonymous',
+            });
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -94,6 +117,12 @@ function NewBlogPostPage() {
             description="Write something amazing."
         >
             <div className="max-w-[1400px] mx-auto pb-20">
+                {error && (
+                    <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        {error}. A local draft copy was kept in this browser.
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit} className="space-y-8">
 
                     {/* Header Section */}

@@ -102,6 +102,7 @@ interface AppState {
     addPage: (page: Omit<Page, 'id' | 'lastUpdated'>) => void;
     deletePage: (id: string) => void;
 
+    setPosts: (posts: BlogPost[]) => void;
     addPost: (post: Omit<BlogPost, 'id' | 'publishedAt'>) => void;
     updatePost: (id: string, updates: Partial<BlogPost>) => void;
     deletePost: (id: string) => void;
@@ -299,6 +300,8 @@ export const useStore = create<AppState>()(
             })),
 
             // Post Actions
+            setPosts: (posts) => set({ posts }),
+
             addPost: (post) => set((state) => ({
                 posts: [{
                     ...post,

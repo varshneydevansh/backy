@@ -2,10 +2,15 @@
  * BACKY CMS - EDIT BLOG POST (HYBRID LAYOUT)
  */
 
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, Save, FileText, Trash2 } from 'lucide-react';
-import { useStore } from '@/stores/mockStore';
+import {
+    deleteBlogPost,
+    getBlogPost,
+    updateBlogPost,
+} from '@/lib/adminContentApi';
+import { useStore, type BlogPost } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
 import { cn } from '@/lib/utils';
@@ -25,16 +30,64 @@ export const Route = createFileRoute('/blog/$postId')({
 function EditBlogPostPage() {
     const navigate = useNavigate();
     const { postId } = Route.useParams();
-    const { posts, updatePost, deletePost } = useStore();
-    const post = posts.find((p) => p.id === postId);
+    const { sites, posts, updatePost, deletePost } = useStore();
+    const storePost = posts.find((p) => p.id === postId);
+    const storePostId = storePost?.id;
+    const activeSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
+    const [post, setPost] = useState<BlogPost | null>(storePost || null);
 
     const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingPost, setIsLoadingPost] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [saveWarning, setSaveWarning] = useState<string | null>(null);
 
     // Initialize State from Post
     const [title, setTitle] = useState(post?.title || '');
     const [slug, setSlug] = useState(post?.slug || '');
     const [excerpt, setExcerpt] = useState(post?.excerpt || '');
     const [status, setStatus] = useState<'draft' | 'published'>((post?.status as 'draft' | 'published') || 'draft');
+
+    useEffect(() => {
+        let cancelled = false;
+        const localFallbackPost = storePost;
+
+        const loadPost = async () => {
+            setIsLoadingPost(true);
+            setLoadError(null);
+
+            try {
+                const backendPost = await getBlogPost(activeSiteId, postId);
+                if (!cancelled) {
+                    setPost(backendPost);
+                    updatePost(postId, backendPost);
+                    setTitle(backendPost.title);
+                    setSlug(backendPost.slug);
+                    setExcerpt(backendPost.excerpt);
+                    setStatus(backendPost.status);
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    if (localFallbackPost) {
+                        setPost(localFallbackPost);
+                        setLoadError(error instanceof Error ? error.message : 'Unable to load backend post.');
+                    } else {
+                        setPost(null);
+                        setLoadError(error instanceof Error ? error.message : 'Unable to load post.');
+                    }
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsLoadingPost(false);
+                }
+            }
+        };
+
+        void loadPost();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeSiteId, postId, storePostId, updatePost]);
 
     // Canvas State (Content Body)
     const { elements: savedElements, canvasSize: savedCanvasSize } = useMemo(
@@ -65,9 +118,19 @@ function EditBlogPostPage() {
     const [canvasElements, setCanvasElements] = useState<CanvasElement[]>(initialElements);
     const [canvasSize, setCanvasSize] = useState<CanvasSize>(savedCanvasSize);
 
+    if (isLoadingPost && !post) {
+        return (
+            <PageShell title="Loading post" description="Fetching editor content from the backend.">
+                <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                    Loading blog editor...
+                </div>
+            </PageShell>
+        );
+    }
+
     if (!post) {
         return (
-            <PageShell title="Post Not Found" description="The article you requested doesn't exist.">
+            <PageShell title="Post Not Found" description={loadError || "The article you requested doesn't exist."}>
                 <button onClick={() => navigate({ to: '/blog' })} className="text-primary hover:underline">
                     &larr; Back to Blog
                 </button>
@@ -85,23 +148,54 @@ function EditBlogPostPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
-        await new Promise(resolve => setTimeout(resolve, 800));
+        setSaveWarning(null);
 
         const content = serializeCanvasContent(canvasElements, canvasSize);
-
-        updatePost(postId, {
+        const localUpdate = {
             title,
             slug,
             excerpt,
             content,
             status,
-        });
+        };
 
-        navigate({ to: '/blog' });
+        try {
+            const savedPost = await updateBlogPost(activeSiteId, postId, {
+                title,
+                slug,
+                excerpt,
+                status,
+                content: JSON.parse(content),
+                meta: {
+                    title,
+                    description: excerpt,
+                },
+            });
+            setPost(savedPost);
+            updatePost(postId, savedPost);
+            navigate({ to: '/blog' });
+        } catch (error) {
+            updatePost(postId, localUpdate);
+            setPost((current) => current ? { ...current, ...localUpdate } : current);
+            setSaveWarning(error instanceof Error
+                ? `${error.message}. Changes were kept locally in this browser.`
+                : 'Backend save failed. Changes were kept locally in this browser.');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const handleDelete = () => {
+    const handleDelete = async () => {
         if (confirm('Are you sure you want to delete this post?')) {
+            setSaveWarning(null);
+
+            try {
+                await deleteBlogPost(activeSiteId, postId);
+            } catch (error) {
+                setSaveWarning(error instanceof Error ? error.message : 'Unable to delete post');
+                return;
+            }
+
             deletePost(postId);
             navigate({ to: '/blog' });
         }
@@ -120,6 +214,12 @@ function EditBlogPostPage() {
             description="Update your article."
         >
             <div className="max-w-[1400px] mx-auto pb-20">
+                {(loadError || saveWarning) && (
+                    <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        {saveWarning || `${loadError} Using the local post copy.`}
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit} className="space-y-8">
 
                     {/* Header Section */}
@@ -138,7 +238,7 @@ function EditBlogPostPage() {
                             </div>
                             <button
                                 type="button"
-                                onClick={handleDelete}
+                                onClick={() => void handleDelete()}
                                 className="text-destructive hover:bg-destructive/10 p-2 rounded-lg"
                                 title="Delete Post"
                             >

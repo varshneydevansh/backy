@@ -4,8 +4,10 @@
  * Layout route that shows list at /blog, renders child routes otherwise.
  */
 
+import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
 import { Plus, FileText, Edit, Trash2 } from 'lucide-react';
+import { deleteBlogPost, listBlogPosts } from '@/lib/adminContentApi';
 import { useStore, type BlogPost } from '@/stores/mockStore';
 import { useDataTable, type Column } from '@/hooks/useDataTable';
 import { PageShell } from '@/components/layout/PageShell';
@@ -31,7 +33,58 @@ function BlogLayout() {
 
 function BlogListView() {
   const navigate = useNavigate();
-  const { posts, deletePost } = useStore();
+  const { sites, posts, setPosts, deletePost } = useStore();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const activeSiteId = useMemo(
+    () => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo',
+    [sites],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPosts = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const backendPosts = await listBlogPosts(activeSiteId);
+        if (!cancelled) {
+          setPosts(backendPosts);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : 'Unable to load posts');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadPosts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSiteId, setPosts]);
+
+  const handleDeletePost = async (post: BlogPost) => {
+    if (!confirm('Delete this post?')) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await deleteBlogPost(activeSiteId, post.id);
+      deletePost(post.id);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete post');
+    }
+  };
 
   const columns: Column<BlogPost>[] = [
     {
@@ -79,9 +132,7 @@ function BlogListView() {
             <Edit className="w-4 h-4" />
           </button>
           <button
-            onClick={() => {
-              if (confirm('Delete this post?')) deletePost(post.id);
-            }}
+            onClick={() => void handleDeletePost(post)}
             className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
           >
             <Trash2 className="w-4 h-4" />
@@ -121,6 +172,18 @@ function BlogListView() {
         </Link>
       }
     >
+      {error && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {error}
+        </div>
+      )}
+
+      {isLoading && (
+        <div className="mb-4 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          Loading blog posts from backend...
+        </div>
+      )}
+
       <div className="flex items-center gap-4 mb-6">
         <div className="relative flex-1 max-w-sm">
           <input
