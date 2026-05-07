@@ -58,7 +58,7 @@ export interface User {
     fullName: string;
     email: string;
     role: 'admin' | 'editor' | 'viewer';
-    status: 'active' | 'inactive';
+    status: 'active' | 'inactive' | 'invited' | 'suspended';
     lastActive: string;
 }
 

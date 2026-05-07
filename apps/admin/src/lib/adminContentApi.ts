@@ -224,7 +224,7 @@ interface ApiUser {
   fullName: string;
   email: string;
   role: User['role'];
-  status: User['status'] | 'invited';
+  status: User['status'];
   createdAt?: string;
   updatedAt?: string;
   lastActiveAt?: string | null;
@@ -298,7 +298,7 @@ interface ApiBlogAuthor {
   name: string;
   slug: string;
   role: User['role'] | 'contributor';
-  status: User['status'] | 'invited' | 'external';
+  status: User['status'] | 'external';
   postCount: number;
 }
 
@@ -591,14 +591,14 @@ export interface UserInput {
   fullName: string;
   email: string;
   role: User['role'];
-  status?: User['status'] | 'invited';
+  status?: User['status'];
 }
 
 export interface UserUpdateInput {
   fullName?: string;
   email?: string;
   role?: User['role'];
-  status?: User['status'] | 'invited';
+  status?: User['status'];
 }
 
 export interface SiteSettingsInput {
@@ -715,7 +715,7 @@ export interface BlogAuthor {
   name: string;
   slug: string;
   role: User['role'] | 'contributor';
-  status: User['status'] | 'invited' | 'external';
+  status: User['status'] | 'external';
   postCount: number;
 }
 
@@ -1028,7 +1028,7 @@ const toStoreUser = (user: ApiUser): User => ({
   fullName: user.fullName,
   email: user.email,
   role: user.role,
-  status: user.status === 'inactive' ? 'inactive' : 'active',
+  status: user.status,
   lastActive: toLastActiveLabel(user),
 });
 
