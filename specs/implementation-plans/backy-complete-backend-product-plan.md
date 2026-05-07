@@ -187,8 +187,13 @@ The next implementation should not start by adding more UI screens. The product 
 - **Dependencies**: Task 2.1
 - **Acceptance Criteria**:
   - Admin and public route handlers depend on repository interfaces, not direct mock stores.
+- **Current progress**:
+  - `packages/core/src/repositories.ts` now defines the shared repository contracts for sites, pages, posts, collections/records, media, forms/submissions/contacts, comments, users, settings, and audit logs.
+  - Page and post repository entities require canonical `BackyContentDocument` content so DB adapters cannot reintroduce legacy canvas-only storage as the primary contract.
+  - `@backy-cms/core/repositories` is exported as a subpath for DB adapters and route handlers.
 - **Validation**:
   - Typecheck.
+  - Current command: `npm run test:repositories --workspace @backy-cms/core`.
 
 ### Task 2.3: Add explicit demo adapter
 

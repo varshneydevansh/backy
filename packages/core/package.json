@@ -21,6 +21,11 @@
       "import": "./dist/content-migrations.mjs",
       "require": "./dist/content-migrations.js"
     },
+    "./repositories": {
+      "types": "./dist/repositories.d.ts",
+      "import": "./dist/repositories.mjs",
+      "require": "./dist/repositories.js"
+    },
     "./types": {
       "types": "./dist/types/index.d.ts",
       "import": "./dist/types/index.mjs",
@@ -28,11 +33,12 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts src/content-contract.ts src/content-migrations.ts --format cjs,esm --dts",
-    "dev": "tsup src/index.ts src/content-contract.ts src/content-migrations.ts --format cjs,esm --dts --watch",
+    "build": "tsup src/index.ts src/content-contract.ts src/content-migrations.ts src/repositories.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts src/content-contract.ts src/content-migrations.ts src/repositories.ts --format cjs,esm --dts --watch",
     "lint": "eslint src/**/*.ts",
     "typecheck": "tsc --noEmit",
     "test:content-contract": "npm run build && node scripts/content-contract-smoke.mjs && node scripts/content-migrations-smoke.mjs",
+    "test:repositories": "npm run build && node scripts/repository-contract-smoke.mjs",
     "clean": "rm -rf dist"
   },
   "devDependencies": {

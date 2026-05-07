@@ -18,6 +18,7 @@
 export * from './types';
 export * from './content-contract';
 export * from './content-migrations';
+export * from './repositories';
 
 // ============================================
 // CONSTANTS
