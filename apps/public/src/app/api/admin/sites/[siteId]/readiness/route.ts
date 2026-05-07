@@ -6,7 +6,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSiteByIdOrSlug } from '@/lib/backyStore';
-import { buildSiteReadiness } from '@/lib/siteReadiness';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { buildRepositorySiteReadiness, buildSiteReadiness } from '@/lib/siteReadiness';
 
 export const runtime = 'nodejs';
 
@@ -38,6 +39,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const readiness = await buildRepositorySiteReadiness(repositories, site);
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          readiness,
+        },
+        readiness,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {

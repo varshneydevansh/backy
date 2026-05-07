@@ -11,6 +11,8 @@ import {
   type StorePage,
   type StoreSite,
 } from '@/lib/backyStore';
+import type { Site } from '@backy-cms/core';
+import type { BackyPage, BackyPost, BackyRepositories } from '@backy-cms/core/repositories';
 
 type ReadinessSeverity = 'error' | 'warning' | 'info';
 type ReadinessStatus = 'pass' | 'fail' | 'notice';
@@ -89,6 +91,76 @@ export interface SiteReadiness {
 const isBlank = (value: unknown): boolean => (
   typeof value !== 'string' || value.trim().length === 0
 );
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const repositoryCanvasSize = (content: BackyPage['content'] | BackyPost['content']) => {
+  const metadata = isRecord(content.metadata) ? content.metadata : {};
+  const canvasSize = isRecord(metadata.canvasSize) ? metadata.canvasSize : {};
+  const width = typeof canvasSize.width === 'number' ? canvasSize.width : 1200;
+  const height = typeof canvasSize.height === 'number' ? canvasSize.height : 900;
+
+  return { width, height };
+};
+
+const repositoryCustomValue = (
+  content: BackyPage['content'] | BackyPost['content'],
+  key: 'customCSS' | 'customJS',
+): string | undefined => {
+  const metadata = isRecord(content.metadata) ? content.metadata : {};
+  return typeof metadata[key] === 'string' ? metadata[key] : undefined;
+};
+
+const repositoryPageToStorePage = (page: BackyPage): StorePage => ({
+  ...page,
+  description: page.description || null,
+  content: {
+    elements: page.content.elements as unknown as StorePage['content']['elements'],
+    canvasSize: repositoryCanvasSize(page.content),
+    customCSS: repositoryCustomValue(page.content, 'customCSS'),
+    customJS: repositoryCustomValue(page.content, 'customJS'),
+    contentDocument: page.content,
+  },
+  meta: {
+    ...page.meta,
+    title: page.meta?.title || page.title,
+    description: page.meta?.description || page.description || null,
+    ogImage: page.meta?.ogImage || null,
+    canonical: page.meta?.canonical || null,
+  },
+});
+
+const repositoryPostToStorePost = (post: BackyPost): StoreBlogPost => ({
+  ...post,
+  content: {
+    elements: post.content.elements,
+    canvasSize: repositoryCanvasSize(post.content),
+    customCSS: repositoryCustomValue(post.content, 'customCSS'),
+    customJS: repositoryCustomValue(post.content, 'customJS'),
+    contentDocument: post.content,
+  } as unknown as StoreBlogPost['content'],
+  meta: post.meta,
+});
+
+const repositorySiteToStoreSite = (site: Site): StoreSite => ({
+  id: site.id,
+  name: site.name,
+  slug: site.slug,
+  description: site.description || '',
+  customDomain: site.customDomain,
+  status: site.isPublished ? 'published' : 'draft',
+  isPublished: site.isPublished,
+  theme: {
+    colors: Object.fromEntries(
+      Object.entries(site.theme?.colors || {}).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+    ),
+    fonts: site.theme?.fonts || {},
+    spacing: site.theme?.spacing,
+    customCSS: typeof site.theme?.customCSS === 'string' ? site.theme.customCSS : '',
+  },
+});
 
 const makeCheck = (
   id: string,
@@ -319,6 +391,84 @@ export const buildSiteReadiness = (site: StoreSite): SiteReadiness => {
       slug: site.slug,
       name: site.name,
       status: site.status,
+      isPublished: site.isPublished,
+    },
+    score: summary.score,
+    statusLabel: summary.statusLabel,
+    summary: {
+      errors: summary.errors,
+      warnings: summary.warnings,
+      notices: summary.notices,
+      totalChecks: summary.totalChecks,
+      passedChecks: summary.passedChecks,
+      pages: pages.length,
+      publishedPages,
+      posts: posts.length,
+      collections: collections.length,
+      media: media.length,
+      reusableSections: reusableSections.length,
+    },
+    checks,
+    pages: pageReadiness,
+    posts: postReadiness,
+  };
+};
+
+export const buildRepositorySiteReadiness = async (
+  repositories: BackyRepositories,
+  site: Site,
+): Promise<SiteReadiness> => {
+  const [
+    pageResult,
+    postResult,
+    collectionResult,
+    mediaResult,
+    reusableSectionResult,
+  ] = await Promise.all([
+    repositories.pages.list({ siteId: site.id, includeUnpublished: true, status: 'all', limit: 1000 }),
+    repositories.posts.list({ siteId: site.id, includeUnpublished: true, status: 'all', limit: 1000 }),
+    repositories.collections.list({ siteId: site.id, includeUnpublished: true, status: 'all', limit: 1000 }),
+    repositories.media.list({ siteId: site.id, type: 'all', visibility: 'all', limit: 1000 }),
+    repositories.reusableSections.list({ siteId: site.id, status: 'all', limit: 1000 }),
+  ]);
+
+  const pages = pageResult.items.map(repositoryPageToStorePage);
+  const posts = postResult.items.map(repositoryPostToStorePost);
+  const collections = collectionResult.items;
+  const media = mediaResult.items;
+  const reusableSections = reusableSectionResult.items;
+  const homepageCount = pages.filter((page) => page.isHomepage).length;
+  const publishedPages = pages.filter((page) => page.status === 'published').length;
+  const navigation = pages.filter((page) => page.status !== 'archived');
+
+  const siteTarget = { type: 'site' as const, id: site.id, label: site.name };
+  const storeSite = repositorySiteToStoreSite(site);
+  const pageReadiness = pages.map(buildPageReadiness);
+  const postReadiness = posts.map(buildBlogPostReadiness);
+  const checks: ReadinessCheck[] = [
+    makeCheck('site:name', 'site', 'Site name', !isBlank(site.name), 'error', 'Site name is required.', siteTarget),
+    makeCheck('site:slug', 'site', 'Site slug', !isBlank(site.slug), 'error', 'Site slug is required.', siteTarget),
+    makeCheck('site:description', 'site', 'Site description', !isBlank(site.description), 'warning', 'Site description is missing.', siteTarget),
+    makeCheck('site:not-archived', 'site', 'Site lifecycle', true, 'error', 'Archived sites are not ready for public delivery.', siteTarget, { status: storeSite.status }),
+    makeCheck('site:homepage', 'navigation', 'Homepage', homepageCount === 1, 'error', 'Site must have exactly one homepage.', siteTarget, { homepageCount }),
+    makeCheck('site:published-pages', 'page', 'Published pages', publishedPages > 0, 'warning', 'Site has no published pages.', siteTarget, { publishedPages }),
+    makeCheck('site:navigation', 'navigation', 'Navigation entries', navigation.length > 0, 'warning', 'Navigation has no page entries.', siteTarget, { navigationCount: navigation.length }),
+    makeCheck('site:theme-colors', 'site', 'Theme colors', Object.keys(storeSite.theme?.colors || {}).length > 0, 'warning', 'Theme colors are missing.', siteTarget),
+    makeCheck('site:theme-fonts', 'site', 'Theme fonts', !isBlank(storeSite.theme?.fonts?.heading) || !isBlank(storeSite.theme?.fonts?.body), 'warning', 'Theme fonts are missing.', siteTarget),
+    makeCheck('site:media-library', 'media', 'Media library', media.length > 0, 'info', 'Media library has no assets.', siteTarget, { mediaCount: media.length }),
+    makeCheck('site:collections', 'content', 'Collections', collections.length > 0, 'info', 'No CMS collections are configured.', siteTarget, { collectionCount: collections.length }),
+    makeCheck('site:reusable-sections', 'content', 'Reusable sections', reusableSections.length > 0, 'info', 'No reusable sections are saved.', siteTarget, { reusableSectionCount: reusableSections.length }),
+    ...pageReadiness.flatMap((page) => page.checks),
+    ...postReadiness.flatMap((post) => post.checks),
+  ];
+  const summary = summarizeChecks(checks);
+
+  return {
+    site: {
+      id: site.id,
+      slug: site.slug,
+      name: site.name,
+      status: storeSite.status,
       isPublished: site.isPublished,
     },
     score: summary.score,

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { BackyPost } from '@backy-cms/core';
 import { getAdminBlogPostById, getSiteByIdOrSlug, publishAdminBlogPost } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
-import { buildSiteReadiness } from '@/lib/siteReadiness';
+import { buildRepositorySiteReadiness, buildSiteReadiness } from '@/lib/siteReadiness';
 import { postRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
 
 export const runtime = 'nodejs';
@@ -62,6 +62,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       if (!currentPost) {
         return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+      }
+
+      const readiness = (await buildRepositorySiteReadiness(repositories, site)).posts.find((item) => item.id === currentPost.id);
+      const readinessErrors = readiness?.checks.filter((check) => (
+        check.status !== 'pass' && check.severity === 'error'
+      )) || [];
+
+      if (readinessErrors.length > 0) {
+        return errorResponse(
+          400,
+          'READINESS_BLOCKED',
+          'Resolve post readiness errors before publishing',
+          requestId,
+          {
+            readiness,
+            checks: readinessErrors,
+          },
+        );
       }
 
       await repositories.contentWorkflows.createRevision({
