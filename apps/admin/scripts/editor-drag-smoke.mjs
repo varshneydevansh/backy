@@ -233,6 +233,8 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
+const AUTH_STORAGE_SCRIPT = `localStorage.setItem('backy-auth-storage', JSON.stringify({ state: { user: { id: '1', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' } }, version: 0 }));`;
+
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
     expression,
@@ -245,6 +247,46 @@ const evaluate = async (client, expression) => {
   }
 
   return result.result.value;
+};
+
+const openAuthenticatedEditorTab = async (parentClient, url) => {
+  const target = await parentClient.send('Target.createTarget', { url: 'about:blank' });
+  const page = (await fetchJson('/json/list')).find((candidate) => candidate.id === target.targetId);
+  assert(page?.webSocketDebuggerUrl, `No Chrome target found for reload check ${target.targetId}`);
+
+  const client = connectCdp(page.webSocketDebuggerUrl);
+  await client.opened;
+  await client.send('Runtime.enable');
+  await client.send('Page.enable');
+  await client.send('DOM.enable');
+  await client.send('Log.enable');
+  await client.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: AUTH_STORAGE_SCRIPT,
+  });
+  await client.send('Page.navigate', { url });
+  return client;
+};
+
+const waitForEditorElements = async (client, elementIds) => {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const ready = await evaluate(client, `(() => ({
+      canvas: Boolean(document.querySelector('[data-testid="editor-canvas"]')),
+      elements: ${JSON.stringify(elementIds)}.map((id) => Boolean(document.querySelector('[data-element-id="' + id + '"]'))),
+      body: document.body?.innerText?.slice(0, 160) || '',
+    }))()`);
+
+    if (ready.canvas && ready.elements.every(Boolean)) {
+      return ready;
+    }
+
+    if (attempt === 119) {
+      throw new Error(`Editor did not render expected elements: ${JSON.stringify(ready)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
 };
 
 const getElementBox = async (client, elementId) => (
@@ -261,10 +303,124 @@ const getElementBox = async (client, elementId) => (
       height: rect.height,
       left: style.left,
       top: style.top,
+      cssWidth: style.width,
+      cssHeight: style.height,
       text: node.textContent.trim().slice(0, 100),
     };
   })()`)
 );
+
+const parseCssPixel = (value) => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const findCanvasElement = (elements, elementId) => {
+  for (const element of elements || []) {
+    if (element?.id === elementId) {
+      return element;
+    }
+
+    const child = findCanvasElement(element?.children, elementId);
+    if (child) {
+      return child;
+    }
+  }
+
+  return null;
+};
+
+const readEditorElementState = async (client, elementIds) => {
+  const entries = await Promise.all(elementIds.map(async (elementId) => {
+    const box = await getElementBox(client, elementId);
+    assert(box, `Missing element ${elementId} while reading editor state`);
+
+    return [
+      elementId,
+      {
+        x: Math.round(parseCssPixel(box.left) ?? box.x),
+        y: Math.round(parseCssPixel(box.top) ?? box.y),
+        width: Math.round(parseCssPixel(box.cssWidth) ?? box.width),
+        height: Math.round(parseCssPixel(box.cssHeight) ?? box.height),
+      },
+    ];
+  }));
+
+  return Object.fromEntries(entries);
+};
+
+const clickSave = async (client) => {
+  const clicked = await evaluate(client, `(() => {
+    const button = Array.from(document.querySelectorAll('button')).find((candidate) => {
+      const label = (candidate.textContent || '').trim();
+      return label === 'Save' || label === 'Saving...';
+    });
+    if (!button) return false;
+    button.click();
+    return true;
+  })()`);
+
+  assert(clicked, 'Unable to find Save button in editor');
+};
+
+const waitForPersistedCanvasState = async (pageId, expectedState) => {
+  let lastState = null;
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+    const elements = payload.data?.page?.content?.elements || [];
+    const persistedState = {};
+
+    for (const [elementId, expected] of Object.entries(expectedState)) {
+      const element = findCanvasElement(elements, elementId);
+      persistedState[elementId] = element
+        ? {
+            x: element.x,
+            y: element.y,
+            width: element.width,
+            height: element.height,
+          }
+        : null;
+
+      if (!element) {
+        break;
+      }
+
+      const matches =
+        Math.abs(element.x - expected.x) <= 1 &&
+        Math.abs(element.y - expected.y) <= 1 &&
+        Math.abs(element.width - expected.width) <= 1 &&
+        Math.abs(element.height - expected.height) <= 1;
+
+      if (!matches) {
+        break;
+      }
+    }
+
+    lastState = persistedState;
+
+    const complete = Object.entries(expectedState).every(([elementId, expected]) => {
+      const persisted = persistedState[elementId];
+      return persisted &&
+        Math.abs(persisted.x - expected.x) <= 1 &&
+        Math.abs(persisted.y - expected.y) <= 1 &&
+        Math.abs(persisted.width - expected.width) <= 1 &&
+        Math.abs(persisted.height - expected.height) <= 1;
+    });
+
+    if (complete) {
+      return persistedState;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Saved canvas state did not match editor state. Expected ${JSON.stringify(expectedState)}, got ${JSON.stringify(lastState)}`);
+};
 
 const dragElement = async (client, elementId, deltaX, deltaY) => {
   const before = await getElementBox(client, elementId);
@@ -477,29 +633,13 @@ const main = async () => {
     await client.send('DOM.enable');
     await client.send('Log.enable');
     await client.send('Page.addScriptToEvaluateOnNewDocument', {
-      source: `localStorage.setItem('backy-auth-storage', JSON.stringify({ state: { user: { id: '1', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' } }, version: 0 }));`,
+      source: AUTH_STORAGE_SCRIPT,
     });
     await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}${editorPath}` });
 
-    for (let attempt = 0; attempt < 120; attempt += 1) {
-      const ready = await evaluate(client, `(() => ({
-        url: location.href,
-        canvas: Boolean(document.querySelector('[data-testid="editor-canvas"]')),
-        heading: Boolean(document.querySelector('[data-element-id="${EDITOR_PATH ? 'home-heading' : 'smoke-heading'}"]')),
-        button: Boolean(document.querySelector('[data-element-id="${EDITOR_PATH ? 'home-cta' : 'smoke-child-button'}"]')),
-        body: document.body?.innerText?.slice(0, 160) || '',
-      }))()`);
-
-      if (ready.canvas && ready.heading && ready.button) {
-        break;
-      }
-
-      if (attempt === 119) {
-        throw new Error(`Editor did not render expected elements: ${JSON.stringify(ready)}`);
-      }
-
-      await sleep(250);
-    }
+    await waitForEditorElements(client, EDITOR_PATH
+      ? ['home-heading', 'home-cta']
+      : ['smoke-heading', 'smoke-child-button']);
 
     const drags = EDITOR_PATH
       ? [
@@ -517,6 +657,43 @@ const main = async () => {
       await resizeElement(client, 'smoke-image', 50, 40),
       await resizeElement(client, 'smoke-form', 50, 40),
     ];
+
+    let persistedState = null;
+    let reloadedState = null;
+    if (tempPageId) {
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-box', 'smoke-child-button', 'smoke-form'];
+      const expectedState = await readEditorElementState(client, elementIds);
+      await clickSave(client);
+      persistedState = await waitForPersistedCanvasState(tempPageId, expectedState);
+
+      let reloadClient = null;
+      try {
+        reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-form']);
+        reloadedState = await readEditorElementState(reloadClient, elementIds);
+      } finally {
+        if (reloadClient) {
+          try {
+            await reloadClient.send('Page.close');
+          } catch {
+            // The target may already be closed by Chrome during cleanup.
+          }
+          reloadClient.close();
+        }
+      }
+
+      assert(
+        Object.entries(expectedState).every(([elementId, expected]) => {
+          const reloaded = reloadedState[elementId];
+          return reloaded &&
+            Math.abs(reloaded.x - expected.x) <= 1 &&
+            Math.abs(reloaded.y - expected.y) <= 1 &&
+            Math.abs(reloaded.width - expected.width) <= 1 &&
+            Math.abs(reloaded.height - expected.height) <= 1;
+        }),
+        `Reloaded canvas state did not match saved state. Expected ${JSON.stringify(expectedState)}, got ${JSON.stringify(reloadedState)}`,
+      );
+    }
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -543,6 +720,8 @@ const main = async () => {
       url: `${ADMIN_BASE_URL}${editorPath}`,
       drags,
       resizes,
+      persistedState,
+      reloadedState,
       invalidInputWarnings: invalidInputWarnings.length,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
