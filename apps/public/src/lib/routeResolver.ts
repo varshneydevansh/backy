@@ -3,14 +3,16 @@ import {
   getBlogPosts,
   getCollectionRecordByIdOrSlug,
   getPageByPath,
+  listCollectionRecords,
   listCollections,
   validatePreviewToken,
   type StoreBlogPost,
+  type StoreCollection,
   type StoreCollectionRecord,
   type StorePage,
   type StoreSite,
 } from './backyStore';
-import { matchCollectionItemRoute } from './collectionRoutes';
+import { matchCollectionItemRoute, matchCollectionListRoute } from './collectionRoutes';
 
 type ResolvedPageRoute = {
   type: 'page';
@@ -64,7 +66,28 @@ type ResolvedDynamicItemRoute = {
   };
 };
 
-export type ResolvedSiteRoute = ResolvedPageRoute | ResolvedPostRoute | ResolvedDynamicItemRoute;
+type ResolvedDynamicListRoute = {
+  type: 'dynamicList';
+  path: string;
+  status: StoreCollection['status'];
+  canonical: string;
+  params: Record<string, string>;
+  resource: {
+    id: string;
+    kind: 'dynamicList';
+    title: string;
+    slug: string;
+    collectionId: string;
+    collectionSlug: string;
+    collectionName: string;
+    recordsUrl: string;
+    renderUrl: string;
+    hostedPath: string;
+    recordCount: number;
+  };
+};
+
+export type ResolvedSiteRoute = ResolvedPageRoute | ResolvedPostRoute | ResolvedDynamicListRoute | ResolvedDynamicItemRoute;
 
 export function normalizeRoutePath(rawPath: string | null | undefined): string {
   const pathOnly = (rawPath || '/').split('?')[0].split('#')[0].trim();
@@ -134,7 +157,35 @@ export function resolveSiteRoute(
     || getPageByPath(site.id, pagePath);
 
   if (!page) {
-    const dynamicItemMatch = matchCollectionItemRoute(path, listCollections(site.id));
+    const collections = listCollections(site.id);
+    const dynamicListMatch = matchCollectionListRoute(path, collections);
+    if (dynamicListMatch) {
+      const { collection, canonical, params } = dynamicListMatch;
+      const records = listCollectionRecords(site.id, collection.id, { limit: 1000 }).records;
+
+      return {
+        type: 'dynamicList',
+        path,
+        status: collection.status,
+        canonical,
+        params,
+        resource: {
+          id: collection.id,
+          kind: 'dynamicList',
+          title: collection.name,
+          slug: collection.slug,
+          collectionId: collection.id,
+          collectionSlug: collection.slug,
+          collectionName: collection.name,
+          recordsUrl: `/api/sites/${site.id}/collections/${collection.id}/records`,
+          renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(canonical)}`,
+          hostedPath: canonical,
+          recordCount: records.length,
+        },
+      };
+    }
+
+    const dynamicItemMatch = matchCollectionItemRoute(path, collections);
     if (!dynamicItemMatch) {
       return null;
     }

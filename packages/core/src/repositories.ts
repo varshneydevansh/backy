@@ -309,6 +309,7 @@ export interface BackyCollection {
   name: string;
   slug: string;
   routePattern?: string | null;
+  listRoutePattern?: string | null;
   description?: string | null;
   status: PublishStatus;
   fields: BackyCollectionField[];
@@ -335,6 +336,7 @@ export interface BackyCollectionCreateInput {
   name: string;
   slug: string;
   routePattern?: string | null;
+  listRoutePattern?: string | null;
   description?: string | null;
   status?: PublishStatus;
   fields: BackyCollectionField[];

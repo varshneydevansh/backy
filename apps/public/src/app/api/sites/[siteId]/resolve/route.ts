@@ -5,11 +5,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { BackyCollectionRecord, BackyPage, Site } from '@backy-cms/core';
+import type { BackyCollection, BackyCollectionRecord, BackyPage, Site } from '@backy-cms/core';
 import { getSiteByIdOrSlug, getSiteNavigation } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRoutePath, resolveSiteRoute } from '@/lib/routeResolver';
-import { matchCollectionItemRoute } from '@/lib/collectionRoutes';
+import { matchCollectionItemRoute, matchCollectionListRoute } from '@/lib/collectionRoutes';
 
 interface RouteParams {
   params: Promise<{
@@ -73,6 +73,25 @@ const collectionRecordTitle = (record: BackyCollectionRecord): string => {
 
   return record.slug;
 };
+
+const dynamicListResource = (
+  siteId: string,
+  collection: BackyCollection,
+  canonical: string,
+  recordCount?: number,
+) => ({
+  id: collection.id,
+  kind: 'dynamicList' as const,
+  title: collection.name,
+  slug: collection.slug,
+  collectionId: collection.id,
+  collectionSlug: collection.slug,
+  collectionName: collection.name,
+  recordsUrl: `/api/sites/${siteId}/collections/${collection.id}/records`,
+  renderUrl: `/api/sites/${siteId}/render?path=${encodeURIComponent(canonical)}`,
+  hostedPath: canonical,
+  ...(typeof recordCount === 'number' ? { recordCount } : {}),
+});
 
 const repositoryNavigation = async (
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
@@ -187,10 +206,44 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           limit: 100,
           offset: 0,
         });
-        const dynamicItemMatch = matchCollectionItemRoute(
-          path,
-          collections.items.filter((collection) => collection.status === 'published' && collection.permissions.publicRead),
-        );
+        const publicCollections = collections.items.filter((collection) => collection.status === 'published' && collection.permissions.publicRead);
+        const dynamicListMatch = matchCollectionListRoute(path, publicCollections);
+        if (dynamicListMatch) {
+          const { collection, params, canonical } = dynamicListMatch;
+          const records = await repositories.collections.listRecords({
+            siteId: site.id,
+            collectionId: collection.id,
+            status: 'published',
+            includeUnpublished: false,
+            limit: 100,
+            offset: 0,
+          });
+          const recordCount = records.items.filter(isPubliclyReadable).length;
+
+          return NextResponse.json({
+            success: true,
+            requestId,
+            data: {
+              site: {
+                id: site.id,
+                slug: site.slug,
+                name: site.name,
+                status: siteStatus(site),
+              },
+              route: {
+                type: 'dynamicList',
+                path,
+                status: collection.status,
+                canonical,
+                params,
+                resource: dynamicListResource(site.id, collection, canonical, recordCount),
+              },
+              navigation: await repositoryNavigation(repositories, site.id),
+            },
+          });
+        }
+
+        const dynamicItemMatch = matchCollectionItemRoute(path, publicCollections);
         if (!dynamicItemMatch) {
           return errorResponse(404, 'ROUTE_NOT_FOUND', 'Route not found', requestId, path);
         }

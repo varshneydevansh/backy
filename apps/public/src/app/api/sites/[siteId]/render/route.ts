@@ -11,6 +11,7 @@ import {
   getCollectionRecordByIdOrSlug,
   getPageByPath,
   getSiteByIdOrSlug,
+  listCollectionRecords,
   listCollections,
   validatePreviewToken,
   type StoreBlogPost,
@@ -22,12 +23,13 @@ import {
 import {
   buildPublicBlogPostRenderPayload,
   buildPublicCollectionItemRenderPayload,
+  buildPublicCollectionListRenderPayload,
   buildPublicRenderPayload,
 } from '@/lib/renderPayload';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRoutePath } from '@/lib/routeResolver';
-import { matchCollectionItemRoute } from '@/lib/collectionRoutes';
+import { matchCollectionItemRoute, matchCollectionListRoute } from '@/lib/collectionRoutes';
 
 interface RouteParams {
   params: Promise<{
@@ -150,6 +152,7 @@ const repositoryCollectionToStoreCollection = (collection: BackyCollection): Sto
   name: collection.name,
   slug: collection.slug,
   routePattern: collection.routePattern || null,
+  listRoutePattern: collection.listRoutePattern || null,
   description: collection.description || null,
   status: collection.status === 'published' || collection.status === 'archived' ? collection.status : 'draft',
   fields: collection.fields.map((field, index) => ({
@@ -255,10 +258,36 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         limit: 100,
         offset: 0,
       });
-      const dynamicItemMatch = matchCollectionItemRoute(
-        path,
-        collections.items.filter((collection) => collection.status === 'published' && collection.permissions.publicRead),
-      );
+      const publicCollections = collections.items.filter((collection) => collection.status === 'published' && collection.permissions.publicRead);
+      const dynamicListMatch = matchCollectionListRoute(path, publicCollections);
+      if (dynamicListMatch) {
+        const { collection } = dynamicListMatch;
+        const records = await repositories.collections.listRecords({
+          siteId: site.id,
+          collectionId: collection.id,
+          status: 'published',
+          includeUnpublished: false,
+          limit: 100,
+          offset: 0,
+        });
+        return publicContractJson(
+          buildPublicCollectionListRenderPayload(
+            storeSite,
+            repositoryCollectionToStoreCollection(collection),
+            records.items.filter(isPubliclyReadable).map(repositoryRecordToStoreRecord),
+            { requestId, path },
+          ),
+          {
+            requestId,
+            request,
+            cache: 'render',
+            schemaVersion: 'backy.content-payload.v1',
+            siteId: site.id,
+          },
+        );
+      }
+
+      const dynamicItemMatch = matchCollectionItemRoute(path, publicCollections);
       if (dynamicItemMatch) {
         const { collection, recordSlug } = dynamicItemMatch;
         const record = await repositories.collections.getRecordBySlug(site.id, collection.id, recordSlug);
@@ -347,7 +376,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const dynamicItemMatch = matchCollectionItemRoute(path, listCollections(site.id));
+    const collections = listCollections(site.id);
+    const dynamicListMatch = matchCollectionListRoute(path, collections);
+    if (dynamicListMatch) {
+      const { collection } = dynamicListMatch;
+      const records = listCollectionRecords(site.id, collection.id, { limit: 100 }).records;
+
+      return publicContractJson(
+        buildPublicCollectionListRenderPayload(site, collection, records, { requestId, path }),
+        {
+          requestId,
+          request,
+          cache: 'render',
+          schemaVersion: 'backy.content-payload.v1',
+          siteId: site.id,
+        },
+      );
+    }
+
+    const dynamicItemMatch = matchCollectionItemRoute(path, collections);
     if (dynamicItemMatch) {
       const { collection, recordSlug } = dynamicItemMatch;
       const record = getCollectionRecordByIdOrSlug(site.id, collection.id, recordSlug);

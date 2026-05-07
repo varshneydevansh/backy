@@ -21,7 +21,7 @@ import {
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
-import { normalizeCollectionRoutePattern } from '@/lib/collectionRoutes';
+import { normalizeCollectionListRoutePattern, normalizeCollectionRoutePattern } from '@/lib/collectionRoutes';
 
 interface RouteParams {
   params: Promise<{
@@ -34,6 +34,7 @@ type ManifestCollectionRoute = {
   slug: string;
   name: string;
   routePattern?: string | null;
+  listRoutePattern?: string | null;
 };
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -75,20 +76,36 @@ const collectionRoutePattern = (collection: Pick<ManifestCollectionRoute, 'slug'
   normalizeCollectionRoutePattern(collection.routePattern, collection.slug)
 );
 
+const collectionListRoutePattern = (collection: Pick<ManifestCollectionRoute, 'slug' | 'listRoutePattern'>) => (
+  normalizeCollectionListRoutePattern(collection.listRoutePattern, collection.slug)
+);
+
 const dynamicCollectionRoutePatterns = (
   siteId: string,
   collections: ManifestCollectionRoute[],
-) => collections.map((collection) => {
+) => collections.flatMap((collection) => {
+  const listPattern = collectionListRoutePattern(collection);
   const pattern = collectionRoutePattern(collection);
-  return {
-    type: 'dynamicCollectionItem',
-    collectionId: collection.id,
-    collectionSlug: collection.slug,
-    collectionName: collection.name,
-    pattern,
-    resolveUrl: `/api/sites/${siteId}/resolve?path=${pattern}`,
-    renderUrl: `/api/sites/${siteId}/render?path=${pattern}`,
-  };
+  return [
+    {
+      type: 'dynamicCollectionList',
+      collectionId: collection.id,
+      collectionSlug: collection.slug,
+      collectionName: collection.name,
+      pattern: listPattern,
+      resolveUrl: `/api/sites/${siteId}/resolve?path=${listPattern}`,
+      renderUrl: `/api/sites/${siteId}/render?path=${listPattern}`,
+    },
+    {
+      type: 'dynamicCollectionItem',
+      collectionId: collection.id,
+      collectionSlug: collection.slug,
+      collectionName: collection.name,
+      pattern,
+      resolveUrl: `/api/sites/${siteId}/resolve?path=${pattern}`,
+      renderUrl: `/api/sites/${siteId}/render?path=${pattern}`,
+    },
+  ];
 });
 
 const repositoryNavigation = (pages: BackyPage[]) => ({
@@ -175,6 +192,7 @@ const buildRepositoryManifest = (
         collectionRecords: true,
         publicCollectionCreate: publicCollections.some((collection) => collection.permissions.publicCreate),
         collectionWriteForms: input.forms.some((form) => form.collectionTarget?.enabled),
+        dynamicListRoutes: publicCollections.length > 0,
         dynamicItemRoutes: publicCollections.length > 0,
         reusableSections: input.reusableSections.length > 0,
         previewTokens: true,
@@ -272,6 +290,10 @@ const buildRepositoryManifest = (
           permissions: collection.permissions,
           fields: collection.fields.map(collectionField),
           recordsUrl: `/api/sites/${input.site.id}/collections/${collection.id}/records`,
+          listRoutePattern: collectionListRoutePattern(collection),
+          dynamicListRoutePattern: collectionListRoutePattern(collection),
+          dynamicListRouteResolveUrl: `/api/sites/${input.site.id}/resolve?path=${collectionListRoutePattern(collection)}`,
+          dynamicListRouteRenderUrl: `/api/sites/${input.site.id}/render?path=${collectionListRoutePattern(collection)}`,
           routePattern: collectionRoutePattern(collection),
           dynamicRoutePattern: collectionRoutePattern(collection),
           dynamicRouteResolveUrl: `/api/sites/${input.site.id}/resolve?path=${collectionRoutePattern(collection)}`,
@@ -428,6 +450,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           collectionRecords: true,
           publicCollectionCreate: collections.some((collection) => collection.permissions.publicCreate),
           collectionWriteForms: forms.some((form) => form.collectionTarget?.enabled),
+          dynamicListRoutes: collections.length > 0,
           dynamicItemRoutes: collections.length > 0,
           reusableSections: reusableSections.length > 0,
           previewTokens: true,
@@ -531,6 +554,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               referenceCollectionId: field.referenceCollectionId,
             })),
             recordsUrl: `/api/sites/${site.id}/collections/${collection.id}/records`,
+            listRoutePattern: collectionListRoutePattern(collection),
+            dynamicListRoutePattern: collectionListRoutePattern(collection),
+            dynamicListRouteResolveUrl: `/api/sites/${site.id}/resolve?path=${collectionListRoutePattern(collection)}`,
+            dynamicListRouteRenderUrl: `/api/sites/${site.id}/render?path=${collectionListRoutePattern(collection)}`,
             routePattern: collectionRoutePattern(collection),
             dynamicRoutePattern: collectionRoutePattern(collection),
             dynamicRouteResolveUrl: `/api/sites/${site.id}/resolve?path=${collectionRoutePattern(collection)}`,

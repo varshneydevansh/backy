@@ -11,7 +11,7 @@ import type { BackyCollection, BackyCollectionRecord, BackyPage, BackyPost, Site
 import { getSiteByIdOrSlug } from '@/lib/backyStore';
 import { buildRobotsTxt, buildSeoDiscovery, buildSitemapXml, type SeoDiscovery, type SeoRoute } from '@/lib/seoDiscovery';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
-import { buildCollectionItemPath } from '@/lib/collectionRoutes';
+import { buildCollectionItemPath, buildCollectionListPath } from '@/lib/collectionRoutes';
 
 interface RouteParams {
   params: Promise<{
@@ -162,6 +162,33 @@ const dynamicItemSeoRoute = (collection: BackyCollection, record: BackyCollectio
   };
 };
 
+const dynamicListSeoRoute = (collection: BackyCollection): SeoRoute => {
+  const canonical = buildCollectionListPath(collection);
+  const description = collection.description || '';
+
+  return {
+    type: 'dynamicList',
+    id: collection.id,
+    title: collection.name,
+    description,
+    path: canonical,
+    canonical,
+    status: collection.status,
+    updatedAt: collection.updatedAt,
+    priority: 0.65,
+    changeFrequency: 'weekly',
+    robots: {
+      index: true,
+      follow: true,
+    },
+    openGraph: {
+      title: collection.name,
+      description,
+    },
+    keywords: [collection.slug],
+  };
+};
+
 const buildRepositorySeoDiscovery = async (
   site: Site,
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
@@ -210,6 +237,9 @@ const buildRepositorySeoDiscovery = async (
   const routes = [
     ...pages.items.filter(isPubliclyReadable).map(pageSeoRoute),
     ...posts.items.filter(isPubliclyReadable).map(postSeoRoute),
+    ...collections.items
+      .filter((collection) => collection.status === 'published' && collection.permissions.publicRead)
+      .map(dynamicListSeoRoute),
     ...dynamicItems.flat(),
   ].sort((left, right) => {
     if (left.priority !== right.priority) return right.priority - left.priority;

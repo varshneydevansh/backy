@@ -169,6 +169,7 @@ const toCollection = (row: CollectionRow): BackyCollection => ({
     name: row.name,
     slug: row.slug,
     routePattern: row.routePattern || null,
+    listRoutePattern: row.listRoutePattern || null,
     description: row.description,
     status: row.status,
     fields: normalizeFields(row.fields),
@@ -224,6 +225,7 @@ export function createCollectionRepository(db: DatabaseInstance): BackyCollectio
                 name: input.name,
                 slug: input.slug,
                 routePattern: input.routePattern || null,
+                listRoutePattern: input.listRoutePattern || null,
                 description: input.description || null,
                 status: input.status || 'draft',
                 fields: input.fields,
@@ -240,6 +242,7 @@ export function createCollectionRepository(db: DatabaseInstance): BackyCollectio
             if (input.name !== undefined) updates.name = input.name;
             if (input.slug !== undefined) updates.slug = input.slug;
             if (input.routePattern !== undefined) updates.routePattern = input.routePattern || null;
+            if (input.listRoutePattern !== undefined) updates.listRoutePattern = input.listRoutePattern || null;
             if (input.description !== undefined) updates.description = input.description;
             if (input.status !== undefined) updates.status = input.status;
             if (input.fields !== undefined) updates.fields = input.fields;

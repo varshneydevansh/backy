@@ -15,7 +15,7 @@ export type BackyContentSchemaVersion = typeof BACKY_CONTENT_SCHEMA_VERSION;
 export type BackyThemeSchemaVersion = typeof BACKY_THEME_SCHEMA_VERSION;
 export type BackyActionsSchemaVersion = typeof BACKY_ACTIONS_SCHEMA_VERSION;
 
-export type BackyContentKind = 'page' | 'post' | 'template' | 'dynamicItem';
+export type BackyContentKind = 'page' | 'post' | 'template' | 'dynamicItem' | 'dynamicList';
 export type BackyContentStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 export type BackyBreakpoint = 'mobile' | 'tablet' | 'desktop' | 'wide' | (string & {});
 export type BackyJsonPrimitive = string | number | boolean | null;

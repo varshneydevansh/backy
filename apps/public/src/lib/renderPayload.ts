@@ -19,7 +19,7 @@ import {
   type StorePage,
   type StoreSite,
 } from './backyStore';
-import { buildCollectionItemPath } from './collectionRoutes';
+import { buildCollectionItemPath, buildCollectionListPath } from './collectionRoutes';
 
 type JsonObject = Record<string, unknown>;
 
@@ -911,6 +911,211 @@ const collectionBindingForField = (
   ];
 };
 
+const buildCollectionListDataset = (
+  collection: StoreCollection,
+  records: StoreCollectionRecord[],
+): DatasetManifest => ({
+  id: `dataset_${collection.id}_list`,
+  collectionId: collection.id,
+  query: {
+    status: 'published',
+    limit: records.length,
+    offset: 0,
+  },
+  pagination: {
+    limit: Math.max(1, records.length || 1),
+    offset: 0,
+  },
+  fields: normalizeResolvedCollectionFields(collection.fields),
+  records: normalizeResolvedCollectionRecords(records),
+});
+
+export const buildCollectionListContent = (
+  _site: StoreSite,
+  collection: StoreCollection,
+  records: StoreCollectionRecord[],
+): { canvasSize: { width: number; height: number }; elements: RenderElement[] } => {
+  const safeCollectionId = safeIdPart(collection.id);
+  const visibleRecords = records.slice(0, 24);
+  const elements: RenderElement[] = [
+    {
+      id: `dynamic_list_${safeCollectionId}_eyebrow`,
+      type: 'text',
+      x: 96,
+      y: 76,
+      width: 1008,
+      height: 28,
+      children: [],
+      props: {
+        content: 'Collection',
+        fontSize: 13,
+        fontWeight: 700,
+        color: '#2563eb',
+        textTransform: 'uppercase',
+      },
+      styles: {},
+      actions: [],
+      dataBindings: [],
+    },
+    {
+      id: `dynamic_list_${safeCollectionId}_title`,
+      type: 'heading',
+      x: 96,
+      y: 112,
+      width: 704,
+      height: 72,
+      children: [],
+      props: {
+        content: collection.name,
+        level: 1,
+        fontSize: 48,
+        lineHeight: 1.1,
+        fontWeight: 800,
+        color: '#111827',
+      },
+      styles: {},
+      actions: [],
+      dataBindings: [],
+    },
+    {
+      id: `dynamic_list_${safeCollectionId}_summary`,
+      type: 'text',
+      x: 96,
+      y: 198,
+      width: 720,
+      height: 58,
+      children: [],
+      props: {
+        content: collection.description || `Browse ${collection.name.toLowerCase()}.`,
+        fontSize: 18,
+        lineHeight: 1.55,
+        color: '#475569',
+      },
+      styles: {},
+      actions: [],
+      dataBindings: [],
+    },
+  ];
+
+  visibleRecords.forEach((record, index) => {
+    const column = index % 3;
+    const row = Math.floor(index / 3);
+    const x = 96 + column * 344;
+    const y = 312 + row * 220;
+    const title = getCollectionRecordTitle(collection, record);
+    const description = getCollectionRecordDescription(collection, record);
+    const href = buildCollectionItemPath(collection, record.slug);
+    const cardId = `dynamic_list_${safeCollectionId}_${safeIdPart(record.id)}`;
+
+    elements.push(
+      {
+        id: `${cardId}_card`,
+        type: 'box',
+        x,
+        y,
+        width: 312,
+        height: 184,
+        children: [],
+        props: {
+          href,
+          backgroundColor: '#ffffff',
+          borderColor: '#e5e7eb',
+          borderWidth: 1,
+          borderRadius: 8,
+        },
+        styles: {
+          boxShadow: '0 14px 32px rgba(15,23,42,0.08)',
+        },
+        actions: [
+          {
+            id: `action_${cardId}_open`,
+            type: 'route',
+            target: href,
+            href,
+          },
+        ],
+        dataBindings: [],
+      },
+      {
+        id: `${cardId}_title`,
+        type: 'heading',
+        x: x + 24,
+        y: y + 24,
+        width: 264,
+        height: 42,
+        children: [],
+        props: {
+          content: title,
+          level: 2,
+          fontSize: 22,
+          lineHeight: 1.2,
+          fontWeight: 750,
+          color: '#0f172a',
+          href,
+        },
+        styles: {},
+        actions: [
+          {
+            id: `action_${cardId}_title_open`,
+            type: 'route',
+            label: title,
+            target: href,
+            href,
+          },
+        ],
+        dataBindings: [],
+      },
+      {
+        id: `${cardId}_description`,
+        type: 'text',
+        x: x + 24,
+        y: y + 78,
+        width: 264,
+        height: 72,
+        children: [],
+        props: {
+          content: description,
+          fontSize: 15,
+          lineHeight: 1.45,
+          color: '#475569',
+        },
+        styles: {},
+        actions: [],
+        dataBindings: [],
+      },
+    );
+  });
+
+  if (visibleRecords.length === 0) {
+    elements.push({
+      id: `dynamic_list_${safeCollectionId}_empty`,
+      type: 'text',
+      x: 96,
+      y: 312,
+      width: 720,
+      height: 48,
+      children: [],
+      props: {
+        content: 'No published records yet.',
+        fontSize: 18,
+        lineHeight: 1.5,
+        color: '#475569',
+      },
+      styles: {},
+      actions: [],
+      dataBindings: [],
+    });
+  }
+
+  return {
+    canvasSize: {
+      width: pageDefaultWidth,
+      height: Math.max(720, 360 + Math.ceil(Math.max(visibleRecords.length, 1) / 3) * 220),
+    },
+    elements,
+  };
+};
+
 export const buildCollectionItemContent = (
   site: StoreSite,
   collection: StoreCollection,
@@ -1148,6 +1353,105 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
       },
       dataBindings: {
         ...dataBindings,
+      },
+      editableMap: buildEditableMap(elements),
+    },
+  };
+}
+
+export function buildPublicCollectionListRenderPayload(
+  site: StoreSite,
+  collection: StoreCollection,
+  records: StoreCollectionRecord[],
+  options: RenderPayloadOptions,
+) {
+  const content = buildCollectionListContent(site, collection, records);
+  const elements = content.elements;
+  const payloadElements = elements.map(normalizeElementForPayload);
+  const mediaPayload = getMediaList(site.id, {
+    visibility: 'public',
+    limit: 100,
+  });
+  const canonical = buildCollectionListPath(collection);
+  const actions = collectElementActions(elements);
+  const dataBindings = collectDataBindingManifest(site.id, elements);
+  const navigation = getSiteNavigation(site.id);
+  const dataset = buildCollectionListDataset(collection, records);
+  const description = collection.description || `${collection.name} collection records.`;
+
+  return {
+    success: true,
+    requestId: options.requestId,
+    data: {
+      site: {
+        id: site.id,
+        slug: site.slug,
+        name: site.name,
+        locale: 'en',
+        status: site.status,
+        assetsBaseUrl: '',
+        themeTokens: buildThemeTokens(site),
+      },
+      navigation,
+      route: {
+        type: 'dynamicList',
+        path: options.path,
+        status: collection.status,
+        canonical,
+        params: {
+          collectionSlug: collection.slug,
+        },
+      },
+      content: buildCanonicalContentPayload({
+        id: collection.id,
+        kind: 'dynamicList',
+        title: collection.name,
+        status: collection.status === 'archived' ? 'archived' : collection.status,
+        locale: 'en',
+        version: collection.updatedAt,
+        elements: payloadElements,
+      }),
+      assets: {
+        media: mediaPayload.media,
+        fonts: buildFontAssets(site),
+      },
+      interactions: {
+        forms: [],
+        comments: [],
+        actions: {
+          schemaVersion: 'backy.actions.v1',
+          actions,
+        },
+      },
+      seo: {
+        title: collection.name,
+        description,
+        canonical,
+        keywords: [collection.slug],
+        robots: {
+          index: true,
+          follow: true,
+        },
+        openGraph: {
+          title: collection.name,
+          description,
+        },
+        jsonLd: [
+          {
+            '@context': 'https://schema.org',
+            '@type': 'CollectionPage',
+            name: collection.name,
+            description,
+            url: canonical,
+          },
+        ],
+      },
+      dataBindings: {
+        ...dataBindings,
+        datasets: [
+          dataset,
+          ...dataBindings.datasets.filter((item) => item.id !== dataset.id),
+        ],
       },
       editableMap: buildEditableMap(elements),
     },

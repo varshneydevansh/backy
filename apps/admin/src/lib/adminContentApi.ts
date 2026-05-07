@@ -764,6 +764,7 @@ export interface Collection {
   name: string;
   slug: string;
   routePattern?: string | null;
+  listRoutePattern?: string | null;
   description: string | null;
   status: 'draft' | 'published' | 'archived';
   fields: CollectionField[];
@@ -789,6 +790,7 @@ export interface CollectionInput {
   name: string;
   slug: string;
   routePattern?: string | null;
+  listRoutePattern?: string | null;
   description?: string | null;
   status?: Collection['status'];
   fields?: CollectionField[];

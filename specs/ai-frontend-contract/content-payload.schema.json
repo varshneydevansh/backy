@@ -204,7 +204,7 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "type": { "enum": ["page", "post", "dynamicItem", "redirect", "notFound", "gone"] },
+            "type": { "enum": ["page", "post", "dynamicList", "dynamicItem", "redirect", "notFound", "gone"] },
             "path": { "type": "string" },
             "status": { "$ref": "#/$defs/status" },
             "canonical": { "type": "string" },
@@ -232,7 +232,7 @@
           "properties": {
             "schemaVersion": { "const": "backy.content.v1" },
             "id": { "type": "string", "minLength": 1 },
-            "kind": { "enum": ["page", "post", "template", "dynamicItem"] },
+            "kind": { "enum": ["page", "post", "template", "dynamicList", "dynamicItem"] },
             "title": { "type": "string" },
             "locale": { "type": "string" },
             "version": { "type": "string" },

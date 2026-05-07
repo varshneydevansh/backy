@@ -336,6 +336,7 @@ export const contentCollections = pgTable('content_collections', {
     name: text('name').notNull(),
     slug: text('slug').notNull(),
     routePattern: text('route_pattern'),
+    listRoutePattern: text('list_route_pattern'),
     description: text('description'),
 
     status: text('status').$type<PublishStatus>().default('draft').notNull(),

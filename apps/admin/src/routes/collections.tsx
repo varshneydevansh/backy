@@ -101,6 +101,7 @@ const getPublicBaseUrl = () => {
   return typeof window !== 'undefined' ? window.location.origin : '';
 };
 
+const defaultCollectionListRoutePattern = (collectionSlug: string) => `/${collectionSlug || 'collection'}`;
 const defaultCollectionRoutePattern = (collectionSlug: string) => `/${collectionSlug || 'collection'}/:recordSlug`;
 
 const normalizeCollectionRoutePattern = (routePattern: string | null | undefined, collectionSlug: string) => {
@@ -113,12 +114,32 @@ const normalizeCollectionRoutePattern = (routePattern: string | null | undefined
   return compact.split('/').includes(':recordSlug') ? compact : fallback;
 };
 
+const normalizeCollectionListRoutePattern = (routePattern: string | null | undefined, collectionSlug: string) => {
+  const fallback = defaultCollectionListRoutePattern(collectionSlug);
+  const raw = routePattern?.trim() || '';
+  if (!raw) return fallback;
+
+  const withLeadingSlash = raw.startsWith('/') ? raw : `/${raw}`;
+  const compact = withLeadingSlash.replace(/\/{2,}/g, '/').replace(/\/$/, '') || '/';
+  return compact !== '/' && !compact.split('/').includes(':recordSlug') ? compact : fallback;
+};
+
 const buildCollectionRecordRoutePath = (collection: Collection, recordSlug: string) => (
   normalizeCollectionRoutePattern(collection.routePattern, collection.slug)
     .split('/')
     .map((segment) => {
       if (segment === ':collectionSlug') return encodeURIComponent(collection.slug);
       if (segment === ':recordSlug') return encodeURIComponent(recordSlug);
+      return segment;
+    })
+    .join('/') || '/'
+);
+
+const buildCollectionListRoutePath = (collection: Collection) => (
+  normalizeCollectionListRoutePattern(collection.listRoutePattern, collection.slug)
+    .split('/')
+    .map((segment) => {
+      if (segment === ':collectionSlug') return encodeURIComponent(collection.slug);
       return segment;
     })
     .join('/') || '/'
@@ -215,6 +236,7 @@ function CollectionsPage() {
   const [collectionForm, setCollectionForm] = useState({
     name: '',
     slug: '',
+    listRoutePattern: '',
     routePattern: '',
     description: '',
     status: 'published' as Collection['status'],
@@ -336,6 +358,7 @@ function CollectionsPage() {
     setCollectionForm({
       name: '',
       slug: '',
+      listRoutePattern: '',
       routePattern: '',
       description: '',
       status: 'published',
@@ -361,6 +384,7 @@ function CollectionsPage() {
     setCollectionForm({
       name: collection.name,
       slug: collection.slug,
+      listRoutePattern: normalizeCollectionListRoutePattern(collection.listRoutePattern, collection.slug),
       routePattern: normalizeCollectionRoutePattern(collection.routePattern, collection.slug),
       description: collection.description || '',
       status: collection.status,
@@ -508,6 +532,7 @@ function CollectionsPage() {
       const payload = {
         name: collectionForm.name.trim(),
         slug: collectionSlug,
+        listRoutePattern: collectionForm.listRoutePattern.trim() || defaultCollectionListRoutePattern(collectionSlug),
         routePattern: collectionForm.routePattern.trim() || defaultCollectionRoutePattern(collectionSlug),
         description: collectionForm.description.trim() || null,
         status: collectionForm.status,
@@ -870,9 +895,13 @@ function CollectionsPage() {
                   onChange={(event) => setCollectionForm((prev) => {
                     const nextSlug = normalizeSlug(event.target.value, 'collection');
                     const previousDefault = defaultCollectionRoutePattern(prev.slug);
+                    const previousListDefault = defaultCollectionListRoutePattern(prev.slug);
                     return {
                       ...prev,
                       slug: nextSlug,
+                      listRoutePattern: !prev.listRoutePattern || prev.listRoutePattern === previousListDefault
+                        ? defaultCollectionListRoutePattern(nextSlug)
+                        : prev.listRoutePattern,
                       routePattern: !prev.routePattern || prev.routePattern === previousDefault
                         ? defaultCollectionRoutePattern(nextSlug)
                         : prev.routePattern,
@@ -882,8 +911,20 @@ function CollectionsPage() {
                   required
                 />
               </label>
-              <label className="space-y-1 text-sm lg:col-span-2">
-                <span className="font-medium">Dynamic route</span>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">List route</span>
+                <input
+                  value={collectionForm.listRoutePattern}
+                  onChange={(event) => setCollectionForm((prev) => ({
+                    ...prev,
+                    listRoutePattern: event.target.value,
+                  }))}
+                  className="w-full rounded-lg border bg-background px-3 py-2"
+                  placeholder={defaultCollectionListRoutePattern(collectionForm.slug)}
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">Item route</span>
                 <input
                   value={collectionForm.routePattern}
                   onChange={(event) => setCollectionForm((prev) => ({
@@ -1081,6 +1122,15 @@ function CollectionsPage() {
                     {recordPagination.total} items in {activeCollection.name}
                     {isRecordsLoading ? ' • Loading...' : ''}
                   </p>
+                  <a
+                    href={`${dynamicBaseUrl}${buildCollectionListRoutePath(activeCollection)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    View list page
+                  </a>
                 </div>
                 <div className="flex items-center gap-2">
                   <input

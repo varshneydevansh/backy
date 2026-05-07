@@ -6,10 +6,10 @@ import {
   listCollections,
   type StoreSite,
 } from '@/lib/backyStore';
-import { buildCollectionItemPath } from '@/lib/collectionRoutes';
+import { buildCollectionItemPath, buildCollectionListPath } from '@/lib/collectionRoutes';
 
 export interface SeoRoute {
-  type: 'page' | 'post' | 'dynamicItem';
+  type: 'page' | 'post' | 'dynamicList' | 'dynamicItem';
   id: string;
   title: string;
   description: string;
@@ -175,7 +175,33 @@ export const buildSeoRoutes = (siteId: string): SeoRoute[] => {
     };
   });
 
-  const dynamicItems: SeoRoute[] = listCollections(siteId).flatMap((collection) => (
+  const collections = listCollections(siteId);
+  const dynamicLists: SeoRoute[] = collections.map((collection) => {
+    const canonical = buildCollectionListPath(collection);
+    return {
+      type: 'dynamicList' as const,
+      id: collection.id,
+      title: collection.name,
+      description: collection.description || '',
+      path: canonical,
+      canonical,
+      status: collection.status,
+      updatedAt: collection.updatedAt,
+      priority: 0.65,
+      changeFrequency: 'weekly' as const,
+      robots: {
+        index: true,
+        follow: true,
+      },
+      openGraph: {
+        title: collection.name,
+        description: collection.description || '',
+      },
+      keywords: [collection.slug],
+    };
+  });
+
+  const dynamicItems: SeoRoute[] = collections.flatMap((collection) => (
     listCollectionRecords(siteId, collection.id, { limit: 1000 }).records.map((record) => {
       const canonical = buildCollectionItemPath(collection, record.slug);
       const title = recordTitle(record.values, record.slug);
@@ -204,7 +230,7 @@ export const buildSeoRoutes = (siteId: string): SeoRoute[] => {
     })
   ));
 
-  return [...pages, ...posts, ...dynamicItems].sort((left, right) => {
+  return [...pages, ...posts, ...dynamicLists, ...dynamicItems].sort((left, right) => {
     if (left.priority !== right.priority) return right.priority - left.priority;
     return left.canonical.localeCompare(right.canonical);
   });

@@ -68,7 +68,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Current data bindings include normalized collection dataset manifests, resolved public collection fields/records, and element binding metadata when canvas elements declare collection `dataBindings`.
   - Published render responses include `Cache-Control: public, max-age=30, stale-while-revalidate=120`, `ETag`/`If-None-Match` 304 support, `x-backy-cache-scope: render`, `x-backy-contract-version`, `x-backy-schema-version`, `x-backy-request-id`, and `x-backy-site-id`.
   - Preview-token responses and error envelopes use `Cache-Control: no-store`.
-  - Collection dynamic item paths currently resolve after normal pages and blog posts using `/:collectionSlug/:recordSlug`, and return a generated `dynamicItem` content document backed by the selected public record.
+  - Collection dynamic list paths resolve after normal pages and blog posts using `/:collectionSlug` by default and return a generated `dynamicList` content document with a hydrated collection dataset. Collection dynamic item paths use `/:collectionSlug/:recordSlug` by default and return a generated `dynamicItem` content document backed by the selected public record.
   - Current implementation is backed by the public seed adapter; production implementation must use the durable service layer.
   - Draft render access requires `previewToken` created by the admin preview endpoint for that exact page or post.
 
@@ -78,7 +78,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Returns `{ success, requestId, data: { site, route, navigation } }` when resolved.
   - Page routes include `resource.kind: "page"` plus page API and render URLs.
   - Blog post routes under `/blog/:slug` include `resource.kind: "post"` plus post API and hosted path.
-  - Collection dynamic item routes under `/:collectionSlug/:recordSlug` include `resource.kind: "dynamicItem"`, collection metadata, record id/slug, public records API URL, render URL, and hosted path.
+  - Collection dynamic list routes under `/:collectionSlug` include `resource.kind: "dynamicList"`, collection metadata, public records API URL, render URL, hosted path, and record count. Collection dynamic item routes under `/:collectionSlug/:recordSlug` include `resource.kind: "dynamicItem"`, collection metadata, record id/slug, public records API URL, render URL, and hosted path.
   - Draft and future scheduled content stays hidden unless the exact preview token is supplied.
   - Unresolved paths return `404` with `ROUTE_NOT_FOUND`.
 
@@ -136,7 +136,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Public record creation requires a published collection with `permissions.publicCreate: true`, validates `values` or `fields` against the collection schema, rejects slug conflicts, and stores accepted visitor-created records as `draft` for admin moderation.
   - Collection fields support `text`, `richText`, `number`, `boolean`, `date`, `datetime`, `image`, `video`, `file`, `reference`, `multiReference`, `select`, `tags`, `url`, `email`, `phone`, `slug`, and `json`. Public collection schemas expose `options` for `select`/`tags` fields and `referenceCollectionId` for reference fields.
   - Record validation enforces required fields, unique fields, and allowed option values for `select` and `tags` fields before admin create/update/import writes persist.
-  - Collection schemas include an optional `routePattern` for generated item pages. The public resolver, render payload, SEO discovery, and frontend manifest all use the collection route pattern, falling back to `/:collectionSlug/:recordSlug`-style paths as `/{collectionSlug}/:recordSlug`.
+  - Collection schemas include optional `listRoutePattern` and `routePattern` values for generated list and item pages. The public resolver, render payload, SEO discovery, and frontend manifest all use those collection route patterns, falling back to `/{collectionSlug}` for lists and `/{collectionSlug}/:recordSlug` for items.
   - Supports basic record search, field-value filtering, sorting, limit, offset, and pagination metadata in both public and admin record list endpoints. `/render` dataset hydration accepts the same query fields.
   - Admin collection records support `POST /api/admin/sites/:siteId/collections/:collectionId/records/bulk` for selected-record `updateStatus` and `delete` actions.
   - Admin record lists also support `GET /api/admin/sites/:siteId/collections/:collectionId/records?format=csv` with the same filters for backend-backed CSV export.

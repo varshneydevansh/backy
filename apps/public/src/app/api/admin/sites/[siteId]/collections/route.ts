@@ -14,7 +14,12 @@ import {
   listCollections,
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
-import { isValidCollectionRoutePattern, normalizeCollectionRoutePattern } from '@/lib/collectionRoutes';
+import {
+  isValidCollectionListRoutePattern,
+  isValidCollectionRoutePattern,
+  normalizeCollectionListRoutePattern,
+  normalizeCollectionRoutePattern,
+} from '@/lib/collectionRoutes';
 
 export const runtime = 'nodejs';
 
@@ -73,6 +78,18 @@ const parseRoutePattern = (value: unknown, slug: string): string | undefined | n
   }
 
   return normalizeCollectionRoutePattern(value, slug);
+};
+
+const parseListRoutePattern = (value: unknown, slug: string): string | undefined | null => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isValidCollectionListRoutePattern(value)) {
+    return null;
+  }
+
+  return normalizeCollectionListRoutePattern(value, slug);
 };
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -158,12 +175,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (body.routePattern !== undefined && routePattern === null) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Collection route pattern must include :recordSlug', requestId);
       }
+      const listRoutePattern = parseListRoutePattern(body.listRoutePattern, slug);
+      if (body.listRoutePattern !== undefined && listRoutePattern === null) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Collection list route pattern cannot include :recordSlug', requestId);
+      }
 
       const collection = (await repositories.collections.create({
         siteId: site.id,
         name,
         slug,
         routePattern,
+        listRoutePattern,
         description: typeof body.description === 'string' ? body.description : null,
         status: parseStatus(body.status) || 'draft',
         fields: toCollectionFields(body.fields),
@@ -202,12 +224,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (body.routePattern !== undefined && routePattern === null) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Collection route pattern must include :recordSlug', requestId);
     }
+    const listRoutePattern = parseListRoutePattern(body.listRoutePattern, slug);
+    if (body.listRoutePattern !== undefined && listRoutePattern === null) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'Collection list route pattern cannot include :recordSlug', requestId);
+    }
 
     const collection = createAdminCollection(site.id, {
       ...body,
       name,
       slug,
       ...(routePattern === undefined ? {} : { routePattern }),
+      ...(listRoutePattern === undefined ? {} : { listRoutePattern }),
     });
 
     return NextResponse.json(
