@@ -2,6 +2,9 @@ export {
     createCollectionRepository,
 } from './collections';
 export {
+    createCommentRepository,
+} from './comments';
+export {
     createFormRepository,
 } from './forms';
 export {

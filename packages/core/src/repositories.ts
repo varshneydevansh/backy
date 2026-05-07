@@ -378,20 +378,30 @@ export interface BackyCommentCreateInput {
   siteId: string;
   targetType: Comment['targetType'];
   targetId: string;
+  commentThreadId?: string | null;
   content: string;
   authorName?: string | null;
   authorEmail?: string | null;
   authorWebsite?: string | null;
+  userId?: string | null;
+  status?: CommentStatus;
   parentId?: string | null;
   requestId?: string | null;
+  ipHash?: string | null;
 }
 
 export interface BackyCommentUpdateInput {
   content?: string;
   status?: CommentStatus;
   reviewedBy?: string | null;
+  reviewedAt?: string | null;
   rejectionReason?: string | null;
   blockReason?: string | null;
+  blockedBy?: string | null;
+  blockedAt?: string | null;
+  reportCount?: number;
+  reportReasons?: Comment['reportReasons'];
+  requestId?: string | null;
 }
 
 export interface BackyCommentListInput extends BackyPaginationInput {
@@ -399,6 +409,12 @@ export interface BackyCommentListInput extends BackyPaginationInput {
   targetType?: Comment['targetType'];
   targetId?: string;
   status?: CommentStatus | 'all';
+  requestId?: string;
+  q?: string;
+  parentOnly?: boolean;
+  parentId?: string | null;
+  commentThreadId?: string;
+  sort?: 'newest' | 'oldest';
   includeReplies?: boolean;
 }
 

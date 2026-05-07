@@ -455,6 +455,47 @@ export const formContacts = pgTable('form_contacts', {
 });
 
 // ==========================================================================
+// COMMENTS - Public page/post discussions and moderation state
+// ==========================================================================
+
+/**
+ * Comments - public page/post discussion threads with moderation metadata.
+ */
+export const comments = pgTable('comments', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    siteId: uuid('site_id')
+        .references(() => sites.id, { onDelete: 'cascade' })
+        .notNull(),
+
+    targetType: text('target_type').notNull(),
+    targetId: text('target_id').notNull(),
+    commentThreadId: text('comment_thread_id'),
+
+    authorName: text('author_name'),
+    authorEmail: text('author_email'),
+    authorWebsite: text('author_website'),
+    userId: text('user_id'),
+
+    content: text('content').notNull(),
+    status: text('status').default('pending').notNull(),
+    parentId: text('parent_id'),
+
+    reviewedBy: text('reviewed_by'),
+    reviewedAt: timestamp('reviewed_at'),
+    rejectionReason: text('rejection_reason'),
+    blockReason: text('block_reason'),
+    blockedBy: text('blocked_by'),
+    blockedAt: timestamp('blocked_at'),
+    reportCount: integer('report_count').default(0).notNull(),
+    reportReasons: jsonb('report_reasons').default([]).notNull(),
+    requestId: text('request_id'),
+    ipHash: text('ip_hash'),
+
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// ==========================================================================
 // DOMAINS - Custom domain mapping
 // ==========================================================================
 
@@ -562,6 +603,7 @@ export const sitesRelations = relations(sites, ({ one, many }) => ({
     media: many(media),
     collections: many(contentCollections),
     forms: many(formDefinitions),
+    comments: many(comments),
 }));
 
 export const pagesRelations = relations(pages, ({ one }) => ({
@@ -640,5 +682,12 @@ export const formContactsRelations = relations(formContacts, ({ one }) => ({
     form: one(formDefinitions, {
         fields: [formContacts.formId],
         references: [formDefinitions.id],
+    }),
+}));
+
+export const commentsRelations = relations(comments, ({ one }) => ({
+    site: one(sites, {
+        fields: [comments.siteId],
+        references: [sites.id],
     }),
 }));

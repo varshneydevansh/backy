@@ -3,6 +3,7 @@
 import { createBackyContentDocument } from '../../core/dist/index.mjs';
 import {
   createCollectionRepository,
+  createCommentRepository,
   createDatabaseRepositories,
   createFormRepository,
   createMediaRepository,
@@ -13,6 +14,7 @@ import {
 } from '../dist/index.js';
 import {
   blogPosts,
+  comments,
   contentCollectionRecords,
   contentCollections,
   formContacts,
@@ -34,6 +36,7 @@ const tableName = (table) => {
   if (table === sites) return 'sites';
   if (table === pages) return 'pages';
   if (table === blogPosts) return 'blogPosts';
+  if (table === comments) return 'comments';
   if (table === contentCollections) return 'contentCollections';
   if (table === contentCollectionRecords) return 'contentCollectionRecords';
   if (table === formDefinitions) return 'formDefinitions';
@@ -49,6 +52,7 @@ const createFakeDb = () => {
     sites: [],
     pages: [],
     blogPosts: [],
+    comments: [],
     contentCollections: [],
     contentCollectionRecords: [],
     formDefinitions: [],
@@ -61,6 +65,7 @@ const createFakeDb = () => {
     sites: 0,
     pages: 0,
     blogPosts: 0,
+    comments: 0,
     contentCollections: 0,
     contentCollectionRecords: 0,
     formDefinitions: 0,
@@ -256,6 +261,35 @@ const createFakeDb = () => {
         ...values,
       };
     }
+    if (name === 'comments') {
+      return {
+        id: nextId(name),
+        siteId: 'site_default',
+        targetType: 'page',
+        targetId: 'pages_1',
+        commentThreadId: null,
+        authorName: null,
+        authorEmail: null,
+        authorWebsite: null,
+        userId: null,
+        content: 'Comment body',
+        status: 'pending',
+        parentId: null,
+        reviewedBy: null,
+        reviewedAt: null,
+        rejectionReason: null,
+        blockReason: null,
+        blockedBy: null,
+        blockedAt: null,
+        reportCount: 0,
+        reportReasons: [],
+        requestId: null,
+        ipHash: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        ...values,
+      };
+    }
     return {
       id: nextId(name),
       siteId: 'site_default',
@@ -351,6 +385,7 @@ assert(repositorySet.sites && repositorySet.pages && repositorySet.posts, 'Expec
 assert(repositorySet.media, 'Expected media repository factory');
 assert(repositorySet.collections, 'Expected collection repository factory');
 assert(repositorySet.forms, 'Expected form repository factory');
+assert(repositorySet.comments, 'Expected comment repository factory');
 
 const siteRepository = createSiteRepository(db);
 const pageRepository = createPageRepository(db);
@@ -358,6 +393,7 @@ const postRepository = createPostRepository(db);
 const mediaRepository = createMediaRepository(db);
 const collectionRepository = createCollectionRepository(db);
 const formRepository = createFormRepository(db);
+const commentRepository = createCommentRepository(db);
 
 const site = (await siteRepository.create({
   teamId: 'team_contract',
@@ -699,6 +735,68 @@ const qualifiedContact = (await formRepository.updateContact(site.id, contact.id
 assert(qualifiedContact.status === 'qualified', 'Expected contact update');
 assert((await formRepository.getContactById(site.id, form.id, contact.id))?.status === 'qualified', 'Expected contact getById');
 assert(await formRepository.delete(site.id, form.id), 'Expected form delete');
+
+const rootComment = (await commentRepository.create({
+  siteId: site.id,
+  targetType: 'page',
+  targetId: publishedPage.id,
+  commentThreadId: 'thread_main',
+  content: 'Repository comments work',
+  authorName: 'Reader',
+  authorEmail: 'reader@example.com',
+  authorWebsite: 'https://example.com',
+  userId: 'user_reader',
+  status: 'approved',
+  parentId: null,
+  requestId: 'req_comment_contract',
+  ipHash: '127.0.0.1',
+})).item;
+assert(rootComment.id === 'comments_1', 'Expected fake comment id');
+assert(rootComment.status === 'approved', 'Expected comment status');
+assert((await commentRepository.list({
+  siteId: site.id,
+  targetType: 'page',
+  targetId: publishedPage.id,
+  status: 'approved',
+  requestId: 'req_comment_contract',
+  q: 'comments work',
+  commentThreadId: 'thread_main',
+})).items.length === 1, 'Expected comment list filters');
+
+const replyComment = (await commentRepository.create({
+  siteId: site.id,
+  targetType: 'page',
+  targetId: publishedPage.id,
+  commentThreadId: 'thread_main',
+  content: 'Reply comment',
+  authorName: 'Editor',
+  status: 'pending',
+  parentId: rootComment.id,
+})).item;
+assert((await commentRepository.list({
+  siteId: site.id,
+  targetType: 'page',
+  targetId: publishedPage.id,
+  parentOnly: true,
+  parentId: rootComment.id,
+  status: 'all',
+})).items.some((comment) => comment.id === replyComment.id), 'Expected comment parent filter');
+
+const updatedComment = (await commentRepository.update(site.id, rootComment.id, {
+  status: 'blocked',
+  reviewedBy: 'user_admin',
+  reviewedAt: '2030-02-03T04:05:06.000Z',
+  rejectionReason: 'Manual review',
+  blockReason: 'spam',
+  blockedBy: 'user_admin',
+  blockedAt: '2030-02-03T04:05:06.000Z',
+  reportCount: 3,
+  reportReasons: ['spam', 'other'],
+})).item;
+assert(updatedComment.status === 'blocked' && updatedComment.reportCount === 3, 'Expected comment moderation update');
+assert((await commentRepository.getById(site.id, rootComment.id))?.blockReason === 'spam', 'Expected comment getById');
+assert(await commentRepository.delete(site.id, replyComment.id), 'Expected comment delete');
+assert(await commentRepository.delete(site.id, rootComment.id), 'Expected root comment delete');
 
 assert(await pageRepository.delete(site.id, publishedPage.id), 'Expected page delete');
 assert(await postRepository.delete(site.id, archivedPost.id), 'Expected post delete');
