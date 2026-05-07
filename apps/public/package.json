@@ -8,7 +8,8 @@
         "build": "next build",
         "start": "next start -p 3001",
         "lint": "next lint",
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "test:preview-contract": "node scripts/preview-contract-smoke.mjs"
     },
     "dependencies": {
         "@backy-cms/core": "*",
