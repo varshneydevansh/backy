@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { BackyPage } from '@backy-cms/core';
 import { archiveAdminPage, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { pageRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
 
 export const runtime = 'nodejs';
 
@@ -56,6 +57,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
       }
 
+      await repositories.contentWorkflows.createRevision({
+        siteId: site.id,
+        targetType: 'page',
+        targetId: currentPage.id,
+        snapshot: pageRevisionSnapshot(currentPage),
+        note: 'Before archive',
+        createdBy: request.headers.get('x-backy-actor') || 'admin',
+      });
       const archived = await repositories.pages.archive(site.id, pageId);
 
       return NextResponse.json({

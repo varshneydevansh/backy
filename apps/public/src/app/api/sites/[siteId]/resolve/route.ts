@@ -131,8 +131,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (blogMatch) {
         const slug = decodeURIComponent(blogMatch[1]);
         const post = await repositories.posts.getBySlug(site.id, slug);
+        const canPreview = post && previewToken
+          ? await repositories.contentWorkflows.validatePreviewToken(site.id, 'post', post.id, previewToken)
+          : false;
 
-        if (!post || !isPubliclyReadable(post)) {
+        if (!post || (!isPubliclyReadable(post) && !canPreview)) {
           return errorResponse(404, 'ROUTE_NOT_FOUND', 'Route not found', requestId, path);
         }
 
@@ -172,7 +175,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
       const pagePath = path === '/' ? 'index' : path.slice(1);
       const page = await repositories.pages.getBySlug(site.id, pagePath);
-      if (!page || !isPubliclyReadable(page)) {
+      const canPreviewPage = page && previewToken
+        ? await repositories.contentWorkflows.validatePreviewToken(site.id, 'page', page.id, previewToken)
+        : false;
+      if (!page || (!isPubliclyReadable(page) && !canPreviewPage)) {
         const dynamicItemMatch = path.match(/^\/([^/]+)\/([^/]+)$/);
         if (!dynamicItemMatch) {
           return errorResponse(404, 'ROUTE_NOT_FOUND', 'Route not found', requestId, path);

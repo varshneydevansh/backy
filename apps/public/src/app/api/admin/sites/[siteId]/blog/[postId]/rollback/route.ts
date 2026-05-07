@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSiteByIdOrSlug, rollbackAdminBlogPost } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import {
+  adminPostFromRepositoryPost,
+  postRevisionSnapshot,
+  postUpdateFromRevisionSnapshot,
+  resolveRepositorySite,
+} from '@/lib/repositoryContentWorkflow';
 
 export const runtime = 'nodejs';
 
@@ -32,17 +39,56 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, postId } = await params;
-    const site = getSiteByIdOrSlug(siteId);
-
-    if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
-    }
-
     const body = await parseJsonBody(request);
     const revisionId = typeof body.revisionId === 'string' ? body.revisionId.trim() : '';
 
     if (!revisionId) {
       return errorResponse(400, 'VALIDATION_ERROR', 'revisionId is required', requestId);
+    }
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const currentPost = await repositories.posts.getById(site.id, postId);
+      const revision = await repositories.contentWorkflows.getRevisionById(site.id, 'post', postId, revisionId);
+
+      if (!currentPost || !revision) {
+        return errorResponse(404, 'REVISION_NOT_FOUND', 'Post or revision not found', requestId);
+      }
+
+      await repositories.contentWorkflows.createRevision({
+        siteId: site.id,
+        targetType: 'post',
+        targetId: currentPost.id,
+        snapshot: postRevisionSnapshot(currentPost),
+        note: `Before rollback to ${revisionId}`,
+        createdBy: request.headers.get('x-backy-actor') || 'admin',
+      });
+
+      const rolledBack = await repositories.posts.update(
+        site.id,
+        currentPost.id,
+        postUpdateFromRevisionSnapshot(revision.snapshot, currentPost),
+      );
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          post: adminPostFromRepositoryPost(rolledBack.item),
+        },
+      });
+    }
+
+    const site = getSiteByIdOrSlug(siteId);
+
+    if (!site) {
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
     const post = rollbackAdminBlogPost(site.id, postId, revisionId, request.headers.get('x-backy-actor') || 'admin');

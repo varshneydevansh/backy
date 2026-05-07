@@ -93,8 +93,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
             if (slug) {
                 const post = await repositories.posts.getBySlug(site.id, slug);
+                const canPreview = post && previewToken
+                    ? await repositories.contentWorkflows.validatePreviewToken(site.id, 'post', post.id, previewToken)
+                    : false;
 
-                if (!post || !isPubliclyReadable(post)) {
+                if (!post || (!isPubliclyReadable(post) && !canPreview)) {
                     return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
                 }
 

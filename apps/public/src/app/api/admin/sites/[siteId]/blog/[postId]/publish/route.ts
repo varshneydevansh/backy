@@ -3,6 +3,7 @@ import type { BackyPost } from '@backy-cms/core';
 import { getAdminBlogPostById, getSiteByIdOrSlug, publishAdminBlogPost } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { buildSiteReadiness } from '@/lib/siteReadiness';
+import { postRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
 
 export const runtime = 'nodejs';
 
@@ -63,6 +64,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
       }
 
+      await repositories.contentWorkflows.createRevision({
+        siteId: site.id,
+        targetType: 'post',
+        targetId: currentPost.id,
+        snapshot: postRevisionSnapshot(currentPost),
+        note: 'Before publish',
+        createdBy: request.headers.get('x-backy-actor') || 'admin',
+      });
       const published = await repositories.posts.publish(site.id, postId);
 
       return NextResponse.json({

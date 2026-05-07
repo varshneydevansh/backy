@@ -21,6 +21,7 @@ import {
   updateAdminPage,
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { pageRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
 
 export const runtime = 'nodejs';
 
@@ -207,6 +208,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const status = statusFromInput(body.status) || page.status;
       const title = typeof body.title === 'string' ? body.title : page.title;
       const content = contentDocumentFromInput(body.content, page, { title, slug: nextSlug, status });
+      await repositories.contentWorkflows.createRevision({
+        siteId: site.id,
+        targetType: 'page',
+        targetId: page.id,
+        snapshot: pageRevisionSnapshot(page),
+        note: typeof body.revisionNote === 'string' && body.revisionNote.trim().length > 0
+          ? body.revisionNote
+          : 'Before update',
+        createdBy: request.headers.get('x-backy-actor') || 'admin',
+      });
       const updated = await repositories.pages.update(site.id, page.id, {
         title: body.title === undefined ? undefined : title,
         slug: body.slug === undefined ? undefined : nextSlug,
@@ -289,6 +300,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
+      await repositories.contentWorkflows.deletePreviewTokensForTarget(site.id, 'page', pageId);
       const deleted = await repositories.pages.delete(site.id, pageId);
 
       if (!deleted) {

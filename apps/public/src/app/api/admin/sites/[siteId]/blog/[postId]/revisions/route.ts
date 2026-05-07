@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminBlogPostById, getSiteByIdOrSlug, listContentRevisions } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { resolveRepositorySite } from '@/lib/repositoryContentWorkflow';
 
 export const runtime = 'nodejs';
 
@@ -27,6 +29,41 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId, postId } = await params;
     const { searchParams } = new URL(request.url);
+    const limit = parseBoundedNumber(searchParams.get('limit'), 25, 1, 100);
+    const offset = parseBoundedNumber(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const post = await repositories.posts.getById(site.id, postId);
+
+      if (!post) {
+        return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+      }
+
+      const result = await repositories.contentWorkflows.listRevisions({
+        siteId: site.id,
+        targetType: 'post',
+        targetId: post.id,
+        limit,
+        offset,
+      });
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          revisions: result.items,
+          pagination: result.pagination,
+        },
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -37,8 +74,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
     }
 
-    const limit = parseBoundedNumber(searchParams.get('limit'), 25, 1, 100);
-    const offset = parseBoundedNumber(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
     const payload = listContentRevisions(site.id, 'post', postId, { limit, offset });
 
     return NextResponse.json({

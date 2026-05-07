@@ -89,8 +89,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             if (slug) {
                 const path = slug.trim().replace(/^\/+|\/+$/g, '') || 'index';
                 const page = await repositories.pages.getBySlug(site.id, path);
+                const canPreview = page && previewToken
+                    ? await repositories.contentWorkflows.validatePreviewToken(site.id, 'page', page.id, previewToken)
+                    : false;
 
-                if (!page || !isPubliclyReadable(page)) {
+                if (!page || (!isPubliclyReadable(page) && !canPreview)) {
                     return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
                 }
 

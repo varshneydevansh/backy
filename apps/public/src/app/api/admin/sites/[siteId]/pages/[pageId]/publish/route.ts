@@ -3,6 +3,7 @@ import type { BackyPage } from '@backy-cms/core';
 import { getAdminPageById, getSiteByIdOrSlug, publishAdminPage } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { buildSiteReadiness } from '@/lib/siteReadiness';
+import { pageRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
 
 export const runtime = 'nodejs';
 
@@ -67,6 +68,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
       }
 
+      await repositories.contentWorkflows.createRevision({
+        siteId: site.id,
+        targetType: 'page',
+        targetId: currentPage.id,
+        snapshot: pageRevisionSnapshot(currentPage),
+        note: 'Before publish',
+        createdBy: request.headers.get('x-backy-actor') || 'admin',
+      });
       const published = await repositories.pages.publish(site.id, pageId);
 
       return NextResponse.json({
