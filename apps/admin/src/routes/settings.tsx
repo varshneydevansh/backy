@@ -199,7 +199,6 @@ function SettingsPage() {
   const updateSettings = useStore((state) => state.updateSettings);
   const publicApiKey = useStore((state) => state.settings.apiKeys.publicApiKey);
   const adminApiKey = useStore((state) => state.settings.apiKeys.adminApiKey);
-  const regenerateApiKeys = useStore((state) => state.regenerateApiKeys);
 
   useEffect(() => {
     setDeliveryMode(persistedDeliveryMode);
@@ -241,8 +240,7 @@ function SettingsPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch {
-      updateSettings({ deliveryMode });
-      setNotice('Backend save failed, so local fallback settings were updated only.');
+      setNotice('Backend save failed. Settings were not persisted.');
     } finally {
       setIsSaving(false);
     }
@@ -258,8 +256,7 @@ function SettingsPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch {
-      regenerateApiKeys();
-      setNotice('Backend key regeneration failed, so local fallback keys were regenerated only.');
+      setNotice('Backend key regeneration failed. API keys were not changed.');
     }
   };
 
