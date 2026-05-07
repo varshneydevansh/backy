@@ -113,11 +113,12 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/sites/:siteId/seo`
 - `GET /api/sites/:siteId/seo?format=sitemap`
 - `GET /api/sites/:siteId/seo?format=robots`
+  - Hosted Backy sites also expose crawlable `GET /sites/:siteSlug/sitemap.xml` and `GET /sites/:siteSlug/robots.txt` routes.
   - Public SEO discovery contract for custom frontends and default generated frontends.
   - JSON response uses `{ success, requestId, data: { site, defaults, routes, sitemap, robots } }`; legacy top-level `routes` remains for compatibility.
   - Routes include publishable pages, blog posts, and dynamic collection item records with canonical path, title, description, robots flags, Open Graph basics, keywords, priority, change frequency, and update timestamps.
   - `format=sitemap` emits XML built from indexable routes.
-  - `format=robots` emits a minimal robots text response that points to the sitemap mode.
+  - `format=robots` emits a minimal robots text response that points to the sitemap mode; hosted robots points to the hosted sitemap URL.
   - The frontend manifest advertises `capabilities.seoDiscovery`, `endpoints.seo`, `endpoints.sitemap`, and `endpoints.robots`; the site-scoped OpenAPI export includes the SEO operation and schema.
 
 - `GET /api/sites/:siteId/collections`

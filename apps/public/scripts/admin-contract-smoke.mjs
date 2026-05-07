@@ -1352,6 +1352,16 @@ try {
       assert(seoRobots.response.headers.get('content-type')?.includes('text/plain'), `${seoRobots.url} expected robots text content type`);
       assert(seoRobots.text.includes(`Sitemap: /api/sites/${createdSiteId}/seo?format=sitemap`), `${seoRobots.url} missing sitemap pointer`);
 
+      const hostedSitemap = await request(`/sites/${siteSlug}/sitemap.xml`);
+      assert(hostedSitemap.response.status === 200, `${hostedSitemap.url} expected 200, got ${hostedSitemap.response.status}`);
+      assert(hostedSitemap.response.headers.get('content-type')?.includes('application/xml'), `${hostedSitemap.url} expected XML sitemap content type`);
+      assert(hostedSitemap.text.includes(`${baseUrl}/sites/${siteSlug}/${pageSlug}-form-write`), `${hostedSitemap.url} missing hosted temporary page URL`);
+
+      const hostedRobots = await request(`/sites/${siteSlug}/robots.txt`);
+      assert(hostedRobots.response.status === 200, `${hostedRobots.url} expected 200, got ${hostedRobots.response.status}`);
+      assert(hostedRobots.response.headers.get('content-type')?.includes('text/plain'), `${hostedRobots.url} expected robots text content type`);
+      assert(hostedRobots.text.includes(`Sitemap: ${baseUrl}/sites/${siteSlug}/sitemap.xml`), `${hostedRobots.url} missing hosted sitemap pointer`);
+
       const frontendManifest = await request(`/api/sites/${createdSiteId}/manifest`);
       assert(frontendManifest.response.status === 200, `${frontendManifest.url} expected 200, got ${frontendManifest.response.status}`);
       assert(frontendManifest.response.headers.get('cache-control')?.includes('max-age=60'), `${frontendManifest.url} missing discovery cache header`);

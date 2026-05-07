@@ -84,7 +84,7 @@ Backy exposes route-level SEO metadata for custom and default frontends:
 - `GET /api/sites/:siteId/seo?format=sitemap`
 - `GET /api/sites/:siteId/seo?format=robots`
 
-The JSON response lists publishable page, blog post, and dynamic collection item routes with canonical paths, title, description, robots flags, Open Graph basics, keywords, sitemap priority, change frequency, and update timestamps. `format=sitemap` emits sitemap XML from the same route index, and `format=robots` emits a minimal robots text response that points at the sitemap mode. The manifest advertises `capabilities.seoDiscovery`, `endpoints.seo`, `endpoints.sitemap`, and `endpoints.robots`; the OpenAPI export includes the SEO operation.
+The JSON response lists publishable page, blog post, and dynamic collection item routes with canonical paths, title, description, robots flags, Open Graph basics, keywords, sitemap priority, change frequency, and update timestamps. `format=sitemap` emits sitemap XML from the same route index, and `format=robots` emits a minimal robots text response that points at the sitemap mode. Hosted Backy sites also expose crawlable `/sites/:siteSlug/sitemap.xml` and `/sites/:siteSlug/robots.txt` routes using the same route index. The manifest advertises `capabilities.seoDiscovery`, `endpoints.seo`, `endpoints.sitemap`, and `endpoints.robots`; the OpenAPI export includes the SEO operation.
 
 ## JavaScript SDK starter
 
