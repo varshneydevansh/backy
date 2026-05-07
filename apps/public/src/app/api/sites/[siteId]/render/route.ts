@@ -5,8 +5,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getPageByPath, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
-import { buildPublicRenderPayload } from '@/lib/renderPayload';
+import { getBlogPosts, getPageByPath, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
+import { buildPublicBlogPostRenderPayload, buildPublicRenderPayload } from '@/lib/renderPayload';
+import { normalizeRoutePath } from '@/lib/routeResolver';
 
 interface RouteParams {
   params: Promise<{
@@ -36,12 +37,32 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const { searchParams } = new URL(request.url);
-    const path = searchParams.get('path') || searchParams.get('slug') || '/';
+    const path = normalizeRoutePath(searchParams.get('path') || searchParams.get('slug') || '/');
     const previewToken = searchParams.get('previewToken');
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
+    const blogMatch = path.match(/^\/blog\/([^/]+)$/);
+    if (blogMatch) {
+      const slug = decodeURIComponent(blogMatch[1]);
+      const previewPost = previewToken
+        ? getBlogPosts(site.id, { slug, includeUnpublished: true }).posts[0]
+        : undefined;
+      const canPreview = previewPost
+        ? validatePreviewToken(site.id, 'post', previewPost.id, previewToken)
+        : false;
+      const post = canPreview
+        ? previewPost
+        : getBlogPosts(site.id, { slug }).posts[0];
+
+      if (!post) {
+        return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+      }
+
+      return NextResponse.json(buildPublicBlogPostRenderPayload(site, post, { requestId, path }));
     }
 
     const previewPage = previewToken

@@ -42,11 +42,12 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Draft access requires `previewToken` created by the admin preview endpoint for that exact page.
 
 - `GET /api/sites/:siteId/render?path=/about`
+- `GET /api/sites/:siteId/render?path=/blog/:slug`
 - `GET /api/public/sites/:siteId/render?path=/about` (future stable alias)
-  - Returns the external render payload described by `specs/ai-frontend-contract/content-payload.schema.json`.
+  - Returns the external page/post render payload described by `specs/ai-frontend-contract/content-payload.schema.json`.
   - Includes site bootstrap, route, canonical content document, assets, forms/comments/actions, SEO, data bindings, and editable map.
   - Current implementation is backed by the public seed adapter; production implementation must use the durable service layer.
-  - Draft render access requires `previewToken` created by the admin preview endpoint for that exact page.
+  - Draft render access requires `previewToken` created by the admin preview endpoint for that exact page or post.
 
 - `GET /api/sites/:siteId/resolve?path=/about`
 - `GET /api/public/sites/:siteId/resolve?path=/about` (future stable alias)
@@ -288,8 +289,8 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 - Public frontend bootstrap flow:
   1. Resolve site: `GET /api/sites/:identifier`.
   2. Resolve path on route changes: `GET /api/sites/:siteId/resolve?path=/...`.
-  3. Fetch page render payloads: `GET /api/sites/:siteId/render?path=/...`.
-  4. If route resolves to a blog post, call blog listing/detail APIs.
+  3. Fetch page or blog post render payloads: `GET /api/sites/:siteId/render?path=/...`.
+  4. If route resolves to a blog post and a custom archive UI is needed, call blog listing/detail APIs.
   5. Render from `content` + `theme` + `meta` only; ignore admin-only flags.
   6. Submit interactive blocks using:
      - `POST /api/sites/:siteId/forms/:formId/submissions`

@@ -3,6 +3,7 @@ import {
   getMediaList,
   listFormsBySite,
   getSiteNavigation,
+  type StoreBlogPost,
   type StorePage,
   type StoreSite,
 } from './backyStore';
@@ -191,6 +192,47 @@ const buildEditableMap = (elements: RenderElement[]): Record<string, JsonObject>
   return editableMap;
 };
 
+const buildFontAssets = (site: StoreSite) => (
+  (site.theme.fonts.custom || []).map((font) => ({
+    id: `font_${font.name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+    family: font.name,
+    source: 'uploaded',
+    url: font.url,
+  }))
+);
+
+const normalizePostElements = (post: StoreBlogPost): RenderElement[] => {
+  const content = post.content;
+  const rawElements = Array.isArray(content.elements) ? content.elements : [];
+  const elements = rawElements
+    .map(normalizeElement)
+    .filter((element): element is RenderElement => !!element);
+
+  if (elements.length) {
+    return elements;
+  }
+
+  const html = typeof content.html === 'string' ? content.html : '';
+  const legacyElement: RenderElement = {
+    id: `${post.id}_legacy_content`,
+    type: html ? 'html' : 'text',
+    children: [],
+    props: html
+      ? { html }
+      : {
+          content: post.excerpt || post.title,
+          fontSize: 18,
+          lineHeight: 1.7,
+          color: '#334155',
+        },
+    styles: {},
+    actions: [],
+    dataBindings: [],
+  };
+
+  return [legacyElement];
+};
+
 export function buildPublicRenderPayload(site: StoreSite, page: StorePage, options: RenderPayloadOptions) {
   const elements = page.content.elements
     .map(normalizeElement)
@@ -238,12 +280,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
       },
       assets: {
         media: mediaPayload.media,
-        fonts: (site.theme.fonts.custom || []).map((font) => ({
-          id: `font_${font.name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
-          family: font.name,
-          source: 'uploaded',
-          url: font.url,
-        })),
+        fonts: buildFontAssets(site),
       },
       interactions: {
         forms: forms.map((form) => ({
@@ -280,6 +317,107 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
           title: page.meta.title || page.title,
           description: page.meta.description || page.description || '',
           image: page.meta.ogImage || undefined,
+        },
+        jsonLd: [],
+      },
+      dataBindings: {
+        schemaVersion: 'backy.bindings.v1',
+        datasets: [],
+        bindings,
+      },
+      editableMap: buildEditableMap(elements),
+    },
+  };
+}
+
+export function buildPublicBlogPostRenderPayload(
+  site: StoreSite,
+  post: StoreBlogPost,
+  options: RenderPayloadOptions,
+) {
+  const elements = normalizePostElements(post);
+  const mediaPayload = getMediaList(site.id, {
+    postId: post.id,
+    visibility: 'public',
+    limit: 100,
+  });
+  const forms = listFormsBySite(site.id, { postId: post.id });
+  const canonical = post.meta?.canonical || `/blog/${post.slug}`;
+  const actions = collectElementActions(elements);
+  const bindings = collectElementBindings(elements);
+  const navigation = getSiteNavigation(site.id);
+
+  return {
+    success: true,
+    requestId: options.requestId,
+    data: {
+      site: {
+        id: site.id,
+        slug: site.slug,
+        name: site.name,
+        locale: 'en',
+        status: site.status,
+        assetsBaseUrl: '',
+        themeTokens: buildThemeTokens(site),
+      },
+      navigation,
+      route: {
+        type: 'post',
+        path: options.path,
+        status: post.status,
+        canonical,
+        params: {
+          slug: post.slug,
+        },
+      },
+      content: {
+        schemaVersion: 'backy.content.v1',
+        id: post.id,
+        kind: 'post',
+        title: post.title,
+        locale: 'en',
+        version: post.updatedAt,
+        elements,
+      },
+      assets: {
+        media: mediaPayload.media,
+        fonts: buildFontAssets(site),
+      },
+      interactions: {
+        forms: forms.map((form) => ({
+          id: form.id,
+          endpoint: `/api/sites/${site.id}/forms/${form.id}/submissions`,
+          method: 'POST',
+          fields: form.fields,
+        })),
+        comments: [
+          {
+            id: `thread_${post.id}`,
+            targetType: 'post',
+            targetId: post.id,
+            endpoint: `/api/sites/${site.id}/blog/${post.id}/comments`,
+            moderationMode: 'manual',
+            count: 0,
+          },
+        ],
+        actions: {
+          schemaVersion: 'backy.actions.v1',
+          actions,
+        },
+      },
+      seo: {
+        title: post.meta?.title || post.title,
+        description: post.meta?.description || post.excerpt || '',
+        canonical,
+        keywords: toStringArray(post.meta?.keywords),
+        robots: {
+          index: !post.meta?.noIndex,
+          follow: !post.meta?.noFollow,
+        },
+        openGraph: {
+          title: post.meta?.title || post.title,
+          description: post.meta?.description || post.excerpt || '',
+          image: post.meta?.ogImage || undefined,
         },
         jsonLd: [],
       },

@@ -47,8 +47,9 @@ The rule is simple: a custom frontend can look completely different from the Bac
 The first implementation-backed endpoint is:
 
 - `GET /api/sites/:siteId/render?path=/about`
+- `GET /api/sites/:siteId/render?path=/blog/example-post`
 
-It returns the `content-payload.schema.json` shape from the current public data adapter. This is not yet the final durable database-backed service, but it gives external frontends and AI-generated frontends a stable payload target while Backy replaces seeded/mock persistence.
+It returns the `content-payload.schema.json` shape for pages and blog posts from the current public data adapter. This is not yet the final durable database-backed service, but it gives external frontends and AI-generated frontends a stable payload target while Backy replaces seeded/mock persistence.
 
 ## Required payload shape
 
