@@ -402,6 +402,8 @@ The next implementation should not start by adding more UI screens. The product 
 - **Dependencies**: Task 5.3
 - **Acceptance Criteria**:
   - Site-level and element-level font choices render in admin and public.
+- **Current progress**:
+  - The editor property panel can open the backend-backed media picker from text font controls, upload/select font files, and apply the registered font family to the selected element.
 - **Validation**:
   - Visual render test and CSS output inspection.
 

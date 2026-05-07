@@ -672,6 +672,22 @@ const assertInspectorSelection = async (client, elementId) => {
   return state;
 };
 
+const assertFontMediaPicker = async (client) => {
+  const state = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="editor-font-media-picker"]');
+    return {
+      exists: Boolean(button),
+      text: button?.textContent || '',
+      disabled: button instanceof HTMLButtonElement ? button.disabled : false,
+    };
+  })()`);
+
+  assert(state?.exists, `Font upload/select control missing from inspector: ${JSON.stringify(state)}`);
+  assert(!state.disabled, `Font upload/select control disabled unexpectedly: ${JSON.stringify(state)}`);
+  assert(/upload or select font/i.test(state.text), `Font upload/select control label changed: ${JSON.stringify(state)}`);
+  return state;
+};
+
 const dragSelectionHandle = async (client, elementId, deltaX, deltaY) => {
   await selectElement(client, elementId);
   const before = await getElementBox(client, elementId);
@@ -935,6 +951,7 @@ const main = async () => {
           ],
         };
     const inspector = await assertInspectorSelection(client, EDITOR_PATH ? 'home-heading' : 'smoke-heading');
+    const fontPicker = await assertFontMediaPicker(client);
 
     let persistedState = null;
     let reloadedState = null;
@@ -1011,6 +1028,7 @@ const main = async () => {
       resizes,
       keyboard,
       inspector,
+      fontPicker,
       postSaveInspector,
       persistedState,
       reloadedState,

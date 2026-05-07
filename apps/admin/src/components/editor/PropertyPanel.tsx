@@ -24,6 +24,7 @@ import {
   ChevronDown,
   ChevronRight,
   Trash2,
+  Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PORTAL_TOOLBAR_CONTAINER_ID } from '@backy-cms/editor';
@@ -1940,6 +1941,7 @@ interface StylePropertiesProps {
 function StyleProperties({ element, onChange, supportsTextStyles = false }: StylePropertiesProps) {
   const media = useStore((state) => state.media);
   const fontFamilies = useMemo(() => getFontFamilyOptions(media), [media]);
+  const [isFontLibraryOpen, setIsFontLibraryOpen] = useState(false);
 
   return (
     <div className="space-y-3">
@@ -1988,10 +1990,33 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
                   )}
                 />
               )}
+              <button
+                type="button"
+                onClick={() => setIsFontLibraryOpen(true)}
+                data-testid="editor-font-media-picker"
+                className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-border px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Upload or select font
+              </button>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Note: Google Fonts and uploaded font files (woff/woff2/ttf/otf) are available.
             </p>
+            <MediaLibraryModal
+              isOpen={isFontLibraryOpen}
+              onClose={() => setIsFontLibraryOpen(false)}
+              onSelect={(font) => {
+                const fontFamily = typeof font.metadata?.fontFamily === 'string' && font.metadata.fontFamily.trim()
+                  ? font.metadata.fontFamily.trim()
+                  : font.name.replace(/\.[a-z0-9]+$/i, '');
+                onChange({ fontFamily });
+              }}
+              allowedTypes="font"
+              initialTab="upload"
+              initialUploadFilter="font"
+              allowScopeSwitcher={false}
+            />
           </div>
 
           {/* Font Size */}

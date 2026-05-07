@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { X, Upload, Image as ImageIcon, Film } from 'lucide-react';
+import { X, Upload, Image as ImageIcon, Film, FileText, Type as TypeIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getDefaultMediaSiteId, listMedia, uploadMedia } from '@/lib/mediaApi';
 import { useStore, type MediaAsset } from '@/stores/mockStore';
 
 type AllowedType = 'image' | 'video' | 'file' | 'font' | 'any';
 type MediaScopeFilter = 'all' | 'global' | 'page' | 'post';
-type UploadFilter = 'all' | 'image' | 'video' | 'file';
+type UploadFilter = 'all' | 'image' | 'video' | 'file' | 'font';
 type MediaLibraryTab = 'library' | 'upload';
 
 export interface MediaContext {
@@ -57,7 +57,7 @@ export function MediaLibraryModal({
 
     setActiveTab(initialTab || 'library');
     setUploadFilter(
-      initialUploadFilter && ['all', 'image', 'video', 'file'].includes(initialUploadFilter)
+      initialUploadFilter && ['all', 'image', 'video', 'file', 'font'].includes(initialUploadFilter)
         ? initialUploadFilter
         : 'all'
     );
@@ -154,14 +154,73 @@ export function MediaLibraryModal({
     return `${scope === 'page' ? 'Page' : 'Post'}${item.scopeTargetId ? ` • ${item.scopeTargetId}` : ''}`;
   };
 
+  const getFileExtension = (file: File) => file.name.split('.').pop()?.toLowerCase() || '';
+
+  const isFontFile = (file: File) => (
+    file.type.includes('font') ||
+    file.type === 'application/vnd.ms-fontobject' ||
+    ['woff', 'woff2', 'ttf', 'otf', 'eot'].includes(getFileExtension(file))
+  );
+
+  const getUploadType = (file: File): MediaAsset['type'] => {
+    if (file.type.startsWith('image/')) return 'image';
+    if (file.type.startsWith('video/')) return 'video';
+    if (isFontFile(file)) return 'font';
+    return 'file';
+  };
+
+  const cleanFontFamilyFromFilename = (name: string): string => (
+    name
+      .replace(/\.[a-z0-9]+$/i, '')
+      .replace(/[-_]+/g, ' ')
+      .replace(/\b(regular|normal|bold|italic|black|light|medium|semibold|extrabold|thin)\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim() || name.replace(/\.[a-z0-9]+$/i, '')
+  );
+
+  const renderMediaThumb = (item: MediaAsset) => {
+    if (item.type === 'image') {
+      return <img src={item.url} alt={item.name} className="w-full h-full object-cover" />;
+    }
+
+    if (item.type === 'font') {
+      const fontFamily = typeof item.metadata?.fontFamily === 'string'
+        ? item.metadata.fontFamily
+        : cleanFontFamilyFromFilename(item.name);
+      return (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-50 px-3 text-slate-700">
+          <TypeIcon className="h-8 w-8 text-slate-500" />
+          <span
+            className="max-w-full truncate text-sm font-semibold"
+            style={{ fontFamily: fontFamily ? `"${fontFamily}"` : undefined }}
+          >
+            Aa
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-full h-full bg-muted flex items-center justify-center">
+        {item.type === 'video' ? (
+          <Film className="w-8 h-8 text-muted-foreground" />
+        ) : (
+          <FileText className="w-8 h-8 text-muted-foreground" />
+        )}
+      </div>
+    );
+  };
+
   const handleFileUpload = async (files: FileList | null, filterHint: UploadFilter) => {
     if (!files || files.length === 0) return;
 
     const shouldKeepFile = (file: File) => {
+      const resolvedType = getUploadType(file);
       if (filterHint === 'all') return true;
-      if (filterHint === 'image') return file.type.startsWith('image/');
-      if (filterHint === 'video') return file.type.startsWith('video/');
-      return !file.type.startsWith('image/') && !file.type.startsWith('video/');
+      if (filterHint === 'image') return resolvedType === 'image';
+      if (filterHint === 'video') return resolvedType === 'video';
+      if (filterHint === 'font') return resolvedType === 'font';
+      return resolvedType === 'file';
     };
 
     setIsUploading(true);
@@ -171,20 +230,20 @@ export function MediaLibraryModal({
       const uploaded: MediaAsset[] = [];
 
       for (const file of Array.from(files)) {
-      const resolvedType = file.type.startsWith('image/')
-        ? 'image'
-        : file.type.startsWith('video/')
-          ? 'video'
-          : 'file';
+        const resolvedType = getUploadType(file);
 
         if (!shouldKeepFile(file)) continue;
-        if (!['image', 'video', 'file'].includes(resolvedType)) continue;
+        if (!allowedTypesSet.has(resolvedType)) continue;
 
         const uploadedItem = await uploadMedia(file, {
           siteId,
           scope: targetScope,
           scopeTargetId: targetId || null,
           visibility: 'public',
+          fontFamily: resolvedType === 'font' ? cleanFontFamilyFromFilename(file.name) : undefined,
+          fontWeight: resolvedType === 'font' ? '400' : undefined,
+          fontStyle: resolvedType === 'font' ? 'normal' : undefined,
+          tags: resolvedType === 'font' ? ['font'] : undefined,
         });
         uploaded.push(uploadedItem);
       }
@@ -198,11 +257,32 @@ export function MediaLibraryModal({
       const fallbackFiles = Array.from(files).filter(shouldKeepFile);
 
       fallbackFiles.forEach((file) => {
-        const resolvedType = file.type.startsWith('image/')
-          ? 'image'
-          : file.type.startsWith('video/')
-            ? 'video'
-            : 'file';
+        const resolvedType = getUploadType(file);
+        if (!allowedTypesSet.has(resolvedType)) return;
+
+        if (resolvedType === 'file' || resolvedType === 'font') {
+          addMedia({
+            name: file.name,
+            type: resolvedType,
+            size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
+            url: '',
+            scope: targetScope,
+            scopeTargetId: targetId || null,
+            visibility: 'public',
+            uploadedBy: 'admin',
+            tags: resolvedType === 'font' ? ['font'] : [],
+            metadata: resolvedType === 'font'
+              ? {
+                  fontFamily: cleanFontFamilyFromFilename(file.name),
+                  fontWeight: '400',
+                  fontStyle: 'normal',
+                }
+              : {},
+            targetPageIds: targetScope === 'page' && targetId ? [targetId] : [],
+            targetPostIds: targetScope === 'post' && targetId ? [targetId] : [],
+          });
+          return;
+        }
 
         const reader = new FileReader();
         reader.onload = (event) => {
@@ -320,13 +400,7 @@ export function MediaLibraryModal({
                   }}
                   className="group relative aspect-square rounded-lg border border-border overflow-hidden hover:ring-2 hover:ring-primary focus:outline-none"
                 >
-                  {item.type === 'image' ? (
-                    <img src={item.url} alt={item.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full bg-muted flex items-center justify-center">
-                      <Film className="w-8 h-8 text-muted-foreground" />
-                    </div>
-                  )}
+                  {renderMediaThumb(item)}
                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <span className="text-white text-xs font-medium">{item.name}</span>
                   </div>
@@ -360,7 +434,9 @@ export function MediaLibraryModal({
           ) : (
             <div className="space-y-3">
               <div className="flex gap-2">
-                {(['all', 'image', 'video', 'file'] as const).map((filter) => (
+                {(['all', 'image', 'video', 'file', 'font'] as const).filter((filter) => (
+                  filter === 'all' ? allowedTypes === 'any' : allowedTypes === 'any' || allowedTypesSet.has(filter)
+                )).map((filter) => (
                   <button
                     type="button"
                     key={filter}
@@ -395,6 +471,13 @@ export function MediaLibraryModal({
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   multiple
                   disabled={isUploading}
+                  accept={allowedTypes === 'image'
+                    ? 'image/*'
+                    : allowedTypes === 'video'
+                      ? 'video/*'
+                      : allowedTypes === 'font'
+                        ? '.woff,.woff2,.ttf,.otf,.eot,font/*'
+                        : undefined}
                   onChange={(e) => void handleFileUpload(e.target.files, uploadFilter)}
                 />
                 <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4 pointer-events-none">
