@@ -16,6 +16,7 @@ import {
   ArrowLeft,
   Save,
   Eye,
+  Layers,
   Scissors,
   Monitor,
   Tablet,
@@ -28,6 +29,7 @@ import {
 import { cn, generateId } from '@/lib/utils';
 import { Canvas } from '@/components/editor/Canvas';
 import { ComponentLibrary } from '@/components/editor/ComponentLibrary';
+import { LayersPanel } from '@/components/editor/LayersPanel';
 import { PropertyPanel } from '@/components/editor/PropertyPanel';
 import { PageSettingsModal, type PageSettings } from '@/components/editor/PageSettingsModal';
 import { ActiveEditorProvider } from '@/components/editor/ActiveEditorContext';
@@ -268,6 +270,7 @@ export function CanvasEditor({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [size, setSize] = useState<CanvasSize>(initialSize || DEFAULT_CANVAS_SIZE);
   const [breakpoint, setBreakpoint] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
+  const [rightPanel, setRightPanel] = useState<'properties' | 'layers'>('properties');
   const [isPreview, setIsPreview] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -657,6 +660,80 @@ export function CanvasEditor({
     updateElementsWithHistory(nextElements, duplicate.id);
   }, [elements, normalizePastedElement, selectedId, updateElementsWithHistory]);
 
+  const handleLayerSelect = useCallback((ids: string[]) => {
+    setSelectedId(ids[0] ?? null);
+    if (ids.length > 0) {
+      setRightPanel('properties');
+    }
+  }, []);
+
+  const handleLayerReorder = useCallback((fromIndex: number, toIndex: number) => {
+    updateElementsWithHistory((currentElements) => {
+      if (
+        fromIndex === toIndex ||
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= currentElements.length ||
+        toIndex >= currentElements.length
+      ) {
+        return currentElements;
+      }
+
+      const next = [...currentElements];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+
+      return next.map((element, index) => ({
+        ...element,
+        zIndex: index + 1,
+      }));
+    }, selectedId);
+  }, [selectedId, updateElementsWithHistory]);
+
+  const handleLayerVisibilityToggle = useCallback((elementId: string) => {
+    updateElementsWithHistory((currentElements) => {
+      const result = updateElementById(currentElements, elementId, (element) => ({
+        ...element,
+        visible: element.visible === false,
+      }));
+
+      return result.updated ? result.elements : currentElements;
+    }, selectedId);
+  }, [selectedId, updateElementsWithHistory]);
+
+  const handleLayerLockToggle = useCallback((elementId: string) => {
+    updateElementsWithHistory((currentElements) => {
+      const result = updateElementById(currentElements, elementId, (element) => ({
+        ...element,
+        locked: !element.locked,
+      }));
+
+      return result.updated ? result.elements : currentElements;
+    }, selectedId);
+  }, [selectedId, updateElementsWithHistory]);
+
+  const handleLayerDelete = useCallback((elementId: string) => {
+    const element = findElementById(elements, elementId);
+    if (element?.locked) {
+      return;
+    }
+
+    const result = removeElementById(elements, elementId);
+    if (!result.updated) return;
+
+    const parentSelection = result.removedParentId || null;
+    setSelectedId((current) => (current === elementId ? parentSelection : current));
+    updateElementsWithHistory(result.elements, parentSelection);
+  }, [elements, findElementById, updateElementsWithHistory]);
+
+  const handleLayerDuplicate = useCallback((elementId: string) => {
+    const selectedElement = findElementById(elements, elementId);
+    if (!selectedElement) return;
+
+    const duplicate = normalizePastedElement(selectedElement);
+    updateElementsWithHistory([...elements, duplicate], duplicate.id);
+  }, [elements, findElementById, normalizePastedElement, updateElementsWithHistory]);
+
   // Get selected element
   const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
 
@@ -752,17 +829,21 @@ export function CanvasEditor({
    */
   const deleteElement = useCallback(() => {
     if (!selectedId) return;
+    const selectedElement = findElementById(elements, selectedId);
+    if (selectedElement?.locked) return;
+
     const result = removeElementById(elements, selectedId);
     if (!result.updated) return;
 
     updateElementsWithHistory(result.elements, result.removedParentId || null);
-  }, [selectedId, elements, updateElementsWithHistory]);
+  }, [selectedId, elements, findElementById, updateElementsWithHistory]);
 
   const handleCut = useCallback(() => {
     if (!selectedId) return;
 
     const selectedElement = findElementById(elements, selectedId);
     if (!selectedElement) return;
+    if (selectedElement.locked) return;
 
     setClipboardElement(selectedElement);
 
@@ -1171,6 +1252,24 @@ export function CanvasEditor({
 
             <div className="w-px h-6 bg-slate-200 mx-1" />
 
+            <button
+              type="button"
+              onClick={() => setRightPanel(rightPanel === 'layers' ? 'properties' : 'layers')}
+              className={cn(
+                'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium',
+                rightPanel === 'layers'
+                  ? 'bg-slate-950 text-white'
+                  : 'hover:bg-slate-100'
+              )}
+              title="Toggle layers panel"
+              aria-label="Toggle layers panel"
+            >
+              <Layers className="w-4 h-4" />
+              Layers
+            </button>
+
+            <div className="w-px h-6 bg-slate-200 mx-1" />
+
             {/* Preview Toggle */}
             <button
               type="button"
@@ -1313,12 +1412,25 @@ export function CanvasEditor({
 
           {/* Right Sidebar - Property Panel */}
           {!isPreview && (
-            <PropertyPanel
-              element={selectedElement}
-              onChange={handleElementUpdate}
-              onDelete={deleteElement}
-              mediaContext={mediaContext}
-            />
+            rightPanel === 'layers' ? (
+              <LayersPanel
+                elements={elements}
+                selectedIds={selectedId ? [selectedId] : []}
+                onSelect={handleLayerSelect}
+                onReorder={handleLayerReorder}
+                onVisibilityToggle={handleLayerVisibilityToggle}
+                onLockToggle={handleLayerLockToggle}
+                onDelete={handleLayerDelete}
+                onDuplicate={handleLayerDuplicate}
+              />
+            ) : (
+              <PropertyPanel
+                element={selectedElement}
+                onChange={handleElementUpdate}
+                onDelete={deleteElement}
+                mediaContext={mediaContext}
+              />
+            )
           )}
         </div>
 

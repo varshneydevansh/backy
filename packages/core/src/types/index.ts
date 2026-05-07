@@ -409,6 +409,12 @@ export interface CanvasNode {
     bottom?: number;
     zIndex?: number;
   };
+
+  /** Whether this node should render. Defaults to true. */
+  visible?: boolean;
+
+  /** Whether this node is locked in editor surfaces. Public renderers ignore this. */
+  locked?: boolean;
 }
 
 /**

@@ -150,6 +150,7 @@ Legend:
 - ✅ selection boundary hit-testing improved for canvas elements by using pointer-capture selection and resize-handle exclusion (keeps dragging/selection reliable while preserving edit targets)
 - ✅ non-preview interaction safety pass added: button/link/input/video/embed/map now pass pointer events to wrapper so element selection/dragging is not blocked by child widgets
 - ✅ canvas drop/drag reliability pass added: component drops use canvas-relative coordinates, pasteboard drops are ignored, nested child drag ids are preserved, and selected elements show clearer bounding-box metrics.
+- ✅ layers panel wiring added for editor parity: right-side layer view can select, root-reorder, hide/show, lock/unlock, duplicate, and delete persisted canvas elements; public renderer skips hidden elements.
 - ✅ list editing now supports marker-level control (`disc`, `circle`, `square`, `decimal`, alpha, roman) from list content panel and renderer
 - ⚠️ remaining parity targets: table/map embed behavior, comment blocks, shared status/action UX, and advanced list nesting behavior (indent/outdent stability at deep levels)
 

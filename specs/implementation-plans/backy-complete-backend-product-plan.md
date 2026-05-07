@@ -535,6 +535,10 @@ The next implementation should not start by adding more UI screens. The product 
   - `Canvas.tsx`
 - **Description**:
   - Bring editor interactions closer to Wix/Canva expectations.
+- **Current progress**:
+  - Layers panel is wired into the editor shell and persists `visible`/`locked` flags on canvas elements.
+  - Root layer reordering updates z-index order, lock blocks canvas drag/resize/delete, and hidden elements are skipped by the public renderer.
+  - Nested children are displayed and selectable in the layer tree, but nested drag-reorder and multi-select transforms are still open.
 - **Dependencies**: Task 7.1
 - **Acceptance Criteria**:
   - Layer ordering, lock/hide, group selection, align/distribute, keyboard nudge work.

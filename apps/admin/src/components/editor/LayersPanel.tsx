@@ -34,6 +34,7 @@ interface LayerItemProps {
     isSelected: boolean;
     isHidden: boolean;
     isLocked: boolean;
+    canReorder: boolean;
     onSelect: (id: string, multiSelect: boolean) => void;
     onDragStart: (index: number) => void;
     onDragOver: (index: number) => void;
@@ -132,6 +133,7 @@ function LayerItem({
     isSelected,
     isHidden,
     isLocked,
+    canReorder,
     onSelect,
     onDragStart,
     onDragOver,
@@ -149,6 +151,9 @@ function LayerItem({
     };
 
     const handleDragStart = (e: React.DragEvent) => {
+        if (!canReorder) {
+            return;
+        }
         e.dataTransfer.effectAllowed = 'move';
         onDragStart(index);
     };
@@ -171,16 +176,19 @@ function LayerItem({
             onClick={handleClick}
             onMouseEnter={() => setShowActions(true)}
             onMouseLeave={() => setShowActions(false)}
-            draggable
+            draggable={canReorder}
             onDragStart={handleDragStart}
             onDragOver={(e) => {
+                if (!canReorder) {
+                    return;
+                }
                 e.preventDefault();
                 onDragOver(index);
             }}
             onDragEnd={onDragEnd}
         >
             {/* Drag handle */}
-            <span style={{ cursor: 'grab', color: '#9ca3af' }}>
+            <span style={{ cursor: canReorder ? 'grab' : 'default', color: '#9ca3af', opacity: canReorder ? 1 : 0.35 }}>
                 <DragIcon />
             </span>
 
@@ -309,8 +317,6 @@ export function LayersPanel({
     onDuplicate,
 }: LayersPanelProps) {
     const [dragFromIndex, setDragFromIndex] = useState<number | null>(null);
-    const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
-    const [lockedIds, setLockedIds] = useState<Set<string>>(new Set());
 
     const handleSelect = useCallback(
         (id: string, multiSelect: boolean) => {
@@ -346,37 +352,44 @@ export function LayersPanel({
     }, []);
 
     const handleVisibilityToggle = useCallback((id: string) => {
-        setHiddenIds((prev) => {
-            const next = new Set(prev);
-            if (next.has(id)) {
-                next.delete(id);
-            } else {
-                next.add(id);
-            }
-            return next;
-        });
         onVisibilityToggle(id);
     }, [onVisibilityToggle]);
 
     const handleLockToggle = useCallback((id: string) => {
-        setLockedIds((prev) => {
-            const next = new Set(prev);
-            if (next.has(id)) {
-                next.delete(id);
-            } else {
-                next.add(id);
-            }
-            return next;
-        });
         onLockToggle(id);
     }, [onLockToggle]);
 
-    // Reverse elements for display (top elements first in layer order)
-    const reversedElements = [...elements].reverse();
+    const renderLayerItems = (items: CanvasElement[], depth = 0) => (
+        [...items].reverse().map((element, reversedIndex) => {
+            const actualIndex = depth === 0 ? items.length - 1 - reversedIndex : reversedIndex;
+            return (
+                <React.Fragment key={element.id}>
+                    <LayerItem
+                        element={element}
+                        index={actualIndex}
+                        isSelected={selectedIds.includes(element.id)}
+                        isHidden={element.visible === false}
+                        isLocked={element.locked === true}
+                        canReorder={depth === 0}
+                        onSelect={handleSelect}
+                        onDragStart={handleDragStart}
+                        onDragOver={handleDragOver}
+                        onDragEnd={handleDragEnd}
+                        onVisibilityToggle={handleVisibilityToggle}
+                        onLockToggle={handleLockToggle}
+                        onDelete={onDelete}
+                        onDuplicate={onDuplicate}
+                        depth={depth}
+                    />
+                    {element.children?.length ? renderLayerItems(element.children, depth + 1) : null}
+                </React.Fragment>
+            );
+        })
+    );
 
     return (
         <div
-            className="layers-panel"
+            className="layers-panel w-[clamp(18rem,24vw,30rem)] min-w-[18rem] max-w-[30rem] shrink-0"
             style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -416,7 +429,7 @@ export function LayersPanel({
                     overflowY: 'auto',
                 }}
             >
-                {reversedElements.length === 0 ? (
+                {elements.length === 0 ? (
                     <div
                         style={{
                             padding: '24px 16px',
@@ -430,24 +443,7 @@ export function LayersPanel({
                         Drag components from the library.
                     </div>
                 ) : (
-                    reversedElements.map((element, index) => (
-                        <LayerItem
-                            key={element.id}
-                            element={element}
-                            index={elements.length - 1 - index} // Correct index for reversed order
-                            isSelected={selectedIds.includes(element.id)}
-                            isHidden={hiddenIds.has(element.id)}
-                            isLocked={lockedIds.has(element.id)}
-                            onSelect={handleSelect}
-                            onDragStart={handleDragStart}
-                            onDragOver={handleDragOver}
-                            onDragEnd={handleDragEnd}
-                            onVisibilityToggle={handleVisibilityToggle}
-                            onLockToggle={handleLockToggle}
-                            onDelete={onDelete}
-                            onDuplicate={onDuplicate}
-                        />
-                    ))
+                    renderLayerItems(elements)
                 )}
             </div>
         </div>

@@ -658,6 +658,14 @@ export function Canvas({
 
       if (isInteractiveHandle(e.target)) return;
 
+      if (clickedElement.locked) {
+        e.preventDefault();
+        e.stopPropagation();
+        onSelect(elementId);
+        clearActiveEditor();
+        return;
+      }
+
       if (isTextEditorInteraction(e.target)) {
         debugTextInteraction('handleMouseDown ignored for text editor interaction', {
           elementId,
@@ -1159,6 +1167,12 @@ function CanvasElementComponent({
   const sharedStyle = buildSharedElementStyle(element);
   const childElements = element.children || [];
   const resolvedSelectedId = selectedId ?? null;
+  const isHidden = element.visible === false;
+  const isLocked = element.locked === true;
+
+  if (isPreview && isHidden) {
+    return null;
+  }
 
   const renderChildren = () => (
     <>
@@ -2287,7 +2301,9 @@ function CanvasElementComponent({
         !isPreview && !isEditing && 'cursor-move select-none',
         !isPreview && !isSelected && 'hover:ring-1 hover:ring-sky-300 hover:ring-offset-1 hover:ring-offset-white',
         isSelected && !isPreview && 'ring-2 ring-sky-500 ring-offset-1 ring-offset-white',
-        isBeingMoved && !isPreview && 'opacity-95 shadow-[0_16px_40px_rgba(14,165,233,0.22)]'
+        isBeingMoved && !isPreview && 'opacity-95 shadow-[0_16px_40px_rgba(14,165,233,0.22)]',
+        isHidden && !isPreview && 'opacity-25',
+        isLocked && !isPreview && 'cursor-default'
       )}
       data-element-id={element.id}
       data-backy-text-editor={isTextElement ? 'true' : undefined}
@@ -2301,7 +2317,8 @@ function CanvasElementComponent({
         zIndex: element.zIndex || 1,
         transform: element.rotation ? `rotate(${element.rotation}deg)` : undefined,
         ...sharedStyle,
-        opacity: sharedStyle.opacity ?? 1,
+        opacity: isHidden && !isPreview ? 0.25 : sharedStyle.opacity ?? 1,
+        pointerEvents: isHidden && !isSelected ? 'none' : undefined,
       }}
       onPointerDownCapture={(event) => {
         if (isEditing && isTextElement) {
@@ -2319,13 +2336,19 @@ function CanvasElementComponent({
         <>
           <div className="pointer-events-none absolute -top-8 left-0 flex items-center gap-2 rounded bg-sky-600 px-2 py-1 text-[11px] font-medium text-white shadow-sm">
             <span className="uppercase tracking-wide">{normalizeCanvasElementType(element.type)}</span>
+            {isLocked && <span className="rounded bg-white/20 px-1 uppercase">locked</span>}
+            {isHidden && <span className="rounded bg-white/20 px-1 uppercase">hidden</span>}
             <span className="h-3 w-px bg-white/40" />
             <span>{element.x}, {element.y}</span>
           </div>
-          <ResizeHandle position="nw" onMouseDown={(e) => onResizeStart(e, element.id, 'nw')} />
-          <ResizeHandle position="ne" onMouseDown={(e) => onResizeStart(e, element.id, 'ne')} />
-          <ResizeHandle position="sw" onMouseDown={(e) => onResizeStart(e, element.id, 'sw')} />
-          <ResizeHandle position="se" onMouseDown={(e) => onResizeStart(e, element.id, 'se')} />
+          {!isLocked && (
+            <>
+              <ResizeHandle position="nw" onMouseDown={(e) => onResizeStart(e, element.id, 'nw')} />
+              <ResizeHandle position="ne" onMouseDown={(e) => onResizeStart(e, element.id, 'ne')} />
+              <ResizeHandle position="sw" onMouseDown={(e) => onResizeStart(e, element.id, 'sw')} />
+              <ResizeHandle position="se" onMouseDown={(e) => onResizeStart(e, element.id, 'se')} />
+            </>
+          )}
         </>
       )}
     </div>

@@ -61,6 +61,8 @@ export interface CanvasElement {
   height: number;
   rotation?: number;
   zIndex?: number;
+  visible?: boolean;
+  locked?: boolean;
   props: Record<string, unknown>;
   styles?: React.CSSProperties;
   children?: CanvasElement[];
@@ -2185,6 +2187,10 @@ export function ElementRenderer({ element, isPreview, siteId, pageId, postId }: 
     return null;
   }
 
+  if (element.visible === false) {
+    return null;
+  }
+
   // Build position styles for absolute positioning
   const positionStyles: React.CSSProperties = {
     position: 'absolute',
@@ -2344,14 +2350,16 @@ export function PageRenderer({
       <div ref={viewportRef} style={viewportStyle}>
         <div className="backy-canvas" style={canvasStyle}>
           {elements.map((element) => (
-            <ElementRenderer
-              key={element.id}
-              element={element}
-              isPreview={isPreview}
-              siteId={siteId}
-              pageId={pageId}
-              postId={postId}
-            />
+            element.visible === false ? null : (
+              <ElementRenderer
+                key={element.id}
+                element={element}
+                isPreview={isPreview}
+                siteId={siteId}
+                pageId={pageId}
+                postId={postId}
+              />
+            )
           ))}
         </div>
       </div>

@@ -34,6 +34,8 @@ interface CanvasElement {
   height: number;
   rotation?: number;
   zIndex?: number;
+  visible?: boolean;
+  locked?: boolean;
   props: Record<string, unknown>;
   styles?: React.CSSProperties;
   children?: CanvasElement[];
