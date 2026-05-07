@@ -3,7 +3,7 @@
  * REST API - Media Endpoint
  * ==========================================================================
  *
- * GET /api/sites/[siteId]/media - List media files
+ * GET /api/sites/[siteId]/media - List public media files
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -19,12 +19,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     try {
         const { siteId } = await params;
         const { searchParams } = new URL(request.url);
-        const type = searchParams.get('type'); // image, video, document
+        const type = searchParams.get('type'); // image, video, audio, document, font
         const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '50', 10) || 50));
         const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
         const scope = searchParams.get('scope');
         const pageId = searchParams.get('pageId');
         const postId = searchParams.get('postId');
+        const search = searchParams.get('search') || searchParams.get('q');
+        const tag = searchParams.get('tag');
+        const folderId = searchParams.has('folderId') ? searchParams.get('folderId') : undefined;
 
         const site = getSiteByIdOrSlug(siteId);
         if (!site) {
@@ -35,6 +38,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             type: type || undefined,
             scope: scope || undefined,
             visibility: 'public',
+            search: search || undefined,
+            tag: tag || undefined,
+            folderId,
             pageId: pageId || undefined,
             postId: postId || undefined,
             limit,

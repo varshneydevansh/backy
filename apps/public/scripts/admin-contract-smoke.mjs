@@ -217,6 +217,7 @@ try {
     formData.set('visibility', 'public');
     formData.set('fontFamily', 'Contract Sans');
     formData.set('fontWeight', '500');
+    formData.set('tags', 'brand,font');
 
     const upload = await request(`/api/admin/sites/${createdSiteId}/media`, {
       method: 'POST',
@@ -243,9 +244,30 @@ try {
     assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
     assert(update.json?.data?.media?.metadata?.fontFamily === 'Contract Sans Display', `${update.url} expected updated font family metadata`);
 
-    const publicFonts = await request(`/api/sites/${createdSiteId}/media?type=font`);
+    const publicFonts = await request(`/api/sites/${createdSiteId}/media?type=font&search=${encodeURIComponent('Contract Sans')}&tag=font`);
     assert(publicFonts.response.status === 200, `${publicFonts.url} expected 200, got ${publicFonts.response.status}`);
     assert(publicFonts.json?.media?.some((item) => item.id === createdMediaId && item.metadata?.fontFamily === 'Contract Sans Display'), `${publicFonts.url} missing public font media`);
+
+    const privateUpdate = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ visibility: 'private' }),
+    });
+    assert(privateUpdate.response.status === 200, `${privateUpdate.url} expected 200, got ${privateUpdate.response.status}`);
+    const hiddenPrivateFont = await request(`/api/sites/${createdSiteId}/media?type=font&tag=font`);
+    assert(hiddenPrivateFont.response.status === 200, `${hiddenPrivateFont.url} expected 200, got ${hiddenPrivateFont.response.status}`);
+    assert(!hiddenPrivateFont.json?.media?.some((item) => item.id === createdMediaId), `${hiddenPrivateFont.url} exposed private font media`);
+
+    const publicUpdate = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ visibility: 'public' }),
+    });
+    assert(publicUpdate.response.status === 200, `${publicUpdate.url} expected 200, got ${publicUpdate.response.status}`);
   });
 
   await record('admin pages create/list/detail/update/delete works for temporary site', async () => {

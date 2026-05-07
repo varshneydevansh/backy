@@ -1038,7 +1038,6 @@ const MEDIA_FOLDERS: MediaFolder[] = [
 
 const MEDIA_CATALOG_PATH = join(process.cwd(), 'data', 'backy', 'media-library.json');
 const ADMIN_CONTENT_PATH = join(process.cwd(), 'data', 'backy', 'admin-content.json');
-let persistedMediaLoaded = false;
 let persistedAdminContentLoaded = false;
 
 interface AdminContentSnapshot {
@@ -1061,11 +1060,16 @@ interface MediaCatalogSnapshot {
 }
 
 function ensurePersistedMediaLoaded() {
-  if (persistedMediaLoaded) {
-    return;
+  for (let index = MEDIA_LIBRARY.length - 1; index >= 0; index -= 1) {
+    if (MEDIA_LIBRARY[index].id.startsWith('media_')) {
+      MEDIA_LIBRARY.splice(index, 1);
+    }
   }
-
-  persistedMediaLoaded = true;
+  for (let index = MEDIA_FOLDERS.length - 1; index >= 0; index -= 1) {
+    if (MEDIA_FOLDERS[index].id.startsWith('folder_')) {
+      MEDIA_FOLDERS.splice(index, 1);
+    }
+  }
 
   if (!existsSync(MEDIA_CATALOG_PATH)) {
     return;
@@ -4559,6 +4563,7 @@ export function getMediaList(
       normalizeIdentifier(item.filename).includes(normalizedSearch) ||
       normalizeIdentifier(item.altText || '').includes(normalizedSearch) ||
       normalizeIdentifier(item.caption || '').includes(normalizedSearch) ||
+      Object.values(item.metadata || {}).some((value) => normalizeIdentifier(sanitizeString(value)).includes(normalizedSearch)) ||
       item.tags.some((itemTag) => normalizeIdentifier(itemTag).includes(normalizedSearch))
     ));
   }

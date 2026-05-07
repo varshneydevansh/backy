@@ -77,6 +77,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/sites/:siteId/media`
   - Public media catalog for custom frontends.
   - Current implementation only returns `visibility=public` catalog items, even if a caller asks for private media.
+  - Supports `type`, `scope`, `pageId`, `postId`, `q`/`search`, `tag`, `folderId`, `limit`, and `offset` filters.
 
 - `GET /api/sites/:siteId/navigation`
   - Public navigation contract for external frontends.
