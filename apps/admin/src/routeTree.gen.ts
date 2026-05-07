@@ -15,6 +15,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PagesRouteImport } from './routes/pages'
 import { Route as MediaRouteImport } from './routes/media'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as CollectionsRouteImport } from './routes/collections'
 import { Route as BlogRouteImport } from './routes/blog'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as UsersNewRouteImport } from './routes/users.new'
@@ -54,6 +55,11 @@ const MediaRoute = MediaRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CollectionsRoute = CollectionsRouteImport.update({
+  id: '/collections',
+  path: '/collections',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlogRoute = BlogRouteImport.update({
@@ -110,6 +116,7 @@ const PagesPageIdEditRoute = PagesPageIdEditRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/blog': typeof BlogRouteWithChildren
+  '/collections': typeof CollectionsRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
   '/pages': typeof PagesRouteWithChildren
@@ -128,6 +135,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/blog': typeof BlogRouteWithChildren
+  '/collections': typeof CollectionsRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
   '/pages': typeof PagesRouteWithChildren
@@ -147,6 +155,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/blog': typeof BlogRouteWithChildren
+  '/collections': typeof CollectionsRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
   '/pages': typeof PagesRouteWithChildren
@@ -167,6 +176,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/blog'
+    | '/collections'
     | '/login'
     | '/media'
     | '/pages'
@@ -185,6 +195,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/blog'
+    | '/collections'
     | '/login'
     | '/media'
     | '/pages'
@@ -203,6 +214,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/blog'
+    | '/collections'
     | '/login'
     | '/media'
     | '/pages'
@@ -222,6 +234,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BlogRoute: typeof BlogRouteWithChildren
+  CollectionsRoute: typeof CollectionsRoute
   LoginRoute: typeof LoginRoute
   MediaRoute: typeof MediaRoute
   PagesRoute: typeof PagesRouteWithChildren
@@ -272,6 +285,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/collections': {
+      id: '/collections'
+      path: '/collections'
+      fullPath: '/collections'
+      preLoaderRoute: typeof CollectionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blog': {
@@ -398,6 +418,7 @@ const UsersRouteWithChildren = UsersRoute._addFileChildren(UsersRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BlogRoute: BlogRouteWithChildren,
+  CollectionsRoute: CollectionsRoute,
   LoginRoute: LoginRoute,
   MediaRoute: MediaRoute,
   PagesRoute: PagesRouteWithChildren,

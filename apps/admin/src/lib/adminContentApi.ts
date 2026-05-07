@@ -290,6 +290,105 @@ interface ApiSettingsResponse {
   };
 }
 
+type ApiCollectionFieldType =
+  | 'text'
+  | 'richText'
+  | 'number'
+  | 'boolean'
+  | 'date'
+  | 'image'
+  | 'file'
+  | 'reference'
+  | 'json';
+
+interface ApiCollectionField {
+  id?: string;
+  key: string;
+  label: string;
+  type: ApiCollectionFieldType;
+  required?: boolean;
+  unique?: boolean;
+  sortOrder?: number;
+  helpText?: string | null;
+  options?: string[];
+  referenceCollectionId?: string | null;
+  defaultValue?: unknown;
+}
+
+interface ApiCollection {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  status: 'draft' | 'published' | 'archived';
+  fields: ApiCollectionField[];
+  permissions: {
+    publicRead: boolean;
+    publicCreate: boolean;
+    publicUpdate: boolean;
+    publicDelete: boolean;
+  };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface ApiCollectionRecord {
+  id: string;
+  siteId: string;
+  collectionId: string;
+  slug: string;
+  status: AdminSiteStatus;
+  values: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+  publishedAt?: string | null;
+  scheduledAt?: string | null;
+}
+
+interface ApiListCollectionsResponse {
+  success: boolean;
+  data?: {
+    collections: ApiCollection[];
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiCollectionResponse {
+  success: boolean;
+  data?: {
+    collection: ApiCollection;
+  };
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
+interface ApiListCollectionRecordsResponse {
+  success: boolean;
+  data?: {
+    collection: ApiCollection;
+    records: ApiCollectionRecord[];
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiCollectionRecordResponse {
+  success: boolean;
+  data?: {
+    record: ApiCollectionRecord;
+  };
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
 export interface SiteCreateInput {
   name: string;
   slug: string;
@@ -444,6 +543,71 @@ export interface PreviewLink {
   previewToken: string;
   expiresAt: string;
   url: string;
+}
+
+export type CollectionFieldType = ApiCollectionFieldType;
+
+export interface CollectionField {
+  id?: string;
+  key: string;
+  label: string;
+  type: CollectionFieldType;
+  required: boolean;
+  unique: boolean;
+  sortOrder: number;
+  helpText?: string | null;
+  options?: string[];
+  referenceCollectionId?: string | null;
+  defaultValue?: unknown;
+}
+
+export interface CollectionPermissions {
+  publicRead: boolean;
+  publicCreate: boolean;
+  publicUpdate: boolean;
+  publicDelete: boolean;
+}
+
+export interface Collection {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  status: 'draft' | 'published' | 'archived';
+  fields: CollectionField[];
+  permissions: CollectionPermissions;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CollectionRecord {
+  id: string;
+  siteId: string;
+  collectionId: string;
+  slug: string;
+  status: Page['status'];
+  values: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+  publishedAt?: string | null;
+  scheduledAt?: string | null;
+}
+
+export interface CollectionInput {
+  name: string;
+  slug: string;
+  description?: string | null;
+  status?: Collection['status'];
+  fields?: CollectionField[];
+  permissions?: CollectionPermissions;
+}
+
+export interface CollectionRecordInput {
+  slug: string;
+  status?: Page['status'];
+  scheduledAt?: string | null;
+  values: Record<string, unknown>;
 }
 
 const getEnvValue = (key: string): string => {
@@ -601,6 +765,51 @@ const toContentRevision = (revision: ApiRevision): ContentRevision => {
     snapshotStatus: toContentStatus(snapshot.status, snapshot.status === 'published'),
   };
 };
+
+const toCollectionField = (field: ApiCollectionField, index: number): CollectionField => ({
+  id: field.id,
+  key: field.key,
+  label: field.label || field.key,
+  type: field.type || 'text',
+  required: field.required === true,
+  unique: field.unique === true,
+  sortOrder: typeof field.sortOrder === 'number' ? field.sortOrder : (index + 1) * 10,
+  helpText: field.helpText || null,
+  options: field.options,
+  referenceCollectionId: field.referenceCollectionId || null,
+  defaultValue: field.defaultValue,
+});
+
+const toCollection = (collection: ApiCollection): Collection => ({
+  id: collection.id,
+  siteId: collection.siteId,
+  name: collection.name,
+  slug: collection.slug,
+  description: collection.description || null,
+  status: collection.status || 'draft',
+  fields: (collection.fields || []).map(toCollectionField),
+  permissions: {
+    publicRead: collection.permissions?.publicRead === true,
+    publicCreate: collection.permissions?.publicCreate === true,
+    publicUpdate: collection.permissions?.publicUpdate === true,
+    publicDelete: collection.permissions?.publicDelete === true,
+  },
+  createdAt: collection.createdAt,
+  updatedAt: collection.updatedAt,
+});
+
+const toCollectionRecord = (record: ApiCollectionRecord): CollectionRecord => ({
+  id: record.id,
+  siteId: record.siteId,
+  collectionId: record.collectionId,
+  slug: record.slug,
+  status: toContentStatus(record.status, record.status === 'published'),
+  values: record.values || {},
+  createdAt: record.createdAt,
+  updatedAt: record.updatedAt,
+  publishedAt: record.publishedAt || null,
+  scheduledAt: record.scheduledAt || null,
+});
 
 const readJson = async <T>(response: Response): Promise<T> => {
   try {
@@ -1214,5 +1423,137 @@ export async function deleteBlogPost(siteId: string, postId: string): Promise<vo
 
   if (!response.ok || !payload.success || !payload.data?.deleted) {
     throw new Error(payload.error?.message || 'Unable to delete blog post');
+  }
+}
+
+export async function listCollections(siteId: string): Promise<Collection[]> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections`);
+  const payload = await readJson<ApiListCollectionsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load collections');
+  }
+
+  return payload.data.collections.map(toCollection);
+}
+
+export async function createCollection(siteId: string, input: CollectionInput): Promise<Collection> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiCollectionResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to create collection');
+  }
+
+  return toCollection(payload.data.collection);
+}
+
+export async function updateCollection(
+  siteId: string,
+  collectionId: string,
+  input: Partial<CollectionInput>,
+): Promise<Collection> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiCollectionResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to save collection');
+  }
+
+  return toCollection(payload.data.collection);
+}
+
+export async function deleteCollection(siteId: string, collectionId: string): Promise<void> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}`, {
+    method: 'DELETE',
+  });
+  const payload = await readJson<ApiDeleteResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.deleted) {
+    throw new Error(payload.error?.message || 'Unable to delete collection');
+  }
+}
+
+export async function listCollectionRecords(
+  siteId: string,
+  collectionId: string,
+): Promise<CollectionRecord[]> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records?limit=100`);
+  const payload = await readJson<ApiListCollectionRecordsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load collection records');
+  }
+
+  return payload.data.records.map(toCollectionRecord);
+}
+
+export async function createCollectionRecord(
+  siteId: string,
+  collectionId: string,
+  input: CollectionRecordInput,
+): Promise<CollectionRecord> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiCollectionRecordResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to create collection record');
+  }
+
+  return toCollectionRecord(payload.data.record);
+}
+
+export async function updateCollectionRecord(
+  siteId: string,
+  collectionId: string,
+  recordId: string,
+  input: Partial<CollectionRecordInput>,
+): Promise<CollectionRecord> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records/${recordId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiCollectionRecordResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to save collection record');
+  }
+
+  return toCollectionRecord(payload.data.record);
+}
+
+export async function deleteCollectionRecord(
+  siteId: string,
+  collectionId: string,
+  recordId: string,
+): Promise<void> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records/${recordId}`, {
+    method: 'DELETE',
+  });
+  const payload = await readJson<ApiDeleteResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.deleted) {
+    throw new Error(payload.error?.message || 'Unable to delete collection record');
   }
 }

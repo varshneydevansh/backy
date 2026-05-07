@@ -66,7 +66,7 @@ Backy now exposes the first implementation-backed CMS collection surface:
 - `GET/POST/PATCH/DELETE /api/admin/sites/:siteId/collections`
 - `GET/POST/PATCH/DELETE /api/admin/sites/:siteId/collections/:collectionId/records`
 
-These endpoints make collection schemas and records addressable by custom frontends. Public reads hide draft/private collections and unpublished records. Collection dynamic item URLs now resolve and render at `/:collectionSlug/:recordSlug` after normal page and blog routes. When page, post, or generated dynamic item elements declare collection `dataBindings`, `/render` exposes normalized dataset manifests, collection field schemas, resolved public records, and binding metadata for custom frontends. Dynamic list templates, custom item URL rules, and the admin dataset-builder UI still need to be completed.
+These endpoints make collection schemas and records addressable by custom frontends. Public reads hide draft/private collections and unpublished records. The admin `/collections` route now gives editors a backend-backed schema and record builder for these APIs. Collection dynamic item URLs now resolve and render at `/:collectionSlug/:recordSlug` after normal page and blog routes. When page, post, or generated dynamic item elements declare collection `dataBindings`, `/render` exposes normalized dataset manifests, collection field schemas, resolved public records, and binding metadata for custom frontends. Dynamic list templates, custom item URL rules, and the canvas dataset-binding UI still need to be completed.
 
 ## Required payload shape
 
