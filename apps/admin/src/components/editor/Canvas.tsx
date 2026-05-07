@@ -617,6 +617,10 @@ const matchesInteractionInput = (
     return !('pointerId' in event);
   }
 
+  if (!('pointerId' in event)) {
+    return true;
+  }
+
   return 'pointerId' in event && (
     interaction.pointerId === undefined || event.pointerId === interaction.pointerId
   );
