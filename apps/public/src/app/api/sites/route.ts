@@ -8,7 +8,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import type { Site } from '@backy-cms/core';
 import { getSites, type StoreSite } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -22,6 +24,54 @@ const findPublicSite = (sites: StoreSite[], identifier: string): StoreSite | und
             normalizeIdentifier(site.slug) === normalized ||
             (site.customDomain ? normalizeIdentifier(site.customDomain) === normalized : false),
     );
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const publicSiteFromRepositorySite = (site: Site): StoreSite => ({
+    id: site.id,
+    name: site.name,
+    slug: site.slug,
+    description: site.description || '',
+    customDomain: site.customDomain || null,
+    status: site.isPublished ? 'published' : 'draft',
+    isPublished: site.isPublished,
+    theme: {
+        colors: isRecord(site.theme?.colors) ? site.theme.colors as Record<string, string> : {},
+        fonts: isRecord(site.theme?.fonts) ? site.theme.fonts as StoreSite['theme']['fonts'] : {},
+        spacing: isRecord(site.theme?.spacing) ? site.theme.spacing as StoreSite['theme']['spacing'] : undefined,
+        customCSS: typeof site.theme?.customCSS === 'string' ? site.theme.customCSS : '',
+    },
+});
+
+const findPublicRepositorySite = async (
+    repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
+    identifier: string,
+): Promise<Site | null> => {
+    const siteById = await repositories.sites.getById(identifier);
+    if (siteById?.isPublished) {
+        return siteById;
+    }
+
+    const siteBySlug = await repositories.sites.getBySlug(identifier);
+    if (siteBySlug?.isPublished) {
+        return siteBySlug;
+    }
+
+    const normalized = normalizeIdentifier(identifier);
+    const result = await repositories.sites.list({
+        status: 'published',
+        limit: 100,
+        offset: 0,
+    });
+
+    return result.items.find((site) => (
+        site.isPublished &&
+        site.customDomain &&
+        normalizeIdentifier(site.customDomain) === normalized
+    )) || null;
 };
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
@@ -44,6 +94,46 @@ export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const identifier = searchParams.get('slug') || searchParams.get('identifier');
+
+        if (!shouldUseDemoStoreFallback()) {
+            const repositories = await getRequiredDatabaseRepositories();
+
+            if (identifier) {
+                const site = await findPublicRepositorySite(repositories, identifier);
+                if (!site) {
+                    return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+                }
+
+                const publicSite = publicSiteFromRepositorySite(site);
+                return NextResponse.json({
+                    success: true,
+                    requestId,
+                    data: { site: publicSite },
+                    site: publicSite,
+                });
+            }
+
+            const result = await repositories.sites.list({
+                status: 'published',
+                limit: 100,
+                offset: 0,
+            });
+            const sites = result.items.filter((site) => site.isPublished).map(publicSiteFromRepositorySite);
+
+            return NextResponse.json({
+                success: true,
+                requestId,
+                data: {
+                    sites,
+                    pagination: {
+                        ...result.pagination,
+                        total: sites.length,
+                    },
+                },
+                sites,
+            });
+        }
+
         const sites = getSites();
 
         if (identifier) {
