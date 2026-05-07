@@ -10,6 +10,7 @@ import {
   createMediaRepository,
   createPageRepository,
   createPostRepository,
+  createReusableSectionRepository,
   createSettingsRepository,
   createSiteRepository,
   createUnimplementedRepositoryProxy,
@@ -29,6 +30,7 @@ import {
   pages,
   platformSettings,
   profiles,
+  reusableSections,
   sites,
 } from '../dist/schema/index.js';
 
@@ -44,6 +46,7 @@ const tableName = (table) => {
   if (table === pages) return 'pages';
   if (table === platformSettings) return 'platformSettings';
   if (table === profiles) return 'profiles';
+  if (table === reusableSections) return 'reusableSections';
   if (table === blogPosts) return 'blogPosts';
   if (table === comments) return 'comments';
   if (table === contentCollections) return 'contentCollections';
@@ -63,6 +66,7 @@ const createFakeDb = () => {
     pages: [],
     platformSettings: [],
     profiles: [],
+    reusableSections: [],
     blogPosts: [],
     comments: [],
     contentCollections: [],
@@ -79,6 +83,7 @@ const createFakeDb = () => {
     pages: 0,
     platformSettings: 0,
     profiles: 0,
+    reusableSections: 0,
     blogPosts: 0,
     comments: 0,
     contentCollections: 0,
@@ -160,6 +165,25 @@ const createFakeDb = () => {
         storage: {},
         auth: {},
         integrations: {},
+        updatedAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'reusableSections') {
+      return {
+        id: nextId(name),
+        siteId: 'site_default',
+        name: 'Reusable section',
+        slug: 'reusable-section',
+        description: null,
+        category: 'general',
+        status: 'active',
+        tags: [],
+        content: {},
+        sourceElementId: null,
+        createdBy: null,
+        updatedBy: null,
+        createdAt: timestamp,
         updatedAt: timestamp,
         ...values,
       };
@@ -442,6 +466,7 @@ assert(repositorySet.media, 'Expected media repository factory');
 assert(repositorySet.collections, 'Expected collection repository factory');
 assert(repositorySet.forms, 'Expected form repository factory');
 assert(repositorySet.comments, 'Expected comment repository factory');
+assert(repositorySet.reusableSections, 'Expected reusable section repository factory');
 assert(repositorySet.users, 'Expected user repository factory');
 assert(repositorySet.settings, 'Expected settings repository factory');
 assert(repositorySet.auditLogs, 'Expected audit log repository factory');
@@ -456,6 +481,7 @@ const commentRepository = createCommentRepository(db);
 const auditLogRepository = createAuditLogRepository(db);
 const userRepository = createUserRepository(db);
 const settingsRepository = createSettingsRepository(db);
+const reusableSectionRepository = createReusableSectionRepository(db);
 
 const site = (await siteRepository.create({
   teamId: 'team_contract',
@@ -919,6 +945,31 @@ assert(updatedSettings.deliveryMode === 'custom-frontend', 'Expected settings de
 assert(updatedSettings.apiKeys.publicKey !== 'pk_manual_contract', 'Expected public key rotation');
 assert(updatedSettings.apiKeys.secretKeyId === 'sk_manual_contract', 'Expected secret key manual update');
 assert(updatedSettings.storage?.provider === 's3', 'Expected settings storage update');
+
+const reusableSection = (await reusableSectionRepository.create({
+  siteId: site.id,
+  name: 'Saved Hero',
+  slug: 'saved-hero',
+  description: 'Reusable hero',
+  category: 'hero',
+  status: 'active',
+  tags: ['landing', 'hero'],
+  content: {
+    elements: [{ id: 'hero_root', type: 'section' }],
+    canvasSize: { width: 1200, height: 640 },
+  },
+  sourceElementId: 'hero_root',
+  createdBy: 'user_admin',
+})).item;
+assert(reusableSection.id === 'reusableSections_1', 'Expected fake reusable section id');
+assert((await reusableSectionRepository.getBySlug(site.id, 'saved-hero'))?.id === reusableSection.id, 'Expected reusable section getBySlug');
+assert((await reusableSectionRepository.list({ siteId: site.id, category: 'hero', tag: 'landing', search: 'saved' })).items.length === 1, 'Expected reusable section filters');
+const archivedReusableSection = (await reusableSectionRepository.update(site.id, reusableSection.id, {
+  status: 'archived',
+  tags: ['archived'],
+})).item;
+assert(archivedReusableSection.status === 'archived', 'Expected reusable section update');
+assert(await reusableSectionRepository.delete(site.id, reusableSection.id), 'Expected reusable section delete');
 
 assert(await pageRepository.delete(site.id, publishedPage.id), 'Expected page delete');
 assert(await postRepository.delete(site.id, archivedPost.id), 'Expected post delete');

@@ -14,6 +14,9 @@ export {
     createMediaRepository,
 } from './media';
 export {
+    createReusableSectionRepository,
+} from './reusable-sections';
+export {
     createPageRepository,
     createPostRepository,
     createSiteRepository,

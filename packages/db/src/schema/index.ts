@@ -475,6 +475,32 @@ export const platformSettings = pgTable('platform_settings', {
 });
 
 // ==========================================================================
+// REUSABLE SECTIONS - Saved component/section templates
+// ==========================================================================
+
+/**
+ * Reusable sections - saved page/editor component groups for reuse across pages.
+ */
+export const reusableSections = pgTable('reusable_sections', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    siteId: uuid('site_id')
+        .references(() => sites.id, { onDelete: 'cascade' })
+        .notNull(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    description: text('description'),
+    category: text('category').default('general').notNull(),
+    status: text('status').default('active').notNull(),
+    tags: jsonb('tags').default([]).notNull(),
+    content: jsonb('content').default({}).notNull(),
+    sourceElementId: text('source_element_id'),
+    createdBy: text('created_by'),
+    updatedBy: text('updated_by'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// ==========================================================================
 // COMMENTS - Public page/post discussions and moderation state
 // ==========================================================================
 
@@ -624,6 +650,7 @@ export const sitesRelations = relations(sites, ({ one, many }) => ({
     collections: many(contentCollections),
     forms: many(formDefinitions),
     comments: many(comments),
+    reusableSections: many(reusableSections),
 }));
 
 export const pagesRelations = relations(pages, ({ one }) => ({
@@ -708,6 +735,13 @@ export const formContactsRelations = relations(formContacts, ({ one }) => ({
 export const commentsRelations = relations(comments, ({ one }) => ({
     site: one(sites, {
         fields: [comments.siteId],
+        references: [sites.id],
+    }),
+}));
+
+export const reusableSectionsRelations = relations(reusableSections, ({ one }) => ({
+    site: one(sites, {
+        fields: [reusableSections.siteId],
         references: [sites.id],
     }),
 }));

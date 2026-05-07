@@ -418,6 +418,59 @@ export interface BackyCommentListInput extends BackyPaginationInput {
   includeReplies?: boolean;
 }
 
+export type BackyReusableSectionStatus = 'active' | 'archived';
+
+export interface BackyReusableSection {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  category: string;
+  status: BackyReusableSectionStatus;
+  tags: string[];
+  content: BackyJsonObject;
+  sourceElementId?: string | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BackyReusableSectionCreateInput {
+  siteId: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  category?: string;
+  status?: BackyReusableSectionStatus;
+  tags?: string[];
+  content: BackyJsonObject;
+  sourceElementId?: string | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+}
+
+export interface BackyReusableSectionUpdateInput {
+  name?: string;
+  slug?: string;
+  description?: string | null;
+  category?: string;
+  status?: BackyReusableSectionStatus;
+  tags?: string[];
+  content?: BackyJsonObject;
+  sourceElementId?: string | null;
+  updatedBy?: string | null;
+}
+
+export interface BackyReusableSectionListInput extends BackyPaginationInput {
+  siteId: string;
+  status?: BackyReusableSectionStatus | 'all';
+  category?: string;
+  tag?: string;
+  search?: string;
+}
+
 export type BackyUserRole = 'owner' | 'admin' | 'editor' | 'viewer';
 export type BackyUserStatus = 'active' | 'inactive' | 'invited' | 'suspended';
 
@@ -583,6 +636,15 @@ export interface BackyCommentRepository {
   delete(siteId: string, commentId: string, context?: BackyRepositoryContext): Promise<boolean>;
 }
 
+export interface BackyReusableSectionRepository {
+  list(input: BackyReusableSectionListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyReusableSection>>;
+  getById(siteId: string, sectionId: string, context?: BackyRepositoryContext): Promise<BackyReusableSection | null>;
+  getBySlug(siteId: string, slug: string, context?: BackyRepositoryContext): Promise<BackyReusableSection | null>;
+  create(input: BackyReusableSectionCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackyReusableSection>>;
+  update(siteId: string, sectionId: string, input: BackyReusableSectionUpdateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackyReusableSection>>;
+  delete(siteId: string, sectionId: string, context?: BackyRepositoryContext): Promise<boolean>;
+}
+
 export interface BackyUserRepository {
   list(input: BackyUserListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyUser>>;
   getById(userId: string, context?: BackyRepositoryContext): Promise<BackyUser | null>;
@@ -610,6 +672,7 @@ export interface BackyRepositories {
   media: BackyMediaRepository;
   forms: BackyFormRepository;
   comments: BackyCommentRepository;
+  reusableSections: BackyReusableSectionRepository;
   users: BackyUserRepository;
   settings: BackySettingsRepository;
   auditLogs: BackyAuditLogRepository;
