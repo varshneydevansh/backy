@@ -3,6 +3,9 @@ const nextConfig = {
     // Enable React strict mode for better development experience
     reactStrictMode: true,
 
+    // Keep optional storage provider dependencies lazy at runtime.
+    serverExternalPackages: ['@backy/storage'],
+
     // Configure for subdomain routing
     async rewrites() {
         return {

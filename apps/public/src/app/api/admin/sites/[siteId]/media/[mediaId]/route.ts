@@ -5,10 +5,9 @@
  * DELETE /api/admin/sites/[siteId]/media/[mediaId]
  */
 
-import { unlink } from 'node:fs/promises';
-import { join, normalize } from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteMediaItem, getMediaById, getSiteByIdOrSlug, updateMediaItem } from '@/lib/backyStore';
+import { getMediaStorageAdapter, getMediaStoragePathFromUrl } from '@/lib/mediaStorage';
 
 export const runtime = 'nodejs';
 
@@ -47,21 +46,16 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
 };
 
 const deleteUploadedFile = async (siteId: string, url: string | null | undefined) => {
-  if (!url || !url.startsWith(`/uploads/sites/${siteId}/`)) {
-    return;
-  }
+  const storagePath = getMediaStoragePathFromUrl(siteId, url);
 
-  const publicRoot = join(process.cwd(), 'public');
-  const absolutePath = normalize(join(publicRoot, url));
-
-  if (!absolutePath.startsWith(publicRoot)) {
+  if (!storagePath) {
     return;
   }
 
   try {
-    await unlink(absolutePath);
+    await getMediaStorageAdapter().delete(storagePath);
   } catch {
-    // Missing local files should not make catalog deletion fail.
+    // Missing storage objects should not make catalog deletion fail.
   }
 };
 

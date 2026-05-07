@@ -146,6 +146,11 @@ const joinPublicUrl = (publicUrl: string, storagePath: string): string => (
     `${publicUrl.replace(/\/+$/, '')}/${normalizeStoragePath(storagePath)}`
 );
 
+const optionalRuntimeImport = async <TModule>(specifier: string): Promise<TModule> => {
+    const runtimeImport = new Function('specifier', 'return import(specifier)') as (value: string) => Promise<TModule>;
+    return runtimeImport(specifier);
+};
+
 export const createStoragePath = (input: {
     siteId: string;
     type: string;
@@ -247,12 +252,20 @@ export interface StorageAdapter {
  */
 export async function createS3Adapter(config: S3Config): Promise<StorageAdapter> {
     // Dynamic import to avoid bundling if not used
-    const s3Module = await import('@aws-sdk/client-s3').catch(() => {
+    const s3Module = await optionalRuntimeImport<{
+        S3Client: typeof import('@aws-sdk/client-s3').S3Client;
+        PutObjectCommand: typeof import('@aws-sdk/client-s3').PutObjectCommand;
+        DeleteObjectCommand: typeof import('@aws-sdk/client-s3').DeleteObjectCommand;
+        HeadObjectCommand: typeof import('@aws-sdk/client-s3').HeadObjectCommand;
+        ListObjectsV2Command: typeof import('@aws-sdk/client-s3').ListObjectsV2Command;
+    }>('@aws-sdk/client-s3').catch(() => {
         throw new Error(
             'AWS SDK v3 clients are not installed. Install "@aws-sdk/client-s3" and "@aws-sdk/s3-request-presigner" to enable S3 storage integration.'
         );
     });
-    const { getSignedUrl: getS3SignedUrl } = await import('@aws-sdk/s3-request-presigner').catch(() => {
+    const { getSignedUrl: getS3SignedUrl } = await optionalRuntimeImport<{
+        getSignedUrl: typeof import('@aws-sdk/s3-request-presigner').getSignedUrl;
+    }>('@aws-sdk/s3-request-presigner').catch(() => {
         throw new Error(
             '@aws-sdk/s3-request-presigner is required to generate signed URLs.'
         );
@@ -308,7 +321,9 @@ export async function createS3Adapter(config: S3Config): Promise<StorageAdapter>
         },
 
         async read(path: string): Promise<Buffer> {
-            const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+            const { GetObjectCommand } = await optionalRuntimeImport<{
+                GetObjectCommand: typeof import('@aws-sdk/client-s3').GetObjectCommand;
+            }>('@aws-sdk/client-s3');
             const response = await client.send(new GetObjectCommand({ Bucket: config.bucket, Key: path }));
             const body = response.Body as {
                 transformToByteArray?: () => Promise<Uint8Array>;
@@ -340,7 +355,9 @@ export async function createS3Adapter(config: S3Config): Promise<StorageAdapter>
         },
 
         async getSignedUrl(path: string, expiresIn: number): Promise<string> {
-            const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+            const { GetObjectCommand } = await optionalRuntimeImport<{
+                GetObjectCommand: typeof import('@aws-sdk/client-s3').GetObjectCommand;
+            }>('@aws-sdk/client-s3');
             const command = new GetObjectCommand({ Bucket: config.bucket, Key: path });
             return getS3SignedUrl(client, command, { expiresIn });
         },
@@ -403,7 +420,9 @@ export async function createS3Adapter(config: S3Config): Promise<StorageAdapter>
 export async function createSupabaseAdapter(
     config: SupabaseConfig
 ): Promise<StorageAdapter> {
-    const { createClient } = await import('@supabase/supabase-js').catch(() => {
+    const { createClient } = await optionalRuntimeImport<{
+        createClient: typeof import('@supabase/supabase-js').createClient;
+    }>('@supabase/supabase-js').catch(() => {
         throw new Error(
             '@supabase/supabase-js is required for Supabase storage adapter.'
         );

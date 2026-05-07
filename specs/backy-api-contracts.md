@@ -227,7 +227,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - multipart upload
   - query/body flags: `scope` (`global|page|post`), `scopeTargetId`, `visibility`
   - current implementation accepts `file`, `altText`, `caption`, `tags`, `uploadedBy`, arbitrary JSON `metadata`, plus `fontFamily`, `fontWeight`, and `fontStyle` for font uploads
-  - validates image/video/audio/document/font MIME categories and writes local assets under `/public/uploads/sites/:siteId/...`
+  - validates image/video/audio/document/font MIME categories and writes local assets through `@backy/storage` under `/public/uploads/sites/:siteId/...`
   - stores extension metadata automatically and preserves custom upload metadata through later metadata edits
   - returns `{ success, requestId, data: { media } }`
 
@@ -253,7 +253,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - Font media metadata can register `fontFamily`, `fontWeight`, and `fontStyle`; `/render` exposes public font media in `assets.fonts`, and hosted page/post rendering injects matching `@font-face` rules.
 
 - `DELETE /api/admin/sites/:siteId/media/:mediaId`
-  - Current implementation deletes the catalog record and removes local uploaded files under `/public/uploads/sites/:siteId/...` when present.
+  - Current implementation deletes the catalog record and removes local uploaded files through the storage adapter when present.
 
 - `POST /api/admin/sites/:siteId/media/:mediaId/bind`
   - Body: `{ targetType: "page"|"post", targetId, action?: "bind"|"unbind", usageType?, attachedBy? }`

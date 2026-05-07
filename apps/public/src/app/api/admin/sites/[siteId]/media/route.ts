@@ -5,10 +5,10 @@
  * POST /api/admin/sites/[siteId]/media
  */
 
-import { mkdir, writeFile } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { extname } from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
 import { createMediaItem, getMediaList, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { getMediaStorageAdapter, getMediaStoragePath } from '@/lib/mediaStorage';
 import type { MediaItem } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
@@ -207,21 +207,27 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const safeName = safePathSegment(extension ? originalName.slice(0, -extension.length) : originalName);
     const storedFilename = `${Date.now().toString(36)}-${safeName}${extension}`;
     const mediaFolder = mediaType === 'font' ? 'fonts' : `${mediaType}s`;
-    const relativePath = `/uploads/sites/${site.id}/${mediaFolder}/${storedFilename}`;
-    const absolutePath = join(process.cwd(), 'public', relativePath);
+    const storagePath = getMediaStoragePath({ siteId: site.id, mediaFolder, storedFilename });
     const metadata = parseMetadata(formData.get('metadata'));
-
-    await mkdir(join(process.cwd(), 'public', 'uploads', 'sites', site.id, mediaFolder), { recursive: true });
-    await writeFile(absolutePath, Buffer.from(await file.arrayBuffer()));
+    const upload = await getMediaStorageAdapter().upload(Buffer.from(await file.arrayBuffer()), {
+      path: storagePath,
+      filename: storedFilename,
+      mimeType,
+      metadata: {
+        siteId: site.id,
+        mediaType,
+        originalName,
+      },
+    });
 
     const media = createMediaItem(site.id, {
       filename: storedFilename,
       originalName,
       mimeType,
-      sizeBytes: file.size,
+      sizeBytes: upload.size,
       type: mediaType,
-      url: relativePath,
-      thumbnailUrl: mediaType === 'image' ? relativePath : null,
+      url: upload.url,
+      thumbnailUrl: mediaType === 'image' ? upload.url : null,
       pageIds: scope === 'page' && scopeTargetId ? [scopeTargetId] : [],
       postIds: scope === 'post' && scopeTargetId ? [scopeTargetId] : [],
       tags: toStringList(formData.get('tags')),

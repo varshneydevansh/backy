@@ -242,6 +242,13 @@ try {
     assert(upload.json?.data?.media?.metadata?.fontFamily === 'Contract Sans', `${upload.url} expected font family metadata`);
     assert(upload.json?.data?.media?.metadata?.extension === 'woff2', `${upload.url} expected preserved font extension metadata`);
     assert(upload.json?.data?.media?.metadata?.license === 'contract-smoke', `${upload.url} expected custom upload metadata`);
+    assert(
+      upload.json?.data?.media?.url?.startsWith(`/uploads/sites/${createdSiteId}/fonts/`),
+      `${upload.url} expected storage-backed public font URL`,
+    );
+    const storedFont = await request(upload.json.data.media.url);
+    assert(storedFont.response.status === 200, `${storedFont.url} expected uploaded font asset to be publicly readable`);
+    assert(storedFont.text === 'contract-font', `${storedFont.url} returned unexpected uploaded font content`);
     createdMediaId = upload.json.data.media.id;
 
     const update = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, {
