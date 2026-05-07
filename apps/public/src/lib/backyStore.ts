@@ -282,6 +282,23 @@ interface StoreCollectionRecord {
   scheduledAt: string | null;
 }
 
+interface StoreReusableSection {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  category: string;
+  status: 'active' | 'archived';
+  tags: string[];
+  content: PageContent;
+  sourceElementId: string | null;
+  createdBy: string | null;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface Pagination {
   total: number;
   limit: number;
@@ -929,6 +946,78 @@ const COLLECTION_RECORDS: StoreCollectionRecord[] = [
   },
 ];
 
+const REUSABLE_SECTIONS: StoreReusableSection[] = [
+  {
+    id: 'section-demo-hero',
+    siteId: 'site-demo',
+    name: 'Demo Hero Section',
+    slug: 'demo-hero-section',
+    description: 'Reusable starter hero section for demo pages.',
+    category: 'layout',
+    status: 'active',
+    tags: ['hero', 'starter'],
+    sourceElementId: 'home-heading',
+    createdBy: 'admin',
+    updatedBy: 'admin',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    content: {
+      canvasSize: {
+        width: 1200,
+        height: 420,
+      },
+      elements: [
+        {
+          id: 'section-demo-hero-root',
+          type: 'section',
+          x: 0,
+          y: 0,
+          width: 1200,
+          height: 420,
+          zIndex: 1,
+          props: {
+            backgroundColor: '#0f172a',
+            borderRadius: 0,
+          },
+          children: [
+            {
+              id: 'section-demo-hero-heading',
+              type: 'heading',
+              x: 72,
+              y: 76,
+              width: 620,
+              height: 92,
+              zIndex: 1,
+              props: {
+                content: 'Reusable page section',
+                level: 'h2',
+                fontSize: 42,
+                fontWeight: '800',
+                color: '#ffffff',
+              },
+            },
+            {
+              id: 'section-demo-hero-copy',
+              type: 'paragraph',
+              x: 74,
+              y: 182,
+              width: 540,
+              height: 72,
+              zIndex: 2,
+              props: {
+                content: 'Save sections once and insert them into any Backy-authored page.',
+                fontSize: 18,
+                lineHeight: 1.55,
+                color: '#cbd5e1',
+              },
+            },
+          ],
+        },
+      ],
+    },
+  },
+];
+
 const CONTENT_REVISIONS: ContentRevision[] = [];
 const PREVIEW_TOKENS: PreviewToken[] = [];
 
@@ -1051,6 +1140,7 @@ interface AdminContentSnapshot {
   blogTags?: StoreBlogTag[];
   collections?: StoreCollection[];
   collectionRecords?: StoreCollectionRecord[];
+  reusableSections?: StoreReusableSection[];
   users?: StoreUser[];
   settings?: StoreSettings;
   revisions?: ContentRevision[];
@@ -1184,6 +1274,10 @@ function refreshPersistedAdminContent() {
       COLLECTION_RECORDS.splice(0, COLLECTION_RECORDS.length, ...parsed.collectionRecords);
     }
 
+    if (Array.isArray(parsed.reusableSections)) {
+      REUSABLE_SECTIONS.splice(0, REUSABLE_SECTIONS.length, ...parsed.reusableSections);
+    }
+
     if (Array.isArray(parsed.users)) {
       USER_LIST.splice(0, USER_LIST.length, ...parsed.users);
     }
@@ -1225,6 +1319,7 @@ function persistAdminContent() {
           blogTags: BLOG_TAGS,
           collections: COLLECTIONS,
           collectionRecords: COLLECTION_RECORDS,
+          reusableSections: REUSABLE_SECTIONS,
           users: USER_LIST,
           settings: SETTINGS,
           revisions: CONTENT_REVISIONS,
@@ -3000,6 +3095,12 @@ export function deleteAdminSite(siteId: string): boolean {
     }
   }
 
+  for (let sectionIndex = REUSABLE_SECTIONS.length - 1; sectionIndex >= 0; sectionIndex -= 1) {
+    if (REUSABLE_SECTIONS[sectionIndex].siteId === siteId) {
+      REUSABLE_SECTIONS.splice(sectionIndex, 1);
+    }
+  }
+
   for (let revisionIndex = CONTENT_REVISIONS.length - 1; revisionIndex >= 0; revisionIndex -= 1) {
     if (CONTENT_REVISIONS[revisionIndex].siteId === siteId) {
       CONTENT_REVISIONS.splice(revisionIndex, 1);
@@ -3492,6 +3593,170 @@ export function deleteAdminCollection(siteId: string, collectionId: string): boo
     }
   }
 
+  persistAdminContent();
+  return true;
+}
+
+const normalizeReusableSectionContent = (
+  value: unknown,
+  existing?: PageContent,
+): PageContent => {
+  const input = toRecord(value);
+  const canvasSizeInput = toRecord(input.canvasSize);
+  const existingCanvasSize = existing?.canvasSize || { width: 1200, height: 600 };
+
+  return {
+    elements: Array.isArray(input.elements)
+      ? clone(input.elements as CanvasElement[])
+      : existing?.elements
+        ? clone(existing.elements)
+        : [],
+    canvasSize: {
+      width: Number(canvasSizeInput.width) || existingCanvasSize.width || 1200,
+      height: Number(canvasSizeInput.height) || existingCanvasSize.height || 600,
+    },
+    customCSS: input.customCSS === undefined
+      ? existing?.customCSS
+      : sanitizeString(input.customCSS),
+    customJS: input.customJS === undefined
+      ? existing?.customJS
+      : sanitizeString(input.customJS),
+  };
+};
+
+const normalizeReusableSectionTags = (value: unknown, existing: string[] = []): string[] => {
+  const source = value === undefined ? existing : value;
+  const tags = Array.isArray(source)
+    ? source.map(sanitizeString)
+    : sanitizeString(source).split(',');
+
+  return Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean)));
+};
+
+export function listReusableSections(
+  siteId: string,
+  params: {
+    status?: StoreReusableSection['status'] | 'all';
+    category?: string;
+    tag?: string;
+    search?: string;
+  } = {},
+): StoreReusableSection[] {
+  ensurePersistedAdminContentLoaded();
+
+  const status = params.status || 'active';
+  const category = sanitizeString(params.category).toLowerCase();
+  const tag = sanitizeString(params.tag).toLowerCase();
+  const search = sanitizeString(params.search).toLowerCase();
+
+  const sections = REUSABLE_SECTIONS.filter((section) => {
+    if (section.siteId !== siteId) return false;
+    if (status !== 'all' && section.status !== status) return false;
+    if (category && section.category.toLowerCase() !== category) return false;
+    if (tag && !section.tags.some((item) => item.toLowerCase() === tag)) return false;
+    if (search) {
+      const haystack = [
+        section.name,
+        section.slug,
+        section.description || '',
+        section.category,
+        ...section.tags,
+      ].join(' ').toLowerCase();
+      if (!haystack.includes(search)) return false;
+    }
+    return true;
+  }).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.name.localeCompare(b.name));
+
+  return clone(sections);
+}
+
+export function getReusableSectionByIdOrSlug(
+  siteId: string,
+  identifier: string,
+): StoreReusableSection | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const normalized = normalizeIdentifier(identifier);
+  const section = REUSABLE_SECTIONS.find((item) => (
+    item.siteId === siteId &&
+    (normalizeIdentifier(item.id) === normalized || normalizeIdentifier(item.slug) === normalized)
+  ));
+
+  return section ? clone(section) : undefined;
+}
+
+export function createReusableSection(siteId: string, input: Record<string, unknown>): StoreReusableSection {
+  ensurePersistedAdminContentLoaded();
+
+  const now = new Date().toISOString();
+  const name = sanitizeString(input.name) || 'Untitled reusable section';
+  const section: StoreReusableSection = {
+    id: sanitizeString(input.id) || createRuntimeId('section'),
+    siteId,
+    name,
+    slug: normalizeSlugInput(input.slug || name, 'section'),
+    description: sanitizeString(input.description) || null,
+    category: sanitizeString(input.category) || 'general',
+    status: parseStatusInput(input.status, ['active', 'archived'] as const, 'active'),
+    tags: normalizeReusableSectionTags(input.tags),
+    content: normalizeReusableSectionContent(input.content),
+    sourceElementId: sanitizeString(input.sourceElementId) || null,
+    createdBy: sanitizeString(input.createdBy) || 'admin',
+    updatedBy: sanitizeString(input.updatedBy) || sanitizeString(input.createdBy) || 'admin',
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  REUSABLE_SECTIONS.unshift(section);
+  persistAdminContent();
+  return clone(section);
+}
+
+export function updateReusableSection(
+  siteId: string,
+  sectionId: string,
+  input: Record<string, unknown>,
+): StoreReusableSection | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = REUSABLE_SECTIONS.findIndex((section) => section.siteId === siteId && section.id === sectionId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const current = REUSABLE_SECTIONS[index];
+  const updated: StoreReusableSection = {
+    ...current,
+    name: input.name === undefined ? current.name : sanitizeString(input.name) || current.name,
+    slug: input.slug === undefined ? current.slug : normalizeSlugInput(input.slug, current.slug),
+    description: input.description === undefined ? current.description : sanitizeString(input.description) || null,
+    category: input.category === undefined ? current.category : sanitizeString(input.category) || current.category,
+    status: input.status === undefined
+      ? current.status
+      : parseStatusInput(input.status, ['active', 'archived'] as const, current.status),
+    tags: input.tags === undefined ? current.tags : normalizeReusableSectionTags(input.tags, current.tags),
+    content: input.content === undefined ? current.content : normalizeReusableSectionContent(input.content, current.content),
+    sourceElementId: input.sourceElementId === undefined
+      ? current.sourceElementId
+      : sanitizeString(input.sourceElementId) || null,
+    updatedBy: input.updatedBy === undefined ? current.updatedBy : sanitizeString(input.updatedBy) || current.updatedBy,
+    updatedAt: new Date().toISOString(),
+  };
+
+  REUSABLE_SECTIONS[index] = updated;
+  persistAdminContent();
+  return clone(updated);
+}
+
+export function deleteReusableSection(siteId: string, sectionId: string): boolean {
+  ensurePersistedAdminContentLoaded();
+
+  const index = REUSABLE_SECTIONS.findIndex((section) => section.siteId === siteId && section.id === sectionId);
+  if (index === -1) {
+    return false;
+  }
+
+  REUSABLE_SECTIONS.splice(index, 1);
   persistAdminContent();
   return true;
 }

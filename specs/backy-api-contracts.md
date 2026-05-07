@@ -260,7 +260,32 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - Binds or unbinds media to page/post contexts, updates `pageIds`/`postIds`, and stores lightweight binding metadata under `media.metadata.bindings`.
   - Page/post create, update, rollback, and delete paths also sync `pageIds`/`postIds` from saved content `mediaId`/`assetId` references and featured media.
 
-### 3.4 Forms
+### 3.4 Reusable sections/templates
+- `GET /api/admin/sites/:siteId/reusable-sections`
+  - Lists saved reusable canvas sections for a site.
+  - Filters: `status=active|archived|all`, `category`, `tag`, `search`.
+  - Default status filter is `active`.
+  - Returns `{ success, requestId, data: { sections } }`.
+
+- `POST /api/admin/sites/:siteId/reusable-sections`
+  - Body: `{ name, slug?, description?, category?, status?, tags?, content, sourceElementId?, createdBy?, updatedBy? }`.
+  - Validates site existence, required name, required non-empty `content.elements`, and per-site slug conflicts.
+  - Stores normal canvas `content.elements` plus `canvasSize`, so saved sections can be inserted back into the same editor/rendering model.
+  - Returns `{ success, requestId, data: { section } }`.
+
+- `GET /api/admin/sites/:siteId/reusable-sections/:sectionId`
+  - Fetches a section by ID or slug.
+
+- `PATCH /api/admin/sites/:siteId/reusable-sections/:sectionId`
+  - Updates name, slug, description, category, status, tags, source element, and content.
+  - Validates duplicate slugs against other sections in the same site.
+
+- `DELETE /api/admin/sites/:siteId/reusable-sections/:sectionId`
+  - Deletes the saved section from the current runtime adapter.
+
+Current reusable-section endpoints persist to `data/backy/admin-content.json`. Production completion still requires editor save/insert UI, synced reusable block instances, import/export, DB persistence, RBAC, audit events, and public/template registry exposure.
+
+### 3.5 Forms
 - `POST /api/admin/sites/:siteId/forms`
 - `GET /api/admin/sites/:siteId/forms`
 - `GET /api/admin/sites/:siteId/forms/:formId`
@@ -270,12 +295,12 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 - `POST /api/admin/sites/:siteId/forms/:formId/submissions/:submissionId/review`
   - status transitions `pending|approved|rejected|spam`
 
-### 3.5 Comments
+### 3.6 Comments
 - `GET /api/admin/sites/:siteId/comments?targetType=page|post&status=`
 - `PATCH /api/admin/sites/:siteId/comments/:commentId`
 - `POST /api/admin/sites/:siteId/comments/:commentId/block-user`
 
-### 3.6 Blog
+### 3.7 Blog
 - `GET /api/admin/sites/:siteId/blog?status=&limit=&offset=`
   - Current implementation returns `{ success, requestId, data: { posts, pagination } }` and includes unpublished posts for admin use.
 
@@ -294,7 +319,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 
 Current blog admin endpoints are local file-backed through `data/backy/admin-content.json`. Production completion still requires authenticated database persistence, RBAC, author/category/tag APIs, preview tokens, cache invalidation, workflow audit events, and contract tests.
 
-### 3.7 Publish and revisions
+### 3.8 Publish and revisions
 - `GET /api/admin/sites/:siteId/pages/:pageId/revisions`
   - Returns local revision history for the page with pagination metadata.
 

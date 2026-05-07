@@ -445,7 +445,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ❌ Element locking
 - ⚠️ Page templates
   - Static composed library presets now exist for hero, feature-grid, and lead-capture form sections.
-  - Still missing persisted site/page/blog template registry, saved user sections, synced reusable blocks, and import/export.
+  - Backend reusable-section APIs now persist saved canvas section patterns.
+  - Still missing editor save/insert UI, persisted site/page/blog template registry, synced reusable blocks, and import/export.
 
 ## Priority Order
 **Phase 1: Critical Fixes (Immediate)**

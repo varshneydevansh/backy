@@ -14,6 +14,7 @@ let createdUserId = null;
 let createdCollectionId = null;
 let createdCollectionRecordId = null;
 let createdMediaId = null;
+let createdReusableSectionId = null;
 let originalDeliveryMode = null;
 
 function assert(condition, message) {
@@ -71,6 +72,10 @@ async function cleanup() {
 
   if (createdSiteId && createdCollectionId) {
     await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (createdSiteId && createdReusableSectionId) {
+    await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}`, { method: 'DELETE' }).catch(() => {});
   }
 
   if (createdSiteId && createdMediaId) {
@@ -572,6 +577,141 @@ try {
     assert(remove.response.status === 200, `${remove.url} expected 200, got ${remove.response.status}`);
     assert(remove.json?.data?.deleted === true, `${remove.url} expected deleted true`);
     createdPageId = null;
+  });
+
+  await record('admin reusable sections create/list/detail/update/delete works for temporary site', async () => {
+    const create = await request(`/api/admin/sites/${createdSiteId}/reusable-sections`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Admin Contract Hero Section',
+        slug: `admin-contract-hero-${unique}`,
+        description: 'Temporary reusable section contract smoke',
+        category: 'layout',
+        tags: ['hero', 'contract'],
+        sourceElementId: 'contract-source-element',
+        content: {
+          canvasSize: { width: 1200, height: 420 },
+          elements: [
+            {
+              id: 'contract-section-root',
+              type: 'section',
+              x: 0,
+              y: 0,
+              width: 1200,
+              height: 420,
+              zIndex: 1,
+              props: {
+                backgroundColor: '#0f172a',
+              },
+              children: [
+                {
+                  id: 'contract-section-heading',
+                  type: 'heading',
+                  x: 72,
+                  y: 80,
+                  width: 620,
+                  height: 88,
+                  zIndex: 1,
+                  props: {
+                    content: 'Reusable section smoke',
+                    level: 'h2',
+                    fontSize: 42,
+                    color: '#ffffff',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        createdBy: 'contract-smoke',
+      }),
+    });
+    assert(create.response.status === 201, `${create.url} expected 201, got ${create.response.status}`);
+    assert(create.json?.success === true, `${create.url} expected success envelope`);
+    assert(create.json?.data?.section?.slug === `admin-contract-hero-${unique}`, `${create.url} returned wrong section slug`);
+    assert(create.json?.data?.section?.content?.elements?.[0]?.children?.[0]?.id === 'contract-section-heading', `${create.url} did not preserve nested section content`);
+    createdReusableSectionId = create.json.data.section.id;
+
+    const duplicate = await request(`/api/admin/sites/${createdSiteId}/reusable-sections`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Duplicate reusable section',
+        slug: `admin-contract-hero-${unique}`,
+        content: {
+          elements: [{ id: 'duplicate-root', type: 'section', x: 0, y: 0, width: 100, height: 100, zIndex: 1, props: {} }],
+        },
+      }),
+    });
+    assert(duplicate.response.status === 409, `${duplicate.url} expected 409, got ${duplicate.response.status}`);
+    assert(duplicate.json?.error?.code === 'SLUG_CONFLICT', `${duplicate.url} expected SLUG_CONFLICT`);
+
+    const invalid = await request(`/api/admin/sites/${createdSiteId}/reusable-sections`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Invalid reusable section',
+        slug: `invalid-section-${unique}`,
+        content: { elements: [] },
+      }),
+    });
+    assert(invalid.response.status === 400, `${invalid.url} expected 400, got ${invalid.response.status}`);
+    assert(invalid.json?.error?.code === 'VALIDATION_ERROR', `${invalid.url} expected validation error`);
+
+    const list = await request(`/api/admin/sites/${createdSiteId}/reusable-sections?tag=hero&category=layout&search=contract`);
+    assert(list.response.status === 200, `${list.url} expected 200, got ${list.response.status}`);
+    assert(list.json?.data?.sections?.some((section) => section.id === createdReusableSectionId), `${list.url} missing created reusable section`);
+
+    const detail = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}`);
+    assert(detail.response.status === 200, `${detail.url} expected 200, got ${detail.response.status}`);
+    assert(detail.json?.data?.section?.content?.canvasSize?.width === 1200, `${detail.url} did not preserve canvas size`);
+
+    const invalidUpdate = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: { elements: [] },
+      }),
+    });
+    assert(invalidUpdate.response.status === 400, `${invalidUpdate.url} expected 400, got ${invalidUpdate.response.status}`);
+    assert(invalidUpdate.json?.error?.code === 'VALIDATION_ERROR', `${invalidUpdate.url} expected validation error for empty content update`);
+
+    const update = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Updated Contract Hero Section',
+        tags: ['hero', 'updated'],
+        status: 'archived',
+        updatedBy: 'contract-smoke',
+      }),
+    });
+    assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
+    assert(update.json?.data?.section?.name === 'Updated Contract Hero Section', `${update.url} did not update section name`);
+    assert(update.json?.data?.section?.tags?.includes('updated'), `${update.url} did not update section tags`);
+    assert(update.json?.data?.section?.status === 'archived', `${update.url} did not archive section`);
+
+    const activeList = await request(`/api/admin/sites/${createdSiteId}/reusable-sections`);
+    assert(!activeList.json?.data?.sections?.some((section) => section.id === createdReusableSectionId), `${activeList.url} included archived section in active default list`);
+
+    const allList = await request(`/api/admin/sites/${createdSiteId}/reusable-sections?status=all`);
+    assert(allList.json?.data?.sections?.some((section) => section.id === createdReusableSectionId), `${allList.url} missing archived section when status=all`);
+
+    const remove = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}`, { method: 'DELETE' });
+    assert(remove.response.status === 200, `${remove.url} expected 200, got ${remove.response.status}`);
+    assert(remove.json?.data?.deleted === true, `${remove.url} expected deleted true`);
+    createdReusableSectionId = null;
   });
 
   await record('admin blog categories create/list/detail/update works for temporary site', async () => {
