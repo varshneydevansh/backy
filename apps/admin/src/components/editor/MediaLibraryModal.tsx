@@ -40,7 +40,6 @@ export function MediaLibraryModal({
   initialUploadFilter = 'all',
 }: MediaLibraryModalProps) {
   const media = useStore((state) => state.media);
-  const addMedia = useStore((state) => state.addMedia);
   const setMedia = useStore((state) => state.setMedia);
   const [activeTab, setActiveTab] = useState<MediaLibraryTab>('library');
   const [uploadFilter, setUploadFilter] = useState<UploadFilter>('all');
@@ -226,15 +225,16 @@ export function MediaLibraryModal({
     setIsUploading(true);
     setError(null);
 
-    try {
-      const uploaded: MediaAsset[] = [];
+    const uploaded: MediaAsset[] = [];
+    const failed: unknown[] = [];
 
-      for (const file of Array.from(files)) {
-        const resolvedType = getUploadType(file);
+    for (const file of Array.from(files)) {
+      const resolvedType = getUploadType(file);
 
-        if (!shouldKeepFile(file)) continue;
-        if (!allowedTypesSet.has(resolvedType)) continue;
+      if (!shouldKeepFile(file)) continue;
+      if (!allowedTypesSet.has(resolvedType)) continue;
 
+      try {
         const uploadedItem = await uploadMedia(file, {
           siteId,
           scope: targetScope,
@@ -246,69 +246,24 @@ export function MediaLibraryModal({
           tags: resolvedType === 'font' ? ['font'] : undefined,
         });
         uploaded.push(uploadedItem);
+      } catch (uploadError) {
+        failed.push(uploadError);
       }
-
-      if (uploaded.length) {
-        setMedia([...uploaded, ...media.filter((item) => !uploaded.some((next) => next.id === item.id))]);
-      }
-
-      setActiveTab('library');
-    } catch (uploadError) {
-      const fallbackFiles = Array.from(files).filter(shouldKeepFile);
-
-      fallbackFiles.forEach((file) => {
-        const resolvedType = getUploadType(file);
-        if (!allowedTypesSet.has(resolvedType)) return;
-
-        if (resolvedType === 'file' || resolvedType === 'font') {
-          addMedia({
-            name: file.name,
-            type: resolvedType,
-            size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
-            url: '',
-            scope: targetScope,
-            scopeTargetId: targetId || null,
-            visibility: 'public',
-            uploadedBy: 'admin',
-            tags: resolvedType === 'font' ? ['font'] : [],
-            metadata: resolvedType === 'font'
-              ? {
-                  fontFamily: cleanFontFamilyFromFilename(file.name),
-                  fontWeight: '400',
-                  fontStyle: 'normal',
-                }
-              : {},
-            targetPageIds: targetScope === 'page' && targetId ? [targetId] : [],
-            targetPostIds: targetScope === 'post' && targetId ? [targetId] : [],
-          });
-          return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const result = event.target?.result as string;
-
-          addMedia({
-            name: file.name,
-            type: resolvedType,
-            size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
-            url: result,
-            scope: targetScope,
-            scopeTargetId: targetId || null,
-            visibility: 'public',
-            uploadedBy: 'admin',
-            targetPageIds: targetScope === 'page' && targetId ? [targetId] : [],
-            targetPostIds: targetScope === 'post' && targetId ? [targetId] : [],
-          });
-        };
-        reader.readAsDataURL(file);
-      });
-
-      setError(uploadError instanceof Error ? uploadError.message : 'Backend upload failed; kept local fallback copy.');
-      setActiveTab('library');
-    } finally {
-      setIsUploading(false);
     }
+
+    if (uploaded.length) {
+      setMedia([...uploaded, ...media.filter((item) => !uploaded.some((next) => next.id === item.id))]);
+      setActiveTab('library');
+    }
+
+    if (failed.length) {
+      const firstError = failed[0];
+      setError(firstError instanceof Error
+        ? `${firstError.message}. ${failed.length} file${failed.length === 1 ? '' : 's'} were not uploaded.`
+        : `${failed.length} file${failed.length === 1 ? '' : 's'} were not uploaded.`);
+    }
+
+    setIsUploading(false);
   };
 
   if (!isOpen) return null;

@@ -54,7 +54,6 @@ function MediaPage() {
   const files = useStore((state) => state.media);
   const pages = useStore((state) => state.pages);
   const posts = useStore((state) => state.posts);
-  const addMedia = useStore((state) => state.addMedia);
   const setMedia = useStore((state) => state.setMedia);
   const setPages = useStore((state) => state.setPages);
   const setPosts = useStore((state) => state.setPosts);
@@ -162,54 +161,6 @@ function MediaPage() {
     setIsDragging(false);
   };
 
-  const getFallbackType = (file: File): MediaAsset['type'] => {
-    const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
-
-    if (file.type.startsWith('image/')) return 'image';
-    if (file.type.startsWith('video/')) return 'video';
-    if (
-      file.type.includes('font') ||
-      ['woff', 'woff2', 'ttf', 'otf', 'eot'].includes(extension)
-    ) {
-      return 'font';
-    }
-
-    return 'file';
-  };
-
-  const addFallbackMedia = (file: File) => {
-    const mediaType = getFallbackType(file);
-
-    if (mediaType === 'file' || mediaType === 'font') {
-      addMedia({
-        name: file.name,
-        type: mediaType,
-        size: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
-        url: '',
-        scope: 'global',
-        scopeTargetId: null,
-        visibility: 'public',
-      });
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-
-      addMedia({
-        name: file.name,
-        type: mediaType,
-        size: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
-        url: result,
-        scope: 'global',
-        scopeTargetId: null,
-        visibility: 'public',
-      });
-    };
-    reader.readAsDataURL(file);
-  };
-
   const handleFileUpload = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
     const uploadFiles = Array.from(fileList);
@@ -217,18 +168,27 @@ function MediaPage() {
     setIsUploading(true);
     setError(null);
 
-    try {
-      const uploaded = await Promise.all(uploadFiles.map((file) => uploadMedia(file, {
+    const results = await Promise.allSettled(uploadFiles.map((file) => uploadMedia(file, {
         siteId,
         scope: 'global',
         visibility: 'public',
       })));
-      setMedia([...uploaded, ...files.filter((file) => !uploaded.some((item) => item.id === file.id))]);
-    } catch (uploadError) {
-      uploadFiles.forEach(addFallbackMedia);
-      setError(uploadError instanceof Error
-        ? `${uploadError.message}. Files were added locally for this session.`
-        : 'Upload failed. Files were added locally for this session.');
+    const uploaded = results
+      .filter((result): result is PromiseFulfilledResult<MediaAsset> => result.status === 'fulfilled')
+      .map((result) => result.value);
+    const failures = results.filter((result) => result.status === 'rejected');
+
+    try {
+      if (uploaded.length) {
+        setMedia([...uploaded, ...files.filter((file) => !uploaded.some((item) => item.id === file.id))]);
+      }
+
+      if (failures.length) {
+        const firstReason = failures[0]?.reason;
+        setError(firstReason instanceof Error
+          ? `${firstReason.message}. ${failures.length} file${failures.length === 1 ? '' : 's'} were not uploaded.`
+          : `${failures.length} file${failures.length === 1 ? '' : 's'} were not uploaded.`);
+      }
     } finally {
       setIsUploading(false);
     }
