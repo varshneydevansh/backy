@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json",
+  "title": "Backy AI Frontend Manifest",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "success": { "const": true },
+    "requestId": { "type": "string", "minLength": 1 },
+    "data": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "schemaVersion": { "const": "backy.frontend-manifest.v1" },
+        "generatedAt": { "type": "string" },
+        "site": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "slug": { "type": "string", "minLength": 1 },
+            "name": { "type": "string", "minLength": 1 },
+            "status": { "type": "string" },
+            "themeTokens": { "type": "object" }
+          },
+          "required": ["id", "slug", "name", "status", "themeTokens"]
+        },
+        "contract": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "version": { "const": "backy.ai-frontend.v1" },
+            "schemas": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "required": ["manifest", "renderPayload", "themeTokens", "elementActions", "dataBindings", "editableMap"]
+            }
+          },
+          "required": ["version", "schemas"]
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": { "type": "boolean" },
+          "required": [
+            "routeResolve",
+            "renderPayload",
+            "navigation",
+            "mediaLibrary",
+            "forms",
+            "collectionSchemas",
+            "collectionRecords",
+            "dynamicItemRoutes"
+          ]
+        },
+        "endpoints": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "required": ["site", "manifest", "resolve", "render", "navigation", "media", "pages", "blog", "collections", "forms"]
+        },
+        "routePatterns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "type": { "type": "string", "minLength": 1 },
+              "pattern": { "type": "string", "minLength": 1 },
+              "resolveUrl": { "type": "string", "minLength": 1 },
+              "renderUrl": { "type": "string", "minLength": 1 }
+            },
+            "required": ["type", "pattern", "resolveUrl", "renderUrl"]
+          }
+        },
+        "modules": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "pages": {
+              "type": "object",
+              "properties": {
+                "count": { "type": "number", "minimum": 0 },
+                "items": { "type": "array" }
+              },
+              "required": ["count", "items"]
+            },
+            "blog": {
+              "type": "object",
+              "properties": {
+                "count": { "type": "number", "minimum": 0 },
+                "categories": { "type": "array" },
+                "tags": { "type": "array" },
+                "authors": { "type": "array" }
+              },
+              "required": ["count", "categories", "tags", "authors"]
+            },
+            "collections": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "id": { "type": "string", "minLength": 1 },
+                  "slug": { "type": "string", "minLength": 1 },
+                  "name": { "type": "string", "minLength": 1 },
+                  "fields": { "type": "array" },
+                  "recordsUrl": { "type": "string", "minLength": 1 },
+                  "dynamicRoutePattern": { "type": "string", "minLength": 1 }
+                },
+                "required": ["id", "slug", "name", "fields", "recordsUrl", "dynamicRoutePattern"]
+              }
+            },
+            "forms": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "id": { "type": "string", "minLength": 1 },
+                  "title": { "type": "string" },
+                  "active": { "type": "boolean" },
+                  "fields": { "type": "array" },
+                  "submitUrl": { "type": "string", "minLength": 1 }
+                },
+                "required": ["id", "active", "fields", "submitUrl"]
+              }
+            },
+            "media": {
+              "type": "object",
+              "properties": {
+                "count": { "type": "number", "minimum": 0 },
+                "publicCount": { "type": "number", "minimum": 0 },
+                "fontCount": { "type": "number", "minimum": 0 },
+                "types": { "type": "array" },
+                "listUrl": { "type": "string", "minLength": 1 }
+              },
+              "required": ["count", "publicCount", "fontCount", "types", "listUrl"]
+            }
+          },
+          "required": ["pages", "blog", "collections", "forms", "media"]
+        },
+        "navigation": { "type": "object" }
+      },
+      "required": [
+        "schemaVersion",
+        "site",
+        "contract",
+        "capabilities",
+        "endpoints",
+        "routePatterns",
+        "modules",
+        "navigation"
+      ]
+    }
+  },
+  "required": ["success", "requestId", "data"]
+}

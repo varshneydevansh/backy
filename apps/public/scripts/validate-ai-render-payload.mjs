@@ -7,6 +7,7 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const contractDir = resolve(scriptDir, '../../../specs/ai-frontend-contract');
 
 const schemaFiles = [
+  'frontend-manifest.schema.json',
   'theme-tokens.schema.json',
   'element-actions.schema.json',
   'data-bindings.schema.json',
@@ -30,6 +31,7 @@ for (const [filename, schema] of schemas) {
 }
 
 const validate = ajv.getSchema('content-payload.schema.json');
+const validateManifest = ajv.getSchema('frontend-manifest.schema.json');
 
 export function validateAiRenderPayload(payload, label = 'render payload') {
   if (!validate) {
@@ -45,4 +47,20 @@ export function validateAiRenderPayload(payload, label = 'render payload') {
     .map((error) => `${error.instancePath || '/'} ${error.message || 'is invalid'}`)
     .join('; ');
   throw new Error(`${label} does not match AI frontend schema: ${details}`);
+}
+
+export function validateAiFrontendManifest(payload, label = 'frontend manifest') {
+  if (!validateManifest) {
+    throw new Error('Unable to load frontend-manifest.schema.json validator');
+  }
+
+  const isValid = validateManifest(payload);
+  if (isValid) {
+    return;
+  }
+
+  const details = (validateManifest.errors || [])
+    .map((error) => `${error.instancePath || '/'} ${error.message || 'is invalid'}`)
+    .join('; ');
+  throw new Error(`${label} does not match AI frontend manifest schema: ${details}`);
 }

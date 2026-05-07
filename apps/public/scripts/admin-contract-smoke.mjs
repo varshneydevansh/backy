@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { validateAiRenderPayload } from './validate-ai-render-payload.mjs';
+import { validateAiFrontendManifest, validateAiRenderPayload } from './validate-ai-render-payload.mjs';
 
 const baseUrl = (process.env.BACKY_PUBLIC_CONTRACT_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
 
@@ -160,6 +160,10 @@ try {
     const publicDraft = await request(`/api/sites?identifier=${siteSlug}`);
     assert(publicDraft.response.status === 404, `${publicDraft.url} expected draft site to be hidden`);
     assert(publicDraft.json?.success === false, `${publicDraft.url} expected error envelope`);
+
+    const draftManifest = await request(`/api/sites/${createdSiteId}/manifest`);
+    assert(draftManifest.response.status === 404, `${draftManifest.url} expected draft site manifest to be hidden`);
+    assert(draftManifest.json?.success === false, `${draftManifest.url} expected error envelope`);
   });
 
   await record('admin sites duplicate slug is rejected', async () => {
@@ -902,6 +906,16 @@ try {
       assert(listedFormWriteSubmission?.collectionRecord?.collectionId === createdCollectionId, `${listedFormWriteSubmissions.url} missing linked collection id`);
       assert(listedFormWriteSubmission?.collectionRecord?.recordSlug === formWrittenRecordSlug, `${listedFormWriteSubmissions.url} missing linked collection record slug`);
       assert(listedFormWriteSubmission?.collectionRecordErrors?.length === 0, `${listedFormWriteSubmissions.url} expected no linked collection errors`);
+
+      const frontendManifest = await request(`/api/sites/${createdSiteId}/manifest`);
+      assert(frontendManifest.response.status === 200, `${frontendManifest.url} expected 200, got ${frontendManifest.response.status}`);
+      validateAiFrontendManifest(frontendManifest.json, 'site frontend manifest');
+      assert(frontendManifest.json?.data?.capabilities?.renderPayload === true, `${frontendManifest.url} missing render payload capability`);
+      assert(frontendManifest.json?.data?.capabilities?.collectionWriteForms === true, `${frontendManifest.url} missing collection write form capability`);
+      assert(frontendManifest.json?.data?.contract?.schemas?.renderPayload?.includes('content-payload.schema.json'), `${frontendManifest.url} missing render schema reference`);
+      assert(frontendManifest.json?.data?.modules?.collections?.some((collection) => collection.id === createdCollectionId && collection.dynamicRoutePattern === `/${collectionSlug}/:recordSlug`), `${frontendManifest.url} missing collection manifest`);
+      assert(frontendManifest.json?.data?.modules?.forms?.some((form) => form.id === 'contract-form-write' && form.collectionTarget?.collectionId === createdCollectionId), `${frontendManifest.url} missing form collection target manifest`);
+      assert(frontendManifest.json?.data?.routePatterns?.some((route) => route.type === 'dynamicCollectionItem'), `${frontendManifest.url} missing dynamic item route pattern`);
     } finally {
       if (formWritePageId) {
         await request(`/api/admin/sites/${createdSiteId}/pages/${formWritePageId}`, { method: 'DELETE' }).catch(() => {});

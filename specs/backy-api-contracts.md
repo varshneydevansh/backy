@@ -38,6 +38,11 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Response uses `{ success, requestId, data: { site } }`; legacy top-level `site` remains for compatibility.
   - Draft/unpublished sites are hidden from public bootstrap.
 
+- `GET /api/sites/:siteId/manifest`
+  - Site-level frontend discovery/bootstrap document described by `specs/ai-frontend-contract/frontend-manifest.schema.json`.
+  - Returns site identity, theme tokens, schema references, capability flags, public endpoint URLs, route patterns, navigation, module summaries, collection field schemas, form submit URLs, media/font counts, and form-to-collection target metadata.
+  - Draft/unpublished sites are hidden from the public manifest.
+
 - `GET /api/sites/:siteId/pages?path=/about`
 - `GET /api/public/sites/:siteId/pages?path=/about` (optional alias)
   - Path-based page fetch for public rendering.
@@ -317,12 +322,13 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 ## 6) Custom frontend integration checklist
 - Public frontend bootstrap flow:
   1. Resolve site: `GET /api/sites/:identifier`.
-  2. Resolve path on route changes: `GET /api/sites/:siteId/resolve?path=/...`.
-  3. Fetch page, blog post, or collection dynamic item render payloads: `GET /api/sites/:siteId/render?path=/...`.
-  4. If route resolves to a blog post and a custom archive UI is needed, call blog listing/detail APIs.
-  5. If elements bind to structured content, inspect `dataBindings.datasets` from the render payload. Record-bound, slug-bound, searched, filtered, and sorted datasets include resolved public records; fetch additional records through `GET /api/sites/:siteId/collections/:collectionId/records` when the frontend needs more than the payload provided.
-  6. Render from `content` + `theme` + `meta` only; ignore admin-only flags.
-  7. Submit interactive blocks using:
+  2. Fetch `GET /api/sites/:siteId/manifest` once to discover schema refs, capabilities, endpoints, route patterns, collections, forms, media/font support, and navigation.
+  3. Resolve path on route changes: `GET /api/sites/:siteId/resolve?path=/...`.
+  4. Fetch page, blog post, or collection dynamic item render payloads: `GET /api/sites/:siteId/render?path=/...`.
+  5. If route resolves to a blog post and a custom archive UI is needed, call blog listing/detail APIs.
+  6. If elements bind to structured content, inspect `dataBindings.datasets` from the render payload. Record-bound, slug-bound, searched, filtered, and sorted datasets include resolved public records; fetch additional records through `GET /api/sites/:siteId/collections/:collectionId/records` when the frontend needs more than the payload provided.
+  7. Render from `content` + `theme` + `meta` only; ignore admin-only flags.
+  8. Submit interactive blocks using:
      - `POST /api/sites/:siteId/forms/:formId/submissions`
      - `POST /api/sites/:siteId/pages/:pageId/comments`
 - CORS policy for custom frontends:

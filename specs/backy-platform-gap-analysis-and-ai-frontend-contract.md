@@ -76,7 +76,7 @@ Backy has the right direction but lacks the production maturity.
 | Taxonomies | Categories/tags/custom taxonomies | Blog category/tag types exist; admin workflow incomplete | Add category/tag CRUD, assignment UI, public filtering, API contracts |
 | Revisions | Content and template revisions | PageVersion type/schema exists, no complete UI/API loop | Add revision graph, diff, rollback, publish snapshots, audit metadata |
 | Users/RBAC | Users, roles, permissions, authenticated API scopes | Mock auth; limited roles | Add session provider, team/site scoped roles, invite flow, access audits |
-| REST/headless | Stable JSON APIs with auth rules | Public endpoints exist but use seeded store and inconsistent envelopes | Add OpenAPI, SDK examples, CORS, API keys, read/write route separation |
+| REST/headless | Stable JSON APIs with auth rules | Public endpoints exist and `/api/sites/:siteId/manifest` now provides a site-level frontend discovery document with schema refs, capabilities, route patterns, endpoint URLs, module summaries, collections, forms, media/font counts, and navigation. Runtime data still uses the seeded/JSON adapter and some legacy endpoints have inconsistent envelopes. | Add OpenAPI, SDK examples, CORS, API keys, read/write route separation, and DB-backed services |
 | Themes/global styles | Site-wide styles and per-block style supports | Theme types/settings exist; no compiler pipeline | Add theme token compiler, per-block token inheritance, CSS var output |
 
 ## 5. Highest-priority missing platform modules
@@ -99,6 +99,7 @@ Backy has the right direction but lacks the production maturity.
    - Make `backy-public` the stable read/interact surface.
    - Keep admin-only mutations under authenticated admin APIs.
    - Use a consistent envelope and request IDs.
+   - Expose one frontend discovery manifest before route-specific render payloads.
 
 5. Publishing/versioning
    - Draft, publish, unpublish, archive, schedule, preview, revision diff, rollback.

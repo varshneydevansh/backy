@@ -19,7 +19,9 @@ The rule is simple: a custom frontend can look completely different from the Bac
 
 1. Resolve the site.
    - `GET /api/sites?identifier=:identifier`
+   - `GET /api/sites/:siteId/manifest`
    - Future stable form: `GET /api/public/sites/:identifier`
+   - The manifest endpoint is the current WordPress-style discovery surface for generated/custom frontends. It returns the site theme, schema references, capability flags, route patterns, endpoint URLs, navigation, page/blog/collection/form/media module summaries, and public collection/form write metadata in one envelope.
 
 2. Resolve a route.
    - `GET /api/sites/:siteId/resolve?path=/about`
@@ -57,6 +59,14 @@ The first implementation-backed endpoint is:
 It returns the `content-payload.schema.json` shape for pages, blog posts, and collection dynamic item routes from the current public data adapter. This is not yet the final durable database-backed service, but it gives external frontends and AI-generated frontends a stable payload target while Backy replaces seeded/mock persistence.
 
 `npm run test:admin-contract --workspace @backy/public` validates the page, blog post, collection-bound page, and collection dynamic item render responses against `content-payload.schema.json` so contract drift is caught during the public API smoke pass. The same smoke verifies that `/render` exposes the dataset manifest, resolved collection fields/records, normalized element binding, collection-record editable map entry, and uploaded public font asset manifests.
+
+## Current frontend manifest endpoint
+
+Backy exposes a site-level discovery endpoint:
+
+- `GET /api/sites/:siteId/manifest`
+
+It returns `frontend-manifest.schema.json` and gives custom frontends a single bootstrap document for site identity, theme tokens, public endpoint URLs, route patterns, module capabilities, navigation, page/blog/collection/form/media summaries, collection field schemas, form submit URLs, and form-to-collection targets. This mirrors the role of REST discovery in a WordPress-like frontend integration while keeping Backy's render payload as the page/post/item-specific contract.
 
 ## Current font asset contract
 
@@ -192,6 +202,7 @@ This is how Backy can let an AI generate any frontend design while still control
 ## Machine-readable contract files
 
 - `content-payload.schema.json`: public render payload envelope for any custom frontend.
+- `frontend-manifest.schema.json`: site-level discovery/bootstrap document for generated/custom frontends.
 - `theme-tokens.schema.json`: colors, typography, spacing, radii, shadows, motion, and breakpoints.
 - `element-actions.schema.json`: route/link/form/media/custom actions attached to elements.
 - `data-bindings.schema.json`: dataset queries and element field bindings for dynamic pages.
