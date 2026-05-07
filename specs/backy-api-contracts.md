@@ -89,9 +89,11 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/sites/:siteId/collections/:collectionId`
 - `GET /api/sites/:siteId/collections/:collectionId/records?slug=:slug&limit=&offset=`
 - `GET /api/sites/:siteId/collections/:collectionId/records?q=&fieldKey=&fieldValue=&sortBy=&sortDirection=asc|desc&limit=&offset=`
+- `POST /api/sites/:siteId/collections/:collectionId/records`
   - Public CMS collection contract for custom frontends and future dataset bindings.
   - Returns only collections with `status: "published"` and `permissions.publicRead: true`.
   - Returns only published records or scheduled records whose `scheduledAt` has passed.
+  - Public record creation requires a published collection with `permissions.publicCreate: true`, validates `values` or `fields` against the collection schema, rejects slug conflicts, and stores accepted visitor-created records as `draft` for admin moderation.
   - Collection fields support `text`, `richText`, `number`, `boolean`, `date`, `datetime`, `image`, `video`, `file`, `reference`, `multiReference`, `select`, `tags`, `url`, `email`, `phone`, `slug`, and `json`. Public collection schemas expose `options` for `select`/`tags` fields and `referenceCollectionId` for reference fields.
   - Record validation enforces required fields, unique fields, and allowed option values for `select` and `tags` fields before admin create/update/import writes persist.
   - Supports basic record search, field-value filtering, sorting, limit, offset, and pagination metadata in both public and admin record list endpoints. `/render` dataset hydration accepts the same query fields.

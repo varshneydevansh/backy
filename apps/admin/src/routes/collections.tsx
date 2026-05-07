@@ -830,20 +830,36 @@ function CollectionsPage() {
                   <option value="archived">Archived</option>
                 </select>
               </label>
-              <label className="flex items-center gap-2 pt-6 text-sm">
-                <input
-                  type="checkbox"
-                  checked={collectionForm.permissions.publicRead}
-                  onChange={(event) => setCollectionForm((prev) => ({
-                    ...prev,
-                    permissions: {
-                      ...prev.permissions,
-                      publicRead: event.target.checked,
-                    },
-                  }))}
-                />
-                Public read
-              </label>
+              <div className="space-y-2 pt-6 text-sm">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={collectionForm.permissions.publicRead}
+                    onChange={(event) => setCollectionForm((prev) => ({
+                      ...prev,
+                      permissions: {
+                        ...prev.permissions,
+                        publicRead: event.target.checked,
+                      },
+                    }))}
+                  />
+                  Public read
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={collectionForm.permissions.publicCreate}
+                    onChange={(event) => setCollectionForm((prev) => ({
+                      ...prev,
+                      permissions: {
+                        ...prev.permissions,
+                        publicCreate: event.target.checked,
+                      },
+                    }))}
+                  />
+                  Visitor create
+                </label>
+              </div>
               <label className="space-y-1 text-sm lg:col-span-4">
                 <span className="font-medium">Description</span>
                 <textarea
