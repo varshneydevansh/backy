@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { BackyPage, Site } from '@backy-cms/core';
+import type { BackyCollectionRecord, BackyPage, Site } from '@backy-cms/core';
 import { getSiteByIdOrSlug, getSiteNavigation } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRoutePath, resolveSiteRoute } from '@/lib/routeResolver';
@@ -57,6 +57,20 @@ const canonicalPathForRepositoryPage = (page: Pick<BackyPage, 'isHomepage' | 'sl
   return typeof page.meta?.canonical === 'string' && page.meta.canonical.length > 0
     ? page.meta.canonical
     : `/${page.slug}`;
+};
+
+const collectionRecordTitle = (record: BackyCollectionRecord): string => {
+  const title = record.values.title;
+  if (typeof title === 'string' && title.length > 0) {
+    return title;
+  }
+
+  const name = record.values.name;
+  if (typeof name === 'string' && name.length > 0) {
+    return name;
+  }
+
+  return record.slug;
 };
 
 const repositoryNavigation = async (
@@ -159,7 +173,64 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const pagePath = path === '/' ? 'index' : path.slice(1);
       const page = await repositories.pages.getBySlug(site.id, pagePath);
       if (!page || !isPubliclyReadable(page)) {
-        return errorResponse(404, 'ROUTE_NOT_FOUND', 'Route not found', requestId, path);
+        const dynamicItemMatch = path.match(/^\/([^/]+)\/([^/]+)$/);
+        if (!dynamicItemMatch) {
+          return errorResponse(404, 'ROUTE_NOT_FOUND', 'Route not found', requestId, path);
+        }
+
+        const collectionSlug = decodeURIComponent(dynamicItemMatch[1]);
+        const recordSlug = decodeURIComponent(dynamicItemMatch[2]);
+        const collection = await repositories.collections.getBySlug(site.id, collectionSlug);
+        const record = collection
+          ? await repositories.collections.getRecordBySlug(site.id, collection.id, recordSlug)
+          : null;
+
+        if (
+          !collection
+          || !record
+          || collection.status !== 'published'
+          || !collection.permissions.publicRead
+          || !isPubliclyReadable(record)
+        ) {
+          return errorResponse(404, 'ROUTE_NOT_FOUND', 'Route not found', requestId, path);
+        }
+
+        const canonical = `/${collection.slug}/${record.slug}`;
+        return NextResponse.json({
+          success: true,
+          requestId,
+          data: {
+            site: {
+              id: site.id,
+              slug: site.slug,
+              name: site.name,
+              status: siteStatus(site),
+            },
+            route: {
+              type: 'dynamicItem',
+              path,
+              status: record.status,
+              canonical,
+              params: {
+                collectionSlug: collection.slug,
+                recordSlug: record.slug,
+              },
+              resource: {
+                id: record.id,
+                kind: 'dynamicItem',
+                title: collectionRecordTitle(record),
+                slug: record.slug,
+                collectionId: collection.id,
+                collectionSlug: collection.slug,
+                collectionName: collection.name,
+                apiUrl: `/api/sites/${site.id}/collections/${collection.id}/records?slug=${encodeURIComponent(record.slug)}`,
+                renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(canonical)}`,
+                hostedPath: canonical,
+              },
+            },
+            navigation: await repositoryNavigation(repositories, site.id),
+          },
+        });
       }
 
       const canonical = canonicalPathForRepositoryPage(page);

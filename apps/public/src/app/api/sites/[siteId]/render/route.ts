@@ -5,7 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import type { BackyPage, BackyPost, Site } from '@backy-cms/core';
+import type { BackyCollection, BackyCollectionRecord, BackyPage, BackyPost, Site } from '@backy-cms/core';
 import {
   getBlogPosts,
   getCollectionByIdOrSlug,
@@ -14,6 +14,8 @@ import {
   getSiteByIdOrSlug,
   validatePreviewToken,
   type StoreBlogPost,
+  type StoreCollection,
+  type StoreCollectionRecord,
   type StorePage,
   type StoreSite,
 } from '@/lib/backyStore';
@@ -141,6 +143,49 @@ const repositoryPostToStorePost = (post: BackyPost): StoreBlogPost => ({
   scheduledAt: post.scheduledAt,
 });
 
+const repositoryCollectionToStoreCollection = (collection: BackyCollection): StoreCollection => ({
+  id: collection.id,
+  siteId: collection.siteId,
+  name: collection.name,
+  slug: collection.slug,
+  description: collection.description || null,
+  status: collection.status === 'published' || collection.status === 'archived' ? collection.status : 'draft',
+  fields: collection.fields.map((field, index) => ({
+    id: field.id,
+    key: field.key,
+    label: field.label,
+    type: field.type,
+    required: field.required === true,
+    unique: field.unique === true,
+    sortOrder: index,
+    helpText: null,
+    options: field.options,
+    referenceCollectionId: field.referenceCollectionId || null,
+    defaultValue: field.defaultValue,
+  })),
+  permissions: {
+    publicRead: collection.permissions.publicRead,
+    publicCreate: collection.permissions.publicCreate,
+    publicUpdate: collection.permissions.publicUpdate === true,
+    publicDelete: collection.permissions.publicDelete === true,
+  },
+  createdAt: collection.createdAt,
+  updatedAt: collection.updatedAt,
+});
+
+const repositoryRecordToStoreRecord = (record: BackyCollectionRecord): StoreCollectionRecord => ({
+  id: record.id,
+  siteId: record.siteId,
+  collectionId: record.collectionId,
+  slug: record.slug,
+  status: record.status,
+  values: record.values,
+  createdAt: record.createdAt,
+  updatedAt: record.updatedAt,
+  publishedAt: record.publishedAt || null,
+  scheduledAt: record.scheduledAt || null,
+});
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -193,6 +238,40 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             siteId: site.id,
           },
         );
+      }
+
+      const dynamicItemMatch = path.match(/^\/([^/]+)\/([^/]+)$/);
+      if (dynamicItemMatch) {
+        const collectionSlug = decodeURIComponent(dynamicItemMatch[1]);
+        const recordSlug = decodeURIComponent(dynamicItemMatch[2]);
+        const collection = await repositories.collections.getBySlug(site.id, collectionSlug);
+        const record = collection
+          ? await repositories.collections.getRecordBySlug(site.id, collection.id, recordSlug)
+          : null;
+
+        if (
+          collection
+          && record
+          && collection.status === 'published'
+          && collection.permissions.publicRead
+          && isPubliclyReadable(record)
+        ) {
+          return publicContractJson(
+            buildPublicCollectionItemRenderPayload(
+              storeSite,
+              repositoryCollectionToStoreCollection(collection),
+              repositoryRecordToStoreRecord(record),
+              { requestId, path },
+            ),
+            {
+              requestId,
+              request,
+              cache: 'render',
+              schemaVersion: 'backy.content-payload.v1',
+              siteId: site.id,
+            },
+          );
+        }
       }
 
       return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);

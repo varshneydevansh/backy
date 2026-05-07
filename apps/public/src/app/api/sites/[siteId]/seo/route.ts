@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { BackyPage, BackyPost, Site } from '@backy-cms/core';
+import type { BackyCollection, BackyCollectionRecord, BackyPage, BackyPost, Site } from '@backy-cms/core';
 import { getSiteByIdOrSlug } from '@/lib/backyStore';
 import { buildRobotsTxt, buildSeoDiscovery, buildSitemapXml, type SeoDiscovery, type SeoRoute } from '@/lib/seoDiscovery';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -117,6 +117,50 @@ const postSeoRoute = (post: BackyPost): SeoRoute => {
   };
 };
 
+const recordTitle = (record: BackyCollectionRecord): string => {
+  const title = record.values.title || record.values.name || record.values.heading || record.values.slug;
+  return typeof title === 'string' && title.trim().length > 0 ? title : record.slug;
+};
+
+const recordDescription = (record: BackyCollectionRecord): string => {
+  const description = record.values.description || record.values.summary || record.values.excerpt;
+  return typeof description === 'string' ? description : '';
+};
+
+const recordImage = (record: BackyCollectionRecord): string | undefined => {
+  const image = record.values.image || record.values.featuredImage || record.values.thumbnail;
+  return typeof image === 'string' && image.length > 0 ? image : undefined;
+};
+
+const dynamicItemSeoRoute = (collection: BackyCollection, record: BackyCollectionRecord): SeoRoute => {
+  const canonical = `/${collection.slug}/${record.slug}`;
+  const title = recordTitle(record);
+  const description = recordDescription(record);
+
+  return {
+    type: 'dynamicItem',
+    id: record.id,
+    title,
+    description,
+    path: canonical,
+    canonical,
+    status: record.status,
+    updatedAt: record.updatedAt,
+    priority: 0.6,
+    changeFrequency: 'weekly',
+    robots: {
+      index: true,
+      follow: true,
+    },
+    openGraph: {
+      title,
+      description,
+      image: recordImage(record),
+    },
+    keywords: [collection.slug, record.slug],
+  };
+};
+
 const buildRepositorySeoDiscovery = async (
   site: Site,
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
@@ -137,9 +181,35 @@ const buildRepositorySeoDiscovery = async (
       offset: 0,
     }),
   ]);
+  const collections = await repositories.collections.list({
+    siteId: site.id,
+    includeUnpublished: false,
+    status: 'published',
+    limit: 100,
+    offset: 0,
+  });
+  const dynamicItems = await Promise.all(
+    collections.items
+      .filter((collection) => collection.status === 'published' && collection.permissions.publicRead)
+      .map(async (collection) => {
+        const records = await repositories.collections.listRecords({
+          siteId: site.id,
+          collectionId: collection.id,
+          includeUnpublished: false,
+          status: 'published',
+          limit: 1000,
+          offset: 0,
+        });
+
+        return records.items
+          .filter(isPubliclyReadable)
+          .map((record) => dynamicItemSeoRoute(collection, record));
+      }),
+  );
   const routes = [
     ...pages.items.filter(isPubliclyReadable).map(pageSeoRoute),
     ...posts.items.filter(isPubliclyReadable).map(postSeoRoute),
+    ...dynamicItems.flat(),
   ].sort((left, right) => {
     if (left.priority !== right.priority) return right.priority - left.priority;
     return left.canonical.localeCompare(right.canonical);
