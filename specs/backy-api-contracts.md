@@ -135,7 +135,20 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 
 - `GET /api/admin/sites/:siteId/media`
   - filters: `scope`, `visibility`, `search`, `type`, `tag`, `page`, `perPage`
-  - current implementation supports `scope`, `visibility`, `type`, `search`, `tag`, `pageId`, `postId`, `limit`, `offset`
+  - current implementation supports `scope`, `visibility`, `type`, `search`, `tag`, `folderId`, `pageId`, `postId`, `limit`, `offset`
+
+- `GET /api/admin/sites/:siteId/media/folders`
+  - Current implementation lists local runtime media folders.
+
+- `POST /api/admin/sites/:siteId/media/folders`
+  - Body: `{ name, parentId?, sortOrder? }`
+  - Creates a local runtime media folder.
+
+- `PATCH /api/admin/sites/:siteId/media/folders/:folderId`
+  - Updates local runtime folder name, parent, and sort order.
+
+- `DELETE /api/admin/sites/:siteId/media/folders/:folderId`
+  - Deletes a local runtime folder and moves contained media back to root.
 
 - `PATCH /api/admin/sites/:siteId/media/:mediaId`
   - Current implementation updates original name, folder, tags, alt text, caption, scope, scope target, visibility, page/post references, and metadata in the local runtime catalog.

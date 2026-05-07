@@ -7,6 +7,7 @@ import type {
   FormFieldDefinition,
   FormDefinition,
   FormSubmission,
+  MediaFolder,
   MediaItem,
   Contact,
   CommentReportReason,
@@ -631,7 +632,7 @@ const MEDIA_LIBRARY: MediaItem[] = [
     type: 'image',
     url: 'https://images.unsplash.com/photo-1559027615-cd4628902d4a',
     thumbnailUrl: 'https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=280&h=160&fit=crop',
-    folderId: null,
+    folderId: 'folder-demo-pages',
     pageIds: ['page-home'],
     postIds: ['post-welcome'],
     tags: ['hero', 'hero-image'],
@@ -659,7 +660,7 @@ const MEDIA_LIBRARY: MediaItem[] = [
     type: 'image',
     url: 'https://upload.wikimedia.org/wikipedia/commons/a/a7/React-icon.svg',
     thumbnailUrl: 'https://upload.wikimedia.org/wikipedia/commons/a/a7/React-icon.svg',
-    folderId: null,
+    folderId: 'folder-demo-brand',
     pageIds: [],
     postIds: [],
     tags: ['brand', 'icon'],
@@ -687,7 +688,7 @@ const MEDIA_LIBRARY: MediaItem[] = [
     type: 'image',
     url: 'https://images.unsplash.com/photo-1521791136064-7986c2920216',
     thumbnailUrl: 'https://images.unsplash.com/photo-1521791136064-7986c2920216?w=280&h=160&fit=crop',
-    folderId: null,
+    folderId: 'folder-demo-pages',
     pageIds: ['page-contact'],
     postIds: [],
     tags: ['contact', 'background'],
@@ -707,6 +708,25 @@ const MEDIA_LIBRARY: MediaItem[] = [
   },
 ];
 
+const MEDIA_FOLDERS: MediaFolder[] = [
+  {
+    id: 'folder-demo-brand',
+    siteId: 'site-demo',
+    parentId: null,
+    name: 'Brand assets',
+    sortOrder: 10,
+    createdAt: nowIso,
+  },
+  {
+    id: 'folder-demo-pages',
+    siteId: 'site-demo',
+    parentId: null,
+    name: 'Page imagery',
+    sortOrder: 20,
+    createdAt: nowIso,
+  },
+];
+
 const MEDIA_CATALOG_PATH = join(process.cwd(), 'data', 'backy', 'media-library.json');
 const ADMIN_CONTENT_PATH = join(process.cwd(), 'data', 'backy', 'admin-content.json');
 let persistedMediaLoaded = false;
@@ -717,6 +737,11 @@ interface AdminContentSnapshot {
   pages?: StorePage[];
   blogPosts?: StoreBlogPost[];
   revisions?: ContentRevision[];
+}
+
+interface MediaCatalogSnapshot {
+  media?: MediaItem[];
+  folders?: MediaFolder[];
 }
 
 function ensurePersistedMediaLoaded() {
@@ -732,11 +757,21 @@ function ensurePersistedMediaLoaded() {
 
   try {
     const parsed = JSON.parse(readFileSync(MEDIA_CATALOG_PATH, 'utf8')) as unknown;
-    if (!Array.isArray(parsed)) {
+    const parsedMedia = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === 'object' && Array.isArray((parsed as MediaCatalogSnapshot).media)
+        ? (parsed as MediaCatalogSnapshot).media || []
+        : [];
+    const parsedFolders = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      && Array.isArray((parsed as MediaCatalogSnapshot).folders)
+      ? (parsed as MediaCatalogSnapshot).folders || []
+      : [];
+
+    if (parsedMedia.length === 0 && parsedFolders.length === 0) {
       return;
     }
 
-    for (const item of parsed) {
+    for (const item of parsedMedia) {
       if (!item || typeof item !== 'object' || !('id' in item)) {
         continue;
       }
@@ -744,6 +779,17 @@ function ensurePersistedMediaLoaded() {
       const media = item as MediaItem;
       if (!MEDIA_LIBRARY.some((existing) => existing.id === media.id)) {
         MEDIA_LIBRARY.unshift(media);
+      }
+    }
+
+    for (const item of parsedFolders) {
+      if (!item || typeof item !== 'object' || !('id' in item)) {
+        continue;
+      }
+
+      const folder = item as MediaFolder;
+      if (!MEDIA_FOLDERS.some((existing) => existing.id === folder.id)) {
+        MEDIA_FOLDERS.unshift(folder);
       }
     }
   } catch (error) {
@@ -755,7 +801,8 @@ function persistRuntimeMediaCatalog() {
   try {
     mkdirSync(dirname(MEDIA_CATALOG_PATH), { recursive: true });
     const runtimeItems = MEDIA_LIBRARY.filter((item) => item.id.startsWith('media_'));
-    writeFileSync(MEDIA_CATALOG_PATH, JSON.stringify(runtimeItems, null, 2));
+    const runtimeFolders = MEDIA_FOLDERS.filter((item) => item.id.startsWith('folder_'));
+    writeFileSync(MEDIA_CATALOG_PATH, JSON.stringify({ media: runtimeItems, folders: runtimeFolders }, null, 2));
   } catch (error) {
     console.error('Unable to persist media catalog:', error);
   }
@@ -2803,6 +2850,7 @@ export function getMediaList(
     visibility?: string;
     search?: string;
     tag?: string;
+    folderId?: string | null;
     pageId?: string;
     postId?: string;
     limit?: number;
@@ -2811,7 +2859,7 @@ export function getMediaList(
 ): { media: MediaItem[]; pagination: Pagination } {
   ensurePersistedMediaLoaded();
 
-  const { type, scope, visibility, search, tag, pageId, postId, limit = 50, offset = 0 } = params;
+  const { type, scope, visibility, search, tag, folderId, pageId, postId, limit = 50, offset = 0 } = params;
   const normalizedType = typeof type === 'string' ? type.trim().toLowerCase() : undefined;
   const normalizedSearch = typeof search === 'string' ? normalizeIdentifier(search) : '';
   const normalizedTag = typeof tag === 'string' ? normalizeIdentifier(tag) : '';
@@ -2842,6 +2890,10 @@ export function getMediaList(
 
   if (normalizedTag) {
     media = media.filter((item) => item.tags.some((itemTag) => normalizeIdentifier(itemTag) === normalizedTag));
+  }
+
+  if (folderId !== undefined) {
+    media = media.filter((item) => item.folderId === (folderId || null));
   }
 
   if (pageId) {
@@ -2932,6 +2984,85 @@ export function createMediaItem(
   MEDIA_LIBRARY.unshift(item);
   persistRuntimeMediaCatalog();
   return clone(item);
+}
+
+export function listMediaFolders(siteId: string): MediaFolder[] {
+  ensurePersistedMediaLoaded();
+
+  return clone(
+    MEDIA_FOLDERS
+      .filter((folder) => folder.siteId === siteId)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
+  );
+}
+
+export function createMediaFolder(siteId: string, input: Record<string, unknown>): MediaFolder {
+  ensurePersistedMediaLoaded();
+
+  const name = sanitizeString(input.name) || 'Untitled folder';
+  const parentId = sanitizeString(input.parentId) || null;
+  const now = new Date().toISOString();
+  const folder: MediaFolder = {
+    id: sanitizeString(input.id) || createRuntimeId('folder'),
+    siteId,
+    parentId,
+    name,
+    sortOrder: Number(input.sortOrder) || MEDIA_FOLDERS.filter((item) => item.siteId === siteId).length + 1,
+    createdAt: now,
+  };
+
+  MEDIA_FOLDERS.unshift(folder);
+  persistRuntimeMediaCatalog();
+  return clone(folder);
+}
+
+export function updateMediaFolder(
+  siteId: string,
+  folderId: string,
+  input: Record<string, unknown>,
+): MediaFolder | undefined {
+  ensurePersistedMediaLoaded();
+
+  const index = MEDIA_FOLDERS.findIndex((folder) => folder.siteId === siteId && folder.id === folderId);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const current = MEDIA_FOLDERS[index];
+  const updated: MediaFolder = {
+    ...current,
+    name: input.name === undefined ? current.name : sanitizeString(input.name) || current.name,
+    parentId: input.parentId === undefined ? current.parentId : sanitizeString(input.parentId) || null,
+    sortOrder: input.sortOrder === undefined ? current.sortOrder : Number(input.sortOrder) || current.sortOrder,
+  };
+
+  MEDIA_FOLDERS[index] = updated;
+  persistRuntimeMediaCatalog();
+  return clone(updated);
+}
+
+export function deleteMediaFolder(siteId: string, folderId: string): boolean {
+  ensurePersistedMediaLoaded();
+
+  const index = MEDIA_FOLDERS.findIndex((folder) => folder.siteId === siteId && folder.id === folderId);
+  if (index === -1) {
+    return false;
+  }
+
+  MEDIA_FOLDERS.splice(index, 1);
+
+  for (let mediaIndex = 0; mediaIndex < MEDIA_LIBRARY.length; mediaIndex += 1) {
+    if (MEDIA_LIBRARY[mediaIndex].siteId === siteId && MEDIA_LIBRARY[mediaIndex].folderId === folderId) {
+      MEDIA_LIBRARY[mediaIndex] = {
+        ...MEDIA_LIBRARY[mediaIndex],
+        folderId: null,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  }
+
+  persistRuntimeMediaCatalog();
+  return true;
 }
 
 export function updateMediaItem(
