@@ -276,6 +276,10 @@ export function CanvasEditor({
   const [isSaving, setIsSaving] = useState(false);
   const autosaveTimeoutRef = useRef<number | null>(null);
   const changeSequenceRef = useRef(0);
+  const pendingTransformRef = useRef<{
+    elements: CanvasElement[];
+    selectedId: string | null;
+  } | null>(null);
 
   // Undo/Redo State
   const [history, setHistory] = useState<Array<{ elements: CanvasElement[]; selectedId: string | null }>>([
@@ -747,9 +751,37 @@ export function CanvasEditor({
   /**
    * Handle elements change
    */
-  const handleElementsChange = useCallback((newElements: CanvasElement[]) => {
+  const handleElementsChange = useCallback((
+    newElements: CanvasElement[],
+    options?: { transient?: boolean; commit?: boolean; selectedId?: string | null },
+  ) => {
+    if (options?.transient) {
+      pendingTransformRef.current = {
+        elements: newElements,
+        selectedId: options.selectedId ?? selectedId,
+      };
+      setElements(newElements);
+      markChanges();
+      return;
+    }
+
+    if (options?.commit) {
+      const pendingTransform = pendingTransformRef.current;
+      pendingTransformRef.current = null;
+      if (!pendingTransform) {
+        return;
+      }
+
+      const selectedSnapshot = pendingTransform.selectedId;
+      setElements(pendingTransform.elements);
+      addToHistory(pendingTransform.elements, selectedSnapshot);
+      markChanges();
+      return;
+    }
+
+    pendingTransformRef.current = null;
     updateElementsWithHistory(newElements);
-  }, [updateElementsWithHistory]);
+  }, [addToHistory, markChanges, selectedId, updateElementsWithHistory]);
 
   /**
    * Handle element update from property panel
@@ -773,6 +805,27 @@ export function CanvasEditor({
     },
     [selectedId, updateElementsWithHistory]
   );
+
+  const nudgeSelectedElement = useCallback((deltaX: number, deltaY: number) => {
+    if (!selectedId) {
+      return;
+    }
+
+    updateElementsWithHistory((currentElements) => {
+      const selectedElement = findElementById(currentElements, selectedId);
+      if (!selectedElement || selectedElement.locked) {
+        return currentElements;
+      }
+
+      const result = updateElementById(currentElements, selectedId, (element) => ({
+        ...element,
+        x: Math.max(0, Math.min(element.x + deltaX, Math.max(0, size.width - element.width))),
+        y: Math.max(0, Math.min(element.y + deltaY, Math.max(0, size.height - element.height))),
+      }));
+
+      return result.updated ? result.elements : currentElements;
+    }, selectedId);
+  }, [findElementById, selectedId, size.height, size.width, updateElementsWithHistory]);
 
   /**
    * Handle drag start from component library
@@ -955,6 +1008,22 @@ export function CanvasEditor({
         return;
       }
 
+      if (e.key.startsWith('Arrow')) {
+        const step = e.shiftKey ? 10 : 1;
+        const deltaByKey: Record<string, [number, number]> = {
+          ArrowLeft: [-step, 0],
+          ArrowRight: [step, 0],
+          ArrowUp: [0, -step],
+          ArrowDown: [0, step],
+        };
+        const delta = deltaByKey[e.key];
+        if (delta) {
+          e.preventDefault();
+          nudgeSelectedElement(delta[0], delta[1]);
+        }
+        return;
+      }
+
       // Delete / Backspace
       if (e.key === 'Delete' || e.key === 'Backspace') {
         deleteElement();
@@ -1018,6 +1087,7 @@ export function CanvasEditor({
     handleCut,
     handlePaste,
     handleDuplicate,
+    nudgeSelectedElement,
     isPreview,
     isSaving,
   ]);

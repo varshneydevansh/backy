@@ -441,7 +441,10 @@ interface CanvasProps {
   /** Canvas elements to render */
   elements: CanvasElement[];
   /** Callback when elements change */
-  onElementsChange: (elements: CanvasElement[]) => void;
+  onElementsChange: (
+    elements: CanvasElement[],
+    options?: { transient?: boolean; commit?: boolean; selectedId?: string | null },
+  ) => void;
   /** Currently selected element ID */
   selectedId: string | null;
   /** Callback when element is selected */
@@ -455,6 +458,25 @@ interface CanvasProps {
 }
 
 const EDITOR_ACTIVATION_EVENT = 'backy-open-text-editor';
+
+type DragInteraction = {
+  elementId: string;
+  startX: number;
+  startY: number;
+  initialX: number;
+  initialY: number;
+};
+
+type ResizeInteraction = {
+  elementId: string;
+  handle: 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w';
+  startX: number;
+  startY: number;
+  initialX: number;
+  initialY: number;
+  initialWidth: number;
+  initialHeight: number;
+};
 
 // ============================================
 // COMPONENT
@@ -485,6 +507,8 @@ export function Canvas({
   const [isDropActive, setIsDropActive] = useState(false);
   const { clearActiveEditor } = useActiveEditor();
   const elementsRef = useRef(elements);
+  const dragStateRef = useRef<DragInteraction | null>(null);
+  const resizeStateRef = useRef<ResizeInteraction | null>(null);
   const debugTextInteraction = useCallback((..._args: unknown[]) => {
   }, []);
 
@@ -611,25 +635,10 @@ export function Canvas({
   }, [requestEditForElement]);
 
   // Drag state for moving elements
-  const [dragState, setDragState] = useState<{
-    elementId: string;
-    startX: number;
-    startY: number;
-    initialX: number;
-    initialY: number;
-  } | null>(null);
+  const [dragState, setDragState] = useState<DragInteraction | null>(null);
 
   // Resize state for resizing elements
-  const [resizeState, setResizeState] = useState<{
-    elementId: string;
-    handle: 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w';
-    startX: number;
-    startY: number;
-    initialX: number;
-    initialY: number;
-    initialWidth: number;
-    initialHeight: number;
-  } | null>(null);
+  const [resizeState, setResizeState] = useState<ResizeInteraction | null>(null);
 
   // Resize state for canvas itself
   const [canvasResizeState, setCanvasResizeState] = useState<{
@@ -686,13 +695,18 @@ export function Canvas({
       }
       clearActiveEditor();
 
-      setDragState({
+      const nextDragState: DragInteraction = {
         elementId,
         startX: e.clientX,
         startY: e.clientY,
         initialX: clickedElement.x,
         initialY: clickedElement.y,
-      });
+      };
+
+      dragStateRef.current = nextDragState;
+      resizeStateRef.current = null;
+      setDragState(nextDragState);
+      setResizeState(null);
     },
     [clearActiveEditor, elements, editingId, isInteractiveHandle, isTextEditorInteraction, isPreview, onSelect]
   );
@@ -710,7 +724,7 @@ export function Canvas({
       const element = findElementById(elements, elementId);
       if (!element) return;
 
-      setResizeState({
+      const nextResizeState: ResizeInteraction = {
         elementId,
         handle,
         startX: e.clientX,
@@ -719,7 +733,12 @@ export function Canvas({
         initialY: element.y,
         initialWidth: element.width,
         initialHeight: element.height,
-      });
+      };
+
+      resizeStateRef.current = nextResizeState;
+      dragStateRef.current = null;
+      setResizeState(nextResizeState);
+      setDragState(null);
     },
     [elements, isPreview]
   );
@@ -729,72 +748,83 @@ export function Canvas({
       return;
     }
 
-    if (resizeState) {
-      const deltaX = event.clientX - resizeState.startX;
-      const deltaY = event.clientY - resizeState.startY;
+    const activeResizeState = resizeStateRef.current;
+    const activeDragState = dragStateRef.current;
 
-      let newX = resizeState.initialX;
-      let newY = resizeState.initialY;
-      let newWidth = resizeState.initialWidth;
-      let newHeight = resizeState.initialHeight;
+    if (activeResizeState) {
+      const deltaX = event.clientX - activeResizeState.startX;
+      const deltaY = event.clientY - activeResizeState.startY;
 
-      switch (resizeState.handle) {
+      let newX = activeResizeState.initialX;
+      let newY = activeResizeState.initialY;
+      let newWidth = activeResizeState.initialWidth;
+      let newHeight = activeResizeState.initialHeight;
+
+      switch (activeResizeState.handle) {
         case 'se':
-          newWidth = Math.max(50, resizeState.initialWidth + deltaX);
-          newHeight = Math.max(30, resizeState.initialHeight + deltaY);
+          newWidth = Math.max(50, activeResizeState.initialWidth + deltaX);
+          newHeight = Math.max(30, activeResizeState.initialHeight + deltaY);
           break;
         case 'sw':
-          newX = resizeState.initialX + deltaX;
-          newWidth = Math.max(50, resizeState.initialWidth - deltaX);
-          newHeight = Math.max(30, resizeState.initialHeight + deltaY);
+          newX = activeResizeState.initialX + deltaX;
+          newWidth = Math.max(50, activeResizeState.initialWidth - deltaX);
+          newHeight = Math.max(30, activeResizeState.initialHeight + deltaY);
           break;
         case 'ne':
-          newWidth = Math.max(50, resizeState.initialWidth + deltaX);
-          newY = resizeState.initialY + deltaY;
-          newHeight = Math.max(30, resizeState.initialHeight - deltaY);
+          newWidth = Math.max(50, activeResizeState.initialWidth + deltaX);
+          newY = activeResizeState.initialY + deltaY;
+          newHeight = Math.max(30, activeResizeState.initialHeight - deltaY);
           break;
         case 'nw':
-          newX = resizeState.initialX + deltaX;
-          newY = resizeState.initialY + deltaY;
-          newWidth = Math.max(50, resizeState.initialWidth - deltaX);
-          newHeight = Math.max(30, resizeState.initialHeight - deltaY);
+          newX = activeResizeState.initialX + deltaX;
+          newY = activeResizeState.initialY + deltaY;
+          newWidth = Math.max(50, activeResizeState.initialWidth - deltaX);
+          newHeight = Math.max(30, activeResizeState.initialHeight - deltaY);
           break;
       }
 
       onElementsChange(
-        updateElementById(elementsRef.current, resizeState.elementId, (element) => ({
+        updateElementById(elementsRef.current, activeResizeState.elementId, (element) => ({
           ...element,
           x: snapToGrid(clampToCanvas(newX, newWidth, size.width)),
           y: snapToGrid(clampToCanvas(newY, newHeight, size.height)),
           width: snapToGrid(newWidth),
           height: snapToGrid(newHeight),
-        })).elements
+        })).elements,
+        { transient: true, selectedId: activeResizeState.elementId },
       );
       return;
     }
 
-    if (!dragState) {
+    if (!activeDragState) {
       return;
     }
 
-    const deltaX = event.clientX - dragState.startX;
-    const deltaY = event.clientY - dragState.startY;
-    const newX = dragState.initialX + deltaX;
-    const newY = dragState.initialY + deltaY;
+    const deltaX = event.clientX - activeDragState.startX;
+    const deltaY = event.clientY - activeDragState.startY;
+    const newX = activeDragState.initialX + deltaX;
+    const newY = activeDragState.initialY + deltaY;
 
     onElementsChange(
-      updateElementById(elementsRef.current, dragState.elementId, (element) => ({
+      updateElementById(elementsRef.current, activeDragState.elementId, (element) => ({
         ...element,
         x: snapToGrid(clampToCanvas(newX, element.width, size.width)),
         y: snapToGrid(clampToCanvas(newY, element.height, size.height)),
-      })).elements
+      })).elements,
+      { transient: true, selectedId: activeDragState.elementId },
     );
-  }, [dragState, isPreview, onElementsChange, resizeState, size.height, size.width]);
+  }, [isPreview, onElementsChange, size.height, size.width]);
 
   const handleGlobalElementUp = useCallback(() => {
+    const hadActiveTransform = Boolean(dragStateRef.current || resizeStateRef.current);
+    dragStateRef.current = null;
+    resizeStateRef.current = null;
     setDragState(null);
     setResizeState(null);
-  }, []);
+    if (hadActiveTransform) {
+      onElementsChange(elementsRef.current, { commit: true, selectedId });
+    }
+  }, [onElementsChange, selectedId]);
 
   useEffect(() => {
     if (!dragState && !resizeState) {
@@ -944,9 +974,8 @@ export function Canvas({
    * Handle mouse up to end dragging/resizing
    */
   const handleMouseUp = useCallback(() => {
-    setDragState(null);
-    setResizeState(null);
-  }, []);
+    handleGlobalElementUp();
+  }, [handleGlobalElementUp]);
 
   /**
    * Handle canvas click to deselect
@@ -1031,6 +1060,10 @@ export function Canvas({
         minHeight: size.height,
       }}
       onMouseUp={handleMouseUp}
+      onPointerMove={(event) => handleGlobalElementMove(event.nativeEvent)}
+      onPointerUp={handleGlobalElementUp}
+      onPointerCancel={handleGlobalElementUp}
+      onMouseMove={(event) => handleGlobalElementMove(event.nativeEvent)}
       onClick={handleCanvasClick}
       onDoubleClick={handleCanvasDoubleClick}
       onDragOver={(event) => {
