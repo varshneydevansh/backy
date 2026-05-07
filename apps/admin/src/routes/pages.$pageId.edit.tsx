@@ -54,6 +54,7 @@ function PageEditorRoute() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewExpiresAt, setPreviewExpiresAt] = useState<string | null>(null);
   const [revisions, setRevisions] = useState<ContentRevision[]>([]);
+  const [editorResetVersion, setEditorResetVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -291,6 +292,7 @@ function PageEditorRoute() {
       const restoredPage = await rollbackPage(siteId, pageId, revision.id);
       setPage(restoredPage);
       updatePage(pageId, restoredPage);
+      setEditorResetVersion((current) => current + 1);
       setWorkflowNotice('Page revision restored.');
     } catch (error) {
       setSaveWarning(error instanceof Error ? error.message : 'Unable to restore page revision.');
@@ -307,16 +309,20 @@ function PageEditorRoute() {
         </div>
       )}
 
-      <div className="absolute right-4 top-3 z-[70] w-[min(360px,calc(100%-2rem))] rounded-lg border border-border bg-background/95 p-3 text-sm shadow-lg backdrop-blur">
-        <div className="mb-3 flex items-center justify-between gap-3">
+      <details
+        className="absolute top-16 z-[70] w-[min(360px,calc(100%-2rem))] rounded-lg border border-border bg-background/95 p-2 text-sm shadow-lg backdrop-blur"
+        style={{ right: 'calc(clamp(18rem, 24vw, 30rem) + 1rem)' }}
+        data-testid="page-workflow-panel"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-md px-2 py-1.5 [&::-webkit-details-marker]:hidden">
           <div className="flex items-center gap-2 font-medium">
             <History className="h-4 w-4" />
             <span>Workflow</span>
           </div>
           <StatusBadge status={page.status} />
-        </div>
+        </summary>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="mt-2 grid grid-cols-3 gap-2">
           <button
             type="button"
             disabled={isPreviewBusy}
@@ -396,10 +402,10 @@ function PageEditorRoute() {
             ))
           )}
         </div>
-      </div>
+      </details>
 
       <CanvasEditor
-        key={`${page.id}:${page.lastUpdated}`}
+        key={`${page.id}:${editorResetVersion}`}
         mode="page"
         initialElements={initialElements.length ? initialElements : fallbackElements}
         initialSize={initialCanvasSize}

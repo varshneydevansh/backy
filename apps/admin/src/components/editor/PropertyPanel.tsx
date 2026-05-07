@@ -255,6 +255,8 @@ interface PropertyPanelProps {
   /** Callback when element is deleted */
   onDelete?: () => void;
   mediaContext?: MediaContext;
+  embedded?: boolean;
+  hideHeader?: boolean;
 }
 
 // ============================================
@@ -272,6 +274,8 @@ export function PropertyPanel({
   onChange,
   onDelete,
   mediaContext,
+  embedded = false,
+  hideHeader = false,
 }: PropertyPanelProps) {
   const [expandedSections, setExpandedSections] = useState<string[]>([
     'content',
@@ -319,10 +323,15 @@ export function PropertyPanel({
 
   if (!element) {
     return (
-      <div className="w-[clamp(18rem,24vw,30rem)] min-w-[18rem] max-w-[30rem] shrink-0 bg-card border-l border-border flex flex-col h-full min-h-0">
-        <div className="p-4 border-b border-border">
-          <h2 className="font-semibold">Properties</h2>
-        </div>
+      <div className={cn(
+        'bg-card flex h-full min-h-0 flex-col',
+        embedded ? 'w-full' : 'w-[clamp(18rem,24vw,30rem)] min-w-[18rem] max-w-[30rem] shrink-0 border-l border-border',
+      )}>
+        {!hideHeader && (
+          <div className="p-4 border-b border-border">
+            <h2 className="font-semibold">Properties</h2>
+          </div>
+        )}
         <div className="flex-1 flex items-center justify-center text-muted-foreground p-4 text-center">
           <p className="text-sm">Select an element to edit its properties</p>
         </div>
@@ -348,14 +357,19 @@ export function PropertyPanel({
   };
 
   return (
-      <div className="w-[clamp(18rem,24vw,30rem)] min-w-[18rem] max-w-[30rem] shrink-0 bg-card border-l border-border flex flex-col h-full min-h-0" key={element.id}>
+      <div className={cn(
+        'bg-card flex h-full min-h-0 flex-col',
+        embedded ? 'w-full' : 'w-[clamp(18rem,24vw,30rem)] min-w-[18rem] max-w-[30rem] shrink-0 border-l border-border',
+      )} key={element.id}>
       {/* Header */}
-      <div className="p-4 border-b border-border">
-        <h2 className="font-semibold">Properties</h2>
-        <p className="text-sm text-muted-foreground capitalize">
-          {element.type}
-        </p>
-      </div>
+      {!hideHeader && (
+        <div className="p-4 border-b border-border">
+          <h2 className="font-semibold">Properties</h2>
+          <p className="text-sm text-muted-foreground capitalize">
+            {element.type}
+          </p>
+        </div>
+      )}
       <div id={PORTAL_TOOLBAR_CONTAINER_ID} className="px-3 pt-3" />
 
       {/* Properties */}

@@ -633,6 +633,45 @@ const getMoveHandleBox = async (client, elementId) => {
   return result.value || null;
 };
 
+const readInspectorState = async (client) => {
+  const { result } = await client.send('Runtime.evaluate', {
+    expression: `(() => {
+      const inspector = document.querySelector('[data-testid="editor-inspector"]');
+      const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
+      const empty = document.querySelector('[data-testid="editor-inspector-empty"]');
+      const workflow = document.querySelector('[data-testid="page-workflow-panel"]');
+      const inspectorRect = inspector?.getBoundingClientRect();
+      const workflowRect = workflow?.getBoundingClientRect();
+      const overlapsWorkflow = Boolean(inspectorRect && workflowRect && !(
+        workflowRect.right <= inspectorRect.left ||
+        workflowRect.left >= inspectorRect.right ||
+        workflowRect.bottom <= inspectorRect.top ||
+        workflowRect.top >= inspectorRect.bottom
+      ));
+      return {
+        hasInspector: Boolean(inspector),
+        hasSelection: Boolean(selected),
+        hasEmpty: Boolean(empty),
+        selectedText: selected?.textContent || '',
+        overlapsWorkflow,
+      };
+    })()`,
+    returnByValue: true,
+  });
+
+  return result.value || null;
+};
+
+const assertInspectorSelection = async (client, elementId) => {
+  await selectElement(client, elementId);
+  const state = await readInspectorState(client);
+  assert(state?.hasInspector, 'Editor inspector dock was not rendered');
+  assert(state.hasSelection, `Inspector did not show selection for ${elementId}: ${JSON.stringify(state)}`);
+  assert(!state.hasEmpty, `Inspector still showed empty state for ${elementId}: ${JSON.stringify(state)}`);
+  assert(!state.overlapsWorkflow, `Workflow panel overlaps editor inspector: ${JSON.stringify(state)}`);
+  return state;
+};
+
 const dragSelectionHandle = async (client, elementId, deltaX, deltaY) => {
   await selectElement(client, elementId);
   const before = await getElementBox(client, elementId);
@@ -895,13 +934,24 @@ const main = async () => {
             await testUndoRedoAfterDrag(client, 'smoke-heading'),
           ],
         };
+    const inspector = await assertInspectorSelection(client, EDITOR_PATH ? 'home-heading' : 'smoke-heading');
 
     let persistedState = null;
     let reloadedState = null;
+    let postSaveInspector = null;
     if (tempPageId) {
       const elementIds = ['smoke-heading', 'smoke-image', 'smoke-box', 'smoke-child-button', 'smoke-form'];
       const expectedState = await readEditorElementState(client, elementIds);
       await clickSave(client);
+      postSaveInspector = await readInspectorState(client);
+      assert(
+        postSaveInspector?.hasSelection && !postSaveInspector.hasEmpty,
+        `Inspector selection was not preserved after save: ${JSON.stringify(postSaveInspector)}`,
+      );
+      assert(
+        !postSaveInspector.overlapsWorkflow,
+        `Workflow panel overlaps editor inspector after save: ${JSON.stringify(postSaveInspector)}`,
+      );
       persistedState = await waitForPersistedCanvasState(tempPageId, expectedState);
 
       let reloadClient = null;
@@ -960,6 +1010,8 @@ const main = async () => {
       moveHandleDrags,
       resizes,
       keyboard,
+      inspector,
+      postSaveInspector,
       persistedState,
       reloadedState,
       invalidInputWarnings: invalidInputWarnings.length,

@@ -26,6 +26,8 @@ interface LayersPanelProps {
     onLockToggle: (id: string) => void;
     onDelete: (id: string) => void;
     onDuplicate: (id: string) => void;
+    embedded?: boolean;
+    hideHeader?: boolean;
 }
 
 interface LayerItemProps {
@@ -315,6 +317,8 @@ export function LayersPanel({
     onLockToggle,
     onDelete,
     onDuplicate,
+    embedded = false,
+    hideHeader = false,
 }: LayersPanelProps) {
     const [dragFromIndex, setDragFromIndex] = useState<number | null>(null);
 
@@ -389,38 +393,40 @@ export function LayersPanel({
 
     return (
         <div
-            className="layers-panel w-[clamp(18rem,24vw,30rem)] min-w-[18rem] max-w-[30rem] shrink-0"
+            className={embedded ? 'layers-panel w-full' : 'layers-panel w-[clamp(18rem,24vw,30rem)] min-w-[18rem] max-w-[30rem] shrink-0'}
             style={{
                 display: 'flex',
                 flexDirection: 'column',
                 height: '100%',
                 backgroundColor: '#ffffff',
-                borderLeft: '1px solid #e5e7eb',
+                borderLeft: embedded ? '0' : '1px solid #e5e7eb',
             }}
         >
             {/* Header */}
-            <div
-                style={{
-                    padding: '12px 16px',
-                    borderBottom: '1px solid #e5e7eb',
-                    fontWeight: 600,
-                    fontSize: '14px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                }}
-            >
-                <span>Layers</span>
-                <span
+            {!hideHeader && (
+                <div
                     style={{
-                        fontSize: '12px',
-                        color: '#6b7280',
-                        fontWeight: 400,
+                        padding: '12px 16px',
+                        borderBottom: '1px solid #e5e7eb',
+                        fontWeight: 600,
+                        fontSize: '14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
                     }}
                 >
-                    {elements.length} elements
-                </span>
-            </div>
+                    <span>Layers</span>
+                    <span
+                        style={{
+                            fontSize: '12px',
+                            color: '#6b7280',
+                            fontWeight: 400,
+                        }}
+                    >
+                        {elements.length} elements
+                    </span>
+                </div>
+            )}
 
             {/* Layer list */}
             <div

@@ -23,6 +23,7 @@ import {
   Save,
   Eye,
   Layers,
+  SlidersHorizontal,
   Scissors,
   Monitor,
   Tablet,
@@ -785,6 +786,9 @@ export function CanvasEditor({
   // Get selected element
   const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
   const canAlignSelected = !!selectedElement && !selectedElement.locked;
+  const selectedElementLabel = selectedElement
+    ? normalizeElementType(selectedElement.type)
+    : null;
 
   /**
    * Handle element selection
@@ -1670,27 +1674,112 @@ export function CanvasEditor({
             )}
           </div>
 
-          {/* Right Sidebar - Property Panel */}
+          {/* Right Sidebar - Inspector */}
           {!isPreview && (
-            rightPanel === 'layers' ? (
-              <LayersPanel
-                elements={elements}
-                selectedIds={selectedId ? [selectedId] : []}
-                onSelect={handleLayerSelect}
-                onReorder={handleLayerReorder}
-                onVisibilityToggle={handleLayerVisibilityToggle}
-                onLockToggle={handleLayerLockToggle}
-                onDelete={handleLayerDelete}
-                onDuplicate={handleLayerDuplicate}
-              />
-            ) : (
-              <PropertyPanel
-                element={selectedElement}
-                onChange={handleElementUpdate}
-                onDelete={deleteElement}
-                mediaContext={mediaContext}
-              />
-            )
+            <aside
+              className="flex h-full min-h-0 w-[clamp(18rem,24vw,30rem)] min-w-[18rem] max-w-[30rem] shrink-0 flex-col border-l border-slate-200 bg-white"
+              data-testid="editor-inspector"
+            >
+              <div className="border-b border-slate-200 p-3">
+                <div className="grid grid-cols-2 rounded-lg bg-slate-100 p-1 text-sm font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setRightPanel('properties')}
+                    className={cn(
+                      'flex items-center justify-center gap-2 rounded-md px-3 py-1.5 transition-colors',
+                      rightPanel === 'properties'
+                        ? 'bg-white text-slate-950 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-950',
+                    )}
+                    aria-pressed={rightPanel === 'properties'}
+                  >
+                    <SlidersHorizontal className="h-4 w-4" />
+                    Properties
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRightPanel('layers')}
+                    className={cn(
+                      'flex items-center justify-center gap-2 rounded-md px-3 py-1.5 transition-colors',
+                      rightPanel === 'layers'
+                        ? 'bg-white text-slate-950 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-950',
+                    )}
+                    aria-pressed={rightPanel === 'layers'}
+                  >
+                    <Layers className="h-4 w-4" />
+                    Layers
+                  </button>
+                </div>
+
+                <div
+                  className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                  data-testid={selectedElement ? 'editor-inspector-selection' : 'editor-inspector-empty'}
+                >
+                  {selectedElement ? (
+                    <>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold capitalize text-slate-950">
+                            {selectedElementLabel}
+                          </div>
+                          <div className="truncate text-xs text-slate-500">{selectedElement.id}</div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          {selectedElement.locked && (
+                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+                              Locked
+                            </span>
+                          )}
+                          {selectedElement.visible === false && (
+                            <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">
+                              Hidden
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-2 grid grid-cols-4 gap-1 text-[11px] font-medium text-slate-500">
+                        <span className="rounded bg-white px-2 py-1 tabular-nums">X {Math.round(selectedElement.x)}</span>
+                        <span className="rounded bg-white px-2 py-1 tabular-nums">Y {Math.round(selectedElement.y)}</span>
+                        <span className="rounded bg-white px-2 py-1 tabular-nums">W {Math.round(selectedElement.width)}</span>
+                        <span className="rounded bg-white px-2 py-1 tabular-nums">H {Math.round(selectedElement.height)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="font-medium text-slate-700">No selection</span>
+                      <span className="text-xs font-medium text-slate-500">{elements.length} elements</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {rightPanel === 'layers' ? (
+                  <LayersPanel
+                    elements={elements}
+                    selectedIds={selectedId ? [selectedId] : []}
+                    onSelect={handleLayerSelect}
+                    onReorder={handleLayerReorder}
+                    onVisibilityToggle={handleLayerVisibilityToggle}
+                    onLockToggle={handleLayerLockToggle}
+                    onDelete={handleLayerDelete}
+                    onDuplicate={handleLayerDuplicate}
+                    embedded
+                    hideHeader
+                  />
+                ) : (
+                  <PropertyPanel
+                    element={selectedElement}
+                    onChange={handleElementUpdate}
+                    onDelete={deleteElement}
+                    mediaContext={mediaContext}
+                    embedded
+                    hideHeader
+                  />
+                )}
+              </div>
+            </aside>
           )}
         </div>
 
