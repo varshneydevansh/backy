@@ -67,6 +67,27 @@ interface ApiPageResponse {
   };
 }
 
+interface ApiRevision {
+  id: string;
+  siteId: string;
+  targetType: 'page' | 'post';
+  targetId: string;
+  snapshot: ApiPage | ApiBlogPost;
+  note: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+interface ApiRevisionListResponse {
+  success: boolean;
+  data?: {
+    revisions: ApiRevision[];
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiDeleteResponse {
   success: boolean;
   data?: {
@@ -138,6 +159,8 @@ export interface PageUpdateInput {
   description?: string;
   meta?: Record<string, unknown>;
   content?: unknown;
+  revisionNote?: string;
+  updatedBy?: string;
 }
 
 export interface BlogPostInput {
@@ -158,6 +181,18 @@ export interface BlogPostUpdateInput {
   content?: unknown;
   meta?: Record<string, unknown>;
   authorId?: string | null;
+  revisionNote?: string;
+  updatedBy?: string;
+}
+
+export interface ContentRevision {
+  id: string;
+  targetType: 'page' | 'post';
+  note: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  snapshotTitle: string;
+  snapshotStatus: Page['status'] | BlogPost['status'];
 }
 
 const getEnvValue = (key: string): string => {
@@ -189,6 +224,13 @@ const toAdminSiteStatus = (status?: AdminSiteStatus, isPublished?: boolean): Sit
   return 'draft';
 };
 
+const toContentStatus = (status?: AdminSiteStatus, isPublished?: boolean): Page['status'] => {
+  if (status === 'archived') return 'archived';
+  if (status === 'scheduled') return 'scheduled';
+  if (status === 'published' || isPublished) return 'published';
+  return 'draft';
+};
+
 const toStoreSite = (site: ApiSite): Site => ({
   id: site.id,
   name: site.name,
@@ -206,7 +248,7 @@ const toStorePage = (page: ApiPage): Page => ({
   siteId: page.siteId,
   title: page.title,
   slug: page.slug,
-  status: toAdminSiteStatus(page.status, page.status === 'published') === 'published' ? 'published' : 'draft',
+  status: toContentStatus(page.status, page.status === 'published'),
   content: page.content ? JSON.stringify(page.content) : undefined,
   meta: page.meta || {
     title: page.title,
@@ -233,10 +275,23 @@ const toStorePost = (post: ApiBlogPost): BlogPost => ({
   slug: post.slug,
   excerpt: post.excerpt || '',
   content: stringifyContent(post.content),
-  status: toAdminSiteStatus(post.status, post.status === 'published') === 'published' ? 'published' : 'draft',
+  status: toContentStatus(post.status, post.status === 'published'),
   author: post.authorId || 'admin',
   publishedAt: post.publishedAt || post.updatedAt || post.createdAt || new Date().toISOString(),
 });
+
+const toContentRevision = (revision: ApiRevision): ContentRevision => {
+  const snapshot = revision.snapshot;
+  return {
+    id: revision.id,
+    targetType: revision.targetType,
+    note: revision.note,
+    createdBy: revision.createdBy,
+    createdAt: revision.createdAt,
+    snapshotTitle: snapshot.title,
+    snapshotStatus: toContentStatus(snapshot.status, snapshot.status === 'published'),
+  };
+};
 
 const readJson = async <T>(response: Response): Promise<T> => {
   try {
@@ -364,6 +419,60 @@ export async function updatePage(siteId: string, pageId: string, input: PageUpda
   return toStorePage(payload.data.page);
 }
 
+export async function listPageRevisions(siteId: string, pageId: string): Promise<ContentRevision[]> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/revisions?limit=8`);
+  const payload = await readJson<ApiRevisionListResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load page revisions');
+  }
+
+  return payload.data.revisions.map(toContentRevision);
+}
+
+export async function publishPage(siteId: string, pageId: string): Promise<Page> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/publish`, {
+    method: 'POST',
+  });
+  const payload = await readJson<ApiPageResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to publish page');
+  }
+
+  return toStorePage(payload.data.page);
+}
+
+export async function archivePage(siteId: string, pageId: string): Promise<Page> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/archive`, {
+    method: 'POST',
+  });
+  const payload = await readJson<ApiPageResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to archive page');
+  }
+
+  return toStorePage(payload.data.page);
+}
+
+export async function rollbackPage(siteId: string, pageId: string, revisionId: string): Promise<Page> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/rollback`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ revisionId }),
+  });
+  const payload = await readJson<ApiPageResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to restore page revision');
+  }
+
+  return toStorePage(payload.data.page);
+}
+
 export async function deletePage(siteId: string, pageId: string): Promise<void> {
   const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}`, {
     method: 'DELETE',
@@ -430,6 +539,60 @@ export async function updateBlogPost(
 
   if (!response.ok || !payload.success || !payload.data) {
     throw new Error(payload.error?.message || 'Unable to save blog post');
+  }
+
+  return toStorePost(payload.data.post);
+}
+
+export async function listBlogPostRevisions(siteId: string, postId: string): Promise<ContentRevision[]> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/revisions?limit=8`);
+  const payload = await readJson<ApiRevisionListResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load post revisions');
+  }
+
+  return payload.data.revisions.map(toContentRevision);
+}
+
+export async function publishBlogPost(siteId: string, postId: string): Promise<BlogPost> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/publish`, {
+    method: 'POST',
+  });
+  const payload = await readJson<ApiBlogPostResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to publish blog post');
+  }
+
+  return toStorePost(payload.data.post);
+}
+
+export async function archiveBlogPost(siteId: string, postId: string): Promise<BlogPost> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/archive`, {
+    method: 'POST',
+  });
+  const payload = await readJson<ApiBlogPostResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to archive blog post');
+  }
+
+  return toStorePost(payload.data.post);
+}
+
+export async function rollbackBlogPost(siteId: string, postId: string, revisionId: string): Promise<BlogPost> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/rollback`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ revisionId }),
+  });
+  const payload = await readJson<ApiBlogPostResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to restore post revision');
   }
 
   return toStorePost(payload.data.post);

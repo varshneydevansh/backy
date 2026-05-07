@@ -25,12 +25,14 @@ export interface Site {
     lastUpdated: string;
 }
 
+export type ContentStatus = 'published' | 'draft' | 'scheduled' | 'archived';
+
 export interface Page {
     id: string;
     siteId: string;
     title: string;
     slug: string;
-    status: 'published' | 'draft';
+    status: ContentStatus;
     content?: string;
     meta?: Record<string, any>;
     lastUpdated: string;
@@ -42,7 +44,7 @@ export interface BlogPost {
     slug: string;
     excerpt: string;
     content: string;
-    status: 'published' | 'draft';
+    status: ContentStatus;
     author: string;
     publishedAt: string;
 }

@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { X, Search, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { ContentStatus } from '@/stores/mockStore';
 
 export interface PageSettings {
     title: string;
     slug: string;
-    status: 'draft' | 'published';
+    status: ContentStatus;
     meta: {
         title?: string;
         description?: string;
@@ -127,11 +128,13 @@ export function PageSettingsModal({
                                 <label className="block text-sm font-medium mb-1">Status</label>
                                 <select
                                     value={settings.status}
-                                    onChange={(e) => setSettings({ ...settings, status: e.target.value as 'draft' | 'published' })}
+                                    onChange={(e) => setSettings({ ...settings, status: e.target.value as ContentStatus })}
                                     className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
                                 >
                                     <option value="draft">Draft</option>
                                     <option value="published">Published</option>
+                                    <option value="scheduled">Scheduled</option>
+                                    <option value="archived">Archived</option>
                                 </select>
                             </div>
                         </div>

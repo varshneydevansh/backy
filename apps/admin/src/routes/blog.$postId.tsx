@@ -4,16 +4,22 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, Save, FileText, Trash2 } from 'lucide-react';
+import { Archive, ArrowLeft, CheckCircle2, FileText, History, RotateCcw, Save, Trash2 } from 'lucide-react';
 import {
+    archiveBlogPost,
     deleteBlogPost,
     getBlogPost,
+    listBlogPostRevisions,
+    publishBlogPost,
+    rollbackBlogPost,
     updateBlogPost,
+    type ContentRevision,
 } from '@/lib/adminContentApi';
-import { useStore, type BlogPost } from '@/stores/mockStore';
+import { useStore, type BlogPost, type ContentStatus } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
 import { cn } from '@/lib/utils';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { CanvasElement } from '@/types/editor';
 import type { CanvasSize } from '@/types/editor';
 import type { PageSettings } from '@/components/editor/PageSettingsModal';
@@ -40,12 +46,15 @@ function EditBlogPostPage() {
     const [isLoadingPost, setIsLoadingPost] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [saveWarning, setSaveWarning] = useState<string | null>(null);
+    const [workflowNotice, setWorkflowNotice] = useState<string | null>(null);
+    const [isWorkflowBusy, setIsWorkflowBusy] = useState(false);
+    const [revisions, setRevisions] = useState<ContentRevision[]>([]);
 
     // Initialize State from Post
     const [title, setTitle] = useState(post?.title || '');
     const [slug, setSlug] = useState(post?.slug || '');
     const [excerpt, setExcerpt] = useState(post?.excerpt || '');
-    const [status, setStatus] = useState<'draft' | 'published'>((post?.status as 'draft' | 'published') || 'draft');
+    const [status, setStatus] = useState<ContentStatus>(post?.status || 'draft');
 
     useEffect(() => {
         let cancelled = false;
@@ -118,6 +127,38 @@ function EditBlogPostPage() {
     const [canvasElements, setCanvasElements] = useState<CanvasElement[]>(initialElements);
     const [canvasSize, setCanvasSize] = useState<CanvasSize>(savedCanvasSize);
 
+    useEffect(() => {
+      setCanvasElements(initialElements);
+      setCanvasSize(savedCanvasSize);
+    }, [initialElements, savedCanvasSize]);
+
+    useEffect(() => {
+        if (!post) {
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadRevisions = async () => {
+            try {
+                const nextRevisions = await listBlogPostRevisions(activeSiteId, postId);
+                if (!cancelled) {
+                    setRevisions(nextRevisions);
+                }
+            } catch {
+                if (!cancelled) {
+                    setRevisions([]);
+                }
+            }
+        };
+
+        void loadRevisions();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeSiteId, post, postId]);
+
     if (isLoadingPost && !post) {
         return (
             <PageShell title="Loading post" description="Fetching editor content from the backend.">
@@ -170,10 +211,12 @@ function EditBlogPostPage() {
                     title,
                     description: excerpt,
                 },
+                revisionNote: 'Before blog editor save',
+                updatedBy: 'admin',
             });
             setPost(savedPost);
             updatePost(postId, savedPost);
-            navigate({ to: '/blog' });
+            setWorkflowNotice('Post saved and revision snapshot recorded.');
         } catch (error) {
             updatePost(postId, localUpdate);
             setPost((current) => current ? { ...current, ...localUpdate } : current);
@@ -182,6 +225,53 @@ function EditBlogPostPage() {
                 : 'Backend save failed. Changes were kept locally in this browser.');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const syncPostState = (nextPost: BlogPost) => {
+        setPost(nextPost);
+        updatePost(postId, nextPost);
+        setTitle(nextPost.title);
+        setSlug(nextPost.slug);
+        setExcerpt(nextPost.excerpt);
+        setStatus(nextPost.status);
+    };
+
+    const applyWorkflow = async (action: 'publish' | 'archive') => {
+        setIsWorkflowBusy(true);
+        setSaveWarning(null);
+        setWorkflowNotice(null);
+
+        try {
+            const nextPost = action === 'publish'
+                ? await publishBlogPost(activeSiteId, postId)
+                : await archiveBlogPost(activeSiteId, postId);
+            syncPostState(nextPost);
+            setWorkflowNotice(action === 'publish' ? 'Post published.' : 'Post archived.');
+        } catch (error) {
+            setSaveWarning(error instanceof Error ? error.message : `Unable to ${action} post.`);
+        } finally {
+            setIsWorkflowBusy(false);
+        }
+    };
+
+    const restoreRevision = async (revision: ContentRevision) => {
+        if (!confirm(`Restore "${revision.snapshotTitle}" from this revision?`)) {
+            return;
+        }
+
+        setIsWorkflowBusy(true);
+        setSaveWarning(null);
+        setWorkflowNotice(null);
+
+        try {
+            const restoredPost = await rollbackBlogPost(activeSiteId, postId, revision.id);
+            syncPostState(restoredPost);
+            setWorkflowNotice('Post revision restored.');
+        } catch (error) {
+            setSaveWarning(error instanceof Error ? error.message : 'Unable to restore post revision.');
+        } finally {
+            setIsWorkflowBusy(false);
         }
     };
 
@@ -225,7 +315,7 @@ function EditBlogPostPage() {
                     {/* Header Section */}
                     <div className="bg-card border border-border rounded-xl p-8 space-y-6 shadow-sm">
 
-                        <div className="flex justify-between items-start">
+                        <div className="flex justify-between items-start gap-4">
                             <div className="flex-1">
                                 {/* Title Input */}
                                 <input
@@ -236,14 +326,35 @@ function EditBlogPostPage() {
                                     className="w-full text-4xl font-bold bg-transparent border-none placeholder:text-muted-foreground/50 focus:ring-0 px-0"
                                 />
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => void handleDelete()}
-                                className="text-destructive hover:bg-destructive/10 p-2 rounded-lg"
-                                title="Delete Post"
-                            >
-                                <Trash2 className="w-5 h-5" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <StatusBadge status={status} />
+                                <button
+                                    type="button"
+                                    disabled={isWorkflowBusy || status === 'published'}
+                                    onClick={() => void applyWorkflow('publish')}
+                                    className="inline-flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    <CheckCircle2 className="w-4 h-4" />
+                                    Publish
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={isWorkflowBusy || status === 'archived'}
+                                    onClick={() => void applyWorkflow('archive')}
+                                    className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    <Archive className="w-4 h-4" />
+                                    Archive
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => void handleDelete()}
+                                    className="text-destructive hover:bg-destructive/10 p-2 rounded-lg"
+                                    title="Delete Post"
+                                >
+                                    <Trash2 className="w-5 h-5" />
+                                </button>
+                            </div>
                         </div>
 
                         {/* Slug Input */}
@@ -258,6 +369,49 @@ function EditBlogPostPage() {
                             />
                         </div>
                     </div>
+
+                    {(workflowNotice || revisions.length > 0) && (
+                        <div className="bg-card border border-border rounded-xl p-6">
+                            <div className="flex items-center gap-2 mb-4 font-semibold">
+                                <History className="w-4 h-4" />
+                                <span>Revision History</span>
+                            </div>
+                            {workflowNotice && (
+                                <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                                    {workflowNotice}
+                                </div>
+                            )}
+                            {revisions.length === 0 ? (
+                                <div className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+                                    No saved revisions yet.
+                                </div>
+                            ) : (
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    {revisions.slice(0, 6).map((revision) => (
+                                        <div key={revision.id} className="rounded-lg border border-border px-4 py-3">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <div className="truncate font-medium">{revision.note || 'Revision snapshot'}</div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {new Date(revision.createdAt).toLocaleString()} · {revision.snapshotStatus}
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    disabled={isWorkflowBusy}
+                                                    onClick={() => void restoreRevision(revision)}
+                                                    className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                                                    title="Restore revision"
+                                                >
+                                                    <RotateCcw className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Canvas Area (The "Content Place") */}
                     <div className="h-[800px] border border-border rounded-xl overflow-hidden bg-background shadow-sm relative">
@@ -276,6 +430,7 @@ function EditBlogPostPage() {
                             hideSettings={true}
                             hideSave={true}
                             mediaContext={{
+                              siteId: activeSiteId,
                               scope: 'post',
                               targetId: postId,
                               targetLabel: post.title,
@@ -294,11 +449,13 @@ function EditBlogPostPage() {
                                 <label className="block text-sm font-medium mb-2">Status</label>
                                 <select
                                     value={status}
-                                    onChange={(e) => setStatus(e.target.value as any)}
+                                    onChange={(e) => setStatus(e.target.value as ContentStatus)}
                                     className="w-full px-4 py-2.5 rounded-lg border bg-background"
                                 >
                                     <option value="draft">Draft</option>
                                     <option value="published">Published</option>
+                                    <option value="scheduled">Scheduled</option>
+                                    <option value="archived">Archived</option>
                                 </select>
                             </div>
                             <div>

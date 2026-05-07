@@ -8,12 +8,22 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { Archive, CheckCircle2, History, RotateCcw } from 'lucide-react';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
 import { PageSettings } from '@/components/editor/PageSettingsModal';
-import { getPage, updatePage as updatePageFromApi } from '@/lib/adminContentApi';
+import {
+  archivePage,
+  getPage,
+  listPageRevisions,
+  publishPage,
+  rollbackPage,
+  updatePage as updatePageFromApi,
+  type ContentRevision,
+} from '@/lib/adminContentApi';
 import { useStore, type Page } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import {
   createCanvasElement,
   normalizeSavedCanvasContent,
@@ -37,6 +47,9 @@ function PageEditorRoute() {
   const [isLoadingPage, setIsLoadingPage] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
+  const [workflowNotice, setWorkflowNotice] = useState<string | null>(null);
+  const [isWorkflowBusy, setIsWorkflowBusy] = useState(false);
+  const [revisions, setRevisions] = useState<ContentRevision[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +90,33 @@ function PageEditorRoute() {
       cancelled = true;
     };
   }, [fallbackSiteId, pageId, storePageId, storePageSiteId, updatePage]);
+
+  useEffect(() => {
+    if (!page) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadRevisions = async () => {
+      try {
+        const nextRevisions = await listPageRevisions(siteId, pageId);
+        if (!cancelled) {
+          setRevisions(nextRevisions);
+        }
+      } catch {
+        if (!cancelled) {
+          setRevisions([]);
+        }
+      }
+    };
+
+    void loadRevisions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [page, pageId, siteId]);
 
   const parseSerializedContent = (serialized: string): unknown => {
     try {
@@ -175,10 +215,13 @@ function PageEditorRoute() {
         status: settings.status,
         meta: settings.meta,
         content: parseSerializedContent(content),
+        revisionNote: 'Before page editor save',
+        updatedBy: 'admin',
       });
       setPage(savedPage);
       updatePage(pageId, savedPage);
       setSaveWarning(null);
+      setWorkflowNotice('Page saved and revision snapshot recorded.');
     } catch (error) {
       updatePage(pageId, localUpdate);
       setPage((current) => current ? { ...current, ...localUpdate } : current);
@@ -192,6 +235,46 @@ function PageEditorRoute() {
     navigate({ to: '/pages' });
   };
 
+  const applyWorkflow = async (action: 'publish' | 'archive') => {
+    setIsWorkflowBusy(true);
+    setSaveWarning(null);
+    setWorkflowNotice(null);
+
+    try {
+      const nextPage = action === 'publish'
+        ? await publishPage(siteId, pageId)
+        : await archivePage(siteId, pageId);
+      setPage(nextPage);
+      updatePage(pageId, nextPage);
+      setWorkflowNotice(action === 'publish' ? 'Page published.' : 'Page archived.');
+    } catch (error) {
+      setSaveWarning(error instanceof Error ? error.message : `Unable to ${action} page.`);
+    } finally {
+      setIsWorkflowBusy(false);
+    }
+  };
+
+  const restoreRevision = async (revision: ContentRevision) => {
+    if (!confirm(`Restore "${revision.snapshotTitle}" from this revision?`)) {
+      return;
+    }
+
+    setIsWorkflowBusy(true);
+    setSaveWarning(null);
+    setWorkflowNotice(null);
+
+    try {
+      const restoredPage = await rollbackPage(siteId, pageId, revision.id);
+      setPage(restoredPage);
+      updatePage(pageId, restoredPage);
+      setWorkflowNotice('Page revision restored.');
+    } catch (error) {
+      setSaveWarning(error instanceof Error ? error.message : 'Unable to restore page revision.');
+    } finally {
+      setIsWorkflowBusy(false);
+    }
+  };
+
   return (
     <div className="relative min-h-screen">
       {(loadError || saveWarning) && (
@@ -199,6 +282,74 @@ function PageEditorRoute() {
           {saveWarning || `${loadError} Using the local page copy.`}
         </div>
       )}
+
+      <div className="absolute right-4 top-3 z-[70] w-[min(360px,calc(100%-2rem))] rounded-lg border border-border bg-background/95 p-3 text-sm shadow-lg backdrop-blur">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 font-medium">
+            <History className="h-4 w-4" />
+            <span>Workflow</span>
+          </div>
+          <StatusBadge status={page.status} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={isWorkflowBusy || page.status === 'published'}
+            onClick={() => void applyWorkflow('publish')}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-green-800 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            Publish
+          </button>
+          <button
+            type="button"
+            disabled={isWorkflowBusy || page.status === 'archived'}
+            onClick={() => void applyWorkflow('archive')}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Archive className="h-4 w-4" />
+            Archive
+          </button>
+        </div>
+
+        {workflowNotice && (
+          <div className="mt-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800">
+            {workflowNotice}
+          </div>
+        )}
+
+        <div className="mt-3 space-y-2">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Recent revisions</div>
+          {revisions.length === 0 ? (
+            <div className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+              No saved revisions yet.
+            </div>
+          ) : (
+            revisions.slice(0, 4).map((revision) => (
+              <div key={revision.id} className="rounded-md border border-border px-3 py-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{revision.note || 'Revision snapshot'}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(revision.createdAt).toLocaleString()} · {revision.snapshotStatus}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isWorkflowBusy}
+                    onClick={() => void restoreRevision(revision)}
+                    className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                    title="Restore revision"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
 
       <CanvasEditor
         key={`${page.id}:${page.lastUpdated}`}
