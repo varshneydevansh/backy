@@ -197,6 +197,9 @@ try {
     const hiddenScheduledPage = await request(`/api/sites/${createdSiteId}/pages?slug=${pageSlug}`);
     assert(hiddenScheduledPage.response.status === 404, `${hiddenScheduledPage.url} expected future scheduled page to be hidden`);
 
+    const hiddenScheduledPageResolve = await request(`/api/sites/${createdSiteId}/resolve?path=/${pageSlug}`);
+    assert(hiddenScheduledPageResolve.response.status === 404, `${hiddenScheduledPageResolve.url} expected future scheduled page route to be hidden`);
+
     const pastPageSchedule = new Date(Date.now() - 60 * 1000).toISOString();
     const pastScheduledPage = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, {
       method: 'PATCH',
@@ -211,6 +214,11 @@ try {
     const visibleScheduledPage = await request(`/api/sites/${createdSiteId}/pages?slug=${pageSlug}`);
     assert(visibleScheduledPage.response.status === 200, `${visibleScheduledPage.url} expected past scheduled page to be visible`);
     assert(visibleScheduledPage.json?.page?.id === createdPageId, `${visibleScheduledPage.url} returned wrong scheduled page`);
+
+    const visibleScheduledPageResolve = await request(`/api/sites/${createdSiteId}/resolve?path=/${pageSlug}`);
+    assert(visibleScheduledPageResolve.response.status === 200, `${visibleScheduledPageResolve.url} expected past scheduled page route to be visible`);
+    assert(visibleScheduledPageResolve.json?.data?.route?.type === 'page', `${visibleScheduledPageResolve.url} expected page route type`);
+    assert(visibleScheduledPageResolve.json?.data?.route?.resource?.id === createdPageId, `${visibleScheduledPageResolve.url} returned wrong resolved page`);
 
     const update = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, {
       method: 'PATCH',
@@ -237,6 +245,12 @@ try {
       renderPayload.json?.data?.navigation?.primary?.some((item) => item.pageId === createdPageId && item.path === `/${pageSlug}`),
       `${renderPayload.url} missing render navigation manifest`,
     );
+
+    const resolvedPage = await request(`/api/sites/${createdSiteId}/resolve?path=/${pageSlug}`);
+    assert(resolvedPage.response.status === 200, `${resolvedPage.url} expected 200, got ${resolvedPage.response.status}`);
+    assert(resolvedPage.json?.success === true, `${resolvedPage.url} expected success envelope`);
+    assert(resolvedPage.json?.data?.route?.type === 'page', `${resolvedPage.url} expected page route`);
+    assert(resolvedPage.json?.data?.route?.resource?.id === createdPageId, `${resolvedPage.url} returned wrong resolved page`);
 
     const remove = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, { method: 'DELETE' });
     assert(remove.response.status === 200, `${remove.url} expected 200, got ${remove.response.status}`);
@@ -409,6 +423,9 @@ try {
     const hiddenScheduledPost = await request(`/api/sites/${createdSiteId}/blog?slug=${postSlug}`);
     assert(hiddenScheduledPost.response.status === 404, `${hiddenScheduledPost.url} expected future scheduled post to be hidden`);
 
+    const hiddenScheduledPostResolve = await request(`/api/sites/${createdSiteId}/resolve?path=/blog/${postSlug}`);
+    assert(hiddenScheduledPostResolve.response.status === 404, `${hiddenScheduledPostResolve.url} expected future scheduled post route to be hidden`);
+
     const pastPostSchedule = new Date(Date.now() - 60 * 1000).toISOString();
     const pastScheduledPost = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, {
       method: 'PATCH',
@@ -424,6 +441,11 @@ try {
     assert(visibleScheduledPost.response.status === 200, `${visibleScheduledPost.url} expected past scheduled post to be visible`);
     assert(visibleScheduledPost.json?.post?.id === createdPostId, `${visibleScheduledPost.url} returned wrong scheduled post`);
 
+    const visibleScheduledPostResolve = await request(`/api/sites/${createdSiteId}/resolve?path=/blog/${postSlug}`);
+    assert(visibleScheduledPostResolve.response.status === 200, `${visibleScheduledPostResolve.url} expected past scheduled post route to be visible`);
+    assert(visibleScheduledPostResolve.json?.data?.route?.type === 'post', `${visibleScheduledPostResolve.url} expected post route type`);
+    assert(visibleScheduledPostResolve.json?.data?.route?.resource?.id === createdPostId, `${visibleScheduledPostResolve.url} returned wrong resolved post`);
+
     const update = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, {
       method: 'PATCH',
       headers: {
@@ -434,6 +456,12 @@ try {
     assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
     assert(update.json?.data?.post?.title === 'Updated Admin Contract Post', `${update.url} expected updated title`);
     assert(update.json?.data?.post?.status === 'published', `${update.url} expected published status`);
+
+    const resolvedPost = await request(`/api/sites/${createdSiteId}/resolve?path=/blog/${postSlug}`);
+    assert(resolvedPost.response.status === 200, `${resolvedPost.url} expected 200, got ${resolvedPost.response.status}`);
+    assert(resolvedPost.json?.success === true, `${resolvedPost.url} expected success envelope`);
+    assert(resolvedPost.json?.data?.route?.type === 'post', `${resolvedPost.url} expected post route`);
+    assert(resolvedPost.json?.data?.route?.resource?.id === createdPostId, `${resolvedPost.url} returned wrong resolved post`);
 
     const publicCategories = await request(`/api/sites/${createdSiteId}/blog/categories`);
     assert(publicCategories.response.status === 200, `${publicCategories.url} expected 200, got ${publicCategories.response.status}`);

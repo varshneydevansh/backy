@@ -48,6 +48,15 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Current implementation is backed by the public seed adapter; production implementation must use the durable service layer.
   - Draft render access requires `previewToken` created by the admin preview endpoint for that exact page.
 
+- `GET /api/sites/:siteId/resolve?path=/about`
+- `GET /api/public/sites/:siteId/resolve?path=/about` (future stable alias)
+  - Resolves a public path to a page or blog post without requiring the frontend to know Backy's route internals.
+  - Returns `{ success, requestId, data: { site, route, navigation } }` when resolved.
+  - Page routes include `resource.kind: "page"` plus page API and render URLs.
+  - Blog post routes under `/blog/:slug` include `resource.kind: "post"` plus post API and hosted path.
+  - Draft and future scheduled content stays hidden unless the exact preview token is supplied.
+  - Unresolved paths return `404` with `ROUTE_NOT_FOUND`.
+
 - `GET /api/sites/:siteId/blog/posts?status=published&limit=&cursor=`
 - `GET /api/public/sites/:siteId/blog/posts?status=published&limit=&cursor=` (optional alias)
   - Published posts list with canonical URLs.
@@ -278,10 +287,11 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 ## 6) Custom frontend integration checklist
 - Public frontend bootstrap flow:
   1. Resolve site: `GET /api/sites/:identifier`.
-  2. Fetch page on route changes: `GET /api/sites/:siteId/pages?path=/...`.
-  3. If route matches blog path, call blog listing/detail APIs.
-  4. Render from `content` + `theme` + `meta` only; ignore admin-only flags.
-  5. Submit interactive blocks using:
+  2. Resolve path on route changes: `GET /api/sites/:siteId/resolve?path=/...`.
+  3. Fetch page render payloads: `GET /api/sites/:siteId/render?path=/...`.
+  4. If route resolves to a blog post, call blog listing/detail APIs.
+  5. Render from `content` + `theme` + `meta` only; ignore admin-only flags.
+  6. Submit interactive blocks using:
      - `POST /api/sites/:siteId/forms/:formId/submissions`
      - `POST /api/sites/:siteId/pages/:pageId/comments`
 - CORS policy for custom frontends:

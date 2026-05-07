@@ -22,6 +22,7 @@ The rule is simple: a custom frontend can look completely different from the Bac
    - Future stable form: `GET /api/public/sites/:identifier`
 
 2. Resolve a route.
+   - `GET /api/sites/:siteId/resolve?path=/about`
    - `GET /api/sites/:siteId/pages?slug=:path`
    - `GET /api/sites/:siteId/render?path=/about`
    - Future stable form: `GET /api/public/sites/:siteId/resolve?path=/about`
