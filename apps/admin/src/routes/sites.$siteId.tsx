@@ -923,7 +923,32 @@ function EditSitePage() {
   const readinessFindings = readiness?.checks
     .filter((check) => check.status !== 'pass')
     .slice(0, 5) || [];
-  const readinessPages = readiness?.pages || [];
+  const readinessContentItems = [
+    ...(readiness?.pages.map((page) => ({
+      id: page.id,
+      type: 'Page',
+      title: page.title,
+      path: page.path,
+      status: page.status,
+      contentMetric: `${page.canvasSize.width}x${page.canvasSize.height}`,
+      score: page.score,
+      statusLabel: page.statusLabel,
+    })) || []),
+    ...(readiness?.posts.map((post) => ({
+      id: post.id,
+      type: 'Post',
+      title: post.title,
+      path: post.path,
+      status: post.status,
+      contentMetric: post.canvasSize
+        ? `${post.canvasSize.width}x${post.canvasSize.height}`
+        : post.hasLegacyContent
+          ? 'Legacy'
+          : 'Empty',
+      score: post.score,
+      statusLabel: post.statusLabel,
+    })) || []),
+  ];
   const readinessSummary = readiness?.summary;
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -1057,7 +1082,7 @@ function EditSitePage() {
             </div>
           ) : (
             <>
-              <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-8">
+              <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-9">
                 <div className="rounded-lg border border-border bg-background px-3 py-2">
                   <div className="text-xs font-medium text-muted-foreground">Score</div>
                   <div className="mt-1 text-2xl font-semibold tabular-nums">
@@ -1080,6 +1105,12 @@ function EditSitePage() {
                   <div className="text-xs font-medium text-muted-foreground">Pages</div>
                   <div className="mt-1 text-2xl font-semibold tabular-nums">
                     {readinessSummary?.pages ?? '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-background px-3 py-2">
+                  <div className="text-xs font-medium text-muted-foreground">Posts</div>
+                  <div className="mt-1 text-2xl font-semibold tabular-nums">
+                    {readinessSummary?.posts ?? '—'}
                   </div>
                 </div>
                 <div className="rounded-lg border border-border bg-background px-3 py-2">
@@ -1137,42 +1168,46 @@ function EditSitePage() {
                 </div>
               ) : null}
 
-              {readinessPages.length > 0 && (
-                <div className="mt-5 overflow-hidden rounded-lg border border-border">
-                  <div className="grid grid-cols-[minmax(0,1fr)_120px_110px_90px] gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
-                    <span>Page</span>
-                    <span>Status</span>
-                    <span>Canvas</span>
-                    <span>Score</span>
-                  </div>
-                  <div className="divide-y divide-border">
-                    {readinessPages.slice(0, 8).map((page) => (
-                      <div
-                        key={page.id}
-                        className="grid grid-cols-[minmax(0,1fr)_120px_110px_90px] items-center gap-3 px-3 py-2 text-sm"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">{page.title}</div>
-                          <div className="truncate text-xs text-muted-foreground">{page.path}</div>
-                        </div>
-                        <StatusBadge status={page.status} />
-                        <span className="text-xs tabular-nums text-muted-foreground">
-                          {page.canvasSize.width}x{page.canvasSize.height}
-                        </span>
-                        <span
-                          className={cn(
-                            'rounded-md px-2 py-1 text-xs font-semibold tabular-nums',
-                            page.statusLabel === 'ready'
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : page.statusLabel === 'blocked'
-                                ? 'bg-red-100 text-red-700'
-                                : 'bg-amber-100 text-amber-700',
-                          )}
+              {readinessContentItems.length > 0 && (
+                <div className="mt-5 overflow-x-auto rounded-lg border border-border">
+                  <div className="min-w-[760px]">
+                    <div className="grid grid-cols-[minmax(0,1fr)_80px_120px_110px_90px] gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
+                      <span>Content</span>
+                      <span>Type</span>
+                      <span>Status</span>
+                      <span>Canvas</span>
+                      <span>Score</span>
+                    </div>
+                    <div className="divide-y divide-border">
+                      {readinessContentItems.slice(0, 10).map((item) => (
+                        <div
+                          key={`${item.type}:${item.id}`}
+                          className="grid grid-cols-[minmax(0,1fr)_80px_120px_110px_90px] items-center gap-3 px-3 py-2 text-sm"
                         >
-                          {page.score}%
-                        </span>
-                      </div>
-                    ))}
+                          <div className="min-w-0">
+                            <div className="truncate font-medium">{item.title}</div>
+                            <div className="truncate text-xs text-muted-foreground">{item.path}</div>
+                          </div>
+                          <span className="text-xs font-medium text-muted-foreground">{item.type}</span>
+                          <StatusBadge status={item.status} />
+                          <span className="text-xs tabular-nums text-muted-foreground">
+                            {item.contentMetric}
+                          </span>
+                          <span
+                            className={cn(
+                              'rounded-md px-2 py-1 text-xs font-semibold tabular-nums',
+                              item.statusLabel === 'ready'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : item.statusLabel === 'blocked'
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-amber-100 text-amber-700',
+                            )}
+                          >
+                            {item.score}%
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
