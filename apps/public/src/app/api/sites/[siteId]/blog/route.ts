@@ -8,7 +8,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import type { BackyPost } from '@backy-cms/core';
 import { getBlogPosts, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
     params: Promise<{
@@ -33,6 +35,42 @@ const errorResponse = (status: number, code: string, message: string, requestId:
     )
 );
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const parseBoundedInteger = (value: string | null, fallback: number, min: number, max: number) => {
+    const parsed = Number.parseInt(value || '', 10);
+    if (!Number.isFinite(parsed)) {
+        return fallback;
+    }
+    return Math.max(min, Math.min(max, parsed));
+};
+
+const parseStatusFilter = (value: string | null): 'published' | 'draft' | 'scheduled' | 'archived' | undefined => (
+    value === 'published' || value === 'draft' || value === 'scheduled' || value === 'archived' ? value : undefined
+);
+
+const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null }) => (
+    item.status === 'published' && (!item.scheduledAt || new Date(item.scheduledAt).getTime() <= Date.now())
+);
+
+const publicPostFromRepositoryPost = (post: BackyPost) => {
+    const canvasSize = isRecord(post.content.metadata?.canvasSize)
+        ? post.content.metadata.canvasSize
+        : { width: 1200, height: 900 };
+
+    return {
+        ...post,
+        content: {
+            elements: post.content.elements,
+            canvasSize,
+            customCSS: typeof post.content.metadata?.customCSS === 'string' ? post.content.metadata.customCSS : undefined,
+            contentDocument: post.content,
+        },
+    };
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
     const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -41,14 +79,62 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const { searchParams } = new URL(request.url);
         const slug = searchParams.get('slug');
         const previewToken = searchParams.get('previewToken');
-        const limit = parseInt(searchParams.get('limit') || '10');
-        const offset = parseInt(searchParams.get('offset') || '0');
-        const status = searchParams.get('status') as
-            | 'published'
-            | 'draft'
-            | 'scheduled'
-            | 'archived'
-            | null;
+        const limit = parseBoundedInteger(searchParams.get('limit'), 10, 1, 100);
+        const offset = parseBoundedInteger(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
+        const status = parseStatusFilter(searchParams.get('status'));
+
+        if (!shouldUseDemoStoreFallback()) {
+            const repositories = await getRequiredDatabaseRepositories();
+            const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+            if (!site) {
+                return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+            }
+
+            if (slug) {
+                const post = await repositories.posts.getBySlug(site.id, slug);
+
+                if (!post || !isPubliclyReadable(post)) {
+                    return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+                }
+
+                const responsePost = publicPostFromRepositoryPost(post);
+                return NextResponse.json({
+                    success: true,
+                    requestId,
+                    data: {
+                        post: responsePost,
+                    },
+                    post: responsePost,
+                });
+            }
+
+            const result = await repositories.posts.list({
+                siteId: site.id,
+                includeUnpublished: false,
+                status: status === 'published' ? 'published' : 'published',
+                categoryId: searchParams.get('categoryId') || undefined,
+                tagId: searchParams.get('tagId') || undefined,
+                authorId: searchParams.get('authorId') || undefined,
+                limit,
+                offset,
+            });
+            const posts = result.items.filter(isPubliclyReadable).map(publicPostFromRepositoryPost);
+            const data = {
+                posts,
+                pagination: {
+                    ...result.pagination,
+                    total: posts.length,
+                },
+            };
+
+            return NextResponse.json({
+                success: true,
+                requestId,
+                data,
+                ...data,
+            });
+        }
 
         const site = getSiteByIdOrSlug(siteId);
         if (!site) {
