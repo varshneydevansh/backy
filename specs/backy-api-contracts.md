@@ -52,6 +52,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/sites/:siteId/pages?path=/about`
 - `GET /api/public/sites/:siteId/pages?path=/about` (optional alias)
   - Path-based page fetch for public rendering.
+  - Response uses `{ success, requestId, data: { page } }` for detail and `{ success, requestId, data: { pages, pagination } }` for list; legacy top-level `page`, `pages`, and `pagination` remain for compatibility.
   - Must return only published content.
   - Draft access requires `previewToken` created by the admin preview endpoint for that exact page.
 
@@ -79,11 +80,19 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/sites/:siteId/blog/posts?status=published&limit=&cursor=`
 - `GET /api/public/sites/:siteId/blog/posts?status=published&limit=&cursor=` (optional alias)
   - Published posts list with canonical URLs.
+  - Current repository route is `GET /api/sites/:siteId/blog`; response uses `{ success, requestId, data: { posts, pagination } }` while preserving legacy top-level `posts/pagination`.
 
 - `GET /api/sites/:siteId/blog/posts/:slug`
 - `GET /api/public/sites/:siteId/blog/posts/:slug` (optional alias)
   - Published post detail by slug.
+  - Current repository route is `GET /api/sites/:siteId/blog?slug=:slug`; response uses `{ success, requestId, data: { post } }` while preserving legacy top-level `post`.
   - Draft post detail access requires `previewToken` created by the admin preview endpoint for that exact post.
+
+- `GET /api/sites/:siteId/blog/categories`
+- `GET /api/sites/:siteId/blog/tags`
+- `GET /api/sites/:siteId/blog/authors`
+  - Public taxonomy/author discovery for blog archive frontends.
+  - Responses use `{ success, requestId, data }`; legacy top-level `categories`, `tags`, and `authors` remain for compatibility.
 
 - `GET /api/sites/:siteId/media`
   - Public media catalog for custom frontends.

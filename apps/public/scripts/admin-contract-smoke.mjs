@@ -360,6 +360,8 @@ try {
 
     const visibleScheduledPage = await request(`/api/sites/${createdSiteId}/pages?slug=${pageSlug}`);
     assert(visibleScheduledPage.response.status === 200, `${visibleScheduledPage.url} expected past scheduled page to be visible`);
+    assert(visibleScheduledPage.json?.success === true, `${visibleScheduledPage.url} expected success envelope`);
+    assert(visibleScheduledPage.json?.data?.page?.id === createdPageId, `${visibleScheduledPage.url} returned wrong scheduled page in data envelope`);
     assert(visibleScheduledPage.json?.page?.id === createdPageId, `${visibleScheduledPage.url} returned wrong scheduled page`);
 
     const visibleScheduledPageResolve = await request(`/api/sites/${createdSiteId}/resolve?path=/${pageSlug}`);
@@ -524,6 +526,8 @@ try {
 
     const publicAuthors = await request(`/api/sites/${createdSiteId}/blog/authors`);
     assert(publicAuthors.response.status === 200, `${publicAuthors.url} expected 200, got ${publicAuthors.response.status}`);
+    assert(publicAuthors.json?.success === true, `${publicAuthors.url} expected success envelope`);
+    assert(publicAuthors.json?.data?.authors?.some((author) => author.id === 'user-admin'), `${publicAuthors.url} missing public admin author in data envelope`);
     assert(publicAuthors.json?.authors?.some((author) => author.id === 'user-admin'), `${publicAuthors.url} missing public admin author`);
   });
 
@@ -608,6 +612,8 @@ try {
 
     const visibleScheduledPost = await request(`/api/sites/${createdSiteId}/blog?slug=${postSlug}`);
     assert(visibleScheduledPost.response.status === 200, `${visibleScheduledPost.url} expected past scheduled post to be visible`);
+    assert(visibleScheduledPost.json?.success === true, `${visibleScheduledPost.url} expected success envelope`);
+    assert(visibleScheduledPost.json?.data?.post?.id === createdPostId, `${visibleScheduledPost.url} returned wrong scheduled post in data envelope`);
     assert(visibleScheduledPost.json?.post?.id === createdPostId, `${visibleScheduledPost.url} returned wrong scheduled post`);
 
     const visibleScheduledPostResolve = await request(`/api/sites/${createdSiteId}/resolve?path=/blog/${postSlug}`);
@@ -652,14 +658,20 @@ try {
 
     const publicCategories = await request(`/api/sites/${createdSiteId}/blog/categories`);
     assert(publicCategories.response.status === 200, `${publicCategories.url} expected 200, got ${publicCategories.response.status}`);
+    assert(publicCategories.json?.success === true, `${publicCategories.url} expected success envelope`);
+    assert(publicCategories.json?.data?.categories?.some((category) => category.id === createdCategoryId), `${publicCategories.url} missing public category in data envelope`);
     assert(publicCategories.json?.categories?.some((category) => category.id === createdCategoryId), `${publicCategories.url} missing public category`);
 
     const publicTags = await request(`/api/sites/${createdSiteId}/blog/tags`);
     assert(publicTags.response.status === 200, `${publicTags.url} expected 200, got ${publicTags.response.status}`);
+    assert(publicTags.json?.success === true, `${publicTags.url} expected success envelope`);
+    assert(publicTags.json?.data?.tags?.some((tag) => tag.id === createdTagId), `${publicTags.url} missing public tag in data envelope`);
     assert(publicTags.json?.tags?.some((tag) => tag.id === createdTagId), `${publicTags.url} missing public tag`);
 
     const publicCategoryFilter = await request(`/api/sites/${createdSiteId}/blog?categorySlug=${categorySlug}`);
     assert(publicCategoryFilter.response.status === 200, `${publicCategoryFilter.url} expected 200, got ${publicCategoryFilter.response.status}`);
+    assert(publicCategoryFilter.json?.success === true, `${publicCategoryFilter.url} expected success envelope`);
+    assert(publicCategoryFilter.json?.data?.posts?.some((post) => post.id === createdPostId), `${publicCategoryFilter.url} missing public category-filtered post in data envelope`);
     assert(publicCategoryFilter.json?.posts?.some((post) => post.id === createdPostId), `${publicCategoryFilter.url} missing public category-filtered post`);
 
     const publicAuthorFilter = await request(`/api/sites/${createdSiteId}/blog?authorId=user-admin`);

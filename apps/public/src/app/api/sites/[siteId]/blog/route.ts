@@ -16,7 +16,26 @@ interface RouteParams {
     }>;
 }
 
+const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+    NextResponse.json(
+        {
+            success: false,
+            requestId,
+            error: {
+                code,
+                message,
+            },
+            errorMessage: message,
+        },
+        { status },
+    )
+);
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
+    const requestId = request.headers.get('x-request-id') || makeRequestId();
+
     try {
         const { siteId } = await params;
         const { searchParams } = new URL(request.url);
@@ -33,7 +52,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
         const site = getSiteByIdOrSlug(siteId);
         if (!site) {
-            return NextResponse.json({ error: 'Site not found' }, { status: 404 });
+            return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
         }
 
         if (slug) {
@@ -50,10 +69,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             const post = posts[0];
 
             if (!post) {
-                return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+                return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
             }
 
-            return NextResponse.json({ post });
+            return NextResponse.json({
+                success: true,
+                requestId,
+                data: {
+                    post,
+                },
+                post,
+            });
         }
 
         const data = getBlogPosts(site.id, {
@@ -67,12 +93,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             authorId: searchParams.get('authorId') || undefined,
             authorSlug: searchParams.get('authorSlug') || undefined,
         });
-        return NextResponse.json(data);
+        return NextResponse.json({
+            success: true,
+            requestId,
+            data,
+            ...data,
+        });
     } catch (error) {
         console.error('API Error:', error);
-        return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
-        );
+        return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
     }
 }
