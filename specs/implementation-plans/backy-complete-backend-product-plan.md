@@ -227,8 +227,15 @@ The next implementation should not start by adding more UI screens. The product 
 - **Acceptance Criteria**:
   - Site/page/post CRUD is available through repository APIs.
   - Slug uniqueness and status filters are enforced.
+- **Current progress**:
+  - `packages/db/src/repositories/site-page-post.ts` now exports Drizzle-backed site, page, and post repository factories.
+  - Page and post repositories persist canonical `BackyContentDocument` payloads and normalize legacy JSON content on read.
+  - Slug checks are exposed for sites, pages, and posts; list methods enforce status filters and unpublished visibility defaults.
 - **Validation**:
   - Repository tests against local test database or Supabase test project.
+  - Current command: `npm run typecheck --workspace @backy/db`.
+  - Current command: `npm run build --workspace @backy/db`.
+  - Remaining gap: add execution tests against a real local test database once the test DB service is configured.
 
 ## Sprint 3: Admin API and Auth/RBAC
 

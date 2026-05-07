@@ -44,6 +44,7 @@ export {
 
 export * from './runtime';
 export * from './adapters/demo';
+export * from './repositories';
 
 // Re-export useful Drizzle utilities
 export { eq, and, or, desc, asc, sql, isNull, isNotNull } from 'drizzle-orm';
