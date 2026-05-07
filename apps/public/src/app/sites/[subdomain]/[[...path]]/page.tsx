@@ -12,6 +12,7 @@ import {
     getCanonicalPathForPage,
     getPageByPath,
     getSiteByIdOrSlug,
+    validatePreviewToken,
 } from '@/lib/backyStore';
 import { PageRenderer } from '@/components/PageRenderer';
 import AnimationHydrator from '@/components/AnimationHydrator';
@@ -21,8 +22,15 @@ async function getSite(subdomain: string) {
     return getSiteByIdOrSlug(subdomain);
 }
 
-async function getPage(siteId: string, pageSlug: string) {
-    return getPageByPath(siteId, pageSlug);
+async function getPage(siteId: string, pageSlug: string, previewToken?: string) {
+    const previewPage = previewToken
+        ? getPageByPath(siteId, pageSlug, { includeUnpublished: true })
+        : undefined;
+    const canPreview = previewPage
+        ? validatePreviewToken(siteId, 'page', previewPage.id, previewToken)
+        : false;
+
+    return canPreview ? previewPage : getPageByPath(siteId, pageSlug);
 }
 
 // ==========================================================================
@@ -34,16 +42,24 @@ interface PageProps {
         subdomain: string;
         path?: string[];
     }>;
+    searchParams?: Promise<{
+        previewToken?: string | string[];
+    }>;
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+const firstParam = (value: string | string[] | undefined): string | undefined => (
+    Array.isArray(value) ? value[0] : value
+);
+
+export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
     const { subdomain, path } = await params;
+    const previewToken = firstParam((await searchParams)?.previewToken);
     const pageSlug = path?.join('/') || 'index';
 
     const site = await getSite(subdomain);
     if (!site) return { title: 'Page Not Found' };
 
-    const page = await getPage(site.id, pageSlug);
+    const page = await getPage(site.id, pageSlug, previewToken);
     if (!page) return { title: 'Page Not Found' };
     const canonicalPath = getCanonicalPathForPage(page);
     const pageKeywords = page.meta?.keywords || [];
@@ -56,7 +72,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
             canonical: canonicalPath,
         },
         robots: {
-            index: page.meta?.noIndex === true ? false : true,
+            index: page.status === 'published' && page.meta?.noIndex !== true,
             follow: page.meta?.noFollow === true ? false : true,
         },
         openGraph: {
@@ -69,8 +85,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     };
 }
 
-export default async function SitePage({ params }: PageProps) {
+export default async function SitePage({ params, searchParams }: PageProps) {
     const { subdomain, path } = await params;
+    const previewToken = firstParam((await searchParams)?.previewToken);
     const pageSlug = path?.join('/') || 'index';
 
     // Fetch site and page data
@@ -79,7 +96,7 @@ export default async function SitePage({ params }: PageProps) {
         notFound();
     }
 
-    const page = await getPage(site.id, pageSlug);
+    const page = await getPage(site.id, pageSlug, previewToken);
     if (!page) {
         notFound();
     }

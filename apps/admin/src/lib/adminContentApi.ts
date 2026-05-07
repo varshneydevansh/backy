@@ -95,6 +95,7 @@ interface ApiPreviewResponse {
     expiresAt: string;
     targetType: 'page' | 'post';
     targetId: string;
+    hostedUrl?: string;
     renderUrl?: string;
     pageApiUrl?: string;
     postApiUrl?: string;
@@ -505,14 +506,14 @@ export async function createPagePreview(siteId: string, pageId: string): Promise
   });
   const payload = await readJson<ApiPreviewResponse>(response);
 
-  if (!response.ok || !payload.success || !payload.data?.renderUrl) {
+  if (!response.ok || !payload.success || !payload.data || (!payload.data.hostedUrl && !payload.data.renderUrl)) {
     throw new Error(payload.error?.message || 'Unable to create page preview');
   }
 
   return {
     previewToken: payload.data.previewToken,
     expiresAt: payload.data.expiresAt,
-    url: payload.data.renderUrl,
+    url: payload.data.hostedUrl || payload.data.renderUrl || '',
   };
 }
 

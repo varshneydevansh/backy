@@ -217,7 +217,7 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 
 - `POST /api/admin/sites/:siteId/pages/:pageId/preview`
   - Body: `{ ttlSeconds? }`
-  - Creates a bounded preview token and returns draft-capable `renderUrl` and `pageApiUrl`.
+  - Creates a bounded preview token and returns draft-capable `hostedUrl`, `renderUrl`, and `pageApiUrl`.
   - Current local runtime stores preview tokens in `data/backy/admin-content.json`; production should bind tokens to authenticated actors, audit creation, and invalidate on policy changes.
 
 - `GET /api/admin/sites/:siteId/blog/:postId/revisions`

@@ -16,6 +16,13 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   NextResponse.json({ success: false, requestId, error: { code, message } }, { status })
 );
 
+const encodePath = (path: string) => (
+  path
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/')
+);
+
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -42,7 +49,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
     const origin = new URL(request.url).origin;
     const encodedToken = encodeURIComponent(preview.token);
-    const encodedSlug = encodeURIComponent(page.slug || 'index');
+    const encodedSlug = encodePath(page.slug || 'index');
+    const hostedPath = page.slug === 'index' || !page.slug ? '' : `/${encodedSlug}`;
+    const hostedUrl = `${origin}/sites/${encodeURIComponent(site.slug || site.id)}${hostedPath}?previewToken=${encodedToken}`;
     const renderUrl = `${origin}/api/sites/${encodeURIComponent(site.slug || site.id)}/render?path=/${encodedSlug}&previewToken=${encodedToken}`;
     const pageApiUrl = `${origin}/api/sites/${encodeURIComponent(site.slug || site.id)}/pages?slug=${encodedSlug}&previewToken=${encodedToken}`;
 
@@ -54,6 +63,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         expiresAt: preview.expiresAt,
         targetType: preview.targetType,
         targetId: preview.targetId,
+        hostedUrl,
         renderUrl,
         pageApiUrl,
       },
