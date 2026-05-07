@@ -97,6 +97,15 @@ function safeText(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function buildCollectionRecordShortcut(record: NonNullable<FormSubmission['collectionRecord']>): string {
+  const params = new URLSearchParams({
+    siteId: record.siteId,
+    collectionId: record.collectionId,
+    recordId: record.recordId,
+  });
+  return `/collections?${params.toString()}`;
+}
+
 function normalizeRequestIdInput(value: string): string {
   return value.trim();
 }
@@ -1239,56 +1248,78 @@ function EditSitePage() {
                               <th className="text-left px-3 py-2">Status</th>
                               <th className="text-left px-3 py-2">Target</th>
                               <th className="text-left px-3 py-2">Request ID</th>
+                              <th className="text-left px-3 py-2">Content</th>
                               <th className="text-left px-3 py-2">Values</th>
                               <th className="text-left px-3 py-2">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                          {state.submissions.map((submission) => (
-                            <tr key={submission.id} className="border-t">
-                              <td className="px-3 py-2">{formatTime(submission.submittedAt)}</td>
-                              <td className="px-3 py-2">
-                                <StatusBadge status={submission.status} />
-                              </td>
-                              <td className="px-3 py-2 text-xs">
-                                {submission.pageId || submission.postId || 'site'}
-                              </td>
-                              <td className="px-3 py-2 text-xs">
-                                {submission.requestId || '—'}
-                              </td>
-                              <td className="px-3 py-2 text-xs max-w-sm truncate">
-                                {safeText(submission.values)}
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => updateSubmissionStatus(submission, 'approved')}
-                                    disabled={actionBusyId === submission.id}
-                                    className="text-xs px-2 py-1 rounded-md border hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-1"
-                                  >
-                                    <CheckCircle className="w-3.5 h-3.5" />
-                                    Approve
-                                  </button>
-                                  <button
-                                    onClick={() => updateSubmissionStatus(submission, 'rejected')}
-                                    disabled={actionBusyId === submission.id}
-                                    className="text-xs px-2 py-1 rounded-md border hover:bg-rose-50 hover:text-rose-700 flex items-center gap-1"
-                                  >
-                                    <MinusCircle className="w-3.5 h-3.5" />
-                                    Reject
-                                  </button>
-                                  <button
-                                    onClick={() => updateSubmissionStatus(submission, 'spam')}
-                                    disabled={actionBusyId === submission.id}
-                                    className="text-xs px-2 py-1 rounded-md border hover:bg-amber-50 hover:text-amber-700 flex items-center gap-1"
-                                  >
-                                    <CircleSlash className="w-3.5 h-3.5" />
-                                    Mark spam
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
+                          {state.submissions.map((submission) => {
+                            const collectionRecord = submission.collectionRecord || null;
+                            const collectionErrors = submission.collectionRecordErrors || [];
+                            return (
+                              <tr key={submission.id} className="border-t">
+                                <td className="px-3 py-2">{formatTime(submission.submittedAt)}</td>
+                                <td className="px-3 py-2">
+                                  <StatusBadge status={submission.status} />
+                                </td>
+                                <td className="px-3 py-2 text-xs">
+                                  {submission.pageId || submission.postId || 'site'}
+                                </td>
+                                <td className="px-3 py-2 text-xs">
+                                  {submission.requestId || '—'}
+                                </td>
+                                <td className="px-3 py-2 text-xs">
+                                  {collectionRecord ? (
+                                    <a
+                                      href={buildCollectionRecordShortcut(collectionRecord)}
+                                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                                    >
+                                      {collectionRecord.collectionSlug}/{collectionRecord.recordSlug}
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  ) : collectionErrors.length > 0 ? (
+                                    <span className="text-amber-700">
+                                      {collectionErrors[0]?.message || 'Collection write failed'}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-xs max-w-sm truncate">
+                                  {safeText(submission.values)}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => updateSubmissionStatus(submission, 'approved')}
+                                      disabled={actionBusyId === submission.id}
+                                      className="text-xs px-2 py-1 rounded-md border hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-1"
+                                    >
+                                      <CheckCircle className="w-3.5 h-3.5" />
+                                      Approve
+                                    </button>
+                                    <button
+                                      onClick={() => updateSubmissionStatus(submission, 'rejected')}
+                                      disabled={actionBusyId === submission.id}
+                                      className="text-xs px-2 py-1 rounded-md border hover:bg-rose-50 hover:text-rose-700 flex items-center gap-1"
+                                    >
+                                      <MinusCircle className="w-3.5 h-3.5" />
+                                      Reject
+                                    </button>
+                                    <button
+                                      onClick={() => updateSubmissionStatus(submission, 'spam')}
+                                      disabled={actionBusyId === submission.id}
+                                      className="text-xs px-2 py-1 rounded-md border hover:bg-amber-50 hover:text-amber-700 flex items-center gap-1"
+                                    >
+                                      <CircleSlash className="w-3.5 h-3.5" />
+                                      Mark spam
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

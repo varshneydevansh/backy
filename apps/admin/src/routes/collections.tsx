@@ -171,6 +171,18 @@ type RecordStatusFilter = CollectionRecord['status'] | '';
 
 function CollectionsPage() {
   const { sites } = useStore();
+  const shortcutParams = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return { siteId: '', collectionId: '', recordId: '' };
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    return {
+      siteId: params.get('siteId') || '',
+      collectionId: params.get('collectionId') || '',
+      recordId: params.get('recordId') || '',
+    };
+  }, []);
   const [selectedSiteId, setSelectedSiteId] = useState('');
   const [collections, setCollections] = useState<Collection[]>([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
@@ -214,6 +226,7 @@ function CollectionsPage() {
   const [validationDetails, setValidationDetails] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const shortcutRecordAppliedRef = useRef(false);
 
   const activeSite = useMemo(
     () => sites.find((site) => (site.publicSiteId || site.id) === selectedSiteId) || sites[0],
@@ -268,9 +281,14 @@ function CollectionsPage() {
 
   useEffect(() => {
     if (!selectedSiteId && sites[0]) {
-      setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
+      const shortcutSite = sites.find((site) => (
+        site.publicSiteId === shortcutParams.siteId ||
+        site.id === shortcutParams.siteId ||
+        site.slug === shortcutParams.siteId
+      ));
+      setSelectedSiteId(shortcutSite?.publicSiteId || shortcutSite?.id || sites[0].publicSiteId || sites[0].id);
     }
-  }, [selectedSiteId, sites]);
+  }, [selectedSiteId, shortcutParams.siteId, sites]);
 
   const resetCollectionForm = () => {
     setSelectedCollectionId(null);
@@ -335,6 +353,10 @@ function CollectionsPage() {
       const backendCollections = await listCollections(activeSiteId);
       setCollections(backendCollections);
       const nextSelected = backendCollections.find((collection) => collection.id === selectedCollectionId)
+        || backendCollections.find((collection) => (
+          collection.id === shortcutParams.collectionId ||
+          collection.slug === shortcutParams.collectionId
+        ))
         || backendCollections[0]
         || null;
       if (nextSelected) {
@@ -366,6 +388,16 @@ function CollectionsPage() {
       });
       setRecords(result.records);
       setSelectedRecordIds((prev) => prev.filter((id) => result.records.some((record) => record.id === id)));
+      if (!shortcutRecordAppliedRef.current && shortcutParams.recordId) {
+        const shortcutRecord = result.records.find((record) => (
+          record.id === shortcutParams.recordId ||
+          record.slug === shortcutParams.recordId
+        ));
+        if (shortcutRecord) {
+          setSelectedRecordId(shortcutRecord.id);
+          shortcutRecordAppliedRef.current = true;
+        }
+      }
       setRecordPagination(result.pagination);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load collection records');

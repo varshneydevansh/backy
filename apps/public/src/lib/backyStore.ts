@@ -5392,6 +5392,8 @@ export function createFormSubmission(record: {
     reviewedBy: record.reviewedBy || null,
     reviewedAt: record.status && record.status !== 'pending' ? new Date().toISOString() : null,
     adminNotes: record.adminNotes || null,
+    collectionRecord: null,
+    collectionRecordErrors: [],
     submittedAt: new Date().toISOString(),
   };
 
@@ -5470,6 +5472,37 @@ export function createCollectionRecordFromFormSubmission(
     record: record || null,
     errors: record ? [] : [{ field: 'collectionId', message: 'Unable to create collection record.' }],
   };
+}
+
+export function attachCollectionRecordToSubmission(
+  submissionId: string,
+  input: {
+    record: StoreCollectionRecord | null;
+    errors: SubmissionValidationDetail[];
+  },
+): FormSubmission | undefined {
+  const submission = formSubmissions.find((item) => item.id === submissionId);
+  if (!submission) return undefined;
+
+  const record = input.record;
+  if (record) {
+    const collection = getCollectionByIdOrSlug(record.siteId, record.collectionId, { includeUnpublished: true });
+    submission.collectionRecord = {
+      siteId: record.siteId,
+      collectionId: record.collectionId,
+      collectionSlug: collection?.slug || record.collectionId,
+      recordId: record.id,
+      recordSlug: record.slug,
+      status: record.status,
+      createdAt: record.createdAt,
+    };
+  } else {
+    submission.collectionRecord = null;
+  }
+
+  submission.collectionRecordErrors = input.errors;
+  formSubmissions = formSubmissions.map((item) => (item.id === submission.id ? submission : item));
+  return clone(submission);
 }
 
 export function listFormSubmissions(

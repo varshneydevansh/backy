@@ -892,6 +892,16 @@ export interface FormDefinition {
   updatedAt: string;
 }
 
+export interface FormCollectionRecordLink {
+  siteId: string;
+  collectionId: string;
+  collectionSlug: string;
+  recordId: string;
+  recordSlug: string;
+  status: 'draft' | 'published' | 'scheduled' | 'archived';
+  createdAt: string;
+}
+
 /** Submission payload received from frontend */
 export interface FormSubmission {
   /** Submission identifier */
@@ -917,6 +927,10 @@ export interface FormSubmission {
   reviewedAt?: string | null;
   adminNotes?: string | null;
   updatedAt?: string;
+
+  /** Draft CMS record created from this submission, when the form writes to a collection */
+  collectionRecord?: FormCollectionRecordLink | null;
+  collectionRecordErrors?: Array<{ field: string; message: string }>;
 
   submittedAt: string;
 }

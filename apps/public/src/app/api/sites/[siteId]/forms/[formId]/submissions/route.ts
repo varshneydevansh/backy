@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  attachCollectionRecordToSubmission,
   buildContactShareFromSubmission,
   createCollectionRecordFromFormSubmission,
   createFormSubmission,
@@ -308,7 +309,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const submission = createFormSubmission({
+    let submission = createFormSubmission({
       siteId: site.id,
       formId: form.id,
       values: parsed.values,
@@ -338,6 +339,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         parsed.values,
         submission,
       );
+      submission = attachCollectionRecordToSubmission(submission.id, {
+        record: collectionRecordResult.record,
+        errors: collectionRecordResult.errors,
+      }) || submission;
     }
 
     if (form.notificationWebhook && submission.status !== 'spam' && submission.status !== 'rejected') {

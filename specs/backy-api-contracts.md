@@ -119,7 +119,7 @@ Public page payload should include:
   - Body: form values map + optional hidden metadata.
   - Response: submission id, status, optional message, or detailed validation errors.
   - Canvas-derived form definitions may include `collectionTarget: { enabled, collectionId, fieldMap, slugField }`.
-  - When enabled, accepted non-spam submissions also create a `draft` collection record after `permissions.publicCreate` and collection schema validation pass. The response includes `collectionRecord` and `collectionRecordErrors`.
+  - When enabled, accepted non-spam submissions also create a `draft` collection record after `permissions.publicCreate` and collection schema validation pass. The response includes `collectionRecord` and `collectionRecordErrors`, and listed submissions retain a lightweight `collectionRecord` link for admin moderation shortcuts.
 
 - `POST /api/sites/:siteId/pages/:pageId/comments`
 - `POST /api/public/sites/:siteId/pages/:pageId/comments` (optional alias)

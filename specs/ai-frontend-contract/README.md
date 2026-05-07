@@ -44,7 +44,7 @@ The rule is simple: a custom frontend can look completely different from the Bac
    - page comments: `POST /api/sites/:siteId/pages/:pageId/comments`
    - blog comments: `POST /api/sites/:siteId/blog/:postId/comments`
 
-Canvas-authored forms can now declare a collection write target in their form props. When `collectionTarget.enabled` is true and the target collection is published with `permissions.publicCreate`, accepted public submissions validate against the collection schema and create draft collection records for moderation. The submission response includes `collectionRecord` when the write succeeds and `collectionRecordErrors` when the submission was stored but the collection write could not be completed.
+Canvas-authored forms can now declare a collection write target in their form props. When `collectionTarget.enabled` is true and the target collection is published with `permissions.publicCreate`, accepted public submissions validate against the collection schema and create draft collection records for moderation. The submission response includes `collectionRecord` when the write succeeds and `collectionRecordErrors` when the submission was stored but the collection write could not be completed. Submission list payloads retain a lightweight collection-record link so admin tools can deep-link from a form submission to the generated draft record.
 
 ## Current render payload endpoint
 
