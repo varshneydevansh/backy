@@ -91,6 +91,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         capabilities: {
           routeResolve: true,
           renderPayload: true,
+          openApi: true,
           hostedRendering: true,
           navigation: true,
           mediaLibrary: true,
@@ -108,6 +109,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         endpoints: {
           site: `/api/sites?identifier=${encodeURIComponent(site.slug)}`,
           manifest: `/api/sites/${site.id}/manifest`,
+          openapi: `/api/sites/${site.id}/openapi`,
           resolve: `/api/sites/${site.id}/resolve?path=/`,
           render: `/api/sites/${site.id}/render?path=/`,
           navigation: `/api/sites/${site.id}/navigation`,

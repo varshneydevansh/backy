@@ -44,6 +44,7 @@
           "required": [
             "routeResolve",
             "renderPayload",
+            "openApi",
             "navigation",
             "mediaLibrary",
             "forms",
@@ -55,7 +56,7 @@
         "endpoints": {
           "type": "object",
           "additionalProperties": { "type": "string" },
-          "required": ["site", "manifest", "resolve", "render", "navigation", "media", "pages", "blog", "collections", "forms"]
+          "required": ["site", "manifest", "openapi", "resolve", "render", "navigation", "media", "pages", "blog", "collections", "forms"]
         },
         "routePatterns": {
           "type": "array",

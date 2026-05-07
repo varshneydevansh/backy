@@ -43,6 +43,12 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Returns site identity, theme tokens, schema references, capability flags, public endpoint URLs, route patterns, navigation, module summaries, collection field schemas, form submit URLs, media/font counts, and form-to-collection target metadata.
   - Draft/unpublished sites are hidden from the public manifest.
 
+- `GET /api/sites/:siteId/openapi`
+  - Site-scoped OpenAPI 3.1 document for public frontend integrations.
+  - Describes discovery, route resolution, render payload, navigation, media list, collection list/records/create, form list/submission, and page/blog comment submission operations for the selected site.
+  - Includes `x-backy` vendor metadata for `siteId`, `siteSlug`, contract version, public collection ids, and form ids.
+  - Draft/unpublished sites are hidden from the public OpenAPI document.
+
 - `GET /api/sites/:siteId/pages?path=/about`
 - `GET /api/public/sites/:siteId/pages?path=/about` (optional alias)
   - Path-based page fetch for public rendering.
@@ -322,7 +328,7 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 ## 6) Custom frontend integration checklist
 - Public frontend bootstrap flow:
   1. Resolve site: `GET /api/sites/:identifier`.
-  2. Fetch `GET /api/sites/:siteId/manifest` once to discover schema refs, capabilities, endpoints, route patterns, collections, forms, media/font support, and navigation.
+  2. Fetch `GET /api/sites/:siteId/manifest` once to discover schema refs, capabilities, endpoints, route patterns, collections, forms, media/font support, navigation, and the site-scoped OpenAPI URL.
   3. Resolve path on route changes: `GET /api/sites/:siteId/resolve?path=/...`.
   4. Fetch page, blog post, or collection dynamic item render payloads: `GET /api/sites/:siteId/render?path=/...`.
   5. If route resolves to a blog post and a custom archive UI is needed, call blog listing/detail APIs.

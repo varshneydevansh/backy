@@ -164,6 +164,10 @@ try {
     const draftManifest = await request(`/api/sites/${createdSiteId}/manifest`);
     assert(draftManifest.response.status === 404, `${draftManifest.url} expected draft site manifest to be hidden`);
     assert(draftManifest.json?.success === false, `${draftManifest.url} expected error envelope`);
+
+    const draftOpenApi = await request(`/api/sites/${createdSiteId}/openapi`);
+    assert(draftOpenApi.response.status === 404, `${draftOpenApi.url} expected draft site OpenAPI to be hidden`);
+    assert(draftOpenApi.json?.success === false, `${draftOpenApi.url} expected error envelope`);
   });
 
   await record('admin sites duplicate slug is rejected', async () => {
@@ -911,11 +915,23 @@ try {
       assert(frontendManifest.response.status === 200, `${frontendManifest.url} expected 200, got ${frontendManifest.response.status}`);
       validateAiFrontendManifest(frontendManifest.json, 'site frontend manifest');
       assert(frontendManifest.json?.data?.capabilities?.renderPayload === true, `${frontendManifest.url} missing render payload capability`);
+      assert(frontendManifest.json?.data?.capabilities?.openApi === true, `${frontendManifest.url} missing OpenAPI capability`);
       assert(frontendManifest.json?.data?.capabilities?.collectionWriteForms === true, `${frontendManifest.url} missing collection write form capability`);
       assert(frontendManifest.json?.data?.contract?.schemas?.renderPayload?.includes('content-payload.schema.json'), `${frontendManifest.url} missing render schema reference`);
+      assert(frontendManifest.json?.data?.endpoints?.openapi === `/api/sites/${createdSiteId}/openapi`, `${frontendManifest.url} missing OpenAPI endpoint`);
       assert(frontendManifest.json?.data?.modules?.collections?.some((collection) => collection.id === createdCollectionId && collection.dynamicRoutePattern === `/${collectionSlug}/:recordSlug`), `${frontendManifest.url} missing collection manifest`);
       assert(frontendManifest.json?.data?.modules?.forms?.some((form) => form.id === 'contract-form-write' && form.collectionTarget?.collectionId === createdCollectionId), `${frontendManifest.url} missing form collection target manifest`);
       assert(frontendManifest.json?.data?.routePatterns?.some((route) => route.type === 'dynamicCollectionItem'), `${frontendManifest.url} missing dynamic item route pattern`);
+
+      const publicOpenApi = await request(`/api/sites/${createdSiteId}/openapi`);
+      assert(publicOpenApi.response.status === 200, `${publicOpenApi.url} expected 200, got ${publicOpenApi.response.status}`);
+      assert(publicOpenApi.json?.openapi === '3.1.0', `${publicOpenApi.url} expected OpenAPI 3.1 document`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/manifest`]?.get, `${publicOpenApi.url} missing manifest operation`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/render`]?.get, `${publicOpenApi.url} missing render operation`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/collections/{collectionId}/records`]?.post, `${publicOpenApi.url} missing public collection create operation`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/forms/{formId}/submissions`]?.post, `${publicOpenApi.url} missing form submission operation`);
+      assert(publicOpenApi.json?.['x-backy']?.collectionIds?.includes(createdCollectionId), `${publicOpenApi.url} missing collection id vendor extension`);
+      assert(publicOpenApi.json?.['x-backy']?.formIds?.includes('contract-form-write'), `${publicOpenApi.url} missing form id vendor extension`);
     } finally {
       if (formWritePageId) {
         await request(`/api/admin/sites/${createdSiteId}/pages/${formWritePageId}`, { method: 'DELETE' }).catch(() => {});

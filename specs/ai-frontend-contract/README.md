@@ -68,6 +68,8 @@ Backy exposes a site-level discovery endpoint:
 
 It returns `frontend-manifest.schema.json` and gives custom frontends a single bootstrap document for site identity, theme tokens, public endpoint URLs, route patterns, module capabilities, navigation, page/blog/collection/form/media summaries, collection field schemas, form submit URLs, and form-to-collection targets. This mirrors the role of REST discovery in a WordPress-like frontend integration while keeping Backy's render payload as the page/post/item-specific contract.
 
+The manifest advertises a site-scoped OpenAPI export at `GET /api/sites/:siteId/openapi`. That document describes the current public discovery, route resolution, render, navigation, media, collection, form, and comment operations for the selected site and includes Backy-specific vendor metadata for available collection and form ids.
+
 ## Current font asset contract
 
 Uploaded font files are stored as media with `type: "font"`. Admin media upload/update accepts font metadata keys `fontFamily`, `fontWeight`, and `fontStyle`; public media hides private fonts, while `/render` includes public registered fonts in `assets.fonts`. Backy's hosted page and blog renderers inject matching `@font-face` rules so element-level font choices render without custom frontend code.
