@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteMediaItem, getMediaById, getSiteByIdOrSlug, updateMediaItem } from '@/lib/backyStore';
 import { getMediaStorageAdapter, getMediaStoragePathFromUrl } from '@/lib/mediaStorage';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
@@ -59,11 +60,49 @@ const deleteUploadedFile = async (siteId: string, url: string | null | undefined
   }
 };
 
+const stringArrayFromInput = (value: unknown): string[] | undefined => (
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : undefined
+);
+
+const metadataFromInput = (value: unknown): Record<string, unknown> | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
+);
+
+const visibilityFromInput = (value: unknown): 'public' | 'private' | undefined => (
+  value === 'public' || value === 'private' ? value : undefined
+);
+
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { siteId, mediaId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      if (!await repositories.media.getById(site.id, mediaId)) {
+        return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media item not found', requestId);
+      }
+
+      const body = await parseJsonBody(request);
+      const updated = await repositories.media.update(site.id, mediaId, {
+        filename: typeof body.filename === 'string' ? body.filename : undefined,
+        folderId: typeof body.folderId === 'string' || body.folderId === null ? body.folderId : undefined,
+        altText: typeof body.altText === 'string' || body.altText === null ? body.altText : undefined,
+        caption: typeof body.caption === 'string' || body.caption === null ? body.caption : undefined,
+        visibility: visibilityFromInput(body.visibility),
+        metadata: metadataFromInput(body.metadata),
+        tags: stringArrayFromInput(body.tags),
+      });
+
+      return NextResponse.json({ success: true, requestId, data: { media: updated.item } });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -93,6 +132,33 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, mediaId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const media = await repositories.media.getById(site.id, mediaId);
+
+      if (!media) {
+        return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media item not found', requestId);
+      }
+
+      await repositories.media.delete(site.id, mediaId);
+      await deleteUploadedFile(site.id, media.url);
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          deleted: true,
+          mediaId,
+        },
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {

@@ -9,6 +9,7 @@ import { extname } from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
 import { createMediaItem, getMediaList, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { getMediaStorageAdapter, getMediaStoragePath } from '@/lib/mediaStorage';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { MediaItem } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
@@ -109,6 +110,31 @@ const parseVisibility = (value: FormDataEntryValue | null): MediaItem['visibilit
   value === 'private' ? 'private' : 'public'
 );
 
+const mediaTypeFromInput = (value: string | null): MediaItem['type'] | undefined => (
+  value === 'image' ||
+  value === 'video' ||
+  value === 'audio' ||
+  value === 'document' ||
+  value === 'font' ||
+  value === 'other'
+    ? value
+    : undefined
+);
+
+const visibilityFromInput = (value: string | null): MediaItem['visibility'] | 'all' | undefined => (
+  value === 'public' || value === 'private' || value === 'all' ? value : undefined
+);
+
+const paginateMedia = (items: MediaItem[], limit: number, offset: number) => ({
+  media: items.slice(offset, offset + limit),
+  pagination: {
+    total: items.length,
+    limit,
+    offset,
+    hasMore: offset + limit < items.length,
+  },
+});
+
 const getMediaType = (mimeType: string, originalName: string): MediaItem['type'] | null => {
   const extension = extname(originalName).toLowerCase();
   return MIME_TYPE_TO_MEDIA_TYPE.find((candidate) => candidate.test(mimeType, extension))?.type ?? null;
@@ -134,6 +160,43 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const { searchParams } = new URL(request.url);
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const limit = Math.max(1, Math.min(100, Number(searchParams.get('limit') || 50)));
+      const offset = Math.max(0, Number(searchParams.get('offset') || 0));
+      const scope = searchParams.get('scope');
+      const pageId = searchParams.get('pageId');
+      const postId = searchParams.get('postId');
+      const tag = searchParams.get('tag');
+      const result = await repositories.media.list({
+        siteId: site.id,
+        type: mediaTypeFromInput(searchParams.get('type')) || 'all',
+        visibility: visibilityFromInput(searchParams.get('visibility')) || 'all',
+        search: searchParams.get('search') || undefined,
+        folderId: searchParams.has('folderId') ? searchParams.get('folderId') : undefined,
+        limit: 100,
+        offset: 0,
+      });
+      const filtered = result.items
+        .filter((item) => scope ? item.scope === scope : true)
+        .filter((item) => pageId ? item.pageIds.includes(pageId) || (item.scope === 'page' && item.scopeTargetId === pageId) : true)
+        .filter((item) => postId ? item.postIds.includes(postId) || (item.scope === 'post' && item.scopeTargetId === postId) : true)
+        .filter((item) => tag ? item.tags.includes(tag) : true);
+      const payload = paginateMedia(filtered, limit, offset);
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: payload,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -171,7 +234,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
-    const site = getSiteByIdOrSlug(siteId);
+    const repositories = !shouldUseDemoStoreFallback() ? await getRequiredDatabaseRepositories() : null;
+    const repositorySite = repositories ? await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId) : null;
+    const site = repositorySite || getSiteByIdOrSlug(siteId);
 
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
@@ -220,7 +285,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
 
-    const media = createMediaItem(site.id, {
+    const mediaInput = {
       filename: storedFilename,
       originalName,
       mimeType,
@@ -234,6 +299,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       metadata: {
         ...metadata,
         extension: extension.replace(/^\./, ''),
+        thumbnailUrl: mediaType === 'image' ? upload.url : null,
+        tags: toStringList(formData.get('tags')),
+        scope,
+        scopeTargetId,
+        pageIds: scope === 'page' && scopeTargetId ? [scopeTargetId] : [],
+        postIds: scope === 'post' && scopeTargetId ? [scopeTargetId] : [],
         ...(mediaType === 'font'
           ? {
               fontFamily: toStringValue(formData.get('fontFamily')) || cleanFontFamily(originalName),
@@ -248,7 +319,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       scope,
       scopeTargetId,
       visibility,
-    });
+    };
+    const media = repositories
+      ? (await repositories.media.create({
+          siteId: site.id,
+          filename: mediaInput.filename,
+          originalName: mediaInput.originalName,
+          mimeType: mediaInput.mimeType,
+          size: mediaInput.sizeBytes,
+          type: mediaInput.type,
+          url: mediaInput.url,
+          folderId: null,
+          altText: mediaInput.altText,
+          caption: mediaInput.caption,
+          visibility: mediaInput.visibility,
+          metadata: mediaInput.metadata,
+          uploadedBy: mediaInput.uploadedBy,
+        })).item
+      : createMediaItem(site.id, mediaInput);
 
     return NextResponse.json(
       {
