@@ -16,7 +16,7 @@ export const Route = createFileRoute('/users/new')({
 
 function NewUserPage() {
   const navigate = useNavigate();
-  const { addUser, setUsers, users } = useStore();
+  const { setUsers, users } = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -38,10 +38,9 @@ function NewUserPage() {
       setUsers([created, ...users]);
       navigate({ to: '/users' });
     } catch (error) {
-      addUser(formData);
       setErrorMessage(error instanceof Error
-        ? `${error.message}. Added to local fallback users only.`
-        : 'Unable to send invite through the backend. Added to local fallback users only.');
+        ? `${error.message}. The invitation was not persisted.`
+        : 'Unable to send invite through the backend. The invitation was not persisted.');
       setIsLoading(false);
     }
   };

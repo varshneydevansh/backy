@@ -32,7 +32,7 @@ function UsersLayout() {
 
 function UsersListView() {
   const navigate = useNavigate();
-  const { users, setUsers, deleteUser } = useStore();
+  const { users, setUsers } = useStore();
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -73,8 +73,7 @@ function UsersListView() {
       setUsers(users.filter((user) => user.id !== userId));
       setNotice(null);
     } catch {
-      deleteUser(userId);
-      setNotice('Backend delete failed, so the local fallback list was updated only.');
+      setNotice('Backend delete failed. The user was not removed.');
     }
   };
 

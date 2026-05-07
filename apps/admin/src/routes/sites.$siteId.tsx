@@ -972,10 +972,9 @@ function EditSitePage() {
       }
       navigate({ to: '/sites' });
     } catch (error) {
-      updateSite(siteId, nextSite);
       setSiteSettingsError(error instanceof Error
-        ? `${error.message}. Changes were kept locally in this browser.`
-        : 'Backend save failed. Changes were kept locally in this browser.');
+        ? `${error.message}. Changes were not persisted.`
+        : 'Backend save failed. Changes were not persisted.');
     } finally {
       setIsLoading(false);
     }

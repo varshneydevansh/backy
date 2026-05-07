@@ -18,7 +18,7 @@ export const Route = createFileRoute('/sites/new')({
 
 function NewSitePage() {
     const navigate = useNavigate();
-    const { sites, addSite, setSites } = useStore();
+    const { sites, setSites } = useStore();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [formData, setFormData] = useState({
@@ -48,7 +48,6 @@ function NewSitePage() {
             navigate({ to: '/sites' });
         } catch (createError) {
             setError(createError instanceof Error ? createError.message : 'Unable to create site');
-            addSite(input);
         } finally {
             setIsLoading(false);
         }
@@ -70,7 +69,7 @@ function NewSitePage() {
             <div className="max-w-2xl mx-auto">
                 {error && (
                     <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                        {error}. A local draft copy was kept in this browser.
+                        {error}. The site was not created because the backend did not persist it.
                     </div>
                 )}
 

@@ -21,7 +21,7 @@ export const Route = createFileRoute('/users/$userId')({
 function EditUserPage() {
   const navigate = useNavigate();
   const { userId } = Route.useParams();
-  const { users, setUsers, updateUser, deleteUser } = useStore();
+  const { users, setUsers } = useStore();
   const user = users.find(u => u.id === userId);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -93,8 +93,7 @@ function EditUserPage() {
       setUsers(users.map((item) => (item.id === userId ? saved : item)));
       navigate({ to: '/users' });
     } catch {
-      updateUser(userId, formData);
-      setNotice('Backend save failed, so the local fallback user was updated only.');
+      setNotice('Backend save failed. Changes were not persisted.');
       setIsLoading(false);
     }
   };
@@ -107,8 +106,7 @@ function EditUserPage() {
       setUsers(users.filter((item) => item.id !== userId));
       navigate({ to: '/users' });
     } catch {
-      deleteUser(userId);
-      navigate({ to: '/users' });
+      setNotice('Backend delete failed. The user was not removed.');
     }
   };
 
