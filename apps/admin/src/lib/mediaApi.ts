@@ -78,6 +78,8 @@ export interface MediaListOptions {
   scope?: MediaScope | 'all';
   visibility?: MediaVisibility;
   type?: 'image' | 'video' | 'audio' | 'document' | 'font' | 'other';
+  search?: string;
+  tag?: string;
   pageId?: string;
   postId?: string;
   limit?: number;
@@ -154,6 +156,8 @@ export async function listMedia(options: MediaListOptions = {}): Promise<MediaAs
   if (options.scope && options.scope !== 'all') query.set('scope', options.scope);
   if (options.visibility) query.set('visibility', options.visibility);
   if (options.type) query.set('type', options.type);
+  if (options.search) query.set('search', options.search);
+  if (options.tag) query.set('tag', options.tag);
   if (options.pageId) query.set('pageId', options.pageId);
   if (options.postId) query.set('postId', options.postId);
   if (options.limit) query.set('limit', `${options.limit}`);

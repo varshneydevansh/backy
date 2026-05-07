@@ -21,6 +21,9 @@ function MediaPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSavingMetadata, setIsSavingMetadata] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | MediaAsset['type']>('all');
+  const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'public' | 'private'>('all');
   const [selectedAsset, setSelectedAsset] = useState<MediaAsset | null>(null);
   const [metadataForm, setMetadataForm] = useState({
     name: '',
@@ -40,14 +43,21 @@ function MediaPage() {
     setError(null);
 
     try {
-      const backendFiles = await listMedia({ siteId, scope: 'all', limit: 250 });
+      const backendFiles = await listMedia({
+        siteId,
+        scope: 'all',
+        limit: 250,
+        search: searchQuery.trim() || undefined,
+        type: typeFilter === 'file' ? 'document' : typeFilter === 'all' ? undefined : typeFilter,
+        visibility: visibilityFilter === 'all' ? undefined : visibilityFilter,
+      });
       setMedia(backendFiles);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load media library.');
     } finally {
       setIsLoading(false);
     }
-  }, [setMedia, siteId]);
+  }, [searchQuery, setMedia, siteId, typeFilter, visibilityFilter]);
 
   useEffect(() => {
     void loadLibrary();
@@ -259,6 +269,42 @@ function MediaPage() {
           {error}
         </div>
       )}
+
+      {isLoading ? (
+        <div className="mb-4 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          Loading media library...
+        </div>
+      ) : null}
+
+      <div className="mb-6 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_180px]">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          className="rounded-lg border bg-background px-4 py-2.5"
+          placeholder="Search filenames, captions, alt text, or tags"
+        />
+        <select
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value as 'all' | MediaAsset['type'])}
+          className="rounded-lg border bg-background px-4 py-2.5"
+        >
+          <option value="all">All types</option>
+          <option value="image">Images</option>
+          <option value="video">Videos</option>
+          <option value="file">Documents</option>
+          <option value="font">Fonts</option>
+        </select>
+        <select
+          value={visibilityFilter}
+          onChange={(event) => setVisibilityFilter(event.target.value as 'all' | 'public' | 'private')}
+          className="rounded-lg border bg-background px-4 py-2.5"
+        >
+          <option value="all">All visibility</option>
+          <option value="public">Public</option>
+          <option value="private">Private</option>
+        </select>
+      </div>
 
       {isLoading ? (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">

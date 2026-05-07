@@ -2801,6 +2801,8 @@ export function getMediaList(
     type?: string;
     scope?: string;
     visibility?: string;
+    search?: string;
+    tag?: string;
     pageId?: string;
     postId?: string;
     limit?: number;
@@ -2809,8 +2811,10 @@ export function getMediaList(
 ): { media: MediaItem[]; pagination: Pagination } {
   ensurePersistedMediaLoaded();
 
-  const { type, scope, visibility, pageId, postId, limit = 50, offset = 0 } = params;
+  const { type, scope, visibility, search, tag, pageId, postId, limit = 50, offset = 0 } = params;
   const normalizedType = typeof type === 'string' ? type.trim().toLowerCase() : undefined;
+  const normalizedSearch = typeof search === 'string' ? normalizeIdentifier(search) : '';
+  const normalizedTag = typeof tag === 'string' ? normalizeIdentifier(tag) : '';
 
   let media = MEDIA_LIBRARY.filter((item) => item.siteId === siteId);
 
@@ -2824,6 +2828,20 @@ export function getMediaList(
 
   if (visibility) {
     media = media.filter((item) => item.visibility === visibility);
+  }
+
+  if (normalizedSearch) {
+    media = media.filter((item) => (
+      normalizeIdentifier(item.originalName).includes(normalizedSearch) ||
+      normalizeIdentifier(item.filename).includes(normalizedSearch) ||
+      normalizeIdentifier(item.altText || '').includes(normalizedSearch) ||
+      normalizeIdentifier(item.caption || '').includes(normalizedSearch) ||
+      item.tags.some((itemTag) => normalizeIdentifier(itemTag).includes(normalizedSearch))
+    ));
+  }
+
+  if (normalizedTag) {
+    media = media.filter((item) => item.tags.some((itemTag) => normalizeIdentifier(itemTag) === normalizedTag));
   }
 
   if (pageId) {

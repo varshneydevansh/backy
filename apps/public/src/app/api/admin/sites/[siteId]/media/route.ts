@@ -122,6 +122,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       type: searchParams.get('type') || undefined,
       scope: searchParams.get('scope') || undefined,
       visibility: searchParams.get('visibility') || undefined,
+      search: searchParams.get('search') || undefined,
+      tag: searchParams.get('tag') || undefined,
       pageId: searchParams.get('pageId') || undefined,
       postId: searchParams.get('postId') || undefined,
       limit,
