@@ -104,6 +104,22 @@ type CanvasAlignment = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
 const RULER_SIZE = 28;
 const RULER_MAJOR_STEP = 100;
 const RULER_MINOR_STEP = 50;
+const MIN_CANVAS_DIMENSION = 320;
+const MAX_CANVAS_DIMENSION = 3840;
+
+const CANVAS_SIZE_PRESETS = [
+  { id: 'desktop', label: 'Desktop', width: 1200, height: 800, breakpoint: 'desktop' as const },
+  { id: 'wide', label: 'Wide page', width: 1440, height: 1200 },
+  { id: 'landing', label: 'Landing', width: 1440, height: 1800 },
+  { id: 'tablet', label: 'Tablet', width: 768, height: 1024, breakpoint: 'tablet' as const },
+  { id: 'mobile', label: 'Mobile', width: 375, height: 812, breakpoint: 'mobile' as const },
+  { id: 'square', label: 'Square', width: 1080, height: 1080 },
+  { id: 'story', label: 'Story', width: 1080, height: 1920 },
+] as const;
+
+const clampCanvasDimension = (value: number) => (
+  Math.min(MAX_CANVAS_DIMENSION, Math.max(MIN_CANVAS_DIMENSION, Math.round(value)))
+);
 
 const buildRulerTicks = (length: number, scale: number) => {
   const safeLength = Math.max(0, Math.ceil(length));
@@ -374,6 +390,11 @@ export function CanvasEditor({
     setCanvasZoom((current) => clampCanvasZoom(Number((current - 0.1).toFixed(2))));
   }, [clampCanvasZoom]);
 
+  const markChanges = useCallback(() => {
+    changeSequenceRef.current += 1;
+    setHasUnsavedChanges(true);
+  }, []);
+
   const handleFitCanvas = useCallback(() => {
     const container = canvasViewportRef.current;
     if (!container) {
@@ -386,6 +407,52 @@ export function CanvasEditor({
     const nextScale = Math.min(1.5, availableWidth / size.width, availableHeight / size.height);
     setCanvasZoom(clampCanvasZoom(Number(nextScale.toFixed(2))));
   }, [clampCanvasZoom, size.height, size.width]);
+
+  const applyCanvasSize = useCallback((nextSize: CanvasSize, nextBreakpoint = breakpoint) => {
+    const normalizedSize = {
+      ...nextSize,
+      width: clampCanvasDimension(nextSize.width),
+      height: clampCanvasDimension(nextSize.height),
+    };
+    setBreakpoint(nextBreakpoint);
+    setSize(normalizedSize);
+    markChanges();
+    if (onChange) {
+      onChange(elements, pageSettings, normalizedSize);
+    }
+  }, [breakpoint, elements, markChanges, onChange, pageSettings]);
+
+  const activeCanvasPresetId = useMemo(() => (
+    CANVAS_SIZE_PRESETS.find((preset) => preset.width === size.width && preset.height === size.height)?.id || 'custom'
+  ), [size.height, size.width]);
+
+  const handleCanvasPresetChange = useCallback((presetId: string) => {
+    const preset = CANVAS_SIZE_PRESETS.find((item) => item.id === presetId);
+    if (!preset) {
+      return;
+    }
+
+    applyCanvasSize(
+      {
+        ...size,
+        width: preset.width,
+        height: preset.height,
+      },
+      'breakpoint' in preset ? preset.breakpoint : breakpoint,
+    );
+  }, [applyCanvasSize, breakpoint, size]);
+
+  const handleCanvasDimensionInput = useCallback((axis: 'width' | 'height', value: string) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+
+    applyCanvasSize({
+      ...size,
+      [axis]: parsed,
+    });
+  }, [applyCanvasSize, size]);
 
   const canAcceptNestedDrop = (elementType: CanvasElement['type']): boolean => {
     const normalizedType = normalizeElementType(elementType);
@@ -409,11 +476,6 @@ export function CanvasEditor({
   const getInitialSettings = useCallback(() => (
     JSON.parse(JSON.stringify(initialSettings)) as PageSettings
   ), [initialSettings]);
-
-  const markChanges = useCallback(() => {
-    changeSequenceRef.current += 1;
-    setHasUnsavedChanges(true);
-  }, []);
 
   const walkTreeMaxZ = (nodes: CanvasElement[]): number =>
     nodes.reduce((max, item) => {
@@ -1593,15 +1655,9 @@ export function CanvasEditor({
    */
   const handleBreakpointChange = useCallback(
     (bp: 'desktop' | 'tablet' | 'mobile') => {
-      setBreakpoint(bp);
-      const nextSize = BREAKPOINT_CANVAS_SIZE[bp];
-      setSize(nextSize);
-      markChanges();
-      if (onChange) {
-        onChange(elements, pageSettings, nextSize);
-      }
+      applyCanvasSize(BREAKPOINT_CANVAS_SIZE[bp], bp);
     },
-    [elements, pageSettings, onChange, markChanges]
+    [applyCanvasSize]
   );
 
   useEffect(() => {
@@ -1693,47 +1749,88 @@ export function CanvasEditor({
             </div>
           ) : <div className="w-4" />}
 
-          {/* Center - Breakpoint Toggle */}
-          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
-            <button
-              type="button"
-              onClick={() => handleBreakpointChange('desktop')}
-              className={cn(
-                'p-2 rounded-md transition-colors',
-                breakpoint === 'desktop'
-                  ? 'bg-white text-slate-950 shadow-sm'
-                  : 'text-slate-500 hover:bg-white/70'
-              )}
-              title="Desktop"
-            >
-              <Monitor className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => handleBreakpointChange('tablet')}
-              className={cn(
-                'p-2 rounded-md transition-colors',
-                breakpoint === 'tablet'
-                  ? 'bg-white text-slate-950 shadow-sm'
-                  : 'text-slate-500 hover:bg-white/70'
-              )}
-              title="Tablet"
-            >
-              <Tablet className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => handleBreakpointChange('mobile')}
-              className={cn(
-                'p-2 rounded-md transition-colors',
-                breakpoint === 'mobile'
-                  ? 'bg-white text-slate-950 shadow-sm'
-                  : 'text-slate-500 hover:bg-white/70'
-              )}
-              title="Mobile"
-            >
-              <Smartphone className="w-4 h-4" />
-            </button>
+          {/* Center - Canvas controls */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
+              <button
+                type="button"
+                onClick={() => handleBreakpointChange('desktop')}
+                className={cn(
+                  'p-2 rounded-md transition-colors',
+                  breakpoint === 'desktop'
+                    ? 'bg-white text-slate-950 shadow-sm'
+                    : 'text-slate-500 hover:bg-white/70'
+                )}
+                title="Desktop"
+                aria-label="Desktop canvas"
+              >
+                <Monitor className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBreakpointChange('tablet')}
+                className={cn(
+                  'p-2 rounded-md transition-colors',
+                  breakpoint === 'tablet'
+                    ? 'bg-white text-slate-950 shadow-sm'
+                    : 'text-slate-500 hover:bg-white/70'
+                )}
+                title="Tablet"
+                aria-label="Tablet canvas"
+              >
+                <Tablet className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBreakpointChange('mobile')}
+                className={cn(
+                  'p-2 rounded-md transition-colors',
+                  breakpoint === 'mobile'
+                    ? 'bg-white text-slate-950 shadow-sm'
+                    : 'text-slate-500 hover:bg-white/70'
+                )}
+                title="Mobile"
+                aria-label="Mobile canvas"
+              >
+                <Smartphone className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="hidden items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-600 shadow-sm xl:flex">
+              <select
+                value={activeCanvasPresetId}
+                onChange={(event) => handleCanvasPresetChange(event.target.value)}
+                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 outline-none focus:border-sky-400"
+                aria-label="Canvas size preset"
+              >
+                <option value="custom">Custom</option>
+                {CANVAS_SIZE_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min={MIN_CANVAS_DIMENSION}
+                max={MAX_CANVAS_DIMENSION}
+                step={10}
+                value={size.width}
+                onChange={(event) => handleCanvasDimensionInput('width', event.target.value)}
+                className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right tabular-nums text-slate-700 outline-none focus:border-sky-400"
+                aria-label="Canvas width"
+              />
+              <span className="text-slate-400">x</span>
+              <input
+                type="number"
+                min={MIN_CANVAS_DIMENSION}
+                max={MAX_CANVAS_DIMENSION}
+                step={10}
+                value={size.height}
+                onChange={(event) => handleCanvasDimensionInput('height', event.target.value)}
+                className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right tabular-nums text-slate-700 outline-none focus:border-sky-400"
+                aria-label="Canvas height"
+              />
+            </div>
           </div>
 
           {/* Right */}
