@@ -34,6 +34,9 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/public/sites/:identifier` (optional external contract alias)
   - Resolve by `subdomain`, `siteId`, or `customDomain`.
   - Returns minimal site metadata and theme defaults.
+  - Current implementation also supports `GET /api/sites?identifier=:identifier`.
+  - Response uses `{ success, requestId, data: { site } }`; legacy top-level `site` remains for compatibility.
+  - Draft/unpublished sites are hidden from public bootstrap.
 
 - `GET /api/sites/:siteId/pages?path=/about`
 - `GET /api/public/sites/:siteId/pages?path=/about` (optional alias)

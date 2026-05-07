@@ -113,6 +113,10 @@ try {
     assert(json?.data?.site?.slug === siteSlug, `${url} returned wrong site slug`);
     assert(json?.data?.site?.status === 'draft', `${url} returned wrong site status`);
     createdSiteId = json.data.site.id;
+
+    const publicDraft = await request(`/api/sites?identifier=${siteSlug}`);
+    assert(publicDraft.response.status === 404, `${publicDraft.url} expected draft site to be hidden`);
+    assert(publicDraft.json?.success === false, `${publicDraft.url} expected error envelope`);
   });
 
   await record('admin sites duplicate slug is rejected', async () => {
@@ -152,6 +156,16 @@ try {
     assert(update.json?.success === true, `${update.url} expected success envelope`);
     assert(update.json?.data?.site?.status === 'published', `${update.url} expected published status`);
     assert(update.json?.data?.site?.description === 'Updated contract smoke site', `${update.url} expected updated description`);
+
+    const publicSiteBySlug = await request(`/api/sites?identifier=${siteSlug}`);
+    assert(publicSiteBySlug.response.status === 200, `${publicSiteBySlug.url} expected 200, got ${publicSiteBySlug.response.status}`);
+    assert(publicSiteBySlug.json?.success === true, `${publicSiteBySlug.url} expected success envelope`);
+    assert(publicSiteBySlug.json?.data?.site?.id === createdSiteId, `${publicSiteBySlug.url} returned wrong site`);
+
+    const publicSiteList = await request('/api/sites');
+    assert(publicSiteList.response.status === 200, `${publicSiteList.url} expected 200, got ${publicSiteList.response.status}`);
+    assert(publicSiteList.json?.success === true, `${publicSiteList.url} expected success envelope`);
+    assert(publicSiteList.json?.data?.sites?.some((site) => site.id === createdSiteId), `${publicSiteList.url} missing published temporary site`);
   });
 
   await record('admin pages create/list/detail/update/delete works for temporary site', async () => {
