@@ -4,7 +4,7 @@
  * GET /api/sites/[siteId]/manifest
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import {
   getBlogPosts,
   getMediaList,
@@ -17,6 +17,7 @@ import {
   listCollections,
   listFormsBySite,
 } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 
 interface RouteParams {
   params: Promise<{
@@ -27,7 +28,7 @@ interface RouteParams {
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -36,7 +37,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
         message,
       },
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const authors = listBlogAuthors(site.id);
     const fonts = media.media.filter((item) => item.type === 'font');
 
-    return NextResponse.json({
+    return publicContractJson({
       success: true,
       requestId,
       data: {
@@ -230,6 +231,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
         navigation: getSiteNavigation(site.id),
       },
+    }, {
+      requestId,
+      cache: 'discovery',
+      schemaVersion: 'backy.frontend-manifest.v1',
+      siteId: site.id,
     });
   } catch (error) {
     console.error('Frontend manifest API error:', error);

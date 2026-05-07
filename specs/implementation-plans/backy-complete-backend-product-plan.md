@@ -327,9 +327,10 @@ The next implementation should not start by adding more UI screens. The product 
   - External frontend can call site resolve, page fetch, media list, collection reads/writes, form list/detail/submit/review/contact endpoints, comment list/detail/update/report endpoints, and interaction event reads.
 - **Current progress**:
   - `packages/sdk-js` exposes a TypeScript public API client for site discovery, manifest/OpenAPI bootstrap, resolve, render, navigation, media, collection records, forms/submissions/contacts, comments/reports, and interaction events.
+  - Public manifest, OpenAPI, and render endpoints emit cache-control plus Backy contract/schema/request/site headers; preview and error responses are no-store.
 - **Validation**:
   - SDK smoke test against local public app, including temporary-site public write coverage for collection records, forms, contacts, comments, reports, and events.
-  - Public contract smoke verifies that the site manifest advertises the same interaction endpoint templates that the site-scoped OpenAPI document exposes.
+  - Public contract smoke verifies that the site manifest advertises the same interaction endpoint templates that the site-scoped OpenAPI document exposes and that discovery/render cache and contract headers are present.
 
 ## Sprint 5: Media, Fonts, Files, Video, and Audio Management
 

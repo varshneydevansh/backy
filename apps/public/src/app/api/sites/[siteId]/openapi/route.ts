@@ -4,8 +4,9 @@
  * GET /api/sites/[siteId]/openapi
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getSiteByIdOrSlug, listCollections, listFormsBySite } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 
 interface RouteParams {
   params: Promise<{
@@ -16,7 +17,7 @@ interface RouteParams {
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -25,7 +26,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
         message,
       },
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
@@ -77,7 +78,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const collectionIds = collections.map((collection) => collection.id);
     const formIds = forms.map((form) => form.id);
 
-    return NextResponse.json({
+    return publicContractJson({
       openapi: '3.1.0',
       info: {
         title: `${site.name} Backy Public API`,
@@ -1046,6 +1047,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         collectionIds,
         formIds,
       },
+    }, {
+      requestId,
+      cache: 'discovery',
+      schemaVersion: 'openapi.3.1',
+      siteId: site.id,
     });
   } catch (error) {
     console.error('OpenAPI API error:', error);

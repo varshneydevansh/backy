@@ -4,7 +4,7 @@
  * GET /api/sites/[siteId]/render?path=/about
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import {
   getBlogPosts,
   getCollectionByIdOrSlug,
@@ -18,6 +18,7 @@ import {
   buildPublicCollectionItemRenderPayload,
   buildPublicRenderPayload,
 } from '@/lib/renderPayload';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { normalizeRoutePath } from '@/lib/routeResolver';
 
 interface RouteParams {
@@ -29,7 +30,7 @@ interface RouteParams {
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -38,7 +39,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
         message,
       },
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
@@ -73,7 +74,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
       }
 
-      return NextResponse.json(buildPublicBlogPostRenderPayload(site, post, { requestId, path }));
+      return publicContractJson(
+        buildPublicBlogPostRenderPayload(site, post, { requestId, path }),
+        {
+          requestId,
+          cache: previewToken ? 'private' : 'render',
+          schemaVersion: 'backy.content-payload.v1',
+          siteId: site.id,
+        },
+      );
     }
 
     const previewPage = previewToken
@@ -86,7 +95,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       ? previewPage
       : getPageByPath(site.id, path);
     if (page) {
-      return NextResponse.json(buildPublicRenderPayload(site, page, { requestId, path }));
+      return publicContractJson(
+        buildPublicRenderPayload(site, page, { requestId, path }),
+        {
+          requestId,
+          cache: previewToken ? 'private' : 'render',
+          schemaVersion: 'backy.content-payload.v1',
+          siteId: site.id,
+        },
+      );
     }
 
     const dynamicItemMatch = path.match(/^\/([^/]+)\/([^/]+)$/);
@@ -99,7 +116,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         : undefined;
 
       if (collection && record) {
-        return NextResponse.json(buildPublicCollectionItemRenderPayload(site, collection, record, { requestId, path }));
+        return publicContractJson(
+          buildPublicCollectionItemRenderPayload(site, collection, record, { requestId, path }),
+          {
+            requestId,
+            cache: 'render',
+            schemaVersion: 'backy.content-payload.v1',
+            siteId: site.id,
+          },
+        );
       }
     }
 
