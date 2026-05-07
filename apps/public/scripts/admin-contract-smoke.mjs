@@ -950,6 +950,62 @@ try {
     assert(detail.json?.data?.post?.categoryIds?.includes(createdCategoryId), `${detail.url} missing category assignment`);
     assert(detail.json?.data?.post?.tagIds?.includes(createdTagId), `${detail.url} missing tag assignment`);
 
+    const readiness = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}/readiness`);
+    assert(readiness.response.status === 200, `${readiness.url} expected 200, got ${readiness.response.status}`);
+    assert(readiness.json?.success === true, `${readiness.url} expected success envelope`);
+    assert(readiness.json?.data?.readiness?.id === createdPostId, `${readiness.url} returned wrong post readiness`);
+    assert(
+      readiness.json?.data?.readiness?.checks?.some((check) => check.id === `post:${createdPostId}:title`),
+      `${readiness.url} missing post title readiness check`,
+    );
+
+    const invalidPost = await request(`/api/admin/sites/${createdSiteId}/blog`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Blocked Admin Contract Post',
+        slug: `${postSlug}-blocked`,
+        excerpt: 'Temporary invalid post',
+        status: 'draft',
+        content: {
+          canvasSize: { width: 200, height: 200 },
+          elements: [
+            {
+              id: `el-invalid-post-${unique}`,
+              type: 'text',
+              x: -12,
+              y: 20,
+              width: 180,
+              height: 60,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              visible: true,
+              props: {
+                content: 'Invalid post element',
+              },
+            },
+          ],
+        },
+      }),
+    });
+    assert(invalidPost.response.status === 201, `${invalidPost.url} expected 201, got ${invalidPost.response.status}`);
+    const invalidPostId = invalidPost.json?.data?.post?.id;
+    assert(invalidPostId, `${invalidPost.url} missing invalid post id`);
+
+    const blockedPublish = await request(`/api/admin/sites/${createdSiteId}/blog/${invalidPostId}/publish`, {
+      method: 'POST',
+    });
+    assert(blockedPublish.response.status === 400, `${blockedPublish.url} expected 400, got ${blockedPublish.response.status}`);
+    assert(blockedPublish.json?.error?.code === 'READINESS_BLOCKED', `${blockedPublish.url} expected READINESS_BLOCKED`);
+    assert(
+      blockedPublish.json?.error?.details?.checks?.some((check) => check.severity === 'error'),
+      `${blockedPublish.url} missing blocking readiness checks`,
+    );
+    await request(`/api/admin/sites/${createdSiteId}/blog/${invalidPostId}`, { method: 'DELETE' });
+
     const futurePostSchedule = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     const futureScheduledPost = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, {
       method: 'PATCH',

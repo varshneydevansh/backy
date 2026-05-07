@@ -223,8 +223,8 @@ Public page payload should include:
 - `GET /api/admin/sites/:siteId/readiness`
   - Admin readiness audit for Wix/WordPress-style publish checks.
   - Response uses `{ success, requestId, data: { readiness } }`; legacy top-level `readiness` remains for compatibility.
-  - Validates site identity/status, homepage/navigation, theme tokens, media/library presence, collections, reusable sections, and per-page canvas dimensions, element count, bounds, SEO title/description/canonical/indexing state.
-  - Returns a site score, status label (`ready`, `needs-attention`, `blocked`), summary counts, site checks, and page-level checks so admin UI can block or warn before publishing.
+  - Validates site identity/status, homepage/navigation, theme tokens, media/library presence, collections, reusable sections, per-page canvas dimensions, post content, element count, bounds, SEO title/description/canonical/indexing state.
+  - Returns a site score, status label (`ready`, `needs-attention`, `blocked`), summary counts, site checks, page-level checks, and post-level checks so admin UI can block or warn before publishing.
 
 - `PATCH /api/admin/sites/:siteId`
   - Body supports partial site settings updates: `name`, `slug`, `description`, `customDomain`, `status`, `isPublished`, `theme`.
@@ -349,6 +349,11 @@ Current reusable-section endpoints persist to `data/backy/admin-content.json`. T
 - `GET /api/admin/sites/:siteId/blog/:postId`
   - Returns full editable post payload.
 
+- `GET /api/admin/sites/:siteId/blog/:postId/readiness`
+  - Admin post readiness audit for blog editor publish workflow.
+  - Response uses `{ success, requestId, data: { readiness } }`; legacy top-level `readiness` remains for compatibility.
+  - Validates title/slug, legacy or canvas-authored content, canvas dimensions when elements exist, element bounds, overflow, SEO title/description/canonical, and indexability before post publish.
+
 - `PATCH /api/admin/sites/:siteId/blog/:postId`
   - Body supports partial updates for title, slug, excerpt, status, content, SEO meta, featured image, author, categories, tags, and schedule.
 
@@ -380,7 +385,9 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
   - Returns local revision history for the post with pagination metadata.
 
 - `POST /api/admin/sites/:siteId/blog/:postId/publish`
-  - Publishes the post, clears scheduled state, sets `publishedAt`, and stores a rollback snapshot.
+  - Publishes the post only when post readiness has no `severity: "error"` checks.
+  - Returns `400 READINESS_BLOCKED` with readiness details when canvas dimensions, element bounds, title, or slug checks fail.
+  - On success, clears scheduled state, sets `publishedAt`, and stores a rollback snapshot.
 
 - `POST /api/admin/sites/:siteId/blog/:postId/archive`
   - Archives the post, clears scheduled state, marks it `noIndex`, and stores a rollback snapshot.

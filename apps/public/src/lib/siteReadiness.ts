@@ -7,6 +7,7 @@ import {
   getSiteNavigation,
   listCollections,
   listReusableSections,
+  type StoreBlogPost,
   type StorePage,
   type StoreSite,
 } from '@/lib/backyStore';
@@ -43,6 +44,20 @@ export interface PageReadiness {
   checks: ReadinessCheck[];
 }
 
+export interface BlogPostReadiness {
+  id: string;
+  title: string;
+  slug: string;
+  path: string;
+  status: StoreBlogPost['status'];
+  canvasSize: StorePage['content']['canvasSize'] | null;
+  elementCount: number;
+  hasLegacyContent: boolean;
+  score: number;
+  statusLabel: 'ready' | 'needs-attention' | 'blocked';
+  checks: ReadinessCheck[];
+}
+
 export interface SiteReadiness {
   site: {
     id: string;
@@ -68,6 +83,7 @@ export interface SiteReadiness {
   };
   checks: ReadinessCheck[];
   pages: PageReadiness[];
+  posts: BlogPostReadiness[];
 }
 
 const isBlank = (value: unknown): boolean => (
@@ -114,6 +130,17 @@ const countElements = (page: StorePage): number => {
   return count;
 };
 
+const countPostElements = (post: StoreBlogPost): number => {
+  const elements = Array.isArray(post.content?.elements)
+    ? post.content.elements as StorePage['content']['elements']
+    : [];
+  let count = 0;
+  walkElements(elements, () => {
+    count += 1;
+  });
+  return count;
+};
+
 const countOutOfBoundsElements = (page: StorePage) => {
   let negative = 0;
   let outside = 0;
@@ -126,6 +153,35 @@ const countOutOfBoundsElements = (page: StorePage) => {
     }
 
     if (element.x + element.width > canvas.width || element.y + element.height > canvas.height) {
+      outside += 1;
+    }
+  });
+
+  return { negative, outside };
+};
+
+const countPostOutOfBoundsElements = (post: StoreBlogPost) => {
+  const elements = Array.isArray(post.content?.elements)
+    ? post.content.elements as StorePage['content']['elements']
+    : [];
+  const canvasInput = post.content?.canvasSize as Partial<StorePage['content']['canvasSize']> | undefined;
+  const canvas = {
+    width: Number(canvasInput?.width) || 0,
+    height: Number(canvasInput?.height) || 0,
+  };
+  let negative = 0;
+  let outside = 0;
+
+  walkElements(elements, (element) => {
+    if (element.x < 0 || element.y < 0 || element.width <= 0 || element.height <= 0) {
+      negative += 1;
+      return;
+    }
+
+    if (canvas.width > 0 && canvas.height > 0 && (
+      element.x + element.width > canvas.width ||
+      element.y + element.height > canvas.height
+    )) {
       outside += 1;
     }
   });
@@ -180,6 +236,49 @@ export const buildPageReadiness = (page: StorePage): PageReadiness => {
   };
 };
 
+export const buildBlogPostReadiness = (post: StoreBlogPost): BlogPostReadiness => {
+  const elementCount = countPostElements(post);
+  const canvasInput = post.content?.canvasSize as Partial<StorePage['content']['canvasSize']> | undefined;
+  const canvas = canvasInput && (Number(canvasInput.width) || Number(canvasInput.height))
+    ? {
+        width: Number(canvasInput.width) || 0,
+        height: Number(canvasInput.height) || 0,
+      }
+    : null;
+  const bounds = countPostOutOfBoundsElements(post);
+  const hasLegacyContent = !isBlank(post.content?.html) || !isBlank(post.excerpt);
+  const hasCanvasElements = elementCount > 0;
+  const target = { type: 'post' as const, id: post.id, label: post.title };
+  const canonical = post.meta?.canonical || `/blog/${post.slug}`;
+  const checks: ReadinessCheck[] = [
+    makeCheck(`post:${post.id}:title`, 'content', 'Post title', !isBlank(post.title), 'error', 'Post title is required.', target),
+    makeCheck(`post:${post.id}:slug`, 'content', 'Post slug', !isBlank(post.slug), 'error', 'Post slug is required.', target),
+    makeCheck(`post:${post.id}:content`, 'content', 'Post content', hasCanvasElements || hasLegacyContent, 'warning', 'Post has no body content.', target, { elementCount, hasLegacyContent }),
+    makeCheck(`post:${post.id}:canvas-size`, 'layout', 'Canvas dimensions', !hasCanvasElements || (canvas !== null && canvas.width >= 320 && canvas.height >= 320), 'error', 'Canvas-authored posts must be at least 320px by 320px.', target, canvas || undefined),
+    makeCheck(`post:${post.id}:bounds`, 'layout', 'Element bounds', bounds.negative === 0, 'error', 'Post elements must have positive dimensions and non-negative coordinates.', target, bounds),
+    makeCheck(`post:${post.id}:overflow`, 'layout', 'Canvas overflow', bounds.outside === 0, 'warning', 'Some post elements extend past the canvas dimensions.', target, bounds),
+    makeCheck(`post:${post.id}:seo-title`, 'seo', 'SEO title', !isBlank(post.meta?.title), 'warning', 'SEO title is missing.', target),
+    makeCheck(`post:${post.id}:seo-description`, 'seo', 'SEO description', !isBlank(post.meta?.description), 'warning', 'SEO description is missing.', target),
+    makeCheck(`post:${post.id}:canonical`, 'seo', 'Canonical path', !isBlank(canonical), 'warning', 'Canonical path is missing.', target, { canonical }),
+    makeCheck(`post:${post.id}:indexable`, 'seo', 'Indexable published post', post.status !== 'published' || post.meta?.noIndex !== true, 'warning', 'Published post is marked noindex.', target),
+  ];
+  const summary = summarizeChecks(checks);
+
+  return {
+    id: post.id,
+    title: post.title,
+    slug: post.slug,
+    path: canonical,
+    status: post.status,
+    canvasSize: canvas,
+    elementCount,
+    hasLegacyContent,
+    score: summary.score,
+    statusLabel: summary.statusLabel,
+    checks,
+  };
+};
+
 export const buildSiteReadiness = (site: StoreSite): SiteReadiness => {
   const pageSummaries = getPageSummary(site.id, { includeUnpublished: true });
   const pages = pageSummaries
@@ -195,6 +294,7 @@ export const buildSiteReadiness = (site: StoreSite): SiteReadiness => {
 
   const siteTarget = { type: 'site' as const, id: site.id, label: site.name };
   const pageReadiness = pages.map(buildPageReadiness);
+  const postReadiness = posts.map(buildBlogPostReadiness);
   const checks: ReadinessCheck[] = [
     makeCheck('site:name', 'site', 'Site name', !isBlank(site.name), 'error', 'Site name is required.', siteTarget),
     makeCheck('site:slug', 'site', 'Site slug', !isBlank(site.slug), 'error', 'Site slug is required.', siteTarget),
@@ -209,6 +309,7 @@ export const buildSiteReadiness = (site: StoreSite): SiteReadiness => {
     makeCheck('site:collections', 'content', 'Collections', collections.length > 0, 'info', 'No CMS collections are configured.', siteTarget, { collectionCount: collections.length }),
     makeCheck('site:reusable-sections', 'content', 'Reusable sections', reusableSections.length > 0, 'info', 'No reusable sections are saved.', siteTarget, { reusableSectionCount: reusableSections.length }),
     ...pageReadiness.flatMap((page) => page.checks),
+    ...postReadiness.flatMap((post) => post.checks),
   ];
   const summary = summarizeChecks(checks);
 
@@ -237,5 +338,6 @@ export const buildSiteReadiness = (site: StoreSite): SiteReadiness => {
     },
     checks,
     pages: pageReadiness,
+    posts: postReadiness,
   };
 };

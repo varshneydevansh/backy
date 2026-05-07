@@ -87,9 +87,23 @@ export interface SiteReadiness {
     statusLabel: 'ready' | 'needs-attention' | 'blocked';
     checks: ReadinessCheck[];
   }>;
+  posts: Array<{
+    id: string;
+    title: string;
+    slug: string;
+    path: string;
+    status: AdminSiteStatus;
+    canvasSize: CanvasSize | null;
+    elementCount: number;
+    hasLegacyContent: boolean;
+    score: number;
+    statusLabel: 'ready' | 'needs-attention' | 'blocked';
+    checks: ReadinessCheck[];
+  }>;
 }
 
 export type PageReadiness = SiteReadiness['pages'][number];
+export type BlogPostReadiness = SiteReadiness['posts'][number];
 
 interface ApiSiteReadinessResponse {
   success: boolean;
@@ -105,6 +119,16 @@ interface ApiPageReadinessResponse {
   success: boolean;
   data?: {
     readiness: PageReadiness;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiBlogPostReadinessResponse {
+  success: boolean;
+  data?: {
+    readiness: BlogPostReadiness;
   };
   error?: {
     message?: string;
@@ -1185,6 +1209,17 @@ export async function getPageReadiness(siteId: string, pageId: string): Promise<
 
   if (!response.ok || !payload.success || !payload.data) {
     throw new Error(payload.error?.message || 'Unable to load page readiness');
+  }
+
+  return payload.data.readiness;
+}
+
+export async function getBlogPostReadiness(siteId: string, postId: string): Promise<BlogPostReadiness> {
+  const response = await fetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}/readiness`);
+  const payload = await readJson<ApiBlogPostReadinessResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load post readiness');
   }
 
   return payload.data.readiness;

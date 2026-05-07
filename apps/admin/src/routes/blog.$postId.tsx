@@ -2,14 +2,15 @@
  * BACKY CMS - EDIT BLOG POST (HYBRID LAYOUT)
  */
 
-import { useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { Archive, ArrowLeft, CheckCircle2, ExternalLink, Eye, FileText, History, RotateCcw, Save, Trash2 } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowLeft, CheckCircle2, ExternalLink, Eye, FileText, History, RefreshCw, RotateCcw, Save, Trash2 } from 'lucide-react';
 import {
     archiveBlogPost,
     createBlogPostPreview,
     deleteBlogPost,
     getBlogPost,
+    getBlogPostReadiness,
     listBlogAuthors,
     listBlogCategories,
     listBlogPostRevisions,
@@ -19,6 +20,7 @@ import {
     updateBlogPost,
     type BlogAuthor,
     type BlogCategory,
+    type BlogPostReadiness,
     type BlogTag,
     type ContentRevision,
 } from '@/lib/adminContentApi';
@@ -63,6 +65,9 @@ function EditBlogPostPage() {
     const [authors, setAuthors] = useState<BlogAuthor[]>([]);
     const [categories, setCategories] = useState<BlogCategory[]>([]);
     const [tags, setTags] = useState<BlogTag[]>([]);
+    const [postReadiness, setPostReadiness] = useState<BlogPostReadiness | null>(null);
+    const [readinessLoading, setReadinessLoading] = useState(false);
+    const [readinessError, setReadinessError] = useState<string | null>(null);
 
     // Initialize State from Post
     const [title, setTitle] = useState(post?.title || '');
@@ -183,10 +188,35 @@ function EditBlogPostPage() {
     const [canvasElements, setCanvasElements] = useState<CanvasElement[]>(initialElements);
     const [canvasSize, setCanvasSize] = useState<CanvasSize>(savedCanvasSize);
 
+    const loadPostReadiness = useCallback(async () => {
+      setReadinessLoading(true);
+      setReadinessError(null);
+
+      try {
+        const readiness = await getBlogPostReadiness(activeSiteId, postId);
+        setPostReadiness(readiness);
+        return readiness;
+      } catch (error) {
+        setReadinessError(error instanceof Error ? error.message : 'Unable to load post readiness.');
+        return null;
+      } finally {
+        setReadinessLoading(false);
+      }
+    }, [activeSiteId, postId]);
+
     useEffect(() => {
       setCanvasElements(initialElements);
       setCanvasSize(savedCanvasSize);
     }, [initialElements, savedCanvasSize]);
+
+    useEffect(() => {
+      if (!post) {
+        setPostReadiness(null);
+        return;
+      }
+
+      void loadPostReadiness();
+    }, [loadPostReadiness, post]);
 
     useEffect(() => {
         if (!post) {
@@ -282,6 +312,7 @@ function EditBlogPostPage() {
             setPost(savedPost);
             updatePost(postId, savedPost);
             setWorkflowNotice('Post saved and revision snapshot recorded.');
+            void loadPostReadiness();
         } catch (error) {
             updatePost(postId, localUpdate);
             setPost((current) => current ? { ...current, ...localUpdate } : current);
@@ -324,11 +355,20 @@ function EditBlogPostPage() {
         setWorkflowNotice(null);
 
         try {
+            if (action === 'publish') {
+                const readiness = await loadPostReadiness();
+                if (readiness?.statusLabel === 'blocked') {
+                    setSaveWarning('Resolve post readiness errors before publishing.');
+                    return;
+                }
+            }
+
             const nextPost = action === 'publish'
                 ? await publishBlogPost(activeSiteId, postId)
                 : await archiveBlogPost(activeSiteId, postId);
             syncPostState(nextPost);
             setWorkflowNotice(action === 'publish' ? 'Post published.' : 'Post archived.');
+            void loadPostReadiness();
         } catch (error) {
             setSaveWarning(error instanceof Error ? error.message : `Unable to ${action} post.`);
         } finally {
@@ -366,6 +406,7 @@ function EditBlogPostPage() {
             const restoredPost = await rollbackBlogPost(activeSiteId, postId, revision.id);
             syncPostState(restoredPost);
             setWorkflowNotice('Post revision restored.');
+            void loadPostReadiness();
         } catch (error) {
             setSaveWarning(error instanceof Error ? error.message : 'Unable to restore post revision.');
         } finally {
@@ -388,6 +429,14 @@ function EditBlogPostPage() {
             navigate({ to: '/blog' });
         }
     };
+
+    const readinessFindings = postReadiness?.checks.filter((check) => check.status !== 'pass') || [];
+    const readinessBlocked = postReadiness?.statusLabel === 'blocked';
+    const readinessTone = postReadiness?.statusLabel === 'ready'
+        ? 'border-green-200 bg-green-50 text-green-900'
+        : readinessBlocked
+            ? 'border-red-200 bg-red-50 text-red-900'
+            : 'border-amber-200 bg-amber-50 text-amber-900';
 
     return (
         <PageShell
@@ -437,9 +486,10 @@ function EditBlogPostPage() {
                                 </button>
                                 <button
                                     type="button"
-                                    disabled={isWorkflowBusy || status === 'published'}
+                                    disabled={isWorkflowBusy || readinessLoading || readinessBlocked || status === 'published'}
                                     onClick={() => void applyWorkflow('publish')}
                                     className="inline-flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                    title={readinessBlocked ? 'Resolve post readiness errors before publishing' : 'Publish post'}
                                 >
                                     <CheckCircle2 className="w-4 h-4" />
                                     Publish
@@ -487,6 +537,51 @@ function EditBlogPostPage() {
                                 </span>
                                 <ExternalLink className="h-3.5 w-3.5 shrink-0" />
                             </a>
+                        )}
+                        {(postReadiness || readinessLoading || readinessError) && (
+                            <div className={cn('rounded-lg border px-4 py-3 text-sm', readinessTone)}>
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div className="flex min-w-0 items-center gap-2">
+                                        {readinessBlocked ? (
+                                            <AlertTriangle className="h-4 w-4 shrink-0" />
+                                        ) : (
+                                            <CheckCircle2 className="h-4 w-4 shrink-0" />
+                                        )}
+                                        <div className="min-w-0">
+                                            <div className="font-medium">
+                                                Readiness {postReadiness ? `${postReadiness.score}%` : 'checking'}
+                                            </div>
+                                            <div className="text-xs opacity-80">
+                                                {postReadiness
+                                                    ? `${postReadiness.elementCount} elements${postReadiness.canvasSize ? ` · ${postReadiness.canvasSize.width}x${postReadiness.canvasSize.height}` : ''}`
+                                                    : readinessError || 'Loading checks...'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => void loadPostReadiness()}
+                                        disabled={readinessLoading}
+                                        className="inline-flex items-center gap-2 rounded-lg border border-current/20 px-3 py-1.5 text-xs hover:bg-white/40 disabled:opacity-50"
+                                    >
+                                        <RefreshCw className={cn('h-3.5 w-3.5', readinessLoading && 'animate-spin')} />
+                                        Refresh
+                                    </button>
+                                </div>
+                                {readinessError && (
+                                    <div className="mt-2 text-xs">{readinessError}</div>
+                                )}
+                                {readinessFindings.length > 0 && (
+                                    <div className="mt-3 grid gap-1 text-xs">
+                                        {readinessFindings.slice(0, 4).map((check) => (
+                                            <div key={check.id} className="flex items-start gap-2">
+                                                <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+                                                <span>{check.message}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         )}
                     </div>
 

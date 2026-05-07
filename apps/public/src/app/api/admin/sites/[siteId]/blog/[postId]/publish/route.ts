@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSiteByIdOrSlug, publishAdminBlogPost } from '@/lib/backyStore';
+import { getAdminBlogPostById, getSiteByIdOrSlug, publishAdminBlogPost } from '@/lib/backyStore';
+import { buildSiteReadiness } from '@/lib/siteReadiness';
 
 export const runtime = 'nodejs';
 
@@ -12,8 +13,14 @@ interface RouteParams {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json({ success: false, requestId, error: { code, message } }, { status })
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+  details?: unknown,
+) => (
+  NextResponse.json({ success: false, requestId, error: { code, message, details } }, { status })
 );
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
@@ -25,6 +32,30 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
+    const currentPost = getAdminBlogPostById(site.id, postId);
+
+    if (!currentPost) {
+      return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
+    }
+
+    const readiness = buildSiteReadiness(site).posts.find((item) => item.id === currentPost.id);
+    const readinessErrors = readiness?.checks.filter((check) => (
+      check.status !== 'pass' && check.severity === 'error'
+    )) || [];
+
+    if (readinessErrors.length > 0) {
+      return errorResponse(
+        400,
+        'READINESS_BLOCKED',
+        'Resolve post readiness errors before publishing',
+        requestId,
+        {
+          readiness,
+          checks: readinessErrors,
+        },
+      );
     }
 
     const post = publishAdminBlogPost(site.id, postId, request.headers.get('x-backy-actor') || 'admin');
