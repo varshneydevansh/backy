@@ -1,6 +1,9 @@
 import {
   getCanonicalPathForPage,
+  getCollectionByIdOrSlug,
+  getCollectionRecordByIdOrSlug,
   getMediaList,
+  listCollectionRecords,
   listFormsBySite,
   getSiteNavigation,
   type StoreBlogPost,
@@ -23,6 +26,13 @@ interface RenderElement extends JsonObject {
   styles?: JsonObject;
   actions?: JsonObject[];
   dataBindings?: JsonObject[];
+}
+
+interface DatasetManifest extends JsonObject {
+  id: string;
+  collectionId: string;
+  query?: JsonObject;
+  pagination?: JsonObject;
 }
 
 const isRecord = (value: unknown): value is JsonObject => (
@@ -287,9 +297,62 @@ const normalizeElementForPayload = (element: RenderElement): RenderElement => ({
     .filter((binding): binding is JsonObject => !!binding) ?? [],
 });
 
-const collectDataBindingManifest = (elements: RenderElement[]) => {
+const normalizeResolvedCollectionFields = (fields: unknown): JsonObject[] => (
+  Array.isArray(fields)
+    ? fields.filter(isRecord).map((field) => ({
+        key: typeof field.key === 'string' ? field.key : '',
+        label: typeof field.label === 'string' ? field.label : typeof field.key === 'string' ? field.key : 'Field',
+        type: typeof field.type === 'string' ? field.type : 'text',
+        required: field.required === true,
+        unique: field.unique === true,
+      })).filter((field) => field.key.length > 0)
+    : []
+);
+
+const normalizeResolvedCollectionRecords = (records: unknown): JsonObject[] => (
+  Array.isArray(records)
+    ? records.filter(isRecord).map((record) => ({
+        id: typeof record.id === 'string' ? record.id : '',
+        slug: typeof record.slug === 'string' ? record.slug : '',
+        status: typeof record.status === 'string' ? record.status : 'published',
+        values: isRecord(record.values) ? record.values : {},
+        updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : '',
+      })).filter((record) => record.id.length > 0 && record.updatedAt.length > 0)
+    : []
+);
+
+const hydrateDatasetRecords = (siteId: string, dataset: DatasetManifest): DatasetManifest => {
+  const collection = getCollectionByIdOrSlug(siteId, dataset.collectionId);
+  if (!collection) {
+    return dataset;
+  }
+
+  const query = isRecord(dataset.query) ? dataset.query : {};
+  const recordId = typeof query.recordId === 'string' && query.recordId.length > 0 ? query.recordId : null;
+  const slug = typeof query.slug === 'string' && query.slug.length > 0 ? query.slug : null;
+  const limit = isRecord(dataset.pagination) && typeof dataset.pagination.limit === 'number'
+    ? dataset.pagination.limit
+    : typeof query.limit === 'number'
+      ? query.limit
+      : 50;
+  const records = recordId
+    ? [getCollectionRecordByIdOrSlug(siteId, collection.id, recordId)].filter(Boolean)
+    : listCollectionRecords(siteId, collection.id, {
+        slug: slug || undefined,
+        limit: Number.isInteger(limit) && limit > 0 ? Math.min(limit, 100) : 50,
+      }).records;
+
+  return {
+    ...dataset,
+    collectionId: collection.id,
+    fields: normalizeResolvedCollectionFields(collection.fields),
+    records: normalizeResolvedCollectionRecords(records),
+  };
+};
+
+const collectDataBindingManifest = (siteId: string, elements: RenderElement[]) => {
   const bindings: JsonObject[] = [];
-  const datasets = new Map<string, JsonObject>();
+  const datasets = new Map<string, DatasetManifest>();
 
   walkElements(elements, (element) => {
     element.dataBindings?.forEach((binding, index) => {
@@ -338,7 +401,7 @@ const collectDataBindingManifest = (elements: RenderElement[]) => {
 
   return {
     schemaVersion: 'backy.bindings.v1',
-    datasets: [...datasets.values()],
+    datasets: [...datasets.values()].map((dataset) => hydrateDatasetRecords(siteId, dataset)),
     bindings,
   };
 };
@@ -495,7 +558,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
   const forms = listFormsBySite(site.id, { pageId: page.id });
   const canonical = page.isHomepage ? '/' : page.meta.canonical || getCanonicalPathForPage(page);
   const actions = collectElementActions(elements);
-  const dataBindings = collectDataBindingManifest(elements);
+  const dataBindings = collectDataBindingManifest(site.id, elements);
   const navigation = getSiteNavigation(site.id);
 
   return {
@@ -593,7 +656,7 @@ export function buildPublicBlogPostRenderPayload(
   const forms = listFormsBySite(site.id, { postId: post.id });
   const canonical = post.meta?.canonical || `/blog/${post.slug}`;
   const actions = collectElementActions(elements);
-  const dataBindings = collectDataBindingManifest(elements);
+  const dataBindings = collectDataBindingManifest(site.id, elements);
   const navigation = getSiteNavigation(site.id);
 
   return {

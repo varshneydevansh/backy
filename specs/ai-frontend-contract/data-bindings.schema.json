@@ -49,6 +49,21 @@
       "properties": {
         "id": { "type": "string", "minLength": 1 },
         "collectionId": { "type": "string", "minLength": 1 },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "key": { "type": "string", "minLength": 1 },
+              "label": { "type": "string" },
+              "type": { "type": "string" },
+              "required": { "type": "boolean" },
+              "unique": { "type": "boolean" }
+            },
+            "required": ["key", "label", "type"]
+          }
+        },
         "query": {
           "type": "object",
           "additionalProperties": true
@@ -59,6 +74,24 @@
           "properties": {
             "limit": { "type": "integer", "minimum": 1 },
             "cursor": { "type": "string" }
+          }
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "slug": { "type": "string" },
+              "status": { "enum": ["draft", "published", "scheduled", "archived"] },
+              "values": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "updatedAt": { "type": "string" }
+            },
+            "required": ["id", "slug", "status", "values", "updatedAt"]
           }
         }
       },

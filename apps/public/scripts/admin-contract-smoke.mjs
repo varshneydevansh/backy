@@ -722,6 +722,14 @@ try {
       `${boundRender.url} missing collection dataset manifest`,
     );
     assert(
+      boundRender.json?.data?.dataBindings?.datasets?.some((dataset) => (
+        dataset.id === 'dataset_contract_collection'
+        && dataset.fields?.some((field) => field.key === 'title' && field.type === 'text')
+        && dataset.records?.some((record) => record.id === createdCollectionRecordId && record.values?.title === 'Collection Record')
+      )),
+      `${boundRender.url} missing hydrated collection dataset records`,
+    );
+    assert(
       boundRender.json?.data?.dataBindings?.bindings?.some((binding) => (
         binding.id === 'bind_bound_title'
         && binding.elementId === 'bound_title'
