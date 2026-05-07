@@ -1,6 +1,8 @@
 import type { BackyContentDocument, BackyJsonObject, BackyJsonValue } from './content-contract';
 import type {
   BlogPost,
+  BlogCategory,
+  BlogTag,
   Comment,
   CommentStatus,
   Contact,
@@ -206,6 +208,59 @@ export interface BackyPostListInput extends BackyPaginationInput {
   categoryId?: string;
   tagId?: string;
   search?: string;
+}
+
+export interface BackyBlogCategory extends BlogCategory {
+  color?: string | null;
+  updatedAt?: string;
+  postCount?: number;
+}
+
+export interface BackyBlogTag extends BlogTag {
+  description?: string | null;
+  updatedAt?: string;
+  postCount?: number;
+}
+
+export interface BackyBlogAuthor {
+  id: string;
+  siteId: string;
+  name: string;
+  slug: string;
+  role: string;
+  status: string;
+  avatarUrl?: string | null;
+  postCount?: number;
+}
+
+export interface BackyBlogCategoryCreateInput {
+  siteId: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  color?: string | null;
+  sortOrder?: number;
+}
+
+export interface BackyBlogCategoryUpdateInput {
+  name?: string;
+  slug?: string;
+  description?: string | null;
+  color?: string | null;
+  sortOrder?: number;
+}
+
+export interface BackyBlogTagCreateInput {
+  siteId: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+}
+
+export interface BackyBlogTagUpdateInput {
+  name?: string;
+  slug?: string;
+  description?: string | null;
 }
 
 export type BackyCollectionFieldType =
@@ -634,6 +689,20 @@ export interface BackyPostRepository {
   delete(siteId: string, postId: string, context?: BackyRepositoryContext): Promise<boolean>;
 }
 
+export interface BackyBlogTaxonomyRepository {
+  listCategories(siteId: string, context?: BackyRepositoryContext): Promise<BackyBlogCategory[]>;
+  getCategoryByIdOrSlug(siteId: string, identifier: string, context?: BackyRepositoryContext): Promise<BackyBlogCategory | null>;
+  createCategory(input: BackyBlogCategoryCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackyBlogCategory>>;
+  updateCategory(siteId: string, categoryId: string, input: BackyBlogCategoryUpdateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackyBlogCategory>>;
+  deleteCategory(siteId: string, categoryId: string, context?: BackyRepositoryContext): Promise<boolean>;
+  listTags(siteId: string, context?: BackyRepositoryContext): Promise<BackyBlogTag[]>;
+  getTagByIdOrSlug(siteId: string, identifier: string, context?: BackyRepositoryContext): Promise<BackyBlogTag | null>;
+  createTag(input: BackyBlogTagCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackyBlogTag>>;
+  updateTag(siteId: string, tagId: string, input: BackyBlogTagUpdateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackyBlogTag>>;
+  deleteTag(siteId: string, tagId: string, context?: BackyRepositoryContext): Promise<boolean>;
+  listAuthors(siteId: string, context?: BackyRepositoryContext): Promise<BackyBlogAuthor[]>;
+}
+
 export interface BackyCollectionRepository {
   list(input: BackyCollectionListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyCollection>>;
   getById(siteId: string, collectionId: string, context?: BackyRepositoryContext): Promise<BackyCollection | null>;
@@ -723,6 +792,7 @@ export interface BackyRepositories {
   sites: BackySiteRepository;
   pages: BackyPageRepository;
   posts: BackyPostRepository;
+  blogTaxonomy: BackyBlogTaxonomyRepository;
   collections: BackyCollectionRepository;
   media: BackyMediaRepository;
   forms: BackyFormRepository;

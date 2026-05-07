@@ -13,6 +13,8 @@ import {
   getSiteByIdOrSlug,
   updateAdminBlogTag,
 } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { resolveRepositorySite } from '@/lib/repositoryContentWorkflow';
 
 export const runtime = 'nodejs';
 
@@ -61,6 +63,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, tagId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const tag = await repositories.blogTaxonomy.getTagByIdOrSlug(site.id, tagId);
+
+      if (!tag) {
+        return errorResponse(404, 'TAG_NOT_FOUND', 'Tag not found', requestId);
+      }
+
+      return NextResponse.json({ success: true, requestId, data: { tag } });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -91,6 +110,43 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, tagId } = await params;
+    const body = await parseJsonBody(request);
+    const nextSlug = body.slug === undefined ? '' : normalizeSlug(body.slug);
+
+    if (body.slug !== undefined && !nextSlug) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'Tag slug is required', requestId);
+    }
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const tag = await repositories.blogTaxonomy.getTagByIdOrSlug(site.id, tagId);
+
+      if (!tag) {
+        return errorResponse(404, 'TAG_NOT_FOUND', 'Tag not found', requestId);
+      }
+
+      if (nextSlug && nextSlug !== tag.slug) {
+        const conflict = await repositories.blogTaxonomy.getTagByIdOrSlug(site.id, nextSlug);
+        if (conflict && conflict.id !== tag.id) {
+          return errorResponse(409, 'SLUG_CONFLICT', 'A tag with this slug already exists', requestId);
+        }
+      }
+
+      const updated = await repositories.blogTaxonomy.updateTag(site.id, tag.id, {
+        name: typeof body.name === 'string' ? body.name : undefined,
+        slug: nextSlug || undefined,
+        description: typeof body.description === 'string' || body.description === null ? body.description : undefined,
+      });
+
+      return NextResponse.json({ success: true, requestId, data: { tag: updated.item } });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -101,13 +157,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (!tag) {
       return errorResponse(404, 'TAG_NOT_FOUND', 'Tag not found', requestId);
-    }
-
-    const body = await parseJsonBody(request);
-    const nextSlug = body.slug === undefined ? '' : normalizeSlug(body.slug);
-
-    if (body.slug !== undefined && !nextSlug) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Tag slug is required', requestId);
     }
 
     if (nextSlug && nextSlug !== tag.slug) {
@@ -144,6 +193,29 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, tagId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const tag = await repositories.blogTaxonomy.getTagByIdOrSlug(site.id, tagId);
+
+      if (!tag) {
+        return errorResponse(404, 'TAG_NOT_FOUND', 'Tag not found', requestId);
+      }
+
+      const deleted = await repositories.blogTaxonomy.deleteTag(site.id, tag.id);
+
+      if (!deleted) {
+        return errorResponse(404, 'TAG_NOT_FOUND', 'Tag not found', requestId);
+      }
+
+      return NextResponse.json({ success: true, requestId, data: { deleted: true, tagId: tag.id } });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {

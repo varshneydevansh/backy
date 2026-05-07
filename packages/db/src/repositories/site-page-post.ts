@@ -161,6 +161,25 @@ const normalizeMeta = (value: unknown): PageMeta => (
     isRecord(value) ? value as PageMeta : {}
 );
 
+const toStringArray = (value: unknown): string[] => (
+    Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : []
+);
+
+const taxonomyMeta = (meta: unknown, categoryIds?: string[], tagIds?: string[]): PageMeta => {
+    const next = { ...normalizeMeta(meta) } as PageMeta & Record<string, unknown>;
+    if (categoryIds !== undefined) {
+        next.categoryIds = categoryIds;
+    }
+    if (tagIds !== undefined) {
+        next.tagIds = tagIds;
+    }
+    return next;
+};
+
+const taxonomyArrayFromMeta = (meta: unknown, key: 'categoryIds' | 'tagIds'): string[] => (
+    toStringArray((normalizeMeta(meta) as PageMeta & Record<string, unknown>)[key])
+);
+
 const normalizeContentDocument = (
     rawContent: unknown,
     input: {
@@ -253,8 +272,8 @@ const toPost = (row: BlogPostRow): BackyPost => ({
     }),
     contentFormat: 'editor',
     featuredImageId: row.featuredImageId,
-    categoryIds: [],
-    tagIds: [],
+    categoryIds: taxonomyArrayFromMeta(row.meta, 'categoryIds'),
+    tagIds: taxonomyArrayFromMeta(row.meta, 'tagIds'),
     authorId: row.authorId,
     status: row.status,
     publishedAt: toNullableIso(row.publishedAt),
@@ -524,7 +543,7 @@ export function createPostRepository(db: DatabaseInstance): BackyPostRepository 
                 status,
                 scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
                 publishedAt: publishedAtForStatus(status),
-                meta: input.meta || {},
+                meta: taxonomyMeta(input.meta || {}, input.categoryIds || [], input.tagIds || []),
                 updatedAt: new Date(),
             }).returning() as BlogPostRow[];
             return { item: toPost(row) };
@@ -540,7 +559,14 @@ export function createPostRepository(db: DatabaseInstance): BackyPostRepository 
             if (input.content !== undefined) updates.content = contentPayload(input.content);
             if (input.featuredImageId !== undefined) updates.featuredImageId = input.featuredImageId;
             if (input.authorId !== undefined) updates.authorId = input.authorId;
-            if (input.meta !== undefined) updates.meta = input.meta;
+            if (input.meta !== undefined || input.categoryIds !== undefined || input.tagIds !== undefined) {
+                const current = await this.getById(siteId, postId);
+                updates.meta = taxonomyMeta(
+                    input.meta !== undefined ? input.meta : current?.meta || {},
+                    input.categoryIds,
+                    input.tagIds,
+                );
+            }
             if (input.status !== undefined) {
                 updates.status = input.status;
                 updates.publishedAt = publishedAtForStatus(input.status);

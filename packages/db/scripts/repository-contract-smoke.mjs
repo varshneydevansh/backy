@@ -3,6 +3,7 @@
 import { createBackyContentDocument } from '../../core/dist/index.mjs';
 import {
   createAuditLogRepository,
+  createBlogTaxonomyRepository,
   createCollectionRepository,
   createCommentRepository,
   createContentWorkflowRepository,
@@ -19,6 +20,8 @@ import {
 } from '../dist/index.js';
 import {
   blogPosts,
+  blogCategories,
+  blogTags,
   activityLogs,
   comments,
   contentCollectionRecords,
@@ -52,6 +55,8 @@ const tableName = (table) => {
   if (table === profiles) return 'profiles';
   if (table === reusableSections) return 'reusableSections';
   if (table === blogPosts) return 'blogPosts';
+  if (table === blogCategories) return 'blogCategories';
+  if (table === blogTags) return 'blogTags';
   if (table === comments) return 'comments';
   if (table === contentCollections) return 'contentCollections';
   if (table === contentCollectionRecords) return 'contentCollectionRecords';
@@ -74,6 +79,8 @@ const createFakeDb = () => {
     profiles: [],
     reusableSections: [],
     blogPosts: [],
+    blogCategories: [],
+    blogTags: [],
     comments: [],
     contentCollections: [],
     contentCollectionRecords: [],
@@ -93,6 +100,8 @@ const createFakeDb = () => {
     profiles: 0,
     reusableSections: 0,
     blogPosts: 0,
+    blogCategories: 0,
+    blogTags: 0,
     comments: 0,
     contentCollections: 0,
     contentCollectionRecords: 0,
@@ -225,6 +234,32 @@ const createFakeDb = () => {
         scheduledAt: null,
         meta: {},
         viewCount: 0,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'blogCategories') {
+      return {
+        id: nextId(name),
+        siteId: 'site_default',
+        name: 'Category',
+        slug: 'category',
+        description: null,
+        color: null,
+        sortOrder: 0,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'blogTags') {
+      return {
+        id: nextId(name),
+        siteId: 'site_default',
+        name: 'Tag',
+        slug: 'tag',
+        description: null,
         createdAt: timestamp,
         updatedAt: timestamp,
         ...values,
@@ -496,6 +531,7 @@ const repositorySet = createDatabaseRepositories({
   },
 });
 assert(repositorySet.sites && repositorySet.pages && repositorySet.posts, 'Expected repository set factories');
+assert(repositorySet.blogTaxonomy, 'Expected blog taxonomy repository factory');
 assert(repositorySet.media, 'Expected media repository factory');
 assert(repositorySet.collections, 'Expected collection repository factory');
 assert(repositorySet.forms, 'Expected form repository factory');
@@ -509,6 +545,7 @@ assert(repositorySet.auditLogs, 'Expected audit log repository factory');
 const siteRepository = createSiteRepository(db);
 const pageRepository = createPageRepository(db);
 const postRepository = createPostRepository(db);
+const blogTaxonomyRepository = createBlogTaxonomyRepository(db);
 const mediaRepository = createMediaRepository(db);
 const collectionRepository = createCollectionRepository(db);
 const formRepository = createFormRepository(db);
@@ -630,6 +667,30 @@ const post = (await postRepository.create({
 assert(post.content.kind === 'post', 'Expected canonical post content');
 assert((await postRepository.list({ siteId: site.id })).items.length === 0, 'Expected draft posts hidden by default');
 assert((await postRepository.list({ siteId: site.id, includeUnpublished: true })).items.length === 1, 'Expected draft posts with includeUnpublished');
+
+const category = (await blogTaxonomyRepository.createCategory({
+  siteId: site.id,
+  name: 'Announcements',
+  slug: 'announcements',
+  description: 'Product updates',
+  color: '#2563eb',
+})).item;
+const tag = (await blogTaxonomyRepository.createTag({
+  siteId: site.id,
+  name: 'Launch',
+  slug: 'launch',
+  description: 'Launch posts',
+})).item;
+const categorizedPost = (await postRepository.update(site.id, post.id, {
+  categoryIds: [category.id],
+  tagIds: [tag.id],
+})).item;
+assert(categorizedPost.categoryIds.includes(category.id), 'Expected post category assignment');
+assert(categorizedPost.tagIds.includes(tag.id), 'Expected post tag assignment');
+assert((await blogTaxonomyRepository.listCategories(site.id))[0]?.postCount === 1, 'Expected category post count');
+assert((await blogTaxonomyRepository.listTags(site.id))[0]?.postCount === 1, 'Expected tag post count');
+assert((await blogTaxonomyRepository.getCategoryByIdOrSlug(site.id, 'announcements'))?.id === category.id, 'Expected category slug lookup');
+assert((await blogTaxonomyRepository.getTagByIdOrSlug(site.id, 'launch'))?.id === tag.id, 'Expected tag slug lookup');
 
 const archivedPost = (await postRepository.archive(site.id, post.id)).item;
 assert(archivedPost.status === 'archived', 'Expected archived post');

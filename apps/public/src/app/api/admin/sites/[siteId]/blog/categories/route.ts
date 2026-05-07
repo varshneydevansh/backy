@@ -12,6 +12,8 @@ import {
   getSiteByIdOrSlug,
   listBlogCategories,
 } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { resolveRepositorySite } from '@/lib/repositoryContentWorkflow';
 
 export const runtime = 'nodejs';
 
@@ -59,6 +61,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          categories: await repositories.blogTaxonomy.listCategories(site.id),
+        },
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {
@@ -83,12 +102,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
-    const site = getSiteByIdOrSlug(siteId);
-
-    if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
-    }
-
     const body = await parseJsonBody(request);
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const slug = normalizeSlug(body.slug || name);
@@ -99,6 +112,45 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!slug) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Category slug is required', requestId);
+    }
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      if (await repositories.blogTaxonomy.getCategoryByIdOrSlug(site.id, slug)) {
+        return errorResponse(409, 'SLUG_CONFLICT', 'A category with this slug already exists', requestId);
+      }
+
+      const created = await repositories.blogTaxonomy.createCategory({
+        siteId: site.id,
+        name,
+        slug,
+        description: typeof body.description === 'string' || body.description === null ? body.description : undefined,
+        color: typeof body.color === 'string' || body.color === null ? body.color : undefined,
+        sortOrder: typeof body.sortOrder === 'number' ? body.sortOrder : undefined,
+      });
+
+      return NextResponse.json(
+        {
+          success: true,
+          requestId,
+          data: {
+            category: created.item,
+          },
+        },
+        { status: 201 },
+      );
+    }
+
+    const site = getSiteByIdOrSlug(siteId);
+
+    if (!site) {
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
     if (getBlogCategoryByIdOrSlug(site.id, slug)) {

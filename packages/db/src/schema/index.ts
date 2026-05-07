@@ -252,8 +252,10 @@ export const blogCategories = pgTable('blog_categories', {
     name: text('name').notNull(),
     slug: text('slug').notNull(),
     description: text('description'),
+    color: text('color'),
     sortOrder: integer('sort_order').default(0).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
 /**
@@ -266,7 +268,9 @@ export const blogTags = pgTable('blog_tags', {
         .notNull(),
     name: text('name').notNull(),
     slug: text('slug').notNull(),
+    description: text('description'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
 // ==========================================================================

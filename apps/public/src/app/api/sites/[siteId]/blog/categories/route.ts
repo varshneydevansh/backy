@@ -6,6 +6,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSiteByIdOrSlug, listBlogCategories } from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { resolveRepositorySite } from '@/lib/repositoryContentWorkflow';
 
 interface RouteParams {
   params: Promise<{
@@ -35,6 +37,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await resolveRepositorySite(repositories, siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+      const categories = await repositories.blogTaxonomy.listCategories(site.id);
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: { categories },
+        categories,
+      });
+    }
+
     const site = getSiteByIdOrSlug(siteId);
 
     if (!site) {

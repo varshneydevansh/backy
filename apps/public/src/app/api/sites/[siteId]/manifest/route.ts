@@ -5,7 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import type { BackyCollection, BackyPage, BackyPost, BackyReusableSection, FormDefinition, MediaItem, Site } from '@backy-cms/core';
+import type { BackyBlogAuthor, BackyBlogCategory, BackyBlogTag, BackyCollection, BackyPage, BackyPost, BackyReusableSection, FormDefinition, MediaItem, Site } from '@backy-cms/core';
 import {
   getBlogPosts,
   getMediaList,
@@ -92,6 +92,9 @@ const buildRepositoryManifest = (
     site: Site;
     pages: BackyPage[];
     posts: BackyPost[];
+    categories: BackyBlogCategory[];
+    tags: BackyBlogTag[];
+    authors: BackyBlogAuthor[];
     collections: BackyCollection[];
     reusableSections: BackyReusableSection[];
     forms: FormDefinition[];
@@ -146,7 +149,7 @@ const buildRepositoryManifest = (
         collectionWriteForms: input.forms.some((form) => form.collectionTarget?.enabled),
         dynamicItemRoutes: publicCollections.length > 0,
         reusableSections: input.reusableSections.length > 0,
-        previewTokens: false,
+        previewTokens: true,
       },
       endpoints: {
         site: `/api/sites?identifier=${encodeURIComponent(input.site.slug)}`,
@@ -217,9 +220,26 @@ const buildRepositoryManifest = (
         },
         blog: {
           count: input.posts.length,
-          categories: [],
-          tags: [],
-          authors: [],
+          categories: input.categories.map((category) => ({
+            id: category.id,
+            name: category.name,
+            slug: category.slug,
+            postCount: category.postCount || 0,
+          })),
+          tags: input.tags.map((tag) => ({
+            id: tag.id,
+            name: tag.name,
+            slug: tag.slug,
+            postCount: tag.postCount || 0,
+          })),
+          authors: input.authors.map((author) => ({
+            id: author.id,
+            name: author.name,
+            slug: author.slug,
+            role: author.role,
+            status: author.status,
+            postCount: author.postCount || 0,
+          })),
         },
         collections: publicCollections.map((collection) => ({
           id: collection.id,
@@ -288,9 +308,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const [pages, posts, collections, reusableSections, forms, media] = await Promise.all([
+      const [pages, posts, categories, tags, authors, collections, reusableSections, forms, media] = await Promise.all([
         repositories.pages.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
         repositories.posts.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
+        repositories.blogTaxonomy.listCategories(site.id),
+        repositories.blogTaxonomy.listTags(site.id),
+        repositories.blogTaxonomy.listAuthors(site.id),
         repositories.collections.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
         repositories.reusableSections.list({ siteId: site.id, status: 'active', limit: 100, offset: 0 }),
         repositories.forms.list({ siteId: site.id, isActive: true, limit: 100, offset: 0 }),
@@ -301,6 +324,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         site,
         pages: pages.items.filter(isPubliclyReadable),
         posts: posts.items.filter(isPubliclyReadable),
+        categories,
+        tags,
+        authors,
         collections: collections.items.filter((collection) => collection.status === 'published'),
         reusableSections: reusableSections.items,
         forms: forms.items,

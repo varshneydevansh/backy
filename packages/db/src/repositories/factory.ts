@@ -1,6 +1,7 @@
 import type { BackyRepositories } from '@backy-cms/core/repositories';
 import type { DatabaseAdapter } from '../adapters';
 import { createAuditLogRepository } from './audit-logs';
+import { createBlogTaxonomyRepository } from './blog-taxonomy';
 import { createCollectionRepository } from './collections';
 import { createCommentRepository } from './comments';
 import { createContentWorkflowRepository } from './content-workflows';
@@ -15,7 +16,7 @@ import {
     createSiteRepository,
 } from './site-page-post';
 
-type ImplementedBackyRepositories = Pick<BackyRepositories, 'sites' | 'pages' | 'posts' | 'media' | 'collections' | 'forms' | 'comments' | 'reusableSections' | 'contentWorkflows' | 'users' | 'settings' | 'auditLogs'>;
+type ImplementedBackyRepositories = Pick<BackyRepositories, 'sites' | 'pages' | 'posts' | 'blogTaxonomy' | 'media' | 'collections' | 'forms' | 'comments' | 'reusableSections' | 'contentWorkflows' | 'users' | 'settings' | 'auditLogs'>;
 
 export interface DatabaseRepositoryFactoryInput {
     adapter: DatabaseAdapter;
@@ -28,6 +29,7 @@ export function createDatabaseRepositories(
         sites: createSiteRepository(input.adapter.db),
         pages: createPageRepository(input.adapter.db),
         posts: createPostRepository(input.adapter.db),
+        blogTaxonomy: createBlogTaxonomyRepository(input.adapter.db),
         media: createMediaRepository(input.adapter.db),
         collections: createCollectionRepository(input.adapter.db),
         forms: createFormRepository(input.adapter.db),

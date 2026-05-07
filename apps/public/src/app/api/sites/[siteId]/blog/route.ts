@@ -112,13 +112,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 });
             }
 
+            const categorySlug = searchParams.get('categorySlug');
+            const tagSlug = searchParams.get('tagSlug');
+            const authorSlug = searchParams.get('authorSlug');
+            const category = categorySlug
+                ? await repositories.blogTaxonomy.getCategoryByIdOrSlug(site.id, categorySlug)
+                : null;
+            const tag = tagSlug
+                ? await repositories.blogTaxonomy.getTagByIdOrSlug(site.id, tagSlug)
+                : null;
+            const author = authorSlug
+                ? (await repositories.blogTaxonomy.listAuthors(site.id)).find((item) => item.slug === authorSlug || item.id === authorSlug)
+                : null;
+
             const result = await repositories.posts.list({
                 siteId: site.id,
                 includeUnpublished: false,
                 status: status === 'published' ? 'published' : 'published',
-                categoryId: searchParams.get('categoryId') || undefined,
-                tagId: searchParams.get('tagId') || undefined,
-                authorId: searchParams.get('authorId') || undefined,
+                categoryId: searchParams.get('categoryId') || category?.id || undefined,
+                tagId: searchParams.get('tagId') || tag?.id || undefined,
+                authorId: searchParams.get('authorId') || author?.id || undefined,
                 limit,
                 offset,
             });

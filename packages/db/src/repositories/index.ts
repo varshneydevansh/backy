@@ -2,6 +2,9 @@ export {
     createAuditLogRepository,
 } from './audit-logs';
 export {
+    createBlogTaxonomyRepository,
+} from './blog-taxonomy';
+export {
     createCollectionRepository,
 } from './collections';
 export {
