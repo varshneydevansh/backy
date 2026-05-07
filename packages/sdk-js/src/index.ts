@@ -23,6 +23,39 @@ export interface BackyErrorEnvelope {
   };
 }
 
+export interface BackyResponseMeta {
+  status: number;
+  etag?: string;
+  cacheControl?: string;
+  cacheScope?: string;
+  contractVersion?: string;
+  schemaVersion?: string;
+  requestId?: string;
+  siteId?: string;
+}
+
+export type BackyConditionalResult<TBody> =
+  | {
+      notModified: false;
+      status: number;
+      body: TBody;
+      meta: BackyResponseMeta;
+    }
+  | {
+      notModified: true;
+      status: 304;
+      body: null;
+      meta: BackyResponseMeta;
+    };
+
+export interface BackyConditionalRequestOptions {
+  etag?: string;
+  requestId?: string;
+  siteId?: string;
+}
+
+export type BackyConditionalOptions = BackyConditionalRequestOptions;
+
 export interface BackyListOptions {
   limit?: number;
   offset?: number;
@@ -361,8 +394,22 @@ export class BackyClient {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/manifest`);
   }
 
+  manifestCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<BackyFrontendManifest>>> {
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/manifest`, {
+      ifNoneMatch: options.etag,
+      requestId: options.requestId,
+    });
+  }
+
   openapi(siteId = this.requireSiteId()): Promise<Record<string, unknown>> {
     return this.requestRawJson(`/api/sites/${encodeURIComponent(siteId)}/openapi`);
+  }
+
+  openapiCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<Record<string, unknown>>> {
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/openapi`, {
+      ifNoneMatch: options.etag,
+      requestId: options.requestId,
+    });
   }
 
   resolve(path: string, options: { previewToken?: string; siteId?: string } = {}): Promise<BackyEnvelope<BackyRouteResolve>> {
@@ -374,6 +421,17 @@ export class BackyClient {
   render<TPayload = BackyRenderPayload>(path: string, options: { previewToken?: string; siteId?: string } = {}): Promise<BackyEnvelope<TPayload>> {
     return this.request(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/render`, {
       query: { path, previewToken: options.previewToken },
+    });
+  }
+
+  renderCached<TPayload = BackyRenderPayload>(
+    path: string,
+    options: BackyConditionalOptions & { previewToken?: string } = {},
+  ): Promise<BackyConditionalResult<BackyEnvelope<TPayload>>> {
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/render`, {
+      query: { path, previewToken: options.previewToken },
+      ifNoneMatch: options.etag,
+      requestId: options.requestId,
     });
   }
 
@@ -610,6 +668,75 @@ export class BackyClient {
       requestId?: string;
     } = {},
   ): Promise<Record<string, unknown>> {
+    const { response, json } = await this.fetchJson(path, options);
+    const responsePath = response.url ? new URL(response.url).pathname : path;
+
+    if (!response.ok) {
+      if (isBackyErrorEnvelope(json)) {
+        throw new BackyApiError(response.status, json);
+      }
+      throw new Error(`Backy API request failed with HTTP ${response.status} for ${responsePath}.`);
+    }
+
+    if (!json || typeof json !== 'object') {
+      throw new Error(`Backy API returned non-JSON response for ${responsePath}.`);
+    }
+
+    return json as Record<string, unknown>;
+  }
+
+  private async requestConditionalJson<TBody>(
+    path: string,
+    options: {
+      method?: string;
+      query?: Record<string, string | number | boolean | undefined>;
+      body?: unknown;
+      requestId?: string;
+      ifNoneMatch?: string;
+    } = {},
+  ): Promise<BackyConditionalResult<TBody>> {
+    const { response, json } = await this.fetchJson(path, options);
+    const meta = extractResponseMeta(response);
+    const responsePath = response.url ? new URL(response.url).pathname : path;
+
+    if (response.status === 304) {
+      return {
+        notModified: true,
+        status: 304,
+        body: null,
+        meta,
+      };
+    }
+
+    if (!response.ok) {
+      if (isBackyErrorEnvelope(json)) {
+        throw new BackyApiError(response.status, json);
+      }
+      throw new Error(`Backy API request failed with HTTP ${response.status} for ${responsePath}.`);
+    }
+
+    if (!json || typeof json !== 'object') {
+      throw new Error(`Backy API returned non-JSON response for ${responsePath}.`);
+    }
+
+    return {
+      notModified: false,
+      status: response.status,
+      body: json as TBody,
+      meta,
+    };
+  }
+
+  private async fetchJson(
+    path: string,
+    options: {
+      method?: string;
+      query?: Record<string, string | number | boolean | undefined>;
+      body?: unknown;
+      requestId?: string;
+      ifNoneMatch?: string;
+    } = {},
+  ): Promise<{ response: Response; json: unknown }> {
     const url = new URL(path.startsWith('http') ? path : `${this.baseUrl}${path}`);
     for (const [key, value] of Object.entries(options.query || {})) {
       if (value !== undefined) {
@@ -620,6 +747,9 @@ export class BackyClient {
     const headers = new Headers(this.defaultHeaders);
     const requestId = options.requestId ?? this.requestIdFactory();
     headers.set('x-request-id', requestId);
+    if (options.ifNoneMatch) {
+      headers.set('if-none-match', options.ifNoneMatch);
+    }
     if (options.body !== undefined && !headers.has('content-type')) {
       headers.set('content-type', 'application/json');
     }
@@ -629,20 +759,15 @@ export class BackyClient {
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });
-    const json = await response.json().catch(() => null) as unknown;
 
-    if (!response.ok) {
-      if (isBackyErrorEnvelope(json)) {
-        throw new BackyApiError(response.status, json);
-      }
-      throw new Error(`Backy API request failed with HTTP ${response.status} for ${url.pathname}.`);
+    if (response.status === 304) {
+      return { response, json: null };
     }
 
-    if (!json || typeof json !== 'object') {
-      throw new Error(`Backy API returned non-JSON response for ${url.pathname}.`);
-    }
-
-    return json as Record<string, unknown>;
+    return {
+      response,
+      json: await response.json().catch(() => null) as unknown,
+    };
   }
 }
 
@@ -673,5 +798,18 @@ function normalizeCommentInput(input: BackyCommentInput): Record<string, unknown
   return {
     ...rest,
     content: content ?? body ?? '',
+  };
+}
+
+function extractResponseMeta(response: Response): BackyResponseMeta {
+  return {
+    status: response.status,
+    etag: response.headers.get('etag') || undefined,
+    cacheControl: response.headers.get('cache-control') || undefined,
+    cacheScope: response.headers.get('x-backy-cache-scope') || undefined,
+    contractVersion: response.headers.get('x-backy-contract-version') || undefined,
+    schemaVersion: response.headers.get('x-backy-schema-version') || undefined,
+    requestId: response.headers.get('x-backy-request-id') || undefined,
+    siteId: response.headers.get('x-backy-site-id') || undefined,
   };
 }

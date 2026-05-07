@@ -327,10 +327,11 @@ The next implementation should not start by adding more UI screens. The product 
   - External frontend can call site resolve, page fetch, media list, collection reads/writes, form list/detail/submit/review/contact endpoints, comment list/detail/update/report endpoints, and interaction event reads.
 - **Current progress**:
   - `packages/sdk-js` exposes a TypeScript public API client for site discovery, manifest/OpenAPI bootstrap, resolve, render, navigation, media, collection records, forms/submissions/contacts, comments/reports, and interaction events.
-  - The SDK exports starter public contract types for render payloads, content documents/elements, media/font assets, collection schemas/records, forms/submissions/contacts, comments, and events.
+  - The SDK exports starter public contract types for render payloads, content documents/elements, media/font assets, collection schemas/records, forms/submissions/contacts, comments, events, response metadata, and conditional 304 results.
+  - `manifestCached`, `openapiCached`, and `renderCached` expose Backy's cache/contract headers and send `If-None-Match` so custom frontends can reuse cached discovery/render payloads through the SDK.
   - Public manifest, OpenAPI, and render endpoints emit cache-control, ETag/304 revalidation, plus Backy contract/schema/request/site headers; preview and error responses are no-store.
 - **Validation**:
-  - SDK smoke test against local public app, including temporary-site public write coverage for collection records, forms, contacts, comments, reports, and events.
+  - SDK smoke test against local public app, including cached manifest/OpenAPI/render 304 revalidation and temporary-site public write coverage for collection records, forms, contacts, comments, reports, and events.
   - Public contract smoke verifies that the site manifest advertises the same interaction endpoint templates that the site-scoped OpenAPI document exposes and that discovery/render cache headers, contract headers, and conditional 304 responses are present.
 
 ## Sprint 5: Media, Fonts, Files, Video, and Audio Management

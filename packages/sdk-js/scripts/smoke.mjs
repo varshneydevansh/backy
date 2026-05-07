@@ -177,15 +177,36 @@ const manifest = await client.manifest();
 assert(manifest.data.capabilities?.renderPayload === true, 'manifest() missing render payload capability');
 assert(typeof manifest.data.endpoints?.render === 'string', 'manifest() missing render endpoint');
 
+const cachedManifest = await client.manifestCached();
+assert(cachedManifest.notModified === false, 'manifestCached() first request should return a body');
+assert(cachedManifest.meta.etag, 'manifestCached() missing response ETag');
+assert(cachedManifest.body.data.capabilities?.renderPayload === true, 'manifestCached() missing render payload capability');
+const revalidatedManifest = await client.manifestCached({ etag: cachedManifest.meta.etag });
+assert(revalidatedManifest.notModified === true, 'manifestCached() did not return notModified for matching ETag');
+
 const openapi = await client.openapi();
 assert(openapi.openapi === '3.1.0', 'openapi() did not return an OpenAPI 3.1 document');
 assert(openapi.paths?.[manifest.data.endpoints.openapi]?.get, 'openapi() missing manifest-advertised OpenAPI path');
+
+const cachedOpenapi = await client.openapiCached();
+assert(cachedOpenapi.notModified === false, 'openapiCached() first request should return a body');
+assert(cachedOpenapi.meta.etag, 'openapiCached() missing response ETag');
+assert(cachedOpenapi.body.openapi === '3.1.0', 'openapiCached() did not return an OpenAPI 3.1 document');
+const revalidatedOpenapi = await client.openapiCached({ etag: cachedOpenapi.meta.etag });
+assert(revalidatedOpenapi.notModified === true, 'openapiCached() did not return notModified for matching ETag');
 
 const resolved = await client.resolve('/');
 assert(resolved.data.route, 'resolve() did not return a route');
 
 const rendered = await client.render('/');
 assert(rendered.data, 'render() did not return a payload envelope');
+
+const cachedRender = await client.renderCached('/');
+assert(cachedRender.notModified === false, 'renderCached() first request should return a body');
+assert(cachedRender.meta.etag, 'renderCached() missing response ETag');
+assert(cachedRender.body.data.content?.elements, 'renderCached() did not return a render payload');
+const revalidatedRender = await client.renderCached('/', { etag: cachedRender.meta.etag });
+assert(revalidatedRender.notModified === true, 'renderCached() did not return notModified for matching ETag');
 
 const navigation = await client.navigation();
 assert(navigation.data.navigation, 'navigation() missing navigation data');
@@ -357,9 +378,12 @@ console.log(JSON.stringify({
     'discoverSite',
     'sites',
     'manifest',
+    'manifestCached',
     'openapi',
+    'openapiCached',
     'resolve',
     'render',
+    'renderCached',
     'navigation',
     'media',
     'forms',

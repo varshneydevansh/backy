@@ -16,8 +16,24 @@ page.data.content.elements.forEach((element) => {
 });
 ```
 
+Conditional discovery/render helpers expose Backy's response metadata and handle `If-None-Match` revalidation:
+
+```ts
+const first = await backy.renderCached('/');
+
+if (!first.notModified) {
+  console.log(first.meta.etag, first.body.data.content.elements);
+}
+
+const second = await backy.renderCached('/', { etag: first.meta.etag });
+
+if (second.notModified) {
+  console.log('Reuse your cached render payload.');
+}
+```
+
 The SDK intentionally does not import admin/editor code. It wraps the public site bootstrap, manifest/OpenAPI discovery, route resolution, render payload, media, collection, form, comment, report, and event endpoints documented in `specs/backy-api-contracts.md`.
-The default return types expose Backy contract shapes such as `BackyRenderPayload`, `BackyContentDocument`, `BackyMediaAsset`, `BackyCollectionRecord`, `BackyFormSubmission`, `BackyComment`, and `BackyInteractionEvent`. Collection record reads/writes are generic, so a frontend can pass its own value shape: `backy.records<{ title: string }>(collectionId)`.
+The default return types expose Backy contract shapes such as `BackyRenderPayload`, `BackyContentDocument`, `BackyMediaAsset`, `BackyCollectionRecord`, `BackyFormSubmission`, `BackyComment`, `BackyInteractionEvent`, `BackyResponseMeta`, and `BackyConditionalResult`. Collection record reads/writes are generic, so a frontend can pass its own value shape: `backy.records<{ title: string }>(collectionId)`.
 
 ## Local validation
 
