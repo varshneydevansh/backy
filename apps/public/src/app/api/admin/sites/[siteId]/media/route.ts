@@ -22,6 +22,7 @@ interface RouteParams {
 }
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const DEFAULT_SITE_MEDIA_QUOTA_BYTES = 500 * 1024 * 1024;
 
 const MIME_TYPE_TO_MEDIA_TYPE: Array<{
   test: (mimeType: string, extension: string) => boolean;
@@ -141,7 +142,26 @@ const getMediaType = (mimeType: string, originalName: string): MediaItem['type']
   return MIME_TYPE_TO_MEDIA_TYPE.find((candidate) => candidate.test(mimeType, extension))?.type ?? null;
 };
 
-const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+const configuredSiteMediaQuotaBytes = () => {
+  const configured = Number(process.env.BACKY_SITE_MEDIA_QUOTA_BYTES);
+  if (!Number.isFinite(configured) || configured <= 0) {
+    return DEFAULT_SITE_MEDIA_QUOTA_BYTES;
+  }
+
+  return Math.floor(configured);
+};
+
+const mediaUsageBytes = (items: MediaItem[]) => (
+  items.reduce((total, item) => total + Math.max(0, Number(item.sizeBytes) || 0), 0)
+);
+
+const mediaQuotaPayload = (limitBytes: number, usedBytes: number) => ({
+  limitBytes,
+  usedBytes,
+  remainingBytes: Math.max(0, limitBytes - usedBytes),
+});
+
+const errorResponse = (status: number, code: string, message: string, requestId: string, details?: Record<string, unknown>) => (
   NextResponse.json(
     {
       success: false,
@@ -149,6 +169,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       error: {
         code,
         message,
+        ...(details ? { details } : {}),
       },
     },
     { status },
@@ -266,6 +287,31 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(415, 'UNSUPPORTED_MEDIA_TYPE', `Unsupported file type: ${mimeType}`, requestId);
     }
 
+    const siteMediaQuotaBytes = configuredSiteMediaQuotaBytes();
+    const currentMedia = repositories
+      ? (await repositories.media.list({
+          siteId: site.id,
+          type: 'all',
+          visibility: 'all',
+          limit: 100,
+          offset: 0,
+        })).items
+      : getMediaList(site.id, {
+          limit: 10000,
+          offset: 0,
+        }).media;
+    const currentUsageBytes = mediaUsageBytes(currentMedia);
+    const nextUsageBytes = currentUsageBytes + file.size;
+    if (nextUsageBytes > siteMediaQuotaBytes) {
+      return errorResponse(
+        413,
+        'SITE_MEDIA_QUOTA_EXCEEDED',
+        'Uploading this file would exceed the site media storage quota.',
+        requestId,
+        mediaQuotaPayload(siteMediaQuotaBytes, currentUsageBytes),
+      );
+    }
+
     const scope = parseScope(formData.get('scope'));
     const visibility = parseVisibility(formData.get('visibility'));
     const scopeTargetId = toStringValue(formData.get('scopeTargetId'));
@@ -356,6 +402,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         data: {
           media,
           cacheInvalidation,
+          quota: mediaQuotaPayload(siteMediaQuotaBytes, nextUsageBytes),
         },
       },
       { status: 201 },

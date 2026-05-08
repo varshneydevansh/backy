@@ -325,6 +325,9 @@ try {
     });
     assert(upload.response.status === 201, `${upload.url} expected 201, got ${upload.response.status}`);
     assert(upload.json?.data?.media?.type === 'font', `${upload.url} expected font media type`);
+    assert(upload.json?.data?.quota?.limitBytes > 0, `${upload.url} missing media quota limit`);
+    assert(upload.json?.data?.quota?.usedBytes >= upload.json?.data?.media?.sizeBytes, `${upload.url} missing media quota usage`);
+    assert(upload.json?.data?.quota?.remainingBytes >= 0, `${upload.url} missing media quota remaining bytes`);
     assert(upload.json?.data?.media?.metadata?.fontFamily === 'Contract Sans', `${upload.url} expected font family metadata`);
     assert(upload.json?.data?.media?.metadata?.extension === 'woff2', `${upload.url} expected preserved font extension metadata`);
     assert(upload.json?.data?.media?.metadata?.license === 'contract-smoke', `${upload.url} expected custom upload metadata`);

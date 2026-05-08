@@ -12,6 +12,7 @@
         "test:ai-contract-examples": "node scripts/validate-ai-contract-examples.mjs",
         "test:preview-contract": "node scripts/preview-contract-smoke.mjs",
         "test:admin-auth": "node scripts/admin-auth-smoke.mjs",
+        "test:media-quota": "node scripts/media-quota-smoke.mjs",
         "test:admin-contract": "node scripts/admin-contract-smoke.mjs"
     },
     "dependencies": {
