@@ -7,9 +7,10 @@
  * GET /api/sites/[siteId]/blog?slug=xxx - Get post by slug
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import type { BackyPost } from '@backy-cms/core';
 import { getBlogPosts, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -21,7 +22,7 @@ interface RouteParams {
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-    NextResponse.json(
+    publicContractJson(
         {
             success: false,
             requestId,
@@ -31,7 +32,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
             },
             errorMessage: message,
         },
-        { status },
+        { status, requestId, cache: 'error' },
     )
 );
 
@@ -102,13 +103,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 }
 
                 const responsePost = publicPostFromRepositoryPost(post);
-                return NextResponse.json({
+                const cacheRevision = previewToken
+                    ? undefined
+                    : await repositories.cacheInvalidations.latestRevision({
+                        siteId: site.id,
+                        scope: 'content',
+                    }) || undefined;
+
+                return publicContractJson({
                     success: true,
                     requestId,
                     data: {
                         post: responsePost,
                     },
                     post: responsePost,
+                }, {
+                    requestId,
+                    request,
+                    cache: previewToken ? 'private' : 'discovery',
+                    siteId: site.id,
+                    cacheRevision,
                 });
             }
 
@@ -143,12 +157,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     total: posts.length,
                 },
             };
+            const cacheRevision = await repositories.cacheInvalidations.latestRevision({
+                siteId: site.id,
+                scope: 'content',
+            }) || undefined;
 
-            return NextResponse.json({
+            return publicContractJson({
                 success: true,
                 requestId,
                 data,
                 ...data,
+            }, {
+                requestId,
+                request,
+                cache: 'discovery',
+                siteId: site.id,
+                cacheRevision,
             });
         }
 
@@ -174,13 +198,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
             }
 
-            return NextResponse.json({
+            return publicContractJson({
                 success: true,
                 requestId,
                 data: {
                     post,
                 },
                 post,
+            }, {
+                requestId,
+                request,
+                cache: previewToken ? 'private' : 'discovery',
+                siteId: site.id,
             });
         }
 
@@ -195,11 +224,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             authorId: searchParams.get('authorId') || undefined,
             authorSlug: searchParams.get('authorSlug') || undefined,
         });
-        return NextResponse.json({
+        return publicContractJson({
             success: true,
             requestId,
             data,
             ...data,
+        }, {
+            requestId,
+            request,
+            cache: 'discovery',
+            siteId: site.id,
         });
     } catch (error) {
         console.error('API Error:', error);

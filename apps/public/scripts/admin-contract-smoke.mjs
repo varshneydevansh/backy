@@ -598,6 +598,17 @@ try {
 
     const visibleScheduledPage = await request(`/api/sites/${createdSiteId}/pages?slug=${pageSlug}`);
     assert(visibleScheduledPage.response.status === 200, `${visibleScheduledPage.url} expected past scheduled page to be visible`);
+    assert(visibleScheduledPage.response.headers.get('x-backy-cache-scope') === 'discovery', `${visibleScheduledPage.url} missing discovery cache scope`);
+    assert(visibleScheduledPage.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${visibleScheduledPage.url} missing contract version header`);
+    assert(visibleScheduledPage.response.headers.get('x-backy-site-id') === createdSiteId, `${visibleScheduledPage.url} missing site id header`);
+    assert(visibleScheduledPage.response.headers.get('x-backy-cache-revision'), `${visibleScheduledPage.url} missing page cache revision`);
+    const visibleScheduledPageEtag = visibleScheduledPage.response.headers.get('etag');
+    assert(visibleScheduledPageEtag?.startsWith('"backy-'), `${visibleScheduledPage.url} missing page etag`);
+    const revalidatedVisibleScheduledPage = await request(`/api/sites/${createdSiteId}/pages?slug=${pageSlug}`, {
+      headers: { 'if-none-match': visibleScheduledPageEtag },
+    });
+    assert(revalidatedVisibleScheduledPage.response.status === 304, `${revalidatedVisibleScheduledPage.url} expected page 304, got ${revalidatedVisibleScheduledPage.response.status}`);
+    assert(revalidatedVisibleScheduledPage.response.headers.get('etag') === visibleScheduledPageEtag, `${revalidatedVisibleScheduledPage.url} expected matching page etag`);
     assert(visibleScheduledPage.json?.success === true, `${visibleScheduledPage.url} expected success envelope`);
     assert(visibleScheduledPage.json?.data?.page?.id === createdPageId, `${visibleScheduledPage.url} returned wrong scheduled page in data envelope`);
     assert(visibleScheduledPage.json?.page?.id === createdPageId, `${visibleScheduledPage.url} returned wrong scheduled page`);
@@ -1371,6 +1382,17 @@ try {
 
     const visibleScheduledPost = await request(`/api/sites/${createdSiteId}/blog?slug=${postSlug}`);
     assert(visibleScheduledPost.response.status === 200, `${visibleScheduledPost.url} expected past scheduled post to be visible`);
+    assert(visibleScheduledPost.response.headers.get('x-backy-cache-scope') === 'discovery', `${visibleScheduledPost.url} missing discovery cache scope`);
+    assert(visibleScheduledPost.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${visibleScheduledPost.url} missing contract version header`);
+    assert(visibleScheduledPost.response.headers.get('x-backy-site-id') === createdSiteId, `${visibleScheduledPost.url} missing site id header`);
+    assert(visibleScheduledPost.response.headers.get('x-backy-cache-revision'), `${visibleScheduledPost.url} missing post cache revision`);
+    const visibleScheduledPostEtag = visibleScheduledPost.response.headers.get('etag');
+    assert(visibleScheduledPostEtag?.startsWith('"backy-'), `${visibleScheduledPost.url} missing post etag`);
+    const revalidatedVisibleScheduledPost = await request(`/api/sites/${createdSiteId}/blog?slug=${postSlug}`, {
+      headers: { 'if-none-match': visibleScheduledPostEtag },
+    });
+    assert(revalidatedVisibleScheduledPost.response.status === 304, `${revalidatedVisibleScheduledPost.url} expected post 304, got ${revalidatedVisibleScheduledPost.response.status}`);
+    assert(revalidatedVisibleScheduledPost.response.headers.get('etag') === visibleScheduledPostEtag, `${revalidatedVisibleScheduledPost.url} expected matching post etag`);
     assert(visibleScheduledPost.json?.success === true, `${visibleScheduledPost.url} expected success envelope`);
     assert(visibleScheduledPost.json?.data?.post?.id === createdPostId, `${visibleScheduledPost.url} returned wrong scheduled post in data envelope`);
     assert(visibleScheduledPost.json?.post?.id === createdPostId, `${visibleScheduledPost.url} returned wrong scheduled post`);
@@ -1429,6 +1451,8 @@ try {
 
     const publicCategoryFilter = await request(`/api/sites/${createdSiteId}/blog?categorySlug=${categorySlug}`);
     assert(publicCategoryFilter.response.status === 200, `${publicCategoryFilter.url} expected 200, got ${publicCategoryFilter.response.status}`);
+    assert(publicCategoryFilter.response.headers.get('x-backy-cache-scope') === 'discovery', `${publicCategoryFilter.url} missing discovery cache scope`);
+    assert(publicCategoryFilter.response.headers.get('etag')?.startsWith('"backy-'), `${publicCategoryFilter.url} missing filtered posts etag`);
     assert(publicCategoryFilter.json?.success === true, `${publicCategoryFilter.url} expected success envelope`);
     assert(publicCategoryFilter.json?.data?.posts?.some((post) => post.id === createdPostId), `${publicCategoryFilter.url} missing public category-filtered post in data envelope`);
     assert(publicCategoryFilter.json?.posts?.some((post) => post.id === createdPostId), `${publicCategoryFilter.url} missing public category-filtered post`);
