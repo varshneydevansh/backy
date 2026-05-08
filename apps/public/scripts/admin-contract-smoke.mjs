@@ -16,6 +16,7 @@ let createdCollectionRecordId = null;
 let createdMediaId = null;
 let createdMediaFolderId = null;
 let createdReusableSectionId = null;
+let routeConflictCleanupPageId = null;
 let originalDeliveryMode = null;
 
 function assert(condition, message) {
@@ -57,6 +58,10 @@ async function cleanup() {
 
   if (createdSiteId && createdPageId) {
     await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (createdSiteId && routeConflictCleanupPageId) {
+    await request(`/api/admin/sites/${createdSiteId}/pages/${routeConflictCleanupPageId}`, { method: 'DELETE' }).catch(() => {});
   }
 
   if (createdSiteId && createdCategoryId) {
@@ -402,6 +407,17 @@ try {
         title: 'Admin Contract Page',
         slug: pageSlug,
         status: 'draft',
+        meta: {
+          title: 'Admin Contract Page',
+          description: 'Admin contract page description.',
+          jsonLd: [
+            {
+              '@context': 'https://schema.org',
+              '@type': 'WebPage',
+              name: 'Admin Contract Page',
+            },
+          ],
+        },
         content: {
           elements: [
             {
@@ -706,6 +722,10 @@ try {
     assert(
       renderPayload.json?.data?.assets?.fonts?.some((font) => font.id === createdMediaId && font.family === 'Contract Sans Display'),
       `${renderPayload.url} missing uploaded font asset manifest`,
+    );
+    assert(
+      renderPayload.json?.data?.seo?.jsonLd?.some((entry) => entry?.['@type'] === 'WebPage' && entry?.name === 'Admin Contract Page'),
+      `${renderPayload.url} missing route JSON-LD in render SEO`,
     );
 
     const resolvedPage = await request(`/api/sites/${createdSiteId}/resolve?path=/${pageSlug}`);
@@ -1462,7 +1482,7 @@ try {
     });
     assert(conflictingPage.response.status === 201, `${conflictingPage.url} expected 201, got ${conflictingPage.response.status}`);
     const routeConflictPageId = conflictingPage.json.data.page.id;
-    createdPageId = routeConflictPageId;
+    routeConflictCleanupPageId = routeConflictPageId;
 
     const blockedCollectionRoute = await request(`/api/admin/sites/${createdSiteId}/collections`, {
       method: 'POST',
@@ -1483,7 +1503,7 @@ try {
 
     const removeRouteConflictPage = await request(`/api/admin/sites/${createdSiteId}/pages/${routeConflictPageId}`, { method: 'DELETE' });
     assert(removeRouteConflictPage.response.status === 200, `${removeRouteConflictPage.url} expected 200, got ${removeRouteConflictPage.response.status}`);
-    createdPageId = null;
+    routeConflictCleanupPageId = null;
 
     const blockedPageRoute = await request(`/api/admin/sites/${createdSiteId}/pages`, {
       method: 'POST',
@@ -1569,6 +1589,17 @@ try {
           title: 'Collection Form Write Page',
           slug: `${pageSlug}-form-write`,
           status: 'published',
+          meta: {
+            title: 'Collection Form Write Page',
+            description: 'Public collection write form page.',
+            jsonLd: [
+              {
+                '@context': 'https://schema.org',
+                '@type': 'WebPage',
+                name: 'Collection Form Write Page',
+              },
+            ],
+          },
           content: {
             elements: [
               {
@@ -1874,6 +1905,11 @@ try {
       assert(seoDiscovery.json?.data?.routes?.some((route) => route.type === 'page' && route.canonical === `/${pageSlug}-form-write`), `${seoDiscovery.url} missing temporary page SEO route`);
       assert(seoDiscovery.json?.data?.defaults?.description === 'Fallback SEO description from admin contract.', `${seoDiscovery.url} missing SEO default description`);
       assert(seoDiscovery.json?.data?.defaults?.jsonLd?.[0]?.['@type'] === 'Organization', `${seoDiscovery.url} missing SEO JSON-LD defaults`);
+      assert(seoDiscovery.json?.data?.routes?.some((route) => (
+        route.type === 'page'
+        && route.id === formWritePageId
+        && route.jsonLd?.some((entry) => entry?.['@type'] === 'WebPage' && entry?.name === 'Collection Form Write Page')
+      )), `${seoDiscovery.url} missing page route JSON-LD`);
       assert(seoDiscovery.json?.data?.routes?.some((route) => route.title?.startsWith('SEO ') && route.openGraph?.image === '/uploads/sites/contract/social-card.jpg'), `${seoDiscovery.url} missing applied SEO defaults`);
       assert(seoDiscovery.json?.data?.sitemap?.enabled === true, `${seoDiscovery.url} missing sitemap enabled flag`);
       assert(seoDiscovery.json?.data?.sitemap?.includeDynamicRoutes === false, `${seoDiscovery.url} missing dynamic sitemap flag`);

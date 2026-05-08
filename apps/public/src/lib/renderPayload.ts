@@ -73,6 +73,14 @@ const getSiteJsonLd = (site: StoreSite): Array<Record<string, unknown>> => (
     : []
 );
 
+const getMetaJsonLd = (meta: { jsonLd?: unknown } | undefined): Array<Record<string, unknown>> => (
+  Array.isArray(meta?.jsonLd)
+    ? meta.jsonLd.filter((entry): entry is Record<string, unknown> => (
+        typeof entry === 'object' && entry !== null && !Array.isArray(entry)
+      ))
+    : []
+);
+
 const normalizeElement = (raw: unknown): RenderElement | null => {
   if (!isRecord(raw)) {
     return null;
@@ -1472,7 +1480,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
           description: page.meta.description || page.description || '',
           image: page.meta.ogImage || undefined,
         },
-        jsonLd: getSiteJsonLd(site),
+        jsonLd: [...getSiteJsonLd(site), ...getMetaJsonLd(page.meta)],
       },
       dataBindings: {
         ...dataBindings,
@@ -1770,7 +1778,7 @@ export function buildPublicBlogPostRenderPayload(
           description: post.meta?.description || post.excerpt || '',
           image: post.meta?.ogImage || undefined,
         },
-        jsonLd: getSiteJsonLd(site),
+        jsonLd: [...getSiteJsonLd(site), ...getMetaJsonLd(post.meta)],
       },
       dataBindings: {
         ...dataBindings,

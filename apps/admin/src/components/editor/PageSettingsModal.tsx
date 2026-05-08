@@ -14,6 +14,7 @@ export interface PageSettings {
         description?: string;
         keywords?: string[];
         ogImage?: string;
+        jsonLd?: Array<Record<string, unknown>>;
     };
 }
 
@@ -24,6 +25,33 @@ interface PageSettingsModalProps {
     onSave: (settings: PageSettings) => void;
 }
 
+const formatJsonLd = (jsonLd: PageSettings['meta']['jsonLd']): string => (
+    Array.isArray(jsonLd) && jsonLd.length > 0 ? JSON.stringify(jsonLd, null, 2) : '[]'
+);
+
+const parseJsonLd = (
+    value: string,
+): { ok: true; value: Array<Record<string, unknown>> } | { ok: false; message: string } => {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(value || '[]');
+    } catch {
+        return { ok: false, message: 'JSON-LD must be valid JSON.' };
+    }
+
+    if (!Array.isArray(parsed)) {
+        return { ok: false, message: 'JSON-LD must be a JSON array.' };
+    }
+
+    for (const [index, entry] of parsed.entries()) {
+        if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+            return { ok: false, message: `JSON-LD entry ${index + 1} must be an object.` };
+        }
+    }
+
+    return { ok: true, value: parsed as Array<Record<string, unknown>> };
+};
+
 export function PageSettingsModal({
     isOpen,
     onClose,
@@ -33,9 +61,11 @@ export function PageSettingsModal({
     const [settings, setSettings] = useState<PageSettings>(initialSettings);
     const [activeTab, setActiveTab] = useState<'general' | 'seo' | 'social'>('general');
     const [validationError, setValidationError] = useState<string | null>(null);
+    const [jsonLdText, setJsonLdText] = useState(() => formatJsonLd(initialSettings.meta.jsonLd));
 
     useEffect(() => {
         setSettings(initialSettings);
+        setJsonLdText(formatJsonLd(initialSettings.meta.jsonLd));
         setValidationError(null);
     }, [initialSettings, isOpen]);
 
@@ -47,7 +77,20 @@ export function PageSettingsModal({
             return;
         }
 
-        onSave(settings);
+        const parsedJsonLd = parseJsonLd(jsonLdText);
+        if (!parsedJsonLd.ok) {
+            setValidationError(parsedJsonLd.message);
+            setActiveTab('seo');
+            return;
+        }
+
+        onSave({
+            ...settings,
+            meta: {
+                ...settings.meta,
+                jsonLd: parsedJsonLd.value,
+            },
+        });
         onClose();
     };
 
@@ -184,6 +227,11 @@ export function PageSettingsModal({
 
                     {activeTab === 'seo' && (
                         <div className="space-y-4">
+                            {validationError && (
+                                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                    {validationError}
+                                </div>
+                            )}
                             <div className="flex items-start gap-4 p-4 bg-muted/30 rounded-lg border border-border/50 mb-4">
                                 <Search className="w-8 h-8 text-blue-500 mt-1" />
                                 <div className="space-y-1">
@@ -228,6 +276,20 @@ export function PageSettingsModal({
                                     rows={3}
                                     className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
                                     placeholder="Description shown in search results"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-1">JSON-LD</label>
+                                <textarea
+                                    value={jsonLdText}
+                                    onChange={(e) => {
+                                        setValidationError(null);
+                                        setJsonLdText(e.target.value);
+                                    }}
+                                    rows={6}
+                                    className="w-full px-3 py-2 border rounded-md bg-background font-mono text-xs leading-5 focus:ring-1 focus:ring-primary focus:outline-none"
+                                    placeholder='[{"@context":"https://schema.org","@type":"WebPage"}]'
                                 />
                             </div>
                         </div>

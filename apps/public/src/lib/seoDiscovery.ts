@@ -30,6 +30,7 @@ export interface SeoRoute {
     image?: string;
   };
   keywords: string[];
+  jsonLd: Array<Record<string, unknown>>;
 }
 
 export interface SeoDiscovery {
@@ -140,15 +141,19 @@ const clampPriority = (value: unknown): number | undefined => {
 
 const isHomepageRoute = (route: SeoRoute) => route.type === 'page' && route.canonical === '/';
 
-export const siteJsonLd = (
-  seo: Partial<SiteSettings['seo']> | undefined,
+export const jsonLdObjects = (
+  value: unknown,
 ): Array<Record<string, unknown>> => (
-  Array.isArray(seo?.jsonLd)
-    ? seo.jsonLd.filter((entry): entry is Record<string, unknown> => (
+  Array.isArray(value)
+    ? value.filter((entry): entry is Record<string, unknown> => (
         typeof entry === 'object' && entry !== null && !Array.isArray(entry)
       ))
     : []
 );
+
+export const siteJsonLd = (
+  seo: Partial<SiteSettings['seo']> | undefined,
+): Array<Record<string, unknown>> => jsonLdObjects(seo?.jsonLd);
 
 export const applySeoSitemapAndRobotsSettings = (
   routes: SeoRoute[],
@@ -248,6 +253,7 @@ export const buildSeoRoutes = (siteId: string): SeoRoute[] => {
         image: typeof page.meta.ogImage === 'string' ? page.meta.ogImage : undefined,
       },
       keywords: toStringArray(page.meta.keywords),
+      jsonLd: jsonLdObjects(page.meta.jsonLd),
     };
   });
 
@@ -276,6 +282,7 @@ export const buildSeoRoutes = (siteId: string): SeoRoute[] => {
         image: typeof post.meta?.ogImage === 'string' ? post.meta.ogImage : undefined,
       },
       keywords: toStringArray(post.meta?.keywords),
+      jsonLd: jsonLdObjects(post.meta?.jsonLd),
     };
   });
 
@@ -302,6 +309,7 @@ export const buildSeoRoutes = (siteId: string): SeoRoute[] => {
         description: collection.description || '',
       },
       keywords: [collection.slug],
+      jsonLd: [],
     };
   });
 
@@ -330,6 +338,7 @@ export const buildSeoRoutes = (siteId: string): SeoRoute[] => {
           description,
         },
         keywords: [collection.slug, record.slug],
+        jsonLd: [],
       };
     })
   ));

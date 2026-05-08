@@ -372,6 +372,7 @@ export interface BackySeoRoute {
   };
   openGraph?: Record<string, unknown>;
   keywords?: string[];
+  jsonLd?: Array<Record<string, unknown>>;
   [key: string]: unknown;
 }
 

@@ -35,6 +35,7 @@ interface PageMeta {
   keywords?: string[];
   ogImage?: string | null;
   canonical?: string | null;
+  jsonLd?: Array<Record<string, unknown>>;
   noIndex?: boolean;
   noFollow?: boolean;
 }
@@ -134,6 +135,7 @@ interface StoreBlogPost {
     keywords?: string[];
     ogImage?: string | null;
     canonical?: string | null;
+    jsonLd?: Array<Record<string, unknown>>;
     noIndex?: boolean;
     noFollow?: boolean;
   };
@@ -2237,6 +2239,18 @@ function toRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function toJsonObjectArray(value: unknown): Array<Record<string, unknown>> | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  return value
+    .filter((entry): entry is Record<string, unknown> => (
+      typeof entry === 'object' && entry !== null && !Array.isArray(entry)
+    ))
+    .map(clone);
+}
+
 function toStringRecord(value: unknown): Record<string, string> {
   return Object.entries(toRecord(value)).reduce<Record<string, string>>((acc, [key, entry]) => {
     const parsed = sanitizeString(entry);
@@ -4217,6 +4231,7 @@ export function createAdminPage(siteId: string, input: Record<string, unknown>):
       keywords: Array.isArray(metaInput.keywords) ? metaInput.keywords.map(sanitizeString).filter(Boolean) : undefined,
       ogImage: sanitizeString(metaInput.ogImage) || null,
       canonical: sanitizeString(metaInput.canonical) || `/${slug}`,
+      jsonLd: toJsonObjectArray(metaInput.jsonLd),
       noIndex: parseBooleanInput(metaInput.noIndex, defaultNoIndexForStatus(status)),
       noFollow: parseBooleanInput(metaInput.noFollow, false),
     },
@@ -4300,6 +4315,7 @@ export function updateAdminPage(
             : current.meta.keywords,
           ogImage: metaInput.ogImage === undefined ? current.meta.ogImage : sanitizeString(metaInput.ogImage) || null,
           canonical: metaInput.canonical === undefined ? current.meta.canonical : sanitizeString(metaInput.canonical),
+          jsonLd: metaInput.jsonLd === undefined ? current.meta.jsonLd : toJsonObjectArray(metaInput.jsonLd),
           noIndex: metaInput.noIndex === undefined ? current.meta.noIndex : parseBooleanInput(metaInput.noIndex, false),
           noFollow: metaInput.noFollow === undefined ? current.meta.noFollow : parseBooleanInput(metaInput.noFollow, false),
         },
@@ -4720,6 +4736,7 @@ export function createAdminBlogPost(siteId: string, input: Record<string, unknow
       keywords: Array.isArray(metaInput.keywords) ? metaInput.keywords.map(sanitizeString).filter(Boolean) : undefined,
       ogImage: sanitizeString(metaInput.ogImage) || null,
       canonical: sanitizeString(metaInput.canonical) || `/blog/${slug}`,
+      jsonLd: toJsonObjectArray(metaInput.jsonLd),
       noIndex: parseBooleanInput(metaInput.noIndex, defaultNoIndexForStatus(status)),
       noFollow: parseBooleanInput(metaInput.noFollow, false),
     },
@@ -4786,6 +4803,7 @@ export function updateAdminBlogPost(
             : current.meta.keywords,
           ogImage: metaInput.ogImage === undefined ? current.meta.ogImage : sanitizeString(metaInput.ogImage) || null,
           canonical: metaInput.canonical === undefined ? current.meta.canonical : sanitizeString(metaInput.canonical),
+          jsonLd: metaInput.jsonLd === undefined ? current.meta.jsonLd : toJsonObjectArray(metaInput.jsonLd),
           noIndex: metaInput.noIndex === undefined ? current.meta.noIndex : parseBooleanInput(metaInput.noIndex, false),
           noFollow: metaInput.noFollow === undefined ? current.meta.noFollow : parseBooleanInput(metaInput.noFollow, false),
         },

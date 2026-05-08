@@ -15,6 +15,7 @@ import {
   buildRobotsTxtFromDiscovery,
   buildSeoDiscovery,
   buildSitemapXml,
+  jsonLdObjects,
   sitemapRoutes,
   siteJsonLd,
   type SeoDiscovery,
@@ -94,6 +95,7 @@ const pageSeoRoute = (page: BackyPage): SeoRoute => {
       image: typeof page.meta?.ogImage === 'string' ? page.meta.ogImage : undefined,
     },
     keywords: toStringArray(page.meta?.keywords),
+    jsonLd: jsonLdObjects(page.meta?.jsonLd),
   };
 };
 
@@ -125,6 +127,7 @@ const postSeoRoute = (post: BackyPost): SeoRoute => {
       image: typeof post.meta?.ogImage === 'string' ? post.meta.ogImage : undefined,
     },
     keywords: toStringArray(post.meta?.keywords),
+    jsonLd: jsonLdObjects(post.meta?.jsonLd),
   };
 };
 
@@ -169,6 +172,7 @@ const dynamicItemSeoRoute = (collection: BackyCollection, record: BackyCollectio
       image: recordImage(record),
     },
     keywords: [collection.slug, record.slug],
+    jsonLd: [],
   };
 };
 
@@ -196,6 +200,7 @@ const dynamicListSeoRoute = (collection: BackyCollection): SeoRoute => {
       description,
     },
     keywords: [collection.slug],
+    jsonLd: [],
   };
 };
 
@@ -289,6 +294,7 @@ const buildRepositorySeoDiscovery = async (
           image: seo?.defaultOgImage || undefined,
         },
         keywords: [],
+        jsonLd: [],
       }, site).title,
       description: seo?.defaultDescription || site.description || '',
       jsonLd: siteJsonLd(seo),

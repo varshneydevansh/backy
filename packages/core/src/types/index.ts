@@ -527,6 +527,9 @@ export interface PageMeta {
   /** Canonical URL override */
   canonical?: string;
 
+  /** Route-specific JSON-LD objects */
+  jsonLd?: Array<Record<string, unknown>>;
+
   /** Whether to exclude from search engines */
   noIndex?: boolean;
 
