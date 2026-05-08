@@ -714,6 +714,8 @@ try {
     assert(renderPayload.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${renderPayload.url} missing contract version header`);
     assert(renderPayload.response.headers.get('x-backy-schema-version') === 'backy.content-payload.v1', `${renderPayload.url} missing render schema version header`);
     assert(renderPayload.response.headers.get('x-backy-site-id') === createdSiteId, `${renderPayload.url} missing site id header`);
+    const renderCacheRevision = renderPayload.response.headers.get('x-backy-cache-revision');
+    assert(renderCacheRevision, `${renderPayload.url} missing render cache revision`);
     const renderEtag = renderPayload.response.headers.get('etag');
     assert(renderEtag?.startsWith('"backy-'), `${renderPayload.url} missing render etag`);
     const revalidatedRender = await request(`/api/sites/${createdSiteId}/render?path=/${pageSlug}`, {
@@ -721,6 +723,7 @@ try {
     });
     assert(revalidatedRender.response.status === 304, `${revalidatedRender.url} expected render 304, got ${revalidatedRender.response.status}`);
     assert(revalidatedRender.response.headers.get('etag') === renderEtag, `${revalidatedRender.url} expected matching render etag`);
+    assert(revalidatedRender.response.headers.get('x-backy-cache-revision') === renderCacheRevision, `${revalidatedRender.url} expected matching render cache revision`);
     validateAiRenderPayload(renderPayload.json, 'page render payload');
     assert(
       renderPayload.json?.data?.navigation?.primary?.some((item) => item.id === 'contract-nav-page' && item.pageId === createdPageId),
@@ -2029,6 +2032,8 @@ try {
       assert(frontendManifest.response.headers.get('x-backy-cache-scope') === 'discovery', `${frontendManifest.url} missing discovery cache scope`);
       assert(frontendManifest.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${frontendManifest.url} missing contract version header`);
       assert(frontendManifest.response.headers.get('x-backy-schema-version') === 'backy.frontend-manifest.v1', `${frontendManifest.url} missing manifest schema version header`);
+      const manifestCacheRevision = frontendManifest.response.headers.get('x-backy-cache-revision');
+      assert(manifestCacheRevision, `${frontendManifest.url} missing manifest cache revision`);
       const manifestEtag = frontendManifest.response.headers.get('etag');
       assert(manifestEtag?.startsWith('"backy-'), `${frontendManifest.url} missing manifest etag`);
       const revalidatedManifest = await request(`/api/sites/${createdSiteId}/manifest`, {
@@ -2036,6 +2041,7 @@ try {
       });
       assert(revalidatedManifest.response.status === 304, `${revalidatedManifest.url} expected manifest 304, got ${revalidatedManifest.response.status}`);
       assert(revalidatedManifest.response.headers.get('etag') === manifestEtag, `${revalidatedManifest.url} expected matching manifest etag`);
+      assert(revalidatedManifest.response.headers.get('x-backy-cache-revision') === manifestCacheRevision, `${revalidatedManifest.url} expected matching manifest cache revision`);
       validateAiFrontendManifest(frontendManifest.json, 'site frontend manifest');
       assert(frontendManifest.json?.data?.capabilities?.renderPayload === true, `${frontendManifest.url} missing render payload capability`);
       assert(frontendManifest.json?.data?.capabilities?.openApi === true, `${frontendManifest.url} missing OpenAPI capability`);
@@ -2104,6 +2110,8 @@ try {
       assert(publicOpenApi.response.headers.get('x-backy-cache-scope') === 'discovery', `${publicOpenApi.url} missing discovery cache scope`);
       assert(publicOpenApi.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${publicOpenApi.url} missing contract version header`);
       assert(publicOpenApi.response.headers.get('x-backy-schema-version') === 'openapi.3.1', `${publicOpenApi.url} missing OpenAPI schema version header`);
+      const openApiCacheRevision = publicOpenApi.response.headers.get('x-backy-cache-revision');
+      assert(openApiCacheRevision, `${publicOpenApi.url} missing OpenAPI cache revision`);
       const openApiEtag = publicOpenApi.response.headers.get('etag');
       assert(openApiEtag?.startsWith('"backy-'), `${publicOpenApi.url} missing OpenAPI etag`);
       const revalidatedOpenApi = await request(`/api/sites/${createdSiteId}/openapi`, {
@@ -2111,6 +2119,7 @@ try {
       });
       assert(revalidatedOpenApi.response.status === 304, `${revalidatedOpenApi.url} expected OpenAPI 304, got ${revalidatedOpenApi.response.status}`);
       assert(revalidatedOpenApi.response.headers.get('etag') === openApiEtag, `${revalidatedOpenApi.url} expected matching OpenAPI etag`);
+      assert(revalidatedOpenApi.response.headers.get('x-backy-cache-revision') === openApiCacheRevision, `${revalidatedOpenApi.url} expected matching OpenAPI cache revision`);
       assert(publicOpenApi.json?.openapi === '3.1.0', `${publicOpenApi.url} expected OpenAPI 3.1 document`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/manifest`]?.get, `${publicOpenApi.url} missing manifest operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/render`]?.get, `${publicOpenApi.url} missing render operation`);

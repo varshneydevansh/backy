@@ -54,8 +54,10 @@ export const publicContractJson = <TBody>(
   options: PublicContractResponseOptions,
 ) => {
   const status = options.status || 200;
-  const etag = shouldAttachEtag(status, options.cache)
-    ? createEtag(options.etagSeed ?? body)
+  const shouldAttachCacheMetadata = shouldAttachEtag(status, options.cache);
+  const etagSeed = options.etagSeed ?? body;
+  const etag = shouldAttachCacheMetadata
+    ? createEtag(etagSeed)
     : null;
   const response = etag && requestHasMatchingEtag(options.request, etag)
     ? new NextResponse(null, { status: 304 })
@@ -65,7 +67,10 @@ export const publicContractJson = <TBody>(
     response.headers.set('etag', etag);
   }
 
-  return withPublicContractHeaders(response, options);
+  return withPublicContractHeaders(response, {
+    ...options,
+    cacheRevision: options.cacheRevision || (shouldAttachCacheMetadata ? createPublicCacheRevision(etagSeed) : undefined),
+  });
 };
 
 const shouldAttachEtag = (status: number, cache: PublicContractCacheScope) => (
