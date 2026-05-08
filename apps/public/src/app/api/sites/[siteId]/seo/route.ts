@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { BackyCollection, BackyCollectionRecord, BackyPage, BackyPost, Site } from '@backy-cms/core';
 import { getSiteByIdOrSlug } from '@/lib/backyStore';
-import { buildRobotsTxt, buildSeoDiscovery, buildSitemapXml, type SeoDiscovery, type SeoRoute } from '@/lib/seoDiscovery';
+import { applySeoDefaults, buildRobotsTxt, buildSeoDiscovery, buildSitemapXml, type SeoDiscovery, type SeoRoute } from '@/lib/seoDiscovery';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { buildCollectionItemPath, buildCollectionListPath } from '@/lib/collectionRoutes';
 
@@ -241,10 +241,11 @@ const buildRepositorySeoDiscovery = async (
       .filter((collection) => collection.status === 'published' && collection.permissions.publicRead)
       .map(dynamicListSeoRoute),
     ...dynamicItems.flat(),
-  ].sort((left, right) => {
+  ].map((route) => applySeoDefaults(route, site)).sort((left, right) => {
     if (left.priority !== right.priority) return right.priority - left.priority;
     return left.canonical.localeCompare(right.canonical);
   });
+  const seo = site.settings?.seo;
 
   return {
     site: {
@@ -253,8 +254,29 @@ const buildRepositorySeoDiscovery = async (
       name: site.name,
     },
     defaults: {
-      title: site.name,
-      description: site.description || '',
+      title: applySeoDefaults({
+        type: 'page',
+        id: site.id,
+        title: site.name,
+        description: seo?.defaultDescription || site.description || '',
+        path: '/',
+        canonical: '/',
+        status: site.isPublished ? 'published' : 'draft',
+        updatedAt: site.updatedAt,
+        priority: 1,
+        changeFrequency: 'daily',
+        robots: {
+          index: true,
+          follow: true,
+        },
+        openGraph: {
+          title: site.name,
+          description: seo?.defaultDescription || site.description || '',
+          image: seo?.defaultOgImage || undefined,
+        },
+        keywords: [],
+      }, site).title,
+      description: seo?.defaultDescription || site.description || '',
       robots: {
         index: true,
         follow: true,

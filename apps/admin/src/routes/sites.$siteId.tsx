@@ -34,12 +34,14 @@ import {
   getSiteNavigation,
   getSiteRedirects,
   getSiteReadiness,
+  getSiteSeoSettings,
   listPages,
   updateSiteRedirects,
   updateSiteNavigation,
+  updateSiteSeoSettings,
   updateSite as updateSiteFromApi,
 } from '@/lib/adminContentApi';
-import type { SiteReadiness } from '@/lib/adminContentApi';
+import type { AdminSiteSeoSettings, SiteReadiness } from '@/lib/adminContentApi';
 import type { Page } from '@/stores/mockStore';
 import type {
   Comment,
@@ -94,6 +96,14 @@ interface SiteRedirectEditorState {
   notice: string | null;
 }
 
+interface SiteSeoEditorState {
+  seo: AdminSiteSeoSettings;
+  loading: boolean;
+  saving: boolean;
+  errorMessage: string | null;
+  notice: string | null;
+}
+
 const DEFAULT_COMMENT_REPORT_REASONS: CommentReportReason[] = [
   'spam',
   'harassment',
@@ -108,6 +118,13 @@ const DEFAULT_COMMENT_REPORT_REASONS: CommentReportReason[] = [
 const EMPTY_NAVIGATION: SiteNavigationConfig = {
   primary: [],
   footer: [],
+};
+
+const EMPTY_SEO_SETTINGS: AdminSiteSeoSettings = {
+  titleTemplate: '%s | {siteName}',
+  defaultDescription: '',
+  defaultOgImage: '',
+  favicon: '',
 };
 
 function makeRedirectRule(): SiteRedirectRule {
@@ -372,6 +389,13 @@ function EditSitePage() {
     errorMessage: null,
     notice: null,
   });
+  const [seoState, setSeoState] = useState<SiteSeoEditorState>({
+    seo: EMPTY_SEO_SETTINGS,
+    loading: false,
+    saving: false,
+    errorMessage: null,
+    notice: null,
+  });
   const [submissionStatus, setSubmissionStatus] = useState<SubmissionStatusFilter>('pending');
   const [contactStatus, setContactStatus] = useState<ContactStatusFilter>('all');
   const [commentStatus, setCommentStatus] = useState<CommentStatusFilter>('pending');
@@ -584,6 +608,60 @@ function EditSitePage() {
         ...prev,
         saving: false,
         errorMessage: error instanceof Error ? error.message : 'Unable to save site redirects.',
+      }));
+    }
+  };
+
+  const loadSeoEditor = async () => {
+    if (!siteApiId) return;
+    setSeoState((prev) => ({ ...prev, loading: true, errorMessage: null }));
+
+    try {
+      const seo = await getSiteSeoSettings(siteApiId);
+      setSeoState((prev) => ({
+        ...prev,
+        seo: { ...EMPTY_SEO_SETTINGS, ...seo },
+        loading: false,
+        notice: null,
+      }));
+    } catch (error) {
+      setSeoState((prev) => ({
+        ...prev,
+        loading: false,
+        errorMessage: error instanceof Error ? error.message : 'Unable to load site SEO settings.',
+      }));
+    }
+  };
+
+  const handleUpdateSeo = (updates: Partial<AdminSiteSeoSettings>) => {
+    setSeoState((prev) => ({
+      ...prev,
+      notice: null,
+      seo: {
+        ...prev.seo,
+        ...updates,
+      },
+    }));
+  };
+
+  const handleSaveSeo = async () => {
+    if (!siteApiId) return;
+    setSeoState((prev) => ({ ...prev, saving: true, errorMessage: null, notice: null }));
+
+    try {
+      const seo = await updateSiteSeoSettings(siteApiId, seoState.seo);
+      setSeoState((prev) => ({
+        ...prev,
+        seo: { ...EMPTY_SEO_SETTINGS, ...seo },
+        saving: false,
+        notice: 'SEO defaults saved and reflected in public SEO discovery.',
+      }));
+      void loadReadiness();
+    } catch (error) {
+      setSeoState((prev) => ({
+        ...prev,
+        saving: false,
+        errorMessage: error instanceof Error ? error.message : 'Unable to save site SEO settings.',
       }));
     }
   };
@@ -1250,6 +1328,7 @@ function EditSitePage() {
       void loadReadiness();
       void loadNavigationEditor();
       void loadRedirectEditor();
+      void loadSeoEditor();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteApiId]);
@@ -1776,6 +1855,114 @@ function EditSitePage() {
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-card border border-border rounded-xl p-6 shadow-sm" data-testid="site-seo-panel">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Globe className="h-5 w-5 text-primary" />
+                <h2 className="text-xl font-semibold">SEO defaults</h2>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Site-wide title, description, Open Graph image, and favicon defaults for hosted pages and custom frontend SEO discovery.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void loadSeoEditor()}
+                disabled={!siteApiId || seoState.loading || seoState.saving}
+                className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RefreshCw className={cn('h-4 w-4', seoState.loading && 'animate-spin')} />
+                Refresh
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveSeo()}
+                disabled={!siteApiId || seoState.loading || seoState.saving}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" />
+                {seoState.saving ? 'Saving...' : 'Save SEO'}
+              </button>
+            </div>
+          </div>
+
+          {seoState.errorMessage && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {seoState.errorMessage}
+            </div>
+          )}
+          {seoState.notice && (
+            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              {seoState.notice}
+            </div>
+          )}
+
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Title template</label>
+                <input
+                  value={seoState.seo.titleTemplate || ''}
+                  onChange={(event) => handleUpdateSeo({ titleTemplate: event.target.value })}
+                  disabled={seoState.loading}
+                  className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="%s | {siteName}"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Use %s or {'{title}'} for the page title and {'{siteName}'} for the site name.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Default description</label>
+                <textarea
+                  value={seoState.seo.defaultDescription || ''}
+                  onChange={(event) => handleUpdateSeo({ defaultDescription: event.target.value })}
+                  disabled={seoState.loading}
+                  rows={3}
+                  className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="Used when a page, post, or dynamic record does not provide its own description."
+                />
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Default Open Graph image</label>
+                <input
+                  value={seoState.seo.defaultOgImage || ''}
+                  onChange={(event) => handleUpdateSeo({ defaultOgImage: event.target.value })}
+                  disabled={seoState.loading}
+                  className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="/uploads/sites/site-id/social-card.jpg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Favicon URL</label>
+                <input
+                  value={seoState.seo.favicon || ''}
+                  onChange={(event) => handleUpdateSeo({ favicon: event.target.value })}
+                  disabled={seoState.loading}
+                  className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="/favicon.ico"
+                />
+              </div>
+              <div className="rounded-lg border border-border bg-background px-4 py-3">
+                <div className="text-xs font-semibold uppercase text-muted-foreground">Preview</div>
+                <div className="mt-2 font-semibold">
+                  {(seoState.seo.titleTemplate || '%s | {siteName}')
+                    .replace(/%s/g, formData.name || site.name)
+                    .replace(/\{title\}/g, formData.name || site.name)
+                    .replace(/\{siteName\}/g, formData.name || site.name)}
+                </div>
+                <div className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                  {seoState.seo.defaultDescription || formData.description || 'No default description set.'}
+                </div>
+              </div>
             </div>
           </div>
         </section>

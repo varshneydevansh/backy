@@ -1,6 +1,6 @@
 import type { BlogPost, Page, Site, User } from '@/stores/mockStore';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
-import type { SiteNavigationConfig, SiteRedirectRule } from '@backy-cms/core';
+import type { SiteNavigationConfig, SiteRedirectRule, SiteSettings } from '@backy-cms/core';
 
 type AdminSiteStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 
@@ -79,6 +79,19 @@ interface ApiSiteRedirectsResponse {
   data?: {
     site: Pick<ApiSite, 'id' | 'slug' | 'name'>;
     redirects: AdminSiteRedirects;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+export type AdminSiteSeoSettings = SiteSettings['seo'];
+
+interface ApiSiteSeoResponse {
+  success: boolean;
+  data?: {
+    site: Pick<ApiSite, 'id' | 'slug' | 'name'>;
+    seo: AdminSiteSeoSettings;
   };
   error?: {
     message?: string;
@@ -1336,6 +1349,37 @@ export async function updateSiteRedirects(
   }
 
   return payload.data.redirects;
+}
+
+export async function getSiteSeoSettings(siteId: string): Promise<AdminSiteSeoSettings> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/seo`);
+  const payload = await readJson<ApiSiteSeoResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load site SEO settings');
+  }
+
+  return payload.data.seo;
+}
+
+export async function updateSiteSeoSettings(
+  siteId: string,
+  seo: AdminSiteSeoSettings,
+): Promise<AdminSiteSeoSettings> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/seo`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ seo }),
+  });
+  const payload = await readJson<ApiSiteSeoResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to save site SEO settings');
+  }
+
+  return payload.data.seo;
 }
 
 export async function getPageReadiness(siteId: string, pageId: string): Promise<PageReadiness> {

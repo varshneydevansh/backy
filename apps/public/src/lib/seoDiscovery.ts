@@ -7,6 +7,7 @@ import {
   type StoreSite,
 } from '@/lib/backyStore';
 import { buildCollectionItemPath, buildCollectionListPath } from '@/lib/collectionRoutes';
+import type { SiteSettings } from '@backy-cms/core';
 
 export interface SeoRoute {
   type: 'page' | 'post' | 'dynamicList' | 'dynamicItem';
@@ -80,6 +81,47 @@ const recordTitle = (values: Record<string, unknown>, fallback: string): string 
 const recordDescription = (values: Record<string, unknown>): string => {
   const description = values.description || values.summary || values.excerpt;
   return typeof description === 'string' ? description : '';
+};
+
+const applyTitleTemplate = (
+  title: string,
+  site: { name: string },
+  seo: Partial<SiteSettings['seo']> | undefined,
+) => {
+  const template = typeof seo?.titleTemplate === 'string' && seo.titleTemplate.trim().length > 0
+    ? seo.titleTemplate.trim()
+    : '';
+
+  if (!template) {
+    return title;
+  }
+
+  return template
+    .replace(/%s/g, title)
+    .replace(/\{title\}/g, title)
+    .replace(/\{siteName\}/g, site.name);
+};
+
+export const applySeoDefaults = (
+  route: SeoRoute,
+  site: { name: string; description?: string | null; settings?: Pick<SiteSettings, 'seo'> },
+): SeoRoute => {
+  const seo = site.settings?.seo;
+  const description = route.description || seo?.defaultDescription || '';
+  const title = applyTitleTemplate(route.title, site, seo);
+  const image = route.openGraph.image || seo?.defaultOgImage || undefined;
+
+  return {
+    ...route,
+    title,
+    description,
+    openGraph: {
+      ...route.openGraph,
+      title,
+      description,
+      image,
+    },
+  };
 };
 
 export const getHostedRouteUrl = (origin: string, siteSlug: string, canonical: string): string => {
@@ -237,7 +279,8 @@ export const buildSeoRoutes = (siteId: string): SeoRoute[] => {
 };
 
 export const buildSeoDiscovery = (site: StoreSite): SeoDiscovery => {
-  const routes = buildSeoRoutes(site.id);
+  const routes = buildSeoRoutes(site.id).map((route) => applySeoDefaults(route, site));
+  const seo = site.settings?.seo;
 
   return {
     site: {
@@ -246,8 +289,8 @@ export const buildSeoDiscovery = (site: StoreSite): SeoDiscovery => {
       name: site.name,
     },
     defaults: {
-      title: site.name,
-      description: site.description || '',
+      title: applyTitleTemplate(site.name, site, seo),
+      description: seo?.defaultDescription || site.description || '',
       robots: {
         index: true,
         follow: true,

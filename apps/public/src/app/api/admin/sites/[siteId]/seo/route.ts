@@ -1,0 +1,203 @@
+/**
+ * Admin site SEO defaults endpoint.
+ *
+ * GET   /api/admin/sites/[siteId]/seo
+ * PATCH /api/admin/sites/[siteId]/seo
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { DEFAULT_SITE_SETTINGS, type SiteSettings } from '@backy-cms/core';
+import {
+  getSiteByIdOrSlug,
+  updateAdminSite,
+} from '@/lib/backyStore';
+import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+
+export const runtime = 'nodejs';
+
+interface RouteParams {
+  params: Promise<{
+    siteId: string;
+  }>;
+}
+
+const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const text = (value: unknown): string | undefined => (
+  typeof value === 'string' ? value.trim() : undefined
+);
+
+const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
+  NextResponse.json(
+    {
+      success: false,
+      requestId,
+      error: {
+        code,
+        message,
+        ...(details ? { details } : {}),
+      },
+    },
+    { status },
+  )
+);
+
+const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+  try {
+    const body = await request.json();
+    return body && typeof body === 'object' && !Array.isArray(body)
+      ? body as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+};
+
+const defaultSiteSettings = (): SiteSettings => ({
+  seo: { ...DEFAULT_SITE_SETTINGS.seo },
+  analytics: {},
+  social: {},
+  redirectRules: [],
+  navigation: {
+    primary: [],
+    footer: [],
+  },
+});
+
+const normalizeSeoInput = (
+  input: unknown,
+  current: SiteSettings['seo'],
+): { ok: true; seo: SiteSettings['seo'] } | { ok: false; details: unknown } => {
+  if (!isRecord(input)) {
+    return { ok: false, details: { message: 'seo must be an object' } };
+  }
+
+  const titleTemplate = text(input.titleTemplate);
+  const issues: Array<{ field: string; message: string }> = [];
+
+  if (titleTemplate && !titleTemplate.includes('%s') && !titleTemplate.includes('{title}')) {
+    issues.push({ field: 'titleTemplate', message: 'Title template must include %s or {title}' });
+  }
+
+  if (issues.length > 0) {
+    return { ok: false, details: { issues } };
+  }
+
+  return {
+    ok: true,
+    seo: {
+      ...current,
+      titleTemplate: input.titleTemplate === undefined ? current.titleTemplate : titleTemplate || '',
+      defaultDescription: input.defaultDescription === undefined ? current.defaultDescription : text(input.defaultDescription) || '',
+      defaultOgImage: input.defaultOgImage === undefined ? current.defaultOgImage : text(input.defaultOgImage) || '',
+      favicon: input.favicon === undefined ? current.favicon : text(input.favicon) || '',
+    },
+  };
+};
+
+const responsePayload = (requestId: string, site: { id: string; slug: string; name: string; settings?: SiteSettings }) => {
+  const settings = site.settings || defaultSiteSettings();
+  return NextResponse.json({
+    success: true,
+    requestId,
+    data: {
+      site: {
+        id: site.id,
+        slug: site.slug,
+        name: site.name,
+      },
+      seo: settings.seo || defaultSiteSettings().seo,
+    },
+  });
+};
+
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
+
+  try {
+    const { siteId } = await params;
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      return responsePayload(requestId, site);
+    }
+
+    const site = getSiteByIdOrSlug(siteId);
+    if (!site) {
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
+    return responsePayload(requestId, site);
+  } catch (error) {
+    console.error('Admin site SEO API error:', error);
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+  }
+}
+
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
+
+  try {
+    const { siteId } = await params;
+    const body = await parseJsonBody(request);
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const validation = normalizeSeoInput(body.seo || body, site.settings.seo);
+      if (!validation.ok) {
+        return errorResponse(400, 'SEO_VALIDATION', 'SEO defaults are invalid', requestId, validation.details);
+      }
+
+      const updated = await repositories.sites.update(site.id, {
+        settings: {
+          ...site.settings,
+          seo: validation.seo,
+        },
+      });
+
+      return responsePayload(requestId, updated.item);
+    }
+
+    const site = getSiteByIdOrSlug(siteId);
+    if (!site) {
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
+    const settings = site.settings || defaultSiteSettings();
+    const validation = normalizeSeoInput(body.seo || body, settings.seo);
+    if (!validation.ok) {
+      return errorResponse(400, 'SEO_VALIDATION', 'SEO defaults are invalid', requestId, validation.details);
+    }
+
+    const updated = updateAdminSite(site.id, {
+      settings: {
+        ...settings,
+        seo: validation.seo,
+      },
+    });
+
+    if (!updated) {
+      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
+    return responsePayload(requestId, updated);
+  } catch (error) {
+    console.error('Admin site SEO update API error:', error);
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+  }
+}

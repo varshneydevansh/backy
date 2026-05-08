@@ -1754,10 +1754,47 @@ try {
       assert(publicReusableSection.response.status === 200, `${publicReusableSection.url} expected 200, got ${publicReusableSection.response.status}`);
       assert(publicReusableSection.json?.data?.section?.content?.elements?.[0]?.id === 'frontend-contract-section-root', `${publicReusableSection.url} missing reusable section content`);
 
+      const invalidSeoSettings = await request(`/api/admin/sites/${createdSiteId}/seo`, {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          seo: {
+            titleTemplate: 'Missing title token',
+          },
+        }),
+      });
+      assert(invalidSeoSettings.response.status === 400, `${invalidSeoSettings.url} expected invalid SEO 400`);
+      assert(invalidSeoSettings.json?.error?.code === 'SEO_VALIDATION', `${invalidSeoSettings.url} expected SEO_VALIDATION`);
+
+      const seoSettings = await request(`/api/admin/sites/${createdSiteId}/seo`, {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          seo: {
+            titleTemplate: 'SEO %s | {siteName}',
+            defaultDescription: 'Fallback SEO description from admin contract.',
+            defaultOgImage: '/uploads/sites/contract/social-card.jpg',
+            favicon: '/favicon-contract.ico',
+          },
+        }),
+      });
+      assert(seoSettings.response.status === 200, `${seoSettings.url} expected SEO settings update 200`);
+      assert(seoSettings.json?.data?.seo?.titleTemplate === 'SEO %s | {siteName}', `${seoSettings.url} missing saved title template`);
+
+      const adminSeoSettings = await request(`/api/admin/sites/${createdSiteId}/seo`);
+      assert(adminSeoSettings.response.status === 200, `${adminSeoSettings.url} expected SEO settings read 200`);
+      assert(adminSeoSettings.json?.data?.seo?.defaultDescription === 'Fallback SEO description from admin contract.', `${adminSeoSettings.url} missing saved SEO defaults`);
+
       const seoDiscovery = await request(`/api/sites/${createdSiteId}/seo`);
       assert(seoDiscovery.response.status === 200, `${seoDiscovery.url} expected 200, got ${seoDiscovery.response.status}`);
       assert(seoDiscovery.json?.success === true, `${seoDiscovery.url} expected success envelope`);
       assert(seoDiscovery.json?.data?.routes?.some((route) => route.type === 'page' && route.canonical === `/${pageSlug}-form-write`), `${seoDiscovery.url} missing temporary page SEO route`);
+      assert(seoDiscovery.json?.data?.defaults?.description === 'Fallback SEO description from admin contract.', `${seoDiscovery.url} missing SEO default description`);
+      assert(seoDiscovery.json?.data?.routes?.some((route) => route.title?.startsWith('SEO ') && route.openGraph?.image === '/uploads/sites/contract/social-card.jpg'), `${seoDiscovery.url} missing applied SEO defaults`);
       assert(seoDiscovery.json?.data?.sitemap?.url === `/api/sites/${createdSiteId}/seo?format=sitemap`, `${seoDiscovery.url} missing sitemap URL`);
 
       const seoSitemap = await request(`/api/sites/${createdSiteId}/seo?format=sitemap`);
