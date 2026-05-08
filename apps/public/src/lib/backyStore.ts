@@ -195,8 +195,8 @@ interface StoreUser {
   id: string;
   fullName: string;
   email: string;
-  role: 'admin' | 'editor' | 'viewer';
-  status: 'active' | 'inactive' | 'invited';
+  role: 'owner' | 'admin' | 'editor' | 'viewer';
+  status: 'active' | 'inactive' | 'invited' | 'suspended';
   createdAt: string;
   updatedAt: string;
   lastActiveAt: string | null;
@@ -3189,7 +3189,7 @@ export function deleteAdminSite(siteId: string): boolean {
 }
 
 const normalizeUserRole = (value: unknown, fallback: StoreUser['role'] = 'viewer'): StoreUser['role'] => {
-  if (value === 'admin' || value === 'editor' || value === 'viewer') {
+  if (value === 'owner' || value === 'admin' || value === 'editor' || value === 'viewer') {
     return value;
   }
 
@@ -3200,7 +3200,7 @@ const normalizeUserStatus = (
   value: unknown,
   fallback: StoreUser['status'] = 'invited',
 ): StoreUser['status'] => {
-  if (value === 'active' || value === 'inactive' || value === 'invited') {
+  if (value === 'active' || value === 'inactive' || value === 'invited' || value === 'suspended') {
     return value;
   }
 
@@ -3215,10 +3215,10 @@ export function listAdminUsers(options: { search?: string; role?: string; status
   ensurePersistedAdminContentLoaded();
 
   const search = sanitizeString(options.search).toLowerCase();
-  const role = options.role === 'admin' || options.role === 'editor' || options.role === 'viewer'
+  const role = options.role === 'owner' || options.role === 'admin' || options.role === 'editor' || options.role === 'viewer'
     ? options.role
     : '';
-  const status = options.status === 'active' || options.status === 'inactive' || options.status === 'invited'
+  const status = options.status === 'active' || options.status === 'inactive' || options.status === 'invited' || options.status === 'suspended'
     ? options.status
     : '';
 

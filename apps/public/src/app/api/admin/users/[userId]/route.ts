@@ -7,10 +7,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { deleteAdminUser, getAdminUserByEmail, getAdminUserById, updateAdminUser } from '@/lib/backyStore';
+import { deleteAdminUser, getAdminUserByEmail, getAdminUserById, listAdminUsers, updateAdminUser } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
+
+type AdminUserRole = 'owner' | 'admin' | 'editor' | 'viewer';
+type AdminUserStatus = 'active' | 'inactive' | 'invited' | 'suspended';
+type AdminUserForSafeguard = {
+  id: string;
+  role: AdminUserRole;
+  status: AdminUserStatus;
+};
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -43,12 +51,45 @@ const normalizeEmail = (value: unknown): string => (
   typeof value === 'string' ? value.trim().toLowerCase() : ''
 );
 
-const normalizeRole = (value: unknown): 'owner' | 'admin' | 'editor' | 'viewer' | null => (
+const normalizeRole = (value: unknown): AdminUserRole | null => (
   value === 'owner' || value === 'admin' || value === 'editor' || value === 'viewer' ? value : null
 );
 
-const normalizeStatus = (value: unknown): 'active' | 'inactive' | 'invited' | 'suspended' | null => (
+const normalizeStatus = (value: unknown): AdminUserStatus | null => (
   value === 'active' || value === 'inactive' || value === 'invited' || value === 'suspended' ? value : null
+);
+
+const isActiveAdminAuthority = (user: AdminUserForSafeguard) => (
+  (user.role === 'owner' || user.role === 'admin') && user.status === 'active'
+);
+
+const wouldRemoveLastAdminAuthority = (
+  users: AdminUserForSafeguard[],
+  current: AdminUserForSafeguard,
+  next: Pick<AdminUserForSafeguard, 'role' | 'status'> | null,
+) => {
+  if (!isActiveAdminAuthority(current)) {
+    return false;
+  }
+
+  const currentStillHasAuthority = next
+    ? isActiveAdminAuthority({ ...current, role: next.role, status: next.status })
+    : false;
+
+  if (currentStillHasAuthority) {
+    return false;
+  }
+
+  return users.filter((user) => user.id !== current.id).every((user) => !isActiveAdminAuthority(user));
+};
+
+const lastAdminError = (requestId: string) => (
+  errorResponse(
+    409,
+    'LAST_ADMIN_AUTHORITY',
+    'At least one active owner or admin must remain.',
+    requestId,
+  )
 );
 
 export async function GET(
@@ -139,6 +180,11 @@ export async function PATCH(
         return errorResponse(409, 'EMAIL_CONFLICT', 'A user with this email already exists', requestId);
       }
 
+      const allUsers = (await repositories.users.list({ limit: 100, offset: 0 })).items;
+      if (wouldRemoveLastAdminAuthority(allUsers, current, { role: nextRole, status: nextStatus })) {
+        return lastAdminError(requestId);
+      }
+
       const user = (await repositories.users.update(userId, {
         ...(body.fullName !== undefined ? { fullName: String(body.fullName).trim() } : {}),
         email: nextEmail,
@@ -188,6 +234,11 @@ export async function PATCH(
       return errorResponse(409, 'EMAIL_CONFLICT', 'A user with this email already exists', requestId);
     }
 
+    const allUsers = listAdminUsers();
+    if (wouldRemoveLastAdminAuthority(allUsers, current, { role: nextRole, status: nextStatus })) {
+      return lastAdminError(requestId);
+    }
+
     const user = updateAdminUser(userId, {
       ...body,
       email: nextEmail,
@@ -223,6 +274,17 @@ export async function DELETE(
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
+      const current = await repositories.users.getById(userId);
+
+      if (!current) {
+        return errorResponse(404, 'USER_NOT_FOUND', 'User not found', requestId);
+      }
+
+      const allUsers = (await repositories.users.list({ limit: 100, offset: 0 })).items;
+      if (wouldRemoveLastAdminAuthority(allUsers, current, null)) {
+        return lastAdminError(requestId);
+      }
+
       const deleted = await repositories.users.delete(userId);
 
       if (!deleted) {
@@ -237,6 +299,15 @@ export async function DELETE(
           userId,
         },
       });
+    }
+
+    const current = getAdminUserById(userId);
+    if (!current) {
+      return errorResponse(404, 'USER_NOT_FOUND', 'User not found', requestId);
+    }
+
+    if (wouldRemoveLastAdminAuthority(listAdminUsers(), current, null)) {
+      return lastAdminError(requestId);
     }
 
     const deleted = deleteAdminUser(userId);

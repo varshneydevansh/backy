@@ -17,6 +17,9 @@ let createdCollectionRecordId = null;
 let createdMediaId = null;
 let createdMediaFolderId = null;
 let createdReusableSectionId = null;
+let createdSafeguardUserId = null;
+let originalUserAdminRole = null;
+let originalUserAdminStatus = null;
 let routeConflictCleanupPageId = null;
 let originalDeliveryMode = null;
 
@@ -126,6 +129,23 @@ async function cleanup() {
 
   if (createdUserId) {
     await request(`/api/admin/users/${createdUserId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (originalUserAdminRole && originalUserAdminStatus) {
+    await request('/api/admin/users/user-admin', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        role: originalUserAdminRole,
+        status: originalUserAdminStatus,
+      }),
+    }).catch(() => {});
+  }
+
+  if (createdSafeguardUserId) {
+    await request(`/api/admin/users/${createdSafeguardUserId}`, { method: 'DELETE' }).catch(() => {});
   }
 
   if (originalDeliveryMode) {
@@ -2879,6 +2899,98 @@ try {
     assert(update.json?.success === true, `${update.url} expected success envelope`);
     assert(update.json?.data?.user?.role === 'editor', `${update.url} expected editor role`);
     assert(update.json?.data?.user?.status === 'active', `${update.url} expected active status`);
+  });
+
+  await record('admin users protect last active admin authority', async () => {
+    const users = await request('/api/admin/users');
+    const activeAuthorities = users.json?.data?.users?.filter((user) => (
+      (user.role === 'owner' || user.role === 'admin') && user.status === 'active'
+    )) || [];
+
+    assert(activeAuthorities.length >= 1, `${users.url} expected at least one active admin authority`);
+    if (activeAuthorities.length !== 1 || !activeAuthorities.some((user) => user.id === 'user-admin')) {
+      return;
+    }
+
+    const safeguardEmail = `admin-safeguard-${Date.now()}@backy.test`;
+    const createSafeguard = await request('/api/admin/users', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        fullName: 'Safeguard Admin',
+        email: safeguardEmail,
+        role: 'admin',
+        status: 'active',
+      }),
+    });
+    assert(createSafeguard.response.status === 201, `${createSafeguard.url} expected 201, got ${createSafeguard.response.status}`);
+    createdSafeguardUserId = createSafeguard.json?.data?.user?.id;
+    assert(createdSafeguardUserId, `${createSafeguard.url} missing safeguard user id`);
+
+    const adminDetail = await request('/api/admin/users/user-admin');
+    originalUserAdminRole = adminDetail.json?.data?.user?.role;
+    originalUserAdminStatus = adminDetail.json?.data?.user?.status;
+    assert(originalUserAdminRole && originalUserAdminStatus, `${adminDetail.url} missing original admin role/status`);
+
+    const demoteDefaultAdmin = await request('/api/admin/users/user-admin', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        role: 'viewer',
+        status: 'active',
+      }),
+    });
+    assert(demoteDefaultAdmin.response.status === 200, `${demoteDefaultAdmin.url} expected temporary demotion to succeed`);
+
+    const blockedDemotion = await request(`/api/admin/users/${createdSafeguardUserId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        role: 'viewer',
+      }),
+    });
+    assert(blockedDemotion.response.status === 409, `${blockedDemotion.url} expected 409 for last admin demotion, got ${blockedDemotion.response.status}`);
+    assert(blockedDemotion.json?.error?.code === 'LAST_ADMIN_AUTHORITY', `${blockedDemotion.url} expected LAST_ADMIN_AUTHORITY`);
+
+    const blockedSuspension = await request(`/api/admin/users/${createdSafeguardUserId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        status: 'suspended',
+      }),
+    });
+    assert(blockedSuspension.response.status === 409, `${blockedSuspension.url} expected 409 for last admin suspension, got ${blockedSuspension.response.status}`);
+    assert(blockedSuspension.json?.error?.code === 'LAST_ADMIN_AUTHORITY', `${blockedSuspension.url} expected LAST_ADMIN_AUTHORITY`);
+
+    const blockedDelete = await request(`/api/admin/users/${createdSafeguardUserId}`, { method: 'DELETE' });
+    assert(blockedDelete.response.status === 409, `${blockedDelete.url} expected 409 for last admin delete, got ${blockedDelete.response.status}`);
+    assert(blockedDelete.json?.error?.code === 'LAST_ADMIN_AUTHORITY', `${blockedDelete.url} expected LAST_ADMIN_AUTHORITY`);
+
+    const restoreDefaultAdmin = await request('/api/admin/users/user-admin', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        role: originalUserAdminRole,
+        status: originalUserAdminStatus,
+      }),
+    });
+    assert(restoreDefaultAdmin.response.status === 200, `${restoreDefaultAdmin.url} expected admin restore to succeed`);
+    originalUserAdminRole = null;
+    originalUserAdminStatus = null;
+
+    const deleteSafeguard = await request(`/api/admin/users/${createdSafeguardUserId}`, { method: 'DELETE' });
+    assert(deleteSafeguard.response.status === 200, `${deleteSafeguard.url} expected safeguard delete after restore`);
+    createdSafeguardUserId = null;
   });
 
   await record('admin users delete removes temporary user', async () => {
