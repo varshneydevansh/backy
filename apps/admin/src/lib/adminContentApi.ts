@@ -120,12 +120,20 @@ export interface AdminSiteSeoPreview {
   routes: AdminSiteSeoPreviewRoute[];
 }
 
+export interface AdminSiteSeoCacheInvalidation {
+  scope: string;
+  reason: string;
+  revision: string;
+  createdAt: string;
+}
+
 interface ApiSiteSeoResponse {
   success: boolean;
   data?: {
     site: Pick<ApiSite, 'id' | 'slug' | 'name'>;
     seo: AdminSiteSeoSettings;
     preview?: AdminSiteSeoPreview;
+    cacheInvalidation?: AdminSiteSeoCacheInvalidation;
   };
   error?: {
     message?: string;
@@ -1405,7 +1413,11 @@ export async function previewSiteRedirects(
   return payload.data.redirects;
 }
 
-export async function getSiteSeoSettings(siteId: string): Promise<{ seo: AdminSiteSeoSettings; preview: AdminSiteSeoPreview }> {
+export async function getSiteSeoSettings(siteId: string): Promise<{
+  seo: AdminSiteSeoSettings;
+  preview: AdminSiteSeoPreview;
+  cacheInvalidation?: AdminSiteSeoCacheInvalidation;
+}> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/seo`);
   const payload = await readJson<ApiSiteSeoResponse>(response);
 
@@ -1416,13 +1428,18 @@ export async function getSiteSeoSettings(siteId: string): Promise<{ seo: AdminSi
   return {
     seo: payload.data.seo,
     preview: payload.data.preview || { supportedVariables: [], routes: [] },
+    cacheInvalidation: payload.data.cacheInvalidation,
   };
 }
 
 export async function updateSiteSeoSettings(
   siteId: string,
   seo: AdminSiteSeoSettings,
-): Promise<{ seo: AdminSiteSeoSettings; preview: AdminSiteSeoPreview }> {
+): Promise<{
+  seo: AdminSiteSeoSettings;
+  preview: AdminSiteSeoPreview;
+  cacheInvalidation?: AdminSiteSeoCacheInvalidation;
+}> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/seo`, {
     method: 'PATCH',
     headers: {
@@ -1439,6 +1456,7 @@ export async function updateSiteSeoSettings(
   return {
     seo: payload.data.seo,
     preview: payload.data.preview || { supportedVariables: [], routes: [] },
+    cacheInvalidation: payload.data.cacheInvalidation,
   };
 }
 
