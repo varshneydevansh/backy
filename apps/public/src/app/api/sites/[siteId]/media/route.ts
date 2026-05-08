@@ -9,6 +9,7 @@
 import { NextRequest } from 'next/server';
 import type { MediaItem } from '@backy-cms/core';
 import { getMediaList, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { withResponsiveMediaManifest } from '@/lib/mediaResponsive';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -46,8 +47,8 @@ const mediaTypeFromInput = (value: string | null): MediaItem['type'] | undefined
         : undefined
 );
 
-const paginateMedia = (items: MediaItem[], limit: number, offset: number) => ({
-    media: items.slice(offset, offset + limit),
+const paginateMedia = (siteId: string, items: MediaItem[], limit: number, offset: number) => ({
+    media: items.slice(offset, offset + limit).map((item) => withResponsiveMediaManifest(siteId, item)),
     pagination: {
         total: items.length,
         limit,
@@ -93,7 +94,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 .filter((item) => pageId ? item.pageIds.includes(pageId) || (item.scope === 'page' && item.scopeTargetId === pageId) : true)
                 .filter((item) => postId ? item.postIds.includes(postId) || (item.scope === 'post' && item.scopeTargetId === postId) : true)
                 .filter((item) => tag ? item.tags.includes(tag) : true);
-            const mediaPayload = paginateMedia(filtered, limit, offset);
+            const mediaPayload = paginateMedia(site.id, filtered, limit, offset);
             const cacheRevision = await repositories.cacheInvalidations.latestRevision({
                 siteId: site.id,
                 scope: 'media',
@@ -130,12 +131,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             limit,
             offset,
         });
+        const mediaWithVariants = {
+            ...mediaPayload,
+            media: mediaPayload.media.map((item) => withResponsiveMediaManifest(site.id, item)),
+        };
 
         return publicContractJson({
             success: true,
             requestId,
-            data: mediaPayload,
-            ...mediaPayload,
+            data: mediaWithVariants,
+            ...mediaWithVariants,
         }, {
             requestId,
             request,

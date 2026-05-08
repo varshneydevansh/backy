@@ -121,6 +121,25 @@ export interface BackyMediaAsset {
   alt?: string;
   title?: string;
   visibility?: string;
+  responsive?: {
+    src: string;
+    srcSet: string;
+    sizes: string;
+    variants: Array<{
+      width: number;
+      quality: number;
+      url: string;
+      bytes?: number;
+      format?: string;
+      mimeType?: string;
+      generatedAt?: string;
+    }>;
+    preparedAt?: string;
+    preparedBy?: string;
+    format?: string;
+    generatedBytes?: number;
+    storageProvider?: string;
+  };
   metadata?: Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -129,6 +148,11 @@ export interface BackyFontAsset extends BackyMediaAsset {
   family?: string;
   weight?: string | number;
   style?: string;
+  weights?: Array<string | number>;
+  styles?: string[];
+  fallbackStack?: string;
+  display?: string;
+  cssFamily?: string;
 }
 
 export interface BackyFieldSchema {

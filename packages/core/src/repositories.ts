@@ -397,6 +397,12 @@ export interface BackyMediaCreateInput {
 
 export interface BackyMediaUpdateInput {
   filename?: string;
+  originalName?: string;
+  mimeType?: string;
+  size?: number;
+  type?: MediaItem['type'];
+  url?: string;
+  thumbnailUrl?: string | null;
   folderId?: string | null;
   altText?: string | null;
   caption?: string | null;

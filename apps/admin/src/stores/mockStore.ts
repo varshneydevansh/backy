@@ -66,13 +66,38 @@ type MediaScope = 'global' | 'page' | 'post';
 
 type MediaVisibility = 'public' | 'private';
 
+export interface MediaResponsiveVariant {
+  width: number;
+  quality: number;
+  url: string;
+  bytes?: number;
+  format?: string;
+  mimeType?: string;
+  generatedAt?: string;
+  storagePath?: string;
+}
+
+export interface MediaResponsiveManifest {
+  src: string;
+  srcSet: string;
+  sizes: string;
+  variants: MediaResponsiveVariant[];
+  preparedAt?: string;
+  preparedBy?: string;
+  format?: string;
+  generatedBytes?: number;
+  storageProvider?: string;
+}
+
 export interface MediaAsset {
   id: string;
   name: string;
   type: 'image' | 'video' | 'file' | 'font';
   size: string;
+  sizeBytes?: number;
   url: string;
   metadata?: Record<string, unknown>;
+  responsive?: MediaResponsiveManifest;
   altText?: string | null;
   caption?: string | null;
   tags?: string[];

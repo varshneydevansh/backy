@@ -5,6 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   getAdminBlogPostById,
   getAdminPageById,
@@ -206,6 +207,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media item not found', requestId);
     }
+
+    await recordAdminAudit({
+      repositories,
+      siteId: site.id,
+      entity: 'media',
+      entityId: updated.id,
+      action: action === 'bind' ? 'media.bind' : 'media.unbind',
+      before: media,
+      after: updated,
+      metadata: {
+        targetType,
+        targetId,
+        usageType,
+        attachedBy,
+      },
+      requestId,
+    });
+
     const cacheInvalidation = repositories
       ? await recordSiteCacheInvalidation(repositories, {
           siteId: site.id,

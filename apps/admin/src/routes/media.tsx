@@ -2,24 +2,42 @@
  * BACKY CMS - MEDIA PAGE
  */
 
-import { useCallback, useEffect, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Edit3, File, FileText, Folder, FolderPlus, Image as ImageIcon, Layout, Save, Trash2, Upload, X } from 'lucide-react';
+import { CheckSquare, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Save, Trash2, Type, Upload, X } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { listBlogPosts, listPages } from '@/lib/adminContentApi';
+import { Button } from '@/components/ui/Button';
+import { Notice } from '@/components/ui/Notice';
+import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import {
+  getSettings,
+  listAdminAuditLogs,
+  listBlogPosts,
+  listPages,
+  type AdminAuditLog,
+  type SiteSettingsInput,
+} from '@/lib/adminContentApi';
+import {
+  bindMediaToTarget,
+  createSignedMediaUrl,
   createMediaFolder,
   deleteMediaFolder,
   deleteMediaFromBackend,
   getDefaultMediaSiteId,
-  listMedia,
+  getPublicImageTransformUrl,
+  getPublicMediaFileUrl,
+  listMediaLibrary,
   listMediaFolders,
+  prepareMediaTransforms,
+  replaceMedia,
   updateMedia,
   uploadMedia,
+  type MediaQuota,
   type MediaFolder,
+  type SignedMediaUrl,
 } from '@/lib/mediaApi';
-import { cn } from '@/lib/utils';
+import { cn, formatBytes } from '@/lib/utils';
 import { useStore, type MediaAsset } from '@/stores/mockStore';
 
 export const Route = createFileRoute('/media')({
@@ -31,10 +49,39 @@ function MediaPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isSavingMetadata, setIsSavingMetadata] = useState(false);
+  const [isCreatingSignedUrl, setIsCreatingSignedUrl] = useState(false);
+  const [isUpdatingBinding, setIsUpdatingBinding] = useState(false);
+  const [isReplacingAsset, setIsReplacingAsset] = useState(false);
+  const [isPreparingTransforms, setIsPreparingTransforms] = useState(false);
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bulkNotice, setBulkNotice] = useState<string | null>(null);
+  const [assetDeliveryError, setAssetDeliveryError] = useState<string | null>(null);
+  const [assetReferenceError, setAssetReferenceError] = useState<string | null>(null);
+  const [assetReplacementError, setAssetReplacementError] = useState<string | null>(null);
+  const [assetAuditLogs, setAssetAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [isLoadingAssetAudit, setIsLoadingAssetAudit] = useState(false);
+  const [assetAuditError, setAssetAuditError] = useState<string | null>(null);
+  const [signedUrl, setSignedUrl] = useState<SignedMediaUrl | null>(null);
+  const [mediaQuota, setMediaQuota] = useState<MediaQuota | undefined>();
+  const [runtimeStorage, setRuntimeStorage] = useState<SiteSettingsInput['runtimeStorage']>();
+  const [signedUrlSeconds, setSignedUrlSeconds] = useState(900);
+  const [signedUrlDisposition, setSignedUrlDisposition] = useState<'inline' | 'attachment'>('inline');
+  const [transformWidth, setTransformWidth] = useState(1200);
+  const [transformQuality, setTransformQuality] = useState(75);
+  const [bindingTargetType, setBindingTargetType] = useState<'page' | 'post'>('page');
+  const [bindingTargetId, setBindingTargetId] = useState('');
+  const [bindingUsageType, setBindingUsageType] = useState<'content' | 'background' | 'thumbnail' | 'cover' | 'avatar' | 'document' | 'icon' | 'other'>('content');
+  const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
+  const [bulkVisibility, setBulkVisibility] = useState<'keep' | 'public' | 'private'>('keep');
+  const [bulkFolderId, setBulkFolderId] = useState<'keep' | 'root' | string>('keep');
+  const [pendingDeleteAsset, setPendingDeleteAsset] = useState<MediaAsset | null>(null);
+  const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
+  const [pendingDeleteFolder, setPendingDeleteFolder] = useState<MediaFolder | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | MediaAsset['type']>('all');
   const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'public' | 'private'>('all');
+  const [usageFilter, setUsageFilter] = useState<'all' | 'unused' | 'referenced' | 'replaced'>('all');
   const [folders, setFolders] = useState<MediaFolder[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null | undefined>(undefined);
   const [newFolderName, setNewFolderName] = useState('');
@@ -48,6 +95,8 @@ function MediaPage() {
     fontFamily: '',
     fontWeight: '400',
     fontStyle: 'normal' as 'normal' | 'italic' | 'oblique',
+    fontFallback: 'system-ui, sans-serif',
+    fontDisplay: 'swap' as 'auto' | 'block' | 'swap' | 'fallback' | 'optional',
     folderId: '',
     visibility: 'public' as 'public' | 'private',
   });
@@ -60,12 +109,122 @@ function MediaPage() {
   const deleteMedia = useStore((state) => state.deleteMedia);
   const siteId = getDefaultMediaSiteId();
 
+  const publicFileUrl = useMemo(
+    () => selectedAsset ? getPublicMediaFileUrl(selectedAsset.id, siteId) : '',
+    [selectedAsset, siteId],
+  );
+  const publicTransformUrl = useMemo(
+    () => selectedAsset?.type === 'image'
+      ? getPublicImageTransformUrl(selectedAsset.id, { width: transformWidth, quality: transformQuality }, siteId)
+      : '',
+    [selectedAsset, siteId, transformQuality, transformWidth],
+  );
+  const responsiveManifest = useMemo(
+    () => selectedAsset?.type === 'image'
+      ? getAdminResponsiveManifest(selectedAsset, siteId)
+      : undefined,
+    [selectedAsset, siteId],
+  );
+  const replacementVersions = useMemo(
+    () => getReplacementVersions(selectedAsset?.metadata),
+    [selectedAsset?.metadata],
+  );
+  const selectedDeliveryAnalytics = useMemo(
+    () => getMediaDeliveryAnalytics(selectedAsset?.metadata),
+    [selectedAsset?.metadata],
+  );
+  const mediaAnalytics = useMemo(() => getMediaAnalytics(files), [files]);
+  const displayedFiles = useMemo(() => (
+    files.filter((file) => {
+      if (usageFilter === 'unused') {
+        return !hasMediaReferences(file);
+      }
+      if (usageFilter === 'referenced') {
+        return hasMediaReferences(file);
+      }
+      if (usageFilter === 'replaced') {
+        return getReplacementVersions(file.metadata).length > 0;
+      }
+      return true;
+    })
+  ), [files, usageFilter]);
+  const quotaUsagePercent = mediaQuota && mediaQuota.limitBytes > 0
+    ? Math.min(100, Math.round((mediaQuota.usedBytes / mediaQuota.limitBytes) * 100))
+    : 0;
+  const bindingTargets = bindingTargetType === 'page'
+    ? pages.map((page) => ({ id: page.id, label: page.title || page.slug || page.id, detail: page.slug ? `/${page.slug}` : 'Page' }))
+    : posts.map((post) => ({ id: post.id, label: post.title || post.slug || post.id, detail: post.slug ? `/blog/${post.slug}` : 'Post' }));
+  const selectedMediaSet = useMemo(() => new Set(selectedMediaIds), [selectedMediaIds]);
+  const selectedMediaAssets = useMemo(
+    () => files.filter((file) => selectedMediaSet.has(file.id)),
+    [files, selectedMediaSet],
+  );
+  const allVisibleSelected = displayedFiles.length > 0 && displayedFiles.every((file) => selectedMediaSet.has(file.id));
+  const hasBulkChange = bulkVisibility !== 'keep' || bulkFolderId !== 'keep';
+  const fontGroups = useMemo(() => {
+    const groups = new Map<string, {
+      family: string;
+      fallback: string;
+      display: string;
+      assets: MediaAsset[];
+      variants: string[];
+      publicCount: number;
+      privateCount: number;
+    }>();
+
+    files
+      .filter((file) => file.type === 'font')
+      .forEach((font) => {
+        const family = typeof font.metadata?.fontFamily === 'string' && font.metadata.fontFamily.trim()
+          ? font.metadata.fontFamily.trim()
+          : font.name.replace(/\.[a-z0-9]+$/i, '');
+        const fallback = typeof font.metadata?.fontFallback === 'string' && font.metadata.fontFallback.trim()
+          ? font.metadata.fontFallback.trim()
+          : 'system-ui, sans-serif';
+        const display = typeof font.metadata?.fontDisplay === 'string' && font.metadata.fontDisplay.trim()
+          ? font.metadata.fontDisplay.trim()
+          : 'swap';
+        const weight = typeof font.metadata?.fontWeight === 'string' && font.metadata.fontWeight.trim()
+          ? font.metadata.fontWeight.trim()
+          : '400';
+        const style = typeof font.metadata?.fontStyle === 'string' && font.metadata.fontStyle.trim()
+          ? font.metadata.fontStyle.trim()
+          : 'normal';
+        const key = family.toLowerCase();
+        const current = groups.get(key) || {
+          family,
+          fallback,
+          display,
+          assets: [],
+          variants: [],
+          publicCount: 0,
+          privateCount: 0,
+        };
+
+        current.assets.push(font);
+        current.variants.push(`${weight} ${style}`);
+        if (font.visibility === 'private') {
+          current.privateCount += 1;
+        } else {
+          current.publicCount += 1;
+        }
+        groups.set(key, current);
+      });
+
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        variants: Array.from(new Set(group.variants)).sort((a, b) => a.localeCompare(b)),
+      }))
+      .sort((a, b) => a.family.localeCompare(b.family));
+  }, [files]);
+
   const loadLibrary = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const backendFiles = await listMedia({
+      const library = await listMediaLibrary({
         siteId,
         scope: 'all',
         limit: 250,
@@ -74,7 +233,8 @@ function MediaPage() {
         visibility: visibilityFilter === 'all' ? undefined : visibilityFilter,
         folderId: selectedFolderId,
       });
-      setMedia(backendFiles);
+      setMedia(library.media);
+      setMediaQuota(library.quota);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load media library.');
     } finally {
@@ -85,6 +245,33 @@ function MediaPage() {
   useEffect(() => {
     void loadLibrary();
   }, [loadLibrary]);
+
+  useEffect(() => {
+    setSelectedMediaIds((current) => current.filter((id) => files.some((file) => file.id === id)));
+  }, [files]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadRuntimeStorage = async () => {
+      try {
+        const settings = await getSettings();
+        if (!cancelled) {
+          setRuntimeStorage(settings.runtimeStorage);
+        }
+      } catch {
+        if (!cancelled) {
+          setRuntimeStorage(undefined);
+        }
+      }
+    };
+
+    void loadRuntimeStorage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,6 +324,10 @@ function MediaPage() {
 
   const openMetadataEditor = (asset: MediaAsset) => {
     setSelectedAsset(asset);
+    setAssetDeliveryError(null);
+    setAssetReferenceError(null);
+    setSignedUrl(null);
+    setBindingTargetId('');
     setMetadataForm({
       name: asset.name,
       altText: asset.altText || '',
@@ -147,9 +338,111 @@ function MediaPage() {
       fontStyle: asset.metadata?.fontStyle === 'italic' || asset.metadata?.fontStyle === 'oblique'
         ? asset.metadata.fontStyle
         : 'normal',
+      fontFallback: typeof asset.metadata?.fontFallback === 'string' && asset.metadata.fontFallback.trim()
+        ? asset.metadata.fontFallback
+        : 'system-ui, sans-serif',
+      fontDisplay: asset.metadata?.fontDisplay === 'auto' ||
+        asset.metadata?.fontDisplay === 'block' ||
+        asset.metadata?.fontDisplay === 'fallback' ||
+        asset.metadata?.fontDisplay === 'optional' ||
+        asset.metadata?.fontDisplay === 'swap'
+        ? asset.metadata.fontDisplay
+        : 'swap',
       folderId: asset.folderId || '',
       visibility: asset.visibility || 'public',
     });
+  };
+
+  useEffect(() => {
+    setAssetDeliveryError(null);
+    setAssetReferenceError(null);
+    setAssetAuditError(null);
+    setAssetReplacementError(null);
+    setSignedUrl(null);
+    setBindingTargetId('');
+  }, [selectedAsset?.id]);
+
+  const loadAssetAuditLogs = useCallback(async (mediaId: string) => {
+    setIsLoadingAssetAudit(true);
+    setAssetAuditError(null);
+
+    try {
+      const result = await listAdminAuditLogs({
+        siteId,
+        entity: 'media',
+        entityId: mediaId,
+        limit: 8,
+      });
+      setAssetAuditLogs(result.logs);
+    } catch (auditError) {
+      setAssetAuditLogs([]);
+      setAssetAuditError(auditError instanceof Error ? auditError.message : 'Unable to load media activity.');
+    } finally {
+      setIsLoadingAssetAudit(false);
+    }
+  }, [siteId]);
+
+  const selectedAssetId = selectedAsset?.id;
+
+  useEffect(() => {
+    if (!selectedAssetId) {
+      setAssetAuditLogs([]);
+      setAssetAuditError(null);
+      setIsLoadingAssetAudit(false);
+      return;
+    }
+
+    void loadAssetAuditLogs(selectedAssetId);
+  }, [loadAssetAuditLogs, selectedAssetId]);
+
+  useEffect(() => {
+    setBindingTargetId('');
+  }, [bindingTargetType]);
+
+  const handleCreateSignedUrl = async () => {
+    if (!selectedAsset) {
+      return;
+    }
+
+    setIsCreatingSignedUrl(true);
+    setAssetDeliveryError(null);
+
+    try {
+      const nextSignedUrl = await createSignedMediaUrl(selectedAsset.id, {
+        expiresInSeconds: signedUrlSeconds,
+        disposition: signedUrlDisposition,
+      }, siteId);
+      setSignedUrl(nextSignedUrl);
+    } catch (signedUrlError) {
+      setAssetDeliveryError(signedUrlError instanceof Error ? signedUrlError.message : 'Unable to create a signed URL.');
+    } finally {
+      setIsCreatingSignedUrl(false);
+    }
+  };
+
+  const handlePrepareTransforms = async () => {
+    if (!selectedAsset || selectedAsset.type !== 'image') {
+      return;
+    }
+
+    setIsPreparingTransforms(true);
+    setAssetDeliveryError(null);
+
+    try {
+      const updated = await prepareMediaTransforms(selectedAsset.id, {
+        siteId,
+        widths: DEFAULT_RESPONSIVE_WIDTHS,
+        quality: DEFAULT_RESPONSIVE_QUALITY,
+        sizes: DEFAULT_RESPONSIVE_SIZES,
+        preparedBy: 'admin',
+      });
+      applyUpdatedAsset(updated);
+      void loadAssetAuditLogs(updated.id);
+    } catch (prepareError) {
+      setAssetDeliveryError(prepareError instanceof Error ? prepareError.message : 'Unable to prepare responsive variants.');
+    } finally {
+      setIsPreparingTransforms(false);
+    }
   };
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
@@ -181,6 +474,7 @@ function MediaPage() {
     try {
       if (uploaded.length) {
         setMedia([...uploaded, ...files.filter((file) => !uploaded.some((item) => item.id === file.id))]);
+        void loadLibrary();
       }
 
       if (failures.length) {
@@ -195,10 +489,6 @@ function MediaPage() {
   };
 
   const handleDeleteAsset = async (file: MediaAsset) => {
-    if (!confirm(`Delete "${file.name}" from the media library?`)) {
-      return;
-    }
-
     setError(null);
 
     try {
@@ -207,9 +497,128 @@ function MediaPage() {
       if (selectedAsset?.id === file.id) {
         setSelectedAsset(null);
       }
+      setPendingDeleteAsset(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete media.');
     }
+  };
+
+  const toggleMediaSelection = (mediaId: string) => {
+    setBulkNotice(null);
+    setPendingBulkDelete(false);
+    setSelectedMediaIds((current) => (
+      current.includes(mediaId)
+        ? current.filter((id) => id !== mediaId)
+        : [...current, mediaId]
+    ));
+  };
+
+  const handleSelectVisibleMedia = () => {
+    setBulkNotice(null);
+    setSelectedMediaIds((current) => {
+      const next = new Set(current);
+      displayedFiles.forEach((file) => next.add(file.id));
+      return Array.from(next);
+    });
+  };
+
+  const handleClearSelection = () => {
+    setBulkNotice(null);
+    setPendingBulkDelete(false);
+    setSelectedMediaIds([]);
+  };
+
+  const handleBulkUpdate = async () => {
+    if (selectedMediaAssets.length === 0 || !hasBulkChange) {
+      return;
+    }
+
+    const input = {
+      ...(bulkVisibility !== 'keep' ? { visibility: bulkVisibility } : {}),
+      ...(bulkFolderId !== 'keep' ? { folderId: bulkFolderId === 'root' ? null : bulkFolderId } : {}),
+    };
+
+    setIsBulkUpdating(true);
+    setError(null);
+    setBulkNotice(null);
+
+    const results = await Promise.allSettled(
+      selectedMediaAssets.map((asset) => updateMedia(asset.id, input, siteId)),
+    );
+    const updated = results
+      .filter((result): result is PromiseFulfilledResult<MediaAsset> => result.status === 'fulfilled')
+      .map((result) => result.value);
+    const failedIds = selectedMediaAssets
+      .filter((_, index) => results[index]?.status === 'rejected')
+      .map((asset) => asset.id);
+
+    if (updated.length > 0) {
+      const updatedById = new Map(updated.map((asset) => [asset.id, asset]));
+      setMedia(files.map((file) => updatedById.get(file.id) || file));
+      if (selectedAsset && updatedById.has(selectedAsset.id)) {
+        setSelectedAsset(updatedById.get(selectedAsset.id) || selectedAsset);
+        void loadAssetAuditLogs(selectedAsset.id);
+      }
+      setBulkVisibility('keep');
+      setBulkFolderId('keep');
+      void loadLibrary();
+    }
+
+    if (failedIds.length > 0) {
+      setSelectedMediaIds(failedIds);
+      setError(`${failedIds.length} selected asset${failedIds.length === 1 ? '' : 's'} could not be updated.`);
+    } else {
+      setSelectedMediaIds([]);
+      setBulkNotice(`Updated ${updated.length} asset${updated.length === 1 ? '' : 's'}.`);
+    }
+
+    setIsBulkUpdating(false);
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedMediaAssets.length === 0) {
+      return;
+    }
+
+    if (!pendingBulkDelete) {
+      setPendingBulkDelete(true);
+      return;
+    }
+
+    setIsBulkUpdating(true);
+    setError(null);
+    setBulkNotice(null);
+
+    const results = await Promise.allSettled(
+      selectedMediaAssets.map((asset) => deleteMediaFromBackend(asset.id, siteId)),
+    );
+    const deletedIds = selectedMediaAssets
+      .filter((_, index) => results[index]?.status === 'fulfilled')
+      .map((asset) => asset.id);
+    const failedIds = selectedMediaAssets
+      .filter((_, index) => results[index]?.status === 'rejected')
+      .map((asset) => asset.id);
+    const deletedIdSet = new Set(deletedIds);
+
+    if (deletedIds.length > 0) {
+      setMedia(files.filter((file) => !deletedIdSet.has(file.id)));
+      if (selectedAsset && deletedIdSet.has(selectedAsset.id)) {
+        setSelectedAsset(null);
+      }
+      void loadLibrary();
+    }
+
+    if (failedIds.length > 0) {
+      setSelectedMediaIds(failedIds);
+      setPendingBulkDelete(false);
+      setError(`${failedIds.length} selected asset${failedIds.length === 1 ? '' : 's'} could not be deleted.`);
+    } else {
+      setSelectedMediaIds([]);
+      setPendingBulkDelete(false);
+      setBulkNotice(`Deleted ${deletedIds.length} asset${deletedIds.length === 1 ? '' : 's'}.`);
+    }
+
+    setIsBulkUpdating(false);
   };
 
   const handleSaveMetadata = async () => {
@@ -228,9 +637,12 @@ function MediaPage() {
         tags: metadataForm.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
         metadata: selectedAsset.type === 'font'
           ? {
+              ...selectedAsset.metadata,
               fontFamily: metadataForm.fontFamily.trim() || metadataForm.name.replace(/\.[a-z0-9]+$/i, ''),
               fontWeight: metadataForm.fontWeight.trim() || '400',
               fontStyle: metadataForm.fontStyle,
+              fontFallback: metadataForm.fontFallback.trim() || 'system-ui, sans-serif',
+              fontDisplay: metadataForm.fontDisplay,
             }
           : selectedAsset.metadata,
         folderId: metadataForm.folderId || null,
@@ -238,10 +650,96 @@ function MediaPage() {
       }, siteId);
       setMedia(files.map((file) => file.id === updated.id ? updated : file));
       setSelectedAsset(updated);
+      void loadAssetAuditLogs(updated.id);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to update media metadata.');
     } finally {
       setIsSavingMetadata(false);
+    }
+  };
+
+  const applyUpdatedAsset = (updated: MediaAsset) => {
+    setMedia(files.map((file) => file.id === updated.id ? updated : file));
+    setSelectedAsset(updated);
+  };
+
+  const handleReplaceAsset = async (fileList: FileList | null) => {
+    if (!selectedAsset || !fileList || fileList.length === 0) {
+      return;
+    }
+
+    const [file] = Array.from(fileList);
+    if (!file) {
+      return;
+    }
+
+    setIsReplacingAsset(true);
+    setAssetReplacementError(null);
+
+    try {
+      const updated = await replaceMedia(selectedAsset.id, file, {
+        siteId,
+        replacedBy: 'admin',
+        reason: 'Manual replacement from media detail',
+      });
+      applyUpdatedAsset(updated);
+      void loadLibrary();
+      void loadAssetAuditLogs(updated.id);
+    } catch (replaceError) {
+      setAssetReplacementError(replaceError instanceof Error ? replaceError.message : 'Unable to replace this asset.');
+    } finally {
+      setIsReplacingAsset(false);
+    }
+  };
+
+  const handleBindTarget = async () => {
+    if (!selectedAsset || !bindingTargetId) {
+      return;
+    }
+
+    setIsUpdatingBinding(true);
+    setAssetReferenceError(null);
+
+    try {
+      const updated = await bindMediaToTarget(selectedAsset.id, {
+        targetType: bindingTargetType,
+        targetId: bindingTargetId,
+        action: 'bind',
+        usageType: bindingUsageType,
+        attachedBy: 'admin',
+      }, siteId);
+      applyUpdatedAsset(updated);
+      setBindingTargetId('');
+      void loadAssetAuditLogs(updated.id);
+    } catch (bindError) {
+      setAssetReferenceError(bindError instanceof Error ? bindError.message : 'Unable to bind this asset.');
+    } finally {
+      setIsUpdatingBinding(false);
+    }
+  };
+
+  const handleUnbindTarget = async (targetType: 'page' | 'post', targetId: string) => {
+    if (!selectedAsset) {
+      return;
+    }
+
+    setIsUpdatingBinding(true);
+    setAssetReferenceError(null);
+
+    try {
+      const updated = await bindMediaToTarget(selectedAsset.id, {
+        targetType,
+        targetId,
+        action: 'unbind',
+        usageType: 'content',
+        attachedBy: 'admin',
+      }, siteId);
+      applyUpdatedAsset(updated);
+      void loadAssetAuditLogs(updated.id);
+    } catch (unbindError) {
+      setAssetReferenceError(unbindError instanceof Error ? unbindError.message : 'Unable to remove this reference.');
+    } finally {
+      setIsUpdatingBinding(false);
     }
   };
 
@@ -268,7 +766,7 @@ function MediaPage() {
 
   const handleDeleteFolder = async (folderId: string) => {
     const folder = folders.find((item) => item.id === folderId);
-    if (!folder || !confirm(`Delete folder "${folder.name}"? Media inside it will move to root.`)) {
+    if (!folder) {
       return;
     }
 
@@ -281,6 +779,7 @@ function MediaPage() {
       if (selectedFolderId === folderId) {
         setSelectedFolderId(undefined);
       }
+      setPendingDeleteFolder(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete folder.');
     }
@@ -366,9 +865,15 @@ function MediaPage() {
       </div>
 
       {error && (
-        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <Notice tone="warning" className="mb-6">
           {error}
-        </div>
+        </Notice>
+      )}
+
+      {bulkNotice && (
+        <Notice tone="success" className="mb-6">
+          {bulkNotice}
+        </Notice>
       )}
 
       {isLoading ? (
@@ -376,6 +881,271 @@ function MediaPage() {
           Loading media library...
         </div>
       ) : null}
+
+      <Panel className="mb-6">
+        <PanelHeader
+          title="Storage health"
+          description="Runtime provider and site quota for files served to custom frontends."
+          icon={<Folder className="size-4" />}
+          action={
+            runtimeStorage && (
+              <span
+                className={cn(
+                  'inline-flex items-center rounded px-2.5 py-1 text-xs font-medium',
+                  runtimeStorage.configured ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                )}
+              >
+                {runtimeStorage.configured ? 'Configured' : 'Needs config'}
+              </span>
+            )
+          }
+        />
+        <PanelContent>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Site media quota</p>
+                  <p className="text-xs text-muted-foreground">
+                    Uploads are blocked before the configured quota is exceeded.
+                  </p>
+                </div>
+                {mediaQuota && (
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {quotaUsagePercent}%
+                  </span>
+                )}
+              </div>
+              {mediaQuota ? (
+                <>
+                  <div className="h-2 overflow-hidden rounded-full bg-background">
+                    <div
+                      className={cn(
+                        'h-full rounded-full transition-all',
+                        quotaUsagePercent >= 90
+                          ? 'bg-destructive'
+                          : quotaUsagePercent >= 75
+                            ? 'bg-warning'
+                            : 'bg-primary',
+                      )}
+                      style={{ width: `${quotaUsagePercent}%` }}
+                    />
+                  </div>
+                  <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Used</dt>
+                      <dd className="font-mono text-xs">{formatBytes(mediaQuota.usedBytes)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Remaining</dt>
+                      <dd className="font-mono text-xs">{formatBytes(mediaQuota.remainingBytes)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Limit</dt>
+                      <dd className="font-mono text-xs">{formatBytes(mediaQuota.limitBytes)}</dd>
+                    </div>
+                  </dl>
+                </>
+              ) : (
+                <p className="rounded-lg border border-dashed border-border bg-background px-3 py-3 text-sm text-muted-foreground">
+                  Quota data will appear after the media API responds.
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="mb-3">
+                <p className="text-sm font-medium">Storage provider</p>
+                <p className="text-xs text-muted-foreground">
+                  Current upload target reported by admin settings.
+                </p>
+              </div>
+              {runtimeStorage ? (
+                <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Provider</dt>
+                    <dd className="font-mono text-xs">{runtimeStorage.provider}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Bucket/path</dt>
+                    <dd className="break-all font-mono text-xs">
+                      {runtimeStorage.bucket || runtimeStorage.basePath || 'not set'}
+                    </dd>
+                  </div>
+                  {runtimeStorage.publicUrl && (
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs text-muted-foreground">Public URL</dt>
+                      <dd className="break-all font-mono text-xs">{runtimeStorage.publicUrl}</dd>
+                    </div>
+                  )}
+                </dl>
+              ) : (
+                <p className="rounded-lg border border-dashed border-border bg-background px-3 py-3 text-sm text-muted-foreground">
+                  Runtime storage data is unavailable.
+                </p>
+              )}
+              {runtimeStorage?.missing && runtimeStorage.missing.length > 0 && (
+                <p className="mt-3 text-sm text-warning">
+                  Missing configuration: {runtimeStorage.missing.join(', ')}
+                </p>
+              )}
+            </div>
+          </div>
+        </PanelContent>
+      </Panel>
+
+      <Panel className="mb-6">
+        <PanelHeader
+          title="Usage analytics"
+          description="Reference coverage, delivery visibility, type mix, and replacement activity for the currently loaded library."
+          icon={<ImageIcon className="size-4" />}
+          action={
+            <span className="rounded bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
+              {displayedFiles.length}/{files.length} visible
+            </span>
+          }
+        />
+        <PanelContent>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              {
+                label: 'Assets',
+                value: mediaAnalytics.totalAssets,
+                detail: `${mediaAnalytics.folderedAssets} foldered · ${mediaAnalytics.rootAssets} root`,
+                filter: 'all' as const,
+              },
+              {
+                label: 'Referenced',
+                value: mediaAnalytics.referencedAssets,
+                detail: `${mediaAnalytics.unusedAssets} unused assets need review`,
+                filter: 'referenced' as const,
+              },
+              {
+                label: 'Private',
+                value: mediaAnalytics.privateAssets,
+                detail: `${mediaAnalytics.publicAssets} public assets available to frontends`,
+                filter: 'all' as const,
+              },
+              {
+                label: 'Replaced',
+                value: mediaAnalytics.replacedAssets,
+                detail: `${mediaAnalytics.replacementVersions} retained versions · ${formatBytes(mediaAnalytics.replacementBytes)}`,
+                filter: 'replaced' as const,
+              },
+            ].map((metric) => (
+              <button
+                key={metric.label}
+                type="button"
+                onClick={() => setUsageFilter(metric.filter)}
+                className="rounded-lg border border-border bg-muted/30 p-4 text-left transition-colors hover:bg-muted"
+              >
+                <div className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">{metric.label}</div>
+                <div className="mt-2 text-2xl font-semibold">{metric.value}</div>
+                <div className="mt-1 text-xs text-muted-foreground">{metric.detail}</div>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Library focus</p>
+                  <p className="text-xs text-muted-foreground">Switch the grid to assets that need action.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: 'all', label: 'All' },
+                    { value: 'unused', label: 'Unused' },
+                    { value: 'referenced', label: 'Referenced' },
+                    { value: 'replaced', label: 'Replaced' },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setUsageFilter(option.value as typeof usageFilter)}
+                      className={cn(
+                        'rounded-lg border px-3 py-1.5 text-xs font-medium',
+                        usageFilter === option.value
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground',
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid gap-2">
+                {mediaAnalytics.typeRows.map((row) => (
+                  <button
+                    key={row.type}
+                    type="button"
+                    onClick={() => setTypeFilter(row.type)}
+                    className="grid grid-cols-[90px_minmax(0,1fr)_90px] items-center gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-muted"
+                  >
+                    <span className="text-xs font-medium capitalize text-muted-foreground">{row.type}</span>
+                    <span className="h-2 overflow-hidden rounded-full bg-muted">
+                      <span
+                        className="block h-full rounded-full bg-primary"
+                        style={{ width: `${row.percent}%` }}
+                      />
+                    </span>
+                    <span className="text-right font-mono text-xs text-muted-foreground">
+                      {row.count} · {formatBytes(row.bytes)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Largest assets</p>
+                  <p className="text-xs text-muted-foreground">Open heavy files before they affect frontend delivery.</p>
+                </div>
+                {mediaAnalytics.largestAssets.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const first = mediaAnalytics.largestAssets[0]?.asset;
+                      if (first) openMetadataEditor(first);
+                    }}
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    Open largest
+                  </button>
+                )}
+              </div>
+              {mediaAnalytics.largestAssets.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
+                  No assets are loaded yet.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {mediaAnalytics.largestAssets.map(({ asset, bytes }) => (
+                    <button
+                      key={asset.id}
+                      type="button"
+                      onClick={() => openMetadataEditor(asset)}
+                      className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2 text-left hover:bg-muted"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">{asset.name}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {asset.type} · {(asset.targetPageIds?.length || 0) + (asset.targetPostIds?.length || 0)} references
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-mono text-xs text-muted-foreground">{formatBytes(bytes)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </PanelContent>
+      </Panel>
 
       <div className="mb-6 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_180px]">
         <input
@@ -474,7 +1244,7 @@ function MediaPage() {
               </button>
               <button
                 type="button"
-                onClick={() => void handleDeleteFolder(folder.id)}
+                onClick={() => setPendingDeleteFolder(folder)}
                 className="border-l border-border px-2 text-muted-foreground hover:bg-red-50 hover:text-red-600"
                 title="Delete folder"
               >
@@ -484,6 +1254,182 @@ function MediaPage() {
           ))}
         </div>
       </div>
+
+      {files.length > 0 && (
+        <Panel className="mb-6">
+          <PanelHeader
+            title="Bulk management"
+            description="Select visible assets, move them between folders, change delivery visibility, or remove them from the library."
+            icon={<CheckSquare className="size-4" />}
+            action={
+              <span className="rounded bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
+                {selectedMediaAssets.length} selected
+              </span>
+            }
+          />
+          <PanelContent>
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_170px_220px_auto_auto]">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isBulkUpdating || allVisibleSelected}
+                  onClick={handleSelectVisibleMedia}
+                >
+                  Select visible
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={isBulkUpdating || selectedMediaAssets.length === 0}
+                  onClick={handleClearSelection}
+                >
+                  Clear
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Selection follows the current search, type, visibility, and folder filters.
+                </p>
+              </div>
+
+              <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                Visibility
+                <select
+                  value={bulkVisibility}
+                  disabled={isBulkUpdating}
+                  onChange={(event) => setBulkVisibility(event.target.value === 'public' || event.target.value === 'private' ? event.target.value : 'keep')}
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="keep">No change</option>
+                  <option value="public">Public</option>
+                  <option value="private">Private</option>
+                </select>
+              </label>
+
+              <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                Folder
+                <select
+                  value={bulkFolderId}
+                  disabled={isBulkUpdating}
+                  onChange={(event) => setBulkFolderId(event.target.value)}
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="keep">No change</option>
+                  <option value="root">Root</option>
+                  {folders.map((folder) => (
+                    <option key={folder.id} value={folder.id}>{folder.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isBulkUpdating || selectedMediaAssets.length === 0 || !hasBulkChange}
+                  onClick={() => void handleBulkUpdate()}
+                  className="w-full whitespace-nowrap"
+                >
+                  {isBulkUpdating ? 'Applying...' : 'Apply changes'}
+                </Button>
+              </div>
+
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="danger"
+                  disabled={isBulkUpdating || selectedMediaAssets.length === 0}
+                  onClick={() => void handleBulkDelete()}
+                  className="w-full whitespace-nowrap"
+                  iconStart={<Trash2 className="size-4" />}
+                >
+                  Delete selected
+                </Button>
+              </div>
+            </div>
+          </PanelContent>
+        </Panel>
+      )}
+
+      {fontGroups.length > 0 && (
+        <Panel className="mb-6">
+          <PanelHeader
+            title="Font families"
+            description="Registered uploaded fonts grouped by family, variants, fallback stack, and frontend delivery visibility."
+            icon={<Type className="size-4" />}
+            action={
+              <span className="rounded bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
+                {fontGroups.length} {fontGroups.length === 1 ? 'family' : 'families'}
+              </span>
+            }
+          />
+          <PanelContent>
+            <div className="grid gap-3 lg:grid-cols-2">
+              {fontGroups.map((group) => (
+                <div key={group.family} className="rounded-lg border border-border bg-muted/30 p-4">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p
+                        className="truncate text-base font-semibold"
+                        style={{ fontFamily: `"${group.family}", ${group.fallback}` }}
+                      >
+                        {group.family}
+                      </p>
+                      <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                        "{group.family}", {group.fallback}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        const firstAsset = group.assets[0];
+                        if (firstAsset) {
+                          openMetadataEditor(firstAsset);
+                        }
+                      }}
+                      className="shrink-0"
+                    >
+                      Edit
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {group.variants.map((variant) => (
+                      <span key={variant} className="rounded bg-background px-2 py-1 font-mono text-xs text-muted-foreground">
+                        {variant}
+                      </span>
+                    ))}
+                  </div>
+
+                  <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-4">
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Fallback stack</dt>
+                      <dd className="truncate font-mono text-xs" title={group.fallback}>{group.fallback}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Display</dt>
+                      <dd className="font-mono text-xs">{group.display}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Public files</dt>
+                      <dd className="font-mono text-xs">{group.publicCount}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Private files</dt>
+                      <dd className="font-mono text-xs">{group.privateCount}</dd>
+                    </div>
+                  </dl>
+                </div>
+              ))}
+            </div>
+          </PanelContent>
+        </Panel>
+      )}
 
       {isLoading ? (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
@@ -495,10 +1441,29 @@ function MediaPage() {
             </div>
           ))}
         </div>
-      ) : files.length > 0 ? (
+      ) : displayedFiles.length > 0 ? (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {files.map((file) => (
-            <div key={file.id} className="group relative bg-card border border-border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all">
+          {displayedFiles.map((file) => (
+            <div
+              key={file.id}
+              className={cn(
+                'group relative overflow-hidden rounded-xl border bg-card shadow-sm transition-all hover:shadow-md',
+                selectedMediaSet.has(file.id) ? 'border-primary ring-2 ring-primary/20' : 'border-border',
+              )}
+            >
+              <label
+                className="absolute left-2 top-2 z-10 inline-flex size-8 items-center justify-center rounded-lg border border-border bg-background/95 shadow-sm backdrop-blur"
+                title={`Select ${file.name}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedMediaSet.has(file.id)}
+                  onChange={() => toggleMediaSelection(file.id)}
+                  className="h-3.5 w-3.5 rounded border-border text-primary"
+                  aria-label={`Select ${file.name}`}
+                />
+                <span className="sr-only">Select {file.name}</span>
+              </label>
               {/* Preview */}
               <div className="aspect-square bg-muted flex items-center justify-center relative">
                 {file.type === 'image' && file.url ? (
@@ -518,9 +1483,7 @@ function MediaPage() {
                   </button>
                   <button
                     className="p-2 bg-white rounded-lg text-red-600 hover:bg-red-50"
-                    onClick={() => {
-                      void handleDeleteAsset(file);
-                    }}
+                    onClick={() => setPendingDeleteAsset(file)}
                     title="Delete media"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -544,8 +1507,8 @@ function MediaPage() {
       ) : (
         <EmptyState
           icon={ImageIcon}
-          title="Library is empty"
-          description="Upload some files to get started."
+          title={files.length === 0 ? 'Library is empty' : 'No assets match this view'}
+          description={files.length === 0 ? 'Upload some files to get started.' : 'Change the usage, search, type, visibility, or folder filters to broaden the view.'}
         />
       )}
 
@@ -558,11 +1521,11 @@ function MediaPage() {
                 src: url("${selectedAsset.url}");
                 font-style: ${metadataForm.fontStyle};
                 font-weight: ${metadataForm.fontWeight || '400'};
-                font-display: swap;
+                font-display: ${metadataForm.fontDisplay};
               }`}
             </style>
           )}
-          <div className="w-full max-w-3xl rounded-xl border border-border bg-background shadow-xl">
+          <div className="w-full max-w-5xl rounded-xl border border-border bg-background shadow-xl">
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
               <div>
                 <h2 className="text-lg font-semibold">Media details</h2>
@@ -577,7 +1540,7 @@ function MediaPage() {
               </button>
             </div>
 
-            <div className="grid max-h-[75vh] gap-5 overflow-y-auto p-5 md:grid-cols-[180px_1fr]">
+            <div className="grid max-h-[75vh] gap-5 overflow-y-auto p-5 md:grid-cols-[220px_1fr]">
               <div className="aspect-square overflow-hidden rounded-lg bg-muted">
                 {selectedAsset.type === 'image' && selectedAsset.url ? (
                   <img src={selectedAsset.url} alt={metadataForm.altText || selectedAsset.name} className="h-full w-full object-cover" />
@@ -673,9 +1636,46 @@ function MediaPage() {
                         </select>
                       </label>
                     </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_150px]">
+                      <label className="space-y-1 text-sm">
+                        <span className="font-medium">Fallback stack</span>
+                        <input
+                          value={metadataForm.fontFallback}
+                          onChange={(event) => setMetadataForm((current) => ({ ...current, fontFallback: event.target.value }))}
+                          className="w-full rounded-lg border bg-background px-3 py-2"
+                          placeholder="system-ui, sans-serif"
+                        />
+                      </label>
+                      <label className="space-y-1 text-sm">
+                        <span className="font-medium">Display</span>
+                        <select
+                          value={metadataForm.fontDisplay}
+                          onChange={(event) => setMetadataForm((current) => ({
+                            ...current,
+                            fontDisplay: event.target.value === 'auto' ||
+                              event.target.value === 'block' ||
+                              event.target.value === 'fallback' ||
+                              event.target.value === 'optional'
+                              ? event.target.value
+                              : 'swap',
+                          }))}
+                          className="w-full rounded-lg border bg-background px-3 py-2"
+                        >
+                          <option value="swap">Swap</option>
+                          <option value="fallback">Fallback</option>
+                          <option value="optional">Optional</option>
+                          <option value="block">Block</option>
+                          <option value="auto">Auto</option>
+                        </select>
+                      </label>
+                    </div>
                     <div
                       className="mt-3 rounded-lg border border-border bg-background px-3 py-2 text-lg"
-                      style={{ fontFamily: metadataForm.fontFamily ? `"${metadataForm.fontFamily}"` : undefined }}
+                      style={{
+                        fontFamily: metadataForm.fontFamily
+                          ? `"${metadataForm.fontFamily}", ${metadataForm.fontFallback || 'system-ui, sans-serif'}`
+                          : undefined,
+                      }}
                     >
                       {metadataForm.fontFamily || 'Uploaded font preview'}
                     </div>
@@ -713,11 +1713,521 @@ function MediaPage() {
               </div>
 
               <div className="md:col-span-2 rounded-xl border border-border bg-muted/30 p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <div className="font-medium">Used in</div>
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium">Delivery analytics</div>
+                    <div className="text-xs text-muted-foreground">
+                      Counts requests served through Backy file and transform endpoints. Direct CDN/storage hits need provider analytics.
+                    </div>
+                  </div>
+                  {selectedDeliveryAnalytics && (
+                    <span className="rounded bg-background px-2 py-1 font-mono text-xs text-muted-foreground">
+                      {selectedDeliveryAnalytics.totalRequests} requests
+                    </span>
+                  )}
+                </div>
+
+                {selectedDeliveryAnalytics ? (
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="rounded-lg border border-border bg-background p-3">
+                      <div className="text-xs text-muted-foreground">Total</div>
+                      <div className="mt-1 font-mono text-lg font-semibold">{selectedDeliveryAnalytics.totalRequests}</div>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background p-3">
+                      <div className="text-xs text-muted-foreground">Files</div>
+                      <div className="mt-1 font-mono text-lg font-semibold">{selectedDeliveryAnalytics.fileRequests}</div>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background p-3">
+                      <div className="text-xs text-muted-foreground">Transforms</div>
+                      <div className="mt-1 font-mono text-lg font-semibold">{selectedDeliveryAnalytics.transformRequests}</div>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background p-3">
+                      <div className="text-xs text-muted-foreground">Bytes</div>
+                      <div className="mt-1 font-mono text-lg font-semibold">{formatBytes(selectedDeliveryAnalytics.bytesServed)}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border bg-background px-4 py-3 text-sm text-muted-foreground">
+                    No Backy-served delivery requests have been recorded for this asset yet.
+                  </div>
+                )}
+
+                {selectedDeliveryAnalytics && (
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-lg border border-border bg-background p-3">
+                      <div className="text-xs text-muted-foreground">Last delivery</div>
+                      <div className="mt-1 text-sm font-medium">{formatAuditDate(selectedDeliveryAnalytics.lastDeliveredAt)}</div>
+                      <div className="mt-1 font-mono text-xs text-muted-foreground">{selectedDeliveryAnalytics.lastDeliveryType}</div>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background p-3">
+                      <div className="text-xs text-muted-foreground">Top endpoint</div>
+                      <div className="mt-1 text-sm font-medium">
+                        {selectedDeliveryAnalytics.variants[0]?.key || 'file'}
+                      </div>
+                      <div className="mt-1 font-mono text-xs text-muted-foreground">
+                        {selectedDeliveryAnalytics.variants[0]?.requests || 0} requests
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="md:col-span-2 rounded-xl border border-border bg-muted/30 p-4">
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium">Replacement history</div>
+                    <div className="text-xs text-muted-foreground">
+                      Swap the stored file while keeping this asset ID stable for pages, posts, products, and custom frontends.
+                    </div>
+                  </div>
+                  <label className={cn(
+                    'inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium shadow-sm hover:bg-muted',
+                    isReplacingAsset && 'pointer-events-none opacity-60',
+                  )}>
+                    <Upload className="size-4" />
+                    {isReplacingAsset ? 'Replacing...' : 'Replace file'}
+                    <input
+                      type="file"
+                      className="sr-only"
+                      accept={replacementAcceptForAsset(selectedAsset.type)}
+                      disabled={isReplacingAsset}
+                      onChange={(event) => {
+                        void handleReplaceAsset(event.target.files);
+                        event.currentTarget.value = '';
+                      }}
+                    />
+                  </label>
+                </div>
+
+                {assetReplacementError && (
+                  <Notice tone="warning" className="mb-3">
+                    {assetReplacementError}
+                  </Notice>
+                )}
+
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+                  <div className="rounded-lg border border-border bg-background px-3 py-3">
+                    <div className="text-sm font-medium">Current file</div>
+                    <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                      <span className="rounded bg-muted px-2 py-1">{selectedAsset.type}</span>
+                      <span className="rounded bg-muted px-2 py-1">{selectedAsset.size}</span>
+                      <span className="rounded bg-muted px-2 py-1">{replacementVersions.length} previous</span>
+                    </div>
+                    <p className="mt-2 break-all text-xs text-muted-foreground">{selectedAsset.name}</p>
+                  </div>
+
+                  {replacementVersions.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-border bg-background px-3 py-3 text-sm text-muted-foreground">
+                      No replacements have been recorded for this asset yet.
+                    </div>
+                  ) : (
+                    <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
+                      {replacementVersions.map((version, index) => (
+                        <div key={version.id || `${version.originalName}-${index}`} className="rounded-lg border border-border bg-background px-3 py-3">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">{version.originalName || version.filename || 'Previous file'}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {formatReplacementSize(version.sizeBytes)} · replaced {formatAuditDate(version.replacedAt || version.createdAt || '')}
+                              </p>
+                            </div>
+                            {version.url && (
+                              <a
+                                href={version.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                              >
+                                Open
+                                <ExternalLink className="size-3" />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="md:col-span-2 rounded-xl border border-border bg-muted/30 p-4">
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium">Safety scan</div>
+                    <div className="text-xs text-muted-foreground">
+                      Static upload checks for accepted file type, dangerous SVG content, and scanner metadata.
+                    </div>
+                  </div>
+                  <span
+                    className={cn(
+                      'rounded px-2 py-1 text-xs font-medium',
+                      getSafetyScan(selectedAsset.metadata)?.status === 'clean'
+                        ? 'bg-success/10 text-success'
+                        : 'bg-warning/10 text-warning',
+                    )}
+                  >
+                    {getSafetyScan(selectedAsset.metadata)?.status === 'clean' ? 'Clean' : 'Not scanned'}
+                  </span>
+                </div>
+
+                {getSafetyScan(selectedAsset.metadata) ? (
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                    <dl className="rounded-lg border border-border bg-background p-3 text-sm">
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Scanner</dt>
+                        <dd className="font-mono text-xs">{getSafetyScan(selectedAsset.metadata)?.scanner}</dd>
+                      </div>
+                      <div className="mt-3">
+                        <dt className="text-xs text-muted-foreground">Scanned</dt>
+                        <dd className="font-mono text-xs">{formatAuditDate(getSafetyScan(selectedAsset.metadata)?.scannedAt || '')}</dd>
+                      </div>
+                    </dl>
+                    <div className="rounded-lg border border-border bg-background p-3">
+                      <div className="text-xs font-medium text-muted-foreground">Checks</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {getSafetyScan(selectedAsset.metadata)?.checks.map((check) => (
+                          <span key={check} className="rounded bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">
+                            {check}
+                          </span>
+                        ))}
+                      </div>
+                      {(getSafetyScan(selectedAsset.metadata)?.warnings.length || 0) > 0 && (
+                        <p className="mt-3 text-xs text-warning">
+                          {getSafetyScan(selectedAsset.metadata)?.warnings.join(' ')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border bg-background px-3 py-3 text-sm text-muted-foreground">
+                    This asset predates upload safety metadata. Replace it to run the current static scan.
+                  </div>
+                )}
+              </div>
+
+              <div className="md:col-span-2 rounded-xl border border-border bg-muted/30 p-4">
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium">Delivery</div>
+                    <div className="text-xs text-muted-foreground">
+                      URLs custom frontends can use for this asset without reading admin internals.
+                    </div>
+                  </div>
+                  {selectedAsset.visibility === 'private' ? (
+                    <span className="rounded bg-warning/10 px-2 py-1 text-xs font-medium text-warning">
+                      Private asset
+                    </span>
+                  ) : (
+                    <span className="rounded bg-success/10 px-2 py-1 text-xs font-medium text-success">
+                      Public asset
+                    </span>
+                  )}
+                </div>
+
+                {assetDeliveryError && (
+                  <Notice tone="warning" className="mb-3">
+                    {assetDeliveryError}
+                  </Notice>
+                )}
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-lg border border-border bg-background p-3">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium">Public file endpoint</div>
+                        <div className="text-xs text-muted-foreground">
+                          Available only when visibility is public.
+                        </div>
+                      </div>
+                      {selectedAsset.visibility !== 'private' && (
+                        <a
+                          href={publicFileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                        >
+                          Open
+                          <ExternalLink className="size-3" />
+                        </a>
+                      )}
+                    </div>
+                    <textarea
+                      readOnly
+                      value={publicFileUrl}
+                      className="min-h-16 w-full resize-none rounded-lg border bg-muted/50 px-3 py-2 font-mono text-xs text-muted-foreground"
+                    />
+                    {selectedAsset.visibility === 'private' && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Public reads are blocked for private files. Generate a temporary signed URL below.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border border-border bg-background p-3">
+                    <div className="mb-2">
+                      <div className="text-sm font-medium">Temporary signed URL</div>
+                      <div className="text-xs text-muted-foreground">
+                        Time-limited access for private delivery, downloads, previews, and integrations.
+                      </div>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-[120px_140px_160px]">
+                      <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                        Expires
+                        <input
+                          type="number"
+                          min={60}
+                          max={86400}
+                          value={signedUrlSeconds}
+                          onChange={(event) => setSignedUrlSeconds(Math.max(60, Math.min(86400, Number(event.target.value) || 900)))}
+                          className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                        />
+                      </label>
+                      <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                        Disposition
+                        <select
+                          value={signedUrlDisposition}
+                          onChange={(event) => setSignedUrlDisposition(event.target.value === 'attachment' ? 'attachment' : 'inline')}
+                          className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                        >
+                          <option value="inline">Inline</option>
+                          <option value="attachment">Download</option>
+                        </select>
+                      </label>
+                      <div className="flex items-end">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={isCreatingSignedUrl}
+                          onClick={() => void handleCreateSignedUrl()}
+                          iconStart={<KeyRound className="size-4" />}
+                          className="w-full whitespace-nowrap"
+                        >
+                          {isCreatingSignedUrl ? 'Generating...' : 'Generate URL'}
+                        </Button>
+                      </div>
+                    </div>
+                    {signedUrl && (
+                      <div className="mt-3">
+                        <textarea
+                          readOnly
+                          value={signedUrl.signedUrl}
+                          className="min-h-16 w-full resize-none rounded-lg border bg-muted/50 px-3 py-2 font-mono text-xs text-muted-foreground"
+                        />
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Expires {new Date(signedUrl.expiresAt).toLocaleString()} · {signedUrl.disposition}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {selectedAsset.type === 'image' && (
+                    <div className="rounded-lg border border-border bg-background p-3 lg:col-span-2">
+                      <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-medium">Optimized image transform</div>
+                          <div className="text-xs text-muted-foreground">
+                            Public image redirect into the Next image optimizer for generated frontends.
+                          </div>
+                        </div>
+                        {selectedAsset.visibility !== 'private' && (
+                          <a
+                            href={publicTransformUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                          >
+                            Open
+                            <ExternalLink className="size-3" />
+                          </a>
+                        )}
+                      </div>
+                      <div className="mb-2 grid gap-2 sm:grid-cols-[120px_120px_minmax(0,1fr)]">
+                        <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                          Width
+                          <input
+                            type="number"
+                            min={16}
+                            max={3840}
+                            value={transformWidth}
+                            onChange={(event) => setTransformWidth(Math.max(16, Math.min(3840, Number(event.target.value) || 1200)))}
+                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                          Quality
+                          <input
+                            type="number"
+                            min={1}
+                            max={100}
+                            value={transformQuality}
+                            onChange={(event) => setTransformQuality(Math.max(1, Math.min(100, Number(event.target.value) || 75)))}
+                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                          />
+                        </label>
+                      </div>
+                      <textarea
+                        readOnly
+                        value={publicTransformUrl}
+                        className="min-h-16 w-full resize-none rounded-lg border bg-muted/50 px-3 py-2 font-mono text-xs text-muted-foreground"
+                      />
+                      {selectedAsset.visibility === 'private' && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Image transforms only run for public image assets.
+                        </p>
+                      )}
+                      {responsiveManifest && (
+                        <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
+                          <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-medium">Responsive image manifest</div>
+                              <div className="text-xs text-muted-foreground">
+                                Drop this srcset into custom frontends for predictable responsive delivery.
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {responsiveManifest.preparedAt && (
+                                <span className="rounded bg-success/10 px-2 py-1 text-xs font-medium text-success">
+                                  Prepared
+                                </span>
+                              )}
+                              {responsiveManifest.format && (
+                                <span className="rounded bg-background px-2 py-1 font-mono text-xs text-muted-foreground">
+                                  {responsiveManifest.format}
+                                </span>
+                              )}
+                              <span className="rounded bg-background px-2 py-1 font-mono text-xs text-muted-foreground">
+                                {responsiveManifest.variants.length} widths
+                              </span>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={isPreparingTransforms || selectedAsset.visibility === 'private'}
+                                onClick={() => void handlePrepareTransforms()}
+                              >
+                                {isPreparingTransforms ? 'Preparing...' : 'Prepare variants'}
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="mb-2 flex flex-wrap gap-2">
+                            {responsiveManifest.variants.map((variant) => (
+                              <a
+                                key={variant.width}
+                                href={variant.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded border border-border bg-background px-2 py-1 font-mono text-xs text-muted-foreground hover:text-primary"
+                              >
+                                {variant.width}w
+                              </a>
+                            ))}
+                          </div>
+                          <textarea
+                            readOnly
+                            value={responsiveManifest.srcSet}
+                            className="min-h-20 w-full resize-none rounded-lg border bg-background px-3 py-2 font-mono text-xs text-muted-foreground"
+                          />
+                          <p className="mt-2 font-mono text-xs text-muted-foreground">
+                            sizes="{responsiveManifest.sizes}"
+                          </p>
+                          {responsiveManifest.preparedAt && (
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              Prepared {new Date(responsiveManifest.preparedAt).toLocaleString()}
+                              {responsiveManifest.preparedBy ? ` by ${responsiveManifest.preparedBy}` : ''}
+                              {responsiveManifest.generatedBytes ? ` · ${formatBytes(responsiveManifest.generatedBytes)} generated` : ''}
+                              {responsiveManifest.storageProvider ? ` · ${responsiveManifest.storageProvider}` : ''}.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="md:col-span-2 rounded-xl border border-border bg-muted/30 p-4">
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium">Used in</div>
+                    <div className="text-xs text-muted-foreground">
+                      Bind this asset to pages or posts so usage tracking and frontend references stay explicit.
+                    </div>
+                  </div>
                   <div className="text-xs text-muted-foreground">
                     {referencedPages.length + referencedPosts.length} references
                   </div>
+                </div>
+
+                {assetReferenceError && (
+                  <Notice tone="warning" className="mb-3">
+                    {assetReferenceError}
+                  </Notice>
+                )}
+
+                <div className="mb-4 rounded-lg border border-border bg-background p-3">
+                  <div className="grid gap-2 lg:grid-cols-[120px_minmax(0,1fr)_150px_140px]">
+                    <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                      Type
+                      <select
+                        value={bindingTargetType}
+                        onChange={(event) => setBindingTargetType(event.target.value === 'post' ? 'post' : 'page')}
+                        className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                      >
+                        <option value="page">Page</option>
+                        <option value="post">Post</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                      Target
+                      <select
+                        value={bindingTargetId}
+                        onChange={(event) => setBindingTargetId(event.target.value)}
+                        className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                      >
+                        <option value="">Select {bindingTargetType}</option>
+                        {bindingTargets.map((target) => (
+                          <option key={target.id} value={target.id}>
+                            {target.label} · {target.detail}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                      Usage
+                      <select
+                        value={bindingUsageType}
+                        onChange={(event) => setBindingUsageType(event.target.value as typeof bindingUsageType)}
+                        className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                      >
+                        <option value="content">Content</option>
+                        <option value="background">Background</option>
+                        <option value="thumbnail">Thumbnail</option>
+                        <option value="cover">Cover</option>
+                        <option value="avatar">Avatar</option>
+                        <option value="document">Document</option>
+                        <option value="icon">Icon</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </label>
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={isUpdatingBinding || !bindingTargetId}
+                        onClick={() => void handleBindTarget()}
+                        className="w-full"
+                      >
+                        {isUpdatingBinding ? 'Updating...' : 'Bind asset'}
+                      </Button>
+                    </div>
+                  </div>
+                  {bindingTargets.length === 0 && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      No {bindingTargetType}s are available for the active site.
+                    </p>
+                  )}
                 </div>
 
                 {referencedPages.length === 0 && referencedPosts.length === 0 ? (
@@ -727,37 +2237,121 @@ function MediaPage() {
                 ) : (
                   <div className="grid gap-3 md:grid-cols-2">
                     {referencedPages.map(({ id, page }) => (
-                      <Link
+                      <div
                         key={`page-${id}`}
-                        to="/pages/$pageId/edit"
-                        params={{ pageId: id }}
-                        className="flex items-start gap-3 rounded-lg border border-border bg-background px-3 py-3 hover:bg-accent"
+                        className="flex items-start justify-between gap-3 rounded-lg border border-border bg-background px-3 py-3"
                       >
-                        <Layout className="mt-0.5 h-4 w-4 text-primary" />
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium">{page?.title || id}</span>
-                          <span className="block truncate text-xs text-muted-foreground">
-                            Page{page?.slug ? ` /${page.slug}` : ''}
+                        <Link
+                          to="/pages/$pageId/edit"
+                          params={{ pageId: id }}
+                          className="flex min-w-0 items-start gap-3 hover:text-primary"
+                        >
+                          <Layout className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium">{page?.title || id}</span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              Page{page?.slug ? ` /${page.slug}` : ''}
+                            </span>
                           </span>
-                        </span>
-                      </Link>
+                        </Link>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={isUpdatingBinding}
+                          onClick={() => void handleUnbindTarget('page', id)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
                     ))}
 
                     {referencedPosts.map(({ id, post }) => (
-                      <Link
+                      <div
                         key={`post-${id}`}
-                        to="/blog/$postId"
-                        params={{ postId: id }}
-                        className="flex items-start gap-3 rounded-lg border border-border bg-background px-3 py-3 hover:bg-accent"
+                        className="flex items-start justify-between gap-3 rounded-lg border border-border bg-background px-3 py-3"
                       >
-                        <FileText className="mt-0.5 h-4 w-4 text-primary" />
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium">{post?.title || id}</span>
-                          <span className="block truncate text-xs text-muted-foreground">
-                            Post{post?.slug ? ` /blog/${post.slug}` : ''}
+                        <Link
+                          to="/blog/$postId"
+                          params={{ postId: id }}
+                          className="flex min-w-0 items-start gap-3 hover:text-primary"
+                        >
+                          <FileText className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium">{post?.title || id}</span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              Post{post?.slug ? ` /blog/${post.slug}` : ''}
+                            </span>
                           </span>
-                        </span>
-                      </Link>
+                        </Link>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={isUpdatingBinding}
+                          onClick={() => void handleUnbindTarget('post', id)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="md:col-span-2 rounded-xl border border-border bg-muted/30 p-4">
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium">Activity</div>
+                    <div className="text-xs text-muted-foreground">
+                      Audit trail for this asset across uploads, edits, references, and delivery changes.
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={isLoadingAssetAudit}
+                    onClick={() => void loadAssetAuditLogs(selectedAsset.id)}
+                  >
+                    Refresh
+                  </Button>
+                </div>
+
+                {assetAuditError && (
+                  <Notice tone="warning" className="mb-3">
+                    {assetAuditError}
+                  </Notice>
+                )}
+
+                {isLoadingAssetAudit ? (
+                  <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
+                    Loading media activity...
+                  </div>
+                ) : assetAuditLogs.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border bg-background px-4 py-3 text-sm text-muted-foreground">
+                    No activity has been recorded for this asset yet.
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    {assetAuditLogs.map((log) => (
+                      <div key={log.id} className="rounded-lg border border-border bg-background px-3 py-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium">{mediaAuditTitle(log)}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{mediaAuditDescription(log)}</p>
+                          </div>
+                          <time className="shrink-0 font-mono text-xs text-muted-foreground" dateTime={log.createdAt}>
+                            {formatAuditDate(log.createdAt)}
+                          </time>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                          <span className="rounded bg-muted px-2 py-1">Actor {log.actorId || 'admin'}</span>
+                          {log.requestId && (
+                            <span className="rounded bg-muted px-2 py-1 font-mono">{log.requestId}</span>
+                          )}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -767,7 +2361,7 @@ function MediaPage() {
             <div className="flex items-center justify-between border-t border-border px-5 py-4">
               <button
                 type="button"
-                onClick={() => void handleDeleteAsset(selectedAsset)}
+                onClick={() => setPendingDeleteAsset(selectedAsset)}
                 className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
               >
                 <Trash2 className="h-4 w-4" />
@@ -786,6 +2380,495 @@ function MediaPage() {
           </div>
         </div>
       )}
+
+      {pendingDeleteAsset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Delete {pendingDeleteAsset.name}?</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This removes the file from the media library and from public delivery. Check references first if the asset is used on pages or posts.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              {pendingDeleteAsset.type} · {pendingDeleteAsset.size} · {pendingDeleteAsset.visibility || 'public'}
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteAsset(null)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteAsset(pendingDeleteAsset)}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+              >
+                Delete asset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingBulkDelete && selectedMediaAssets.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  Delete {selectedMediaAssets.length} selected asset{selectedMediaAssets.length === 1 ? '' : 's'}?
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Selected files will be removed from Backy storage and frontend media APIs.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingBulkDelete(false)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkDelete()}
+                disabled={isBulkUpdating}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+              >
+                Delete assets
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingDeleteFolder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Delete folder {pendingDeleteFolder.name}?</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  The folder will be removed. Media inside it will stay in the library and move back to Root.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              {files.filter((file) => file.folderId === pendingDeleteFolder.id).length} asset{files.filter((file) => file.folderId === pendingDeleteFolder.id).length === 1 ? '' : 's'} will move to Root.
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteFolder(null)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteFolder(pendingDeleteFolder.id)}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+              >
+                Delete folder
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }
+
+type MediaAnalytics = {
+  totalAssets: number;
+  publicAssets: number;
+  privateAssets: number;
+  referencedAssets: number;
+  unusedAssets: number;
+  replacedAssets: number;
+  replacementVersions: number;
+  replacementBytes: number;
+  folderedAssets: number;
+  rootAssets: number;
+  typeRows: Array<{
+    type: MediaAsset['type'];
+    count: number;
+    bytes: number;
+    percent: number;
+  }>;
+  largestAssets: Array<{
+    asset: MediaAsset;
+    bytes: number;
+  }>;
+};
+
+type MediaSafetyScan = {
+  status: 'clean';
+  scannedAt: string;
+  scanner: string;
+  checks: string[];
+  warnings: string[];
+};
+
+const getSafetyScan = (metadata: Record<string, unknown> | undefined): MediaSafetyScan | undefined => {
+  const scan = metadata?.safetyScan;
+  if (!scan || typeof scan !== 'object' || Array.isArray(scan)) {
+    return undefined;
+  }
+
+  const record = scan as Record<string, unknown>;
+  if (record.status !== 'clean' || typeof record.scannedAt !== 'string' || typeof record.scanner !== 'string') {
+    return undefined;
+  }
+
+  return {
+    status: 'clean',
+    scannedAt: record.scannedAt,
+    scanner: record.scanner,
+    checks: Array.isArray(record.checks) ? record.checks.filter((check): check is string => typeof check === 'string') : [],
+    warnings: Array.isArray(record.warnings) ? record.warnings.filter((warning): warning is string => typeof warning === 'string') : [],
+  };
+};
+
+type MediaDeliveryAnalytics = {
+  totalRequests: number;
+  fileRequests: number;
+  transformRequests: number;
+  bytesServed: number;
+  lastDeliveredAt: string;
+  lastDeliveryType: 'file' | 'optimizer-transform';
+  variants: Array<{
+    key: string;
+    requests: number;
+  }>;
+};
+
+const numberValue = (value: unknown) => (
+  Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0
+);
+
+const getMediaDeliveryAnalytics = (metadata: Record<string, unknown> | undefined): MediaDeliveryAnalytics | undefined => {
+  const delivery = metadata?.mediaDelivery;
+  if (!delivery || typeof delivery !== 'object' || Array.isArray(delivery)) {
+    return undefined;
+  }
+
+  const record = delivery as Record<string, unknown>;
+  if (typeof record.lastDeliveredAt !== 'string') {
+    return undefined;
+  }
+
+  const lastDeliveryType = record.lastDeliveryType === 'optimizer-transform'
+    ? 'optimizer-transform'
+    : 'file';
+
+  return {
+    totalRequests: numberValue(record.totalRequests),
+    fileRequests: numberValue(record.fileRequests),
+    transformRequests: numberValue(record.transformRequests),
+    bytesServed: numberValue(record.bytesServed),
+    lastDeliveredAt: record.lastDeliveredAt,
+    lastDeliveryType,
+    variants: Array.isArray(record.variants)
+      ? record.variants
+          .filter((variant): variant is Record<string, unknown> => (
+            !!variant && typeof variant === 'object' && !Array.isArray(variant)
+          ))
+          .map((variant) => ({
+            key: typeof variant.key === 'string' ? variant.key : 'file',
+            requests: numberValue(variant.requests),
+          }))
+      : [],
+  };
+};
+
+const DEFAULT_RESPONSIVE_WIDTHS = [320, 640, 960, 1280, 1920];
+const DEFAULT_RESPONSIVE_QUALITY = 75;
+const DEFAULT_RESPONSIVE_SIZES = '(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 1200px';
+
+const getAdminResponsiveManifest = (asset: MediaAsset, siteId: string): NonNullable<MediaAsset['responsive']> => {
+  if (asset.responsive) {
+    return asset.responsive;
+  }
+
+  const generated = asset.metadata?.generatedTransforms;
+  if (generated && typeof generated === 'object' && !Array.isArray(generated)) {
+    const record = generated as Record<string, unknown>;
+    const variants = Array.isArray(record.variants)
+      ? record.variants
+          .filter((variant): variant is Record<string, unknown> => (
+            !!variant && typeof variant === 'object' && !Array.isArray(variant)
+          ))
+          .map((variant): NonNullable<MediaAsset['responsive']>['variants'][number] | null => {
+            const width = Number(variant.width);
+            const quality = Number(variant.quality);
+            if (!Number.isFinite(width) || width <= 0) {
+              return null;
+            }
+
+            const bytes = Number(variant.bytes);
+            return {
+              width: Math.floor(width),
+              quality: Number.isFinite(quality) && quality > 0 ? Math.floor(quality) : DEFAULT_RESPONSIVE_QUALITY,
+              url: typeof variant.url === 'string' && variant.url.trim().length > 0
+                ? variant.url
+                : getPublicImageTransformUrl(asset.id, { width: Math.floor(width), quality: DEFAULT_RESPONSIVE_QUALITY }, siteId),
+              ...(Number.isFinite(bytes) ? { bytes } : {}),
+              ...(typeof variant.format === 'string' ? { format: variant.format } : {}),
+              ...(typeof variant.mimeType === 'string' ? { mimeType: variant.mimeType } : {}),
+              ...(typeof variant.generatedAt === 'string' ? { generatedAt: variant.generatedAt } : {}),
+              ...(typeof variant.storagePath === 'string' ? { storagePath: variant.storagePath } : {}),
+            };
+          })
+          .filter((variant): variant is NonNullable<MediaAsset['responsive']>['variants'][number] => !!variant)
+      : [];
+
+    if (variants.length > 0) {
+      return {
+        src: typeof record.src === 'string' && record.src.trim().length > 0 ? record.src : asset.url,
+        srcSet: variants.map((variant) => `${variant.url} ${variant.width}w`).join(', '),
+        sizes: typeof record.sizes === 'string' && record.sizes.trim().length > 0 ? record.sizes : DEFAULT_RESPONSIVE_SIZES,
+        variants,
+        preparedAt: typeof record.preparedAt === 'string' ? record.preparedAt : undefined,
+        preparedBy: typeof record.preparedBy === 'string' ? record.preparedBy : undefined,
+        format: typeof record.format === 'string' ? record.format : undefined,
+        generatedBytes: Number.isFinite(Number(record.generatedBytes)) ? Number(record.generatedBytes) : undefined,
+        storageProvider: typeof record.storageProvider === 'string' ? record.storageProvider : undefined,
+      };
+    }
+  }
+
+  const variants = DEFAULT_RESPONSIVE_WIDTHS.map((width) => ({
+    width,
+    quality: DEFAULT_RESPONSIVE_QUALITY,
+    url: getPublicImageTransformUrl(asset.id, { width, quality: DEFAULT_RESPONSIVE_QUALITY }, siteId),
+  }));
+
+  return {
+    src: asset.url,
+    srcSet: variants.map((variant) => `${variant.url} ${variant.width}w`).join(', '),
+    sizes: DEFAULT_RESPONSIVE_SIZES,
+    variants,
+  };
+};
+
+const assetSizeBytes = (asset: MediaAsset): number => {
+  if (Number.isFinite(asset.sizeBytes)) {
+    return Math.max(0, asset.sizeBytes || 0);
+  }
+
+  const match = asset.size.match(/^([\d.]+)\s*(B|KB|MB|GB)$/i);
+  if (!match) {
+    return 0;
+  }
+
+  const value = Number(match[1]);
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  const unit = match[2].toUpperCase();
+  if (unit === 'GB') return Math.round(value * 1024 * 1024 * 1024);
+  if (unit === 'MB') return Math.round(value * 1024 * 1024);
+  if (unit === 'KB') return Math.round(value * 1024);
+  return Math.round(value);
+};
+
+const hasMediaReferences = (asset: MediaAsset): boolean => (
+  (asset.targetPageIds?.length || 0) + (asset.targetPostIds?.length || 0) > 0
+);
+
+const replacementBytesForAsset = (asset: MediaAsset): number => (
+  getReplacementVersions(asset.metadata).reduce((total, version) => total + Math.max(0, version.sizeBytes || 0), 0)
+);
+
+const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
+  const totalBytes = assets.reduce((total, asset) => total + assetSizeBytes(asset), 0);
+  const byType = new Map<MediaAsset['type'], { count: number; bytes: number }>();
+  let publicAssets = 0;
+  let privateAssets = 0;
+  let referencedAssets = 0;
+  let folderedAssets = 0;
+  let replacedAssets = 0;
+  let replacementVersions = 0;
+  let replacementBytes = 0;
+
+  assets.forEach((asset) => {
+    const bytes = assetSizeBytes(asset);
+    const current = byType.get(asset.type) || { count: 0, bytes: 0 };
+    byType.set(asset.type, {
+      count: current.count + 1,
+      bytes: current.bytes + bytes,
+    });
+
+    if (asset.visibility === 'private') privateAssets += 1;
+    else publicAssets += 1;
+
+    if (hasMediaReferences(asset)) referencedAssets += 1;
+    if (asset.folderId) folderedAssets += 1;
+
+    const versions = getReplacementVersions(asset.metadata);
+    if (versions.length > 0) {
+      replacedAssets += 1;
+      replacementVersions += versions.length;
+      replacementBytes += replacementBytesForAsset(asset);
+    }
+  });
+
+  return {
+    totalAssets: assets.length,
+    publicAssets,
+    privateAssets,
+    referencedAssets,
+    unusedAssets: Math.max(0, assets.length - referencedAssets),
+    replacedAssets,
+    replacementVersions,
+    replacementBytes,
+    folderedAssets,
+    rootAssets: Math.max(0, assets.length - folderedAssets),
+    typeRows: Array.from(byType.entries())
+      .map(([type, value]) => ({
+        type,
+        count: value.count,
+        bytes: value.bytes,
+        percent: totalBytes > 0 ? Math.max(4, Math.round((value.bytes / totalBytes) * 100)) : 0,
+      }))
+      .sort((a, b) => b.bytes - a.bytes || b.count - a.count),
+    largestAssets: assets
+      .map((asset) => ({ asset, bytes: assetSizeBytes(asset) }))
+      .sort((a, b) => b.bytes - a.bytes)
+      .slice(0, 4),
+  };
+};
+
+type ReplacementVersion = {
+  id?: string;
+  filename?: string;
+  originalName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  url?: string;
+  createdAt?: string;
+  replacedAt?: string;
+};
+
+const getReplacementVersions = (metadata: Record<string, unknown> | undefined): ReplacementVersion[] => {
+  const versions = metadata?.replacementVersions;
+  if (!Array.isArray(versions)) {
+    return [];
+  }
+
+  return versions
+    .filter((version): version is Record<string, unknown> => (
+      !!version && typeof version === 'object' && !Array.isArray(version)
+    ))
+    .map((version) => ({
+      id: typeof version.id === 'string' ? version.id : undefined,
+      filename: typeof version.filename === 'string' ? version.filename : undefined,
+      originalName: typeof version.originalName === 'string' ? version.originalName : undefined,
+      mimeType: typeof version.mimeType === 'string' ? version.mimeType : undefined,
+      sizeBytes: Number.isFinite(Number(version.sizeBytes)) ? Number(version.sizeBytes) : undefined,
+      url: typeof version.url === 'string' ? version.url : undefined,
+      createdAt: typeof version.createdAt === 'string' ? version.createdAt : undefined,
+      replacedAt: typeof version.replacedAt === 'string' ? version.replacedAt : undefined,
+    }));
+};
+
+const replacementAcceptForAsset = (type: MediaAsset['type']) => {
+  if (type === 'image') return 'image/*';
+  if (type === 'video') return 'video/*';
+  if (type === 'font') return '.woff,.woff2,.ttf,.otf,.eot,font/*';
+  return '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv';
+};
+
+const formatReplacementSize = (sizeBytes: number | undefined) => (
+  Number.isFinite(sizeBytes) ? formatBytes(sizeBytes || 0) : 'Unknown size'
+);
+
+const auditRecord = (value: unknown): Record<string, unknown> | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
+);
+
+const auditText = (value: unknown): string => (
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : ''
+);
+
+const formatAuditDate = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+};
+
+const mediaAuditTitle = (log: AdminAuditLog) => {
+  if (log.action === 'create') return 'Asset uploaded';
+  if (log.action === 'update') return 'Asset metadata updated';
+  if (log.action === 'delete') return 'Asset deleted';
+  if (log.action === 'media.bind') return 'Asset bound to content';
+  if (log.action === 'media.unbind') return 'Asset removed from content';
+  if (log.action === 'media.replace') return 'Asset file replaced';
+  return log.action;
+};
+
+const mediaAuditDescription = (log: AdminAuditLog) => {
+  const metadata = auditRecord(log.metadata);
+  const changedKeys = Array.isArray(metadata?.changedKeys)
+    ? metadata.changedKeys.filter((key): key is string => typeof key === 'string')
+    : [];
+  const targetType = auditText(metadata?.targetType);
+  const targetId = auditText(metadata?.targetId);
+  const usageType = auditText(metadata?.usageType);
+  const filename = auditText(metadata?.filename) || auditText(auditRecord(log.after)?.originalName) || auditText(auditRecord(log.before)?.originalName);
+  const replacementFilename = auditText(metadata?.replacementFilename);
+  const previousFilename = auditText(metadata?.previousFilename);
+  const visibility = auditText(metadata?.visibility) || auditText(auditRecord(log.after)?.visibility);
+
+  if (log.action === 'create') {
+    return `${filename || 'Asset'} was uploaded${visibility ? ` as ${visibility}` : ''}.`;
+  }
+
+  if (log.action === 'update' && changedKeys.length > 0) {
+    return `Changed ${changedKeys.join(', ')}.`;
+  }
+
+  if (log.action === 'media.bind') {
+    return `Bound to ${targetType || 'content'} ${targetId || ''}${usageType ? ` as ${usageType}` : ''}.`;
+  }
+
+  if (log.action === 'media.unbind') {
+    return `Removed from ${targetType || 'content'} ${targetId || ''}.`;
+  }
+
+  if (log.action === 'media.replace') {
+    return `${previousFilename || 'Previous file'} was replaced with ${replacementFilename || 'a new file'}.`;
+  }
+
+  if (log.action === 'delete') {
+    return `${filename || 'Asset'} was removed from the library.`;
+  }
+
+  return `Request ${log.requestId || log.id}`;
+};

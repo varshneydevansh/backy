@@ -587,6 +587,10 @@ interface ApiSettings {
     adminApiKey: string;
   };
   runtimeStorage?: SiteSettingsInput['runtimeStorage'];
+  integrations?: SiteSettingsInput['integrations'];
+  runtimeDatabase?: SiteSettingsInput['runtimeDatabase'];
+  runtimeSupabase?: SiteSettingsInput['runtimeSupabase'];
+  runtimeVercel?: SiteSettingsInput['runtimeVercel'];
   updatedAt?: string;
 }
 
@@ -595,6 +599,46 @@ interface ApiSettingsResponse {
   data?: {
     settings: ApiSettings;
   };
+  error?: {
+    message?: string;
+  };
+}
+
+export interface AdminAuditLog {
+  id: string;
+  siteId?: string | null;
+  teamId?: string | null;
+  actorId?: string | null;
+  entity: string;
+  entityId: string;
+  action: string;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  requestId?: string;
+  createdAt: string;
+}
+
+export interface AdminAuditLogListFilters {
+  siteId?: string;
+  teamId?: string;
+  actorId?: string;
+  entity?: string;
+  entityId?: string;
+  action?: string;
+  requestId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AdminAuditLogListResult {
+  logs: AdminAuditLog[];
+  pagination: ApiPagination;
+}
+
+interface ApiAdminAuditLogsResponse {
+  success: boolean;
+  data?: AdminAuditLogListResult;
   error?: {
     message?: string;
   };
@@ -816,6 +860,22 @@ export interface SiteSettingsInput {
     publicApiKey: string;
     adminApiKey: string;
   };
+  integrations?: {
+    supabase?: {
+      projectUrl?: string;
+      projectRef?: string;
+      databaseEnabled?: boolean;
+      storageEnabled?: boolean;
+      authEnabled?: boolean;
+    };
+    vercel?: {
+      projectId?: string;
+      teamSlug?: string;
+      productionDomain?: string;
+      autoDeploy?: boolean;
+      previewDeployments?: boolean;
+    };
+  };
   runtimeStorage?: {
     provider: 'local' | 's3' | 'supabase';
     configured: boolean;
@@ -827,6 +887,37 @@ export interface SiteSettingsInput {
     forcePathStyle?: boolean;
     missing: string[];
     error?: string;
+  };
+  runtimeDatabase?: {
+    mode: string;
+    provider: string;
+    configured: boolean;
+    host?: string;
+    database?: string;
+    path?: string;
+    logging?: boolean;
+    missing: string[];
+    note?: string;
+    error?: string;
+  };
+  runtimeSupabase?: {
+    configured: boolean;
+    projectUrl?: string;
+    projectRef?: string;
+    anonKeyConfigured?: boolean;
+    serviceRoleConfigured?: boolean;
+    databaseUrlConfigured?: boolean;
+    storageBucket?: string;
+    missing: string[];
+  };
+  runtimeVercel?: {
+    configured: boolean;
+    onVercel?: boolean;
+    projectId?: string;
+    teamId?: string;
+    url?: string;
+    environment?: string;
+    missing: string[];
   };
 }
 
@@ -1831,6 +1922,10 @@ export async function getSettings(): Promise<SiteSettingsInput> {
     deliveryMode: payload.data.settings.deliveryMode,
     apiKeys: payload.data.settings.apiKeys,
     runtimeStorage: payload.data.settings.runtimeStorage,
+    integrations: payload.data.settings.integrations,
+    runtimeDatabase: payload.data.settings.runtimeDatabase,
+    runtimeSupabase: payload.data.settings.runtimeSupabase,
+    runtimeVercel: payload.data.settings.runtimeVercel,
   };
 }
 
@@ -1852,6 +1947,10 @@ export async function updateSettings(input: Partial<SiteSettingsInput>): Promise
     deliveryMode: payload.data.settings.deliveryMode,
     apiKeys: payload.data.settings.apiKeys,
     runtimeStorage: payload.data.settings.runtimeStorage,
+    integrations: payload.data.settings.integrations,
+    runtimeDatabase: payload.data.settings.runtimeDatabase,
+    runtimeSupabase: payload.data.settings.runtimeSupabase,
+    runtimeVercel: payload.data.settings.runtimeVercel,
   };
 }
 
@@ -1873,7 +1972,31 @@ export async function regenerateSettingsApiKeys(): Promise<SiteSettingsInput> {
     deliveryMode: payload.data.settings.deliveryMode,
     apiKeys: payload.data.settings.apiKeys,
     runtimeStorage: payload.data.settings.runtimeStorage,
+    integrations: payload.data.settings.integrations,
+    runtimeDatabase: payload.data.settings.runtimeDatabase,
+    runtimeSupabase: payload.data.settings.runtimeSupabase,
+    runtimeVercel: payload.data.settings.runtimeVercel,
   };
+}
+
+export async function listAdminAuditLogs(filters: AdminAuditLogListFilters = {}): Promise<AdminAuditLogListResult> {
+  const params = new URLSearchParams();
+
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      params.set(key, String(value));
+    }
+  });
+
+  const query = params.toString();
+  const response = await adminFetch(`${getAdminApiBase()}/audit-logs${query ? `?${query}` : ''}`);
+  const payload = await readJson<ApiAdminAuditLogsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load audit logs');
+  }
+
+  return payload.data;
 }
 
 export async function listPages(siteId: string): Promise<Page[]> {

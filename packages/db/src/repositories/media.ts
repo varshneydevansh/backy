@@ -224,6 +224,12 @@ export function createMediaRepository(db: DatabaseInstance): BackyMediaRepositor
                 updatedAt: new Date(),
             };
             if (input.filename !== undefined) updates.filename = input.filename;
+            if (input.originalName !== undefined) updates.originalName = input.originalName;
+            if (input.mimeType !== undefined) updates.mimeType = input.mimeType;
+            if (input.size !== undefined) updates.sizeBytes = input.size;
+            if (input.type !== undefined) updates.type = input.type;
+            if (input.url !== undefined) updates.url = input.url;
+            if (input.thumbnailUrl !== undefined) updates.thumbnailUrl = input.thumbnailUrl;
             if (input.folderId !== undefined) updates.folderId = input.folderId;
             if (input.altText !== undefined) updates.altText = input.altText;
             if (input.caption !== undefined) updates.caption = input.caption;

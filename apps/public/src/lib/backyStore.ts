@@ -8,6 +8,11 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type {
+  BackyAuditLogEntry,
+  BackyAuditLogListInput,
+  BackyJsonObject,
+  BackyListResult,
+  BackyRepositoryEntity,
   Comment,
   CommentTargetType,
   FormFieldDefinition,
@@ -219,6 +224,7 @@ interface StoreSettings {
     publicApiKey: string;
     adminApiKey: string;
   };
+  integrations?: BackyJsonObject;
   updatedAt: string;
 }
 
@@ -486,6 +492,22 @@ let SETTINGS: StoreSettings = {
   apiKeys: {
     publicApiKey: createRuntimeApiKey('public'),
     adminApiKey: createRuntimeApiKey('admin'),
+  },
+  integrations: {
+    supabase: {
+      projectUrl: '',
+      projectRef: '',
+      databaseEnabled: false,
+      storageEnabled: false,
+      authEnabled: false,
+    },
+    vercel: {
+      projectId: '',
+      teamSlug: '',
+      productionDomain: '',
+      autoDeploy: false,
+      previewDeployments: true,
+    },
   },
   updatedAt: nowIso,
 };
@@ -1341,6 +1363,7 @@ const REUSABLE_SECTIONS: StoreReusableSection[] = [
 
 const CONTENT_REVISIONS: ContentRevision[] = [];
 const PREVIEW_TOKENS: PreviewToken[] = [];
+const ADMIN_AUDIT_LOGS: BackyAuditLogEntry[] = [];
 
 const MEDIA_LIBRARY: MediaItem[] = [
   {
@@ -1466,6 +1489,7 @@ interface AdminContentSnapshot {
   settings?: StoreSettings;
   revisions?: ContentRevision[];
   previewTokens?: PreviewToken[];
+  adminAuditLogs?: BackyAuditLogEntry[];
 }
 
 interface MediaCatalogSnapshot {
@@ -1611,6 +1635,10 @@ function refreshPersistedAdminContent() {
           ...SETTINGS.apiKeys,
           ...(parsed.settings.apiKeys || {}),
         },
+        integrations: {
+          ...(SETTINGS.integrations || {}),
+          ...(parsed.settings.integrations || {}),
+        },
       };
     }
 
@@ -1620,6 +1648,10 @@ function refreshPersistedAdminContent() {
 
     if (Array.isArray(parsed.previewTokens)) {
       PREVIEW_TOKENS.splice(0, PREVIEW_TOKENS.length, ...parsed.previewTokens);
+    }
+
+    if (Array.isArray(parsed.adminAuditLogs)) {
+      ADMIN_AUDIT_LOGS.splice(0, ADMIN_AUDIT_LOGS.length, ...parsed.adminAuditLogs);
     }
   } catch (error) {
     console.error('Unable to load persisted admin content:', error);
@@ -1645,6 +1677,7 @@ function persistAdminContent() {
           settings: SETTINGS,
           revisions: CONTENT_REVISIONS,
           previewTokens: PREVIEW_TOKENS,
+          adminAuditLogs: ADMIN_AUDIT_LOGS,
         } satisfies AdminContentSnapshot,
         null,
         2,
@@ -1653,6 +1686,73 @@ function persistAdminContent() {
   } catch (error) {
     console.error('Unable to persist admin content:', error);
   }
+}
+
+const DEFAULT_ADMIN_AUDIT_LIMIT = 50;
+const MAX_ADMIN_AUDIT_LIMIT = 100;
+const MAX_STORED_ADMIN_AUDIT_LOGS = 1000;
+
+const normalizeAdminAuditLimit = (limit?: number): number => (
+  Math.max(1, Math.min(MAX_ADMIN_AUDIT_LIMIT, Math.floor(limit || DEFAULT_ADMIN_AUDIT_LIMIT)))
+);
+
+const normalizeAdminAuditOffset = (offset?: number): number => (
+  Math.max(0, Math.floor(offset || 0))
+);
+
+const asJsonObject = (value: unknown): BackyJsonObject | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value) ? value as BackyJsonObject : undefined
+);
+
+const normalizeAdminAuditEntity = (value: BackyRepositoryEntity | undefined): BackyRepositoryEntity => (
+  value || 'auditLog'
+);
+
+export function recordAdminAuditLog(input: Omit<BackyAuditLogEntry, 'id' | 'createdAt'>): BackyAuditLogEntry {
+  ensurePersistedAdminContentLoaded();
+
+  const entry: BackyAuditLogEntry = {
+    id: `audit_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`,
+    siteId: input.siteId || null,
+    teamId: input.teamId || null,
+    actorId: input.actorId || 'admin',
+    entity: normalizeAdminAuditEntity(input.entity),
+    entityId: input.entityId,
+    action: input.action,
+    before: asJsonObject(input.before),
+    after: asJsonObject(input.after),
+    metadata: asJsonObject(input.metadata) || {},
+    requestId: input.requestId,
+    createdAt: new Date().toISOString(),
+  };
+
+  ADMIN_AUDIT_LOGS.unshift(entry);
+  if (ADMIN_AUDIT_LOGS.length > MAX_STORED_ADMIN_AUDIT_LOGS) {
+    ADMIN_AUDIT_LOGS.splice(MAX_STORED_ADMIN_AUDIT_LOGS);
+  }
+  persistAdminContent();
+  return clone(entry);
+}
+
+export function listAdminAuditLogs(input: BackyAuditLogListInput = {}): BackyListResult<BackyAuditLogEntry> {
+  ensurePersistedAdminContentLoaded();
+
+  const limit = normalizeAdminAuditLimit(input.limit);
+  const offset = normalizeAdminAuditOffset(input.offset);
+  const filtered = ADMIN_AUDIT_LOGS
+    .filter((entry) => input.siteId ? entry.siteId === input.siteId : true)
+    .filter((entry) => input.teamId ? entry.teamId === input.teamId : true)
+    .filter((entry) => input.actorId ? entry.actorId === input.actorId : true)
+    .filter((entry) => input.entity ? entry.entity === input.entity : true)
+    .filter((entry) => input.entityId ? entry.entityId === input.entityId : true)
+    .filter((entry) => input.action ? entry.action === input.action : true)
+    .filter((entry) => input.requestId ? entry.requestId === input.requestId : true);
+  const items = filtered.slice(offset, offset + limit);
+
+  return {
+    items: clone(items),
+    pagination: getPagination(filtered.length, limit, offset),
+  };
 }
 
 const FORM_LIBRARY: FormDefinition[] = [
@@ -3657,6 +3757,7 @@ export function updateAdminSettings(input: Record<string, unknown>): StoreSettin
   ensurePersistedAdminContentLoaded();
 
   const apiKeysInput = toRecord(input.apiKeys);
+  const integrationsInput = asJsonObject(input.integrations) || {};
   SETTINGS = {
     ...SETTINGS,
     deliveryMode: input.deliveryMode === undefined
@@ -3670,6 +3771,12 @@ export function updateAdminSettings(input: Record<string, unknown>): StoreSettin
         ? SETTINGS.apiKeys.adminApiKey
         : sanitizeString(apiKeysInput.adminApiKey) || SETTINGS.apiKeys.adminApiKey,
     },
+    integrations: input.integrations === undefined
+      ? SETTINGS.integrations
+      : {
+          ...(SETTINGS.integrations || {}),
+          ...integrationsInput,
+        },
     updatedAt: new Date().toISOString(),
   };
 
@@ -5632,9 +5739,30 @@ export function updateMediaItem(
 
   const updated: MediaItem = {
     ...current,
+    filename: input.filename === undefined
+      ? current.filename
+      : sanitizeString(input.filename) || current.filename,
     originalName: input.originalName === undefined
       ? current.originalName
       : sanitizeString(input.originalName) || current.originalName,
+    mimeType: input.mimeType === undefined
+      ? current.mimeType
+      : sanitizeString(input.mimeType) || current.mimeType,
+    sizeBytes: input.sizeBytes === undefined && input.size === undefined
+      ? current.sizeBytes
+      : Math.max(0, Number(input.sizeBytes ?? input.size) || current.sizeBytes),
+    type: input.type === 'image' ||
+      input.type === 'video' ||
+      input.type === 'audio' ||
+      input.type === 'document' ||
+      input.type === 'font' ||
+      input.type === 'other'
+      ? input.type
+      : current.type,
+    url: input.url === undefined ? current.url : sanitizeString(input.url) || current.url,
+    thumbnailUrl: input.thumbnailUrl === undefined
+      ? current.thumbnailUrl
+      : sanitizeString(input.thumbnailUrl) || null,
     folderId: input.folderId === undefined ? current.folderId : sanitizeString(input.folderId) || null,
     pageIds: nextScope === 'page' && scopeTargetId && !pageIds.includes(scopeTargetId)
       ? [...pageIds, scopeTargetId]

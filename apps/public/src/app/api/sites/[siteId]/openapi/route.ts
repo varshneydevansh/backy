@@ -1282,7 +1282,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               type: 'object',
               required: ['media', 'pagination'],
               properties: {
-                media: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                media: { type: 'array', items: { $ref: '#/components/schemas/MediaAsset' } },
                 pagination: { type: 'object', additionalProperties: true },
               },
             }),
@@ -1291,9 +1291,49 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             type: 'object',
             required: ['media'],
             properties: {
-              media: { type: 'object', additionalProperties: true },
+              media: { $ref: '#/components/schemas/MediaAsset' },
             },
           }),
+          MediaAsset: {
+            type: 'object',
+            additionalProperties: true,
+            properties: {
+              id: { type: 'string' },
+              type: { type: 'string' },
+              url: { type: 'string' },
+              visibility: { type: 'string' },
+              responsive: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  src: { type: 'string' },
+                  srcSet: { type: 'string' },
+                  sizes: { type: 'string' },
+                  variants: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      required: ['width', 'quality', 'url'],
+                      properties: {
+                        width: { type: 'integer' },
+                        quality: { type: 'integer' },
+                        url: { type: 'string' },
+                        bytes: { type: 'integer' },
+                        format: { type: 'string' },
+                        mimeType: { type: 'string' },
+                        generatedAt: { type: 'string', format: 'date-time' },
+                      },
+                    },
+                  },
+                  format: { type: 'string' },
+                  generatedBytes: { type: 'integer' },
+                  storageProvider: { type: 'string' },
+                  preparedAt: { type: 'string', format: 'date-time' },
+                  preparedBy: { type: 'string' },
+                },
+              },
+            },
+          },
           ReusableSectionListEnvelope: envelopeSchema({
             type: 'object',
             required: ['sections', 'pagination'],

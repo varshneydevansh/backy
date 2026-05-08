@@ -7,9 +7,12 @@
 
 import { extname } from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { createMediaItem, getMediaList, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
+import { MediaSafetyError, scanMediaUpload } from '@/lib/mediaSafety';
 import { getMediaStorageAdapter, getMediaStoragePath } from '@/lib/mediaStorage';
+import { generatedTransformBytes } from '@/lib/mediaTransformGeneration';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { MediaItem } from '@backy-cms/core';
 
@@ -112,6 +115,16 @@ const parseVisibility = (value: FormDataEntryValue | null): MediaItem['visibilit
   value === 'private' ? 'private' : 'public'
 );
 
+const parseFontDisplay = (value: FormDataEntryValue | null) => (
+  value === 'auto' ||
+  value === 'block' ||
+  value === 'fallback' ||
+  value === 'optional' ||
+  value === 'swap'
+    ? value
+    : 'swap'
+);
+
 const mediaTypeFromInput = (value: string | null): MediaItem['type'] | undefined => (
   value === 'image' ||
   value === 'video' ||
@@ -151,8 +164,27 @@ const configuredSiteMediaQuotaBytes = () => {
   return Math.floor(configured);
 };
 
+const replacementVersionBytes = (metadata: MediaItem['metadata'] | undefined): number => {
+  const versions = metadata && Array.isArray(metadata.replacementVersions)
+    ? metadata.replacementVersions
+    : [];
+
+  return versions.reduce((total, version) => {
+    if (!version || typeof version !== 'object' || Array.isArray(version)) {
+      return total;
+    }
+
+    return total + Math.max(0, Number((version as Record<string, unknown>).sizeBytes) || 0);
+  }, 0);
+};
+
 const mediaUsageBytes = (items: MediaItem[]) => (
-  items.reduce((total, item) => total + Math.max(0, Number(item.sizeBytes) || 0), 0)
+  items.reduce((total, item) => (
+    total
+    + Math.max(0, Number(item.sizeBytes) || 0)
+    + replacementVersionBytes(item.metadata)
+    + generatedTransformBytes(item.metadata)
+  ), 0)
 );
 
 const mediaQuotaPayload = (limitBytes: number, usedBytes: number) => ({
@@ -211,11 +243,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         .filter((item) => postId ? item.postIds.includes(postId) || (item.scope === 'post' && item.scopeTargetId === postId) : true)
         .filter((item) => tag ? item.tags.includes(tag) : true);
       const payload = paginateMedia(filtered, limit, offset);
+      const allMedia = (await repositories.media.list({
+        siteId: site.id,
+        type: 'all',
+        visibility: 'all',
+        limit: 10000,
+        offset: 0,
+      })).items;
 
       return NextResponse.json({
         success: true,
         requestId,
-        data: payload,
+        data: {
+          ...payload,
+          quota: mediaQuotaPayload(configuredSiteMediaQuotaBytes(), mediaUsageBytes(allMedia)),
+        },
       });
     }
 
@@ -243,7 +285,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       success: true,
       requestId,
-      data: payload,
+      data: {
+        ...payload,
+        quota: mediaQuotaPayload(configuredSiteMediaQuotaBytes(), mediaUsageBytes(getMediaList(site.id, {
+          limit: 10000,
+          offset: 0,
+        }).media)),
+      },
     });
   } catch (error) {
     console.error('Admin media list API error:', error);
@@ -321,8 +369,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const mediaFolder = mediaType === 'font' ? 'fonts' : `${mediaType}s`;
     const storagePath = getMediaStoragePath({ siteId: site.id, mediaFolder, storedFilename });
     const metadata = parseMetadata(formData.get('metadata'));
+    const uploadBuffer = Buffer.from(await file.arrayBuffer());
+    const safetyScan = scanMediaUpload({
+      buffer: uploadBuffer,
+      originalName,
+      mimeType,
+      mediaType,
+    });
     const storage = await getMediaStorageAdapter();
-    const upload = await storage.upload(Buffer.from(await file.arrayBuffer()), {
+    const upload = await storage.upload(uploadBuffer, {
       path: storagePath,
       filename: storedFilename,
       mimeType,
@@ -349,6 +404,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         extension: extension.replace(/^\./, ''),
         storagePath: upload.path,
         storageProvider: storage.provider,
+        safetyScan,
         thumbnailUrl: mediaType === 'image' ? upload.url : null,
         tags: toStringList(formData.get('tags')),
         scope,
@@ -360,6 +416,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               fontFamily: toStringValue(formData.get('fontFamily')) || cleanFontFamily(originalName),
               fontWeight: toStringValue(formData.get('fontWeight')) || '400',
               fontStyle: toStringValue(formData.get('fontStyle')) || 'normal',
+              fontFallback: toStringValue(formData.get('fontFallback')) || 'system-ui, sans-serif',
+              fontDisplay: parseFontDisplay(formData.get('fontDisplay')),
             }
           : {}),
       },
@@ -387,6 +445,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           uploadedBy: mediaInput.uploadedBy,
         })).item
       : createMediaItem(site.id, mediaInput);
+    await recordAdminAudit({
+      repositories,
+      siteId: site.id,
+      entity: 'media',
+      entityId: media.id,
+      action: 'create',
+      after: media,
+      metadata: {
+        filename: media.originalName || media.filename,
+        mimeType: media.mimeType,
+        type: media.type,
+        visibility: media.visibility || 'public',
+        sizeBytes: media.sizeBytes,
+        safetyStatus: safetyScan.status,
+        ...(typeof media.metadata?.storageProvider === 'string' ? { storageProvider: media.metadata.storageProvider } : {}),
+        ...(typeof media.metadata?.storagePath === 'string' ? { storagePath: media.metadata.storagePath } : {}),
+      },
+      requestId,
+    });
     const cacheInvalidation = repositories
       ? await recordSiteCacheInvalidation(repositories, {
           siteId: site.id,
@@ -411,6 +488,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       { status: 201 },
     );
   } catch (error) {
+    if (error instanceof MediaSafetyError) {
+      return errorResponse(415, error.code, error.message, requestId, error.details);
+    }
+
     console.error('Admin media upload API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

@@ -138,6 +138,9 @@ function getHostedFontAssets(siteId: string) {
         styles: [getStringMetadata(font.metadata, 'fontStyle') === 'italic' || getStringMetadata(font.metadata, 'fontStyle') === 'oblique'
             ? getStringMetadata(font.metadata, 'fontStyle') as 'italic' | 'oblique'
             : 'normal' as const],
+        fallbackStack: getStringMetadata(font.metadata, 'fontFallback') || 'system-ui, sans-serif',
+        display: getStringMetadata(font.metadata, 'fontDisplay') || 'swap',
+        cssFamily: `"${(getStringMetadata(font.metadata, 'fontFamily') || font.originalName.replace(/\.[a-z0-9]+$/i, '')).replace(/["\\]/g, '')}", ${getStringMetadata(font.metadata, 'fontFallback') || 'system-ui, sans-serif'}`,
     }));
 }
 
@@ -158,6 +161,9 @@ async function getRepositoryFontAssets(hostedSite: Extract<HostedSite, { mode: '
         styles: [getStringMetadata(font.metadata, 'fontStyle') === 'italic' || getStringMetadata(font.metadata, 'fontStyle') === 'oblique'
             ? getStringMetadata(font.metadata, 'fontStyle') as 'italic' | 'oblique'
             : 'normal' as const],
+        fallbackStack: getStringMetadata(font.metadata, 'fontFallback') || 'system-ui, sans-serif',
+        display: getStringMetadata(font.metadata, 'fontDisplay') || 'swap',
+        cssFamily: `"${(getStringMetadata(font.metadata, 'fontFamily') || font.originalName.replace(/\.[a-z0-9]+$/i, '')).replace(/["\\]/g, '')}", ${getStringMetadata(font.metadata, 'fontFallback') || 'system-ui, sans-serif'}`,
     }));
 }
 

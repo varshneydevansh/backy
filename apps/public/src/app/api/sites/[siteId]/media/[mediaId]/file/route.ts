@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { recordMediaDelivery } from '@/lib/mediaDeliveryAnalytics';
 import { getMediaStorageAdapter, getMediaStoragePathFromMedia } from '@/lib/mediaStorage';
 import { verifySignedMediaAccess } from '@/lib/mediaSigning';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -79,6 +80,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const storage = await getMediaStorageAdapter();
     const buffer = await storage.read(storagePath);
+    await recordMediaDelivery({
+      repositories,
+      siteId: site.id,
+      media,
+      deliveryType: 'file',
+      bytesServed: buffer.byteLength,
+      requestId,
+    }).catch((error) => {
+      console.error('Media delivery analytics update failed:', error);
+    });
     const response = new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { recordMediaDelivery } from '@/lib/mediaDeliveryAnalytics';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -73,6 +74,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (media.type !== 'image' || !media.mimeType.startsWith('image/')) {
       return errorResponse(400, 'MEDIA_TRANSFORM_UNSUPPORTED', 'Only public image media can be transformed.', requestId);
     }
+
+    await recordMediaDelivery({
+      repositories,
+      siteId: site.id,
+      media,
+      deliveryType: 'optimizer-transform',
+      width,
+      quality,
+      requestId,
+    }).catch((error) => {
+      console.error('Media transform analytics update failed:', error);
+    });
 
     const transformUrl = new URL('/_next/image', request.url);
     transformUrl.searchParams.set('url', media.url);

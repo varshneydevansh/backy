@@ -6,6 +6,7 @@
 
 import { NextRequest } from 'next/server';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { withResponsiveMediaManifest } from '@/lib/mediaResponsive';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -56,13 +57,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         scope: 'media',
       }) || undefined;
 
+      const mediaWithVariants = withResponsiveMediaManifest(site.id, media);
+
       return publicContractJson({
         success: true,
         requestId,
         data: {
-          media,
+          media: mediaWithVariants,
         },
-        media,
+        media: mediaWithVariants,
       }, {
         requestId,
         request,
@@ -84,13 +87,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media not found', requestId);
     }
 
+    const mediaWithVariants = withResponsiveMediaManifest(site.id, media);
+
     return publicContractJson({
       success: true,
       requestId,
       data: {
-        media,
+        media: mediaWithVariants,
       },
-      media,
+      media: mediaWithVariants,
     }, {
       requestId,
       request,

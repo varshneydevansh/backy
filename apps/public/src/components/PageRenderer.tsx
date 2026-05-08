@@ -115,6 +115,9 @@ interface FontAsset {
   url?: string;
   weights?: Array<string | number>;
   styles?: Array<'normal' | 'italic' | 'oblique'>;
+  fallbackStack?: string;
+  display?: 'auto' | 'block' | 'swap' | 'fallback' | 'optional' | string;
+  cssFamily?: string;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -2504,13 +2507,14 @@ export function PageRenderer({
       const family = font.family.replace(/["\\]/g, '');
       const weight = font.weights?.[0] || '400';
       const style = font.styles?.[0] || 'normal';
+      const display = font.display || 'swap';
 
       return `@font-face {
         font-family: "${family}";
         src: url("${font.url}");
         font-style: ${style};
         font-weight: ${weight};
-        font-display: swap;
+        font-display: ${display};
       }`;
     })
     .join('\n');

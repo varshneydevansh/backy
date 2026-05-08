@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { createMediaFolder, getSiteByIdOrSlug, listMediaFolders } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -106,6 +107,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           sortOrder: numberFromInput(body.sortOrder),
         })).item
       : createMediaFolder(site.id, body);
+    await recordAdminAudit({
+      repositories,
+      siteId: site.id,
+      entity: 'mediaFolder',
+      entityId: folder.id,
+      action: 'mediaFolder.create',
+      after: folder,
+      metadata: {
+        name: folder.name,
+        parentId: folder.parentId,
+        sortOrder: folder.sortOrder,
+      },
+      requestId,
+    });
     const cacheInvalidation = repositories
       ? await recordSiteCacheInvalidation(repositories, {
           siteId: site.id,

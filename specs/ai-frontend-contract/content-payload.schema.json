@@ -113,7 +113,10 @@
         "styles": {
           "type": "array",
           "items": { "enum": ["normal", "italic", "oblique"] }
-        }
+        },
+        "fallbackStack": { "type": "string" },
+        "display": { "enum": ["auto", "block", "swap", "fallback", "optional"] },
+        "cssFamily": { "type": "string" }
       },
       "required": ["id", "family", "source"]
     },

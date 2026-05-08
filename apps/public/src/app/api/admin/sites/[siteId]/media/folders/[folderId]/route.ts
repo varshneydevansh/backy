@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { deleteMediaFolder, getSiteByIdOrSlug, updateMediaFolder } from '@/lib/backyStore';
+import { recordAdminAudit } from '@/lib/adminAudit';
+import { deleteMediaFolder, getSiteByIdOrSlug, listMediaFolders, updateMediaFolder } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -42,6 +43,10 @@ const numberFromInput = (value: unknown): number | undefined => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+const listDemoMediaFolder = (siteId: string, folderId: string) => (
+  listMediaFolders(siteId).find((folder) => folder.id === folderId)
+);
+
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -59,7 +64,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const parentId = nullableString(body.parentId);
 
     if (repositories) {
-      if (!await repositories.media.getFolderById(site.id, folderId)) {
+      const beforeFolder = await repositories.media.getFolderById(site.id, folderId);
+      if (!beforeFolder) {
         return errorResponse(404, 'FOLDER_NOT_FOUND', 'Media folder not found', requestId);
       }
 
@@ -76,6 +82,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         parentId,
         sortOrder: numberFromInput(body.sortOrder),
       })).item;
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'mediaFolder',
+        entityId: folder.id,
+        action: 'mediaFolder.update',
+        before: beforeFolder,
+        after: folder,
+        metadata: {
+          changedKeys: Object.keys(body),
+        },
+        requestId,
+      });
       const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
         siteId: site.id,
         scope: 'media',
@@ -88,11 +107,24 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ success: true, requestId, data: { folder, cacheInvalidation } });
     }
 
+    const beforeFolder = listDemoMediaFolder(site.id, folderId);
     const folder = updateMediaFolder(site.id, folderId, body);
 
     if (!folder) {
       return errorResponse(404, 'FOLDER_NOT_FOUND', 'Media folder not found', requestId);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'mediaFolder',
+      entityId: folder.id,
+      action: 'mediaFolder.update',
+      before: beforeFolder,
+      after: folder,
+      metadata: {
+        changedKeys: Object.keys(body),
+      },
+      requestId,
+    });
 
     return NextResponse.json({ success: true, requestId, data: { folder } });
   } catch (error) {
@@ -114,13 +146,30 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
+    const beforeFolder = repositories
+      ? await repositories.media.getFolderById(site.id, folderId)
+      : listDemoMediaFolder(site.id, folderId);
     const deleted = repositories
-      ? Boolean(await repositories.media.getFolderById(site.id, folderId) && await repositories.media.deleteFolder(site.id, folderId))
+      ? Boolean(beforeFolder && await repositories.media.deleteFolder(site.id, folderId))
       : deleteMediaFolder(site.id, folderId);
 
     if (!deleted) {
       return errorResponse(404, 'FOLDER_NOT_FOUND', 'Media folder not found', requestId);
     }
+    await recordAdminAudit({
+      repositories,
+      siteId: site.id,
+      entity: 'mediaFolder',
+      entityId: folderId,
+      action: 'mediaFolder.delete',
+      before: beforeFolder,
+      metadata: {
+        name: beforeFolder?.name || null,
+        parentId: beforeFolder?.parentId || null,
+        sortOrder: beforeFolder?.sortOrder ?? null,
+      },
+      requestId,
+    });
     const cacheInvalidation = repositories
       ? await recordSiteCacheInvalidation(repositories, {
           siteId: site.id,

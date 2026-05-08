@@ -19,6 +19,7 @@ interface ApiMediaItem {
   caption?: string | null;
   tags?: string[];
   metadata?: Record<string, unknown>;
+  responsive?: MediaAsset['responsive'];
   uploadedBy?: string | null;
   pageIds?: string[];
   postIds?: string[];
@@ -28,10 +29,17 @@ interface ApiMediaListResponse {
   success: boolean;
   data?: {
     media: ApiMediaItem[];
+    quota?: ApiMediaQuota;
   };
   error?: {
     message?: string;
   };
+}
+
+interface ApiMediaQuota {
+  limitBytes: number;
+  usedBytes: number;
+  remainingBytes: number;
 }
 
 interface ApiUploadResponse {
@@ -48,6 +56,11 @@ interface ApiMediaResponse {
   success: boolean;
   data?: {
     media: ApiMediaItem;
+    quota?: ApiMediaQuota;
+    replacement?: {
+      previousVersion?: Record<string, unknown>;
+      retainedVersions?: number;
+    };
   };
   error?: {
     message?: string;
@@ -64,6 +77,27 @@ interface ApiMediaBindResponse {
       id: string;
       bound: boolean;
       referenceKey: 'pageIds' | 'postIds';
+    };
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiSignedMediaUrlResponse {
+  success: boolean;
+  data?: {
+    signedUrl: string;
+    path: string;
+    expiresAt: string | number;
+    disposition: 'inline' | 'attachment';
+    media: {
+      id: string;
+      siteId: string;
+      filename: string;
+      originalName?: string | null;
+      mimeType?: string | null;
+      visibility: MediaVisibility;
     };
   };
   error?: {
@@ -121,6 +155,8 @@ export interface MediaUploadOptions {
   fontFamily?: string;
   fontWeight?: string;
   fontStyle?: 'normal' | 'italic' | 'oblique';
+  fontFallback?: string;
+  fontDisplay?: 'auto' | 'block' | 'swap' | 'fallback' | 'optional';
   altText?: string;
   caption?: string;
 }
@@ -150,6 +186,20 @@ export interface MediaUpdateInput {
   visibility?: MediaVisibility;
 }
 
+export interface MediaReplaceOptions {
+  siteId?: string;
+  reason?: string;
+  replacedBy?: string;
+}
+
+export interface MediaTransformPrepareInput {
+  siteId?: string;
+  widths?: number[];
+  quality?: number;
+  sizes?: string;
+  preparedBy?: string;
+}
+
 export interface MediaBindInput {
   targetType: 'page' | 'post';
   targetId: string;
@@ -163,6 +213,29 @@ export interface MediaFolder {
   name: string;
   parentId: string | null;
   sortOrder: number;
+}
+
+export interface MediaQuota {
+  limitBytes: number;
+  usedBytes: number;
+  remainingBytes: number;
+}
+
+export interface MediaLibraryResult {
+  media: MediaAsset[];
+  quota?: MediaQuota;
+}
+
+export interface SignedMediaUrlInput {
+  expiresInSeconds?: number;
+  disposition?: 'inline' | 'attachment';
+}
+
+export interface SignedMediaUrl {
+  signedUrl: string;
+  path: string;
+  expiresAt: string;
+  disposition: 'inline' | 'attachment';
 }
 
 const getEnvValue = (key: string): string => {
@@ -192,6 +265,26 @@ const getAdminApiBase = (): string => {
 
   const base = envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
   return `${base.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api/admin`;
+};
+
+const getPublicApiBase = (): string => {
+  const envBase = (
+    getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
+    getEnvValue('VITE_PUBLIC_API_URL') ||
+    getEnvValue('VITE_BACKY_ADMIN_API_BASE_URL') ||
+    getEnvValue('VITE_ADMIN_API_URL') ||
+    getEnvValue('VITE_API_BASE_URL') ||
+    ''
+  ).trim();
+
+  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+    return 'http://localhost:3001';
+  }
+
+  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+    .replace(/\/api\/admin$/, '')
+    .replace(/\/api$/, '')
+    .replace(/\/$/, '');
 };
 
 const getAdminApiKey = (): string => (
@@ -226,11 +319,13 @@ const toMediaAsset = (item: ApiMediaItem): MediaAsset => ({
   name: item.originalName || item.filename,
   type: toAdminMediaType(item.type),
   size: formatBytes(item.sizeBytes || 0),
+  sizeBytes: item.sizeBytes || 0,
   url: item.url,
   altText: item.altText || null,
   caption: item.caption || null,
   tags: item.tags || [],
   metadata: item.metadata || {},
+  responsive: item.responsive,
   folderId: item.folderId || null,
   scope: item.scope || 'global',
   scopeTargetId: item.scopeTargetId || null,
@@ -240,7 +335,20 @@ const toMediaAsset = (item: ApiMediaItem): MediaAsset => ({
   targetPostIds: item.postIds || [],
 });
 
-export async function listMedia(options: MediaListOptions = {}): Promise<MediaAsset[]> {
+const normalizeApiTimestamp = (value: string | number): string => {
+  if (typeof value === 'number') {
+    return new Date(value < 1_000_000_000_000 ? value * 1000 : value).toISOString();
+  }
+
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) {
+    return new Date(numeric < 1_000_000_000_000 ? numeric * 1000 : numeric).toISOString();
+  }
+
+  return value;
+};
+
+export async function listMediaLibrary(options: MediaListOptions = {}): Promise<MediaLibraryResult> {
   const siteId = options.siteId || getDefaultMediaSiteId();
   const query = new URLSearchParams();
 
@@ -261,7 +369,15 @@ export async function listMedia(options: MediaListOptions = {}): Promise<MediaAs
     throw new Error(payload.error?.message || 'Unable to load media library');
   }
 
-  return payload.data.media.map(toMediaAsset);
+  return {
+    media: payload.data.media.map(toMediaAsset),
+    quota: payload.data.quota,
+  };
+}
+
+export async function listMedia(options: MediaListOptions = {}): Promise<MediaAsset[]> {
+  const result = await listMediaLibrary(options);
+  return result.media;
 }
 
 const toMediaFolder = (folder: ApiMediaFolder): MediaFolder => ({
@@ -325,6 +441,8 @@ export async function uploadMedia(file: File, options: MediaUploadOptions = {}):
   if (options.fontFamily) formData.set('fontFamily', options.fontFamily);
   if (options.fontWeight) formData.set('fontWeight', options.fontWeight);
   if (options.fontStyle) formData.set('fontStyle', options.fontStyle);
+  if (options.fontFallback) formData.set('fontFallback', options.fontFallback);
+  if (options.fontDisplay) formData.set('fontDisplay', options.fontDisplay);
 
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media`, {
     method: 'POST',
@@ -355,6 +473,56 @@ export async function updateMedia(
 
   if (!response.ok || !payload.success || !payload.data) {
     throw new Error(payload.error?.message || 'Unable to update media');
+  }
+
+  return toMediaAsset(payload.data.media);
+}
+
+export async function replaceMedia(
+  mediaId: string,
+  file: File,
+  options: MediaReplaceOptions = {},
+): Promise<MediaAsset> {
+  const siteId = options.siteId || getDefaultMediaSiteId();
+  const formData = new FormData();
+  formData.set('file', file);
+  if (options.reason) formData.set('reason', options.reason);
+  if (options.replacedBy) formData.set('replacedBy', options.replacedBy);
+
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/${mediaId}`, {
+    method: 'POST',
+    body: formData,
+  });
+  const payload = await response.json() as ApiMediaResponse;
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to replace media');
+  }
+
+  return toMediaAsset(payload.data.media);
+}
+
+export async function prepareMediaTransforms(
+  mediaId: string,
+  input: MediaTransformPrepareInput = {},
+): Promise<MediaAsset> {
+  const siteId = input.siteId || getDefaultMediaSiteId();
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/${mediaId}/transforms`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      widths: input.widths,
+      quality: input.quality,
+      sizes: input.sizes,
+      preparedBy: input.preparedBy,
+    }),
+  });
+  const payload = await response.json() as ApiMediaResponse;
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to prepare media transforms');
   }
 
   return toMediaAsset(payload.data.media);
@@ -393,4 +561,47 @@ export async function bindMediaToTarget(
   }
 
   return toMediaAsset(payload.data.media);
+}
+
+export async function createSignedMediaUrl(
+  mediaId: string,
+  input: SignedMediaUrlInput = {},
+  siteId = getDefaultMediaSiteId(),
+): Promise<SignedMediaUrl> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/${mediaId}/signed-url`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await response.json() as ApiSignedMediaUrlResponse;
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to create signed media URL');
+  }
+
+  return {
+    signedUrl: payload.data.signedUrl,
+    path: payload.data.path,
+    expiresAt: normalizeApiTimestamp(payload.data.expiresAt),
+    disposition: payload.data.disposition,
+  };
+}
+
+export function getPublicMediaFileUrl(mediaId: string, siteId = getDefaultMediaSiteId()): string {
+  return `${getPublicApiBase()}/api/sites/${siteId}/media/${mediaId}/file`;
+}
+
+export function getPublicImageTransformUrl(
+  mediaId: string,
+  options: { width: number; quality?: number },
+  siteId = getDefaultMediaSiteId(),
+): string {
+  const url = new URL(`${getPublicApiBase()}/api/sites/${siteId}/media/${mediaId}/transform`);
+  url.searchParams.set('width', String(options.width));
+  if (options.quality) {
+    url.searchParams.set('quality', String(options.quality));
+  }
+  return url.toString();
 }
