@@ -782,6 +782,50 @@ const assertFontMediaPicker = async (client) => {
   return state;
 };
 
+const testComponentClickAdd = async (client, componentKey = 'divider') => {
+  const before = await evaluate(client, `(() => ({
+    count: document.querySelectorAll('[data-element-id]').length,
+    selected: document.querySelector('[data-testid="editor-inspector-selection"]')?.textContent || '',
+  }))()`);
+
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-component-add="${componentKey}"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'missing-add-button' };
+    }
+    button.click();
+    return { ok: true, label: button.getAttribute('aria-label') || button.textContent || '' };
+  })()`);
+
+  assert(clicked?.ok, `Unable to click component add button for ${componentKey}: ${JSON.stringify(clicked)}`);
+  await sleep(250);
+
+  const after = await evaluate(client, `(() => {
+    const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
+    const selectedElement = Array.from(document.querySelectorAll('[data-element-id]')).find((node) => (
+      node.querySelector('[data-role="canvas-move-handle"]')
+    ));
+    return {
+      count: document.querySelectorAll('[data-element-id]').length,
+      selectedText: selected?.textContent || '',
+      selectedElementId: selectedElement?.getAttribute('data-element-id') || null,
+    };
+  })()`);
+
+  assert(
+    after.count === before.count + 1,
+    `Component click-add did not insert exactly one element: before ${JSON.stringify(before)}, after ${JSON.stringify(after)}`,
+  );
+  assert(after.selectedElementId, `Component click-add did not select the inserted element: ${JSON.stringify(after)}`);
+
+  return {
+    componentKey,
+    clicked,
+    before,
+    after,
+  };
+};
+
 const assertGroupingControls = async (client) => {
   const state = await evaluate(client, `(() => {
     const groupButton = document.querySelector('[data-testid="editor-group-selection"]');
@@ -1242,6 +1286,8 @@ const main = async () => {
       ? ['home-heading', 'home-cta']
       : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge']);
 
+    const clickAdd = await testComponentClickAdd(client, 'divider');
+
     const drags = EDITOR_PATH
       ? [
           await dragElement(client, 'home-heading', 90, 40),
@@ -1380,6 +1426,7 @@ const main = async () => {
       inspector,
       fontPicker,
       groupingControls,
+      clickAdd,
       multiSelectionDrag,
       grouping,
       postSaveInspector,

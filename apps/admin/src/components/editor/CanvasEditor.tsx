@@ -1297,6 +1297,101 @@ export function CanvasEditor({
     // Placeholder for drag analytics/hooks.
   }, []);
 
+  const getViewportInsertionPoint = useCallback(() => {
+    const canvas = canvasViewportRef.current?.querySelector<HTMLElement>('[data-testid="editor-canvas"]');
+    const viewport = canvasViewportRef.current;
+    if (!canvas || !viewport) {
+      return { x: 80, y: 80 };
+    }
+
+    const canvasRect = canvas.getBoundingClientRect();
+    const viewportRect = viewport.getBoundingClientRect();
+    const visibleLeft = Math.max(canvasRect.left, viewportRect.left);
+    const visibleRight = Math.min(canvasRect.right, viewportRect.right);
+    const visibleTop = Math.max(canvasRect.top, viewportRect.top);
+    const visibleBottom = Math.min(canvasRect.bottom, viewportRect.bottom);
+    const midpointX = visibleLeft < visibleRight ? (visibleLeft + visibleRight) / 2 : canvasRect.left + 120;
+    const midpointY = visibleTop < visibleBottom ? (visibleTop + visibleBottom) / 2 : canvasRect.top + 120;
+
+    return {
+      x: Math.round(Math.max(0, (midpointX - canvasRect.left) / activeCanvasScale) / 10) * 10,
+      y: Math.round(Math.max(0, (midpointY - canvasRect.top) / activeCanvasScale) / 10) * 10,
+    };
+  }, [activeCanvasScale]);
+
+  const addLibraryItemToCanvas = useCallback((item: ComponentLibraryItem, x: number, y: number) => {
+    const normalizedType = normalizeElementType(item.type);
+    const highestZ = Math.max(walkTreeMaxZ(elements), 0);
+    const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
+    const canNestInSelection = selectedElement && canAcceptNestedDrop(selectedElement.type);
+
+    if (item.reusableContent?.elements?.length) {
+      const newElements = createCanvasElementsFromReusableContent(
+        item.reusableContent,
+        canNestInSelection ? 20 : x,
+        canNestInSelection ? 20 : y,
+        highestZ + 1,
+      );
+      if (!newElements.length) {
+        return;
+      }
+
+      if (canNestInSelection) {
+        let nextElements = elements;
+        let inserted = false;
+        for (const child of newElements) {
+          const result = insertElementAsChild(nextElements, selectedElement.id, child);
+          nextElements = result.elements;
+          inserted = inserted || result.updated;
+        }
+
+        if (inserted) {
+          updateElementsWithHistory(nextElements, newElements[0].id);
+          setSelectedId(newElements[0].id);
+          setSelectedIds([newElements[0].id]);
+          setRightPanel('properties');
+        }
+        return;
+      }
+
+      updateElementsWithHistory([...elements, ...newElements], newElements[0].id);
+      setSelectedId(newElements[0].id);
+      setSelectedIds([newElements[0].id]);
+      setRightPanel('properties');
+      return;
+    }
+
+    const newElement = {
+      ...createCanvasElementFromLibraryItem(
+        { ...item, type: normalizedType },
+        canNestInSelection ? 20 : x,
+        canNestInSelection ? 20 : y,
+      ),
+      zIndex: highestZ + 1,
+    };
+
+    if (canNestInSelection) {
+      const result = insertElementAsChild(elements, selectedElement.id, newElement);
+      if (result.updated) {
+        updateElementsWithHistory(result.elements, newElement.id);
+        setSelectedId(newElement.id);
+        setSelectedIds([newElement.id]);
+        setRightPanel('properties');
+      }
+      return;
+    }
+
+    updateElementsWithHistory([...elements, newElement], newElement.id);
+    setSelectedId(newElement.id);
+    setSelectedIds([newElement.id]);
+    setRightPanel('properties');
+  }, [elements, findElementById, selectedId, updateElementsWithHistory]);
+
+  const handleAddLibraryItem = useCallback((item: ComponentLibraryItem) => {
+    const point = getViewportInsertionPoint();
+    addLibraryItemToCanvas(item, point.x, point.y);
+  }, [addLibraryItemToCanvas, getViewportInsertionPoint]);
+
   const handleSaveSelectionAsReusableSection = useCallback(async () => {
     if (!activeSiteId || !selectedId || isSavingReusableSection) {
       return;
@@ -1427,29 +1522,16 @@ export function CanvasEditor({
         const y = Math.round(Math.max(0, (e.clientY - rect.top) / activeCanvasScale) / 10) * 10;
 
         if (item.reusableContent?.elements?.length) {
-          const newElements = createCanvasElementsFromReusableContent(
-            item.reusableContent,
-            x,
-            y,
-            Math.max(walkTreeMaxZ(elements), 0) + 1,
-          );
-          if (newElements.length) {
-            updateElementsWithHistory([...elements, ...newElements], newElements[0].id);
-          }
+          addLibraryItemToCanvas(item, x, y);
           return;
         }
 
-        const newElement = {
-          ...createCanvasElementFromLibraryItem({ ...item, type: normalizedType }, x, y),
-          zIndex: Math.max(walkTreeMaxZ(elements), 0) + 1,
-        };
-
-        updateElementsWithHistory([...elements, newElement], newElement.id);
+        addLibraryItemToCanvas({ ...item, type: normalizedType }, x, y);
       } catch (err) {
         console.error('Failed to drop element:', err);
       }
     },
-    [activeCanvasScale, elements, updateElementsWithHistory]
+    [activeCanvasScale, addLibraryItemToCanvas]
   );
 
   /**
@@ -2135,6 +2217,7 @@ export function CanvasEditor({
           {!isPreview && (
             <ComponentLibrary
               onDragStart={handleDragStart}
+              onAddItem={handleAddLibraryItem}
               reusableSections={reusableSections}
               reusableSectionsLoading={reusableSectionsLoading}
               reusableSectionsError={reusableSectionsError}

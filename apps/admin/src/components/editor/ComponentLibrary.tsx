@@ -42,6 +42,7 @@ import {
   RefreshCw,
   Pencil,
   Trash2,
+  Plus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ComponentLibraryItem } from '@/types/editor';
@@ -66,6 +67,7 @@ interface ComponentLibraryProps {
   reusableSectionsError?: string | null;
   canSaveSelection?: boolean;
   isSavingReusableSection?: boolean;
+  onAddItem?: (item: ComponentLibraryItem) => void;
   onRefreshReusableSections?: () => void;
   onSaveSelectionAsReusableSection?: () => void;
   onRenameReusableSection?: (sectionId: string) => void;
@@ -85,6 +87,7 @@ export function ComponentLibrary({
   reusableSectionsError = null,
   canSaveSelection = false,
   isSavingReusableSection = false,
+  onAddItem,
   onRefreshReusableSections,
   onSaveSelectionAsReusableSection,
   onRenameReusableSection,
@@ -257,6 +260,7 @@ export function ComponentLibrary({
                   key={item.id ?? item.type}
                   item={item}
                   onDragStart={() => onDragStart?.(item)}
+                  onAddItem={() => onAddItem?.(item)}
                   onRenameReusableSection={onRenameReusableSection}
                   onDeleteReusableSection={onDeleteReusableSection}
                 />
@@ -282,6 +286,7 @@ export function ComponentLibrary({
 interface LibraryItemProps {
   item: ComponentLibraryItem;
   onDragStart: () => void;
+  onAddItem?: () => void;
   onRenameReusableSection?: (sectionId: string) => void;
   onDeleteReusableSection?: (sectionId: string) => void;
 }
@@ -289,6 +294,7 @@ interface LibraryItemProps {
 function LibraryItem({
   item,
   onDragStart,
+  onAddItem,
   onRenameReusableSection,
   onDeleteReusableSection,
 }: LibraryItemProps) {
@@ -352,6 +358,7 @@ function LibraryItem({
     <div
       draggable
       onDragStart={handleDragStart}
+      data-component-library-item={item.id ?? item.type}
       className={cn(
         'group flex items-center gap-3 p-2 rounded-md cursor-grab',
         'hover:bg-slate-100 transition-colors',
@@ -370,6 +377,21 @@ function LibraryItem({
           </p>
         )}
       </div>
+      <button
+        type="button"
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onAddItem?.();
+        }}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 opacity-0 transition-opacity hover:bg-white hover:text-slate-900 group-hover:opacity-100 focus:opacity-100"
+        title={`Add ${item.name} to canvas`}
+        aria-label={`Add ${item.name} to canvas`}
+        data-component-add={item.id ?? item.type}
+      >
+        <Plus className="h-3.5 w-3.5" />
+      </button>
       {reusableSectionId && (
         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           <button
