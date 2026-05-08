@@ -93,6 +93,7 @@ function ProductsRoute() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [pendingDeleteProduct, setPendingDeleteProduct] = useState<CollectionRecord | null>(null);
 
   const activeSite = useMemo(
     () => sites.find((site) => (site.publicSiteId || site.id) === selectedSiteId) || sites[0],
@@ -267,7 +268,7 @@ function ProductsRoute() {
   };
 
   const removeProduct = async (product: CollectionRecord) => {
-    if (!productCollection || !confirm(`Delete "${String(product.values.title || product.slug)}"?`)) return;
+    if (!productCollection) return;
     setIsSaving(true);
     setError(null);
 
@@ -277,6 +278,7 @@ function ProductsRoute() {
       if (selectedProductId === product.id) {
         resetForm();
       }
+      setPendingDeleteProduct(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete product');
     } finally {
@@ -390,7 +392,7 @@ function ProductsRoute() {
                         onEdit={() => setSelectedProductId(product.id)}
                         onPublish={() => void changeProductStatus(product, 'published')}
                         onArchive={() => void changeProductStatus(product, 'archived')}
-                        onDelete={() => void removeProduct(product)}
+                        onDelete={() => setPendingDeleteProduct(product)}
                         disabled={isSaving}
                       />
                     ))}
@@ -529,6 +531,44 @@ function ProductsRoute() {
               </form>
             </PanelContent>
           </Panel>
+        </div>
+      )}
+
+      {pendingDeleteProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Delete {String(pendingDeleteProduct.values.title || pendingDeleteProduct.slug)}?</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This removes the product record from Backy and from storefront API responses. Archive it instead if you only want it hidden.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              SKU: <span className="font-medium text-foreground">{String(pendingDeleteProduct.values.sku || pendingDeleteProduct.slug)}</span>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteProduct(null)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void removeProduct(pendingDeleteProduct)}
+                disabled={isSaving}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+              >
+                Delete product
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </PageShell>

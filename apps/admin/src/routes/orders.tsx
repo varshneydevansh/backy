@@ -100,6 +100,7 @@ function OrdersRoute() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [pendingDeleteOrder, setPendingDeleteOrder] = useState<CollectionRecord | null>(null);
 
   const activeSite = useMemo(
     () => sites.find((site) => (site.publicSiteId || site.id) === selectedSiteId) || sites[0],
@@ -294,7 +295,7 @@ function OrdersRoute() {
   };
 
   const removeOrder = async (order: CollectionRecord) => {
-    if (!ordersCollection || !confirm(`Delete "${String(readOrderValue(order.values, 'ordernumber', order.slug))}"?`)) return;
+    if (!ordersCollection) return;
     setIsSaving(true);
     setError(null);
 
@@ -304,6 +305,7 @@ function OrdersRoute() {
       if (selectedOrderId === order.id) {
         resetForm();
       }
+      setPendingDeleteOrder(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete order');
     } finally {
@@ -418,7 +420,7 @@ function OrdersRoute() {
       onPaid={() => void updateOrderWorkflow(order, { orderStatus: 'paid', paymentStatus: 'paid' })}
       onFulfilled={() => void updateOrderWorkflow(order, { orderStatus: 'fulfilled', fulfillmentStatus: 'fulfilled' })}
       onCancelled={() => void updateOrderWorkflow(order, { orderStatus: 'cancelled', fulfillmentStatus: 'cancelled' })}
-                      onDelete={() => void removeOrder(order)}
+                      onDelete={() => setPendingDeleteOrder(order)}
                     />
                   ))}
                 </div>
@@ -572,6 +574,46 @@ function OrdersRoute() {
               </form>
             </PanelContent>
           </Panel>
+        </div>
+      )}
+
+      {pendingDeleteOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  Delete {String(readOrderValue(pendingDeleteOrder.values, 'ordernumber', pendingDeleteOrder.slug))}?
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This permanently removes the order record from Backy. Keep it archived if you need the sale history for reporting.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Customer: <span className="font-medium text-foreground">{String(readOrderValue(pendingDeleteOrder.values, 'customername', 'Unknown customer'))}</span>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteOrder(null)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void removeOrder(pendingDeleteOrder)}
+                disabled={isSaving}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+              >
+                Delete order
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </PageShell>
