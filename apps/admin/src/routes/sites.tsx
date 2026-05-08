@@ -1,24 +1,62 @@
 /**
  * BACKY CMS - SITES PAGE
- * 
- * Layout route that shows list at /sites, renders child routes otherwise.
+ *
+ * Workspace hub for website ownership, publishing state, and site operations.
  */
 
-import { useEffect, useState } from 'react';
-import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { Plus, Globe, Edit, Trash2 } from 'lucide-react';
-import { deleteSite as deleteSiteFromApi, listSites } from '@/lib/adminContentApi';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
+import {
+  AlertTriangle,
+  Edit,
+  Eye,
+  Filter,
+  Globe,
+  Layers3,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+} from 'lucide-react';
+import {
+  deleteSite as deleteSiteFromApi,
+  listSites,
+  updateSite as updateSiteFromApi,
+} from '@/lib/adminContentApi';
 import { useStore, type Site } from '@/stores/mockStore';
 import { useDataTable, type Column } from '@/hooks/useDataTable';
-import { PageShell } from '@/components/layout/PageShell';
 import { DataGrid } from '@/components/ui/DataGrid';
-import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { formatDate } from '@/lib/utils';
+import { PageShell } from '@/components/layout/PageShell';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/sites')({
   component: SitesLayout,
 });
+
+type SiteStatusFilter = 'all' | Site['status'];
+
+const STATUS_OPTIONS: Array<{ value: Site['status']; label: string }> = [
+  { value: 'published', label: 'Published' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'archived', label: 'Archived' },
+];
+
+const getDisplayDomain = (site: Site) => site.customDomain || `${site.slug}.backy.app`;
+
+const getPublicPreviewHref = (site: Site) => {
+  const domain = getDisplayDomain(site);
+  if (site.customDomain) {
+    return `https://${domain}`;
+  }
+
+  if (typeof window !== 'undefined' && window.location.port === '5173') {
+    return `http://localhost:3001/sites/${site.slug}`;
+  }
+
+  return `/sites/${site.slug}`;
+};
 
 function SitesLayout() {
   const routerState = useRouterState();
@@ -35,114 +73,172 @@ function SitesListView() {
   const navigate = useNavigate();
   const { sites, setSites, deleteSite } = useStore();
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<SiteStatusFilter>('all');
+  const [updatingSiteId, setUpdatingSiteId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Site | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadSites = async () => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const backendSites = await listSites();
-        if (!cancelled) {
-          setSites(backendSites);
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : 'Unable to load sites');
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadSites();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [setSites]);
-
-  const handleDeleteSite = async (site: Site) => {
-    if (!confirm('Are you sure you want to delete this site?')) {
-      return;
-    }
-
-    setError(null);
+  const loadSites = useCallback(async () => {
+    setIsLoading(true);
+    setNotice(null);
 
     try {
-      await deleteSiteFromApi(site.publicSiteId || site.id);
-      deleteSite(site.id);
-    } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete site');
+      const backendSites = await listSites();
+      setSites(backendSites);
+    } catch (loadError) {
+      setNotice(loadError instanceof Error ? loadError.message : 'Unable to load sites');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [setSites]);
+
+  useEffect(() => {
+    void loadSites();
+  }, [loadSites]);
+
+  const metrics = useMemo(() => {
+    const published = sites.filter((site) => site.status === 'published').length;
+    const draft = sites.filter((site) => site.status === 'draft').length;
+    const archived = sites.filter((site) => site.status === 'archived').length;
+    const pages = sites.reduce((total, site) => total + (site.pageCount || 0), 0);
+
+    return [
+      { label: 'Sites', value: sites.length, detail: `${published} public`, icon: Globe },
+      { label: 'Pages controlled', value: pages, detail: 'Across all workspaces', icon: Layers3 },
+      { label: 'Draft sites', value: draft, detail: 'Private until published', icon: Edit },
+      { label: 'Archived', value: archived, detail: 'Hidden from active work', icon: AlertTriangle },
+    ];
+  }, [sites]);
+
+  const filteredSites = useMemo(() => (
+    statusFilter === 'all' ? sites : sites.filter((site) => site.status === statusFilter)
+  ), [sites, statusFilter]);
+
+  const handleStatusChange = async (site: Site, status: Site['status']) => {
+    setUpdatingSiteId(site.id);
+    setNotice(null);
+
+    try {
+      const saved = await updateSiteFromApi(site.publicSiteId || site.id, { status });
+      setSites(sites.map((item) => (item.id === site.id ? saved : item)));
+      setNotice(`${saved.name} is now ${status}.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to update site status');
+    } finally {
+      setUpdatingSiteId(null);
     }
   };
 
-  // Define columns
+  const handleDeleteSite = async () => {
+    if (!pendingDelete) return;
+
+    setUpdatingSiteId(pendingDelete.id);
+    setNotice(null);
+
+    try {
+      await deleteSiteFromApi(pendingDelete.publicSiteId || pendingDelete.id);
+      deleteSite(pendingDelete.id);
+      setPendingDelete(null);
+    } catch (deleteError) {
+      setNotice(deleteError instanceof Error ? deleteError.message : 'Unable to delete site');
+    } finally {
+      setUpdatingSiteId(null);
+    }
+  };
+
   const columns: Column<Site>[] = [
     {
       key: 'name',
-      label: 'Site Name',
+      label: 'Site',
       sortable: true,
       render: (site) => (
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Globe className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <div className="font-medium text-foreground">{site.name}</div>
-            <div className="text-xs text-muted-foreground">{site.customDomain || `${site.slug}.backy.app`}</div>
-          </div>
-        </div>
-      )
+        <button
+          type="button"
+          onClick={() => navigate({ to: '/sites/$siteId', params: { siteId: site.id } })}
+          className="group flex min-w-[260px] items-center gap-3 text-left"
+        >
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+            <Globe className="h-5 w-5" />
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate font-semibold text-foreground group-hover:text-primary">{site.name}</span>
+            <span className="mt-0.5 block truncate text-xs text-muted-foreground">{getDisplayDomain(site)}</span>
+          </span>
+        </button>
+      ),
     },
     {
       key: 'status',
       label: 'Status',
       sortable: true,
-      render: (site) => <StatusBadge status={site.status} />
+      render: (site) => (
+        <div className="space-y-2">
+          <StatusBadge status={site.status} />
+          <select
+            value={site.status}
+            disabled={updatingSiteId === site.id}
+            onChange={(event) => void handleStatusChange(site, event.target.value as Site['status'])}
+            className="block w-36 rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none transition focus:ring-2 focus:ring-ring disabled:opacity-50"
+            aria-label={`Change status for ${site.name}`}
+          >
+            {STATUS_OPTIONS.map((status) => (
+              <option key={status.value} value={status.value}>{status.label}</option>
+            ))}
+          </select>
+        </div>
+      ),
     },
     {
       key: 'pageCount',
       label: 'Pages',
       sortable: true,
-      render: (site) => <span className="text-muted-foreground">{site.pageCount} pages</span>
+      render: (site) => <span className="text-sm text-muted-foreground">{site.pageCount} pages</span>,
     },
     {
       key: 'lastUpdated',
-      label: 'Last Updated',
+      label: 'Updated',
       sortable: true,
-      render: (site) => <span className="text-muted-foreground">{formatDate(site.lastUpdated)}</span>
+      render: (site) => <span className="text-sm text-muted-foreground">{formatDate(site.lastUpdated)}</span>,
     },
     {
       key: 'actions',
       label: '',
       render: (site) => (
         <div className="flex items-center justify-end gap-2">
-          <button
-            onClick={() => navigate({ to: '/sites/$siteId', params: { siteId: site.id } })}
-            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
-            title="Edit Site"
+          <a
+            href={getPublicPreviewHref(site)}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            aria-label={`Preview ${site.name}`}
+            title="Preview site"
           >
-            <Edit className="w-4 h-4" />
+            <Eye className="h-4 w-4" />
+          </a>
+          <button
+            type="button"
+            onClick={() => navigate({ to: '/sites/$siteId', params: { siteId: site.id } })}
+            className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            aria-label={`Manage ${site.name}`}
+            title="Manage site"
+          >
+            <Edit className="h-4 w-4" />
           </button>
           <button
-            onClick={() => void handleDeleteSite(site)}
-            className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-            title="Delete Site"
+            type="button"
+            onClick={() => setPendingDelete(site)}
+            disabled={updatingSiteId === site.id}
+            className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-200 disabled:opacity-50"
+            aria-label={`Delete ${site.name}`}
+            title="Delete site"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="h-4 w-4" />
           </button>
         </div>
-      )
-    }
+      ),
+    },
   ];
 
-  // Use shared hook
   const {
     data,
     searchQuery,
@@ -152,56 +248,106 @@ function SitesListView() {
     currentPage,
     setCurrentPage,
     totalPages,
-    totalItems
+    totalItems,
   } = useDataTable({
-    data: sites,
+    data: filteredSites,
     columns,
-    pageSize: 8
+    initialSort: { key: 'lastUpdated', direction: 'desc' },
+    pageSize: 8,
   });
+
+  const hasActiveFilters = Boolean(searchQuery) || statusFilter !== 'all';
 
   return (
     <PageShell
       title="Sites"
-      description="Manage your websites and their settings."
+      description="Create, publish, preview, and manage every frontend workspace Backy controls."
       action={
         <Link
           to="/sites/new"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
         >
-          <Plus className="w-4 h-4" />
-          New Site
+          <Plus className="h-4 w-4" />
+          New site
         </Link>
       }
+      className="mx-auto max-w-7xl"
     >
-      {error && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {error}
-        </div>
-      )}
-
-      {isLoading && (
-        <div className="mb-4 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          Loading sites from backend...
-        </div>
-      )}
-
-      {/* Search & Filter Bar */}
-      <div className="flex items-center gap-4 mb-6">
-        <div className="relative flex-1 max-w-sm">
-          <input
-            type="text"
-            placeholder="Search sites..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-4 pr-4 py-2 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {metrics.map((metric) => (
+          <div key={metric.label} className="rounded-lg border border-border bg-card p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">{metric.label}</p>
+                <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground tabular-nums">{metric.value}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{metric.detail}</p>
+              </div>
+              <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
+                <metric.icon className="h-4 w-4" />
+              </span>
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* Data Grid */}
+      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative min-w-0 flex-1 lg:max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="search"
+              placeholder="Search sites, slugs, domains, or status..."
+              value={searchQuery}
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+            />
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+              <Filter className="h-4 w-4" />
+              <select
+                value={statusFilter}
+                onChange={(event) => {
+                  setStatusFilter(event.target.value as SiteStatusFilter);
+                  setCurrentPage(1);
+                }}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring"
+                aria-label="Filter sites by status"
+              >
+                <option value="all">All statuses</option>
+                {STATUS_OPTIONS.map((status) => (
+                  <option key={status.value} value={status.value}>{status.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <button
+              type="button"
+              onClick={() => void loadSites()}
+              disabled={isLoading}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+            >
+              <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        {notice && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {notice}
+          </div>
+        )}
+      </div>
+
       <DataGrid
         columns={columns}
         data={data}
+        loading={isLoading}
         sortConfig={sortConfig}
         onSort={handleSort}
         currentPage={currentPage}
@@ -210,21 +356,73 @@ function SitesListView() {
         totalItems={totalItems}
         emptyState={
           <EmptyState
-            icon={Globe}
-            title="No sites found"
-            description="Get started by creating your first website."
+            icon={hasActiveFilters ? Search : Globe}
+            title={hasActiveFilters ? 'No sites match those controls' : 'No sites found'}
+            description={hasActiveFilters ? 'Clear the search or filters to return to the full workspace list.' : 'Create the first site before adding pages, navigation, media, products, or forms.'}
             action={
-              <Link
-                to="/sites/new"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 mt-4"
-              >
-                <Plus className="w-4 h-4" />
-                Create Site
-              </Link>
+              hasActiveFilters ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setStatusFilter('all');
+                    setCurrentPage(1);
+                  }}
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+                >
+                  Clear filters
+                </button>
+              ) : (
+                <Link
+                  to="/sites/new"
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+                >
+                  <Plus className="h-4 w-4" />
+                  Create site
+                </Link>
+              )
             }
           />
         }
       />
+
+      {pendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Delete {pendingDelete.name}?</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This removes the site workspace and its managed content from the admin backend. Use archive when you only want to hide it.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Public address: <span className="font-medium text-foreground">{getDisplayDomain(pendingDelete)}</span>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDelete(null)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteSite()}
+                disabled={updatingSiteId === pendingDelete.id}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+              >
+                Delete site
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }
