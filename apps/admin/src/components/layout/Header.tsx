@@ -25,7 +25,15 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { useStore } from '@/stores/mockStore';
-import { listComments, type AdminComment } from '@/lib/adminContentApi';
+import {
+  listBlogPosts,
+  listComments,
+  listFormContacts,
+  listForms,
+  listPages,
+  listSites,
+  type AdminComment,
+} from '@/lib/adminContentApi';
 
 // ============================================
 // TYPES
@@ -35,6 +43,15 @@ interface HeaderProps {
   sidebarCollapsed: boolean;
   onSidebarToggle: () => void;
 }
+
+type SearchResult =
+  | { id: string; type: 'Site'; title: string; detail: string; action: { route: 'site'; siteId: string } }
+  | { id: string; type: 'Page'; title: string; detail: string; action: { route: 'page'; pageId: string } }
+  | { id: string; type: 'Blog'; title: string; detail: string; action: { route: 'blog'; postId: string } }
+  | { id: string; type: 'Form'; title: string; detail: string; action: { route: 'forms' } }
+  | { id: string; type: 'Comment'; title: string; detail: string; action: { route: 'comments' } }
+  | { id: string; type: 'Contact'; title: string; detail: string; action: { route: 'contacts' } }
+  | { id: string; type: 'Tool'; title: string; detail: string; action: { route: 'static'; to: '/media' | '/products' | '/orders' | '/collections' | '/settings' } };
 
 // ============================================
 // COMPONENT
@@ -50,11 +67,29 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   const [pendingComments, setPendingComments] = useState<AdminComment[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchIndex, setSearchIndex] = useState<SearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchLoadedForSiteId, setSearchLoadedForSiteId] = useState<string | null>(null);
 
   const activeSiteId = useMemo(
     () => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo',
     [sites],
   );
+  const searchResults = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (normalizedQuery.length < 2) return searchIndex.slice(0, 6);
+
+    return searchIndex
+      .filter((item) => [
+        item.title,
+        item.detail,
+        item.type,
+      ].some((value) => value.toLowerCase().includes(normalizedQuery)))
+      .slice(0, 8);
+  }, [searchIndex, searchQuery]);
 
   // Get page title from route
   const getPageTitle = () => {
@@ -93,6 +128,111 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     }
   };
 
+  const loadGlobalSearch = async () => {
+    if (searchLoading || searchLoadedForSiteId === activeSiteId) return;
+    setSearchLoading(true);
+    setSearchError(null);
+
+    try {
+      const [loadedSites, pages, posts, forms, comments] = await Promise.all([
+        listSites().catch(() => []),
+        listPages(activeSiteId).catch(() => []),
+        listBlogPosts(activeSiteId).catch(() => []),
+        listForms(activeSiteId).catch(() => []),
+        listComments(activeSiteId, { status: 'all', limit: 20, sort: 'newest' }).then((result) => result.comments).catch(() => []),
+      ]);
+      const contactGroups = await Promise.all(
+        forms.map((form) => listFormContacts(activeSiteId, form.id, { limit: 20 }).then((result) => result.contacts).catch(() => [])),
+      );
+
+      setSearchIndex([
+        ...loadedSites.map((site) => ({
+          id: `site:${site.id}`,
+          type: 'Site' as const,
+          title: site.name || site.slug || site.id,
+          detail: site.slug ? `/${site.slug}` : 'Site settings',
+          action: { route: 'site' as const, siteId: site.id },
+        })),
+        ...pages.map((page) => ({
+          id: `page:${page.id}`,
+          type: 'Page' as const,
+          title: page.title || page.slug || page.id,
+          detail: page.slug ? `/${page.slug}` : 'Page editor',
+          action: { route: 'page' as const, pageId: page.id },
+        })),
+        ...posts.map((post) => ({
+          id: `blog:${post.id}`,
+          type: 'Blog' as const,
+          title: post.title || post.slug || post.id,
+          detail: post.slug ? `/blog/${post.slug}` : 'Blog editor',
+          action: { route: 'blog' as const, postId: post.id },
+        })),
+        ...forms.map((form) => ({
+          id: `form:${form.id}`,
+          type: 'Form' as const,
+          title: form.title || form.name || form.id,
+          detail: `${form.fields.length} fields`,
+          action: { route: 'forms' as const },
+        })),
+        ...comments.map((comment) => ({
+          id: `comment:${comment.id}`,
+          type: 'Comment' as const,
+          title: comment.authorName || 'Anonymous comment',
+          detail: comment.content,
+          action: { route: 'comments' as const },
+        })),
+        ...contactGroups.flat().map((contact) => ({
+          id: `contact:${contact.id}`,
+          type: 'Contact' as const,
+          title: contact.name || contact.email || 'Unnamed contact',
+          detail: contact.email || contact.notes || contact.status,
+          action: { route: 'contacts' as const },
+        })),
+        { id: 'tool:media', type: 'Tool' as const, title: 'Media Library', detail: 'Files, folders, images, fonts', action: { route: 'static' as const, to: '/media' as const } },
+        { id: 'tool:products', type: 'Tool' as const, title: 'Products', detail: 'Catalog and sellable items', action: { route: 'static' as const, to: '/products' as const } },
+        { id: 'tool:orders', type: 'Tool' as const, title: 'Orders', detail: 'Sales and fulfillment queue', action: { route: 'static' as const, to: '/orders' as const } },
+        { id: 'tool:collections', type: 'Tool' as const, title: 'Collections', detail: 'Schemas, records, dynamic data', action: { route: 'static' as const, to: '/collections' as const } },
+        { id: 'tool:settings', type: 'Tool' as const, title: 'Settings', detail: 'API keys, infrastructure, delivery mode', action: { route: 'static' as const, to: '/settings' as const } },
+      ]);
+      setSearchLoadedForSiteId(activeSiteId);
+    } catch (error) {
+      setSearchError(error instanceof Error ? error.message : 'Unable to load search');
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleSearchResult = (result: SearchResult) => {
+    setSearchOpen(false);
+    setSearchQuery('');
+
+    if (result.action.route === 'site') {
+      navigate({ to: '/sites/$siteId', params: { siteId: result.action.siteId } });
+      return;
+    }
+    if (result.action.route === 'page') {
+      navigate({ to: '/pages/$pageId/edit', params: { pageId: result.action.pageId } });
+      return;
+    }
+    if (result.action.route === 'blog') {
+      navigate({ to: '/blog/$postId', params: { postId: result.action.postId } });
+      return;
+    }
+    if (result.action.route === 'forms') {
+      navigate({ to: '/forms' });
+      return;
+    }
+    if (result.action.route === 'comments') {
+      navigate({ to: '/comments' });
+      return;
+    }
+    if (result.action.route === 'contacts') {
+      navigate({ to: '/contacts' });
+      return;
+    }
+    navigate({ to: result.action.to });
+  };
+
   useEffect(() => {
     void loadNotifications();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -117,17 +257,79 @@ export function Header({ onSidebarToggle }: HeaderProps) {
       {/* Right Section */}
       <div className="flex items-center gap-2">
         {/* Search */}
-        <div className="hidden md:flex items-center relative">
+        <div className="relative hidden md:flex items-center">
           <Search className="w-4 h-4 absolute left-3 text-muted-foreground" />
           <input
             type="text"
             placeholder="Search..."
+            value={searchQuery}
+            onFocus={() => {
+              setSearchOpen(true);
+              void loadGlobalSearch();
+            }}
+            onBlur={() => window.setTimeout(() => setSearchOpen(false), 120)}
+            onChange={(event) => {
+              setSearchQuery(event.target.value);
+              setSearchOpen(true);
+              void loadGlobalSearch();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setSearchOpen(false);
+                return;
+              }
+              if (event.key === 'Enter' && searchResults[0]) {
+                event.preventDefault();
+                handleSearchResult(searchResults[0]);
+              }
+            }}
             className={cn(
               'pl-9 pr-4 py-2 rounded-lg bg-muted text-sm',
               'focus:outline-none focus:ring-2 focus:ring-ring',
               'w-48 lg:w-64 transition-all'
             )}
           />
+          {searchOpen && (
+            <div className="absolute left-0 top-full z-30 mt-2 w-[22rem] overflow-hidden rounded-lg border border-border bg-card shadow-lg">
+              <div className="border-b border-border px-4 py-3">
+                <div className="text-sm font-semibold">Search Backy</div>
+                <div className="text-xs text-muted-foreground">Sites, pages, posts, forms, contacts, and tools.</div>
+              </div>
+              <div className="max-h-96 overflow-y-auto p-2">
+                {searchLoading ? (
+                  <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
+                    Loading...
+                  </div>
+                ) : searchError ? (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    {searchError}
+                  </div>
+                ) : searchResults.length === 0 ? (
+                  <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+                    No matching results.
+                  </div>
+                ) : (
+                  searchResults.map((result) => (
+                    <button
+                      key={result.id}
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleSearchResult(result)}
+                      className="block w-full rounded-md px-3 py-2 text-left hover:bg-accent"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="truncate text-sm font-medium">{result.title}</span>
+                        <span className="shrink-0 rounded bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                          {result.type}
+                        </span>
+                      </div>
+                      <div className="mt-1 truncate text-xs text-muted-foreground">{result.detail}</div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Notifications */}
