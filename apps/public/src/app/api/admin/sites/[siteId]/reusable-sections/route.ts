@@ -13,6 +13,7 @@ import {
   listReusableSections,
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import type { BackyJsonObject } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
@@ -183,9 +184,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         createdBy: typeof body.createdBy === 'string' ? body.createdBy.trim() || 'admin' : 'admin',
         updatedBy: typeof body.updatedBy === 'string' ? body.updatedBy.trim() || 'admin' : 'admin',
       })).item;
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'reusableSection',
+        entityId: section.id,
+        reason: 'reusable-section-created',
+        requestId,
+      });
 
       return NextResponse.json(
-        { success: true, requestId, data: { section } },
+        { success: true, requestId, data: { section, cacheInvalidation } },
         { status: 201 },
       );
     }

@@ -1912,12 +1912,26 @@ try {
 
       const publicReusableSections = await request(`/api/sites/${createdSiteId}/reusable-sections?tag=frontend-contract&category=layout`);
       assert(publicReusableSections.response.status === 200, `${publicReusableSections.url} expected 200, got ${publicReusableSections.response.status}`);
+      assert(publicReusableSections.response.headers.get('x-backy-cache-scope') === 'discovery', `${publicReusableSections.url} missing discovery cache scope`);
+      assert(publicReusableSections.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${publicReusableSections.url} missing contract version header`);
+      assert(publicReusableSections.response.headers.get('x-backy-site-id') === createdSiteId, `${publicReusableSections.url} missing site id header`);
+      assert(publicReusableSections.response.headers.get('x-backy-cache-revision'), `${publicReusableSections.url} missing reusable sections cache revision`);
+      const reusableSectionsEtag = publicReusableSections.response.headers.get('etag');
+      assert(reusableSectionsEtag?.startsWith('"backy-'), `${publicReusableSections.url} missing reusable sections etag`);
+      const revalidatedReusableSections = await request(`/api/sites/${createdSiteId}/reusable-sections?tag=frontend-contract&category=layout`, {
+        headers: { 'if-none-match': reusableSectionsEtag },
+      });
+      assert(revalidatedReusableSections.response.status === 304, `${revalidatedReusableSections.url} expected reusable sections 304, got ${revalidatedReusableSections.response.status}`);
+      assert(revalidatedReusableSections.response.headers.get('etag') === reusableSectionsEtag, `${revalidatedReusableSections.url} expected matching reusable sections etag`);
       assert(publicReusableSections.json?.success === true, `${publicReusableSections.url} expected success envelope`);
       assert(publicReusableSections.json?.data?.sections?.some((section) => section.id === manifestReusableSectionId), `${publicReusableSections.url} missing reusable section in data envelope`);
       assert(publicReusableSections.json?.sections?.some((section) => section.id === manifestReusableSectionId), `${publicReusableSections.url} missing legacy reusable sections`);
 
       const publicReusableSection = await request(`/api/sites/${createdSiteId}/reusable-sections/${manifestReusableSectionId}`);
       assert(publicReusableSection.response.status === 200, `${publicReusableSection.url} expected 200, got ${publicReusableSection.response.status}`);
+      assert(publicReusableSection.response.headers.get('x-backy-cache-scope') === 'discovery', `${publicReusableSection.url} missing discovery cache scope`);
+      assert(publicReusableSection.response.headers.get('x-backy-cache-revision'), `${publicReusableSection.url} missing reusable section cache revision`);
+      assert(publicReusableSection.response.headers.get('etag')?.startsWith('"backy-'), `${publicReusableSection.url} missing reusable section etag`);
       assert(publicReusableSection.json?.data?.section?.content?.elements?.[0]?.id === 'frontend-contract-section-root', `${publicReusableSection.url} missing reusable section content`);
 
       const invalidSeoSettings = await request(`/api/admin/sites/${createdSiteId}/seo`, {

@@ -105,6 +105,7 @@ export type BackyRepositoryEntity =
   | 'mediaFolder'
   | 'form'
   | 'formSubmission'
+  | 'reusableSection'
   | 'contact'
   | 'comment'
   | 'user'

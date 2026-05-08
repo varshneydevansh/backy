@@ -14,6 +14,7 @@ import {
   updateReusableSection,
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import type { BackyJsonObject } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
@@ -158,8 +159,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ...(body.sourceElementId !== undefined ? { sourceElementId: typeof body.sourceElementId === 'string' ? body.sourceElementId.trim() || null : null } : {}),
         ...(body.updatedBy !== undefined ? { updatedBy: typeof body.updatedBy === 'string' ? body.updatedBy.trim() || null : null } : {}),
       })).item;
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'reusableSection',
+        entityId: updated.id,
+        reason: 'reusable-section-updated',
+        requestId,
+      });
 
-      return NextResponse.json({ success: true, requestId, data: { section: updated } });
+      return NextResponse.json({ success: true, requestId, data: { section: updated, cacheInvalidation } });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -230,6 +239,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       if (!deleted) {
         return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
       }
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'reusableSection',
+        entityId: section.id,
+        reason: 'reusable-section-deleted',
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -237,6 +254,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         data: {
           deleted: true,
           sectionId: section.id,
+          cacheInvalidation,
         },
       });
     }

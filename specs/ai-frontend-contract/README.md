@@ -111,7 +111,7 @@ Backy now exposes active saved editor sections as public frontend templates:
 - `POST /api/admin/sites/:siteId/reusable-sections`
 - `GET/PATCH/DELETE /api/admin/sites/:siteId/reusable-sections/:sectionId`
 
-Public reusable-section reads only return active sections for published sites. Each section keeps its normal canvas `content.elements` and `canvasSize`, so a custom frontend, generated frontend, or default Backy frontend can treat saved sections as reusable page-building templates without importing admin code. The manifest exposes `capabilities.reusableSections`, `endpoints.reusableSections`, `endpoints.reusableSectionDetail`, and `modules.reusableSections` with count/category/tag/item summaries. The OpenAPI export includes list/detail operations and `x-backy.reusableSectionIds`.
+Public reusable-section reads only return active sections for published sites and now emit Backy public contract headers, discovery cache headers, ETags, conditional 304 responses, and database-mode `content` cache revisions. Database-mode reusable-section create/update/delete mutations also record scoped content invalidation events. Each section keeps its normal canvas `content.elements` and `canvasSize`, so a custom frontend, generated frontend, or default Backy frontend can treat saved sections as reusable page-building templates without importing admin code. The manifest exposes `capabilities.reusableSections`, `endpoints.reusableSections`, `endpoints.reusableSectionDetail`, and `modules.reusableSections` with count/category/tag/item summaries. The OpenAPI export includes list/detail operations and `x-backy.reusableSectionIds`.
 
 ## Current font asset contract
 

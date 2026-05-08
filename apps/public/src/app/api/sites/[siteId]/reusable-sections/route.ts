@@ -4,8 +4,9 @@
  * GET /api/sites/[siteId]/reusable-sections
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getSiteByIdOrSlug, listReusableSections } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -17,7 +18,7 @@ interface RouteParams {
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -27,7 +28,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
       errorMessage: message,
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
@@ -54,8 +55,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         limit: 100,
         offset: 0,
       });
+      const cacheRevision = await repositories.cacheInvalidations.latestRevision({
+        siteId: site.id,
+        scope: 'content',
+      }) || undefined;
 
-      return NextResponse.json({
+      return publicContractJson({
         success: true,
         requestId,
         data: {
@@ -64,6 +69,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
         sections: result.items,
         pagination: result.pagination,
+      }, {
+        requestId,
+        request,
+        cache: 'discovery',
+        siteId: site.id,
+        cacheRevision,
       });
     }
 
@@ -86,7 +97,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       hasMore: false,
     };
 
-    return NextResponse.json({
+    return publicContractJson({
       success: true,
       requestId,
       data: {
@@ -95,6 +106,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
       sections,
       pagination,
+    }, {
+      requestId,
+      request,
+      cache: 'discovery',
+      siteId: site.id,
     });
   } catch (error) {
     console.error('Public reusable sections list API error:', error);

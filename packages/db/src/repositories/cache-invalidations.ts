@@ -87,6 +87,7 @@ const normalizeEntity = (value: unknown): BackyRepositoryEntity => {
         value === 'mediaFolder' ||
         value === 'form' ||
         value === 'formSubmission' ||
+        value === 'reusableSection' ||
         value === 'contact' ||
         value === 'comment' ||
         value === 'user' ||
