@@ -23,6 +23,7 @@ let originalUserAdminRole = null;
 let originalUserAdminStatus = null;
 let routeConflictCleanupPageId = null;
 let originalDeliveryMode = null;
+let originalSettingsIntegrations = null;
 
 function assert(condition, message) {
   if (!condition) {
@@ -159,7 +160,10 @@ async function cleanup() {
       headers: {
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ deliveryMode: originalDeliveryMode }),
+      body: JSON.stringify({
+        deliveryMode: originalDeliveryMode,
+        ...(originalSettingsIntegrations ? { integrations: originalSettingsIntegrations } : {}),
+      }),
     }).catch(() => {});
   }
 }
@@ -318,6 +322,8 @@ try {
     formData.set('visibility', 'public');
     formData.set('fontFamily', 'Contract Sans');
     formData.set('fontWeight', '500');
+    formData.set('fontFallback', 'ui-sans-serif, system-ui');
+    formData.set('fontDisplay', 'fallback');
     formData.set('tags', 'brand,font');
     formData.set('metadata', JSON.stringify({
       license: 'contract-smoke',
@@ -334,8 +340,12 @@ try {
     assert(upload.json?.data?.quota?.usedBytes >= upload.json?.data?.media?.sizeBytes, `${upload.url} missing media quota usage`);
     assert(upload.json?.data?.quota?.remainingBytes >= 0, `${upload.url} missing media quota remaining bytes`);
     assert(upload.json?.data?.media?.metadata?.fontFamily === 'Contract Sans', `${upload.url} expected font family metadata`);
+    assert(upload.json?.data?.media?.metadata?.fontFallback === 'ui-sans-serif, system-ui', `${upload.url} expected font fallback metadata`);
+    assert(upload.json?.data?.media?.metadata?.fontDisplay === 'fallback', `${upload.url} expected font display metadata`);
     assert(upload.json?.data?.media?.metadata?.extension === 'woff2', `${upload.url} expected preserved font extension metadata`);
     assert(upload.json?.data?.media?.metadata?.license === 'contract-smoke', `${upload.url} expected custom upload metadata`);
+    assert(upload.json?.data?.media?.metadata?.safetyScan?.status === 'clean', `${upload.url} missing clean safety scan metadata`);
+    assert(upload.json?.data?.media?.metadata?.safetyScan?.checks?.includes('font-extension-policy'), `${upload.url} missing font safety check`);
     assert(
       upload.json?.data?.media?.url?.startsWith(`/uploads/sites/${createdSiteId}/fonts/`),
       `${upload.url} expected storage-backed public font URL`,
@@ -355,11 +365,15 @@ try {
           fontFamily: 'Contract Sans Display',
           fontWeight: '600',
           fontStyle: 'normal',
+          fontFallback: 'Georgia, serif',
+          fontDisplay: 'optional',
         },
       }),
     });
     assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
     assert(update.json?.data?.media?.metadata?.fontFamily === 'Contract Sans Display', `${update.url} expected updated font family metadata`);
+    assert(update.json?.data?.media?.metadata?.fontFallback === 'Georgia, serif', `${update.url} expected updated font fallback metadata`);
+    assert(update.json?.data?.media?.metadata?.fontDisplay === 'optional', `${update.url} expected updated font display metadata`);
     assert(update.json?.data?.media?.metadata?.extension === 'woff2', `${update.url} lost extension metadata during font update`);
     assert(update.json?.data?.media?.metadata?.license === 'contract-smoke', `${update.url} lost custom upload metadata during font update`);
 
@@ -369,12 +383,16 @@ try {
     assert(publicFonts.json?.data?.media?.some((item) => (
       item.id === createdMediaId &&
       item.metadata?.fontFamily === 'Contract Sans Display' &&
+      item.metadata?.fontFallback === 'Georgia, serif' &&
+      item.metadata?.fontDisplay === 'optional' &&
       item.metadata?.extension === 'woff2' &&
       item.metadata?.license === 'contract-smoke'
     )), `${publicFonts.url} missing public font media in data envelope`);
     assert(publicFonts.json?.media?.some((item) => (
       item.id === createdMediaId &&
       item.metadata?.fontFamily === 'Contract Sans Display' &&
+      item.metadata?.fontFallback === 'Georgia, serif' &&
+      item.metadata?.fontDisplay === 'optional' &&
       item.metadata?.extension === 'woff2' &&
       item.metadata?.license === 'contract-smoke'
     )), `${publicFonts.url} missing public font media`);
@@ -384,6 +402,14 @@ try {
     assert(publicFontDetail.json?.success === true, `${publicFontDetail.url} expected success envelope`);
     assert(publicFontDetail.json?.data?.media?.id === createdMediaId, `${publicFontDetail.url} missing media detail in data envelope`);
     assert(publicFontDetail.json?.media?.metadata?.fontFamily === 'Contract Sans Display', `${publicFontDetail.url} missing legacy media detail`);
+
+    const adminMediaList = await request(`/api/admin/sites/${createdSiteId}/media?type=font&tag=font`);
+    assert(adminMediaList.response.status === 200, `${adminMediaList.url} expected 200, got ${adminMediaList.response.status}`);
+    assert(adminMediaList.json?.success === true, `${adminMediaList.url} expected success envelope`);
+    assert(adminMediaList.json?.data?.quota?.limitBytes > 0, `${adminMediaList.url} missing media quota limit`);
+    assert(adminMediaList.json?.data?.quota?.usedBytes >= upload.json?.data?.media?.sizeBytes, `${adminMediaList.url} missing media quota usage`);
+    assert(adminMediaList.json?.data?.quota?.remainingBytes >= 0, `${adminMediaList.url} missing media quota remaining bytes`);
+    assert(adminMediaList.json?.data?.media?.some((item) => item.id === createdMediaId), `${adminMediaList.url} missing admin media list item`);
 
     const privateUpdate = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, {
       method: 'PATCH',
@@ -432,6 +458,58 @@ try {
       body: JSON.stringify({ visibility: 'public' }),
     });
     assert(publicUpdate.response.status === 200, `${publicUpdate.url} expected 200, got ${publicUpdate.response.status}`);
+
+    const createAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=media&entityId=${createdMediaId}&action=create&requestId=${upload.json.requestId}`);
+    assert(createAudit.response.status === 200, `${createAudit.url} expected media create audit read`);
+    assert(createAudit.json?.data?.logs?.some((entry) => (
+      entry.entity === 'media' &&
+      entry.entityId === createdMediaId &&
+      entry.action === 'create' &&
+      entry.requestId === upload.json.requestId &&
+      entry.after?.id === createdMediaId
+    )), `${createAudit.url} missing media create audit log`);
+
+    const updateAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=media&entityId=${createdMediaId}&action=update&requestId=${publicUpdate.json.requestId}`);
+    assert(updateAudit.response.status === 200, `${updateAudit.url} expected media update audit read`);
+    assert(updateAudit.json?.data?.logs?.some((entry) => (
+      entry.entity === 'media' &&
+      entry.entityId === createdMediaId &&
+      entry.action === 'update' &&
+      entry.requestId === publicUpdate.json.requestId &&
+      entry.before?.id === createdMediaId &&
+      entry.after?.id === createdMediaId
+    )), `${updateAudit.url} missing media update audit log`);
+
+    const replacementFormData = new FormData();
+    replacementFormData.set('file', new Blob(['contract-font-v2'], { type: 'font/woff2' }), 'ContractSansV2.woff2');
+    replacementFormData.set('replacedBy', 'contract-smoke');
+    replacementFormData.set('reason', 'contract replacement');
+
+    const replacement = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, {
+      method: 'POST',
+      body: replacementFormData,
+    });
+    assert(replacement.response.status === 200, `${replacement.url} expected media replacement 200, got ${replacement.response.status}`);
+    assert(replacement.json?.data?.media?.id === createdMediaId, `${replacement.url} replacement changed media id`);
+    assert(replacement.json?.data?.media?.originalName === 'ContractSansV2.woff2', `${replacement.url} did not update original name`);
+    assert(replacement.json?.data?.media?.metadata?.fontFamily === 'Contract Sans Display', `${replacement.url} lost font metadata during replacement`);
+    assert(replacement.json?.data?.media?.metadata?.safetyScan?.status === 'clean', `${replacement.url} missing replacement safety scan`);
+    assert(Array.isArray(replacement.json?.data?.media?.metadata?.replacementVersions), `${replacement.url} missing replacement history`);
+    assert(replacement.json?.data?.media?.metadata?.replacementVersions?.[0]?.originalName === 'ContractSans.woff2', `${replacement.url} missing previous version metadata`);
+    assert(replacement.json?.data?.quota?.usedBytes >= replacement.json?.data?.media?.sizeBytes, `${replacement.url} missing replacement quota usage`);
+    const replacedFont = await request(replacement.json.data.media.url);
+    assert(replacedFont.response.status === 200, `${replacedFont.url} expected replaced media file to load`);
+    assert(replacedFont.text === 'contract-font-v2', `${replacedFont.url} returned unexpected replacement content`);
+
+    const replacementAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=media&entityId=${createdMediaId}&action=media.replace&requestId=${replacement.json.requestId}`);
+    assert(replacementAudit.response.status === 200, `${replacementAudit.url} expected media replacement audit read`);
+    assert(replacementAudit.json?.data?.logs?.some((entry) => (
+      entry.entity === 'media' &&
+      entry.entityId === createdMediaId &&
+      entry.action === 'media.replace' &&
+      entry.metadata?.replacementFilename === 'ContractSansV2.woff2' &&
+      entry.metadata?.retainedVersions >= 1
+    )), `${replacementAudit.url} missing media replacement audit log`);
   });
 
   await record('admin media folders create/list/update/delete and detach assets', async () => {
@@ -449,6 +527,14 @@ try {
     assert(create.json?.success === true, `${create.url} expected success envelope`);
     assert(create.json?.data?.folder?.name === 'Contract Assets', `${create.url} expected created folder name`);
     createdMediaFolderId = create.json.data.folder.id;
+
+    const createFolderAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=mediaFolder&entityId=${createdMediaFolderId}&action=mediaFolder.create&requestId=${create.json.requestId}`);
+    assert(createFolderAudit.response.status === 200, `${createFolderAudit.url} expected media folder create audit read`);
+    assert(createFolderAudit.json?.data?.logs?.some((entry) => (
+      entry.action === 'mediaFolder.create' &&
+      entry.entityId === createdMediaFolderId &&
+      entry.after?.name === 'Contract Assets'
+    )), `${createFolderAudit.url} missing media folder create audit log`);
 
     const list = await request(`/api/admin/sites/${createdSiteId}/media/folders`);
     assert(list.response.status === 200, `${list.url} expected 200, got ${list.response.status}`);
@@ -484,9 +570,25 @@ try {
     assert(update.json?.data?.folder?.name === 'Contract Brand Assets', `${update.url} did not update folder name`);
     assert(update.json?.data?.folder?.sortOrder === 11, `${update.url} did not update folder sort order`);
 
+    const updateFolderAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=mediaFolder&entityId=${createdMediaFolderId}&action=mediaFolder.update&requestId=${update.json.requestId}`);
+    assert(updateFolderAudit.response.status === 200, `${updateFolderAudit.url} expected media folder update audit read`);
+    assert(updateFolderAudit.json?.data?.logs?.some((entry) => (
+      entry.action === 'mediaFolder.update' &&
+      entry.before?.name === 'Contract Assets' &&
+      entry.after?.name === 'Contract Brand Assets'
+    )), `${updateFolderAudit.url} missing media folder update audit log`);
+
     const remove = await request(`/api/admin/sites/${createdSiteId}/media/folders/${createdMediaFolderId}`, { method: 'DELETE' });
     assert(remove.response.status === 200, `${remove.url} expected 200, got ${remove.response.status}`);
     assert(remove.json?.data?.deleted === true, `${remove.url} expected deleted true`);
+
+    const deleteFolderAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=mediaFolder&entityId=${createdMediaFolderId}&action=mediaFolder.delete&requestId=${remove.json.requestId}`);
+    assert(deleteFolderAudit.response.status === 200, `${deleteFolderAudit.url} expected media folder delete audit read`);
+    assert(deleteFolderAudit.json?.data?.logs?.some((entry) => (
+      entry.action === 'mediaFolder.delete' &&
+      entry.before?.name === 'Contract Brand Assets'
+    )), `${deleteFolderAudit.url} missing media folder delete audit log`);
+
     createdMediaFolderId = null;
 
     const detachedMedia = await request(`/api/admin/sites/${createdSiteId}/media?type=font`);
@@ -496,9 +598,9 @@ try {
     )), `${detachedMedia.url} did not detach media from deleted folder`);
   });
 
-  await record('admin media image transforms redirect to optimizer', async () => {
+  await record('admin media image transforms generate responsive files', async () => {
     const formData = new FormData();
-    formData.set('file', new Blob(['<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="red"/></svg>'], { type: 'image/svg+xml' }), 'contract-image.svg');
+    formData.set('file', new Blob(['<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="red"/></svg>'], { type: 'image/svg+xml' }), 'contract-image.svg');
     formData.set('visibility', 'public');
     formData.set('altText', 'Contract image');
 
@@ -510,6 +612,39 @@ try {
     createdImageMediaId = upload.json?.data?.media?.id;
     assert(createdImageMediaId, `${upload.url} missing image media id`);
     assert(upload.json?.data?.media?.type === 'image', `${upload.url} expected image media type`);
+    assert(upload.json?.data?.media?.metadata?.safetyScan?.checks?.includes('svg-active-content-policy'), `${upload.url} missing SVG safety scan`);
+
+    const dangerousSvgFormData = new FormData();
+    dangerousSvgFormData.set('file', new Blob(['<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'], { type: 'image/svg+xml' }), 'dangerous.svg');
+    dangerousSvgFormData.set('visibility', 'public');
+    const dangerousSvg = await request(`/api/admin/sites/${createdSiteId}/media`, {
+      method: 'POST',
+      body: dangerousSvgFormData,
+    });
+    assert(dangerousSvg.response.status === 415, `${dangerousSvg.url} expected dangerous SVG rejection`);
+    assert(dangerousSvg.json?.error?.code === 'MEDIA_SAFETY_SCAN_FAILED', `${dangerousSvg.url} expected safety scan error code`);
+
+    const preparedTransforms = await request(`/api/admin/sites/${createdSiteId}/media/${createdImageMediaId}/transforms`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        widths: [320, 768, 1280],
+        quality: 82,
+        sizes: '(max-width: 900px) 100vw, 900px',
+        preparedBy: 'contract-smoke',
+      }),
+    });
+    assert(preparedTransforms.response.status === 200, `${preparedTransforms.url} expected transform preparation 200`);
+    assert(preparedTransforms.json?.data?.media?.metadata?.generatedTransforms?.variants?.some((variant) => variant.width === 768 && variant.quality === 82), `${preparedTransforms.url} missing stored transform variants`);
+    assert(preparedTransforms.json?.data?.media?.metadata?.generatedTransforms?.format === 'webp', `${preparedTransforms.url} missing generated webp format`);
+    assert(preparedTransforms.json?.data?.media?.metadata?.generatedTransforms?.generatedBytes > 0, `${preparedTransforms.url} missing generated transform byte count`);
+    assert(preparedTransforms.json?.data?.media?.metadata?.generatedTransforms?.variants?.every((variant) => (
+      typeof variant.storagePath === 'string' &&
+      typeof variant.bytes === 'number' &&
+      variant.url.includes('.webp')
+    )), `${preparedTransforms.url} missing generated transform files`);
 
     const transform = await request(`/api/sites/${createdSiteId}/media/${createdImageMediaId}/transform?width=320&quality=80`, {
       redirect: 'manual',
@@ -519,6 +654,39 @@ try {
     assert(transform.response.headers.get('location')?.includes('w=320'), `${transform.url} missing transform width`);
     assert(transform.response.headers.get('x-backy-transform-width') === '320', `${transform.url} missing transform width header`);
     assert(transform.response.headers.get('x-backy-transform-quality') === '80', `${transform.url} missing transform quality header`);
+
+    const deliveredFile = await request(`/api/sites/${createdSiteId}/media/${createdImageMediaId}/file`);
+    assert(deliveredFile.response.status === 200, `${deliveredFile.url} expected public media file delivery`);
+    assert(deliveredFile.response.headers.get('content-type')?.includes('image/svg+xml'), `${deliveredFile.url} expected image/svg+xml delivery`);
+
+    const mediaAfterDelivery = await request(`/api/admin/sites/${createdSiteId}/media?type=image`);
+    const deliveredImage = mediaAfterDelivery.json?.data?.media?.find((item) => item.id === createdImageMediaId);
+    assert(deliveredImage?.metadata?.mediaDelivery?.totalRequests >= 2, `${mediaAfterDelivery.url} missing media delivery request analytics`);
+    assert(deliveredImage?.metadata?.mediaDelivery?.fileRequests >= 1, `${mediaAfterDelivery.url} missing media file delivery analytics`);
+    assert(deliveredImage?.metadata?.mediaDelivery?.transformRequests >= 1, `${mediaAfterDelivery.url} missing media transform delivery analytics`);
+    assert(deliveredImage?.metadata?.mediaDelivery?.bytesServed > 0, `${mediaAfterDelivery.url} missing delivered byte analytics`);
+
+    const publicImageList = await request(`/api/sites/${createdSiteId}/media?type=image`);
+    assert(publicImageList.response.status === 200, `${publicImageList.url} expected image media list`);
+    const listedImage = publicImageList.json?.data?.media?.find((item) => item.id === createdImageMediaId);
+    assert(listedImage?.responsive?.srcSet?.includes('.webp'), `${publicImageList.url} missing generated responsive image srcset`);
+    assert(listedImage?.responsive?.variants?.some((variant) => variant.width === 768 && variant.quality === 82), `${publicImageList.url} missing prepared responsive image variants`);
+    assert(listedImage?.responsive?.preparedBy === 'contract-smoke', `${publicImageList.url} missing prepared transform attribution`);
+    assert(listedImage?.responsive?.generatedBytes > 0, `${publicImageList.url} missing responsive generated byte metadata`);
+
+    const publicImageDetail = await request(`/api/sites/${createdSiteId}/media/${createdImageMediaId}`);
+    assert(publicImageDetail.response.status === 200, `${publicImageDetail.url} expected image media detail`);
+    assert(publicImageDetail.json?.data?.media?.responsive?.sizes === '(max-width: 900px) 100vw, 900px', `${publicImageDetail.url} missing prepared responsive image sizes`);
+    assert(publicImageDetail.json?.media?.responsive?.variants?.length >= 3, `${publicImageDetail.url} missing legacy responsive image variants`);
+
+    const transformAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=media&entityId=${createdImageMediaId}&action=media.transforms.prepare&requestId=${preparedTransforms.json.requestId}`);
+    assert(transformAudit.response.status === 200, `${transformAudit.url} expected transform audit read`);
+    assert(transformAudit.json?.data?.logs?.some((entry) => (
+      entry.action === 'media.transforms.prepare' &&
+      entry.metadata?.quality === 82 &&
+      entry.metadata?.preparedBy === 'contract-smoke' &&
+      entry.metadata?.generatedBytes > 0
+    )), `${transformAudit.url} missing transform preparation audit log`);
 
     const invalidTransform = await request(`/api/sites/${createdSiteId}/media/${createdMediaId}/transform?width=320`, {
       redirect: 'manual',
@@ -689,6 +857,15 @@ try {
     assert(bindMedia.response.status === 200, `${bindMedia.url} expected 200, got ${bindMedia.response.status}`);
     assert(bindMedia.json?.data?.media?.pageIds?.includes(createdPageId), `${bindMedia.url} did not bind media to page`);
     assert(bindMedia.json?.data?.binding?.targetId === createdPageId, `${bindMedia.url} missing binding metadata`);
+
+    const bindAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=media&entityId=${createdMediaId}&action=media.bind&limit=5`);
+    assert(bindAudit.response.status === 200, `${bindAudit.url} expected 200, got ${bindAudit.response.status}`);
+    assert(bindAudit.json?.data?.logs?.some((log) => (
+      log.action === 'media.bind' &&
+      log.metadata?.targetType === 'page' &&
+      log.metadata?.targetId === createdPageId &&
+      log.metadata?.usageType === 'content'
+    )), `${bindAudit.url} missing media bind audit log`);
 
     const pageMediaList = await request(`/api/admin/sites/${createdSiteId}/media?pageId=${createdPageId}&type=font`);
     assert(pageMediaList.response.status === 200, `${pageMediaList.url} expected 200, got ${pageMediaList.response.status}`);
@@ -879,8 +1056,14 @@ try {
       `${renderPayload.url} missing configured render navigation manifest`,
     );
     assert(
-      renderPayload.json?.data?.assets?.fonts?.some((font) => font.id === createdMediaId && font.family === 'Contract Sans Display'),
-      `${renderPayload.url} missing uploaded font asset manifest`,
+      renderPayload.json?.data?.assets?.fonts?.some((font) => (
+        font.id === createdMediaId &&
+        font.family === 'Contract Sans Display' &&
+        font.fallbackStack === 'Georgia, serif' &&
+        font.display === 'optional' &&
+        font.cssFamily === '"Contract Sans Display", Georgia, serif'
+      )),
+      `${renderPayload.url} missing uploaded font asset manifest with fallback metadata`,
     );
     assert(
       renderPayload.json?.data?.seo?.jsonLd?.some((entry) => entry?.['@type'] === 'WebPage' && entry?.name === 'Admin Contract Page'),
@@ -1173,6 +1356,14 @@ try {
     });
     assert(unbindMedia.response.status === 200, `${unbindMedia.url} expected 200, got ${unbindMedia.response.status}`);
     assert(!unbindMedia.json?.data?.media?.pageIds?.includes(createdPageId), `${unbindMedia.url} did not unbind media from page`);
+
+    const unbindAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=media&entityId=${createdMediaId}&action=media.unbind&limit=5`);
+    assert(unbindAudit.response.status === 200, `${unbindAudit.url} expected 200, got ${unbindAudit.response.status}`);
+    assert(unbindAudit.json?.data?.logs?.some((log) => (
+      log.action === 'media.unbind' &&
+      log.metadata?.targetType === 'page' &&
+      log.metadata?.targetId === createdPageId
+    )), `${unbindAudit.url} missing media unbind audit log`);
 
     const remove = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, { method: 'DELETE' });
     assert(remove.response.status === 200, `${remove.url} expected 200, got ${remove.response.status}`);
@@ -3082,8 +3273,16 @@ try {
     assert(json?.data?.settings?.runtimeStorage?.provider, `${url} missing runtime storage provider`);
     assert(typeof json?.data?.settings?.runtimeStorage?.configured === 'boolean', `${url} missing runtime storage configured flag`);
     assert(Array.isArray(json?.data?.settings?.runtimeStorage?.missing), `${url} missing runtime storage missing list`);
+    assert(json?.data?.settings?.runtimeDatabase?.mode, `${url} missing runtime database mode`);
+    assert(typeof json?.data?.settings?.runtimeDatabase?.configured === 'boolean', `${url} missing runtime database configured flag`);
+    assert(typeof json?.data?.settings?.runtimeSupabase?.configured === 'boolean', `${url} missing runtime Supabase configured flag`);
+    assert(Array.isArray(json?.data?.settings?.runtimeSupabase?.missing), `${url} missing runtime Supabase missing list`);
+    assert(typeof json?.data?.settings?.runtimeVercel?.configured === 'boolean', `${url} missing runtime Vercel configured flag`);
+    assert(Array.isArray(json?.data?.settings?.runtimeVercel?.missing), `${url} missing runtime Vercel missing list`);
     assert(!JSON.stringify(json.data.settings.runtimeStorage).includes('SECRET'), `${url} exposed storage secret names or values`);
+    assert(!JSON.stringify(json.data.settings.runtimeSupabase).includes('SERVICE_ROLE'), `${url} exposed Supabase secret env names or values`);
     originalDeliveryMode = json.data.settings.deliveryMode;
+    originalSettingsIntegrations = json.data.settings.integrations || null;
   });
 
   await record('admin settings update validates delivery mode', async () => {
@@ -3108,6 +3307,67 @@ try {
     assert(valid.response.status === 200, `${valid.url} expected 200, got ${valid.response.status}`);
     assert(valid.json?.success === true, `${valid.url} expected success envelope`);
     assert(valid.json?.data?.settings?.deliveryMode === nextMode, `${valid.url} did not persist delivery mode`);
+
+    const audit = await request(`/api/admin/audit-logs?entity=settings&entityId=platform&action=settings.update&requestId=${valid.json.requestId}`);
+    assert(audit.response.status === 200, `${audit.url} expected settings audit read`);
+    const auditEntry = audit.json?.data?.logs?.find((entry) => (
+      entry.entity === 'settings' &&
+      entry.entityId === 'platform' &&
+      entry.action === 'settings.update' &&
+      entry.requestId === valid.json.requestId
+    ));
+    assert(auditEntry?.before?.deliveryMode === originalDeliveryMode, `${audit.url} missing settings audit before delivery mode`);
+    assert(auditEntry?.after?.deliveryMode === nextMode, `${audit.url} missing settings audit after delivery mode`);
+    assert(auditEntry?.before?.apiKeys?.redacted === true, `${audit.url} expected settings audit api keys to be redacted`);
+    assert(auditEntry?.before?.apiKeys?.adminApiKey === undefined, `${audit.url} leaked admin api key in audit before snapshot`);
+    assert(auditEntry?.after?.apiKeys?.adminApiKey === undefined, `${audit.url} leaked admin api key in audit after snapshot`);
+  });
+
+  await record('admin settings update persists infrastructure metadata', async () => {
+    const infrastructure = {
+      supabase: {
+        projectUrl: `https://contract-${unique}.supabase.co`,
+        projectRef: `contract-${unique}`,
+        databaseEnabled: true,
+        storageEnabled: true,
+        authEnabled: false,
+      },
+      vercel: {
+        projectId: `prj_${unique}`,
+        teamSlug: 'backy-contract-team',
+        productionDomain: `contract-${unique}.vercel.app`,
+        autoDeploy: false,
+        previewDeployments: true,
+      },
+    };
+
+    const update = await request('/api/admin/settings', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ integrations: infrastructure }),
+    });
+    assert(update.response.status === 200, `${update.url} expected 200, got ${update.response.status}`);
+    assert(update.json?.success === true, `${update.url} expected success envelope`);
+    assert(update.json?.data?.settings?.integrations?.supabase?.projectRef === infrastructure.supabase.projectRef, `${update.url} did not persist Supabase project ref`);
+    assert(update.json?.data?.settings?.integrations?.vercel?.projectId === infrastructure.vercel.projectId, `${update.url} did not persist Vercel project id`);
+    assert(update.json?.data?.settings?.integrations?.vercel?.previewDeployments === true, `${update.url} did not persist Vercel preview toggle`);
+
+    const readBack = await request('/api/admin/settings');
+    assert(readBack.response.status === 200, `${readBack.url} expected 200, got ${readBack.response.status}`);
+    assert(readBack.json?.data?.settings?.integrations?.supabase?.projectUrl === infrastructure.supabase.projectUrl, `${readBack.url} did not read back Supabase URL`);
+    assert(readBack.json?.data?.settings?.integrations?.vercel?.productionDomain === infrastructure.vercel.productionDomain, `${readBack.url} did not read back Vercel domain`);
+
+    const audit = await request(`/api/admin/audit-logs?entity=settings&entityId=platform&action=settings.update&requestId=${update.json.requestId}`);
+    assert(audit.response.status === 200, `${audit.url} expected settings audit read`);
+    const auditEntry = audit.json?.data?.logs?.find((entry) => (
+      entry.entity === 'settings' &&
+      entry.entityId === 'platform' &&
+      entry.action === 'settings.update' &&
+      entry.requestId === update.json.requestId
+    ));
+    assert(auditEntry?.metadata?.changedKeys?.includes('integrations'), `${audit.url} missing integrations audit change key`);
   });
 
   await record('admin settings regenerates API keys', async () => {
@@ -3127,6 +3387,18 @@ try {
     assert(json?.success === true, `${url} expected success envelope`);
     assert(json?.data?.settings?.apiKeys?.publicApiKey !== oldPublicKey, `${url} public key did not rotate`);
     assert(json?.data?.settings?.apiKeys?.adminApiKey !== oldAdminKey, `${url} admin key did not rotate`);
+
+    const audit = await request(`/api/admin/audit-logs?entity=settings&entityId=platform&action=${encodeURIComponent('settings.api_keys.regenerate')}&requestId=${json.requestId}`);
+    assert(audit.response.status === 200, `${audit.url} expected key regeneration audit read`);
+    const auditEntry = audit.json?.data?.logs?.find((entry) => (
+      entry.entity === 'settings' &&
+      entry.entityId === 'platform' &&
+      entry.action === 'settings.api_keys.regenerate' &&
+      entry.requestId === json.requestId
+    ));
+    assert(auditEntry?.metadata?.scope === 'all', `${audit.url} missing key regeneration audit scope`);
+    assert(auditEntry?.before?.apiKeys?.redacted === true, `${audit.url} expected key audit api keys to be redacted`);
+    assert(auditEntry?.after?.apiKeys?.adminApiKey === undefined, `${audit.url} leaked regenerated admin api key in audit snapshot`);
   });
 
   await cleanup();
