@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import type { BackyJsonValue, Contact, FormDefinition, FormSubmission } from '@backy-cms/core';
 import {
   attachCollectionRecordToSubmission,
@@ -13,6 +13,7 @@ import {
   validateCollectionRecordValues,
   type StoreCollection,
 } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -37,8 +38,24 @@ type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const privateResponse = <TBody>(body: TBody, requestId: string, status = 200) => (
+  publicContractJson(body, {
+    status,
+    requestId,
+    cache: 'private',
+  })
+);
+
+const contractResponse = <TBody>(body: TBody, requestId: string, status = 200) => (
+  publicContractJson(body, {
+    status,
+    requestId,
+    cache: status >= 400 ? 'error' : 'private',
+  })
+);
+
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -48,7 +65,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
       errorMessage: message,
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
@@ -454,7 +471,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         pagination: result.pagination,
       };
 
-      return NextResponse.json({
+      return privateResponse({
         success: true,
         requestId: responseRequestId,
         data: {
@@ -463,7 +480,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
         form,
         submissions,
-      });
+      }, responseRequestId);
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -489,7 +506,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       offset,
     });
 
-    return NextResponse.json({
+    return privateResponse({
       success: true,
       requestId: responseRequestId,
       data: {
@@ -498,7 +515,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
       form: form,
       submissions: result,
-    });
+    }, responseRequestId);
   } catch (error) {
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', responseRequestId);
@@ -546,7 +563,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
 
       if (!classification.ok) {
-        return NextResponse.json(
+        return contractResponse(
           {
             success: false,
             requestId,
@@ -560,7 +577,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             spamFlags: classification.spamFlags,
             message: classification.spamMessage || 'Submission blocked.',
           },
-          { status: 422 },
+          requestId,
+          422,
         );
       }
 
@@ -598,7 +616,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         })).item;
       }
 
-      return NextResponse.json(
+      return privateResponse(
         {
           success: true,
           requestId,
@@ -621,7 +639,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           collectionRecord: collectionRecordResult?.record || null,
           collectionRecordErrors: collectionRecordResult?.errors || [],
         },
-        { status: 201 },
+        requestId,
+        201,
       );
     }
 
@@ -659,7 +678,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
 
     if (!classification.ok) {
-      return NextResponse.json(
+      return contractResponse(
         {
           success: false,
           requestId,
@@ -673,7 +692,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           spamFlags: classification.spamFlags,
           message: classification.spamMessage || 'Submission blocked.',
         },
-        { status: 422 },
+        requestId,
+        422,
       );
     }
 
@@ -790,7 +810,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    return NextResponse.json(
+    return privateResponse(
       {
         success: true,
         requestId,
@@ -813,7 +833,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         collectionRecord: collectionRecordResult?.record || null,
         collectionRecordErrors: collectionRecordResult?.errors || [],
       },
-      { status: 201 },
+      requestId,
+      201,
     );
   } catch (error) {
     console.error('API Error:', error);
@@ -825,7 +846,7 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
   const requestId = _request.headers.get('x-request-id') || makeRequestId();
   void params;
 
-  return NextResponse.json(
+  return contractResponse(
     {
       success: false,
       requestId,
@@ -835,6 +856,7 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
       },
       errorMessage: 'Unsupported method. Use POST for form submissions.',
     },
-    { status: 405 },
+    requestId,
+    405,
   );
 }

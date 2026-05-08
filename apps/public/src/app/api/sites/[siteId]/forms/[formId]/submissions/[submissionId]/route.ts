@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import {
   getFormById,
   getSiteByIdOrSlug,
@@ -7,6 +7,7 @@ import {
   buildContactShareFromSubmission,
   trackWebhookEvent,
 } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { Contact, FormDefinition, FormSubmission } from '@backy-cms/core';
 
@@ -29,8 +30,16 @@ interface ContactShareOverridePayload {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const privateResponse = <TBody>(body: TBody, requestId: string, status = 200) => (
+  publicContractJson(body, {
+    status,
+    requestId,
+    cache: 'private',
+  })
+);
+
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -40,7 +49,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
       errorMessage: message,
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
@@ -274,14 +283,14 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SUBMISSION_NOT_FOUND', 'Submission not found', requestId);
       }
 
-      return NextResponse.json({
+      return privateResponse({
         success: true,
         requestId,
         data: {
           submission,
         },
         submission,
-      });
+      }, requestId);
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -299,14 +308,14 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SUBMISSION_NOT_FOUND', 'Submission not found', requestId);
     }
 
-    return NextResponse.json({
+    return privateResponse({
       success: true,
       requestId,
       data: {
         submission,
       },
       submission,
-    });
+    }, requestId);
   } catch (error) {
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
@@ -354,14 +363,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         await buildRepositoryContactShare(repositories, form, updated, body.contactShareOverride);
       }
 
-      return NextResponse.json({
+      return privateResponse({
         success: true,
         requestId,
         data: {
           submission: updated,
         },
         submission: updated,
-      });
+      }, requestId);
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -423,14 +432,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    return NextResponse.json({
+    return privateResponse({
       success: true,
       requestId,
       data: {
         submission: updated,
       },
       submission: updated,
-    });
+    }, requestId);
   } catch (error) {
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
