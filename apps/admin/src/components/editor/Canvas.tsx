@@ -984,14 +984,17 @@ export function Canvas({
           break;
       }
 
+      const result = updateElementById(elementsRef.current, activeResizeState.elementId, (element) => ({
+        ...element,
+        x: snapToGrid(clampToCanvas(newX, newWidth, size.width)),
+        y: snapToGrid(clampToCanvas(newY, newHeight, size.height)),
+        width: snapToGrid(newWidth),
+        height: snapToGrid(newHeight),
+      }));
+
+      elementsRef.current = result.elements;
       onElementsChange(
-        updateElementById(elementsRef.current, activeResizeState.elementId, (element) => ({
-          ...element,
-          x: snapToGrid(clampToCanvas(newX, newWidth, size.width)),
-          y: snapToGrid(clampToCanvas(newY, newHeight, size.height)),
-          width: snapToGrid(newWidth),
-          height: snapToGrid(newHeight),
-        })).elements,
+        result.elements,
         { transient: true, selectedId: activeResizeState.elementId },
       );
       return;
@@ -1034,6 +1037,7 @@ export function Canvas({
     });
 
     setAlignmentGuides(nextGuides);
+    elementsRef.current = result.elements;
     onElementsChange(result.elements, { transient: true, selectedId: activeDragState.elementId });
   }, [isPreview, onElementsChange, size.height, size.width, toCanvasDelta]);
 
