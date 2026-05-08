@@ -634,6 +634,21 @@ export const activityLogs = pgTable('activity_logs', {
 });
 
 /**
+ * Cache invalidation events for public contract revisions and downstream CDN purges.
+ */
+export const cacheInvalidationEvents = pgTable('cache_invalidation_events', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    siteId: uuid('site_id').references(() => sites.id, { onDelete: 'cascade' }),
+    scope: text('scope').default('all').notNull(),
+    entityType: text('entity_type').notNull(),
+    entityId: text('entity_id'),
+    reason: text('reason').notNull(),
+    revision: text('revision').notNull(),
+    metadata: jsonb('metadata').default({}).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+/**
  * Page views for analytics
  */
 export const pageViews = pgTable('page_views', {
@@ -694,6 +709,7 @@ export const sitesRelations = relations(sites, ({ one, many }) => ({
     reusableSections: many(reusableSections),
     contentRevisions: many(contentRevisions),
     previewTokens: many(previewTokens),
+    cacheInvalidationEvents: many(cacheInvalidationEvents),
 }));
 
 export const pagesRelations = relations(pages, ({ one }) => ({
@@ -721,6 +737,13 @@ export const blogPostsRelations = relations(blogPosts, ({ one }) => ({
 export const mediaRelations = relations(media, ({ one }) => ({
     site: one(sites, {
         fields: [media.siteId],
+        references: [sites.id],
+    }),
+}));
+
+export const cacheInvalidationEventsRelations = relations(cacheInvalidationEvents, ({ one }) => ({
+    site: one(sites, {
+        fields: [cacheInvalidationEvents.siteId],
         references: [sites.id],
     }),
 }));

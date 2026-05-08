@@ -2,6 +2,7 @@ import type { BackyRepositories } from '@backy-cms/core/repositories';
 import type { DatabaseAdapter } from '../adapters';
 import { createAuditLogRepository } from './audit-logs';
 import { createBlogTaxonomyRepository } from './blog-taxonomy';
+import { createCacheInvalidationRepository } from './cache-invalidations';
 import { createCollectionRepository } from './collections';
 import { createCommentRepository } from './comments';
 import { createContentWorkflowRepository } from './content-workflows';
@@ -16,7 +17,7 @@ import {
     createSiteRepository,
 } from './site-page-post';
 
-type ImplementedBackyRepositories = Pick<BackyRepositories, 'sites' | 'pages' | 'posts' | 'blogTaxonomy' | 'media' | 'collections' | 'forms' | 'comments' | 'reusableSections' | 'contentWorkflows' | 'users' | 'settings' | 'auditLogs'>;
+type ImplementedBackyRepositories = Pick<BackyRepositories, 'sites' | 'pages' | 'posts' | 'blogTaxonomy' | 'media' | 'collections' | 'forms' | 'comments' | 'reusableSections' | 'contentWorkflows' | 'users' | 'settings' | 'auditLogs' | 'cacheInvalidations'>;
 
 export interface DatabaseRepositoryFactoryInput {
     adapter: DatabaseAdapter;
@@ -39,6 +40,7 @@ export function createDatabaseRepositories(
         users: createUserRepository(input.adapter.db),
         settings: createSettingsRepository(input.adapter.db),
         auditLogs: createAuditLogRepository(input.adapter.db),
+        cacheInvalidations: createCacheInvalidationRepository(input.adapter.db),
     };
 }
 

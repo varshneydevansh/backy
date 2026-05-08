@@ -109,7 +109,8 @@ export type BackyRepositoryEntity =
   | 'comment'
   | 'user'
   | 'settings'
-  | 'auditLog';
+  | 'auditLog'
+  | 'cacheInvalidation';
 
 export interface BackyRepositoryResult<TItem> {
   data?: TItem;
@@ -672,6 +673,46 @@ export interface BackyAuditLogListInput extends BackyPaginationInput {
   requestId?: string;
 }
 
+export type BackyCacheInvalidationScope =
+  | 'all'
+  | 'discovery'
+  | 'render'
+  | 'seo'
+  | 'navigation'
+  | 'media'
+  | 'content'
+  | 'settings'
+  | (string & {});
+
+export interface BackyCacheInvalidationEvent {
+  id: string;
+  siteId?: string | null;
+  scope: BackyCacheInvalidationScope;
+  entity: BackyRepositoryEntity;
+  entityId?: string | null;
+  reason: string;
+  revision: string;
+  metadata?: BackyJsonObject;
+  createdAt: string;
+}
+
+export interface BackyCacheInvalidationListInput extends BackyPaginationInput {
+  siteId?: string;
+  scope?: BackyCacheInvalidationScope;
+  entity?: BackyRepositoryEntity;
+  entityId?: string;
+}
+
+export interface BackyCacheInvalidationRecordInput {
+  siteId?: string | null;
+  scope?: BackyCacheInvalidationScope;
+  entity: BackyRepositoryEntity;
+  entityId?: string | null;
+  reason: string;
+  revision?: string;
+  metadata?: BackyJsonObject;
+}
+
 export interface BackySiteRepository {
   list(input: BackySiteListInput, context?: BackyRepositoryContext): Promise<BackyListResult<Site>>;
   getById(siteId: string, context?: BackyRepositoryContext): Promise<Site | null>;
@@ -809,6 +850,12 @@ export interface BackyAuditLogRepository {
   record(input: Omit<BackyAuditLogEntry, 'id' | 'createdAt'>, context?: BackyRepositoryContext): Promise<BackyAuditLogEntry>;
 }
 
+export interface BackyCacheInvalidationRepository {
+  list(input: BackyCacheInvalidationListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyCacheInvalidationEvent>>;
+  record(input: BackyCacheInvalidationRecordInput, context?: BackyRepositoryContext): Promise<BackyCacheInvalidationEvent>;
+  latestRevision(input: { siteId?: string; scope?: BackyCacheInvalidationScope }, context?: BackyRepositoryContext): Promise<string | null>;
+}
+
 export interface BackyRepositories {
   sites: BackySiteRepository;
   pages: BackyPageRepository;
@@ -823,4 +870,5 @@ export interface BackyRepositories {
   users: BackyUserRepository;
   settings: BackySettingsRepository;
   auditLogs: BackyAuditLogRepository;
+  cacheInvalidations: BackyCacheInvalidationRepository;
 }

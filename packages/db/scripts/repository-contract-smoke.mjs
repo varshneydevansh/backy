@@ -4,6 +4,7 @@ import { createBackyContentDocument } from '../../core/dist/index.mjs';
 import {
   createAuditLogRepository,
   createBlogTaxonomyRepository,
+  createCacheInvalidationRepository,
   createCollectionRepository,
   createCommentRepository,
   createContentWorkflowRepository,
@@ -22,6 +23,7 @@ import {
   blogPosts,
   blogCategories,
   blogTags,
+  cacheInvalidationEvents,
   activityLogs,
   comments,
   contentCollectionRecords,
@@ -48,6 +50,7 @@ const assert = (condition, message) => {
 
 const tableName = (table) => {
   if (table === activityLogs) return 'activityLogs';
+  if (table === cacheInvalidationEvents) return 'cacheInvalidationEvents';
   if (table === sites) return 'sites';
   if (table === pages) return 'pages';
   if (table === platformSettings) return 'platformSettings';
@@ -72,6 +75,7 @@ const tableName = (table) => {
 const createFakeDb = () => {
   const state = {
     activityLogs: [],
+    cacheInvalidationEvents: [],
     sites: [],
     pages: [],
     platformSettings: [],
@@ -93,6 +97,7 @@ const createFakeDb = () => {
   };
   const counters = {
     activityLogs: 0,
+    cacheInvalidationEvents: 0,
     sites: 0,
     pages: 0,
     platformSettings: 0,
@@ -439,6 +444,20 @@ const createFakeDb = () => {
         ...values,
       };
     }
+    if (name === 'cacheInvalidationEvents') {
+      return {
+        id: nextId(name),
+        siteId: null,
+        scope: 'all',
+        entityType: 'cacheInvalidation',
+        entityId: null,
+        reason: 'manual',
+        revision: `rev_${counters[name]}`,
+        metadata: {},
+        createdAt: timestamp,
+        ...values,
+      };
+    }
     return {
       id: nextId(name),
       siteId: 'site_default',
@@ -541,6 +560,7 @@ assert(repositorySet.contentWorkflows, 'Expected content workflow repository fac
 assert(repositorySet.users, 'Expected user repository factory');
 assert(repositorySet.settings, 'Expected settings repository factory');
 assert(repositorySet.auditLogs, 'Expected audit log repository factory');
+assert(repositorySet.cacheInvalidations, 'Expected cache invalidation repository factory');
 
 const siteRepository = createSiteRepository(db);
 const pageRepository = createPageRepository(db);
@@ -551,6 +571,7 @@ const collectionRepository = createCollectionRepository(db);
 const formRepository = createFormRepository(db);
 const commentRepository = createCommentRepository(db);
 const auditLogRepository = createAuditLogRepository(db);
+const cacheInvalidationRepository = createCacheInvalidationRepository(db);
 const contentWorkflowRepository = createContentWorkflowRepository(db);
 const userRepository = createUserRepository(db);
 const settingsRepository = createSettingsRepository(db);
@@ -1014,6 +1035,30 @@ assert((await auditLogRepository.list({
   action: 'comment-status',
   requestId: 'req_audit_contract',
 })).items.length === 1, 'Expected audit log filters');
+
+const cacheInvalidation = await cacheInvalidationRepository.record({
+  siteId: site.id,
+  scope: 'seo',
+  entity: 'site',
+  entityId: site.id,
+  reason: 'seo-settings-updated',
+  revision: 'rev_contract_seo',
+  metadata: {
+    requestId: 'req_cache_contract',
+  },
+});
+assert(cacheInvalidation.id === 'cacheInvalidationEvents_1', 'Expected fake cache invalidation id');
+assert(cacheInvalidation.revision === 'rev_contract_seo', 'Expected cache invalidation revision');
+assert((await cacheInvalidationRepository.list({
+  siteId: site.id,
+  scope: 'seo',
+  entity: 'site',
+  entityId: site.id,
+})).items.length === 1, 'Expected cache invalidation filters');
+assert(await cacheInvalidationRepository.latestRevision({
+  siteId: site.id,
+  scope: 'seo',
+}) === 'rev_contract_seo', 'Expected latest cache invalidation revision');
 
 const user = (await userRepository.create({
   fullName: 'Repository User',

@@ -5,6 +5,9 @@ export {
     createBlogTaxonomyRepository,
 } from './blog-taxonomy';
 export {
+    createCacheInvalidationRepository,
+} from './cache-invalidations';
+export {
     createCollectionRepository,
 } from './collections';
 export {
