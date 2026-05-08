@@ -51,6 +51,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     if (path.startsWith('/pages')) return 'Pages';
     if (path.startsWith('/blog')) return 'Blog';
     if (path.startsWith('/media')) return 'Media';
+    if (path.startsWith('/products')) return 'Products';
     if (path.startsWith('/users')) return 'Users';
     if (path.startsWith('/settings')) return 'Settings';
     return 'Dashboard';

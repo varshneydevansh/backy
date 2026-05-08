@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as UsersRouteImport } from './routes/users'
 import { Route as SitesRouteImport } from './routes/sites'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PagesRouteImport } from './routes/pages'
 import { Route as MediaRouteImport } from './routes/media'
 import { Route as LoginRouteImport } from './routes/login'
@@ -41,6 +42,11 @@ const SitesRoute = SitesRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductsRoute = ProductsRouteImport.update({
+  id: '/products',
+  path: '/products',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PagesRoute = PagesRouteImport.update({
@@ -127,6 +133,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
   '/pages': typeof PagesRouteWithChildren
+  '/products': typeof ProductsRoute
   '/settings': typeof SettingsRoute
   '/sites': typeof SitesRouteWithChildren
   '/users': typeof UsersRouteWithChildren
@@ -147,6 +154,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
   '/pages': typeof PagesRouteWithChildren
+  '/products': typeof ProductsRoute
   '/settings': typeof SettingsRoute
   '/sites': typeof SitesRouteWithChildren
   '/users': typeof UsersRouteWithChildren
@@ -168,6 +176,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
   '/pages': typeof PagesRouteWithChildren
+  '/products': typeof ProductsRoute
   '/settings': typeof SettingsRoute
   '/sites': typeof SitesRouteWithChildren
   '/users': typeof UsersRouteWithChildren
@@ -190,6 +199,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/media'
     | '/pages'
+    | '/products'
     | '/settings'
     | '/sites'
     | '/users'
@@ -210,6 +220,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/media'
     | '/pages'
+    | '/products'
     | '/settings'
     | '/sites'
     | '/users'
@@ -230,6 +241,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/media'
     | '/pages'
+    | '/products'
     | '/settings'
     | '/sites'
     | '/users'
@@ -251,6 +263,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   MediaRoute: typeof MediaRoute
   PagesRoute: typeof PagesRouteWithChildren
+  ProductsRoute: typeof ProductsRoute
   SettingsRoute: typeof SettingsRoute
   SitesRoute: typeof SitesRouteWithChildren
   UsersRoute: typeof UsersRouteWithChildren
@@ -277,6 +290,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/products': {
+      id: '/products'
+      path: '/products'
+      fullPath: '/products'
+      preLoaderRoute: typeof ProductsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pages': {
@@ -443,6 +463,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   MediaRoute: MediaRoute,
   PagesRoute: PagesRouteWithChildren,
+  ProductsRoute: ProductsRoute,
   SettingsRoute: SettingsRoute,
   SitesRoute: SitesRouteWithChildren,
   UsersRoute: UsersRouteWithChildren,
