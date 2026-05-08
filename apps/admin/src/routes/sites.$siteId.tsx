@@ -42,7 +42,12 @@ import {
   updateSiteSeoSettings,
   updateSite as updateSiteFromApi,
 } from '@/lib/adminContentApi';
-import type { AdminSiteRedirectConflict, AdminSiteSeoSettings, SiteReadiness } from '@/lib/adminContentApi';
+import type {
+  AdminSiteRedirectConflict,
+  AdminSiteSeoPreview,
+  AdminSiteSeoSettings,
+  SiteReadiness,
+} from '@/lib/adminContentApi';
 import type { Page } from '@/stores/mockStore';
 import type {
   Comment,
@@ -102,6 +107,7 @@ interface SiteRedirectEditorState {
 interface SiteSeoEditorState {
   seo: AdminSiteSeoSettings;
   jsonLdText: string;
+  preview: AdminSiteSeoPreview;
   loading: boolean;
   saving: boolean;
   errorMessage: string | null;
@@ -141,6 +147,11 @@ const EMPTY_SEO_SETTINGS: AdminSiteSeoSettings = {
     follow: true,
     extraRules: '',
   },
+};
+
+const EMPTY_SEO_PREVIEW: AdminSiteSeoPreview = {
+  supportedVariables: [],
+  routes: [],
 };
 
 const formatJsonLd = (jsonLd: AdminSiteSeoSettings['jsonLd']): string => (
@@ -429,6 +440,7 @@ function EditSitePage() {
   const [seoState, setSeoState] = useState<SiteSeoEditorState>({
     seo: EMPTY_SEO_SETTINGS,
     jsonLdText: formatJsonLd(EMPTY_SEO_SETTINGS.jsonLd),
+    preview: EMPTY_SEO_PREVIEW,
     loading: false,
     saving: false,
     errorMessage: null,
@@ -685,12 +697,14 @@ function EditSitePage() {
     setSeoState((prev) => ({ ...prev, loading: true, errorMessage: null }));
 
     try {
-      const seo = await getSiteSeoSettings(siteApiId);
+      const result = await getSiteSeoSettings(siteApiId);
+      const seo = result.seo;
       const nextSeo = { ...EMPTY_SEO_SETTINGS, ...seo };
       setSeoState((prev) => ({
         ...prev,
         seo: nextSeo,
         jsonLdText: formatJsonLd(nextSeo.jsonLd),
+        preview: result.preview,
         loading: false,
         notice: null,
       }));
@@ -729,15 +743,17 @@ function EditSitePage() {
 
     try {
       const jsonLd = parseJsonLd(seoState.jsonLdText);
-      const seo = await updateSiteSeoSettings(siteApiId, {
+      const result = await updateSiteSeoSettings(siteApiId, {
         ...seoState.seo,
         jsonLd,
       });
+      const seo = result.seo;
       const nextSeo = { ...EMPTY_SEO_SETTINGS, ...seo };
       setSeoState((prev) => ({
         ...prev,
         seo: nextSeo,
         jsonLdText: formatJsonLd(nextSeo.jsonLd),
+        preview: result.preview,
         saving: false,
         notice: 'SEO defaults saved and reflected in public SEO discovery.',
       }));
@@ -2197,6 +2213,48 @@ function EditSitePage() {
                 </div>
                 <div className="mt-1 line-clamp-2 text-sm text-muted-foreground">
                   {seoState.seo.defaultDescription || formData.description || 'No default description set.'}
+                </div>
+                <div className="mt-4 border-t border-border pt-3">
+                  <div className="text-xs font-semibold uppercase text-muted-foreground">Dynamic route previews</div>
+                  {seoState.preview.supportedVariables.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {seoState.preview.supportedVariables.map((variable) => (
+                        <span
+                          key={variable}
+                          className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+                        >
+                          {variable}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {seoState.preview.routes.length > 0 ? (
+                    <div className="mt-3 space-y-2" data-testid="site-seo-dynamic-previews">
+                      {seoState.preview.routes.slice(0, 6).map((route) => (
+                        <div
+                          key={`${route.type}-${route.canonical}-${route.sourceTitle}`}
+                          className="rounded-md border border-border bg-muted/30 px-3 py-2"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="rounded bg-background px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                              {route.type === 'dynamicItem' ? 'Item' : 'List'}
+                            </span>
+                            <span className="truncate font-mono text-[11px] text-muted-foreground">
+                              {route.canonical}
+                            </span>
+                          </div>
+                          <div className="mt-2 line-clamp-1 text-sm font-semibold">{route.title}</div>
+                          <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                            {route.description || 'No description after defaults.'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-3 text-xs text-muted-foreground">
+                      Create a collection with records to preview dynamic list and item SEO titles.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

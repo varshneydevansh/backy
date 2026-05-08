@@ -105,11 +105,27 @@ interface ApiSiteRedirectsResponse {
 
 export type AdminSiteSeoSettings = SiteSettings['seo'];
 
+export interface AdminSiteSeoPreviewRoute {
+  type: 'dynamicList' | 'dynamicItem';
+  title: string;
+  description: string;
+  canonical: string;
+  sourceTitle: string;
+  sourceDescription: string;
+  variables: Record<string, string>;
+}
+
+export interface AdminSiteSeoPreview {
+  supportedVariables: string[];
+  routes: AdminSiteSeoPreviewRoute[];
+}
+
 interface ApiSiteSeoResponse {
   success: boolean;
   data?: {
     site: Pick<ApiSite, 'id' | 'slug' | 'name'>;
     seo: AdminSiteSeoSettings;
+    preview?: AdminSiteSeoPreview;
   };
   error?: {
     message?: string;
@@ -1389,7 +1405,7 @@ export async function previewSiteRedirects(
   return payload.data.redirects;
 }
 
-export async function getSiteSeoSettings(siteId: string): Promise<AdminSiteSeoSettings> {
+export async function getSiteSeoSettings(siteId: string): Promise<{ seo: AdminSiteSeoSettings; preview: AdminSiteSeoPreview }> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/seo`);
   const payload = await readJson<ApiSiteSeoResponse>(response);
 
@@ -1397,13 +1413,16 @@ export async function getSiteSeoSettings(siteId: string): Promise<AdminSiteSeoSe
     throw new Error(payload.error?.message || 'Unable to load site SEO settings');
   }
 
-  return payload.data.seo;
+  return {
+    seo: payload.data.seo,
+    preview: payload.data.preview || { supportedVariables: [], routes: [] },
+  };
 }
 
 export async function updateSiteSeoSettings(
   siteId: string,
   seo: AdminSiteSeoSettings,
-): Promise<AdminSiteSeoSettings> {
+): Promise<{ seo: AdminSiteSeoSettings; preview: AdminSiteSeoPreview }> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/seo`, {
     method: 'PATCH',
     headers: {
@@ -1417,7 +1436,10 @@ export async function updateSiteSeoSettings(
     throw new Error(payload.error?.message || 'Unable to save site SEO settings');
   }
 
-  return payload.data.seo;
+  return {
+    seo: payload.data.seo,
+    preview: payload.data.preview || { supportedVariables: [], routes: [] },
+  };
 }
 
 export async function getPageReadiness(siteId: string, pageId: string): Promise<PageReadiness> {

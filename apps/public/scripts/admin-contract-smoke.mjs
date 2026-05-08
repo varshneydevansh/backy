@@ -1935,6 +1935,27 @@ try {
       assert(adminSeoSettings.response.status === 200, `${adminSeoSettings.url} expected SEO settings read 200`);
       assert(adminSeoSettings.json?.data?.seo?.defaultDescription === 'Fallback SEO description from admin contract.', `${adminSeoSettings.url} missing saved SEO defaults`);
       assert(adminSeoSettings.json?.data?.seo?.jsonLd?.[0]?.['@type'] === 'Organization', `${adminSeoSettings.url} missing saved JSON-LD defaults`);
+      assert(
+        adminSeoSettings.json?.data?.preview?.supportedVariables?.includes('{recordTitle}'),
+        `${adminSeoSettings.url} missing dynamic SEO preview variables`,
+      );
+      assert(
+        adminSeoSettings.json?.data?.preview?.routes?.some((route) => (
+          route.type === 'dynamicList'
+          && route.canonical === '/directory'
+          && route.title?.startsWith('SEO ')
+        )),
+        `${adminSeoSettings.url} missing dynamic list SEO preview`,
+      );
+      assert(
+        adminSeoSettings.json?.data?.preview?.routes?.some((route) => (
+          route.type === 'dynamicItem'
+          && typeof route.variables?.recordSlug === 'string'
+          && route.canonical?.startsWith('/directory/')
+          && route.title?.startsWith('SEO ')
+        )),
+        `${adminSeoSettings.url} missing dynamic item SEO preview`,
+      );
 
       const seoDiscovery = await request(`/api/sites/${createdSiteId}/seo`);
       assert(seoDiscovery.response.status === 200, `${seoDiscovery.url} expected 200, got ${seoDiscovery.response.status}`);

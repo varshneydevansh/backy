@@ -8,9 +8,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DEFAULT_SITE_SETTINGS, type SiteSettings } from '@backy-cms/core';
 import {
+  listCollectionRecords,
+  listCollections,
   getSiteByIdOrSlug,
   updateAdminSite,
 } from '@/lib/backyStore';
+import {
+  buildCollectionItemPath,
+  buildCollectionListPath,
+} from '@/lib/collectionRoutes';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -19,6 +25,21 @@ interface RouteParams {
   params: Promise<{
     siteId: string;
   }>;
+}
+
+interface SeoPreviewRoute {
+  type: 'dynamicList' | 'dynamicItem';
+  title: string;
+  description: string;
+  canonical: string;
+  sourceTitle: string;
+  sourceDescription: string;
+  variables: Record<string, string>;
+}
+
+interface SeoPreview {
+  supportedVariables: string[];
+  routes: SeoPreviewRoute[];
 }
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -38,6 +59,70 @@ const bool = (value: unknown, fallback: boolean) => (
 const numberInRange = (value: unknown, fallback: number) => {
   const number = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : fallback;
+};
+
+const applyTitleTemplate = (
+  title: string,
+  siteName: string,
+  seo: Partial<SiteSettings['seo']> | undefined,
+) => {
+  const template = typeof seo?.titleTemplate === 'string' && seo.titleTemplate.trim().length > 0
+    ? seo.titleTemplate.trim()
+    : '';
+
+  if (!template) {
+    return title;
+  }
+
+  return template
+    .replace(/%s/g, title)
+    .replace(/\{title\}/g, title)
+    .replace(/\{siteName\}/g, siteName);
+};
+
+const recordText = (values: Record<string, unknown>, keys: string[]): string => {
+  for (const key of keys) {
+    const value = values[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return '';
+};
+
+const previewDescription = (
+  sourceDescription: string,
+  seo: Partial<SiteSettings['seo']> | undefined,
+) => sourceDescription || seo?.defaultDescription || '';
+
+const buildPreviewRoute = (
+  input: {
+    type: SeoPreviewRoute['type'];
+    sourceTitle: string;
+    sourceDescription: string;
+    canonical: string;
+    variables: Record<string, string>;
+  },
+  site: { name: string; settings?: SiteSettings },
+): SeoPreviewRoute => {
+  const seo = site.settings?.seo;
+  const title = applyTitleTemplate(input.sourceTitle, site.name, seo);
+  const description = previewDescription(input.sourceDescription, seo);
+
+  return {
+    type: input.type,
+    title,
+    description,
+    canonical: input.canonical,
+    sourceTitle: input.sourceTitle,
+    sourceDescription: input.sourceDescription,
+    variables: {
+      title: input.sourceTitle,
+      siteName: site.name,
+      ...input.variables,
+    },
+  };
 };
 
 const normalizeJsonLd = (
@@ -94,6 +179,107 @@ const defaultSiteSettings = (): SiteSettings => ({
     footer: [],
   },
 });
+
+const buildDemoSeoPreview = (site: { id: string; name: string; settings?: SiteSettings }): SeoPreview => {
+  const collections = listCollections(site.id, { includeUnpublished: true });
+  const routes: SeoPreviewRoute[] = [];
+
+  for (const collection of collections.slice(0, 6)) {
+    routes.push(buildPreviewRoute({
+      type: 'dynamicList',
+      sourceTitle: collection.name,
+      sourceDescription: collection.description || '',
+      canonical: buildCollectionListPath(collection),
+      variables: {
+        collectionName: collection.name,
+        collectionSlug: collection.slug,
+      },
+    }, site));
+
+    const record = listCollectionRecords(site.id, collection.id, {
+      includeUnpublished: true,
+      limit: 1,
+      offset: 0,
+    }).records[0];
+    if (record) {
+      const recordTitle = recordText(record.values, ['title', 'name', 'heading']) || record.slug;
+      routes.push(buildPreviewRoute({
+        type: 'dynamicItem',
+        sourceTitle: recordTitle,
+        sourceDescription: recordText(record.values, ['description', 'summary', 'excerpt']),
+        canonical: buildCollectionItemPath(collection, record.slug),
+        variables: {
+          collectionName: collection.name,
+          collectionSlug: collection.slug,
+          recordTitle,
+          recordSlug: record.slug,
+        },
+      }, site));
+    }
+  }
+
+  return {
+    supportedVariables: ['%s', '{title}', '{siteName}', '{collectionName}', '{collectionSlug}', '{recordTitle}', '{recordSlug}'],
+    routes,
+  };
+};
+
+const buildRepositorySeoPreview = async (
+  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
+  site: { id: string; name: string; settings?: SiteSettings },
+): Promise<SeoPreview> => {
+  const collections = await repositories.collections.list({
+    siteId: site.id,
+    includeUnpublished: true,
+    status: 'all',
+    limit: 6,
+    offset: 0,
+  });
+  const routes: SeoPreviewRoute[] = [];
+
+  for (const collection of collections.items) {
+    routes.push(buildPreviewRoute({
+      type: 'dynamicList',
+      sourceTitle: collection.name,
+      sourceDescription: collection.description || '',
+      canonical: buildCollectionListPath(collection),
+      variables: {
+        collectionName: collection.name,
+        collectionSlug: collection.slug,
+      },
+    }, site));
+
+    const records = await repositories.collections.listRecords({
+      siteId: site.id,
+      collectionId: collection.id,
+      includeUnpublished: true,
+      status: 'all',
+      limit: 1,
+      offset: 0,
+    });
+    const record = records.items[0];
+    if (record) {
+      const recordTitle = recordText(record.values, ['title', 'name', 'heading']) || record.slug;
+      routes.push(buildPreviewRoute({
+        type: 'dynamicItem',
+        sourceTitle: recordTitle,
+        sourceDescription: recordText(record.values, ['description', 'summary', 'excerpt']),
+        canonical: buildCollectionItemPath(collection, record.slug),
+        variables: {
+          collectionName: collection.name,
+          collectionSlug: collection.slug,
+          recordTitle,
+          recordSlug: record.slug,
+        },
+      }, site));
+    }
+  }
+
+  return {
+    supportedVariables: ['%s', '{title}', '{siteName}', '{collectionName}', '{collectionSlug}', '{recordTitle}', '{recordSlug}'],
+    routes,
+  };
+};
 
 const normalizeSeoInput = (
   input: unknown,
@@ -162,7 +348,11 @@ const normalizeSeoInput = (
   };
 };
 
-const responsePayload = (requestId: string, site: { id: string; slug: string; name: string; settings?: SiteSettings }) => {
+const responsePayload = (
+  requestId: string,
+  site: { id: string; slug: string; name: string; settings?: SiteSettings },
+  preview: SeoPreview,
+) => {
   const settings = site.settings || defaultSiteSettings();
   return NextResponse.json({
     success: true,
@@ -174,6 +364,7 @@ const responsePayload = (requestId: string, site: { id: string; slug: string; na
         name: site.name,
       },
       seo: settings.seo || defaultSiteSettings().seo,
+      preview,
     },
   });
 };
@@ -191,7 +382,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      return responsePayload(requestId, site);
+      return responsePayload(requestId, site, await buildRepositorySeoPreview(repositories, site));
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -199,7 +390,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    return responsePayload(requestId, site);
+    return responsePayload(requestId, site, buildDemoSeoPreview(site));
   } catch (error) {
     console.error('Admin site SEO API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
@@ -233,7 +424,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         },
       });
 
-      return responsePayload(requestId, updated.item);
+      return responsePayload(requestId, updated.item, await buildRepositorySeoPreview(repositories, updated.item));
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -258,7 +449,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    return responsePayload(requestId, updated);
+    return responsePayload(requestId, updated, buildDemoSeoPreview(updated));
   } catch (error) {
     console.error('Admin site SEO update API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
