@@ -23,6 +23,7 @@ The rule is simple: a custom frontend can look completely different from the Bac
    - `GET /api/sites/:siteId/manifest`
    - Future stable form: `GET /api/public/sites/:identifier`
    - The manifest endpoint is the current WordPress-style discovery surface for generated/custom frontends. It returns the site theme, schema references, capability flags, route patterns, endpoint URLs, navigation, page/blog/collection/form/media module summaries, and public collection/form write metadata in one envelope.
+   - Public site discovery now emits Backy contract/cache headers, ETags, conditional 304 responses, and site metadata headers for identifier lookups.
 
 2. Resolve a route.
    - `GET /api/sites/:siteId/resolve?path=/about`

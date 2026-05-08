@@ -187,6 +187,7 @@ try {
 
     const publicDraft = await request(`/api/sites?identifier=${siteSlug}`);
     assert(publicDraft.response.status === 404, `${publicDraft.url} expected draft site to be hidden`);
+    assertBackyContract(publicDraft, 'error');
     assert(publicDraft.json?.success === false, `${publicDraft.url} expected error envelope`);
 
     const draftManifest = await request(`/api/sites/${createdSiteId}/manifest`);
@@ -242,15 +243,26 @@ try {
 
     const publicSiteBySlug = await request(`/api/sites?identifier=${siteSlug}`);
     assert(publicSiteBySlug.response.status === 200, `${publicSiteBySlug.url} expected 200, got ${publicSiteBySlug.response.status}`);
+    assertBackyContract(publicSiteBySlug, 'discovery');
+    assert(publicSiteBySlug.response.headers.get('x-backy-site-id') === createdSiteId, `${publicSiteBySlug.url} missing site id header`);
+    const publicSiteBySlugEtag = publicSiteBySlug.response.headers.get('etag');
+    assert(publicSiteBySlugEtag?.startsWith('"backy-'), `${publicSiteBySlug.url} missing site discovery etag`);
+    const revalidatedPublicSiteBySlug = await request(`/api/sites?identifier=${siteSlug}`, {
+      headers: { 'if-none-match': publicSiteBySlugEtag },
+    });
+    assert(revalidatedPublicSiteBySlug.response.status === 304, `${revalidatedPublicSiteBySlug.url} expected site discovery 304, got ${revalidatedPublicSiteBySlug.response.status}`);
+    assert(revalidatedPublicSiteBySlug.response.headers.get('etag') === publicSiteBySlugEtag, `${revalidatedPublicSiteBySlug.url} expected matching site discovery etag`);
     assert(publicSiteBySlug.json?.success === true, `${publicSiteBySlug.url} expected success envelope`);
     assert(publicSiteBySlug.json?.data?.site?.id === createdSiteId, `${publicSiteBySlug.url} returned wrong site`);
 
     const publicSiteByDomain = await request(`/api/sites?identifier=${customDomain}`);
     assert(publicSiteByDomain.response.status === 200, `${publicSiteByDomain.url} expected 200, got ${publicSiteByDomain.response.status}`);
+    assertBackyContract(publicSiteByDomain, 'discovery');
     assert(publicSiteByDomain.json?.data?.site?.id === createdSiteId, `${publicSiteByDomain.url} did not resolve custom domain`);
 
     const publicSiteList = await request('/api/sites');
     assert(publicSiteList.response.status === 200, `${publicSiteList.url} expected 200, got ${publicSiteList.response.status}`);
+    assertBackyContract(publicSiteList, 'discovery');
     assert(publicSiteList.json?.success === true, `${publicSiteList.url} expected success envelope`);
     assert(publicSiteList.json?.data?.sites?.some((site) => site.id === createdSiteId), `${publicSiteList.url} missing published temporary site`);
   });
