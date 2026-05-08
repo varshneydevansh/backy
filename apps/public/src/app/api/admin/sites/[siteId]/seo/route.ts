@@ -40,6 +40,24 @@ const numberInRange = (value: unknown, fallback: number) => {
   return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : fallback;
 };
 
+const normalizeJsonLd = (
+  value: unknown,
+): { ok: true; value: Array<Record<string, unknown>> } | { ok: false; message: string } => {
+  if (!Array.isArray(value)) {
+    return { ok: false, message: 'JSON-LD must be an array of objects' };
+  }
+
+  const entries: Array<Record<string, unknown>> = [];
+  for (const [index, entry] of value.entries()) {
+    if (!isRecord(entry)) {
+      return { ok: false, message: `JSON-LD entry ${index + 1} must be an object` };
+    }
+    entries.push(entry);
+  }
+
+  return { ok: true, value: entries };
+};
+
 const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
   NextResponse.json(
     {
@@ -89,9 +107,14 @@ const normalizeSeoInput = (
   const sitemapInput = isRecord(input.sitemap) ? input.sitemap : {};
   const robotsInput = isRecord(input.robots) ? input.robots : {};
   const issues: Array<{ field: string; message: string }> = [];
+  const jsonLdInput = input.jsonLd === undefined ? undefined : normalizeJsonLd(input.jsonLd);
 
   if (titleTemplate && !titleTemplate.includes('%s') && !titleTemplate.includes('{title}')) {
     issues.push({ field: 'titleTemplate', message: 'Title template must include %s or {title}' });
+  }
+
+  if (jsonLdInput && !jsonLdInput.ok) {
+    issues.push({ field: 'jsonLd', message: jsonLdInput.message });
   }
 
   if (
@@ -115,6 +138,7 @@ const normalizeSeoInput = (
       defaultDescription: input.defaultDescription === undefined ? current.defaultDescription : text(input.defaultDescription) || '',
       defaultOgImage: input.defaultOgImage === undefined ? current.defaultOgImage : text(input.defaultOgImage) || '',
       favicon: input.favicon === undefined ? current.favicon : text(input.favicon) || '',
+      jsonLd: input.jsonLd === undefined ? current.jsonLd || [] : jsonLdInput && jsonLdInput.ok ? jsonLdInput.value : [],
       sitemap: input.sitemap === undefined
         ? current.sitemap
         : {

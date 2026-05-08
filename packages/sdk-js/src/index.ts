@@ -377,7 +377,16 @@ export interface BackySeoRoute {
 
 export interface BackySeoDiscovery {
   site: BackySiteSummary;
-  defaults: Record<string, unknown>;
+  defaults: {
+    title?: string;
+    description?: string;
+    jsonLd?: Array<Record<string, unknown>>;
+    robots?: {
+      index?: boolean;
+      follow?: boolean;
+    };
+    [key: string]: unknown;
+  };
   routes: BackySeoRoute[];
   sitemap: {
     url: string;

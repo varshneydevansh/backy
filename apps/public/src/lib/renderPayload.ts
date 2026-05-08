@@ -65,6 +65,14 @@ const toStringArray = (value: unknown): string[] => (
     : []
 );
 
+const getSiteJsonLd = (site: StoreSite): Array<Record<string, unknown>> => (
+  Array.isArray(site.settings?.seo?.jsonLd)
+    ? site.settings.seo.jsonLd.filter((entry): entry is Record<string, unknown> => (
+        typeof entry === 'object' && entry !== null && !Array.isArray(entry)
+      ))
+    : []
+);
+
 const normalizeElement = (raw: unknown): RenderElement | null => {
   if (!isRecord(raw)) {
     return null;
@@ -1464,7 +1472,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
           description: page.meta.description || page.description || '',
           image: page.meta.ogImage || undefined,
         },
-        jsonLd: [],
+        jsonLd: getSiteJsonLd(site),
       },
       dataBindings: {
         ...dataBindings,
@@ -1552,6 +1560,7 @@ export function buildPublicCollectionListRenderPayload(
           description,
         },
         jsonLd: [
+          ...getSiteJsonLd(site),
           {
             '@context': 'https://schema.org',
             '@type': 'CollectionPage',
@@ -1652,6 +1661,7 @@ export function buildPublicCollectionItemRenderPayload(
           description,
         },
         jsonLd: [
+          ...getSiteJsonLd(site),
           {
             '@context': 'https://schema.org',
             '@type': 'Thing',
@@ -1760,7 +1770,7 @@ export function buildPublicBlogPostRenderPayload(
           description: post.meta?.description || post.excerpt || '',
           image: post.meta?.ogImage || undefined,
         },
-        jsonLd: [],
+        jsonLd: getSiteJsonLd(site),
       },
       dataBindings: {
         ...dataBindings,

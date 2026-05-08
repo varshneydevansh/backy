@@ -98,6 +98,7 @@ interface SiteRedirectEditorState {
 
 interface SiteSeoEditorState {
   seo: AdminSiteSeoSettings;
+  jsonLdText: string;
   loading: boolean;
   saving: boolean;
   errorMessage: string | null;
@@ -125,6 +126,7 @@ const EMPTY_SEO_SETTINGS: AdminSiteSeoSettings = {
   defaultDescription: '',
   defaultOgImage: '',
   favicon: '',
+  jsonLd: [],
   sitemap: {
     enabled: true,
     defaultChangeFrequency: 'weekly',
@@ -136,6 +138,25 @@ const EMPTY_SEO_SETTINGS: AdminSiteSeoSettings = {
     follow: true,
     extraRules: '',
   },
+};
+
+const formatJsonLd = (jsonLd: AdminSiteSeoSettings['jsonLd']): string => (
+  Array.isArray(jsonLd) && jsonLd.length > 0 ? JSON.stringify(jsonLd, null, 2) : '[]'
+);
+
+const parseJsonLd = (value: string): Array<Record<string, unknown>> => {
+  const parsed = JSON.parse(value || '[]') as unknown;
+  if (!Array.isArray(parsed)) {
+    throw new Error('JSON-LD must be a JSON array.');
+  }
+
+  parsed.forEach((entry, index) => {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      throw new Error(`JSON-LD entry ${index + 1} must be an object.`);
+    }
+  });
+
+  return parsed as Array<Record<string, unknown>>;
 };
 
 function makeRedirectRule(): SiteRedirectRule {
@@ -402,6 +423,7 @@ function EditSitePage() {
   });
   const [seoState, setSeoState] = useState<SiteSeoEditorState>({
     seo: EMPTY_SEO_SETTINGS,
+    jsonLdText: formatJsonLd(EMPTY_SEO_SETTINGS.jsonLd),
     loading: false,
     saving: false,
     errorMessage: null,
@@ -629,9 +651,11 @@ function EditSitePage() {
 
     try {
       const seo = await getSiteSeoSettings(siteApiId);
+      const nextSeo = { ...EMPTY_SEO_SETTINGS, ...seo };
       setSeoState((prev) => ({
         ...prev,
-        seo: { ...EMPTY_SEO_SETTINGS, ...seo },
+        seo: nextSeo,
+        jsonLdText: formatJsonLd(nextSeo.jsonLd),
         loading: false,
         notice: null,
       }));
@@ -655,15 +679,30 @@ function EditSitePage() {
     }));
   };
 
+  const handleUpdateJsonLdText = (value: string) => {
+    setSeoState((prev) => ({
+      ...prev,
+      jsonLdText: value,
+      notice: null,
+      errorMessage: null,
+    }));
+  };
+
   const handleSaveSeo = async () => {
     if (!siteApiId) return;
     setSeoState((prev) => ({ ...prev, saving: true, errorMessage: null, notice: null }));
 
     try {
-      const seo = await updateSiteSeoSettings(siteApiId, seoState.seo);
+      const jsonLd = parseJsonLd(seoState.jsonLdText);
+      const seo = await updateSiteSeoSettings(siteApiId, {
+        ...seoState.seo,
+        jsonLd,
+      });
+      const nextSeo = { ...EMPTY_SEO_SETTINGS, ...seo };
       setSeoState((prev) => ({
         ...prev,
-        seo: { ...EMPTY_SEO_SETTINGS, ...seo },
+        seo: nextSeo,
+        jsonLdText: formatJsonLd(nextSeo.jsonLd),
         saving: false,
         notice: 'SEO defaults saved and reflected in public SEO discovery.',
       }));
@@ -1878,7 +1917,7 @@ function EditSitePage() {
                 <h2 className="text-xl font-semibold">SEO defaults</h2>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                Site-wide title, description, Open Graph image, and favicon defaults for hosted pages and custom frontend SEO discovery.
+                Site-wide title, description, Open Graph image, structured data, and crawler defaults for hosted pages and custom frontend SEO discovery.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -2063,6 +2102,20 @@ function EditSitePage() {
                   rows={3}
                   className="mt-3 w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
                   placeholder="Disallow: /private"
+                />
+              </div>
+              <div className="rounded-lg border border-border bg-background px-4 py-3">
+                <label className="block text-sm font-semibold" htmlFor="site-json-ld">
+                  JSON-LD defaults
+                </label>
+                <textarea
+                  id="site-json-ld"
+                  value={seoState.jsonLdText}
+                  onChange={(event) => handleUpdateJsonLdText(event.target.value)}
+                  disabled={seoState.loading}
+                  rows={7}
+                  className="mt-3 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs leading-5 focus:outline-none focus:ring-2 focus:ring-ring resize-y disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder='[{"@context":"https://schema.org","@type":"Organization","name":"Example"}]'
                 />
               </div>
               <div className="rounded-lg border border-border bg-background px-4 py-3">

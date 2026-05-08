@@ -319,6 +319,7 @@ assert(navigation.data.navigation, 'navigation() missing navigation data');
 const seo = await client.seo();
 assert(Array.isArray(seo.data.routes), 'seo() missing route metadata');
 assert(seo.data.sitemap?.url, 'seo() missing sitemap URL');
+assert(Array.isArray(seo.data.defaults?.jsonLd), 'seo() missing JSON-LD defaults array');
 
 const media = await client.media({ limit: 5 });
 assert(media.data.media || media.data.pagination, 'media() missing media list data');

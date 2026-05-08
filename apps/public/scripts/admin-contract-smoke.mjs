@@ -1768,6 +1768,21 @@ try {
       assert(invalidSeoSettings.response.status === 400, `${invalidSeoSettings.url} expected invalid SEO 400`);
       assert(invalidSeoSettings.json?.error?.code === 'SEO_VALIDATION', `${invalidSeoSettings.url} expected SEO_VALIDATION`);
 
+      const invalidJsonLdSettings = await request(`/api/admin/sites/${createdSiteId}/seo`, {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          seo: {
+            titleTemplate: 'SEO %s | {siteName}',
+            jsonLd: [{ '@context': 'https://schema.org' }, 'not-an-object'],
+          },
+        }),
+      });
+      assert(invalidJsonLdSettings.response.status === 400, `${invalidJsonLdSettings.url} expected invalid JSON-LD 400`);
+      assert(invalidJsonLdSettings.json?.error?.code === 'SEO_VALIDATION', `${invalidJsonLdSettings.url} expected JSON-LD SEO_VALIDATION`);
+
       const seoSettings = await request(`/api/admin/sites/${createdSiteId}/seo`, {
         method: 'PATCH',
         headers: {
@@ -1779,6 +1794,14 @@ try {
             defaultDescription: 'Fallback SEO description from admin contract.',
             defaultOgImage: '/uploads/sites/contract/social-card.jpg',
             favicon: '/favicon-contract.ico',
+            jsonLd: [
+              {
+                '@context': 'https://schema.org',
+                '@type': 'Organization',
+                name: 'Admin Contract Organization',
+                url: `https://${siteSlug}.example.test`,
+              },
+            ],
             sitemap: {
               enabled: true,
               defaultChangeFrequency: 'monthly',
@@ -1799,12 +1822,14 @@ try {
       const adminSeoSettings = await request(`/api/admin/sites/${createdSiteId}/seo`);
       assert(adminSeoSettings.response.status === 200, `${adminSeoSettings.url} expected SEO settings read 200`);
       assert(adminSeoSettings.json?.data?.seo?.defaultDescription === 'Fallback SEO description from admin contract.', `${adminSeoSettings.url} missing saved SEO defaults`);
+      assert(adminSeoSettings.json?.data?.seo?.jsonLd?.[0]?.['@type'] === 'Organization', `${adminSeoSettings.url} missing saved JSON-LD defaults`);
 
       const seoDiscovery = await request(`/api/sites/${createdSiteId}/seo`);
       assert(seoDiscovery.response.status === 200, `${seoDiscovery.url} expected 200, got ${seoDiscovery.response.status}`);
       assert(seoDiscovery.json?.success === true, `${seoDiscovery.url} expected success envelope`);
       assert(seoDiscovery.json?.data?.routes?.some((route) => route.type === 'page' && route.canonical === `/${pageSlug}-form-write`), `${seoDiscovery.url} missing temporary page SEO route`);
       assert(seoDiscovery.json?.data?.defaults?.description === 'Fallback SEO description from admin contract.', `${seoDiscovery.url} missing SEO default description`);
+      assert(seoDiscovery.json?.data?.defaults?.jsonLd?.[0]?.['@type'] === 'Organization', `${seoDiscovery.url} missing SEO JSON-LD defaults`);
       assert(seoDiscovery.json?.data?.routes?.some((route) => route.title?.startsWith('SEO ') && route.openGraph?.image === '/uploads/sites/contract/social-card.jpg'), `${seoDiscovery.url} missing applied SEO defaults`);
       assert(seoDiscovery.json?.data?.sitemap?.enabled === true, `${seoDiscovery.url} missing sitemap enabled flag`);
       assert(seoDiscovery.json?.data?.sitemap?.includeDynamicRoutes === false, `${seoDiscovery.url} missing dynamic sitemap flag`);

@@ -16,6 +16,7 @@ import {
   buildSeoDiscovery,
   buildSitemapXml,
   sitemapRoutes,
+  siteJsonLd,
   type SeoDiscovery,
   type SeoRoute,
 } from '@/lib/seoDiscovery';
@@ -290,6 +291,7 @@ const buildRepositorySeoDiscovery = async (
         keywords: [],
       }, site).title,
       description: seo?.defaultDescription || site.description || '',
+      jsonLd: siteJsonLd(seo),
       robots: {
         index: seo?.robots?.index !== false,
         follow: seo?.robots?.follow !== false,

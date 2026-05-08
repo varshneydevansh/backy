@@ -60,6 +60,7 @@ export const DEFAULT_SITE_SETTINGS = {
     defaultDescription: '',
     defaultOgImage: '',
     favicon: '',
+    jsonLd: [] as Array<Record<string, unknown>>,
     sitemap: {
       enabled: true,
       defaultChangeFrequency: 'weekly',

@@ -41,6 +41,7 @@ export interface SeoDiscovery {
   defaults: {
     title: string;
     description: string;
+    jsonLd: Array<Record<string, unknown>>;
     robots: {
       index: boolean;
       follow: boolean;
@@ -138,6 +139,16 @@ const clampPriority = (value: unknown): number | undefined => {
 };
 
 const isHomepageRoute = (route: SeoRoute) => route.type === 'page' && route.canonical === '/';
+
+export const siteJsonLd = (
+  seo: Partial<SiteSettings['seo']> | undefined,
+): Array<Record<string, unknown>> => (
+  Array.isArray(seo?.jsonLd)
+    ? seo.jsonLd.filter((entry): entry is Record<string, unknown> => (
+        typeof entry === 'object' && entry !== null && !Array.isArray(entry)
+      ))
+    : []
+);
 
 export const applySeoSitemapAndRobotsSettings = (
   routes: SeoRoute[],
@@ -346,6 +357,7 @@ export const buildSeoDiscovery = (site: StoreSite): SeoDiscovery => {
     defaults: {
       title: applyTitleTemplate(site.name, site, seo),
       description: seo?.defaultDescription || site.description || '',
+      jsonLd: siteJsonLd(seo),
       robots: {
         index: seo?.robots?.index !== false,
         follow: seo?.robots?.follow !== false,

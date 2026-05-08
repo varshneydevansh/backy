@@ -251,6 +251,8 @@ export interface SiteSettings {
     defaultOgImage?: string;
     /** Favicon URL */
     favicon?: string;
+    /** Site-wide JSON-LD objects emitted by public SEO discovery and render payloads */
+    jsonLd?: Array<Record<string, unknown>>;
     /** Sitemap output controls */
     sitemap?: {
       /** Whether sitemap XML should include indexable routes */
