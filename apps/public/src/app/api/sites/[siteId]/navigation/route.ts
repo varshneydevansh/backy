@@ -4,9 +4,10 @@
  * GET /api/sites/[siteId]/navigation
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import type { BackyPage } from '@backy-cms/core';
 import { getSiteByIdOrSlug, getSiteNavigation } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { buildSiteNavigation } from '@/lib/navigation';
 
@@ -19,7 +20,7 @@ interface RouteParams {
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -28,7 +29,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
         message,
       },
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
@@ -66,8 +67,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         limit: 100,
         offset: 0,
       });
+      const cacheRevision = await repositories.cacheInvalidations.latestRevision({
+        siteId: site.id,
+      }) || undefined;
 
-      return NextResponse.json({
+      return publicContractJson({
         success: true,
         requestId,
         data: {
@@ -84,6 +88,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
           }))),
         },
+      }, {
+        requestId,
+        request,
+        cache: 'discovery',
+        siteId: site.id,
+        cacheRevision,
       });
     }
 
@@ -93,7 +103,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    return NextResponse.json({
+    return publicContractJson({
       success: true,
       requestId,
       data: {
@@ -104,6 +114,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
         navigation: getSiteNavigation(site.id),
       },
+    }, {
+      requestId,
+      request,
+      cache: 'discovery',
+      siteId: site.id,
     });
   } catch (error) {
     console.error('Navigation API error:', error);

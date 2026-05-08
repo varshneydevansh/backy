@@ -697,6 +697,17 @@ try {
 
     const publicNavigation = await request(`/api/sites/${createdSiteId}/navigation`);
     assert(publicNavigation.response.status === 200, `${publicNavigation.url} expected 200, got ${publicNavigation.response.status}`);
+    assert(publicNavigation.response.headers.get('x-backy-cache-scope') === 'discovery', `${publicNavigation.url} missing navigation cache scope`);
+    assert(publicNavigation.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${publicNavigation.url} missing navigation contract version`);
+    assert(publicNavigation.response.headers.get('x-backy-site-id') === createdSiteId, `${publicNavigation.url} missing navigation site id header`);
+    assert(publicNavigation.response.headers.get('x-backy-cache-revision'), `${publicNavigation.url} missing navigation cache revision`);
+    const publicNavigationEtag = publicNavigation.response.headers.get('etag');
+    assert(publicNavigationEtag?.startsWith('"backy-'), `${publicNavigation.url} missing navigation etag`);
+    const revalidatedPublicNavigation = await request(`/api/sites/${createdSiteId}/navigation`, {
+      headers: { 'if-none-match': publicNavigationEtag },
+    });
+    assert(revalidatedPublicNavigation.response.status === 304, `${revalidatedPublicNavigation.url} expected navigation 304, got ${revalidatedPublicNavigation.response.status}`);
+    assert(revalidatedPublicNavigation.response.headers.get('etag') === publicNavigationEtag, `${revalidatedPublicNavigation.url} expected matching navigation etag`);
     assert(publicNavigation.json?.success === true, `${publicNavigation.url} expected success envelope`);
     assert(
       publicNavigation.json?.data?.navigation?.primary?.some((item) => (
