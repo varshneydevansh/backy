@@ -38,6 +38,7 @@ import {
   ZoomOut,
   Maximize2,
   Ungroup,
+  X,
 } from 'lucide-react';
 import { cn, generateId } from '@/lib/utils';
 import { Canvas } from '@/components/editor/Canvas';
@@ -271,6 +272,13 @@ export function CanvasEditor({
   const [reusableSectionsError, setReusableSectionsError] = useState<string | null>(null);
   const [isSavingReusableSection, setIsSavingReusableSection] = useState(false);
   const [pendingDeleteReusableSection, setPendingDeleteReusableSection] = useState<ReusableSection | null>(null);
+  const [reusableSectionDraft, setReusableSectionDraft] = useState<{
+    mode: 'save' | 'rename';
+    name: string;
+    sourceElementId?: string;
+    sectionId?: string;
+  } | null>(null);
+  const [editorNotice, setEditorNotice] = useState<string | null>(null);
 
   useEffect(() => {
     const siteId = activeSiteId;
@@ -1395,7 +1403,7 @@ export function CanvasEditor({
     addLibraryItemToCanvas(item, point.x, point.y);
   }, [addLibraryItemToCanvas, getViewportInsertionPoint]);
 
-  const handleSaveSelectionAsReusableSection = useCallback(async () => {
+  const handleSaveSelectionAsReusableSection = useCallback(() => {
     if (!activeSiteId || !selectedId || isSavingReusableSection) {
       return;
     }
@@ -1406,32 +1414,77 @@ export function CanvasEditor({
     }
 
     const fallbackName = selectedElement.name || `${selectedElement.type} section`;
-    const name = window.prompt('Save selected element as a reusable section', fallbackName);
-    if (!name?.trim()) {
+    setReusableSectionDraft({
+      mode: 'save',
+      name: fallbackName,
+      sourceElementId: selectedElement.id,
+    });
+  }, [
+    activeSiteId,
+    elements,
+    findElementById,
+    isSavingReusableSection,
+    selectedId,
+  ]);
+
+  const confirmReusableSectionDraft = useCallback(async () => {
+    if (!activeSiteId || !reusableSectionDraft || isSavingReusableSection) {
       return;
     }
 
-    const root = toReusableTemplateElement(selectedElement);
+    const name = reusableSectionDraft.name.trim();
+    if (!name) {
+      return;
+    }
+
     setIsSavingReusableSection(true);
+    setEditorNotice(null);
+
     try {
-      const section = await createReusableSection(activeSiteId, {
-        name: name.trim(),
-        category: selectedElement.type === 'section' ? 'layout' : 'saved',
-        tags: [mode, selectedElement.type],
-        sourceElementId: selectedElement.id,
-        content: {
-          canvasSize: {
-            width: root.width,
-            height: root.height,
+      if (reusableSectionDraft.mode === 'save') {
+        const selectedElement = reusableSectionDraft.sourceElementId
+          ? findElementById(elements, reusableSectionDraft.sourceElementId)
+          : null;
+
+        if (!selectedElement) {
+          setEditorNotice('Select an element before saving it as a reusable section.');
+          return;
+        }
+
+        const root = toReusableTemplateElement(selectedElement);
+        const section = await createReusableSection(activeSiteId, {
+          name,
+          category: selectedElement.type === 'section' ? 'layout' : 'saved',
+          tags: [mode, selectedElement.type],
+          sourceElementId: selectedElement.id,
+          content: {
+            canvasSize: {
+              width: root.width,
+              height: root.height,
+            },
+            elements: [root],
           },
-          elements: [root],
-        },
-        createdBy: 'admin',
-        updatedBy: 'admin',
-      });
-      setReusableSections((current) => [section, ...current.filter((item) => item.id !== section.id)]);
+          createdBy: 'admin',
+          updatedBy: 'admin',
+        });
+        setReusableSections((current) => [section, ...current.filter((item) => item.id !== section.id)]);
+      } else if (reusableSectionDraft.sectionId) {
+        const section = reusableSections.find((item) => item.id === reusableSectionDraft.sectionId);
+        if (!section || section.name === name) {
+          setReusableSectionDraft(null);
+          return;
+        }
+
+        const updated = await updateReusableSection(activeSiteId, reusableSectionDraft.sectionId, {
+          name,
+          updatedBy: 'admin',
+        });
+        setReusableSections((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      }
+
+      setReusableSectionDraft(null);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Unable to save reusable section');
+      setEditorNotice(error instanceof Error ? error.message : 'Unable to save reusable section');
     } finally {
       setIsSavingReusableSection(false);
     }
@@ -1441,11 +1494,12 @@ export function CanvasEditor({
     findElementById,
     isSavingReusableSection,
     mode,
-    selectedId,
+    reusableSectionDraft,
+    reusableSections,
     toReusableTemplateElement,
   ]);
 
-  const handleRenameReusableSection = useCallback(async (sectionId: string) => {
+  const handleRenameReusableSection = useCallback((sectionId: string) => {
     if (!activeSiteId) {
       return;
     }
@@ -1455,20 +1509,11 @@ export function CanvasEditor({
       return;
     }
 
-    const nextName = window.prompt('Rename reusable section', section.name);
-    if (!nextName?.trim() || nextName.trim() === section.name) {
-      return;
-    }
-
-    try {
-      const updated = await updateReusableSection(activeSiteId, sectionId, {
-        name: nextName.trim(),
-        updatedBy: 'admin',
-      });
-      setReusableSections((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Unable to rename reusable section');
-    }
+    setReusableSectionDraft({
+      mode: 'rename',
+      name: section.name,
+      sectionId,
+    });
   }, [activeSiteId, reusableSections]);
 
   const confirmDeleteReusableSection = useCallback(async (sectionId: string) => {
@@ -1486,7 +1531,7 @@ export function CanvasEditor({
       setReusableSections((current) => current.filter((item) => item.id !== sectionId));
       setPendingDeleteReusableSection(null);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Unable to delete reusable section');
+      setEditorNotice(error instanceof Error ? error.message : 'Unable to delete reusable section');
     }
   }, [activeSiteId, reusableSections]);
 
@@ -1593,7 +1638,7 @@ export function CanvasEditor({
     } catch {
       setHasUnsavedChanges(true);
       if (!silent) {
-        alert('Unable to save page. Please try again.');
+        setEditorNotice('Unable to save page. Please try again.');
       } else {
         console.error('Auto-save failed');
       }
@@ -2563,6 +2608,81 @@ export function CanvasEditor({
             </aside>
           )}
         </div>
+
+        {editorNotice && (
+          <div className="fixed left-1/2 top-4 z-[95] w-[min(560px,calc(100%-2rem))] -translate-x-1/2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <span>{editorNotice}</span>
+              <button
+                type="button"
+                onClick={() => setEditorNotice(null)}
+                className="rounded p-1 text-amber-800 hover:bg-amber-100"
+                aria-label="Dismiss editor notice"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {reusableSectionDraft && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+            <form
+              className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-xl"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void confirmReusableSectionDraft();
+              }}
+            >
+              <div className="flex items-start gap-3">
+                <span className="rounded-lg bg-slate-100 p-2 text-slate-700">
+                  <Layers className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">
+                    {reusableSectionDraft.mode === 'save' ? 'Save reusable section' : 'Rename reusable section'}
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {reusableSectionDraft.mode === 'save'
+                      ? 'Name this saved block so it can be reused from the component library.'
+                      : 'Update the name shown in the reusable sections list.'}
+                  </p>
+                </div>
+              </div>
+              <label className="mt-5 block space-y-2">
+                <span className="text-xs font-semibold text-slate-600">Section name</span>
+                <input
+                  type="text"
+                  value={reusableSectionDraft.name}
+                  onChange={(event) => setReusableSectionDraft((current) => current ? {
+                    ...current,
+                    name: event.target.value,
+                  } : current)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-sky-400"
+                  autoFocus
+                />
+              </label>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReusableSectionDraft(null)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingReusableSection || reusableSectionDraft.name.trim().length === 0}
+                  className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {isSavingReusableSection
+                    ? 'Saving...'
+                    : reusableSectionDraft.mode === 'save' ? 'Save section' : 'Rename section'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
         {pendingDeleteReusableSection && (
           <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
