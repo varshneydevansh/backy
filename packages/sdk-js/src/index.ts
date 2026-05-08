@@ -201,6 +201,7 @@ export interface BackyFormDefinition {
   fields?: Array<Record<string, unknown>>;
   submitUrl?: string;
   detailUrl?: string;
+  definitionUrl?: string;
   submissionsUrl?: string;
   contactsUrl?: string;
   collectionTarget?: Record<string, unknown> | null;
@@ -660,6 +661,20 @@ export class BackyClient {
 
   form(formId: string): Promise<BackyEnvelope<{ form: BackyFormDefinition }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}`);
+  }
+
+  formDefinition(formId: string): Promise<BackyEnvelope<{ schemaVersion: 'backy.form-definition.v1'; form: BackyFormDefinition; submitUrl: string }>> {
+    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/definition`);
+  }
+
+  formDefinitionCached(
+    formId: string,
+    options: BackyConditionalOptions = {},
+  ): Promise<BackyConditionalResult<BackyEnvelope<{ schemaVersion: 'backy.form-definition.v1'; form: BackyFormDefinition; submitUrl: string }>>> {
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/definition`, {
+      ifNoneMatch: options.etag,
+      requestId: options.requestId,
+    });
   }
 
   formSubmissions(formId: string, options: BackyListOptions & { status?: string } = {}): Promise<BackyEnvelope<{ form: BackyFormDefinition; submissions: { data?: BackyFormSubmission[]; [key: string]: unknown }; pagination?: BackyPagination }>> {

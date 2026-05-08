@@ -337,6 +337,16 @@ if (reusableSections.data.sections.length > 0) {
 
 const forms = await client.forms();
 assert(Array.isArray(forms.data.forms), 'forms() missing forms array');
+if (forms.data.forms.length > 0) {
+  const definition = await client.formDefinition(forms.data.forms[0].id);
+  assert(definition.data.schemaVersion === 'backy.form-definition.v1', 'formDefinition() missing schema version');
+  assert(definition.data.form?.id === forms.data.forms[0].id, 'formDefinition() returned wrong form');
+  const cachedDefinition = await client.formDefinitionCached(forms.data.forms[0].id);
+  assert(cachedDefinition.notModified === false, 'formDefinitionCached() first request should return a body');
+  assert(cachedDefinition.meta.etag, 'formDefinitionCached() missing response ETag');
+  const revalidatedDefinition = await client.formDefinitionCached(forms.data.forms[0].id, { etag: cachedDefinition.meta.etag });
+  assert(revalidatedDefinition.notModified === true, 'formDefinitionCached() did not return notModified for matching ETag');
+}
 
 const comments = await client.siteComments({ limit: 5 });
 assert(Array.isArray(comments.data.comments), 'siteComments() missing comments array');
@@ -375,8 +385,11 @@ if (runWriteSmoke) {
       'fixture manifest missing custom URL navigation',
     );
     assert(
-      fixtureManifest.data.modules?.forms?.some?.((form) => form.id === 'sdk-smoke-form'),
-      'fixture manifest missing SDK smoke form',
+      fixtureManifest.data.modules?.forms?.some?.((form) => (
+        form.id === 'sdk-smoke-form'
+        && form.definitionUrl === `/api/sites/${fixture.siteId}/forms/sdk-smoke-form/definition`
+      )),
+      'fixture manifest missing SDK smoke form definition URL',
     );
     assert(
       fixtureManifest.data.modules?.reusableSections?.items?.some?.((section) => section.id === fixture.reusableSectionId),
@@ -428,6 +441,15 @@ if (runWriteSmoke) {
     const form = await writeClient.form('sdk-smoke-form');
     assert(form.data.form?.id === 'sdk-smoke-form', 'form() missing SDK smoke form');
     writeChecks.push('form');
+
+    const formDefinition = await writeClient.formDefinitionCached('sdk-smoke-form');
+    assert(formDefinition.notModified === false, 'formDefinitionCached() should return SDK smoke form body');
+    assert(formDefinition.body?.data?.form?.id === 'sdk-smoke-form', 'formDefinitionCached() missing SDK smoke form');
+    assert(formDefinition.meta.cacheScope === 'discovery', 'formDefinitionCached() expected discovery cache scope');
+    assert(formDefinition.meta.etag, 'formDefinitionCached() SDK smoke missing response ETag');
+    const revalidatedFormDefinition = await writeClient.formDefinitionCached('sdk-smoke-form', { etag: formDefinition.meta.etag });
+    assert(revalidatedFormDefinition.notModified === true, 'formDefinitionCached() SDK smoke revalidation failed');
+    writeChecks.push('formDefinitionCached');
 
     const submittedForm = await writeClient.submitForm('sdk-smoke-form', {
       values: {
@@ -565,6 +587,8 @@ console.log(JSON.stringify({
     'media',
     'reusableSections',
     'forms',
+    'formDefinition',
+    'formDefinitionCached',
     'siteComments',
     'events',
   ],

@@ -176,7 +176,8 @@ Public page payload should include:
 - `POST /api/sites/:siteId/forms/:formId/submissions`
 - `POST /api/public/sites/:siteId/forms/:formId/submissions` (optional alias)
   - `GET /api/sites/:siteId/forms` lists public form definitions with `{ success, requestId, data: { forms, total, pagination } }`; legacy top-level `forms` and `total` remain for compatibility.
-  - `GET /api/sites/:siteId/forms/:formId` and `GET /api/sites/:siteId/forms/:formId/submissions` return `{ success, requestId, data: { form, submissions } }` while preserving legacy top-level `form/submissions`.
+  - `GET /api/sites/:siteId/forms/:formId/definition` returns cacheable `{ success, requestId, data: { schemaVersion: "backy.form-definition.v1", form, submitUrl } }` with ETag/304 support and no submission/contact data.
+  - `GET /api/sites/:siteId/forms/:formId` and `GET /api/sites/:siteId/forms/:formId/submissions` return `{ success, requestId, data: { form, submissions } }` while preserving legacy top-level `form/submissions`; these remain private/no-store because they can include visitor submission data.
   - `GET /api/sites/:siteId/forms/:formId/submissions/:submissionId` and `PATCH /api/sites/:siteId/forms/:formId/submissions/:submissionId` return `{ success, requestId, data: { submission } }` while preserving legacy top-level `submission`.
   - `GET /api/sites/:siteId/forms/:formId/contacts` and `PATCH /api/sites/:siteId/forms/:formId/contacts/:contactId` return `{ success, requestId, data }` envelopes while preserving legacy contact list/status fields.
   - Body: form values map + optional hidden metadata.

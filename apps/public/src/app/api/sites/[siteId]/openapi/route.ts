@@ -460,7 +460,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         [`/api/sites/${site.id}/forms/{formId}`]: {
           get: {
             tags: ['Interactions'],
-            summary: 'Fetch a public form definition',
+            summary: 'Fetch a form detail payload with submission data',
             operationId: 'getBackyForm',
             parameters: [pathParameter('formId', 'Form id', formIds)],
             responses: {
@@ -469,6 +469,24 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 content: {
                   'application/json': {
                     schema: { $ref: '#/components/schemas/FormEnvelope' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        [`/api/sites/${site.id}/forms/{formId}/definition`]: {
+          get: {
+            tags: ['Interactions'],
+            summary: 'Fetch a cacheable public form definition without submissions or contacts',
+            operationId: 'getBackyFormDefinition',
+            parameters: [pathParameter('formId', 'Form id', formIds)],
+            responses: {
+              '200': {
+                description: 'Cacheable form definition',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/FormDefinitionEnvelope' },
                   },
                 },
               },
@@ -1253,6 +1271,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             required: ['form'],
             properties: {
               form: { type: 'object', additionalProperties: true },
+            },
+          }),
+          FormDefinitionEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['schemaVersion', 'form', 'submitUrl'],
+            properties: {
+              schemaVersion: { type: 'string', const: 'backy.form-definition.v1' },
+              form: { type: 'object', additionalProperties: true },
+              submitUrl: { type: 'string' },
             },
           }),
           FormSubmissionsEnvelope: envelopeSchema({

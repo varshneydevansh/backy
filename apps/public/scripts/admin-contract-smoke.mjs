@@ -1886,6 +1886,24 @@ try {
       assert(listedForms.json?.data?.forms?.some((form) => form.id === 'contract-form-write'), `${listedForms.url} missing form in data envelope`);
       assert(listedForms.json?.forms?.some((form) => form.id === 'contract-form-write'), `${listedForms.url} missing legacy forms list`);
 
+      const formDefinition = await request(`/api/sites/${createdSiteId}/forms/contract-form-write/definition`);
+      assert(formDefinition.response.status === 200, `${formDefinition.url} expected 200, got ${formDefinition.response.status}`);
+      assert(formDefinition.response.headers.get('x-backy-cache-scope') === 'discovery', `${formDefinition.url} missing form definition cache scope`);
+      assert(formDefinition.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${formDefinition.url} missing form definition contract version`);
+      assert(formDefinition.response.headers.get('x-backy-schema-version') === 'backy.form-definition.v1', `${formDefinition.url} missing form definition schema version`);
+      assert(formDefinition.response.headers.get('x-backy-site-id') === createdSiteId, `${formDefinition.url} missing form definition site id header`);
+      const formDefinitionEtag = formDefinition.response.headers.get('etag');
+      assert(formDefinitionEtag?.startsWith('"backy-'), `${formDefinition.url} missing form definition etag`);
+      const revalidatedFormDefinition = await request(`/api/sites/${createdSiteId}/forms/contract-form-write/definition`, {
+        headers: { 'if-none-match': formDefinitionEtag },
+      });
+      assert(revalidatedFormDefinition.response.status === 304, `${revalidatedFormDefinition.url} expected form definition 304, got ${revalidatedFormDefinition.response.status}`);
+      assert(revalidatedFormDefinition.response.headers.get('etag') === formDefinitionEtag, `${revalidatedFormDefinition.url} expected matching form definition etag`);
+      assert(formDefinition.json?.data?.schemaVersion === 'backy.form-definition.v1', `${formDefinition.url} missing form definition schema payload`);
+      assert(formDefinition.json?.data?.form?.id === 'contract-form-write', `${formDefinition.url} missing form definition in data envelope`);
+      assert(formDefinition.json?.data?.submitUrl === `/api/sites/${createdSiteId}/forms/contract-form-write/submissions`, `${formDefinition.url} missing form submit URL`);
+      assert(formDefinition.json?.form?.id === 'contract-form-write', `${formDefinition.url} missing legacy form definition`);
+
       const formDetailBeforeSubmission = await request(`/api/sites/${createdSiteId}/forms/contract-form-write`);
       assert(formDetailBeforeSubmission.response.status === 200, `${formDetailBeforeSubmission.url} expected 200, got ${formDetailBeforeSubmission.response.status}`);
       assert(formDetailBeforeSubmission.response.headers.get('x-backy-cache-scope') === 'private', `${formDetailBeforeSubmission.url} expected private form detail cache scope`);
@@ -2239,6 +2257,7 @@ try {
       assert(frontendManifest.json?.data?.endpoints?.mediaDetail === `/api/sites/${createdSiteId}/media/{mediaId}`, `${frontendManifest.url} missing media detail endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.reusableSections === `/api/sites/${createdSiteId}/reusable-sections`, `${frontendManifest.url} missing reusable sections endpoint`);
       assert(frontendManifest.json?.data?.endpoints?.formDetail === `/api/sites/${createdSiteId}/forms/{formId}`, `${frontendManifest.url} missing form detail endpoint template`);
+      assert(frontendManifest.json?.data?.endpoints?.formDefinition === `/api/sites/${createdSiteId}/forms/{formId}/definition`, `${frontendManifest.url} missing form definition endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.formContacts === `/api/sites/${createdSiteId}/forms/{formId}/contacts`, `${frontendManifest.url} missing form contacts endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.commentReport === `/api/sites/${createdSiteId}/comments/{commentId}/report`, `${frontendManifest.url} missing comment report endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.events === `/api/sites/${createdSiteId}/events`, `${frontendManifest.url} missing events endpoint`);
@@ -2277,6 +2296,7 @@ try {
         form.id === 'contract-form-write' &&
         form.collectionTarget?.collectionId === createdCollectionId &&
         form.detailUrl === `/api/sites/${createdSiteId}/forms/contract-form-write` &&
+        form.definitionUrl === `/api/sites/${createdSiteId}/forms/contract-form-write/definition` &&
         form.contactsUrl === `/api/sites/${createdSiteId}/forms/contract-form-write/contacts`
       )), `${frontendManifest.url} missing form collection target manifest`);
       assert(frontendManifest.json?.data?.routePatterns?.some((route) => route.type === 'dynamicCollectionItem'), `${frontendManifest.url} missing dynamic item route pattern`);
@@ -2311,6 +2331,7 @@ try {
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/reusable-sections`]?.get, `${publicOpenApi.url} missing reusable sections list operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/reusable-sections/{sectionId}`]?.get, `${publicOpenApi.url} missing reusable section detail operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/forms/{formId}`]?.get, `${publicOpenApi.url} missing form detail operation`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/forms/{formId}/definition`]?.get, `${publicOpenApi.url} missing form definition operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/forms/{formId}/submissions`]?.get, `${publicOpenApi.url} missing form submission list operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/forms/{formId}/submissions`]?.post, `${publicOpenApi.url} missing form submission operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/forms/{formId}/submissions/{submissionId}`]?.patch, `${publicOpenApi.url} missing form submission review operation`);
@@ -2321,6 +2342,7 @@ try {
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/comments/{commentId}/report`]?.post, `${publicOpenApi.url} missing comment report operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/events`]?.get, `${publicOpenApi.url} missing interaction events operation`);
       assert(publicOpenApi.json?.components?.schemas?.FormSubmissionEnvelope, `${publicOpenApi.url} missing form submission schema`);
+      assert(publicOpenApi.json?.components?.schemas?.FormDefinitionEnvelope, `${publicOpenApi.url} missing form definition schema`);
       assert(publicOpenApi.json?.components?.schemas?.SeoDiscoveryEnvelope, `${publicOpenApi.url} missing SEO discovery schema`);
       assert(publicOpenApi.json?.components?.schemas?.MediaDetailEnvelope, `${publicOpenApi.url} missing media detail schema`);
       assert(publicOpenApi.json?.components?.schemas?.ReusableSectionListEnvelope, `${publicOpenApi.url} missing reusable section list schema`);
