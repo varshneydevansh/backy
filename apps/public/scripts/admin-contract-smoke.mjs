@@ -46,12 +46,23 @@ async function request(pathOrUrl, init) {
     // Keep raw text for diagnostics below.
   }
 
-  return {
+  const result = {
     response,
     text,
     json,
     url,
   };
+  if (pathname.startsWith('/api/admin/') && init?.method !== 'OPTIONS') {
+    assertAdminContract(result);
+  }
+  return result;
+}
+
+function assertAdminContract(result) {
+  assert(result.response.headers.get('x-backy-request-id'), `${result.url} missing request id header`);
+  assert(result.response.headers.get('cache-control') === 'no-store', `${result.url} expected admin no-store cache control`);
+  assert(result.response.headers.get('x-backy-cache-scope') === 'admin', `${result.url} expected admin cache scope`);
+  assert(result.response.headers.get('x-backy-admin-contract-version') === 'backy.admin.v1', `${result.url} missing admin contract version`);
 }
 
 function assertBackyContract(result, scope, label = result.url) {
@@ -168,10 +179,10 @@ try {
   });
 
   await record('admin sites list returns success envelope', async () => {
-    const { response, json, url } = await request('/api/admin/sites?includeUnpublished=true');
-    assert(response.status === 200, `${url} expected 200, got ${response.status}`);
-    assert(json?.success === true, `${url} expected success envelope`);
-    assert(Array.isArray(json?.data?.sites), `${url} expected sites array`);
+    const result = await request('/api/admin/sites?includeUnpublished=true');
+    assert(result.response.status === 200, `${result.url} expected 200, got ${result.response.status}`);
+    assert(result.json?.success === true, `${result.url} expected success envelope`);
+    assert(Array.isArray(result.json?.data?.sites), `${result.url} expected sites array`);
   });
 
   await record('admin sites create validates and persists site', async () => {

@@ -5,6 +5,8 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://127.0.0.1:5173',
 ];
 
+const BACKY_ADMIN_CONTRACT_VERSION = 'backy.admin.v1';
+
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const getAllowedOrigins = () => {
@@ -66,6 +68,7 @@ const adminAuthError = (
     { status },
   );
   applyCorsHeaders(response.headers, origin);
+  applyAdminHeaders(response.headers);
   response.headers.set('x-backy-request-id', requestId);
   return response;
 };
@@ -80,6 +83,12 @@ const applyCorsHeaders = (headers: Headers, origin: string | null) => {
   headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-Id, X-Backy-Admin-Key, X-API-Key');
   headers.set('Access-Control-Max-Age', '86400');
   headers.append('Vary', 'Origin');
+};
+
+const applyAdminHeaders = (headers: Headers) => {
+  headers.set('Cache-Control', 'no-store');
+  headers.set('x-backy-cache-scope', 'admin');
+  headers.set('x-backy-admin-contract-version', BACKY_ADMIN_CONTRACT_VERSION);
 };
 
 export function proxy(request: NextRequest) {
@@ -112,6 +121,9 @@ export function proxy(request: NextRequest) {
 
   const response = NextResponse.next();
   applyCorsHeaders(response.headers, origin);
+  if (isAdminApiRequest(request)) {
+    applyAdminHeaders(response.headers);
+  }
   response.headers.set('x-backy-request-id', requestId);
   return response;
 }
