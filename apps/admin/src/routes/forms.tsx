@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import {
   CheckCircle2,
   ClipboardList,
+  Download,
   ExternalLink,
   FileInput,
   Filter,
   Inbox,
   RefreshCw,
+  Search,
   ShieldCheck,
   Sparkles,
   XCircle,
@@ -47,6 +49,7 @@ function FormsRoute() {
   const [inboxByForm, setInboxByForm] = useState<Record<string, FormInbox>>({});
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<SubmissionStatusFilter>('all');
+  const [submissionQuery, setSubmissionQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,8 +66,29 @@ function FormsRoute() {
   const selectedInbox = selectedForm ? inboxByForm[selectedForm.id] : null;
   const selectedSubmissions = selectedInbox?.submissions || [];
   const filteredSubmissions = useMemo(
-    () => selectedSubmissions.filter((submission) => statusFilter === 'all' || submission.status === statusFilter),
-    [selectedSubmissions, statusFilter],
+    () => selectedSubmissions.filter((submission) => {
+      const statusMatches = statusFilter === 'all' || submission.status === statusFilter;
+      if (!statusMatches) return false;
+
+      const query = submissionQuery.trim().toLowerCase();
+      if (!query) return true;
+
+      const searchable = [
+        submission.id,
+        submission.requestId,
+        submission.status,
+        submission.reviewedBy,
+        submission.collectionRecord?.collectionSlug,
+        submission.collectionRecord?.recordSlug,
+        ...Object.values(submission.values).map(formatSubmissionValue),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return searchable.includes(query);
+    }),
+    [selectedSubmissions, statusFilter, submissionQuery],
   );
   const metrics = useMemo(() => {
     const submissions = Object.values(inboxByForm).flatMap((item) => item.submissions);
@@ -144,6 +168,42 @@ function FormsRoute() {
     } finally {
       setIsUpdatingId(null);
     }
+  };
+
+  const handleExportSubmissions = () => {
+    if (!selectedForm) return;
+
+    const fieldKeys = selectedForm.fields.map((field) => field.key);
+    const header = [
+      'submission_id',
+      'status',
+      'submitted_at',
+      'request_id',
+      'collection_record',
+      ...fieldKeys,
+    ];
+    const rows = filteredSubmissions.map((submission) => [
+      submission.id,
+      submission.status,
+      submission.submittedAt,
+      submission.requestId || '',
+      submission.collectionRecord
+        ? `${submission.collectionRecord.collectionSlug}/${submission.collectionRecord.recordSlug}`
+        : '',
+      ...fieldKeys.map((key) => formatSubmissionValue(submission.values[key])),
+    ]);
+    const csv = [header, ...rows]
+      .map((row) => row.map(csvEscape).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${selectedForm.name || selectedForm.id}-submissions.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -263,7 +323,31 @@ function FormsRoute() {
                   title={selectedForm.title || selectedForm.name}
                   description={selectedForm.description || selectedForm.id}
                   icon={<FileInput className="size-4" />}
-                  action={<StatusBadge status={selectedForm.audience} type="info" />}
+                  action={
+                    <div className="flex flex-wrap items-center gap-2">
+                      {selectedForm.pageId && (
+                        <Link
+                          to="/pages/$pageId/edit"
+                          params={{ pageId: selectedForm.pageId }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+                        >
+                          <ExternalLink className="size-4" />
+                          Page
+                        </Link>
+                      )}
+                      {selectedForm.postId && (
+                        <Link
+                          to="/blog/$postId"
+                          params={{ postId: selectedForm.postId }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+                        >
+                          <ExternalLink className="size-4" />
+                          Blog
+                        </Link>
+                      )}
+                      <StatusBadge status={selectedForm.audience} type="info" />
+                    </div>
+                  }
                 />
                 <PanelContent>
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -298,21 +382,41 @@ function FormsRoute() {
                 description={`${filteredSubmissions.length}/${selectedSubmissions.length} visible`}
                 icon={<Inbox className="size-4" />}
                 action={
-                  <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-muted p-1">
-                    <Filter className="ml-2 size-4 text-muted-foreground" />
-                    {(['all', 'pending', 'approved', 'rejected', 'spam'] as const).map((status) => (
-                      <button
-                        key={status}
-                        type="button"
-                        onClick={() => setStatusFilter(status)}
-                        className={cn(
-                          'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-background hover:text-foreground',
-                          statusFilter === status && 'bg-background text-foreground shadow-sm',
-                        )}
-                      >
-                        {status}
-                      </button>
-                    ))}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative min-w-56">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        type="search"
+                        value={submissionQuery}
+                        onChange={(event) => setSubmissionQuery(event.target.value)}
+                        placeholder="Search submissions..."
+                        className="min-h-10 w-full rounded-lg border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={handleExportSubmissions}
+                      disabled={!selectedForm || filteredSubmissions.length === 0}
+                      iconStart={<Download className="size-4" />}
+                    >
+                      Export CSV
+                    </Button>
+                    <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-muted p-1">
+                      <Filter className="ml-2 size-4 text-muted-foreground" />
+                      {(['all', 'pending', 'approved', 'rejected', 'spam'] as const).map((status) => (
+                        <button
+                          key={status}
+                          type="button"
+                          onClick={() => setStatusFilter(status)}
+                          className={cn(
+                            'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-background hover:text-foreground',
+                            statusFilter === status && 'bg-background text-foreground shadow-sm',
+                          )}
+                        >
+                          {status}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 }
               />
@@ -423,10 +527,18 @@ function SubmissionCard({
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {submission.requestId && <span className="rounded bg-muted px-2 py-1 font-mono">{submission.requestId}</span>}
           {submission.collectionRecord && (
-            <span className="inline-flex items-center gap-1 rounded bg-success/10 px-2 py-1 text-success">
+            <Link
+              to="/collections"
+              search={{
+                siteId: submission.collectionRecord.siteId,
+                collectionId: submission.collectionRecord.collectionId,
+                recordId: submission.collectionRecord.recordId,
+              }}
+              className="inline-flex items-center gap-1 rounded bg-success/10 px-2 py-1 text-success hover:underline"
+            >
               <ExternalLink className="size-3" />
               {submission.collectionRecord.collectionSlug}/{submission.collectionRecord.recordSlug}
-            </span>
+            </Link>
           )}
         </div>
       )}
@@ -440,4 +552,9 @@ const formatSubmissionValue = (value: unknown): string => {
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (Array.isArray(value)) return value.map(formatSubmissionValue).join(', ');
   return JSON.stringify(value);
+};
+
+const csvEscape = (value: unknown): string => {
+  const raw = String(value ?? '').replace(/\r?\n/g, '\\n');
+  return `"${raw.replace(/"/g, '""')}"`;
 };
