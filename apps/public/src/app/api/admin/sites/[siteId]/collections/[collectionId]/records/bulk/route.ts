@@ -13,6 +13,7 @@ import {
   getSiteByIdOrSlug,
   updateAdminCollectionRecord,
 } from '@/lib/backyStore';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -98,6 +99,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             skipped += 1;
           }
         }
+        const cacheInvalidation = deleted > 0
+          ? await recordSiteCacheInvalidation(repositories, {
+              siteId: site.id,
+              scope: 'content',
+              entity: 'collection',
+              entityId: collection.id,
+              reason: 'collection-records-deleted',
+              requestId,
+            })
+          : undefined;
 
         return NextResponse.json({
           success: true,
@@ -108,6 +119,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             updated: 0,
             skipped,
             records: [],
+            cacheInvalidation,
           },
         });
       }
@@ -134,6 +146,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           records.push(saved);
           updated += 1;
         }
+        const cacheInvalidation = updated > 0
+          ? await recordSiteCacheInvalidation(repositories, {
+              siteId: site.id,
+              scope: 'content',
+              entity: 'collection',
+              entityId: collection.id,
+              reason: 'collection-records-status-updated',
+              requestId,
+            })
+          : undefined;
 
         return NextResponse.json({
           success: true,
@@ -144,6 +166,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             updated,
             skipped,
             records,
+            cacheInvalidation,
           },
         });
       }

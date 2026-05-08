@@ -18,6 +18,7 @@ import {
   validateCollectionRecordValues,
   type StoreCollection,
 } from '@/lib/backyStore';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -308,9 +309,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         status: parseStatus(body.status) || 'draft',
         values: toJsonRecord(values),
       })).item;
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'collectionRecord',
+        entityId: record.id,
+        reason: 'collection-record-created',
+        requestId,
+      });
 
       return NextResponse.json(
-        { success: true, requestId, data: { record } },
+        { success: true, requestId, data: { record, cacheInvalidation } },
         { status: 201 },
       );
     }

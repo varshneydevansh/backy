@@ -14,6 +14,7 @@ import {
   getSiteByIdOrSlug,
   listCollections,
 } from '@/lib/backyStore';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import {
   isValidCollectionListRoutePattern,
@@ -210,9 +211,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         fields: toCollectionFields(body.fields),
         permissions: toCollectionPermissions(body.permissions),
       })).item;
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'collection',
+        entityId: collection.id,
+        reason: 'collection-created',
+        requestId,
+      });
 
       return NextResponse.json(
-        { success: true, requestId, data: { collection } },
+        { success: true, requestId, data: { collection, cacheInvalidation } },
         { status: 201 },
       );
     }

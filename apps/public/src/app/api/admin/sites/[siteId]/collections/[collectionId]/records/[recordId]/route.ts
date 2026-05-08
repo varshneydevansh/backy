@@ -17,6 +17,7 @@ import {
   validateCollectionRecordValues,
   type StoreCollection,
 } from '@/lib/backyStore';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -172,8 +173,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ...(parseStatus(body.status) ? { status: parseStatus(body.status) } : {}),
         ...(nextSlug ? { slug: nextSlug } : {}),
       })).item;
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'collectionRecord',
+        entityId: updated.id,
+        reason: 'collection-record-updated',
+        requestId,
+      });
 
-      return NextResponse.json({ success: true, requestId, data: { record: updated } });
+      return NextResponse.json({ success: true, requestId, data: { record: updated, cacheInvalidation } });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -261,6 +270,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       if (!deleted) {
         return errorResponse(404, 'RECORD_NOT_FOUND', 'Collection record not found', requestId);
       }
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'collectionRecord',
+        entityId: record.id,
+        reason: 'collection-record-deleted',
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -268,6 +285,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         data: {
           deleted: true,
           recordId: record.id,
+          cacheInvalidation,
         },
       });
     }
