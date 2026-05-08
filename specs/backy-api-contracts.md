@@ -224,6 +224,7 @@ Public page payload should include:
 - `GET /api/admin/sites/:siteId/readiness`
   - Admin readiness audit for Wix/WordPress-style publish checks.
   - Response uses `{ success, requestId, data: { readiness } }`; legacy top-level `readiness` remains for compatibility.
+  - Page/post readiness includes publish-blocking SEO errors for duplicate canonical paths across non-archived pages and posts.
   - Validates site identity/status, homepage/navigation, theme tokens, media/library presence, collections, reusable sections, per-page canvas dimensions, post content, element count, bounds, SEO title/description/canonical/indexing state.
   - Returns a site score, status label (`ready`, `needs-attention`, `blocked`), summary counts, site checks, page-level checks, and post-level checks so admin UI can block or warn before publishing.
 

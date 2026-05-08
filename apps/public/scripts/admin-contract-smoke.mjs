@@ -446,6 +446,50 @@ try {
       `${pageReadiness.url} missing legacy page readiness checks`,
     );
 
+    const canonicalConflictPage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Canonical Conflict Page',
+        slug: `${pageSlug}-canonical-conflict`,
+        status: 'draft',
+        meta: {
+          title: 'Canonical Conflict Page',
+          description: 'Conflicts with the primary admin contract page.',
+          canonical: `/${pageSlug}`,
+        },
+        content: {
+          elements: [
+            {
+              id: 'canonical-conflict-heading',
+              type: 'heading',
+              x: 100,
+              y: 100,
+              width: 520,
+              height: 80,
+              zIndex: 1,
+              props: { content: 'Canonical conflict' },
+            },
+          ],
+          canvasSize: { width: 1200, height: 900 },
+        },
+      }),
+    });
+    assert(canonicalConflictPage.response.status === 201, `${canonicalConflictPage.url} expected 201, got ${canonicalConflictPage.response.status}`);
+    const canonicalConflictPageId = canonicalConflictPage.json?.data?.page?.id;
+    assert(canonicalConflictPageId, `${canonicalConflictPage.url} missing canonical conflict page id`);
+    const canonicalConflictReadiness = await request(`/api/admin/sites/${createdSiteId}/readiness`);
+    assert(canonicalConflictReadiness.response.status === 200, `${canonicalConflictReadiness.url} expected 200, got ${canonicalConflictReadiness.response.status}`);
+    assert(canonicalConflictReadiness.json?.data?.readiness?.checks?.some((check) => (
+      check.id === `page:${createdPageId}:canonical-conflict`
+      && check.status === 'fail'
+      && check.severity === 'error'
+      && check.details?.canonical === `/${pageSlug}`
+    )), `${canonicalConflictReadiness.url} missing canonical conflict readiness error`);
+    await request(`/api/admin/sites/${createdSiteId}/pages/${canonicalConflictPageId}`, { method: 'DELETE' });
+
     const invalidPage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
       method: 'POST',
       headers: {

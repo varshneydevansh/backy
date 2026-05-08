@@ -278,7 +278,7 @@ export const buildPageReadiness = (page: StorePage): PageReadiness => {
   const canvas = page.content.canvasSize || { width: 0, height: 0 };
   const bounds = countOutOfBoundsElements(page);
   const target = { type: 'page' as const, id: page.id, label: page.title };
-  const canonical = getCanonicalPathForPage(page);
+  const canonical = page.meta?.canonical || getCanonicalPathForPage(page);
   const checks: ReadinessCheck[] = [
     makeCheck(`page:${page.id}:title`, 'page', 'Page title', !isBlank(page.title), 'error', 'Page title is required.', target),
     makeCheck(`page:${page.id}:slug`, 'page', 'Page slug', !isBlank(page.slug), 'error', 'Page slug is required.', target),
