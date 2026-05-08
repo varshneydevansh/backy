@@ -1707,6 +1707,7 @@ try {
       }),
     });
     assert(blockedPublicCreate.response.status === 403, `${blockedPublicCreate.url} expected public create to be forbidden`);
+    assertBackyContract(blockedPublicCreate, 'error');
     assert(blockedPublicCreate.json?.error?.code === 'PUBLIC_CREATE_DISABLED', `${blockedPublicCreate.url} expected PUBLIC_CREATE_DISABLED`);
 
     const enablePublicCreate = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}`, {
@@ -1744,6 +1745,7 @@ try {
       }),
     });
     assert(publicCreateRecord.response.status === 201, `${publicCreateRecord.url} expected 201, got ${publicCreateRecord.response.status}`);
+    assertBackyContract(publicCreateRecord, 'private');
     assert(publicCreateRecord.json?.success === true, `${publicCreateRecord.url} expected success envelope`);
     assert(publicCreateRecord.json?.data?.record?.status === 'draft', `${publicCreateRecord.url} expected public-created records to default to draft`);
     assert(publicCreateRecord.json?.data?.record?.values?.category === 'Standard', `${publicCreateRecord.url} expected validated option value`);

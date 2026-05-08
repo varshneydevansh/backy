@@ -7,7 +7,7 @@
  * POST /api/sites/[siteId]/collections/[collectionId]/records
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import type { BackyJsonValue } from '@backy-cms/core';
 import {
   createAdminCollectionRecord,
@@ -29,6 +29,14 @@ interface RouteParams {
 }
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const privateResponse = <TBody>(body: TBody, requestId: string, status = 200) => (
+  publicContractJson(body, {
+    status,
+    requestId,
+    cache: 'private',
+  })
+);
 
 const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
   publicContractJson(
@@ -251,14 +259,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         values: toJsonRecord(values),
       })).item;
 
-      return NextResponse.json(
+      return privateResponse(
         {
           success: true,
           requestId,
           data: { record },
           record,
         },
-        { status: 201 },
+        requestId,
+        201,
       );
     }
 
@@ -304,14 +313,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
     }
 
-    return NextResponse.json(
+    return privateResponse(
       {
         success: true,
         requestId,
         data: { record },
         record,
       },
-      { status: 201 },
+      requestId,
+      201,
     );
   } catch (error) {
     console.error('Public collection record create API error:', error);
