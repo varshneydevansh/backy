@@ -25,6 +25,7 @@ import {
   ShoppingBag,
   Receipt,
   MessageSquare,
+  Contact,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -69,6 +70,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Products', to: '/products', icon: ShoppingBag },
   { label: 'Orders', to: '/orders', icon: Receipt },
   { label: 'Comments', to: '/comments', icon: MessageSquare },
+  { label: 'Contacts', to: '/contacts', icon: Contact },
   { label: 'Media', to: '/media', icon: Image },
   { label: 'Users', to: '/users', icon: Users },
   { label: 'Settings', to: '/settings', icon: Settings },

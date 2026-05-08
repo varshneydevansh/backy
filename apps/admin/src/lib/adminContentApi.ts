@@ -1,6 +1,6 @@
 import type { BlogPost, Page, Site, User } from '@/stores/mockStore';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
-import type { Comment, CommentStatus, CommentTargetType, SiteNavigationConfig, SiteRedirectRule, SiteSettings } from '@backy-cms/core';
+import type { Comment, CommentStatus, CommentTargetType, Contact, SiteNavigationConfig, SiteRedirectRule, SiteSettings } from '@backy-cms/core';
 
 type AdminSiteStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 
@@ -514,6 +514,33 @@ interface ApiFormSubmissionResponse {
   };
 }
 
+interface ApiListContactsResponse {
+  success: boolean;
+  data?: {
+    formId: string;
+    contacts: Contact[];
+    count: number;
+    pagination?: ApiPagination;
+  };
+  contacts?: Contact[];
+  count?: number;
+  pagination?: ApiPagination;
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiContactResponse {
+  success: boolean;
+  data?: {
+    contact: Contact;
+  };
+  contact?: Contact;
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiPagination {
   total: number;
   limit: number;
@@ -972,6 +999,22 @@ export interface FormSubmissionList {
     offset: number;
     hasMore: boolean;
   };
+}
+
+export type ContactStatus = Contact['status'];
+export type AdminContact = Contact;
+
+export interface ContactListFilters {
+  status?: ContactStatus | 'all';
+  requestId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface ContactListResult {
+  contacts: AdminContact[];
+  count: number;
+  pagination: ApiPagination;
 }
 
 export type CommentModerationStatus = CommentStatus;
@@ -2323,6 +2366,62 @@ export async function updateFormSubmission(
   }
 
   return submission;
+}
+
+export async function listFormContacts(
+  siteId: string,
+  formId: string,
+  filters: ContactListFilters = {},
+): Promise<ContactListResult> {
+  const query = new URLSearchParams();
+  query.set('limit', String(filters.limit || 100));
+  query.set('offset', String(filters.offset || 0));
+  if (filters.status && filters.status !== 'all') query.set('status', filters.status);
+  if (filters.requestId) query.set('requestId', filters.requestId);
+
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/forms/${formId}/contacts?${query.toString()}`);
+  const payload = await readJson<ApiListContactsResponse>(response);
+  const contacts = payload.data?.contacts || payload.contacts;
+  const count = payload.data?.count ?? payload.count ?? contacts?.length ?? 0;
+  const pagination = payload.data?.pagination || payload.pagination || {
+    total: count,
+    limit: filters.limit || contacts?.length || 100,
+    offset: filters.offset || 0,
+    hasMore: false,
+  };
+
+  if (!response.ok || !payload.success || !contacts) {
+    throw new Error(payload.error?.message || 'Unable to load contacts');
+  }
+
+  return {
+    contacts,
+    count,
+    pagination,
+  };
+}
+
+export async function updateContact(
+  siteId: string,
+  formId: string,
+  contactId: string,
+  input: { status: ContactStatus },
+): Promise<AdminContact> {
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/forms/${formId}/contacts/${contactId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiContactResponse>(response);
+  const contact = payload.data?.contact || payload.contact;
+
+  if (!response.ok || !payload.success || !contact) {
+    throw new Error(payload.error?.message || 'Unable to update contact');
+  }
+
+  return contact;
 }
 
 export async function listComments(

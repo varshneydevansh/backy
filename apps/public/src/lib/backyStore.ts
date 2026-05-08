@@ -1791,7 +1791,30 @@ const COMMENT_LIST: Comment[] = [
 ];
 
 const FORM_SUBMISSIONS: FormSubmission[] = [];
-const CONTACT_LIST: Contact[] = [];
+const CONTACT_LIST: Contact[] = [
+  {
+    id: 'contact-demo-jordan',
+    siteId: 'site-demo',
+    formId: 'form-contact',
+    pageId: 'page-contact',
+    postId: null,
+    name: 'Jordan Lee',
+    email: 'jordan@example.com',
+    phone: '+1 555 0100',
+    notes: 'Interested in the starter site template and API handoff.',
+    sourceValues: {
+      name: 'Jordan Lee',
+      email: 'jordan@example.com',
+      message: 'I want to connect a custom frontend to Backy.',
+    },
+    status: 'new',
+    sourceSubmissionId: 'submission-contact-demo',
+    requestId: 'req-demo-contact',
+    sourceIpHash: null,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  },
+];
 const COMMENT_REPORT_BLOCKLIST = new Map<
   string,
   { type: 'email' | 'ip'; value: string; reason: string; actor?: string; requestId?: string; createdAt: string; }
