@@ -30,6 +30,7 @@ import {
   Tablet,
   Smartphone,
   RefreshCw,
+  Trash2,
   Undo,
   Redo,
   Settings,
@@ -269,6 +270,7 @@ export function CanvasEditor({
   const [reusableSectionsLoading, setReusableSectionsLoading] = useState(false);
   const [reusableSectionsError, setReusableSectionsError] = useState<string | null>(null);
   const [isSavingReusableSection, setIsSavingReusableSection] = useState(false);
+  const [pendingDeleteReusableSection, setPendingDeleteReusableSection] = useState<ReusableSection | null>(null);
 
   useEffect(() => {
     const siteId = activeSiteId;
@@ -337,6 +339,7 @@ export function CanvasEditor({
   const [isPreview, setIsPreview] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showReloadConfirm, setShowReloadConfirm] = useState(false);
   const autosaveTimeoutRef = useRef<number | null>(null);
   const changeSequenceRef = useRef(0);
   const pendingTransformRef = useRef<{
@@ -1468,7 +1471,7 @@ export function CanvasEditor({
     }
   }, [activeSiteId, reusableSections]);
 
-  const handleDeleteReusableSection = useCallback(async (sectionId: string) => {
+  const confirmDeleteReusableSection = useCallback(async (sectionId: string) => {
     if (!activeSiteId) {
       return;
     }
@@ -1478,17 +1481,21 @@ export function CanvasEditor({
       return;
     }
 
-    if (!window.confirm(`Delete "${section.name}" from saved sections?`)) {
-      return;
-    }
-
     try {
       await deleteReusableSection(activeSiteId, sectionId);
       setReusableSections((current) => current.filter((item) => item.id !== sectionId));
+      setPendingDeleteReusableSection(null);
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Unable to delete reusable section');
     }
   }, [activeSiteId, reusableSections]);
+
+  const handleDeleteReusableSection = useCallback((sectionId: string) => {
+    const section = reusableSections.find((item) => item.id === sectionId);
+    if (section) {
+      setPendingDeleteReusableSection(section);
+    }
+  }, [reusableSections]);
 
   /**
    * Handle canvas drop
@@ -1605,20 +1612,7 @@ export function CanvasEditor({
     await handleSaveWrapper(nextSettings, true);
   }, [handleSaveWrapper, pageSettings, markChanges]);
 
-  const handleReload = useCallback(() => {
-    if (isSaving) {
-      return;
-    }
-
-    if (hasUnsavedChanges) {
-      const shouldReload = window.confirm(
-        'You have unsaved changes. Reload will discard your current edits. Continue?'
-      );
-      if (!shouldReload) {
-        return;
-      }
-    }
-
+  const performReload = useCallback(() => {
     const nextElements = getInitialElements();
     const nextSettings = getInitialSettings();
 
@@ -1632,10 +1626,24 @@ export function CanvasEditor({
     setHistoryIndex(0);
     setHasUnsavedChanges(false);
     changeSequenceRef.current += 1;
+    setShowReloadConfirm(false);
     if (onChange) {
       onChange(nextElements, nextSettings, initialSize || DEFAULT_CANVAS_SIZE);
     }
-  }, [getInitialElements, getInitialSettings, hasUnsavedChanges, initialSize, isSaving, onChange]);
+  }, [getInitialElements, getInitialSettings, initialSize, onChange]);
+
+  const handleReload = useCallback(() => {
+    if (isSaving) {
+      return;
+    }
+
+    if (hasUnsavedChanges) {
+      setShowReloadConfirm(true);
+      return;
+    }
+
+    performReload();
+  }, [hasUnsavedChanges, isSaving, performReload]);
 
   /**
    * Keyboard shortcuts
@@ -1730,6 +1738,17 @@ export function CanvasEditor({
       if ((e.ctrlKey || e.metaKey) && key === 'd') {
         e.preventDefault();
         handleDuplicate();
+        return;
+      }
+
+      // Ctrl+G / Cmd+G (Group), Shift+Ctrl+G / Shift+Cmd+G (Ungroup)
+      if ((e.ctrlKey || e.metaKey) && key === 'g') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleUngroupSelected();
+        } else {
+          handleGroupSelected();
+        }
       }
     };
 
@@ -1745,6 +1764,8 @@ export function CanvasEditor({
     handleCut,
     handlePaste,
     handleDuplicate,
+    handleGroupSelected,
+    handleUngroupSelected,
     nudgeSelectedElement,
     isPreview,
     isSaving,
@@ -1826,10 +1847,10 @@ export function CanvasEditor({
     <ActiveEditorProvider>
       <div className={cn("flex flex-col bg-slate-100 text-slate-950", className || "fixed inset-0")}>
         {/* Header */}
-        <header className="h-14 bg-white/95 border-b border-slate-200 shadow-sm backdrop-blur flex items-center justify-between px-4">
+        <header className="flex min-h-14 items-center justify-between gap-3 overflow-x-auto border-b border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
           {/* Left */}
           {!hideNavigation ? (
-            <div className="flex items-center gap-4">
+            <div className="flex shrink-0 items-center gap-4">
               <button
                 type="button"
                 onClick={onBack}
@@ -1849,10 +1870,10 @@ export function CanvasEditor({
                 </span>
               )}
             </div>
-          ) : <div className="w-4" />}
+          ) : <div className="w-4 shrink-0" />}
 
           {/* Center - Canvas controls */}
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
             <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
               <button
                 type="button"
@@ -1936,7 +1957,7 @@ export function CanvasEditor({
           </div>
 
           {/* Right */}
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-max shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
             {/* Undo/Redo */}
             <button
               type="button"
@@ -2007,7 +2028,7 @@ export function CanvasEditor({
               onClick={handleGroupSelected}
               disabled={!canGroupSelected}
               className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Group selected layers"
+              title="Group selected layers (Cmd/Ctrl+G)"
               aria-label="Group selected layers"
               data-testid="editor-group-selection"
             >
@@ -2019,7 +2040,7 @@ export function CanvasEditor({
               onClick={handleUngroupSelected}
               disabled={!canUngroupSelected}
               className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Ungroup selected element"
+              title="Ungroup selected element (Shift+Cmd/Ctrl+G)"
               aria-label="Ungroup selected element"
               data-testid="editor-ungroup-selection"
             >
@@ -2542,6 +2563,74 @@ export function CanvasEditor({
             </aside>
           )}
         </div>
+
+        {pendingDeleteReusableSection && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
+              <div className="flex items-start gap-3">
+                <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                  <Trash2 className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">Delete {pendingDeleteReusableSection.name}?</h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    This removes the saved section from the component library. Existing canvas layers will stay where they are.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPendingDeleteReusableSection(null)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void confirmDeleteReusableSection(pendingDeleteReusableSection.id)}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+                >
+                  Delete section
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showReloadConfirm && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
+              <div className="flex items-start gap-3">
+                <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
+                  <RefreshCw className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">Reload editor?</h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Reloading will discard your current unsaved edits and reset the canvas to the last loaded version.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowReloadConfirm(false)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={performReload}
+                  className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700"
+                >
+                  Reload editor
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <PageSettingsModal
           isOpen={isSettingsOpen}
