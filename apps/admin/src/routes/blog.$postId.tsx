@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, Archive, ArrowLeft, CheckCircle2, ExternalLink, Eye, FileText, History, RefreshCw, RotateCcw, Save, Trash2 } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, ExternalLink, Eye, Globe, History, PenLine, RefreshCw, RotateCcw, Save, Tags, Trash2, UserRound } from 'lucide-react';
 import {
     archiveBlogPost,
     createBlogPostPreview,
@@ -28,8 +28,12 @@ import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore, type BlogPost, type ContentStatus } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
+import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
 import { cn } from '@/lib/utils';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Button } from '@/components/ui/Button';
+import { Notice } from '@/components/ui/Notice';
+import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import type { CanvasElement } from '@/types/editor';
 import type { CanvasSize } from '@/types/editor';
 import type { PageSettings } from '@/components/editor/PageSettingsModal';
@@ -430,266 +434,283 @@ function EditBlogPostPage() {
         : readinessBlocked
             ? 'border-red-200 bg-red-50 text-red-900'
             : 'border-amber-200 bg-amber-50 text-amber-900';
+    const selectedAuthor = authors.find((author) => author.id === selectedAuthorId);
+    const selectedSite = sites.find((site) => (site.publicSiteId || site.id) === activeSiteId);
+    const localReadinessChecks = [
+        { label: 'Title', complete: title.trim().length > 0 },
+        { label: 'Slug', complete: slug.trim().length > 0 },
+        { label: 'Summary', complete: excerpt.trim().length >= 24 },
+        { label: 'Design', complete: canvasElements.length > 0 },
+        { label: 'Schedule', complete: status !== 'scheduled' || Boolean(scheduledAt) },
+    ];
+    const localReadyCount = localReadinessChecks.filter((check) => check.complete).length;
+    const canSave = title.trim().length > 0 && slug.trim().length > 0 && (status !== 'scheduled' || Boolean(scheduledAt));
+    const submitLabel = status === 'published' ? 'Save published post' : status === 'scheduled' ? 'Schedule changes' : status === 'archived' ? 'Save archived post' : 'Save draft';
 
     return (
         <PageShell
             title={
                 <div className="flex items-center gap-4">
-                    <button onClick={() => navigate({ to: '/blog' })} className="p-2 rounded-lg hover:bg-accent border border-border bg-background">
+                    <button onClick={() => navigate({ to: '/blog' })} className="rounded-lg border border-border bg-background p-2 hover:bg-accent">
                         <ArrowLeft className="w-5 h-5" />
                     </button>
                     <span>Edit Blog Post</span>
                 </div>
             }
-            description="Update your article."
+            description="Edit the article, its publishing state, and its public design in one workspace."
         >
-            <div className="max-w-[1400px] mx-auto pb-20">
+            <div className="mx-auto w-full max-w-[1760px] pb-24">
                 {(loadError || saveWarning) && (
-                    <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <Notice tone="warning" className="mb-4">
                         {saveWarning || `${loadError} Using the local post copy.`}
-                    </div>
+                    </Notice>
+                )}
+                {workflowNotice && (
+                    <Notice tone="success" className="mb-4">
+                        {workflowNotice}
+                    </Notice>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-8">
-
-                    {/* Header Section */}
-                    <div className="bg-card border border-border rounded-xl p-8 space-y-6 shadow-sm">
-
-                        <div className="flex justify-between items-start gap-4">
-                            <div className="flex-1">
-                                {/* Title Input */}
-                                <input
-                                    type="text"
-                                    value={title}
-                                    onChange={(e) => setTitle(e.target.value)}
-                                    placeholder="Post Title"
-                                    className="w-full text-4xl font-bold bg-transparent border-none placeholder:text-muted-foreground/50 focus:ring-0 px-0"
-                                />
-                            </div>
-                            <div className="flex flex-wrap items-center justify-end gap-2">
-                                <StatusBadge status={status} />
-                                <button
-                                    type="button"
-                                    disabled={isPreviewBusy}
-                                    onClick={() => void generatePreview()}
-                                    className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    <Eye className="w-4 h-4" />
-                                    Preview
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={isWorkflowBusy || readinessLoading || readinessBlocked || status === 'published'}
-                                    onClick={() => void applyWorkflow('publish')}
-                                    className="inline-flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                    title={readinessBlocked ? 'Resolve post readiness errors before publishing' : 'Publish post'}
-                                >
-                                    <CheckCircle2 className="w-4 h-4" />
-                                    Publish
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={isWorkflowBusy || status === 'archived'}
-                                    onClick={() => void applyWorkflow('archive')}
-                                    className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    <Archive className="w-4 h-4" />
-                                    Archive
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => void handleDelete()}
-                                    className="text-destructive hover:bg-destructive/10 p-2 rounded-lg"
-                                    title="Delete Post"
-                                >
-                                    <Trash2 className="w-5 h-5" />
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Slug Input */}
-                        <div className="flex items-center text-sm text-muted-foreground gap-2">
-                            <span className="font-mono">/blog/</span>
-                            <input
-                                type="text"
-                                value={slug}
-                                onChange={(e) => setSlug(e.target.value)}
-                                className="bg-transparent border-none focus:ring-0 p-0 text-foreground font-mono w-full"
-                                placeholder="post-slug"
+                <form onSubmit={handleSubmit} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
+                    <div className="min-w-0 space-y-6">
+                        <Panel className="overflow-hidden">
+                            <PanelHeader
+                                title="Editorial draft"
+                                description="Title, canonical URL, and list/SEO summary."
+                                icon={<PenLine className="size-4" />}
+                                action={<StatusBadge status={status} />}
                             />
-                        </div>
-                        {previewUrl && (
-                            <a
-                                href={previewUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex max-w-full items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                            >
-                                <span className="truncate">
-                                    Preview expires {previewExpiresAt ? new Date(previewExpiresAt).toLocaleTimeString() : 'soon'}
-                                </span>
-                                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                            </a>
-                        )}
-                        {(postReadiness || readinessLoading || readinessError) && (
-                            <div className={cn('rounded-lg border px-4 py-3 text-sm', readinessTone)}>
-                                <div className="flex flex-wrap items-center justify-between gap-3">
-                                    <div className="flex min-w-0 items-center gap-2">
-                                        {readinessBlocked ? (
-                                            <AlertTriangle className="h-4 w-4 shrink-0" />
-                                        ) : (
-                                            <CheckCircle2 className="h-4 w-4 shrink-0" />
-                                        )}
-                                        <div className="min-w-0">
-                                            <div className="font-medium">
-                                                Readiness {postReadiness ? `${postReadiness.score}%` : 'checking'}
-                                            </div>
-                                            <div className="text-xs opacity-80">
-                                                {postReadiness
-                                                    ? `${postReadiness.elementCount} elements${postReadiness.canvasSize ? ` · ${postReadiness.canvasSize.width}x${postReadiness.canvasSize.height}` : ''}`
-                                                    : readinessError || 'Loading checks...'}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => void loadPostReadiness()}
-                                        disabled={readinessLoading}
-                                        className="inline-flex items-center gap-2 rounded-lg border border-current/20 px-3 py-1.5 text-xs hover:bg-white/40 disabled:opacity-50"
-                                    >
-                                        <RefreshCw className={cn('h-3.5 w-3.5', readinessLoading && 'animate-spin')} />
-                                        Refresh
-                                    </button>
-                                </div>
-                                {readinessError && (
-                                    <div className="mt-2 text-xs">{readinessError}</div>
-                                )}
-                                {readinessFindings.length > 0 && (
-                                    <div className="mt-3 grid gap-1 text-xs">
-                                        {readinessFindings.slice(0, 4).map((check) => (
-                                            <div key={check.id} className="flex items-start gap-2">
-                                                <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
-                                                <span>{check.message}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
-                    {(workflowNotice || revisions.length > 0) && (
-                        <div className="bg-card border border-border rounded-xl p-6">
-                            <div className="flex items-center gap-2 mb-4 font-semibold">
-                                <History className="w-4 h-4" />
-                                <span>Revision History</span>
-                            </div>
-                            {workflowNotice && (
-                                <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-                                    {workflowNotice}
-                                </div>
-                            )}
-                            {revisions.length === 0 ? (
-                                <div className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-                                    No saved revisions yet.
-                                </div>
-                            ) : (
-                                <div className="grid gap-3 md:grid-cols-2">
-                                    {revisions.slice(0, 6).map((revision) => (
-                                        <div key={revision.id} className="rounded-lg border border-border px-4 py-3">
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div className="min-w-0">
-                                                    <div className="truncate font-medium">{revision.note || 'Revision snapshot'}</div>
-                                                    <div className="text-xs text-muted-foreground">
-                                                        {new Date(revision.createdAt).toLocaleString()} · {revision.snapshotStatus}
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    disabled={isWorkflowBusy}
-                                                    onClick={() => void restoreRevision(revision)}
-                                                    className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
-                                                    title="Restore revision"
-                                                >
-                                                    <RotateCcw className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Canvas Area (The "Content Place") */}
-                    <div className="h-[800px] border border-border rounded-xl overflow-hidden bg-background shadow-sm relative">
-                        <CanvasEditor
-                            mode="blog"
-                            initialElements={initialElements}
-                            initialSettings={dummySettings}
-                            initialSize={canvasSize}
-                            onSave={() => { }}
-                            onChange={(elements, _settings, size) => {
-                                setCanvasElements(elements);
-                                if (size) setCanvasSize(size);
-                            }}
-                            className="h-full w-full"
-                            hideNavigation={true}
-                            hideSettings={true}
-                            hideSave={true}
-                            mediaContext={{
-                              siteId: activeSiteId,
-                              scope: 'post',
-                              targetId: postId,
-                              targetLabel: post.title,
-                            }}
-                        />
-                    </div>
-
-                    {/* Settings Panel */}
-                    <div className="bg-card border border-border rounded-xl p-6">
-                        <div className="flex items-center gap-2 mb-4 font-semibold">
-                            <FileText className="w-4 h-4" />
-                            <span>Post Settings</span>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label className="block text-sm font-medium mb-2">Status</label>
-                                <select
-                                    value={status}
-                                    onChange={(e) => {
-                                        const nextStatus = e.target.value as ContentStatus;
-                                        setStatus(nextStatus);
-                                        if (nextStatus !== 'scheduled') {
-                                            setScheduledAt(null);
-                                        }
-                                    }}
-                                    className="w-full px-4 py-2.5 rounded-lg border bg-background"
-                                >
-                                    <option value="draft">Draft</option>
-                                    <option value="published">Published</option>
-                                    <option value="scheduled">Scheduled</option>
-                                    <option value="archived">Archived</option>
-                                </select>
-                            </div>
-                            {status === 'scheduled' && (
-                                <div>
-                                    <label className="block text-sm font-medium mb-2">Publish Date</label>
+                            <PanelContent className="space-y-5">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium text-muted-foreground">Post title</label>
                                     <input
-                                        type="datetime-local"
-                                        value={toDateTimeLocalValue(scheduledAt)}
-                                        onChange={(e) => setScheduledAt(fromDateTimeLocalValue(e.target.value))}
-                                        className="w-full px-4 py-2.5 rounded-lg border bg-background"
-                                        required
+                                        type="text"
+                                        value={title}
+                                        onChange={(e) => setTitle(e.target.value)}
+                                        placeholder="Untitled post"
+                                        className="w-full rounded-lg border-0 bg-transparent px-0 text-4xl font-semibold tracking-normal placeholder:text-muted-foreground/45 focus:outline-none focus:ring-0"
                                     />
                                 </div>
-                            )}
-                            <div>
-                                <label className="block text-sm font-medium mb-2">Author</label>
+
+                                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                                    <span className="font-mono text-muted-foreground">/blog/</span>
+                                    <input
+                                        type="text"
+                                        value={slug}
+                                        onChange={(e) => setSlug(e.target.value)}
+                                        className="min-w-48 flex-1 border-0 bg-transparent p-0 font-mono text-foreground focus:outline-none focus:ring-0"
+                                        placeholder="post-slug"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium text-muted-foreground">Excerpt</label>
+                                    <textarea
+                                        value={excerpt}
+                                        onChange={(e) => setExcerpt(e.target.value)}
+                                        rows={3}
+                                        className="w-full resize-none rounded-lg border bg-background px-4 py-3 text-sm leading-6 focus:outline-none focus:ring-2 focus:ring-ring"
+                                        placeholder="Short summary for blog lists, feeds, and SEO previews."
+                                    />
+                                    <div className="text-xs text-muted-foreground">{excerpt.length} characters</div>
+                                </div>
+                            </PanelContent>
+                        </Panel>
+
+                        <EditorWorkspaceFrame
+                            title="Post design canvas"
+                            description="Design the public post page with the same component, layer, media, grouping, and data-binding controls used by pages."
+                            meta={
+                                <>
+                                    <span className="rounded bg-muted px-2 py-1 tabular-nums">
+                                        {canvasSize.width} x {canvasSize.height}px
+                                    </span>
+                                    <span className="rounded bg-muted px-2 py-1">
+                                        {canvasElements.length} root layer{canvasElements.length === 1 ? '' : 's'}
+                                    </span>
+                                    <span className="rounded bg-muted px-2 py-1">
+                                        Cmd/Ctrl+G grouping
+                                    </span>
+                                </>
+                            }
+                            className="relative min-h-[760px] xl:h-[calc(100vh-180px)] xl:min-h-[860px]"
+                        >
+                            <CanvasEditor
+                                mode="blog"
+                                initialElements={initialElements}
+                                initialSettings={dummySettings}
+                                initialSize={canvasSize}
+                                onSave={() => { }}
+                                onChange={(elements, _settings, size) => {
+                                    setCanvasElements(elements);
+                                    if (size) setCanvasSize(size);
+                                }}
+                                className="h-full w-full"
+                                hideNavigation={true}
+                                hideSettings={true}
+                                hideSave={true}
+                                mediaContext={{
+                                  siteId: activeSiteId,
+                                  scope: 'post',
+                                  targetId: postId,
+                                  targetLabel: post.title,
+                                }}
+                            />
+                        </EditorWorkspaceFrame>
+                    </div>
+
+                    <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
+                        <Panel>
+                            <PanelHeader
+                                title="Publish"
+                                description={selectedSite ? selectedSite.name : activeSiteId}
+                                icon={<CalendarClock className="size-4" />}
+                            />
+                            <PanelContent className="space-y-4">
+                                <div className="grid grid-cols-4 gap-1 rounded-lg border border-border bg-muted p-1">
+                                    {(['draft', 'published', 'scheduled', 'archived'] as const).map((nextStatus) => (
+                                        <button
+                                            key={nextStatus}
+                                            type="button"
+                                            onClick={() => {
+                                                setStatus(nextStatus);
+                                                if (nextStatus !== 'scheduled') {
+                                                    setScheduledAt(null);
+                                                }
+                                            }}
+                                            className={cn(
+                                                'rounded-md px-2 py-2 text-xs font-medium capitalize transition-colors',
+                                                status === nextStatus
+                                                    ? 'bg-background text-foreground shadow-sm'
+                                                    : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
+                                            )}
+                                        >
+                                            {nextStatus}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {status === 'scheduled' && (
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-medium text-muted-foreground">Publish date</label>
+                                        <input
+                                            type="datetime-local"
+                                            value={toDateTimeLocalValue(scheduledAt)}
+                                            onChange={(e) => setScheduledAt(fromDateTimeLocalValue(e.target.value))}
+                                            className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                                            required
+                                        />
+                                    </div>
+                                )}
+
+                                {(postReadiness || readinessLoading || readinessError) && (
+                                    <div className={cn('rounded-lg border px-4 py-3 text-sm', readinessTone)}>
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="flex min-w-0 items-start gap-2">
+                                                {readinessBlocked ? (
+                                                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                                ) : (
+                                                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                                                )}
+                                                <div className="min-w-0">
+                                                    <div className="font-medium">
+                                                        Readiness {postReadiness ? `${postReadiness.score}%` : `${localReadyCount}/${localReadinessChecks.length}`}
+                                                    </div>
+                                                    <div className="text-xs opacity-80">
+                                                        {postReadiness
+                                                            ? `${postReadiness.elementCount} elements${postReadiness.canvasSize ? ` · ${postReadiness.canvasSize.width}x${postReadiness.canvasSize.height}` : ''}`
+                                                            : readinessError || 'Loading checks...'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => void loadPostReadiness()}
+                                                disabled={readinessLoading}
+                                                className="rounded-lg border border-current/20 p-1.5 hover:bg-white/40 disabled:opacity-50"
+                                                title="Refresh readiness"
+                                            >
+                                                <RefreshCw className={cn('h-3.5 w-3.5', readinessLoading && 'animate-spin')} />
+                                            </button>
+                                        </div>
+                                        {readinessError && <div className="mt-2 text-xs">{readinessError}</div>}
+                                        {readinessFindings.length > 0 && (
+                                            <div className="mt-3 grid gap-1 text-xs">
+                                                {readinessFindings.slice(0, 4).map((check) => (
+                                                    <div key={check.id} className="flex items-start gap-2">
+                                                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+                                                        <span>{check.message}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                <div className="grid gap-2">
+                                    <Button type="submit" disabled={isLoading || !canSave} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
+                                        {isLoading ? 'Saving...' : submitLabel}
+                                    </Button>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Button
+                                            onClick={() => void generatePreview()}
+                                            disabled={isPreviewBusy}
+                                            variant="outline"
+                                            iconStart={<Eye className="size-4" />}
+                                        >
+                                            Preview
+                                        </Button>
+                                        <Button
+                                            onClick={() => void applyWorkflow('publish')}
+                                            disabled={isWorkflowBusy || readinessLoading || readinessBlocked || status === 'published'}
+                                            variant="secondary"
+                                            iconStart={<CheckCircle2 className="size-4" />}
+                                            title={readinessBlocked ? 'Resolve post readiness errors before publishing' : 'Publish post'}
+                                        >
+                                            Publish
+                                        </Button>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Button
+                                            onClick={() => void applyWorkflow('archive')}
+                                            disabled={isWorkflowBusy || status === 'archived'}
+                                            variant="outline"
+                                            iconStart={<Archive className="size-4" />}
+                                        >
+                                            Archive
+                                        </Button>
+                                        <Button onClick={() => navigate({ to: '/blog' })} variant="outline">
+                                            Discard
+                                        </Button>
+                                    </div>
+                                    <Button onClick={() => void handleDelete()} variant="danger" iconStart={<Trash2 className="size-4" />} className="w-full">
+                                        Delete post
+                                    </Button>
+                                </div>
+
+                                {previewUrl && (
+                                    <a
+                                        href={previewUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex max-w-full items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                                    >
+                                        <span className="truncate">
+                                            Preview expires {previewExpiresAt ? new Date(previewExpiresAt).toLocaleTimeString() : 'soon'}
+                                        </span>
+                                        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                                    </a>
+                                )}
+                            </PanelContent>
+                        </Panel>
+
+                        <Panel>
+                            <PanelHeader title="Author" icon={<UserRound className="size-4" />} />
+                            <PanelContent className="space-y-2">
                                 <select
                                     value={selectedAuthorId}
-                                    onChange={(e) => setSelectedAuthorId(e.target.value)}
-                                    className="w-full px-4 py-2.5 rounded-lg border bg-background"
+                                    onChange={(event) => setSelectedAuthorId(event.target.value)}
+                                    className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                                 >
                                     {authors.length === 0 ? (
                                         <option value={selectedAuthorId}>{selectedAuthorId}</option>
@@ -699,79 +720,111 @@ function EditBlogPostPage() {
                                         </option>
                                     ))}
                                 </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-2">Categories</label>
-                                <div className="grid gap-2 rounded-lg border bg-background p-3">
-                                    {categories.length === 0 ? (
-                                        <div className="text-sm text-muted-foreground">No categories yet.</div>
-                                    ) : categories.map((category) => (
-                                        <label key={category.id} className="flex items-center gap-2 text-sm">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedCategoryIds.includes(category.id)}
-                                                onChange={() => toggleSelection(category.id, selectedCategoryIds, setSelectedCategoryIds)}
-                                            />
-                                            <span>{category.name}</span>
-                                        </label>
-                                    ))}
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <Globe className="size-3.5" />
+                                    <span>{selectedAuthor?.postCount ?? 0} existing post{(selectedAuthor?.postCount ?? 0) === 1 ? '' : 's'}</span>
                                 </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-2">Tags</label>
-                                <div className="grid gap-2 rounded-lg border bg-background p-3">
-                                    {tags.length === 0 ? (
-                                        <div className="text-sm text-muted-foreground">No tags yet.</div>
-                                    ) : tags.map((tag) => (
-                                        <label key={tag.id} className="flex items-center gap-2 text-sm">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedTagIds.includes(tag.id)}
-                                                onChange={() => toggleSelection(tag.id, selectedTagIds, setSelectedTagIds)}
-                                            />
-                                            <span>{tag.name}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-2">Excerpt</label>
-                                <textarea
-                                    value={excerpt}
-                                    onChange={(e) => setExcerpt(e.target.value)}
-                                    rows={2}
-                                    className="w-full px-4 py-2.5 rounded-lg border bg-background resize-none"
-                                    placeholder="Short summary..."
+                            </PanelContent>
+                        </Panel>
+
+                        <Panel>
+                            <PanelHeader title="Taxonomy" icon={<Tags className="size-4" />} />
+                            <PanelContent className="space-y-5">
+                                <TaxonomyPicker
+                                    title="Categories"
+                                    emptyLabel="No categories yet."
+                                    items={categories}
+                                    selectedIds={selectedCategoryIds}
+                                    onToggle={(id) => toggleSelection(id, selectedCategoryIds, setSelectedCategoryIds)}
                                 />
-                            </div>
-                        </div>
-                    </div>
+                                <TaxonomyPicker
+                                    title="Tags"
+                                    emptyLabel="No tags yet."
+                                    items={tags}
+                                    selectedIds={selectedTagIds}
+                                    onToggle={(id) => toggleSelection(id, selectedTagIds, setSelectedTagIds)}
+                                />
+                            </PanelContent>
+                        </Panel>
 
-                    {/* Footer Actions */}
-                    <div className="flex justify-end gap-3 sticky bottom-4 z-50">
-                        <button
-                            type="button"
-                            onClick={() => navigate({ to: '/blog' })}
-                            className="px-6 py-2.5 rounded-lg border bg-background hover:bg-accent shadow-sm"
-                        >
-                            Discard
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={isLoading || !title}
-                            className={cn(
-                                'flex items-center gap-2 px-6 py-2.5 rounded-lg',
-                                'bg-primary text-primary-foreground font-medium',
-                                'hover:bg-primary/90 disabled:opacity-50 shadow-md'
-                            )}
-                        >
-                            <Save className="w-4 h-4" />
-                            {isLoading ? 'Saving...' : 'Save Changes'}
-                        </button>
-                    </div>
-
+                        <Panel>
+                            <PanelHeader title="Revisions" icon={<History className="size-4" />} />
+                            <PanelContent>
+                                {revisions.length === 0 ? (
+                                    <div className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+                                        No saved revisions yet.
+                                    </div>
+                                ) : (
+                                    <div className="grid gap-2">
+                                        {revisions.slice(0, 6).map((revision) => (
+                                            <div key={revision.id} className="rounded-lg border border-border px-3 py-2">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <div className="truncate text-sm font-medium">{revision.note || 'Revision snapshot'}</div>
+                                                        <div className="text-xs text-muted-foreground">
+                                                            {new Date(revision.createdAt).toLocaleString()} · {revision.snapshotStatus}
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        disabled={isWorkflowBusy}
+                                                        onClick={() => void restoreRevision(revision)}
+                                                        className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                                                        title="Restore revision"
+                                                    >
+                                                        <RotateCcw className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </PanelContent>
+                        </Panel>
+                    </aside>
                 </form>
             </div>
         </PageShell>
+    );
+}
+
+interface TaxonomyPickerProps {
+    title: string;
+    emptyLabel: string;
+    items: Array<BlogCategory | BlogTag>;
+    selectedIds: string[];
+    onToggle: (id: string) => void;
+}
+
+function TaxonomyPicker({ title, emptyLabel, items, selectedIds, onToggle }: TaxonomyPickerProps) {
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+                <label className="text-xs font-medium text-muted-foreground">{title}</label>
+                <span className="text-xs text-muted-foreground">{selectedIds.length} selected</span>
+            </div>
+            <div className="flex min-h-12 flex-wrap gap-2 rounded-lg border border-border bg-background p-3">
+                {items.length === 0 ? (
+                    <span className="text-sm text-muted-foreground">{emptyLabel}</span>
+                ) : items.map((item) => {
+                    const selected = selectedIds.includes(item.id);
+                    return (
+                        <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => onToggle(item.id)}
+                            className={cn(
+                                'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+                                selected
+                                    ? 'border-primary bg-primary text-primary-foreground'
+                                    : 'border-border bg-muted text-muted-foreground hover:bg-accent hover:text-foreground',
+                            )}
+                        >
+                            {item.name}
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
     );
 }
