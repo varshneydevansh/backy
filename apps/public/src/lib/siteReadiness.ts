@@ -351,6 +351,97 @@ export const buildBlogPostReadiness = (post: StoreBlogPost): BlogPostReadiness =
   };
 };
 
+const normalizeCanonicalPath = (path: string): string => {
+  const trimmed = path.trim();
+  const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return withLeadingSlash.length > 1 ? withLeadingSlash.replace(/\/+$/, '') : '/';
+};
+
+const withCanonicalConflictChecks = (
+  pages: PageReadiness[],
+  posts: BlogPostReadiness[],
+) => {
+  const routeRefs = [
+    ...pages
+      .filter((page) => page.status !== 'archived')
+      .map((page) => ({
+        kind: 'page' as const,
+        id: page.id,
+        label: page.title,
+        path: normalizeCanonicalPath(page.path),
+      })),
+    ...posts
+      .filter((post) => post.status !== 'archived')
+      .map((post) => ({
+        kind: 'post' as const,
+        id: post.id,
+        label: post.title,
+        path: normalizeCanonicalPath(post.path),
+      })),
+  ];
+
+  const routesByPath = new Map<string, typeof routeRefs>();
+  for (const routeRef of routeRefs) {
+    routesByPath.set(routeRef.path, [...(routesByPath.get(routeRef.path) || []), routeRef]);
+  }
+
+  const conflictChecks = new Map<string, ReadinessCheck>();
+  for (const [canonical, refs] of routesByPath.entries()) {
+    if (refs.length < 2) {
+      continue;
+    }
+
+    for (const ref of refs) {
+      const conflicts = refs
+        .filter((item) => item.id !== ref.id)
+        .map((item) => ({ type: item.kind, id: item.id, label: item.label }));
+      const target = { type: ref.kind, id: ref.id, label: ref.label };
+
+      conflictChecks.set(`${ref.kind}:${ref.id}`, makeCheck(
+        `${ref.kind}:${ref.id}:canonical-conflict`,
+        'seo',
+        'Unique canonical path',
+        false,
+        'error',
+        `Canonical path "${canonical}" is shared with another route.`,
+        target,
+        { canonical, conflicts },
+      ));
+    }
+  }
+
+  return {
+    pages: pages.map((page) => {
+      const conflictCheck = conflictChecks.get(`page:${page.id}`);
+      if (!conflictCheck) {
+        return page;
+      }
+      const checks = [...page.checks, conflictCheck];
+      const summary = summarizeChecks(checks);
+      return {
+        ...page,
+        checks,
+        score: summary.score,
+        statusLabel: summary.statusLabel,
+      };
+    }),
+    posts: posts.map((post) => {
+      const conflictCheck = conflictChecks.get(`post:${post.id}`);
+      if (!conflictCheck) {
+        return post;
+      }
+      const checks = [...post.checks, conflictCheck];
+      const summary = summarizeChecks(checks);
+      return {
+        ...post,
+        checks,
+        score: summary.score,
+        statusLabel: summary.statusLabel,
+      };
+    }),
+  };
+};
+
 export const buildSiteReadiness = (site: StoreSite): SiteReadiness => {
   const pageSummaries = getPageSummary(site.id, { includeUnpublished: true });
   const pages = pageSummaries
@@ -365,8 +456,12 @@ export const buildSiteReadiness = (site: StoreSite): SiteReadiness => {
   const navigation = getSiteNavigation(site.id, { includeUnpublished: true }).primary;
 
   const siteTarget = { type: 'site' as const, id: site.id, label: site.name };
-  const pageReadiness = pages.map(buildPageReadiness);
-  const postReadiness = posts.map(buildBlogPostReadiness);
+  const readinessWithCanonicalChecks = withCanonicalConflictChecks(
+    pages.map(buildPageReadiness),
+    posts.map(buildBlogPostReadiness),
+  );
+  const pageReadiness = readinessWithCanonicalChecks.pages;
+  const postReadiness = readinessWithCanonicalChecks.posts;
   const checks: ReadinessCheck[] = [
     makeCheck('site:name', 'site', 'Site name', !isBlank(site.name), 'error', 'Site name is required.', siteTarget),
     makeCheck('site:slug', 'site', 'Site slug', !isBlank(site.slug), 'error', 'Site slug is required.', siteTarget),
@@ -443,8 +538,12 @@ export const buildRepositorySiteReadiness = async (
 
   const siteTarget = { type: 'site' as const, id: site.id, label: site.name };
   const storeSite = repositorySiteToStoreSite(site);
-  const pageReadiness = pages.map(buildPageReadiness);
-  const postReadiness = posts.map(buildBlogPostReadiness);
+  const readinessWithCanonicalChecks = withCanonicalConflictChecks(
+    pages.map(buildPageReadiness),
+    posts.map(buildBlogPostReadiness),
+  );
+  const pageReadiness = readinessWithCanonicalChecks.pages;
+  const postReadiness = readinessWithCanonicalChecks.posts;
   const checks: ReadinessCheck[] = [
     makeCheck('site:name', 'site', 'Site name', !isBlank(site.name), 'error', 'Site name is required.', siteTarget),
     makeCheck('site:slug', 'site', 'Site slug', !isBlank(site.slug), 'error', 'Site slug is required.', siteTarget),
