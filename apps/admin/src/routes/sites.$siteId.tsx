@@ -455,6 +455,7 @@ function EditSitePage() {
   const [commentTargetId, setCommentTargetId] = useState('');
   const [commentBlockReason, setCommentBlockReason] = useState<CommentReportReason>(DEFAULT_COMMENT_REPORT_REASONS[0]);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (site) {
@@ -1515,19 +1516,19 @@ function EditSitePage() {
   };
 
   const handleDelete = async () => {
-    if (confirm('Are you sure you want to delete this site? This action cannot be undone.')) {
-      setSiteSettingsError(null);
+    setIsLoading(true);
+    setSiteSettingsError(null);
 
-      try {
-        await deleteSiteFromApi(siteApiId || siteId);
-      } catch (error) {
-        setSiteSettingsError(error instanceof Error ? error.message : 'Unable to delete site');
-        return;
-      }
-
-      deleteSite(siteId);
-      navigate({ to: '/sites' });
+    try {
+      await deleteSiteFromApi(siteApiId || siteId);
+    } catch (error) {
+      setSiteSettingsError(error instanceof Error ? error.message : 'Unable to delete site');
+      setIsLoading(false);
+      return;
     }
+
+    deleteSite(siteId);
+    navigate({ to: '/sites' });
   };
 
   if (!site) {
@@ -2326,7 +2327,7 @@ function EditSitePage() {
           <div className="flex items-center justify-between pt-4">
             <button
               type="button"
-              onClick={() => void handleDelete()}
+              onClick={() => setShowDeleteConfirm(true)}
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
             >
               <Trash2 className="w-4 h-4" />
@@ -2960,6 +2961,44 @@ function EditSitePage() {
             </>
           )}
         </section>
+
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+              <div className="flex items-start gap-3">
+                <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                  <Trash2 className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">Delete {site.name}?</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    This removes the site workspace and its managed content from Backy. Archive the site if you only want to hide it.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                Public address: <span className="font-medium text-foreground">{site.customDomain || `${site.slug}.backy.app`}</span>
+              </div>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDelete()}
+                  disabled={isLoading}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+                >
+                  Delete site
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </PageShell>
   );
