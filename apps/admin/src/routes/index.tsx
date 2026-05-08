@@ -2,174 +2,616 @@
  * BACKY CMS - DASHBOARD HOME
  */
 
+import { type ElementType, useCallback, useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import {
-  Globe,
-  Layout,
-  FileText,
-  Users,
+  AlertTriangle,
+  ArrowRight,
   ArrowUpRight,
-  HardDrive
+  CheckCircle2,
+  Code2,
+  Database,
+  FileText,
+  Globe,
+  HardDrive,
+  History,
+  KeyRound,
+  Layout,
+  Loader2,
+  Package,
+  RefreshCw,
+  Settings,
+  Users,
 } from 'lucide-react';
-import { useStore } from '@/stores/mockStore';
+import {
+  getSettings,
+  getSiteReadiness,
+  listAdminAuditLogs,
+  listBlogPosts,
+  listPages,
+  listSites,
+  listUsers,
+  type AdminAuditLog,
+  type SiteReadiness,
+  type SiteSettingsInput,
+} from '@/lib/adminContentApi';
+import { getDefaultMediaSiteId, listMedia } from '@/lib/mediaApi';
 import { PageShell } from '@/components/layout/PageShell';
 import { formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
+import { useStore, type BlogPost, type Page, type Site, type User, type MediaAsset } from '@/stores/mockStore';
 
 export const Route = createFileRoute('/')({
   component: Index,
 });
 
+type DashboardSource = 'backend' | 'fallback';
+
+interface DashboardData {
+  sites: Site[];
+  pages: Page[];
+  posts: BlogPost[];
+  users: User[];
+  media: MediaAsset[];
+  settings?: SiteSettingsInput;
+  auditLogs: AdminAuditLog[];
+  readiness: SiteReadiness[];
+  source: DashboardSource;
+}
+
+interface DashboardIssue {
+  id: string;
+  label: string;
+  detail: string;
+  severity: 'error' | 'warning' | 'info';
+  to: '/sites' | '/pages' | '/settings' | '/media' | '/collections';
+}
+
+const emptyDashboardData = (): DashboardData => ({
+  sites: [],
+  pages: [],
+  posts: [],
+  users: [],
+  media: [],
+  auditLogs: [],
+  readiness: [],
+  source: 'backend',
+});
+
+const fallbackAuditLogs = (sites: Site[], pages: Page[], posts: BlogPost[]): AdminAuditLog[] => (
+  [
+    ...sites.map((site) => ({
+      id: `fallback-site-${site.id}`,
+      entity: 'site',
+      entityId: site.id,
+      action: 'updated',
+      actorId: 'local',
+      createdAt: site.lastUpdated,
+      metadata: { title: site.name },
+    })),
+    ...pages.map((page) => ({
+      id: `fallback-page-${page.id}`,
+      entity: 'page',
+      entityId: page.id,
+      action: 'updated',
+      actorId: 'local',
+      createdAt: page.lastUpdated,
+      metadata: { title: page.title },
+    })),
+    ...posts.map((post) => ({
+      id: `fallback-post-${post.id}`,
+      entity: 'post',
+      entityId: post.id,
+      action: 'updated',
+      actorId: 'local',
+      createdAt: post.publishedAt,
+      metadata: { title: post.title },
+    })),
+  ] satisfies AdminAuditLog[]
+).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 6);
+
+const titleFromAuditLog = (log: AdminAuditLog): string => {
+  const title = log.metadata?.title;
+  if (typeof title === 'string' && title.trim()) {
+    return title;
+  }
+
+  if (log.entity === 'settings') return 'Platform settings';
+  return log.entityId;
+};
+
+const actionLabel = (action: string): string => (
+  action
+    .replace(/^settings\./, '')
+    .replace(/_/g, ' ')
+    .replace(/\./g, ' ')
+);
+
+const issueTone = {
+  error: 'border-destructive/25 bg-destructive/10 text-destructive',
+  warning: 'border-warning/25 bg-warning/10 text-warning',
+  info: 'border-info/25 bg-info/10 text-info',
+} satisfies Record<DashboardIssue['severity'], string>;
+
+const frontendContracts = [
+  { label: 'Manifest', path: '/api/sites/:siteId/manifest', detail: 'Routes, capability flags, schemas' },
+  { label: 'Render', path: '/api/sites/:siteId/render', detail: 'Page, post, collection payloads' },
+  { label: 'Media', path: '/api/sites/:siteId/media', detail: 'Public assets, fonts, files' },
+  { label: 'Collections', path: '/api/sites/:siteId/collections', detail: 'Structured records for custom UI' },
+];
+
+function buildDashboardIssues(data: DashboardData, error: string | null): DashboardIssue[] {
+  const readinessErrors = data.readiness.reduce((total, item) => total + item.summary.errors, 0);
+  const readinessWarnings = data.readiness.reduce((total, item) => total + item.summary.warnings, 0);
+  const storageConfigured = data.settings?.runtimeStorage?.configured;
+  const issues: DashboardIssue[] = [];
+
+  if (error) {
+    issues.push({
+      id: 'dashboard-load-error',
+      label: 'Dashboard is using fallback data',
+      detail: error,
+      severity: 'warning',
+      to: '/settings',
+    });
+  }
+
+  if (readinessErrors > 0) {
+    issues.push({
+      id: 'readiness-errors',
+      label: `${readinessErrors} publish blocker${readinessErrors === 1 ? '' : 's'}`,
+      detail: 'Resolve site readiness errors before publishing or handing a route to a custom frontend.',
+      severity: 'error',
+      to: '/sites',
+    });
+  }
+
+  if (readinessWarnings > 0) {
+    issues.push({
+      id: 'readiness-warnings',
+      label: `${readinessWarnings} readiness warning${readinessWarnings === 1 ? '' : 's'}`,
+      detail: 'Warnings do not block publishing, but they reduce quality for hosted and headless frontends.',
+      severity: 'warning',
+      to: '/sites',
+    });
+  }
+
+  if (data.settings?.runtimeStorage && storageConfigured === false) {
+    issues.push({
+      id: 'storage-config',
+      label: 'Media storage needs configuration',
+      detail: `Missing ${data.settings.runtimeStorage.missing.join(', ') || 'provider configuration'}.`,
+      severity: 'warning',
+      to: '/settings',
+    });
+  }
+
+  if (data.sites.length === 0) {
+    issues.push({
+      id: 'no-sites',
+      label: 'No sites yet',
+      detail: 'Create a site before connecting a custom frontend to Backy content.',
+      severity: 'info',
+      to: '/sites',
+    });
+  }
+
+  return issues.slice(0, 5);
+}
+
+function StatCard({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  to,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  detail: string;
+  icon: ElementType;
+  to: '/sites' | '/pages' | '/blog' | '/media' | '/users';
+  tone: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className="group rounded-lg border border-border bg-card p-5 shadow-sm transition-colors hover:border-primary/40 hover:bg-accent/30"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">{label}</p>
+          <p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+        </div>
+        <span className={cn('flex size-11 items-center justify-center rounded-lg', tone)}>
+          <Icon className="size-5" />
+        </span>
+      </div>
+    </Link>
+  );
+}
+
 function Index() {
   const { user } = useAuthStore();
-  const { sites, pages, posts, users } = useStore();
+  const fallbackStore = useStore();
+  const [dashboard, setDashboard] = useState<DashboardData>(() => ({
+    ...emptyDashboardData(),
+    sites: fallbackStore.sites,
+    pages: fallbackStore.pages,
+    posts: fallbackStore.posts,
+    users: fallbackStore.users,
+    media: fallbackStore.media,
+    auditLogs: fallbackAuditLogs(fallbackStore.sites, fallbackStore.pages, fallbackStore.posts),
+    source: 'fallback',
+  }));
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Calculate recent activity
-  const recentItems = [
-    ...sites.map(s => ({ type: 'site', action: 'updated', name: s.name, date: s.lastUpdated })),
-    ...pages.map(p => ({ type: 'page', action: 'updated', name: p.title, date: p.lastUpdated })),
-    ...posts.map(p => ({ type: 'post', action: 'updated', name: p.title, date: p.publishedAt })),
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5);
+  const loadDashboard = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const [sites, users, settings, auditResult] = await Promise.all([
+        listSites(),
+        listUsers(),
+        getSettings(),
+        listAdminAuditLogs({ limit: 8 }),
+      ]);
+      const [pagesBySite, postsBySite, readinessBySite, mediaBySite] = await Promise.all([
+        Promise.all(sites.map((site) => listPages(site.id).catch(() => [] as Page[]))),
+        Promise.all(sites.map((site) => listBlogPosts(site.id).catch(() => [] as BlogPost[]))),
+        Promise.all(sites.map((site) => getSiteReadiness(site.id).catch(() => null))),
+        Promise.all(sites.map((site) => listMedia({ siteId: site.id, limit: 200 }).catch(() => [] as MediaAsset[]))),
+      ]);
+
+      const media = mediaBySite.flat();
+      const defaultMediaSiteId = getDefaultMediaSiteId();
+      const defaultSiteAlreadyLoaded = sites.some((site) => site.id === defaultMediaSiteId);
+      const defaultSiteMedia = defaultSiteAlreadyLoaded
+        ? []
+        : await listMedia({ siteId: defaultMediaSiteId, limit: 200 }).catch(() => [] as MediaAsset[]);
+
+      setDashboard({
+        sites,
+        pages: pagesBySite.flat(),
+        posts: postsBySite.flat(),
+        users,
+        media: [...media, ...defaultSiteMedia],
+        settings,
+        auditLogs: auditResult.logs,
+        readiness: readinessBySite.filter((item): item is SiteReadiness => Boolean(item)),
+        source: 'backend',
+      });
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : 'Unable to load backend dashboard data';
+      setError(message);
+      setDashboard({
+        ...emptyDashboardData(),
+        sites: fallbackStore.sites,
+        pages: fallbackStore.pages,
+        posts: fallbackStore.posts,
+        users: fallbackStore.users,
+        media: fallbackStore.media,
+        auditLogs: fallbackAuditLogs(fallbackStore.sites, fallbackStore.pages, fallbackStore.posts),
+        source: 'fallback',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fallbackStore.media, fallbackStore.pages, fallbackStore.posts, fallbackStore.sites, fallbackStore.users]);
+
+  useEffect(() => {
+    void loadDashboard();
+  }, [loadDashboard]);
+
+  const issues = useMemo(() => buildDashboardIssues(dashboard, error), [dashboard, error]);
+  const publishedSites = dashboard.sites.filter((site) => site.status === 'published').length;
+  const draftPages = dashboard.pages.filter((page) => page.status !== 'published').length;
+  const draftPosts = dashboard.posts.filter((post) => post.status !== 'published').length;
+  const readinessErrors = dashboard.readiness.reduce((total, item) => total + item.summary.errors, 0);
+  const readinessWarnings = dashboard.readiness.reduce((total, item) => total + item.summary.warnings, 0);
+  const backendHealthy = dashboard.source === 'backend' && !error;
+  const storage = dashboard.settings?.runtimeStorage;
+  const apiKeysConfigured = Boolean(
+    dashboard.settings?.apiKeys.publicApiKey && dashboard.settings?.apiKeys.adminApiKey
+  );
 
   const stats = [
-    { label: 'Total Sites', value: sites.length, icon: Globe, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
-    { label: 'Total Pages', value: pages.length, icon: Layout, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30' },
-    { label: 'Blog Posts', value: posts.length, icon: FileText, color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' },
-    { label: 'Team Members', value: users.length, icon: Users, color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30' },
+    {
+      label: 'Sites',
+      value: dashboard.sites.length,
+      detail: `${publishedSites} published`,
+      icon: Globe,
+      to: '/sites' as const,
+      tone: 'bg-info/10 text-info',
+    },
+    {
+      label: 'Pages',
+      value: dashboard.pages.length,
+      detail: `${draftPages} draft or scheduled`,
+      icon: Layout,
+      to: '/pages' as const,
+      tone: 'bg-primary/10 text-primary',
+    },
+    {
+      label: 'Blog posts',
+      value: dashboard.posts.length,
+      detail: `${draftPosts} draft or scheduled`,
+      icon: FileText,
+      to: '/blog' as const,
+      tone: 'bg-warning/10 text-warning',
+    },
+    {
+      label: 'Media assets',
+      value: dashboard.media.length,
+      detail: storage ? `${storage.provider} storage` : 'Library files',
+      icon: HardDrive,
+      to: '/media' as const,
+      tone: 'bg-success/10 text-success',
+    },
+    {
+      label: 'Team members',
+      value: dashboard.users.length,
+      detail: 'Admin users',
+      icon: Users,
+      to: '/users' as const,
+      tone: 'bg-info/10 text-info',
+    },
   ];
 
   return (
     <PageShell
       title="Dashboard"
-      description={`Welcome back, ${user?.fullName || 'Admin'}. Here's what's happening.`}
+      description={`Welcome back, ${user?.fullName || 'Admin'}. Control sites, content, APIs, and publishing readiness from one cockpit.`}
+      action={
+        <button
+          type="button"
+          onClick={() => void loadDashboard()}
+          disabled={isLoading}
+          className={cn(
+            'inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium',
+            'hover:bg-accent transition-colors disabled:cursor-not-allowed disabled:opacity-60'
+          )}
+        >
+          {isLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+          Refresh
+        </button>
+      }
     >
-      <div className="space-y-8">
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm">
+          <span
+            className={cn(
+              'inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium',
+              backendHealthy ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'
+            )}
+          >
+            {backendHealthy ? <CheckCircle2 className="size-3.5" /> : <AlertTriangle className="size-3.5" />}
+            {backendHealthy ? 'Backend live' : 'Fallback mode'}
+          </span>
+          <span className="text-muted-foreground">
+            {dashboard.settings?.deliveryMode === 'custom-frontend'
+              ? 'Custom frontend API mode is active.'
+              : 'Managed Backy rendering is active.'}
+          </span>
+          {isLoading && <span className="text-muted-foreground">Updating dashboard data...</span>}
+        </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {stats.map((stat) => (
-            <div key={stat.label} className="bg-card border border-border rounded-xl p-6 shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground font-medium mb-1">{stat.label}</p>
-                <h3 className="text-2xl font-bold">{stat.value}</h3>
-              </div>
-              <div className={cn("w-12 h-12 rounded-lg flex items-center justify-center", stat.bg)}>
-                <stat.icon className={cn("w-6 h-6", stat.color)} />
-              </div>
-            </div>
+            <StatCard key={stat.label} {...stat} />
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-          {/* Main Content Area */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Quick Actions */}
-            <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
-              <h3 className="font-semibold mb-4">Quick Actions</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <Link to="/sites/new" className="flex flex-col items-center justify-center p-4 rounded-xl border border-border hover:bg-accent hover:border-primary/50 transition-all group">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mb-2 group-hover:bg-primary/20">
-                    <Globe className="w-5 h-5 text-primary" />
-                  </div>
-                  <span className="text-sm font-medium">New Site</span>
-                </Link>
-                <Link to="/pages/new" className="flex flex-col items-center justify-center p-4 rounded-xl border border-border hover:bg-accent hover:border-primary/50 transition-all group">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mb-2 group-hover:bg-primary/20">
-                    <Layout className="w-5 h-5 text-primary" />
-                  </div>
-                  <span className="text-sm font-medium">New Page</span>
-                </Link>
-                <Link to="/blog/new" className="flex flex-col items-center justify-center p-4 rounded-xl border border-border hover:bg-accent hover:border-primary/50 transition-all group">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mb-2 group-hover:bg-primary/20">
-                    <FileText className="w-5 h-5 text-primary" />
-                  </div>
-                  <span className="text-sm font-medium">New Post</span>
-                </Link>
-                <Link to="/media" className="flex flex-col items-center justify-center p-4 rounded-xl border border-border hover:bg-accent hover:border-primary/50 transition-all group">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mb-2 group-hover:bg-primary/20">
-                    <HardDrive className="w-5 h-5 text-primary" />
-                  </div>
-                  <span className="text-sm font-medium">Upload</span>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <div className="flex flex-col gap-6 xl:col-span-2">
+            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-semibold">Build and manage</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Start the workflows that control hosted pages and custom frontend data.
+                  </p>
+                </div>
+                <Link to="/settings" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+                  API settings <ArrowUpRight className="size-3.5" />
                 </Link>
               </div>
-            </div>
 
-            {/* Recent Activity */}
-            <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
-              <div className="p-6 border-b border-border flex items-center justify-between">
-                <h3 className="font-semibold">Recent Activity</h3>
-                <Link to="/sites" className="text-sm text-primary hover:underline flex items-center gap-1">
-                  View all <ArrowUpRight className="w-3 h-3" />
-                </Link>
-              </div>
-              <div className="divide-y divide-border">
-                {recentItems.length > 0 ? (
-                  recentItems.map((item, i) => (
-                    <div key={i} className="p-4 flex items-center gap-4 hover:bg-muted/30 transition-colors">
-                      <div className={cn(
-                        "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold",
-                        item.type === 'site' ? "bg-blue-100 text-blue-700" :
-                          item.type === 'page' ? "bg-purple-100 text-purple-700" :
-                            "bg-amber-100 text-amber-700"
-                      )}>
-                        {item.type === 'site' ? 'S' : item.type === 'page' ? 'P' : 'B'}
+              <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3">
+                {[
+                  { label: 'New site', to: '/sites/new' as const, icon: Globe, detail: 'Website container' },
+                  { label: 'New page', to: '/pages/new' as const, icon: Layout, detail: 'Visual canvas' },
+                  { label: 'New post', to: '/blog/new' as const, icon: FileText, detail: 'Blog article' },
+                  { label: 'Media library', to: '/media' as const, icon: HardDrive, detail: 'Images, files, fonts' },
+                  { label: 'Collections', to: '/collections' as const, icon: Database, detail: 'Structured data' },
+                  { label: 'API setup', to: '/settings' as const, icon: Settings, detail: 'Frontend control' },
+                ].map((action) => (
+                  <Link
+                    key={action.label}
+                    to={action.to}
+                    className="group rounded-lg border border-border p-4 transition-colors hover:border-primary/40 hover:bg-accent/40"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <action.icon className="size-5" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="font-medium">{action.label}</p>
+                        <p className="text-xs text-muted-foreground">{action.detail}</p>
                       </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">
-                          <span className="capitalize">{item.action}</span> {item.type} <span className="text-foreground">"{item.name}"</span>
-                        </p>
-                        <p className="text-xs text-muted-foreground">{formatDate(item.date)}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-border bg-card shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-5">
+                <div>
+                  <h2 className="font-semibold">Recent backend activity</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Audit-backed changes are shown first, with request ids for debugging.
+                  </p>
+                </div>
+                <Link to="/settings" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+                  Audit setup <ArrowUpRight className="size-3.5" />
+                </Link>
+              </div>
+
+              <div className="divide-y divide-border">
+                {dashboard.auditLogs.length > 0 ? (
+                  dashboard.auditLogs.slice(0, 6).map((log) => (
+                    <div key={log.id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <span className="mt-0.5 flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                          <History className="size-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">
+                            <span className="capitalize">{actionLabel(log.action)}</span>{' '}
+                            <span className="text-muted-foreground">{log.entity}</span>{' '}
+                            <span>{titleFromAuditLog(log)}</span>
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {formatDate(log.createdAt)}
+                            {log.actorId ? ` by ${log.actorId}` : ''}
+                          </p>
+                          {log.requestId && (
+                            <p className="mt-2 break-all font-mono text-xs text-muted-foreground">
+                              {log.requestId}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="p-8 text-center text-muted-foreground">
-                    No recent activity
+                  <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+                    No activity has been recorded yet.
                   </div>
                 )}
               </div>
-            </div>
+            </section>
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            <div className="bg-gradient-to-br from-primary to-purple-600 rounded-xl p-6 text-white shadow-lg">
-              <h3 className="font-bold text-lg mb-2">Pro Tips</h3>
-              <p className="text-primary-foreground/90 text-sm mb-4">
-                Did you know you can use the visual editor to build pages faster?
-              </p>
-              <button className="px-4 py-2 bg-white text-primary rounded-lg text-sm font-medium hover:bg-white/90">
-                Try Editor
-              </button>
-            </div>
+          <div className="flex flex-col gap-6">
+            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="size-4 text-warning" />
+                <h2 className="font-semibold">Needs attention</h2>
+              </div>
+              <div className="mt-4 flex flex-col gap-3">
+                {issues.length > 0 ? (
+                  issues.map((issue) => (
+                    <Link
+                      key={issue.id}
+                      to={issue.to}
+                      className={cn('block rounded-lg border px-3 py-3 text-sm transition-colors hover:bg-accent/40', issueTone[issue.severity])}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium">{issue.label}</p>
+                          <p className="mt-1 text-xs opacity-90">{issue.detail}</p>
+                        </div>
+                        <ArrowRight className="mt-0.5 size-4 flex-shrink-0" />
+                      </div>
+                    </Link>
+                  ))
+                ) : (
+                  <div className="rounded-lg border border-success/25 bg-success/10 px-3 py-3 text-sm text-success">
+                    No publish blockers found in loaded readiness checks.
+                  </div>
+                )}
+              </div>
+            </section>
 
-            <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
-              <h3 className="font-semibold mb-4">System Status</h3>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Version</span>
-                  <span className="font-mono">v1.2.0</span>
+            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+              <div className="flex items-center gap-2">
+                <Package className="size-4 text-foreground" />
+                <h2 className="font-semibold">Backend health</h2>
+              </div>
+              <dl className="mt-4 flex flex-col gap-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Admin API</dt>
+                  <dd className={backendHealthy ? 'text-success' : 'text-warning'}>
+                    {backendHealthy ? 'Reachable' : 'Fallback'}
+                  </dd>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Database</span>
-                  <span className="flex items-center gap-2 text-green-600">
-                    <span className="w-2 h-2 rounded-full bg-green-500" />
-                    Connected
-                  </span>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Delivery</dt>
+                  <dd>{dashboard.settings?.deliveryMode || 'unknown'}</dd>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Storage</span>
-                  <span>45% Used</span>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Storage</dt>
+                  <dd className={storage?.configured ? 'text-success' : 'text-warning'}>
+                    {storage ? `${storage.provider} ${storage.configured ? 'ready' : 'needs config'}` : 'unknown'}
+                  </dd>
                 </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-primary w-[45%]" />
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Readiness</dt>
+                  <dd>{readinessErrors} errors, {readinessWarnings} warnings</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+              <div className="flex items-center gap-2">
+                <Code2 className="size-4 text-primary" />
+                <h2 className="font-semibold">API control plane</h2>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Custom frontends should be able to rebuild the public experience from Backy contracts without touching admin internals.
+              </p>
+
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <div className="rounded-lg border border-border bg-muted/40 p-3">
+                  <p className="font-mono text-[0.68rem] uppercase tracking-[0.12em] text-muted-foreground">Mode</p>
+                  <p className="mt-1 text-sm font-medium">{dashboard.settings?.deliveryMode || 'unknown'}</p>
+                </div>
+                <div className="rounded-lg border border-border bg-muted/40 p-3">
+                  <p className="font-mono text-[0.68rem] uppercase tracking-[0.12em] text-muted-foreground">Keys</p>
+                  <p className={cn('mt-1 text-sm font-medium', apiKeysConfigured ? 'text-success' : 'text-warning')}>
+                    {apiKeysConfigured ? 'Configured' : 'Needs setup'}
+                  </p>
                 </div>
               </div>
-            </div>
-          </div>
 
+              <div className="mt-4 flex flex-col divide-y divide-border rounded-lg border border-border">
+                {frontendContracts.map((contract) => (
+                  <div key={contract.path} className="p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium">{contract.label}</p>
+                      <KeyRound className="size-3.5 text-muted-foreground" />
+                    </div>
+                    <p className="mt-1 break-all font-mono text-[0.7rem] text-primary">{contract.path}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{contract.detail}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 flex flex-col gap-2">
+                <Link
+                  to="/settings"
+                  className="inline-flex min-h-11 items-center justify-between rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+                >
+                  Open API and delivery settings
+                  <ArrowRight className="size-4" />
+                </Link>
+                <Link
+                  to="/collections"
+                  className="inline-flex min-h-11 items-center justify-between rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+                >
+                  Manage frontend datasets
+                  <ArrowRight className="size-4" />
+                </Link>
+              </div>
+            </section>
+          </div>
         </div>
       </div>
     </PageShell>
