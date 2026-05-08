@@ -3,6 +3,7 @@
 import { validateAiFrontendManifest, validateAiRenderPayload } from './validate-ai-render-payload.mjs';
 
 const baseUrl = (process.env.BACKY_PUBLIC_CONTRACT_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
+const adminApiKey = (process.env.BACKY_ADMIN_API_KEY || process.env.BACKY_ADMIN_SECRET_KEY || '').trim();
 
 const checks = [];
 let createdSiteId = null;
@@ -27,7 +28,15 @@ function assert(condition, message) {
 
 async function request(pathOrUrl, init) {
   const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${baseUrl}${pathOrUrl}`;
-  const response = await fetch(url, init);
+  const headers = new Headers(init?.headers || {});
+  const pathname = pathOrUrl.startsWith('http') ? new URL(pathOrUrl).pathname : pathOrUrl;
+  if (adminApiKey && pathname.startsWith('/api/admin/') && !headers.has('x-backy-admin-key') && !headers.has('authorization')) {
+    headers.set('x-backy-admin-key', adminApiKey);
+  }
+  const response = await fetch(url, {
+    ...init,
+    headers,
+  });
   const text = await response.text();
   let json = null;
 

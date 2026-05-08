@@ -13,6 +13,7 @@ The rule is simple: a custom frontend can look completely different from the Bac
 - Do not depend on admin localStorage, admin mock stores, or editor-only components.
 - Consume public APIs, public SDKs, or generated JSON payloads only.
 - Treat `/api/admin/*` as a protected mutation surface. When admin key enforcement is enabled, admin clients must send `X-Backy-Admin-Key` or `Authorization: Bearer <key>`; public/custom frontends should not call admin mutation APIs.
+- `npm run test:admin-auth --workspace @backy/public` verifies admin API key enforcement against a server that was started with `BACKY_REQUIRE_ADMIN_API_KEY=true BACKY_ADMIN_API_KEY=<key>`. The broader `test:admin-contract` smoke can target the same key-enforced server and will send the configured key on `/api/admin/*` requests.
 - Treat Backy as the source of truth for content, assets, SEO, theme tokens, and interaction endpoints.
 - Render design however the frontend wants, as long as Backy-managed fields remain addressable.
 
