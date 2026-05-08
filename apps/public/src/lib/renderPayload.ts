@@ -237,6 +237,9 @@ const normalizeBindingPagination = (value: unknown): JsonObject | null => {
   if (typeof value.limit === 'number' && Number.isInteger(value.limit) && value.limit > 0) {
     pagination.limit = value.limit;
   }
+  if (typeof value.offset === 'number' && Number.isInteger(value.offset) && value.offset >= 0) {
+    pagination.offset = value.offset;
+  }
   if (typeof value.cursor === 'string') {
     pagination.cursor = value.cursor;
   }
@@ -478,6 +481,7 @@ export const resolveElementDataBindings = (siteId: string, rawElements: unknown[
         ...element,
         children,
       };
+      const withRepeaterData = hydrateRepeaterElement(siteId, withChildren);
 
       return (element.dataBindings || []).reduce<RenderElement>((currentElement, binding, index) => {
         const normalized = normalizeCollectionBinding(binding, currentElement, index);
@@ -492,7 +496,7 @@ export const resolveElementDataBindings = (siteId: string, rawElements: unknown[
         }
 
         return applyBindingValue(siteId, currentElement, targetPath, nextValue);
-      }, withChildren);
+      }, withRepeaterData);
     })
 );
 
@@ -536,13 +540,12 @@ const normalizeResolvedCollectionRecords = (records: unknown): JsonObject[] => (
     : []
 );
 
-const hydrateDatasetRecords = (siteId: string, dataset: DatasetManifest): DatasetManifest => {
-  const collection = getCollectionByIdOrSlug(siteId, dataset.collectionId);
-  if (!collection) {
-    return dataset;
-  }
-
-  const query = isRecord(dataset.query) ? dataset.query : {};
+const collectionRecordsForQuery = (
+  siteId: string,
+  collectionId: string,
+  query: JsonObject = {},
+  pagination: JsonObject | null = null,
+): StoreCollectionRecord[] => {
   const recordId = typeof query.recordId === 'string' && query.recordId.length > 0 ? query.recordId : null;
   const slug = typeof query.slug === 'string' && query.slug.length > 0 ? query.slug : null;
   const search = typeof query.q === 'string' && query.q.length > 0
@@ -554,28 +557,42 @@ const hydrateDatasetRecords = (siteId: string, dataset: DatasetManifest): Datase
   const fieldValue = query.fieldValue;
   const sortBy = typeof query.sortBy === 'string' && query.sortBy.length > 0 ? query.sortBy : null;
   const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
-  const limit = isRecord(dataset.pagination) && typeof dataset.pagination.limit === 'number'
-    ? dataset.pagination.limit
+  const limit = isRecord(pagination) && typeof pagination.limit === 'number'
+    ? pagination.limit
     : typeof query.limit === 'number'
       ? query.limit
       : 50;
-  const offset = isRecord(dataset.pagination) && typeof dataset.pagination.offset === 'number'
-    ? dataset.pagination.offset
+  const offset = isRecord(pagination) && typeof pagination.offset === 'number'
+    ? pagination.offset
     : typeof query.offset === 'number'
       ? query.offset
       : 0;
-  const records = recordId
-    ? [getCollectionRecordByIdOrSlug(siteId, collection.id, recordId)].filter(Boolean)
-    : listCollectionRecords(siteId, collection.id, {
-        slug: slug || undefined,
-        search: search || undefined,
-        fieldKey: fieldKey || undefined,
-        fieldValue,
-        sortBy: sortBy || undefined,
-        sortDirection,
-        limit: Number.isInteger(limit) && limit > 0 ? Math.min(limit, 100) : 50,
-        offset: Number.isInteger(offset) && offset > 0 ? offset : 0,
-      }).records;
+
+  if (recordId) {
+    return [getCollectionRecordByIdOrSlug(siteId, collectionId, recordId)].filter((record): record is StoreCollectionRecord => !!record);
+  }
+
+  return listCollectionRecords(siteId, collectionId, {
+    slug: slug || undefined,
+    search: search || undefined,
+    fieldKey: fieldKey || undefined,
+    fieldValue,
+    sortBy: sortBy || undefined,
+    sortDirection,
+    limit: Number.isInteger(limit) && limit > 0 ? Math.min(limit, 100) : 50,
+    offset: Number.isInteger(offset) && offset > 0 ? offset : 0,
+  }).records;
+};
+
+const hydrateDatasetRecords = (siteId: string, dataset: DatasetManifest): DatasetManifest => {
+  const collection = getCollectionByIdOrSlug(siteId, dataset.collectionId);
+  if (!collection) {
+    return dataset;
+  }
+
+  const query = isRecord(dataset.query) ? dataset.query : {};
+  const pagination = isRecord(dataset.pagination) ? dataset.pagination : null;
+  const records = collectionRecordsForQuery(siteId, collection.id, query, pagination);
 
   return {
     ...dataset,
@@ -585,11 +602,109 @@ const hydrateDatasetRecords = (siteId: string, dataset: DatasetManifest): Datase
   };
 };
 
+const repeaterDatasetForElement = (element: RenderElement): DatasetManifest | null => {
+  const repeater = isRecord(element.props.repeater) ? element.props.repeater : element.props;
+  const collectionId = typeof repeater.collectionId === 'string' && repeater.collectionId.length > 0
+    ? repeater.collectionId
+    : null;
+
+  if (!collectionId) {
+    return null;
+  }
+
+  const datasetId = typeof repeater.datasetId === 'string' && repeater.datasetId.length > 0
+    ? repeater.datasetId
+    : `dataset_${collectionId}_${element.id}`;
+  const query = isRecord(repeater.query) ? { ...repeater.query } : {};
+  const pagination = normalizeBindingPagination(repeater.pagination);
+  if (typeof repeater.limit === 'number' && !('limit' in query)) {
+    query.limit = repeater.limit;
+  }
+  if (typeof repeater.offset === 'number' && !('offset' in query)) {
+    query.offset = repeater.offset;
+  }
+  if (typeof repeater.sortBy === 'string' && !('sortBy' in query)) {
+    query.sortBy = repeater.sortBy;
+  }
+  if (repeater.sortDirection === 'asc' || repeater.sortDirection === 'desc') {
+    query.sortDirection = repeater.sortDirection;
+  }
+
+  return {
+    id: datasetId,
+    collectionId,
+    ...(Object.keys(query).length > 0 ? { query } : {}),
+    ...(pagination ? { pagination } : {}),
+  };
+};
+
+const hydrateRepeaterElement = (siteId: string, element: RenderElement): RenderElement => {
+  if (element.type !== 'repeater') {
+    return element;
+  }
+
+  const dataset = repeaterDatasetForElement(element);
+  if (!dataset) {
+    return element;
+  }
+
+  const collection = getCollectionByIdOrSlug(siteId, dataset.collectionId);
+  if (!collection) {
+    return element;
+  }
+
+  const query = isRecord(dataset.query) ? dataset.query : {};
+  const pagination = isRecord(dataset.pagination) ? dataset.pagination : null;
+  const records = collectionRecordsForQuery(siteId, collection.id, query, pagination);
+  const titleField = typeof element.props.titleField === 'string'
+    ? element.props.titleField
+    : typeof element.props.repeaterTitleField === 'string'
+      ? element.props.repeaterTitleField
+      : 'title';
+  const descriptionField = typeof element.props.descriptionField === 'string'
+    ? element.props.descriptionField
+    : typeof element.props.repeaterDescriptionField === 'string'
+      ? element.props.repeaterDescriptionField
+      : 'summary';
+  const imageField = typeof element.props.imageField === 'string'
+    ? element.props.imageField
+    : typeof element.props.repeaterImageField === 'string'
+      ? element.props.repeaterImageField
+      : 'image';
+
+  return {
+    ...element,
+    props: {
+      ...element.props,
+      schemaVersion: 'backy.repeater.v1',
+      datasetId: dataset.id,
+      collectionId: collection.id,
+      collectionSlug: collection.slug,
+      collectionName: collection.name,
+      fields: normalizeResolvedCollectionFields(collection.fields),
+      records: normalizeResolvedCollectionRecords(records).map((record) => ({
+        ...record,
+        href: typeof record.slug === 'string' && record.slug.length > 0
+          ? buildCollectionItemPath(collection, record.slug)
+          : undefined,
+      })),
+      titleField,
+      descriptionField,
+      imageField,
+    },
+  };
+};
+
 const collectDataBindingManifest = (siteId: string, elements: RenderElement[]) => {
   const bindings: JsonObject[] = [];
   const datasets = new Map<string, DatasetManifest>();
 
   walkElements(elements, (element) => {
+    const repeaterDataset = repeaterDatasetForElement(element);
+    if (repeaterDataset) {
+      datasets.set(repeaterDataset.id, repeaterDataset);
+    }
+
     element.dataBindings?.forEach((binding, index) => {
       const source = isRecord(binding.source) ? binding.source : {};
       const collectionId = typeof source.collectionId === 'string' && source.collectionId.length > 0

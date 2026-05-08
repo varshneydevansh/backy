@@ -44,6 +44,7 @@ export type KnownElementType =
   | 'checkbox'
   | 'radio'
   | 'list'
+  | 'repeater'
   | 'table'
   | 'embed'
   | 'html'
@@ -1190,6 +1191,94 @@ function ListElement({ element }: ElementRendererProps) {
   );
 }
 
+const repeaterRecordValue = (
+  record: Record<string, unknown>,
+  field: unknown,
+  fallbackFields: string[],
+): string => {
+  const values = isRecord(record.values) ? record.values : {};
+  const fieldKey = typeof field === 'string' && field.length > 0
+    ? field
+    : fallbackFields.find((key) => values[key] !== undefined);
+  const value = fieldKey ? values[fieldKey] : undefined;
+
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.map((item) => repeaterRecordValue({ values: { value: item } }, 'value', [])).filter(Boolean).join(', ');
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '';
+  }
+};
+
+/**
+ * Render a collection-backed repeater/list element.
+ */
+function RepeaterElement({ element }: ElementRendererProps) {
+  const { props, styles } = element;
+  const records = Array.isArray(props.records)
+    ? props.records.filter(isRecord)
+    : [];
+  const columns = Math.max(1, Math.min(6, typeof props.columns === 'number' ? props.columns : 3));
+  const gap = getLength(props.gap, '16px');
+  const titleField = typeof props.titleField === 'string' ? props.titleField : 'title';
+  const descriptionField = typeof props.descriptionField === 'string' ? props.descriptionField : 'summary';
+  const emptyMessage = getNameClass(props.emptyMessage) || 'No records yet.';
+
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+        gap,
+        width: '100%',
+        height: '100%',
+        alignContent: 'start',
+        ...styles,
+      }}
+      data-backy-repeater={getNameClass(props.datasetId) || element.id}
+    >
+      {records.length === 0 ? (
+        <div style={{ color: '#64748b', fontSize: 16 }}>{emptyMessage}</div>
+      ) : records.map((record) => {
+        const recordId = typeof record.id === 'string' ? record.id : `${element.id}-record`;
+        const title = repeaterRecordValue(record, titleField, ['title', 'name', 'label', 'slug']);
+        const description = repeaterRecordValue(record, descriptionField, ['summary', 'description', 'excerpt', 'body']);
+        const href = typeof record.href === 'string' ? record.href : '#';
+
+        return (
+          <a
+            key={`${element.id}-${recordId}`}
+            href={href}
+            style={{
+              display: 'block',
+              minWidth: 0,
+              border: '1px solid #e5e7eb',
+              borderRadius: 8,
+              padding: 18,
+              textDecoration: 'none',
+              color: 'inherit',
+              background: '#fff',
+              boxShadow: '0 12px 28px rgba(15,23,42,0.08)',
+            }}
+          >
+            <div style={{ fontSize: 18, lineHeight: 1.25, fontWeight: 700, color: '#0f172a' }}>
+              {title || getNameClass(record.slug) || 'Untitled'}
+            </div>
+            {description ? (
+              <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.45, color: '#475569' }}>
+                {description}
+              </div>
+            ) : null}
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * Render a quote element
  */
@@ -2219,6 +2308,7 @@ const ELEMENT_RENDERERS: Record<
   checkbox: CheckboxOrRadioElement,
   radio: CheckboxOrRadioElement,
   list: ListElement,
+  repeater: RepeaterElement,
   table: HtmlElement,
   embed: EmbedElement,
   html: HtmlElement,

@@ -1961,6 +1961,25 @@ try {
                 },
               ],
             },
+            {
+              id: 'bound_repeater',
+              type: 'repeater',
+              x: 100,
+              y: 220,
+              width: 720,
+              height: 260,
+              props: {
+                collectionId: createdCollectionId,
+                datasetId: 'dataset_contract_repeater',
+                titleField: 'title',
+                descriptionField: 'summary',
+                columns: 2,
+                limit: 6,
+                sortBy: 'rank',
+                sortDirection: 'asc',
+              },
+              children: [],
+            },
           ],
         },
       }),
@@ -1984,6 +2003,15 @@ try {
       `${boundRender.url} missing hydrated collection dataset records`,
     );
     assert(
+      boundRender.json?.data?.dataBindings?.datasets?.some((dataset) => (
+        dataset.id === 'dataset_contract_repeater'
+        && dataset.collectionId === createdCollectionId
+        && dataset.query?.sortBy === 'rank'
+        && dataset.records?.some((record) => record.id === createdCollectionRecordId)
+      )),
+      `${boundRender.url} missing repeater dataset manifest`,
+    );
+    assert(
       boundRender.json?.data?.dataBindings?.bindings?.some((binding) => (
         binding.id === 'bind_bound_title'
         && binding.elementId === 'bound_title'
@@ -2000,9 +2028,22 @@ try {
       `${boundRender.url} did not resolve bound collection value into element props`,
     );
     assert(
+      boundRender.json?.data?.content?.elements?.some((element) => (
+        element.id === 'bound_repeater'
+        && element.type === 'repeater'
+        && element.props?.datasetId === 'dataset_contract_repeater'
+        && element.props?.records?.some((record) => record.id === createdCollectionRecordId && record.href === dynamicItemPath)
+      )),
+      `${boundRender.url} did not hydrate repeater records into element props`,
+    );
+    assert(
       boundRender.json?.data?.editableMap?.[`collection.${createdCollectionId}.bound_title.title`]?.scope === 'collectionRecord',
       `${boundRender.url} missing collection record editable map entry`,
     );
+
+    const hostedBoundPage = await request(`/sites/${siteSlug}/${boundPageSlug}`);
+    assert(hostedBoundPage.response.status === 200, `${hostedBoundPage.url} expected hosted bound page`);
+    assert(hostedBoundPage.text.includes('Collection Record'), `${hostedBoundPage.url} missing hosted repeater record`);
 
     const removeBoundPage = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, { method: 'DELETE' });
     assert(removeBoundPage.response.status === 200, `${removeBoundPage.url} expected 200, got ${removeBoundPage.response.status}`);
