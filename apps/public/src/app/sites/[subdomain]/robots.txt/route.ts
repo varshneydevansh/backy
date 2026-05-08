@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSiteByIdOrSlug } from '@/lib/backyStore';
-import { buildRobotsTxt } from '@/lib/seoDiscovery';
+import { buildRobotsTxtFromDiscovery, buildSeoDiscovery } from '@/lib/seoDiscovery';
 
 interface RouteParams {
   params: Promise<{
@@ -23,8 +23,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 
   const origin = new URL(request.url).origin;
+  const discovery = buildSeoDiscovery(site);
+  const hostedDiscovery = {
+    ...discovery,
+    sitemap: {
+      ...discovery.sitemap,
+      url: `${origin}/sites/${site.slug}/sitemap.xml`,
+    },
+  };
 
-  return new NextResponse(buildRobotsTxt(`${origin}/sites/${site.slug}/sitemap.xml`), {
+  return new NextResponse(buildRobotsTxtFromDiscovery(hostedDiscovery), {
     headers: {
       'content-type': 'text/plain; charset=utf-8',
       'cache-control': 'public, max-age=60, stale-while-revalidate=300',

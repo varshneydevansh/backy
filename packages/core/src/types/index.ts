@@ -251,6 +251,26 @@ export interface SiteSettings {
     defaultOgImage?: string;
     /** Favicon URL */
     favicon?: string;
+    /** Sitemap output controls */
+    sitemap?: {
+      /** Whether sitemap XML should include indexable routes */
+      enabled?: boolean;
+      /** Default route change frequency when a route does not override it */
+      defaultChangeFrequency?: 'daily' | 'weekly' | 'monthly';
+      /** Default route priority when a route does not override it */
+      defaultPriority?: number;
+      /** Whether dynamic collection list/item routes are included */
+      includeDynamicRoutes?: boolean;
+    };
+    /** Robots.txt and global robots defaults */
+    robots?: {
+      /** Whether routes are indexable by default */
+      index?: boolean;
+      /** Whether routes are followable by default */
+      follow?: boolean;
+      /** Additional robots.txt directives appended after the Backy defaults */
+      extraRules?: string;
+    };
   };
 
   /** Analytics configuration */

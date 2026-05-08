@@ -50,9 +50,14 @@ export interface SeoDiscovery {
   sitemap: {
     url: string;
     count: number;
+    enabled: boolean;
+    includeDynamicRoutes: boolean;
   };
   robots: {
     url: string;
+    index: boolean;
+    follow: boolean;
+    extraRules?: string;
   };
 }
 
@@ -124,6 +129,44 @@ export const applySeoDefaults = (
   };
 };
 
+const clampPriority = (value: unknown): number | undefined => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return undefined;
+  }
+
+  return Math.max(0, Math.min(1, value));
+};
+
+const isHomepageRoute = (route: SeoRoute) => route.type === 'page' && route.canonical === '/';
+
+export const applySeoSitemapAndRobotsSettings = (
+  routes: SeoRoute[],
+  site: { settings?: Pick<SiteSettings, 'seo'> },
+): SeoRoute[] => {
+  const seo = site.settings?.seo;
+  const robotsIndex = seo?.robots?.index !== false;
+  const robotsFollow = seo?.robots?.follow !== false;
+  const includeDynamicRoutes = seo?.sitemap?.includeDynamicRoutes !== false;
+  const defaultPriority = clampPriority(seo?.sitemap?.defaultPriority);
+  const defaultChangeFrequency = seo?.sitemap?.defaultChangeFrequency;
+
+  return routes
+    .filter((route) => includeDynamicRoutes || (route.type !== 'dynamicItem' && route.type !== 'dynamicList'))
+    .map((route) => ({
+      ...route,
+      priority: defaultPriority === undefined || isHomepageRoute(route) ? route.priority : defaultPriority,
+      changeFrequency: defaultChangeFrequency && !isHomepageRoute(route) ? defaultChangeFrequency : route.changeFrequency,
+      robots: {
+        index: route.robots.index && robotsIndex,
+        follow: route.robots.follow && robotsFollow,
+      },
+    }));
+};
+
+export const sitemapRoutes = (discovery: SeoDiscovery): SeoRoute[] => (
+  discovery.sitemap.enabled ? discovery.routes.filter((route) => route.robots.index) : []
+);
+
 export const getHostedRouteUrl = (origin: string, siteSlug: string, canonical: string): string => {
   const normalizedCanonical = canonical === '/' ? '' : canonical.startsWith('/') ? canonical : `/${canonical}`;
   return `${origin.replace(/\/$/, '')}/sites/${siteSlug}${normalizedCanonical}`;
@@ -159,6 +202,14 @@ export const buildRobotsTxt = (sitemapUrl: string) => [
   `Sitemap: ${sitemapUrl}`,
   '',
 ].join('\n');
+
+export const buildRobotsTxtFromDiscovery = (discovery: SeoDiscovery) => [
+  'User-agent: *',
+  discovery.robots.index ? 'Allow: /' : 'Disallow: /',
+  discovery.sitemap.enabled ? `Sitemap: ${discovery.sitemap.url}` : '',
+  discovery.robots.extraRules || '',
+  '',
+].filter((line, index, lines) => line.length > 0 || index === lines.length - 1).join('\n');
 
 export const buildSeoRoutes = (siteId: string): SeoRoute[] => {
   const pages: SeoRoute[] = getPageSummary(siteId).map((page) => {
@@ -279,8 +330,12 @@ export const buildSeoRoutes = (siteId: string): SeoRoute[] => {
 };
 
 export const buildSeoDiscovery = (site: StoreSite): SeoDiscovery => {
-  const routes = buildSeoRoutes(site.id).map((route) => applySeoDefaults(route, site));
+  const routes = applySeoSitemapAndRobotsSettings(
+    buildSeoRoutes(site.id).map((route) => applySeoDefaults(route, site)),
+    site,
+  );
   const seo = site.settings?.seo;
+  const sitemapEnabled = seo?.sitemap?.enabled !== false;
 
   return {
     site: {
@@ -292,17 +347,22 @@ export const buildSeoDiscovery = (site: StoreSite): SeoDiscovery => {
       title: applyTitleTemplate(site.name, site, seo),
       description: seo?.defaultDescription || site.description || '',
       robots: {
-        index: true,
-        follow: true,
+        index: seo?.robots?.index !== false,
+        follow: seo?.robots?.follow !== false,
       },
     },
     routes,
     sitemap: {
       url: `/api/sites/${site.id}/seo?format=sitemap`,
-      count: routes.filter((route) => route.robots.index).length,
+      count: sitemapEnabled ? routes.filter((route) => route.robots.index).length : 0,
+      enabled: sitemapEnabled,
+      includeDynamicRoutes: seo?.sitemap?.includeDynamicRoutes !== false,
     },
     robots: {
       url: `/api/sites/${site.id}/seo?format=robots`,
+      index: seo?.robots?.index !== false,
+      follow: seo?.robots?.follow !== false,
+      extraRules: seo?.robots?.extraRules || undefined,
     },
   };
 };

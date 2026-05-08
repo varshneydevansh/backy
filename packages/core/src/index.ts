@@ -60,6 +60,17 @@ export const DEFAULT_SITE_SETTINGS = {
     defaultDescription: '',
     defaultOgImage: '',
     favicon: '',
+    sitemap: {
+      enabled: true,
+      defaultChangeFrequency: 'weekly',
+      defaultPriority: 0.7,
+      includeDynamicRoutes: true,
+    },
+    robots: {
+      index: true,
+      follow: true,
+      extraRules: '',
+    },
   },
   analytics: {},
   social: {},

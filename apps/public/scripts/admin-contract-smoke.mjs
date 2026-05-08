@@ -1779,6 +1779,17 @@ try {
             defaultDescription: 'Fallback SEO description from admin contract.',
             defaultOgImage: '/uploads/sites/contract/social-card.jpg',
             favicon: '/favicon-contract.ico',
+            sitemap: {
+              enabled: true,
+              defaultChangeFrequency: 'monthly',
+              defaultPriority: 0.4,
+              includeDynamicRoutes: false,
+            },
+            robots: {
+              index: true,
+              follow: true,
+              extraRules: 'Disallow: /contract-private',
+            },
           },
         }),
       });
@@ -1795,6 +1806,10 @@ try {
       assert(seoDiscovery.json?.data?.routes?.some((route) => route.type === 'page' && route.canonical === `/${pageSlug}-form-write`), `${seoDiscovery.url} missing temporary page SEO route`);
       assert(seoDiscovery.json?.data?.defaults?.description === 'Fallback SEO description from admin contract.', `${seoDiscovery.url} missing SEO default description`);
       assert(seoDiscovery.json?.data?.routes?.some((route) => route.title?.startsWith('SEO ') && route.openGraph?.image === '/uploads/sites/contract/social-card.jpg'), `${seoDiscovery.url} missing applied SEO defaults`);
+      assert(seoDiscovery.json?.data?.sitemap?.enabled === true, `${seoDiscovery.url} missing sitemap enabled flag`);
+      assert(seoDiscovery.json?.data?.sitemap?.includeDynamicRoutes === false, `${seoDiscovery.url} missing dynamic sitemap flag`);
+      assert(seoDiscovery.json?.data?.robots?.extraRules === 'Disallow: /contract-private', `${seoDiscovery.url} missing robots extra rules`);
+      assert(seoDiscovery.json?.data?.routes?.some((route) => route.type === 'page' && route.changeFrequency === 'monthly' && route.priority === 0.4), `${seoDiscovery.url} missing sitemap route defaults`);
       assert(seoDiscovery.json?.data?.sitemap?.url === `/api/sites/${createdSiteId}/seo?format=sitemap`, `${seoDiscovery.url} missing sitemap URL`);
 
       const seoSitemap = await request(`/api/sites/${createdSiteId}/seo?format=sitemap`);
@@ -1806,6 +1821,7 @@ try {
       assert(seoRobots.response.status === 200, `${seoRobots.url} expected 200, got ${seoRobots.response.status}`);
       assert(seoRobots.response.headers.get('content-type')?.includes('text/plain'), `${seoRobots.url} expected robots text content type`);
       assert(seoRobots.text.includes(`Sitemap: /api/sites/${createdSiteId}/seo?format=sitemap`), `${seoRobots.url} missing sitemap pointer`);
+      assert(seoRobots.text.includes('Disallow: /contract-private'), `${seoRobots.url} missing custom robots rule`);
 
       const hostedSitemap = await request(`/sites/${siteSlug}/sitemap.xml`);
       assert(hostedSitemap.response.status === 200, `${hostedSitemap.url} expected 200, got ${hostedSitemap.response.status}`);

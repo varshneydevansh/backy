@@ -382,10 +382,15 @@ export interface BackySeoDiscovery {
   sitemap: {
     url: string;
     count?: number;
+    enabled?: boolean;
+    includeDynamicRoutes?: boolean;
     [key: string]: unknown;
   };
   robots: {
     url: string;
+    index?: boolean;
+    follow?: boolean;
+    extraRules?: string;
     [key: string]: unknown;
   };
 }

@@ -9,7 +9,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { BackyCollection, BackyCollectionRecord, BackyPage, BackyPost, Site } from '@backy-cms/core';
 import { getSiteByIdOrSlug } from '@/lib/backyStore';
-import { applySeoDefaults, buildRobotsTxt, buildSeoDiscovery, buildSitemapXml, type SeoDiscovery, type SeoRoute } from '@/lib/seoDiscovery';
+import {
+  applySeoDefaults,
+  applySeoSitemapAndRobotsSettings,
+  buildRobotsTxtFromDiscovery,
+  buildSeoDiscovery,
+  buildSitemapXml,
+  sitemapRoutes,
+  type SeoDiscovery,
+  type SeoRoute,
+} from '@/lib/seoDiscovery';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { buildCollectionItemPath, buildCollectionListPath } from '@/lib/collectionRoutes';
 
@@ -234,18 +243,22 @@ const buildRepositorySeoDiscovery = async (
           .map((record) => dynamicItemSeoRoute(collection, record));
       }),
   );
-  const routes = [
-    ...pages.items.filter(isPubliclyReadable).map(pageSeoRoute),
-    ...posts.items.filter(isPubliclyReadable).map(postSeoRoute),
-    ...collections.items
-      .filter((collection) => collection.status === 'published' && collection.permissions.publicRead)
-      .map(dynamicListSeoRoute),
-    ...dynamicItems.flat(),
-  ].map((route) => applySeoDefaults(route, site)).sort((left, right) => {
+  const routes = applySeoSitemapAndRobotsSettings(
+    [
+      ...pages.items.filter(isPubliclyReadable).map(pageSeoRoute),
+      ...posts.items.filter(isPubliclyReadable).map(postSeoRoute),
+      ...collections.items
+        .filter((collection) => collection.status === 'published' && collection.permissions.publicRead)
+        .map(dynamicListSeoRoute),
+      ...dynamicItems.flat(),
+    ].map((route) => applySeoDefaults(route, site)),
+    site,
+  ).sort((left, right) => {
     if (left.priority !== right.priority) return right.priority - left.priority;
     return left.canonical.localeCompare(right.canonical);
   });
   const seo = site.settings?.seo;
+  const sitemapEnabled = seo?.sitemap?.enabled !== false;
 
   return {
     site: {
@@ -278,17 +291,22 @@ const buildRepositorySeoDiscovery = async (
       }, site).title,
       description: seo?.defaultDescription || site.description || '',
       robots: {
-        index: true,
-        follow: true,
+        index: seo?.robots?.index !== false,
+        follow: seo?.robots?.follow !== false,
       },
     },
     routes,
     sitemap: {
       url: `/api/sites/${site.id}/seo?format=sitemap`,
-      count: routes.filter((route) => route.robots.index).length,
+      count: sitemapEnabled ? routes.filter((route) => route.robots.index).length : 0,
+      enabled: sitemapEnabled,
+      includeDynamicRoutes: seo?.sitemap?.includeDynamicRoutes !== false,
     },
     robots: {
       url: `/api/sites/${site.id}/seo?format=robots`,
+      index: seo?.robots?.index !== false,
+      follow: seo?.robots?.follow !== false,
+      extraRules: seo?.robots?.extraRules || undefined,
     },
   };
 };
@@ -310,7 +328,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const format = new URL(request.url).searchParams.get('format');
 
       if (format === 'sitemap') {
-        return new NextResponse(buildSitemapXml(discovery.routes), {
+        return new NextResponse(buildSitemapXml(sitemapRoutes(discovery)), {
           headers: {
             'content-type': 'application/xml; charset=utf-8',
             'cache-control': 'public, max-age=60, stale-while-revalidate=300',
@@ -321,7 +339,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
 
       if (format === 'robots') {
-        return new NextResponse(buildRobotsTxt(discovery.sitemap.url), {
+        return new NextResponse(buildRobotsTxtFromDiscovery(discovery), {
           headers: {
             'content-type': 'text/plain; charset=utf-8',
             'cache-control': 'public, max-age=60, stale-while-revalidate=300',
@@ -349,7 +367,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const format = new URL(request.url).searchParams.get('format');
 
     if (format === 'sitemap') {
-      return new NextResponse(buildSitemapXml(discovery.routes), {
+      return new NextResponse(buildSitemapXml(sitemapRoutes(discovery)), {
         headers: {
           'content-type': 'application/xml; charset=utf-8',
           'cache-control': 'public, max-age=60, stale-while-revalidate=300',
@@ -360,7 +378,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     if (format === 'robots') {
-      return new NextResponse(buildRobotsTxt(discovery.sitemap.url), {
+      return new NextResponse(buildRobotsTxtFromDiscovery(discovery), {
         headers: {
           'content-type': 'text/plain; charset=utf-8',
           'cache-control': 'public, max-age=60, stale-while-revalidate=300',

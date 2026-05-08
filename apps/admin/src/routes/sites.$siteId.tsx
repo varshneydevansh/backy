@@ -125,6 +125,17 @@ const EMPTY_SEO_SETTINGS: AdminSiteSeoSettings = {
   defaultDescription: '',
   defaultOgImage: '',
   favicon: '',
+  sitemap: {
+    enabled: true,
+    defaultChangeFrequency: 'weekly',
+    defaultPriority: 0.7,
+    includeDynamicRoutes: true,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    extraRules: '',
+  },
 };
 
 function makeRedirectRule(): SiteRedirectRule {
@@ -1949,6 +1960,109 @@ function EditSitePage() {
                   disabled={seoState.loading}
                   className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                   placeholder="/favicon.ico"
+                />
+              </div>
+              <div className="rounded-lg border border-border bg-background px-4 py-3">
+                <div className="text-sm font-semibold">Sitemap</div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={seoState.seo.sitemap?.enabled !== false}
+                      onChange={(event) => handleUpdateSeo({
+                        sitemap: {
+                          ...seoState.seo.sitemap,
+                          enabled: event.target.checked,
+                        },
+                      })}
+                    />
+                    Emit sitemap routes
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={seoState.seo.sitemap?.includeDynamicRoutes !== false}
+                      onChange={(event) => handleUpdateSeo({
+                        sitemap: {
+                          ...seoState.seo.sitemap,
+                          includeDynamicRoutes: event.target.checked,
+                        },
+                      })}
+                    />
+                    Include dynamic routes
+                  </label>
+                  <select
+                    value={seoState.seo.sitemap?.defaultChangeFrequency || 'weekly'}
+                    onChange={(event) => handleUpdateSeo({
+                      sitemap: {
+                        ...seoState.seo.sitemap,
+                        defaultChangeFrequency: event.target.value as NonNullable<AdminSiteSeoSettings['sitemap']>['defaultChangeFrequency'],
+                      },
+                    })}
+                    className="h-9 rounded-md border bg-background px-2 text-sm"
+                  >
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.1}
+                    value={seoState.seo.sitemap?.defaultPriority ?? 0.7}
+                    onChange={(event) => handleUpdateSeo({
+                      sitemap: {
+                        ...seoState.seo.sitemap,
+                        defaultPriority: Number(event.target.value),
+                      },
+                    })}
+                    className="h-9 rounded-md border bg-background px-2 text-sm"
+                    aria-label="Default sitemap priority"
+                  />
+                </div>
+              </div>
+              <div className="rounded-lg border border-border bg-background px-4 py-3">
+                <div className="text-sm font-semibold">Robots</div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={seoState.seo.robots?.index !== false}
+                      onChange={(event) => handleUpdateSeo({
+                        robots: {
+                          ...seoState.seo.robots,
+                          index: event.target.checked,
+                        },
+                      })}
+                    />
+                    Allow indexing
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={seoState.seo.robots?.follow !== false}
+                      onChange={(event) => handleUpdateSeo({
+                        robots: {
+                          ...seoState.seo.robots,
+                          follow: event.target.checked,
+                        },
+                      })}
+                    />
+                    Allow following
+                  </label>
+                </div>
+                <textarea
+                  value={seoState.seo.robots?.extraRules || ''}
+                  onChange={(event) => handleUpdateSeo({
+                    robots: {
+                      ...seoState.seo.robots,
+                      extraRules: event.target.value,
+                    },
+                  })}
+                  rows={3}
+                  className="mt-3 w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                  placeholder="Disallow: /private"
                 />
               </div>
               <div className="rounded-lg border border-border bg-background px-4 py-3">

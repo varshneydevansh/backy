@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSiteByIdOrSlug } from '@/lib/backyStore';
-import { buildSeoDiscovery, buildSitemapXml, getHostedRouteUrl } from '@/lib/seoDiscovery';
+import { buildSeoDiscovery, buildSitemapXml, getHostedRouteUrl, sitemapRoutes } from '@/lib/seoDiscovery';
 
 interface RouteParams {
   params: Promise<{
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const discovery = buildSeoDiscovery(site);
 
   return new NextResponse(
-    buildSitemapXml(discovery.routes, (route) => getHostedRouteUrl(origin, site.slug, route.canonical)),
+    buildSitemapXml(sitemapRoutes(discovery), (route) => getHostedRouteUrl(origin, site.slug, route.canonical)),
     {
       headers: {
         'content-type': 'application/xml; charset=utf-8',

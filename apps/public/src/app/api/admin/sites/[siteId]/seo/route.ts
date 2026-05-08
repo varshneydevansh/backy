@@ -31,6 +31,15 @@ const text = (value: unknown): string | undefined => (
   typeof value === 'string' ? value.trim() : undefined
 );
 
+const bool = (value: unknown, fallback: boolean) => (
+  typeof value === 'boolean' ? value : fallback
+);
+
+const numberInRange = (value: unknown, fallback: number) => {
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : fallback;
+};
+
 const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
   NextResponse.json(
     {
@@ -77,10 +86,21 @@ const normalizeSeoInput = (
   }
 
   const titleTemplate = text(input.titleTemplate);
+  const sitemapInput = isRecord(input.sitemap) ? input.sitemap : {};
+  const robotsInput = isRecord(input.robots) ? input.robots : {};
   const issues: Array<{ field: string; message: string }> = [];
 
   if (titleTemplate && !titleTemplate.includes('%s') && !titleTemplate.includes('{title}')) {
     issues.push({ field: 'titleTemplate', message: 'Title template must include %s or {title}' });
+  }
+
+  if (
+    sitemapInput.defaultChangeFrequency !== undefined
+    && sitemapInput.defaultChangeFrequency !== 'daily'
+    && sitemapInput.defaultChangeFrequency !== 'weekly'
+    && sitemapInput.defaultChangeFrequency !== 'monthly'
+  ) {
+    issues.push({ field: 'sitemap.defaultChangeFrequency', message: 'Change frequency must be daily, weekly, or monthly' });
   }
 
   if (issues.length > 0) {
@@ -95,6 +115,25 @@ const normalizeSeoInput = (
       defaultDescription: input.defaultDescription === undefined ? current.defaultDescription : text(input.defaultDescription) || '',
       defaultOgImage: input.defaultOgImage === undefined ? current.defaultOgImage : text(input.defaultOgImage) || '',
       favicon: input.favicon === undefined ? current.favicon : text(input.favicon) || '',
+      sitemap: input.sitemap === undefined
+        ? current.sitemap
+        : {
+            ...current.sitemap,
+            enabled: bool(sitemapInput.enabled, current.sitemap?.enabled !== false),
+            defaultChangeFrequency: sitemapInput.defaultChangeFrequency === 'daily' || sitemapInput.defaultChangeFrequency === 'weekly' || sitemapInput.defaultChangeFrequency === 'monthly'
+              ? sitemapInput.defaultChangeFrequency
+              : current.sitemap?.defaultChangeFrequency || 'weekly',
+            defaultPriority: numberInRange(sitemapInput.defaultPriority, current.sitemap?.defaultPriority ?? 0.7),
+            includeDynamicRoutes: bool(sitemapInput.includeDynamicRoutes, current.sitemap?.includeDynamicRoutes !== false),
+          },
+      robots: input.robots === undefined
+        ? current.robots
+        : {
+            ...current.robots,
+            index: bool(robotsInput.index, current.robots?.index !== false),
+            follow: bool(robotsInput.follow, current.robots?.follow !== false),
+            extraRules: robotsInput.extraRules === undefined ? current.robots?.extraRules || '' : text(robotsInput.extraRules) || '',
+          },
     },
   };
 };
