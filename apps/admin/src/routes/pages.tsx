@@ -61,6 +61,8 @@ function PagesListView() {
   const [isBulkBusy, setIsBulkBusy] = useState(false);
   const [readinessMap, setReadinessMap] = useState<Record<string, PageReadiness>>({});
   const [previewingPageId, setPreviewingPageId] = useState<string | null>(null);
+  const [pendingDeletePage, setPendingDeletePage] = useState<Page | null>(null);
+  const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const activeSite = useMemo(
     () => sites.find((site) => (site.publicSiteId || site.id) === selectedSiteId) || sites[0],
     [selectedSiteId, sites],
@@ -219,10 +221,6 @@ function PagesListView() {
   };
 
   const handleDeletePage = async (page: Page) => {
-    if (!confirm('Delete page?')) {
-      return;
-    }
-
     setError(null);
 
     try {
@@ -238,6 +236,7 @@ function PagesListView() {
         delete next[page.id];
         return next;
       });
+      setPendingDeletePage(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete page');
     }
@@ -248,7 +247,8 @@ function PagesListView() {
       return;
     }
 
-    if (bulkAction === 'delete' && !confirm(`Delete ${selectedPages.length} selected page${selectedPages.length === 1 ? '' : 's'}?`)) {
+    if (bulkAction === 'delete' && !pendingBulkDelete) {
+      setPendingBulkDelete(true);
       return;
     }
 
@@ -275,6 +275,7 @@ function PagesListView() {
           selectedPages.map((page) => deletePageFromApi(page.siteId || activeSiteId, page.id)),
         );
         selectedPages.forEach((page) => deletePage(page.id));
+        setPendingBulkDelete(false);
       }
 
       setSelectedPageIds(new Set());
@@ -403,7 +404,7 @@ function PagesListView() {
           </button>
           <button
             onClick={() => {
-              void handleDeletePage(page);
+              setPendingDeletePage(page);
             }}
             title="Delete page"
             className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -528,7 +529,12 @@ function PagesListView() {
             type="button"
             onClick={() => void handleBulkAction()}
             disabled={!bulkAction || selectedPages.length === 0 || isBulkBusy}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+            className={cn(
+              'rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+              bulkAction === 'delete'
+                ? 'bg-red-600 text-white hover:bg-red-700'
+                : 'bg-primary text-primary-foreground hover:bg-primary/90',
+            )}
           >
             {isBulkBusy ? 'Applying...' : 'Apply'}
           </button>
@@ -627,6 +633,80 @@ function PagesListView() {
           />
         }
       />
+
+      {pendingDeletePage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Delete {pendingDeletePage.title}?</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This removes the page from the backend and the public API. Archive it instead if you only want to hide it.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Route: <span className="font-medium text-foreground">{pagePublicPath(pendingDeletePage)}</span>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDeletePage(null)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeletePage(pendingDeletePage)}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+              >
+                Delete page
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingBulkDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  Delete {selectedPages.length} selected page{selectedPages.length === 1 ? '' : 's'}?
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Selected pages will be removed from the site and from frontend API delivery.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingBulkDelete(false)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkAction()}
+                disabled={isBulkBusy}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+              >
+                Delete pages
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }
