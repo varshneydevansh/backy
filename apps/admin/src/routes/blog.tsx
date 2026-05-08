@@ -6,13 +6,16 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { Plus, FileText, Edit, Trash2 } from 'lucide-react';
+import { Archive, CheckCircle2, ExternalLink, Eye, Filter, Plus, FileText, Edit, Trash2 } from 'lucide-react';
 import {
+  archiveBlogPost,
+  createBlogPostPreview,
   deleteBlogPost,
   listBlogAuthors,
   listBlogCategories,
   listBlogPosts,
   listBlogTags,
+  publishBlogPost,
   type BlogAuthor,
   type BlogCategory,
   type BlogTag,
@@ -23,7 +26,7 @@ import { PageShell } from '@/components/layout/PageShell';
 import { DataGrid } from '@/components/ui/DataGrid';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { formatDate } from '@/lib/utils';
+import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/blog')({
   component: BlogLayout,
@@ -42,19 +45,86 @@ function BlogLayout() {
 
 function BlogListView() {
   const navigate = useNavigate();
-  const { sites, posts, setPosts, deletePost } = useStore();
+  const { sites, posts, setPosts, deletePost, updatePost } = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [tags, setTags] = useState<BlogTag[]>([]);
   const [authors, setAuthors] = useState<BlogAuthor[]>([]);
+  const [selectedSiteId, setSelectedSiteId] = useState(() => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo');
+  const [statusFilter, setStatusFilter] = useState<'all' | BlogPost['status']>('all');
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [selectedTagId, setSelectedTagId] = useState('');
   const [selectedAuthorId, setSelectedAuthorId] = useState('');
-  const activeSiteId = useMemo(
-    () => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo',
-    [sites],
+  const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(() => new Set());
+  const [bulkAction, setBulkAction] = useState<'publish' | 'archive' | 'delete' | ''>('');
+  const [isBulkBusy, setIsBulkBusy] = useState(false);
+  const [previewingPostId, setPreviewingPostId] = useState<string | null>(null);
+  const activeSite = useMemo(
+    () => sites.find((site) => (site.publicSiteId || site.id) === selectedSiteId) || sites[0],
+    [selectedSiteId, sites],
   );
+  const activeSiteId = useMemo(
+    () => activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo',
+    [activeSite, selectedSiteId],
+  );
+  const siteSlug = activeSite?.slug || activeSiteId;
+  const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
+  const visiblePosts = useMemo(
+    () => posts.filter((post) => (
+      (statusFilter === 'all' || post.status === statusFilter) &&
+      (!selectedCategoryId || post.categoryIds?.includes(selectedCategoryId)) &&
+      (!selectedTagId || post.tagIds?.includes(selectedTagId)) &&
+      (!selectedAuthorId || post.author === selectedAuthorId)
+    )),
+    [posts, selectedAuthorId, selectedCategoryId, selectedTagId, statusFilter],
+  );
+  const postMetrics = useMemo(
+    () => ({
+      total: posts.length,
+      published: posts.filter((post) => post.status === 'published').length,
+      draft: posts.filter((post) => post.status === 'draft').length,
+      scheduled: posts.filter((post) => post.status === 'scheduled').length,
+      archived: posts.filter((post) => post.status === 'archived').length,
+    }),
+    [posts],
+  );
+  const selectedPosts = useMemo(
+    () => posts.filter((post) => selectedPostIds.has(post.id)),
+    [posts, selectedPostIds],
+  );
+
+  const refreshPosts = useMemo(
+    () => async (siteId: string) => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const [backendPosts, backendCategories, backendTags, backendAuthors] = await Promise.all([
+          listBlogPosts(siteId),
+          listBlogCategories(siteId),
+          listBlogTags(siteId),
+          listBlogAuthors(siteId),
+        ]);
+        setPosts(backendPosts);
+        setSelectedPostIds((current) => new Set(backendPosts.filter((post) => current.has(post.id)).map((post) => post.id)));
+        setCategories(backendCategories);
+        setTags(backendTags);
+        setAuthors(backendAuthors);
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : 'Unable to load posts');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [setPosts],
+  );
+
+  useEffect(() => {
+    if (sites.length > 0 && !sites.some((site) => (site.publicSiteId || site.id) === selectedSiteId)) {
+      setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
+    }
+  }, [selectedSiteId, sites]);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,17 +135,14 @@ function BlogListView() {
 
       try {
         const [backendPosts, backendCategories, backendTags, backendAuthors] = await Promise.all([
-          listBlogPosts(activeSiteId, {
-            categoryId: selectedCategoryId || undefined,
-            tagId: selectedTagId || undefined,
-            authorId: selectedAuthorId || undefined,
-          }),
+          listBlogPosts(activeSiteId),
           listBlogCategories(activeSiteId),
           listBlogTags(activeSiteId),
           listBlogAuthors(activeSiteId),
         ]);
         if (!cancelled) {
           setPosts(backendPosts);
+          setSelectedPostIds((current) => new Set(backendPosts.filter((post) => current.has(post.id)).map((post) => post.id)));
           setCategories(backendCategories);
           setTags(backendTags);
           setAuthors(backendAuthors);
@@ -96,7 +163,7 @@ function BlogListView() {
     return () => {
       cancelled = true;
     };
-  }, [activeSiteId, selectedAuthorId, selectedCategoryId, selectedTagId, setPosts]);
+  }, [activeSiteId, setPosts]);
 
   const categoryById = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
@@ -111,6 +178,55 @@ function BlogListView() {
     [authors],
   );
 
+  const setPostStatusFilter = (nextStatus: 'all' | BlogPost['status']) => {
+    setStatusFilter(nextStatus);
+    setCurrentPage(1);
+  };
+
+  const setPostSelection = (targetPosts: BlogPost[], selected: boolean) => {
+    setSelectedPostIds((current) => {
+      const next = new Set(current);
+      targetPosts.forEach((post) => {
+        if (selected) {
+          next.add(post.id);
+        } else {
+          next.delete(post.id);
+        }
+      });
+      return next;
+    });
+  };
+
+  const togglePostSelection = (postId: string) => {
+    setSelectedPostIds((current) => {
+      const next = new Set(current);
+      if (next.has(postId)) {
+        next.delete(postId);
+      } else {
+        next.add(postId);
+      }
+      return next;
+    });
+  };
+
+  const publicPostUrl = (post: BlogPost) => (
+    `${publicBaseUrl}/sites/${encodeURIComponent(siteSlug)}/blog/${encodeURIComponent(post.slug)}`
+  );
+
+  const handlePreviewPost = async (post: BlogPost) => {
+    setPreviewingPostId(post.id);
+    setError(null);
+
+    try {
+      const preview = await createBlogPostPreview(activeSiteId, post.id);
+      window.open(preview.url, '_blank', 'noopener,noreferrer');
+    } catch (previewError) {
+      setError(previewError instanceof Error ? previewError.message : 'Unable to create post preview');
+    } finally {
+      setPreviewingPostId(null);
+    }
+  };
+
   const handleDeletePost = async (post: BlogPost) => {
     if (!confirm('Delete this post?')) {
       return;
@@ -121,12 +237,68 @@ function BlogListView() {
     try {
       await deleteBlogPost(activeSiteId, post.id);
       deletePost(post.id);
+      setSelectedPostIds((current) => {
+        const next = new Set(current);
+        next.delete(post.id);
+        return next;
+      });
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete post');
     }
   };
 
+  const handleBulkAction = async () => {
+    if (!bulkAction || selectedPosts.length === 0) {
+      return;
+    }
+
+    if (bulkAction === 'delete' && !confirm(`Delete ${selectedPosts.length} selected post${selectedPosts.length === 1 ? '' : 's'}?`)) {
+      return;
+    }
+
+    setIsBulkBusy(true);
+    setError(null);
+
+    try {
+      if (bulkAction === 'publish') {
+        const updatedPosts = await Promise.all(selectedPosts.map((post) => publishBlogPost(activeSiteId, post.id)));
+        updatedPosts.forEach((post) => updatePost(post.id, post));
+      }
+
+      if (bulkAction === 'archive') {
+        const updatedPosts = await Promise.all(selectedPosts.map((post) => archiveBlogPost(activeSiteId, post.id)));
+        updatedPosts.forEach((post) => updatePost(post.id, post));
+      }
+
+      if (bulkAction === 'delete') {
+        await Promise.all(selectedPosts.map((post) => deleteBlogPost(activeSiteId, post.id)));
+        selectedPosts.forEach((post) => deletePost(post.id));
+      }
+
+      setSelectedPostIds(new Set());
+      setBulkAction('');
+      await refreshPosts(activeSiteId);
+    } catch (bulkError) {
+      setError(bulkError instanceof Error ? bulkError.message : 'Unable to apply bulk action');
+    } finally {
+      setIsBulkBusy(false);
+    }
+  };
+
   const columns: Column<BlogPost>[] = [
+    {
+      key: 'id',
+      label: 'Select',
+      render: (post) => (
+        <input
+          type="checkbox"
+          aria-label={`Select ${post.title}`}
+          checked={selectedPostIds.has(post.id)}
+          onChange={() => togglePostSelection(post.id)}
+          className="size-4 rounded border-border text-primary focus:ring-ring"
+        />
+      )
+    },
     {
       key: 'title',
       label: 'Title',
@@ -147,7 +319,16 @@ function BlogListView() {
       key: 'status',
       label: 'Status',
       sortable: true,
-      render: (post) => <StatusBadge status={post.status} />
+      render: (post) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={post.status} />
+          {post.scheduledAt && (
+            <span className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
+              {formatDate(post.scheduledAt)}
+            </span>
+          )}
+        </div>
+      )
     },
     {
       key: 'author',
@@ -180,14 +361,37 @@ function BlogListView() {
       label: '',
       render: (post) => (
         <div className="flex items-center justify-end gap-2">
+          {post.status === 'published' && (
+            <a
+              href={publicPostUrl(post)}
+              target="_blank"
+              rel="noreferrer"
+              title="Open published post"
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          )}
+          <button
+            onClick={() => {
+              void handlePreviewPost(post);
+            }}
+            disabled={previewingPostId === post.id}
+            title="Preview post"
+            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Eye className="w-4 h-4" />
+          </button>
           <button
             onClick={() => navigate({ to: '/blog/$postId', params: { postId: post.id } })}
+            title="Edit post"
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
           >
             <Edit className="w-4 h-4" />
           </button>
           <button
             onClick={() => void handleDeletePost(post)}
+            title="Delete post"
             className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
           >
             <Trash2 className="w-4 h-4" />
@@ -208,10 +412,12 @@ function BlogListView() {
     totalPages,
     totalItems
   } = useDataTable({
-    data: posts,
+    data: visiblePosts,
     columns,
     pageSize: 10
   });
+  const selectedCurrentRows = data.filter((post) => selectedPostIds.has(post.id));
+  const hasPosts = posts.length > 0;
 
   return (
     <PageShell
@@ -239,7 +445,98 @@ function BlogListView() {
         </div>
       )}
 
-      <div className="flex items-center gap-4 mb-6">
+      <div className="mb-6 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid gap-3 md:grid-cols-5">
+          {[
+            { label: 'All', value: postMetrics.total, status: 'all' as const },
+            { label: 'Published', value: postMetrics.published, status: 'published' as const },
+            { label: 'Draft', value: postMetrics.draft, status: 'draft' as const },
+            { label: 'Scheduled', value: postMetrics.scheduled, status: 'scheduled' as const },
+            { label: 'Archived', value: postMetrics.archived, status: 'archived' as const },
+          ].map((metric) => (
+            <button
+              key={metric.label}
+              type="button"
+              onClick={() => setPostStatusFilter(metric.status)}
+              className={cn(
+                'rounded-lg border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-muted',
+                statusFilter === metric.status && 'border-primary bg-primary/5',
+              )}
+            >
+              <div className="text-xs font-medium text-muted-foreground">{metric.label}</div>
+              <div className="mt-1 font-mono text-2xl font-semibold">{metric.value}</div>
+            </button>
+          ))}
+        </div>
+        <div className="rounded-lg border border-border bg-card px-4 py-3">
+          <div className="text-xs font-medium text-muted-foreground">Active Site</div>
+          <select
+            value={activeSiteId}
+            onChange={(event) => {
+              setSelectedSiteId(event.target.value);
+              setStatusFilter('all');
+              setSelectedCategoryId('');
+              setSelectedTagId('');
+              setSelectedAuthorId('');
+              setSelectedPostIds(new Set());
+            }}
+            className="mt-2 w-full min-w-52 rounded-lg border bg-background px-3 py-2 text-sm"
+          >
+            {sites.length === 0 ? (
+              <option value="site-demo">Demo site</option>
+            ) : sites.map((site) => (
+              <option key={site.id} value={site.publicSiteId || site.id}>
+                {site.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {hasPosts && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
+          <span className="text-sm font-medium">{selectedPostIds.size} selected</span>
+          <button
+            type="button"
+            onClick={() => setPostSelection(data, selectedCurrentRows.length !== data.length)}
+            disabled={data.length === 0}
+            className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {selectedCurrentRows.length === data.length && data.length > 0 ? 'Clear visible' : 'Select visible'}
+          </button>
+          <select
+            value={bulkAction}
+            onChange={(event) => setBulkAction(event.target.value as typeof bulkAction)}
+            className="min-w-44 rounded-lg border bg-background px-3 py-2 text-sm"
+          >
+            <option value="">Bulk action...</option>
+            <option value="publish">Publish selected</option>
+            <option value="archive">Archive selected</option>
+            <option value="delete">Delete selected</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => void handleBulkAction()}
+            disabled={!bulkAction || selectedPosts.length === 0 || isBulkBusy}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {bulkAction === 'publish' && <CheckCircle2 className="size-4" />}
+            {bulkAction === 'archive' && <Archive className="size-4" />}
+            {isBulkBusy ? 'Applying...' : 'Apply'}
+          </button>
+          {selectedPosts.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedPostIds(new Set())}
+              className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              Clear selection
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3 mb-6">
         <div className="relative flex-1 max-w-sm">
           <input
             type="text"
@@ -248,6 +545,22 @@ function BlogListView() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-4 pr-4 py-2 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
           />
+        </div>
+        <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card p-1">
+          <Filter className="ml-2 size-4 text-muted-foreground" />
+          {(['all', 'published', 'draft', 'scheduled', 'archived'] as const).map((status) => (
+            <button
+              key={status}
+              type="button"
+              onClick={() => setPostStatusFilter(status)}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                statusFilter === status && 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground',
+              )}
+            >
+              {status}
+            </button>
+          ))}
         </div>
         <select
           value={selectedCategoryId}
@@ -294,6 +607,28 @@ function BlogListView() {
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          onClick={() => {
+            setSearchQuery('');
+            setStatusFilter('all');
+            setSelectedCategoryId('');
+            setSelectedTagId('');
+            setSelectedAuthorId('');
+            setCurrentPage(1);
+          }}
+          className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+        >
+          Clear Filters
+        </button>
+        <button
+          type="button"
+          onClick={() => void refreshPosts(activeSiteId)}
+          disabled={isLoading}
+          className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Refresh
+        </button>
       </div>
 
       <DataGrid
@@ -308,16 +643,39 @@ function BlogListView() {
         emptyState={
           <EmptyState
             icon={FileText}
-            title="No posts yet"
-            description="Write your first blog post to get started."
+            title={hasPosts ? 'No matching posts' : 'No posts yet'}
+            description={
+              hasPosts
+                ? 'No posts match the current search, status, taxonomy, or author filters.'
+                : 'Write the first post for this site, then design its public page.'
+            }
             action={
-              <Link
-                to="/blog/new"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 mt-4"
-              >
-                <Plus className="w-4 h-4" />
-                Create Post
-              </Link>
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                {hasPosts && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setStatusFilter('all');
+                      setSelectedCategoryId('');
+                      setSelectedTagId('');
+                      setSelectedAuthorId('');
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 font-medium transition-colors hover:bg-accent"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+                <button
+                  type="button"
+                  data-testid="blog-empty-create"
+                  onClick={() => navigate({ to: '/blog/new' })}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  <Plus className="w-4 h-4" />
+                  {hasPosts ? 'New Post' : 'Create First Post'}
+                </button>
+              </div>
             }
           />
         }
@@ -325,3 +683,26 @@ function BlogListView() {
     </PageShell>
   );
 }
+
+const getEnvValue = (key: string): string => {
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+  return env[key]?.trim() ?? '';
+};
+
+const getPublicBaseUrl = (): string => {
+  const envBase = (
+    getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
+    getEnvValue('VITE_PUBLIC_API_URL') ||
+    getEnvValue('VITE_API_BASE_URL') ||
+    ''
+  ).trim();
+
+  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+    return 'http://localhost:3001';
+  }
+
+  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+    .replace(/\/api\/admin$/, '')
+    .replace(/\/api$/, '')
+    .replace(/\/$/, '');
+};
