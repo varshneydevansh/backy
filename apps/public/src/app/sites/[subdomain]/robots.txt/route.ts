@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSiteByIdOrSlug } from '@/lib/backyStore';
-import { buildRobotsTxtFromDiscovery, buildSeoDiscovery } from '@/lib/seoDiscovery';
+import { buildRobotsTxtFromDiscovery, buildSeoDiscovery, getSiteCanonicalBaseUrl } from '@/lib/seoDiscovery';
 
 interface RouteParams {
   params: Promise<{
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     ...discovery,
     sitemap: {
       ...discovery.sitemap,
-      url: `${origin}/sites/${site.slug}/sitemap.xml`,
+      url: `${getSiteCanonicalBaseUrl(origin, site)}/sitemap.xml`,
     },
   };
 

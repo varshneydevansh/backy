@@ -16,6 +16,7 @@ export interface SeoRoute {
   description: string;
   path: string;
   canonical: string;
+  canonicalUrl?: string;
   status: string;
   updatedAt?: string;
   priority: number;
@@ -38,6 +39,8 @@ export interface SeoDiscovery {
     id: string;
     slug: string;
     name: string;
+    customDomain?: string | null;
+    canonicalBaseUrl?: string;
   };
   defaults: {
     title: string;
@@ -51,12 +54,14 @@ export interface SeoDiscovery {
   routes: SeoRoute[];
   sitemap: {
     url: string;
+    publicUrl?: string;
     count: number;
     enabled: boolean;
     includeDynamicRoutes: boolean;
   };
   robots: {
     url: string;
+    publicUrl?: string;
     index: boolean;
     follow: boolean;
     extraRules?: string;
@@ -183,14 +188,102 @@ export const sitemapRoutes = (discovery: SeoDiscovery): SeoRoute[] => (
   discovery.sitemap.enabled ? discovery.routes.filter((route) => route.robots.index) : []
 );
 
-export const getHostedRouteUrl = (origin: string, siteSlug: string, canonical: string): string => {
-  const normalizedCanonical = canonical === '/' ? '' : canonical.startsWith('/') ? canonical : `/${canonical}`;
-  return `${origin.replace(/\/$/, '')}/sites/${siteSlug}${normalizedCanonical}`;
+const normalizeDomain = (domain: string | null | undefined): string | null => {
+  if (typeof domain !== 'string' || domain.trim().length === 0) {
+    return null;
+  }
+
+  const withoutProtocol = domain.trim().replace(/^https?:\/\//i, '');
+  const hostname = withoutProtocol.split('/')[0]?.replace(/\/+$/, '').toLowerCase();
+  return hostname || null;
+};
+
+const normalizeCanonicalPath = (canonical: string): string => {
+  if (canonical === '/') {
+    return '/';
+  }
+
+  return canonical.startsWith('/') ? canonical : `/${canonical}`;
+};
+
+export const getHostedRouteUrl = (
+  origin: string,
+  siteSlug: string,
+  canonical: string,
+  customDomain?: string | null,
+): string => {
+  const normalizedCanonical = normalizeCanonicalPath(canonical);
+  const domain = normalizeDomain(customDomain);
+
+  if (domain) {
+    return `https://${domain}${normalizedCanonical}`;
+  }
+
+  const hostedPath = normalizedCanonical === '/' ? '' : normalizedCanonical;
+  return `${origin.replace(/\/$/, '')}/sites/${siteSlug}${hostedPath}`;
+};
+
+export const getSiteCanonicalBaseUrl = (
+  origin: string,
+  site: { slug: string; customDomain?: string | null },
+): string => {
+  const domain = normalizeDomain(site.customDomain);
+
+  if (domain) {
+    return `https://${domain}`;
+  }
+
+  return `${origin.replace(/\/$/, '')}/sites/${site.slug}`;
+};
+
+const customDomainSitemapUrl = (site: { customDomain?: string | null }) => {
+  const domain = normalizeDomain(site.customDomain);
+  return domain ? `https://${domain}/sitemap.xml` : undefined;
+};
+
+const customDomainRobotsUrl = (site: { customDomain?: string | null }) => {
+  const domain = normalizeDomain(site.customDomain);
+  return domain ? `https://${domain}/robots.txt` : undefined;
+};
+
+const withCanonicalUrls = (
+  discovery: SeoDiscovery,
+  site: { slug: string; customDomain?: string | null },
+  origin?: string,
+): SeoDiscovery => {
+  if (!origin) {
+    return discovery;
+  }
+
+  const canonicalBaseUrl = getSiteCanonicalBaseUrl(origin, site);
+  const sitemapPublicUrl = customDomainSitemapUrl(site);
+  const robotsPublicUrl = customDomainRobotsUrl(site);
+
+  return {
+    ...discovery,
+    site: {
+      ...discovery.site,
+      customDomain: site.customDomain || null,
+      canonicalBaseUrl,
+    },
+    routes: discovery.routes.map((route) => ({
+      ...route,
+      canonicalUrl: getHostedRouteUrl(origin, site.slug, route.canonical, site.customDomain),
+    })),
+    sitemap: {
+      ...discovery.sitemap,
+      publicUrl: sitemapPublicUrl,
+    },
+    robots: {
+      ...discovery.robots,
+      publicUrl: robotsPublicUrl,
+    },
+  };
 };
 
 export const buildSitemapXml = (
   routes: SeoRoute[],
-  resolveLocation: (route: SeoRoute) => string = (route) => route.canonical,
+  resolveLocation: (route: SeoRoute) => string = (route) => route.canonicalUrl || route.canonical,
 ) => {
   const urls = routes
     .filter((route) => route.robots.index)
@@ -222,7 +315,7 @@ export const buildRobotsTxt = (sitemapUrl: string) => [
 export const buildRobotsTxtFromDiscovery = (discovery: SeoDiscovery) => [
   'User-agent: *',
   discovery.robots.index ? 'Allow: /' : 'Disallow: /',
-  discovery.sitemap.enabled ? `Sitemap: ${discovery.sitemap.url}` : '',
+  discovery.sitemap.enabled ? `Sitemap: ${discovery.sitemap.publicUrl || discovery.sitemap.url}` : '',
   discovery.robots.extraRules || '',
   '',
 ].filter((line, index, lines) => line.length > 0 || index === lines.length - 1).join('\n');
@@ -349,7 +442,7 @@ export const buildSeoRoutes = (siteId: string): SeoRoute[] => {
   });
 };
 
-export const buildSeoDiscovery = (site: StoreSite): SeoDiscovery => {
+export const buildSeoDiscovery = (site: StoreSite, options: { origin?: string } = {}): SeoDiscovery => {
   const routes = applySeoSitemapAndRobotsSettings(
     buildSeoRoutes(site.id).map((route) => applySeoDefaults(route, site)),
     site,
@@ -357,11 +450,12 @@ export const buildSeoDiscovery = (site: StoreSite): SeoDiscovery => {
   const seo = site.settings?.seo;
   const sitemapEnabled = seo?.sitemap?.enabled !== false;
 
-  return {
+  return withCanonicalUrls({
     site: {
       id: site.id,
       slug: site.slug,
       name: site.name,
+      customDomain: site.customDomain || null,
     },
     defaults: {
       title: applyTitleTemplate(site.name, site, seo),
@@ -385,5 +479,5 @@ export const buildSeoDiscovery = (site: StoreSite): SeoDiscovery => {
       follow: seo?.robots?.follow !== false,
       extraRules: seo?.robots?.extraRules || undefined,
     },
-  };
+  }, site, options.origin);
 };

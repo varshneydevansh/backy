@@ -362,6 +362,7 @@ export interface BackySeoRoute {
   description?: string;
   path: string;
   canonical: string;
+  canonicalUrl?: string;
   status?: string;
   updatedAt?: string;
   priority?: number;
@@ -391,6 +392,7 @@ export interface BackySeoDiscovery {
   routes: BackySeoRoute[];
   sitemap: {
     url: string;
+    publicUrl?: string;
     count?: number;
     enabled?: boolean;
     includeDynamicRoutes?: boolean;
@@ -398,6 +400,7 @@ export interface BackySeoDiscovery {
   };
   robots: {
     url: string;
+    publicUrl?: string;
     index?: boolean;
     follow?: boolean;
     extraRules?: string;

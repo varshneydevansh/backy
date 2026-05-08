@@ -26,7 +26,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const discovery = buildSeoDiscovery(site);
 
   return new NextResponse(
-    buildSitemapXml(sitemapRoutes(discovery), (route) => getHostedRouteUrl(origin, site.slug, route.canonical)),
+    buildSitemapXml(sitemapRoutes(discovery), (route) => getHostedRouteUrl(origin, site.slug, route.canonical, site.customDomain)),
     {
       headers: {
         'content-type': 'application/xml; charset=utf-8',

@@ -114,6 +114,7 @@ async function cleanup() {
 try {
   const unique = Date.now();
   const siteSlug = `admin-contract-site-${unique}`;
+  const customDomain = `${siteSlug}.example.test`;
   const pageSlug = `admin-contract-page-${unique}`;
   const postSlug = `admin-contract-post-${unique}`;
   const categorySlug = `admin-contract-category-${unique}`;
@@ -220,6 +221,7 @@ try {
       },
       body: JSON.stringify({
         description: 'Updated contract smoke site',
+        customDomain,
         status: 'published',
       }),
     });
@@ -228,11 +230,16 @@ try {
     assert(update.json?.success === true, `${update.url} expected success envelope`);
     assert(update.json?.data?.site?.status === 'published', `${update.url} expected published status`);
     assert(update.json?.data?.site?.description === 'Updated contract smoke site', `${update.url} expected updated description`);
+    assert(update.json?.data?.site?.customDomain === customDomain, `${update.url} expected updated custom domain`);
 
     const publicSiteBySlug = await request(`/api/sites?identifier=${siteSlug}`);
     assert(publicSiteBySlug.response.status === 200, `${publicSiteBySlug.url} expected 200, got ${publicSiteBySlug.response.status}`);
     assert(publicSiteBySlug.json?.success === true, `${publicSiteBySlug.url} expected success envelope`);
     assert(publicSiteBySlug.json?.data?.site?.id === createdSiteId, `${publicSiteBySlug.url} returned wrong site`);
+
+    const publicSiteByDomain = await request(`/api/sites?identifier=${customDomain}`);
+    assert(publicSiteByDomain.response.status === 200, `${publicSiteByDomain.url} expected 200, got ${publicSiteByDomain.response.status}`);
+    assert(publicSiteByDomain.json?.data?.site?.id === createdSiteId, `${publicSiteByDomain.url} did not resolve custom domain`);
 
     const publicSiteList = await request('/api/sites');
     assert(publicSiteList.response.status === 200, `${publicSiteList.url} expected 200, got ${publicSiteList.response.status}`);
@@ -1961,6 +1968,12 @@ try {
       assert(seoDiscovery.response.status === 200, `${seoDiscovery.url} expected 200, got ${seoDiscovery.response.status}`);
       assert(seoDiscovery.json?.success === true, `${seoDiscovery.url} expected success envelope`);
       assert(seoDiscovery.json?.data?.routes?.some((route) => route.type === 'page' && route.canonical === `/${pageSlug}-form-write`), `${seoDiscovery.url} missing temporary page SEO route`);
+      assert(seoDiscovery.json?.data?.site?.canonicalBaseUrl === `https://${customDomain}`, `${seoDiscovery.url} missing custom-domain canonical base URL`);
+      assert(seoDiscovery.json?.data?.routes?.some((route) => (
+        route.type === 'page'
+        && route.canonical === `/${pageSlug}-form-write`
+        && route.canonicalUrl === `https://${customDomain}/${pageSlug}-form-write`
+      )), `${seoDiscovery.url} missing custom-domain route canonical URL`);
       assert(seoDiscovery.json?.data?.defaults?.description === 'Fallback SEO description from admin contract.', `${seoDiscovery.url} missing SEO default description`);
       assert(seoDiscovery.json?.data?.defaults?.jsonLd?.[0]?.['@type'] === 'Organization', `${seoDiscovery.url} missing SEO JSON-LD defaults`);
       assert(seoDiscovery.json?.data?.routes?.some((route) => (
@@ -1974,27 +1987,29 @@ try {
       assert(seoDiscovery.json?.data?.robots?.extraRules === 'Disallow: /contract-private', `${seoDiscovery.url} missing robots extra rules`);
       assert(seoDiscovery.json?.data?.routes?.some((route) => route.type === 'page' && route.changeFrequency === 'monthly' && route.priority === 0.4), `${seoDiscovery.url} missing sitemap route defaults`);
       assert(seoDiscovery.json?.data?.sitemap?.url === `/api/sites/${createdSiteId}/seo?format=sitemap`, `${seoDiscovery.url} missing sitemap URL`);
+      assert(seoDiscovery.json?.data?.sitemap?.publicUrl === `https://${customDomain}/sitemap.xml`, `${seoDiscovery.url} missing custom-domain sitemap URL`);
+      assert(seoDiscovery.json?.data?.robots?.publicUrl === `https://${customDomain}/robots.txt`, `${seoDiscovery.url} missing custom-domain robots URL`);
 
       const seoSitemap = await request(`/api/sites/${createdSiteId}/seo?format=sitemap`);
       assert(seoSitemap.response.status === 200, `${seoSitemap.url} expected 200, got ${seoSitemap.response.status}`);
       assert(seoSitemap.response.headers.get('content-type')?.includes('application/xml'), `${seoSitemap.url} expected XML sitemap content type`);
-      assert(seoSitemap.text.includes(`/${pageSlug}-form-write`), `${seoSitemap.url} missing temporary page in sitemap`);
+      assert(seoSitemap.text.includes(`https://${customDomain}/${pageSlug}-form-write`), `${seoSitemap.url} missing custom-domain temporary page in sitemap`);
 
       const seoRobots = await request(`/api/sites/${createdSiteId}/seo?format=robots`);
       assert(seoRobots.response.status === 200, `${seoRobots.url} expected 200, got ${seoRobots.response.status}`);
       assert(seoRobots.response.headers.get('content-type')?.includes('text/plain'), `${seoRobots.url} expected robots text content type`);
-      assert(seoRobots.text.includes(`Sitemap: /api/sites/${createdSiteId}/seo?format=sitemap`), `${seoRobots.url} missing sitemap pointer`);
+      assert(seoRobots.text.includes(`Sitemap: https://${customDomain}/sitemap.xml`), `${seoRobots.url} missing custom-domain sitemap pointer`);
       assert(seoRobots.text.includes('Disallow: /contract-private'), `${seoRobots.url} missing custom robots rule`);
 
       const hostedSitemap = await request(`/sites/${siteSlug}/sitemap.xml`);
       assert(hostedSitemap.response.status === 200, `${hostedSitemap.url} expected 200, got ${hostedSitemap.response.status}`);
       assert(hostedSitemap.response.headers.get('content-type')?.includes('application/xml'), `${hostedSitemap.url} expected XML sitemap content type`);
-      assert(hostedSitemap.text.includes(`${baseUrl}/sites/${siteSlug}/${pageSlug}-form-write`), `${hostedSitemap.url} missing hosted temporary page URL`);
+      assert(hostedSitemap.text.includes(`https://${customDomain}/${pageSlug}-form-write`), `${hostedSitemap.url} missing custom-domain hosted temporary page URL`);
 
       const hostedRobots = await request(`/sites/${siteSlug}/robots.txt`);
       assert(hostedRobots.response.status === 200, `${hostedRobots.url} expected 200, got ${hostedRobots.response.status}`);
       assert(hostedRobots.response.headers.get('content-type')?.includes('text/plain'), `${hostedRobots.url} expected robots text content type`);
-      assert(hostedRobots.text.includes(`Sitemap: ${baseUrl}/sites/${siteSlug}/sitemap.xml`), `${hostedRobots.url} missing hosted sitemap pointer`);
+      assert(hostedRobots.text.includes(`Sitemap: https://${customDomain}/sitemap.xml`), `${hostedRobots.url} missing custom-domain hosted sitemap pointer`);
 
       const frontendManifest = await request(`/api/sites/${createdSiteId}/manifest`);
       assert(frontendManifest.response.status === 200, `${frontendManifest.url} expected 200, got ${frontendManifest.response.status}`);

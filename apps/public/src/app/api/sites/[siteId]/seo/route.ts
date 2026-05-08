@@ -15,6 +15,8 @@ import {
   buildRobotsTxtFromDiscovery,
   buildSeoDiscovery,
   buildSitemapXml,
+  getHostedRouteUrl,
+  getSiteCanonicalBaseUrl,
   jsonLdObjects,
   sitemapRoutes,
   siteJsonLd,
@@ -207,6 +209,7 @@ const dynamicListSeoRoute = (collection: BackyCollection): SeoRoute => {
 const buildRepositorySeoDiscovery = async (
   site: Site,
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
+  origin?: string,
 ): Promise<SeoDiscovery> => {
   const [pages, posts] = await Promise.all([
     repositories.pages.list({
@@ -266,11 +269,13 @@ const buildRepositorySeoDiscovery = async (
   const seo = site.settings?.seo;
   const sitemapEnabled = seo?.sitemap?.enabled !== false;
 
-  return {
+  const discovery: SeoDiscovery = {
     site: {
       id: site.id,
       slug: site.slug,
       name: site.name,
+      customDomain: site.customDomain || null,
+      canonicalBaseUrl: origin ? getSiteCanonicalBaseUrl(origin, site) : undefined,
     },
     defaults: {
       title: applySeoDefaults({
@@ -317,6 +322,28 @@ const buildRepositorySeoDiscovery = async (
       extraRules: seo?.robots?.extraRules || undefined,
     },
   };
+
+  if (!origin) {
+    return discovery;
+  }
+
+  const customDomainBaseUrl = site.customDomain ? getSiteCanonicalBaseUrl(origin, site) : undefined;
+
+  return {
+    ...discovery,
+    routes: discovery.routes.map((route) => ({
+      ...route,
+      canonicalUrl: getHostedRouteUrl(origin, site.slug, route.canonical, site.customDomain),
+    })),
+    sitemap: {
+      ...discovery.sitemap,
+      publicUrl: customDomainBaseUrl ? `${customDomainBaseUrl}/sitemap.xml` : undefined,
+    },
+    robots: {
+      ...discovery.robots,
+      publicUrl: customDomainBaseUrl ? `${customDomainBaseUrl}/robots.txt` : undefined,
+    },
+  };
 };
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -324,6 +351,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
+    const origin = new URL(request.url).origin;
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
@@ -332,7 +360,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const discovery = await buildRepositorySeoDiscovery(site, repositories);
+      const discovery = await buildRepositorySeoDiscovery(site, repositories, origin);
       const format = new URL(request.url).searchParams.get('format');
 
       if (format === 'sitemap') {
@@ -371,7 +399,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const discovery = buildSeoDiscovery(site);
+    const discovery = buildSeoDiscovery(site, { origin });
     const format = new URL(request.url).searchParams.get('format');
 
     if (format === 'sitemap') {
