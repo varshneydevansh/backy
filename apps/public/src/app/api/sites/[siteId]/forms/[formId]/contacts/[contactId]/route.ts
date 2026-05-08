@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import {
   getContactById,
   getFormById,
@@ -7,6 +7,7 @@ import {
   trackWebhookEvent,
   updateContactStatus,
 } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -21,8 +22,16 @@ type ContactStatus = 'new' | 'contacted' | 'qualified' | 'archived';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const privateResponse = <TBody>(body: TBody, requestId: string, status = 200) => (
+  publicContractJson(body, {
+    status,
+    requestId,
+    cache: 'private',
+  })
+);
+
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -32,7 +41,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
       errorMessage: message,
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
@@ -166,14 +175,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         status: body.status,
       })).item;
 
-      return NextResponse.json({
+      return privateResponse({
         success: true,
         requestId,
         data: {
           contact: updated,
         },
         contact: updated,
-      });
+      }, requestId);
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -221,14 +230,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       });
     }
 
-    return NextResponse.json({
+    return privateResponse({
       success: true,
       requestId,
       data: {
         contact: updated,
       },
       contact: updated,
-    });
+    }, requestId);
   } catch (error) {
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);

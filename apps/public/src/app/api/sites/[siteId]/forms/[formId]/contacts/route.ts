@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import {
   getFormById,
   getSiteByIdOrSlug,
   listFormContacts,
 } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -15,8 +16,16 @@ interface RouteParams {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const privateResponse = <TBody>(body: TBody, requestId: string, status = 200) => (
+  publicContractJson(body, {
+    status,
+    requestId,
+    cache: 'private',
+  })
+);
+
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -26,7 +35,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
       errorMessage: message,
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
@@ -64,7 +73,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         offset: Number.isFinite(offset) ? offset : 0,
       });
 
-      return NextResponse.json({
+      return privateResponse({
         success: true,
         requestId,
         data: {
@@ -77,7 +86,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         contacts: result.items,
         count: result.pagination.total,
         pagination: result.pagination,
-      });
+      }, requestId);
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -106,7 +115,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       offset: Number.isFinite(offset) ? offset : 0,
     });
 
-    return NextResponse.json({
+    return privateResponse({
       success: true,
       requestId,
       data: {
@@ -119,7 +128,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       contacts: result.contacts,
       count: result.count,
       pagination: result.pagination,
-    });
+    }, requestId);
   } catch (error) {
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
