@@ -477,6 +477,43 @@ interface ApiBlogPostResponse {
   };
 }
 
+interface ApiListFormsResponse {
+  success: boolean;
+  data?: {
+    forms: FormDefinition[];
+    total?: number;
+    pagination?: FormSubmissionList['pagination'];
+  };
+  forms?: FormDefinition[];
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiFormDetailResponse {
+  success: boolean;
+  data?: {
+    form: FormDefinition;
+    submissions?: FormSubmissionList;
+  };
+  form?: FormDefinition;
+  submissions?: FormSubmissionList;
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiFormSubmissionResponse {
+  success: boolean;
+  data?: {
+    submission: FormSubmission;
+  };
+  submission?: FormSubmission;
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiSettings {
   deliveryMode: SiteSettingsInput['deliveryMode'];
   apiKeys: {
@@ -804,6 +841,100 @@ export interface BlogTagUpdateInput {
   description?: string | null;
 }
 
+export type FormSubmissionStatus = 'pending' | 'approved' | 'rejected' | 'spam';
+
+export interface FormFieldDefinition {
+  key: string;
+  label: string;
+  type: string;
+  placeholder?: string;
+  helpText?: string;
+  defaultValue?: string;
+  options?: string[];
+  required?: boolean;
+  validation?: Array<{
+    type: string;
+    value?: string | number;
+    message: string;
+  }>;
+}
+
+export interface FormDefinition {
+  id: string;
+  siteId: string;
+  pageId?: string | null;
+  postId?: string | null;
+  name: string;
+  title?: string | null;
+  description?: string | null;
+  audience: 'public' | 'authenticated' | 'adminOnly';
+  isActive: boolean;
+  fields: FormFieldDefinition[];
+  notificationEmail?: string | null;
+  successRedirectUrl?: string | null;
+  successMessage?: string | null;
+  enableHoneypot?: boolean;
+  enableCaptcha?: boolean;
+  notificationWebhook?: string | null;
+  moderationMode?: 'manual' | 'auto-approve';
+  contactShare?: {
+    enabled: boolean;
+    nameField?: string;
+    emailField?: string;
+    phoneField?: string;
+    notesField?: string;
+    dedupeByEmail?: boolean;
+  };
+  collectionTarget?: {
+    enabled: boolean;
+    collectionId: string;
+    fieldMap?: Record<string, string>;
+    slugField?: string;
+  };
+  createdBy?: string | null;
+  updatedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FormSubmission {
+  id: string;
+  formId: string;
+  siteId: string;
+  pageId?: string | null;
+  postId?: string | null;
+  values: Record<string, unknown>;
+  ipHash?: string | null;
+  userAgent?: string | null;
+  requestId?: string | null;
+  status: FormSubmissionStatus;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  adminNotes?: string | null;
+  updatedAt?: string;
+  collectionRecord?: {
+    siteId: string;
+    collectionId: string;
+    collectionSlug: string;
+    recordId: string;
+    recordSlug: string;
+    status: string;
+    createdAt: string;
+  } | null;
+  collectionRecordErrors?: Array<{ field: string; message: string }>;
+  submittedAt: string;
+}
+
+export interface FormSubmissionList {
+  data: FormSubmission[];
+  pagination?: {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+}
+
 export interface BlogCategory {
   id: string;
   siteId: string;
@@ -1033,6 +1164,10 @@ const getAdminApiBase = (): string => {
   const base = envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
   return `${base.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api/admin`;
 };
+
+const getPublicApiBase = (): string => (
+  getAdminApiBase().replace(/\/api\/admin$/, '/api')
+);
 
 const getAdminApiKey = (): string => (
   getEnvValue('VITE_BACKY_ADMIN_API_KEY') ||
@@ -2041,6 +2176,74 @@ export async function deleteBlogPost(siteId: string, postId: string): Promise<vo
   if (!response.ok || !payload.success || !payload.data?.deleted) {
     throw new Error(payload.error?.message || 'Unable to delete blog post');
   }
+}
+
+export async function listForms(
+  siteId: string,
+  filters: { pageId?: string; postId?: string } = {},
+): Promise<FormDefinition[]> {
+  const query = new URLSearchParams();
+  if (filters.pageId) query.set('pageId', filters.pageId);
+  if (filters.postId) query.set('postId', filters.postId);
+
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/forms${query.toString() ? `?${query}` : ''}`);
+  const payload = await readJson<ApiListFormsResponse>(response);
+  const forms = payload.data?.forms || payload.forms;
+
+  if (!response.ok || !payload.success || !forms) {
+    throw new Error(payload.error?.message || 'Unable to load forms');
+  }
+
+  return forms;
+}
+
+export async function getFormWithSubmissions(
+  siteId: string,
+  formId: string,
+  filters: { status?: FormSubmissionStatus | 'all'; requestId?: string; limit?: number; offset?: number } = {},
+): Promise<{ form: FormDefinition; submissions: FormSubmissionList }> {
+  const query = new URLSearchParams();
+  if (filters.status && filters.status !== 'all') query.set('status', filters.status);
+  if (filters.requestId) query.set('requestId', filters.requestId);
+  if (filters.limit) query.set('limit', String(filters.limit));
+  if (filters.offset) query.set('offset', String(filters.offset));
+
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/forms/${formId}${query.toString() ? `?${query}` : ''}`);
+  const payload = await readJson<ApiFormDetailResponse>(response);
+  const form = payload.data?.form || payload.form;
+  const submissions = payload.data?.submissions || payload.submissions;
+
+  if (!response.ok || !payload.success || !form) {
+    throw new Error(payload.error?.message || 'Unable to load form');
+  }
+
+  return {
+    form,
+    submissions: submissions || { data: [], pagination: { total: 0, limit: filters.limit || 20, offset: filters.offset || 0, hasMore: false } },
+  };
+}
+
+export async function updateFormSubmission(
+  siteId: string,
+  formId: string,
+  submissionId: string,
+  input: { status: FormSubmissionStatus; reviewedBy?: string | null; adminNotes?: string | null },
+): Promise<FormSubmission> {
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/forms/${formId}/submissions/${submissionId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiFormSubmissionResponse>(response);
+  const submission = payload.data?.submission || payload.submission;
+
+  if (!response.ok || !payload.success || !submission) {
+    throw new Error(payload.error?.message || 'Unable to update submission');
+  }
+
+  return submission;
 }
 
 export async function listCollections(siteId: string): Promise<Collection[]> {
