@@ -626,6 +626,16 @@ export class BackyClient {
     return `${this.baseUrl}/api/sites/${encodeURIComponent(this.requireSiteId())}/media/${encodeURIComponent(mediaId)}/file${query ? `?${query}` : ''}`;
   }
 
+  mediaTransformUrl(mediaId: string, options: { width: number; quality?: number }): string {
+    const searchParams = new URLSearchParams({
+      width: String(options.width),
+    });
+    if (options.quality !== undefined) {
+      searchParams.set('quality', String(options.quality));
+    }
+    return `${this.baseUrl}/api/sites/${encodeURIComponent(this.requireSiteId())}/media/${encodeURIComponent(mediaId)}/transform?${searchParams.toString()}`;
+  }
+
   collections(siteId = this.requireSiteId()): Promise<BackyEnvelope<{ collections: BackyCollectionSchema[] }>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/collections`);
   }

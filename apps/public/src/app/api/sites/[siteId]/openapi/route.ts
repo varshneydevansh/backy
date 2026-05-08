@@ -349,6 +349,29 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
           },
         },
+        [`/api/sites/${site.id}/media/{mediaId}/transform`]: {
+          get: {
+            tags: ['Media'],
+            summary: 'Validate and redirect a public image asset to Backy image optimization',
+            operationId: 'transformBackyMediaImage',
+            parameters: [
+              { name: 'mediaId', in: 'path', required: true, schema: { type: 'string' } },
+              queryParameter('width', { type: 'integer', minimum: 16, maximum: 3840 }, 'Target image width'),
+              queryParameter('quality', { type: 'integer', minimum: 1, maximum: 100 }, 'Output quality, default 75'),
+            ],
+            responses: {
+              '307': {
+                description: 'Redirect to optimized image URL',
+              },
+              '400': {
+                description: 'Invalid transform request or unsupported media type',
+              },
+              '404': {
+                description: 'Media not found or private',
+              },
+            },
+          },
+        },
         [`/api/sites/${site.id}/collections`]: {
           get: {
             tags: ['Content'],

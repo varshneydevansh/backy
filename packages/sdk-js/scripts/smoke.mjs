@@ -330,6 +330,10 @@ if (media.data.media?.length > 0) {
     client.mediaFileUrl(media.data.media[0].id).includes(`/api/sites/${client.getSiteId()}/media/${media.data.media[0].id}/file`),
     'mediaFileUrl() returned wrong media file URL',
   );
+  assert(
+    client.mediaTransformUrl(media.data.media[0].id, { width: 640, quality: 80 }).includes(`/api/sites/${client.getSiteId()}/media/${media.data.media[0].id}/transform?width=640&quality=80`),
+    'mediaTransformUrl() returned wrong media transform URL',
+  );
 }
 
 const reusableSections = await client.reusableSections();
@@ -590,6 +594,7 @@ console.log(JSON.stringify({
     'seo',
     'media',
     'mediaFileUrl',
+    'mediaTransformUrl',
     'reusableSections',
     'forms',
     'formDefinition',

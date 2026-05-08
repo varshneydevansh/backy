@@ -126,6 +126,8 @@ Uploaded font files are stored as media with `type: "font"`. Admin media upload/
 
 Private media can now be delivered through a Backy-signed file URL. Admin integrations call `POST /api/admin/sites/:siteId/media/:mediaId/signed-url` to receive a temporary `/api/sites/:siteId/media/:mediaId/file?...` URL. The public file route serves private bytes only when the HMAC token, expiry, and disposition match; unsigned private file requests return `MEDIA_SIGNATURE_INVALID`. Public file URLs remain directly readable through the same route.
 
+Public image media can also be routed through `GET /api/sites/:siteId/media/:mediaId/transform?width=:width&quality=:quality`. Backy validates site ownership, public visibility, image type, and bounded width/quality parameters, then redirects to the Next image optimizer. Manifest/OpenAPI advertise the route, and the SDK exposes `mediaTransformUrl(...)` for generated/custom frontends.
+
 ## Current collection endpoints
 
 Backy now exposes the first implementation-backed CMS collection surface:

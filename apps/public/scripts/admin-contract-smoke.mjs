@@ -15,6 +15,7 @@ let createdUserId = null;
 let createdCollectionId = null;
 let createdCollectionRecordId = null;
 let createdMediaId = null;
+let createdImageMediaId = null;
 let createdMediaFolderId = null;
 let createdReusableSectionId = null;
 let createdSafeguardUserId = null;
@@ -121,6 +122,10 @@ async function cleanup() {
 
   if (createdSiteId && createdMediaId) {
     await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (createdSiteId && createdImageMediaId) {
+    await request(`/api/admin/sites/${createdSiteId}/media/${createdImageMediaId}`, { method: 'DELETE' }).catch(() => {});
   }
 
   if (createdSiteId) {
@@ -489,6 +494,41 @@ try {
     assert(detachedMedia.json?.data?.media?.some((item) => (
       item.id === createdMediaId && item.folderId === null
     )), `${detachedMedia.url} did not detach media from deleted folder`);
+  });
+
+  await record('admin media image transforms redirect to optimizer', async () => {
+    const formData = new FormData();
+    formData.set('file', new Blob(['<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="red"/></svg>'], { type: 'image/svg+xml' }), 'contract-image.svg');
+    formData.set('visibility', 'public');
+    formData.set('altText', 'Contract image');
+
+    const upload = await request(`/api/admin/sites/${createdSiteId}/media`, {
+      method: 'POST',
+      body: formData,
+    });
+    assert(upload.response.status === 201, `${upload.url} expected 201, got ${upload.response.status}`);
+    createdImageMediaId = upload.json?.data?.media?.id;
+    assert(createdImageMediaId, `${upload.url} missing image media id`);
+    assert(upload.json?.data?.media?.type === 'image', `${upload.url} expected image media type`);
+
+    const transform = await request(`/api/sites/${createdSiteId}/media/${createdImageMediaId}/transform?width=320&quality=80`, {
+      redirect: 'manual',
+    });
+    assert(transform.response.status === 307, `${transform.url} expected transform redirect, got ${transform.response.status}`);
+    assert(transform.response.headers.get('location')?.includes('/_next/image'), `${transform.url} missing optimizer redirect`);
+    assert(transform.response.headers.get('location')?.includes('w=320'), `${transform.url} missing transform width`);
+    assert(transform.response.headers.get('x-backy-transform-width') === '320', `${transform.url} missing transform width header`);
+    assert(transform.response.headers.get('x-backy-transform-quality') === '80', `${transform.url} missing transform quality header`);
+
+    const invalidTransform = await request(`/api/sites/${createdSiteId}/media/${createdMediaId}/transform?width=320`, {
+      redirect: 'manual',
+    });
+    assert(invalidTransform.response.status === 400, `${invalidTransform.url} expected non-image transform to fail`);
+    assert(invalidTransform.json?.error?.code === 'MEDIA_TRANSFORM_UNSUPPORTED', `${invalidTransform.url} expected unsupported transform code`);
+
+    const remove = await request(`/api/admin/sites/${createdSiteId}/media/${createdImageMediaId}`, { method: 'DELETE' });
+    assert(remove.response.status === 200, `${remove.url} expected image media cleanup`);
+    createdImageMediaId = null;
   });
 
   await record('admin pages create/list/detail/update/delete works for temporary site', async () => {
@@ -2303,6 +2343,7 @@ try {
       assert(frontendManifest.json?.data?.endpoints?.sitemap === `/api/sites/${createdSiteId}/seo?format=sitemap`, `${frontendManifest.url} missing sitemap endpoint`);
       assert(frontendManifest.json?.data?.endpoints?.mediaDetail === `/api/sites/${createdSiteId}/media/{mediaId}`, `${frontendManifest.url} missing media detail endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.mediaFile === `/api/sites/${createdSiteId}/media/{mediaId}/file`, `${frontendManifest.url} missing media file endpoint template`);
+      assert(frontendManifest.json?.data?.endpoints?.mediaTransform === `/api/sites/${createdSiteId}/media/{mediaId}/transform?width={width}`, `${frontendManifest.url} missing media transform endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.reusableSections === `/api/sites/${createdSiteId}/reusable-sections`, `${frontendManifest.url} missing reusable sections endpoint`);
       assert(frontendManifest.json?.data?.endpoints?.formDetail === `/api/sites/${createdSiteId}/forms/{formId}`, `${frontendManifest.url} missing form detail endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.formDefinition === `/api/sites/${createdSiteId}/forms/{formId}/definition`, `${frontendManifest.url} missing form definition endpoint template`);
@@ -2376,6 +2417,7 @@ try {
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/seo`]?.get, `${publicOpenApi.url} missing SEO discovery operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/media/{mediaId}`]?.get, `${publicOpenApi.url} missing media detail operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/media/{mediaId}/file`]?.get, `${publicOpenApi.url} missing media file operation`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/media/{mediaId}/transform`]?.get, `${publicOpenApi.url} missing media transform operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/collections/{collectionId}/records`]?.post, `${publicOpenApi.url} missing public collection create operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/reusable-sections`]?.get, `${publicOpenApi.url} missing reusable sections list operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/reusable-sections/{sectionId}`]?.get, `${publicOpenApi.url} missing reusable section detail operation`);
