@@ -7,13 +7,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { Site } from '@backy-cms/core';
+import type { Site, SiteSettings } from '@backy-cms/core';
 import {
   deleteAdminSite,
   getSiteByIdOrSlug,
   updateAdminSite,
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { normalizeRedirectRules } from '@/lib/redirectRules';
 
 export const runtime = 'nodejs';
 
@@ -55,6 +56,49 @@ const adminSiteFromRepositorySite = (site: Site | null) => {
   return {
     ...site,
     status: site.isPublished ? 'published' : 'draft',
+  };
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const toStringRecord = (value: unknown): Record<string, string> => {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return Object.entries(value).reduce<Record<string, string>>((acc, [key, entry]) => {
+    if (typeof entry === 'string') {
+      acc[key] = entry;
+    }
+    return acc;
+  }, {});
+};
+
+const mergeSiteSettings = (current: SiteSettings, input: unknown): SiteSettings | undefined => {
+  if (!isRecord(input)) {
+    return undefined;
+  }
+
+  return {
+    ...current,
+    ...input,
+    seo: {
+      ...current.seo,
+      ...(isRecord(input.seo) ? input.seo : {}),
+    },
+    analytics: {
+      ...current.analytics,
+      ...(isRecord(input.analytics) ? input.analytics : {}),
+    },
+    social: {
+      ...current.social,
+      ...toStringRecord(input.social),
+    },
+    redirectRules: input.redirectRules === undefined
+      ? current.redirectRules
+      : normalizeRedirectRules(input.redirectRules),
   };
 };
 
@@ -113,6 +157,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const body = await parseJsonBody(request);
+      const settings = mergeSiteSettings(site.settings, body.settings);
       const updated = await repositories.sites.update(site.id, {
         name: typeof body.name === 'string' ? body.name : undefined,
         slug: typeof body.slug === 'string' ? body.slug : undefined,
@@ -120,6 +165,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         customDomain: typeof body.customDomain === 'string' || body.customDomain === null ? body.customDomain : undefined,
         status: body.status === 'published' ? 'published' : body.status === 'draft' ? 'draft' : undefined,
         isPublished: typeof body.isPublished === 'boolean' ? body.isPublished : undefined,
+        settings,
       });
 
       return NextResponse.json({

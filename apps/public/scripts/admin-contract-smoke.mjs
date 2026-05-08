@@ -589,6 +589,52 @@ try {
     assert(resolvedPage.json?.data?.route?.type === 'page', `${resolvedPage.url} expected page route`);
     assert(resolvedPage.json?.data?.route?.resource?.id === createdPageId, `${resolvedPage.url} returned wrong resolved page`);
 
+    const redirectSourcePath = `/old-${pageSlug}`;
+    const goneSourcePath = `/retired-${pageSlug}`;
+    const redirectSettings = await request(`/api/admin/sites/${createdSiteId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          redirectRules: [
+            {
+              id: 'contract-redirect',
+              from: redirectSourcePath,
+              to: `/${pageSlug}`,
+              statusCode: 301,
+              enabled: true,
+            },
+            {
+              id: 'contract-gone',
+              from: goneSourcePath,
+              statusCode: 410,
+              enabled: true,
+            },
+          ],
+        },
+      }),
+    });
+    assert(redirectSettings.response.status === 200, `${redirectSettings.url} expected redirect settings update`);
+    assert(
+      redirectSettings.json?.data?.site?.settings?.redirectRules?.some((rule) => (
+        rule.id === 'contract-redirect' && rule.from === redirectSourcePath && rule.to === `/${pageSlug}`
+      )),
+      `${redirectSettings.url} missing persisted redirect rule`,
+    );
+
+    const redirectedRoute = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(redirectSourcePath)}`);
+    assert(redirectedRoute.response.status === 200, `${redirectedRoute.url} expected redirect route resolve`);
+    assert(redirectedRoute.json?.data?.route?.type === 'redirect', `${redirectedRoute.url} expected redirect route`);
+    assert(redirectedRoute.json?.data?.route?.resource?.to === `/${pageSlug}`, `${redirectedRoute.url} returned wrong redirect target`);
+    assert(redirectedRoute.json?.data?.route?.resource?.statusCode === 301, `${redirectedRoute.url} returned wrong redirect status code`);
+
+    const goneRoute = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(goneSourcePath)}`);
+    assert(goneRoute.response.status === 410, `${goneRoute.url} expected 410 gone route`);
+    assert(goneRoute.json?.success === false, `${goneRoute.url} expected gone error envelope`);
+    assert(goneRoute.json?.data?.route?.type === 'gone', `${goneRoute.url} expected gone route`);
+
     const readiness = await request(`/api/admin/sites/${createdSiteId}/readiness`);
     assert(readiness.response.status === 200, `${readiness.url} expected 200, got ${readiness.response.status}`);
     assert(readiness.json?.success === true, `${readiness.url} expected success envelope`);

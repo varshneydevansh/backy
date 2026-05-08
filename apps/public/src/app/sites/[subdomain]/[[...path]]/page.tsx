@@ -7,7 +7,7 @@
  * Uses SSR for SEO and initial load, with GSAP hydration for animations.
  */
 
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect, redirect } from 'next/navigation';
 import type { BackyCollection, BackyCollectionRecord, BackyPage, Site } from '@backy-cms/core';
 import {
     getCanonicalPathForPage,
@@ -32,6 +32,7 @@ import {
     matchCollectionItemRoute,
     matchCollectionListRoute,
 } from '@/lib/collectionRoutes';
+import { resolveRedirectRoute } from '@/lib/redirectRules';
 import type { Metadata } from 'next';
 
 type HostedSite =
@@ -341,16 +342,39 @@ const firstParam = (value: string | string[] | undefined): string | undefined =>
     Array.isArray(value) ? value[0] : value
 );
 
+const routePathFromParts = (path: string[] | undefined): string => (
+    path && path.length > 0 ? `/${path.join('/')}` : '/'
+);
+
+function applyHostedRedirects(site: Pick<Site, 'settings'> | StoreSite, path: string) {
+    const redirectRoute = resolveRedirectRoute(site.settings, path);
+    if (!redirectRoute) {
+        return;
+    }
+
+    if (redirectRoute.type === 'gone') {
+        notFound();
+    }
+
+    if (redirectRoute.resource.statusCode === 301 || redirectRoute.resource.statusCode === 308) {
+        permanentRedirect(redirectRoute.resource.to);
+    }
+
+    redirect(redirectRoute.resource.to);
+}
+
 export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
     const { subdomain, path } = await params;
     const previewToken = firstParam((await searchParams)?.previewToken);
     const pageSlug = path?.join('/') || 'index';
+    const routePath = routePathFromParts(path);
 
     const hostedSite = await getSite(subdomain);
     if (!hostedSite) return { title: 'Page Not Found' };
 
     if (hostedSite.mode === 'database') {
         const { site } = hostedSite;
+        applyHostedRedirects(site, routePath);
         const page = await getRepositoryPage(hostedSite, pageSlug, previewToken);
         if (!page) {
             const dynamicRoute = await getRepositoryDynamicCollectionRoute(hostedSite, path);
@@ -425,6 +449,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
     }
 
     const { site } = hostedSite;
+    applyHostedRedirects(site, routePath);
     const page = await getPage(site.id, pageSlug, previewToken);
     if (!page) {
         const dynamicRoute = getDynamicCollectionRoute(site.id, path);

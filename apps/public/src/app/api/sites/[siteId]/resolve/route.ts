@@ -10,6 +10,7 @@ import { getSiteByIdOrSlug, getSiteNavigation } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRoutePath, resolveSiteRoute } from '@/lib/routeResolver';
 import { matchCollectionItemRoute, matchCollectionListRoute } from '@/lib/collectionRoutes';
+import { resolveRedirectRoute, type ResolvedRedirectRoute } from '@/lib/redirectRules';
 
 interface RouteParams {
   params: Promise<{
@@ -43,6 +44,37 @@ const errorResponse = (status: number, code: string, message: string, requestId:
     { status },
   )
 );
+
+const redirectRouteResponse = (
+  route: ResolvedRedirectRoute,
+  site: { id: string; slug: string; name: string; status: string },
+  requestId: string,
+) => {
+  const isGone = route.type === 'gone';
+
+  return NextResponse.json(
+    {
+      success: !isGone,
+      requestId,
+      ...(isGone
+        ? {
+            error: {
+              code: 'ROUTE_GONE',
+              message: 'Route is gone',
+            },
+          }
+        : {}),
+      data: {
+        site,
+        route,
+        navigation: {
+          primary: [],
+        },
+      },
+    },
+    { status: isGone ? 410 : 200 },
+  );
+};
 
 const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null }) => (
   item.status === 'published' && (!item.scheduledAt || new Date(item.scheduledAt).getTime() <= Date.now())
@@ -145,6 +177,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
       if (!site) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId, path);
+      }
+
+      const redirectRoute = resolveRedirectRoute(site.settings, path);
+      if (redirectRoute) {
+        return redirectRouteResponse(redirectRoute, {
+          id: site.id,
+          slug: site.slug,
+          name: site.name,
+          status: siteStatus(site),
+        }, requestId);
       }
 
       const blogMatch = path.match(/^\/blog\/([^/]+)$/);
@@ -337,6 +379,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const route = resolveSiteRoute(site, path, { previewToken });
     if (!route) {
       return errorResponse(404, 'ROUTE_NOT_FOUND', 'Route not found', requestId, path);
+    }
+
+    if (route.type === 'redirect' || route.type === 'gone') {
+      return redirectRouteResponse(route, {
+        id: site.id,
+        slug: site.slug,
+        name: site.name,
+        status: site.status,
+      }, requestId);
     }
 
     return NextResponse.json({

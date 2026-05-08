@@ -13,6 +13,7 @@ import {
   type StoreSite,
 } from './backyStore';
 import { matchCollectionItemRoute, matchCollectionListRoute } from './collectionRoutes';
+import { resolveRedirectRoute, type ResolvedRedirectRoute } from './redirectRules';
 
 type ResolvedPageRoute = {
   type: 'page';
@@ -87,7 +88,12 @@ type ResolvedDynamicListRoute = {
   };
 };
 
-export type ResolvedSiteRoute = ResolvedPageRoute | ResolvedPostRoute | ResolvedDynamicListRoute | ResolvedDynamicItemRoute;
+export type ResolvedSiteRoute =
+  | ResolvedPageRoute
+  | ResolvedPostRoute
+  | ResolvedDynamicListRoute
+  | ResolvedDynamicItemRoute
+  | ResolvedRedirectRoute;
 
 export function normalizeRoutePath(rawPath: string | null | undefined): string {
   const pathOnly = (rawPath || '/').split('?')[0].split('#')[0].trim();
@@ -123,6 +129,11 @@ export function resolveSiteRoute(
   options: { previewToken?: string | null } = {},
 ): ResolvedSiteRoute | null {
   const path = normalizeRoutePath(rawPath);
+  const redirectRoute = resolveRedirectRoute(site.settings, path);
+  if (redirectRoute) {
+    return redirectRoute;
+  }
+
   const blogMatch = path.match(/^\/blog\/([^/]+)$/);
 
   if (blogMatch) {

@@ -272,6 +272,29 @@ export interface SiteSettings {
     github?: string;
     [key: string]: string | undefined;
   };
+
+  /** Site-level redirects and retired routes */
+  redirectRules: SiteRedirectRule[];
+}
+
+/**
+ * Site-level redirect or gone rule used by hosted sites and custom frontends.
+ */
+export interface SiteRedirectRule {
+  /** Stable rule identifier */
+  id?: string;
+
+  /** Source path such as /old-page */
+  from: string;
+
+  /** Destination path or URL. Leave empty only for 410 rules. */
+  to?: string;
+
+  /** HTTP status semantics for the rule */
+  statusCode?: 301 | 302 | 307 | 308 | 410;
+
+  /** Whether the rule is enabled */
+  enabled?: boolean;
 }
 
 // ============================================

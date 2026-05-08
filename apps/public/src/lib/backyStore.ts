@@ -1,4 +1,5 @@
 import {
+  DEFAULT_SITE_SETTINGS,
   DEFAULT_THEME,
   isBackyContentDocument,
   type BackyContentDocument,
@@ -17,6 +18,7 @@ import type {
   Contact,
   CommentReportReason,
   CommentStatus,
+  SiteSettings,
 } from '@backy-cms/core';
 import {
   defaultCollectionListRoutePattern,
@@ -24,6 +26,7 @@ import {
   normalizeCollectionListRoutePattern,
   normalizeCollectionRoutePattern,
 } from './collectionRoutes';
+import { normalizeRedirectRules } from './redirectRules';
 
 interface PageMeta {
   title: string;
@@ -78,6 +81,7 @@ interface StoreSite {
   customDomain: string | null;
   status: 'draft' | 'published' | 'scheduled' | 'archived';
   isPublished: boolean;
+  settings?: SiteSettings;
   theme: {
     colors: Record<string, string>;
     fonts: {
@@ -407,6 +411,13 @@ const seedTheme = {
   },
 };
 
+const createDefaultSiteSettings = (): SiteSettings => ({
+  seo: { ...DEFAULT_SITE_SETTINGS.seo },
+  analytics: {},
+  social: {},
+  redirectRules: [],
+});
+
 const SITE_LIST: StoreSite[] = [
   {
     id: 'site-demo',
@@ -416,6 +427,7 @@ const SITE_LIST: StoreSite[] = [
     customDomain: null,
     status: 'published',
     isPublished: true,
+    settings: createDefaultSiteSettings(),
     theme: seedTheme,
   },
   {
@@ -426,6 +438,7 @@ const SITE_LIST: StoreSite[] = [
     customDomain: null,
     status: 'draft',
     isPublished: false,
+    settings: createDefaultSiteSettings(),
     theme: {
       ...seedTheme,
       colors: {
@@ -2978,6 +2991,31 @@ export function getSiteByIdOrSlug(identifier: string): StoreSite | undefined {
   return found ? clone(found) : undefined;
 }
 
+function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): SiteSettings {
+  const settingsInput = toRecord(input);
+  const base = current || createDefaultSiteSettings();
+
+  return {
+    ...base,
+    ...settingsInput,
+    seo: {
+      ...base.seo,
+      ...toRecord(settingsInput.seo),
+    },
+    analytics: {
+      ...base.analytics,
+      ...toRecord(settingsInput.analytics),
+    },
+    social: {
+      ...base.social,
+      ...toStringRecord(settingsInput.social),
+    },
+    redirectRules: settingsInput.redirectRules === undefined
+      ? [...base.redirectRules]
+      : normalizeRedirectRules(settingsInput.redirectRules),
+  };
+}
+
 export function createAdminSite(input: Record<string, unknown>): StoreSite {
   ensurePersistedAdminContentLoaded();
 
@@ -2994,6 +3032,7 @@ export function createAdminSite(input: Record<string, unknown>): StoreSite {
     customDomain: sanitizeString(input.customDomain) || null,
     status,
     isPublished: status === 'published' || parseBooleanInput(input.isPublished, false),
+    settings: normalizeSiteSettingsInput(input.settings),
     theme: {
       ...seedTheme,
       ...toRecord(input.theme),
@@ -3027,6 +3066,9 @@ export function updateAdminSite(siteId: string, input: Record<string, unknown>):
     ? current.status
     : parseStatusInput(input.status, ['draft', 'published', 'scheduled', 'archived'] as const, current.status);
   const themeInput = toRecord(input.theme);
+  const settingsInput = input.settings === undefined && input.redirectRules !== undefined
+    ? { redirectRules: input.redirectRules }
+    : input.settings;
 
   const updated: StoreSite = {
     ...current,
@@ -3040,6 +3082,9 @@ export function updateAdminSite(siteId: string, input: Record<string, unknown>):
     isPublished: input.isPublished === undefined
       ? nextStatus === 'published'
       : parseBooleanInput(input.isPublished, nextStatus === 'published'),
+    settings: settingsInput === undefined
+      ? current.settings
+      : normalizeSiteSettingsInput(settingsInput, current.settings),
     theme: input.theme === undefined
       ? current.theme
       : {

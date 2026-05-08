@@ -140,6 +140,24 @@ const normalizeTheme = (value: unknown): ThemeConfig => ({
     customCSS: isRecord(value) && typeof value.customCSS === 'string' ? value.customCSS : DEFAULT_THEME.customCSS,
 });
 
+const normalizeSiteRedirectRules = (value: unknown): SiteSettings['redirectRules'] => (
+    Array.isArray(value)
+        ? value.filter(isRecord).map((rule) => ({
+            id: typeof rule.id === 'string' && rule.id.length > 0 ? rule.id : undefined,
+            from: typeof rule.from === 'string' ? rule.from : '/',
+            to: typeof rule.to === 'string' ? rule.to : undefined,
+            statusCode: rule.statusCode === 301
+                || rule.statusCode === 302
+                || rule.statusCode === 307
+                || rule.statusCode === 308
+                || rule.statusCode === 410
+                ? rule.statusCode
+                : undefined,
+            enabled: typeof rule.enabled === 'boolean' ? rule.enabled : undefined,
+        }))
+        : []
+);
+
 const normalizeSettings = (value: unknown): SiteSettings => ({
     ...DEFAULT_SITE_SETTINGS,
     ...(isRecord(value) ? value : {}),
@@ -155,6 +173,7 @@ const normalizeSettings = (value: unknown): SiteSettings => ({
         ...DEFAULT_SITE_SETTINGS.social,
         ...(isRecord(value) && isRecord(value.social) ? value.social : {}),
     },
+    redirectRules: normalizeSiteRedirectRules(isRecord(value) ? value.redirectRules : undefined),
 });
 
 const normalizeMeta = (value: unknown): PageMeta => (

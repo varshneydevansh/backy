@@ -63,6 +63,7 @@ export const DEFAULT_SITE_SETTINGS = {
   },
   analytics: {},
   social: {},
+  redirectRules: [],
 } as const;
 
 /**
