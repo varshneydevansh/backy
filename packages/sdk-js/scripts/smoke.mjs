@@ -142,27 +142,25 @@ async function createSdkSmokeFixture() {
   const redirectPath = `/sdk-old-${pageSlug}`;
   const gonePath = `/sdk-retired-${pageSlug}`;
 
-  const routeSettings = await request(`/api/admin/sites/${siteId}`, {
+  const routeSettings = await request(`/api/admin/sites/${siteId}/redirects`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      settings: {
-        redirectRules: [
-          {
-            id: 'sdk-smoke-redirect',
-            from: redirectPath,
-            to: `/${pageSlug}`,
-            statusCode: 301,
-            enabled: true,
-          },
-          {
-            id: 'sdk-smoke-gone',
-            from: gonePath,
-            statusCode: 410,
-            enabled: true,
-          },
-        ],
-      },
+      redirectRules: [
+        {
+          id: 'sdk-smoke-redirect',
+          from: redirectPath,
+          to: `/${pageSlug}`,
+          statusCode: 301,
+          enabled: true,
+        },
+        {
+          id: 'sdk-smoke-gone',
+          from: gonePath,
+          statusCode: 410,
+          enabled: true,
+        },
+      ],
     }),
   });
   assert(routeSettings.response.status === 200, `${routeSettings.url} expected redirect settings update 200`);

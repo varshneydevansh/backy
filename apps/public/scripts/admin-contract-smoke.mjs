@@ -672,38 +672,60 @@ try {
 
     const redirectSourcePath = `/old-${pageSlug}`;
     const goneSourcePath = `/retired-${pageSlug}`;
-    const redirectSettings = await request(`/api/admin/sites/${createdSiteId}`, {
+    const invalidRedirectSettings = await request(`/api/admin/sites/${createdSiteId}/redirects`, {
       method: 'PATCH',
       headers: {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        settings: {
-          redirectRules: [
-            {
-              id: 'contract-redirect',
-              from: redirectSourcePath,
-              to: `/${pageSlug}`,
-              statusCode: 301,
-              enabled: true,
-            },
-            {
-              id: 'contract-gone',
-              from: goneSourcePath,
-              statusCode: 410,
-              enabled: true,
-            },
-          ],
-        },
+        redirectRules: [
+          {
+            id: 'contract-invalid-redirect',
+            from: redirectSourcePath,
+            to: redirectSourcePath,
+            statusCode: 301,
+            enabled: true,
+          },
+        ],
+      }),
+    });
+    assert(invalidRedirectSettings.response.status === 400, `${invalidRedirectSettings.url} expected invalid redirect 400`);
+    assert(invalidRedirectSettings.json?.error?.code === 'REDIRECT_VALIDATION', `${invalidRedirectSettings.url} expected REDIRECT_VALIDATION`);
+
+    const redirectSettings = await request(`/api/admin/sites/${createdSiteId}/redirects`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        redirectRules: [
+          {
+            id: 'contract-redirect',
+            from: redirectSourcePath,
+            to: `/${pageSlug}`,
+            statusCode: 301,
+            enabled: true,
+          },
+          {
+            id: 'contract-gone',
+            from: goneSourcePath,
+            statusCode: 410,
+            enabled: true,
+          },
+        ],
       }),
     });
     assert(redirectSettings.response.status === 200, `${redirectSettings.url} expected redirect settings update`);
     assert(
-      redirectSettings.json?.data?.site?.settings?.redirectRules?.some((rule) => (
+      redirectSettings.json?.data?.redirects?.rules?.some((rule) => (
         rule.id === 'contract-redirect' && rule.from === redirectSourcePath && rule.to === `/${pageSlug}`
       )),
       `${redirectSettings.url} missing persisted redirect rule`,
     );
+
+    const adminRedirects = await request(`/api/admin/sites/${createdSiteId}/redirects`);
+    assert(adminRedirects.response.status === 200, `${adminRedirects.url} expected redirects read 200`);
+    assert(adminRedirects.json?.data?.redirects?.rules?.some((rule) => rule.id === 'contract-gone' && rule.statusCode === 410), `${adminRedirects.url} missing saved gone rule`);
 
     const redirectedRoute = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(redirectSourcePath)}`);
     assert(redirectedRoute.response.status === 200, `${redirectedRoute.url} expected redirect route resolve`);

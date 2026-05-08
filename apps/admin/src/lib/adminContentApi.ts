@@ -1,6 +1,6 @@
 import type { BlogPost, Page, Site, User } from '@/stores/mockStore';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
-import type { SiteNavigationConfig } from '@backy-cms/core';
+import type { SiteNavigationConfig, SiteRedirectRule } from '@backy-cms/core';
 
 type AdminSiteStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 
@@ -64,6 +64,21 @@ interface ApiSiteNavigationResponse {
   data?: {
     site: Pick<ApiSite, 'id' | 'slug' | 'name'>;
     navigation: AdminSiteNavigation;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+export interface AdminSiteRedirects {
+  rules: SiteRedirectRule[];
+}
+
+interface ApiSiteRedirectsResponse {
+  success: boolean;
+  data?: {
+    site: Pick<ApiSite, 'id' | 'slug' | 'name'>;
+    redirects: AdminSiteRedirects;
   };
   error?: {
     message?: string;
@@ -1290,6 +1305,37 @@ export async function updateSiteNavigation(
   }
 
   return payload.data.navigation;
+}
+
+export async function getSiteRedirects(siteId: string): Promise<AdminSiteRedirects> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/redirects`);
+  const payload = await readJson<ApiSiteRedirectsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load site redirects');
+  }
+
+  return payload.data.redirects;
+}
+
+export async function updateSiteRedirects(
+  siteId: string,
+  redirectRules: SiteRedirectRule[],
+): Promise<AdminSiteRedirects> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/redirects`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ redirectRules }),
+  });
+  const payload = await readJson<ApiSiteRedirectsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to save site redirects');
+  }
+
+  return payload.data.redirects;
 }
 
 export async function getPageReadiness(siteId: string, pageId: string): Promise<PageReadiness> {

@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   ArrowLeft,
+  ArrowRight,
   CheckCircle,
   ChevronDown,
   ChevronUp,
@@ -31,8 +32,10 @@ import { cn } from '@/lib/utils';
 import {
   deleteSite as deleteSiteFromApi,
   getSiteNavigation,
+  getSiteRedirects,
   getSiteReadiness,
   listPages,
+  updateSiteRedirects,
   updateSiteNavigation,
   updateSite as updateSiteFromApi,
 } from '@/lib/adminContentApi';
@@ -46,6 +49,7 @@ import type {
   CommentReportReason,
   SiteNavigationConfig,
   SiteNavigationConfigItem,
+  SiteRedirectRule,
 } from '@backy-cms/core';
 
 interface SiteFormManagementState {
@@ -82,6 +86,14 @@ interface SiteNavigationEditorState {
   notice: string | null;
 }
 
+interface SiteRedirectEditorState {
+  rules: SiteRedirectRule[];
+  loading: boolean;
+  saving: boolean;
+  errorMessage: string | null;
+  notice: string | null;
+}
+
 const DEFAULT_COMMENT_REPORT_REASONS: CommentReportReason[] = [
   'spam',
   'harassment',
@@ -97,6 +109,26 @@ const EMPTY_NAVIGATION: SiteNavigationConfig = {
   primary: [],
   footer: [],
 };
+
+function makeRedirectRule(): SiteRedirectRule {
+  return {
+    id: `redirect_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    from: '/old-path',
+    to: '/new-path',
+    statusCode: 301,
+    enabled: true,
+  };
+}
+
+function normalizeRedirectEditorRule(rule: SiteRedirectRule): SiteRedirectRule {
+  return {
+    ...rule,
+    from: rule.from?.trim() || '/',
+    to: rule.statusCode === 410 ? undefined : rule.to?.trim() || '/',
+    statusCode: rule.statusCode || 302,
+    enabled: rule.enabled !== false,
+  };
+}
 
 function makeNavigationItem(type: SiteNavigationConfigItem['type'], pages: Page[]): SiteNavigationConfigItem {
   const firstPublishedPage = pages.find((page) => page.status === 'published') || pages[0];
@@ -333,6 +365,13 @@ function EditSitePage() {
     errorMessage: null,
     notice: null,
   });
+  const [redirectState, setRedirectState] = useState<SiteRedirectEditorState>({
+    rules: [],
+    loading: false,
+    saving: false,
+    errorMessage: null,
+    notice: null,
+  });
   const [submissionStatus, setSubmissionStatus] = useState<SubmissionStatusFilter>('pending');
   const [contactStatus, setContactStatus] = useState<ContactStatusFilter>('all');
   const [commentStatus, setCommentStatus] = useState<CommentStatusFilter>('pending');
@@ -474,6 +513,77 @@ function EditSitePage() {
         ...prev,
         saving: false,
         errorMessage: error instanceof Error ? error.message : 'Unable to save site navigation.',
+      }));
+    }
+  };
+
+  const loadRedirectEditor = async () => {
+    if (!siteApiId) return;
+    setRedirectState((prev) => ({ ...prev, loading: true, errorMessage: null }));
+
+    try {
+      const redirects = await getSiteRedirects(siteApiId);
+      setRedirectState((prev) => ({
+        ...prev,
+        rules: redirects.rules || [],
+        loading: false,
+        notice: null,
+      }));
+    } catch (error) {
+      setRedirectState((prev) => ({
+        ...prev,
+        loading: false,
+        errorMessage: error instanceof Error ? error.message : 'Unable to load site redirects.',
+      }));
+    }
+  };
+
+  const handleAddRedirectRule = () => {
+    setRedirectState((prev) => ({
+      ...prev,
+      notice: null,
+      rules: [...prev.rules, makeRedirectRule()],
+    }));
+  };
+
+  const handleUpdateRedirectRule = (ruleId: string, updates: Partial<SiteRedirectRule>) => {
+    setRedirectState((prev) => ({
+      ...prev,
+      notice: null,
+      rules: prev.rules.map((rule) => (
+        (rule.id || rule.from) === ruleId
+          ? normalizeRedirectEditorRule({ ...rule, ...updates })
+          : rule
+      )),
+    }));
+  };
+
+  const handleRemoveRedirectRule = (ruleId: string) => {
+    setRedirectState((prev) => ({
+      ...prev,
+      notice: null,
+      rules: prev.rules.filter((rule) => (rule.id || rule.from) !== ruleId),
+    }));
+  };
+
+  const handleSaveRedirects = async () => {
+    if (!siteApiId) return;
+    setRedirectState((prev) => ({ ...prev, saving: true, errorMessage: null, notice: null }));
+
+    try {
+      const redirects = await updateSiteRedirects(siteApiId, redirectState.rules.map(normalizeRedirectEditorRule));
+      setRedirectState((prev) => ({
+        ...prev,
+        rules: redirects.rules || [],
+        saving: false,
+        notice: 'Redirect rules saved and available to hosted sites and custom frontends.',
+      }));
+      void loadReadiness();
+    } catch (error) {
+      setRedirectState((prev) => ({
+        ...prev,
+        saving: false,
+        errorMessage: error instanceof Error ? error.message : 'Unable to save site redirects.',
       }));
     }
   };
@@ -1139,6 +1249,7 @@ function EditSitePage() {
     if (siteApiId) {
       void loadReadiness();
       void loadNavigationEditor();
+      void loadRedirectEditor();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteApiId]);
@@ -1528,6 +1639,144 @@ function EditSitePage() {
               onRemoveItem={handleRemoveNavigationItem}
               onMoveRootItem={handleMoveNavigationRootItem}
             />
+          </div>
+        </section>
+
+        <section className="bg-card border border-border rounded-xl p-6 shadow-sm" data-testid="site-redirects-panel">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <ArrowRight className="h-5 w-5 text-primary" />
+                <h2 className="text-xl font-semibold">Redirects and retired routes</h2>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Manage exact route redirects and 410 gone rules used by hosted pages, route resolution, manifest/OpenAPI, and SDK clients.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void loadRedirectEditor()}
+                disabled={!siteApiId || redirectState.loading || redirectState.saving}
+                className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RefreshCw className={cn('h-4 w-4', redirectState.loading && 'animate-spin')} />
+                Refresh
+              </button>
+              <button
+                type="button"
+                onClick={handleAddRedirectRule}
+                disabled={redirectState.loading || redirectState.saving}
+                className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" />
+                Add rule
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveRedirects()}
+                disabled={!siteApiId || redirectState.loading || redirectState.saving}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" />
+                {redirectState.saving ? 'Saving...' : 'Save redirects'}
+              </button>
+            </div>
+          </div>
+
+          {redirectState.errorMessage && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {redirectState.errorMessage}
+            </div>
+          )}
+          {redirectState.notice && (
+            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              {redirectState.notice}
+            </div>
+          )}
+
+          <div className="mt-5 overflow-hidden rounded-lg border border-border">
+            <div className="grid min-w-[860px] grid-cols-[minmax(140px,1fr)_minmax(160px,1.2fr)_120px_90px_52px] gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
+              <span>Source</span>
+              <span>Destination</span>
+              <span>Status</span>
+              <span>Enabled</span>
+              <span />
+            </div>
+            <div className="overflow-x-auto">
+              {redirectState.loading ? (
+                <div className="min-w-[860px] px-3 py-8 text-center text-sm text-muted-foreground">
+                  Loading redirect rules...
+                </div>
+              ) : redirectState.rules.length === 0 ? (
+                <div className="min-w-[860px] px-3 py-8 text-center text-sm text-muted-foreground">
+                  No redirect or 410 rules configured.
+                </div>
+              ) : (
+                <div className="min-w-[860px] divide-y divide-border">
+                  {redirectState.rules.map((rule, index) => {
+                    const ruleId = rule.id || rule.from || `redirect-${index}`;
+                    const isGone = rule.statusCode === 410;
+
+                    return (
+                      <div
+                        key={ruleId}
+                        className="grid grid-cols-[minmax(140px,1fr)_minmax(160px,1.2fr)_120px_90px_52px] items-center gap-3 px-3 py-3"
+                      >
+                        <input
+                          value={rule.from || ''}
+                          onChange={(event) => handleUpdateRedirectRule(ruleId, { from: event.target.value })}
+                          className="h-9 rounded-md border bg-background px-2 text-sm"
+                          placeholder="/old-path"
+                        />
+                        <input
+                          value={isGone ? '' : rule.to || ''}
+                          onChange={(event) => handleUpdateRedirectRule(ruleId, { to: event.target.value })}
+                          disabled={isGone}
+                          className="h-9 rounded-md border bg-background px-2 text-sm disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+                          placeholder={isGone ? 'Not needed for 410' : '/new-path or https://...'}
+                        />
+                        <select
+                          value={rule.statusCode || 302}
+                          onChange={(event) => handleUpdateRedirectRule(ruleId, {
+                            statusCode: Number(event.target.value) as SiteRedirectRule['statusCode'],
+                          })}
+                          className="h-9 rounded-md border bg-background px-2 text-sm"
+                        >
+                          <option value={301}>301 permanent</option>
+                          <option value={302}>302 temporary</option>
+                          <option value={307}>307 temporary</option>
+                          <option value={308}>308 permanent</option>
+                          <option value={410}>410 gone</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateRedirectRule(ruleId, { enabled: rule.enabled === false ? true : false })}
+                          className={cn(
+                            'inline-flex h-9 items-center justify-center gap-1 rounded-md border px-2 text-xs font-medium',
+                            rule.enabled === false
+                              ? 'text-muted-foreground hover:bg-accent'
+                              : 'border-emerald-200 bg-emerald-50 text-emerald-700',
+                          )}
+                        >
+                          {rule.enabled === false ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                          {rule.enabled === false ? 'Off' : 'On'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveRedirectRule(ruleId)}
+                          className="rounded-md p-2 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                          title="Remove redirect rule"
+                          aria-label="Remove redirect rule"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </section>
 

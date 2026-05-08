@@ -30,6 +30,7 @@ The rule is simple: a custom frontend can look completely different from the Bac
    - `GET /api/sites/:siteId/render?path=/about`
    - Future stable form: `GET /api/public/sites/:siteId/resolve?path=/about`
    - Public route resolution returns published content and scheduled content only after `scheduledAt` has passed. Drafts and future scheduled content require a valid preview token. Site-level redirect rules resolve as `route.type: "redirect"` with the configured redirect status code and target. Retired routes resolve as `route.type: "gone"` with HTTP 410 so custom frontends can render an explicit removed-page state instead of treating it like an ordinary 404.
+   - Admin clients can manage route rules through `GET/PATCH /api/admin/sites/:siteId/redirects`. The endpoint validates missing destinations, duplicate enabled source paths, and same-route redirect loops before saving rules consumed by public route resolution, hosted pages, manifest/OpenAPI metadata, and the SDK.
 
 3. Fetch supporting data.
    - media: `GET /api/sites/:siteId/media`
