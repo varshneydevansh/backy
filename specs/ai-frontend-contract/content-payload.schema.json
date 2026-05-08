@@ -163,12 +163,14 @@
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string", "minLength": 1 },
-        "type": { "enum": ["page", "post", "dynamicItem", "external"] },
+        "type": { "enum": ["page", "post", "dynamicItem", "route", "url", "external"] },
         "pageId": { "type": "string" },
         "label": { "type": "string", "minLength": 1 },
         "title": { "type": "string" },
         "slug": { "type": "string" },
         "path": { "type": "string", "minLength": 1 },
+        "href": { "type": "string", "minLength": 1 },
+        "target": { "enum": ["_self", "_blank"] },
         "status": { "$ref": "#/$defs/status" },
         "isHomepage": { "type": "boolean" },
         "children": {
@@ -176,7 +178,7 @@
           "items": { "$ref": "#/$defs/navigationItem" }
         }
       },
-      "required": ["id", "type", "label", "path", "children"]
+      "required": ["id", "type", "label", "children"]
     }
   },
   "properties": {
@@ -220,6 +222,10 @@
           "additionalProperties": false,
           "properties": {
             "primary": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/navigationItem" }
+            },
+            "footer": {
               "type": "array",
               "items": { "$ref": "#/$defs/navigationItem" }
             }

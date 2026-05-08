@@ -10,6 +10,7 @@ import { getSiteByIdOrSlug, getSiteNavigation } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRoutePath, resolveSiteRoute } from '@/lib/routeResolver';
 import { matchCollectionItemRoute, matchCollectionListRoute } from '@/lib/collectionRoutes';
+import { buildSiteNavigation } from '@/lib/navigation';
 import { resolveRedirectRoute, type ResolvedRedirectRoute } from '@/lib/redirectRules';
 
 interface RouteParams {
@@ -127,39 +128,23 @@ const dynamicListResource = (
 
 const repositoryNavigation = async (
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
-  siteId: string,
+  site: Site,
 ) => {
   const result = await repositories.pages.list({
-    siteId,
+    siteId: site.id,
     includeUnpublished: false,
     status: 'published',
     limit: 100,
     offset: 0,
   });
 
-  return {
-    primary: result.items
-      .filter(isPubliclyReadable)
-      .map((page) => ({
-        id: `nav_${page.id}`,
-        type: 'page' as const,
-        pageId: page.id,
-        label: page.title,
-        title: page.title,
-        slug: page.slug,
-        path: canonicalPathForRepositoryPage(page),
-        status: page.status,
-        isHomepage: page.isHomepage,
-        children: [],
-      }))
-      .sort((a, b) => {
-        if (a.isHomepage !== b.isHomepage) {
-          return a.isHomepage ? -1 : 1;
-        }
-
-        return a.label.localeCompare(b.label) || a.path.localeCompare(b.path);
-      }),
-  };
+  return buildSiteNavigation(site.settings, result.items.filter(isPubliclyReadable).map((page) => ({
+    ...page,
+    meta: {
+      ...page.meta,
+      canonical: canonicalPathForRepositoryPage(page),
+    },
+  })));
 };
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -230,7 +215,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 hostedPath: canonical,
               },
             },
-            navigation: await repositoryNavigation(repositories, site.id),
+            navigation: await repositoryNavigation(repositories, site),
           },
         });
       }
@@ -280,7 +265,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 params,
                 resource: dynamicListResource(site.id, collection, canonical, recordCount),
               },
-              navigation: await repositoryNavigation(repositories, site.id),
+              navigation: await repositoryNavigation(repositories, site),
             },
           });
         }
@@ -334,7 +319,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 hostedPath: canonical,
               },
             },
-            navigation: await repositoryNavigation(repositories, site.id),
+            navigation: await repositoryNavigation(repositories, site),
           },
         });
       }
@@ -365,7 +350,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(path)}`,
             },
           },
-          navigation: await repositoryNavigation(repositories, site.id),
+          navigation: await repositoryNavigation(repositories, site),
         },
       });
     }

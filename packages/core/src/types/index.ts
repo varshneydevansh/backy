@@ -275,6 +275,9 @@ export interface SiteSettings {
 
   /** Site-level redirects and retired routes */
   redirectRules: SiteRedirectRule[];
+
+  /** Site-level navigation menus for default and custom frontends */
+  navigation: SiteNavigationConfig;
 }
 
 /**
@@ -295,6 +298,49 @@ export interface SiteRedirectRule {
 
   /** Whether the rule is enabled */
   enabled?: boolean;
+}
+
+/**
+ * Site-level navigation menus.
+ */
+export interface SiteNavigationConfig {
+  /** Primary navigation menu */
+  primary: SiteNavigationConfigItem[];
+
+  /** Footer navigation menu */
+  footer?: SiteNavigationConfigItem[];
+}
+
+/**
+ * Site navigation item that can point to a page, internal route, or external URL.
+ */
+export interface SiteNavigationConfigItem {
+  /** Stable menu item identifier */
+  id?: string;
+
+  /** Item type */
+  type: 'page' | 'route' | 'url';
+
+  /** Display label */
+  label: string;
+
+  /** Referenced page ID for page items */
+  pageId?: string;
+
+  /** Internal path for route items */
+  path?: string;
+
+  /** External URL for url items */
+  href?: string;
+
+  /** Link target */
+  target?: '_self' | '_blank';
+
+  /** Whether the item is shown publicly */
+  visible?: boolean;
+
+  /** Nested menu items */
+  children?: SiteNavigationConfigItem[];
 }
 
 // ============================================

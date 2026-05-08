@@ -162,6 +162,31 @@ async function createSdkSmokeFixture() {
             enabled: true,
           },
         ],
+        navigation: {
+          primary: [
+            {
+              id: 'sdk-smoke-nav-page',
+              type: 'page',
+              pageId,
+              label: 'SDK Smoke Page',
+              children: [
+                {
+                  id: 'sdk-smoke-nav-child',
+                  type: 'route',
+                  label: 'SDK Child',
+                  path: `/${pageSlug}#child`,
+                },
+              ],
+            },
+            {
+              id: 'sdk-smoke-nav-docs',
+              type: 'url',
+              label: 'SDK Docs',
+              href: 'https://example.com/sdk',
+              target: '_blank',
+            },
+          ],
+        },
       },
     }),
   });
@@ -333,6 +358,18 @@ if (runWriteSmoke) {
       'fixture manifest missing redirect route metadata',
     );
     assert(
+      fixtureManifest.data.navigation?.primary?.some?.((item) => (
+        item.id === 'sdk-smoke-nav-page'
+        && item.pageId === fixture.pageId
+        && item.children?.some?.((child) => child.id === 'sdk-smoke-nav-child')
+      )),
+      'fixture manifest missing configured navigation',
+    );
+    assert(
+      fixtureManifest.data.navigation?.primary?.some?.((item) => item.id === 'sdk-smoke-nav-docs' && item.href === 'https://example.com/sdk'),
+      'fixture manifest missing custom URL navigation',
+    );
+    assert(
       fixtureManifest.data.modules?.forms?.some?.((form) => form.id === 'sdk-smoke-form'),
       'fixture manifest missing SDK smoke form',
     );
@@ -355,6 +392,17 @@ if (runWriteSmoke) {
     assert(gone.success === false, 'resolve() should return a non-throwing gone envelope');
     assert(gone.data.route?.type === 'gone', 'resolve() did not expose gone route data');
     writeChecks.push('routeRedirects');
+
+    const configuredNavigation = await writeClient.navigation();
+    assert(
+      configuredNavigation.data.navigation?.primary?.some?.((item) => item.id === 'sdk-smoke-nav-page' && item.pageId === fixture.pageId),
+      'navigation() missing configured page item',
+    );
+    assert(
+      configuredNavigation.data.navigation?.primary?.some?.((item) => item.id === 'sdk-smoke-nav-docs' && item.href === 'https://example.com/sdk'),
+      'navigation() missing configured URL item',
+    );
+    writeChecks.push('navigation');
 
     const savedSections = await writeClient.reusableSections({ tag: 'sdk' });
     assert(savedSections.data.sections?.some?.((section) => section.id === fixture.reusableSectionId), 'reusableSections() missing SDK smoke reusable section');

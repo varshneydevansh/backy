@@ -98,10 +98,13 @@ export interface BackySiteSummary {
 
 export interface BackyNavigationItem {
   id?: string;
+  type?: 'page' | 'route' | 'url' | string;
   pageId?: string;
   label?: string;
   title?: string;
-  path: string;
+  path?: string;
+  href?: string;
+  target?: '_self' | '_blank' | string;
   children?: BackyNavigationItem[];
   [key: string]: unknown;
 }
@@ -342,7 +345,7 @@ export type BackyResolvedRoute = BackyRenderableRoute | BackyRedirectRoute | Bac
 export interface BackyRouteResolve {
   site: BackySiteSummary;
   route: BackyResolvedRoute;
-  navigation?: { primary?: BackyNavigationItem[]; [key: string]: unknown };
+  navigation?: { primary?: BackyNavigationItem[]; footer?: BackyNavigationItem[]; [key: string]: unknown };
 }
 
 export type BackyRouteResolveResult =
@@ -432,7 +435,7 @@ export interface BackyFrontendManifest {
 
 export interface BackyRenderPayload {
   site: BackySiteSummary;
-  navigation: { primary: BackyNavigationItem[]; [key: string]: unknown };
+  navigation: { primary: BackyNavigationItem[]; footer?: BackyNavigationItem[]; [key: string]: unknown };
   route: Record<string, unknown>;
   content: BackyContentDocument;
   assets: {
@@ -558,7 +561,7 @@ export class BackyClient {
     });
   }
 
-  navigation(siteId = this.requireSiteId()): Promise<BackyEnvelope<{ site?: BackySiteSummary; navigation: { primary: BackyNavigationItem[]; [key: string]: unknown } }>> {
+  navigation(siteId = this.requireSiteId()): Promise<BackyEnvelope<{ site?: BackySiteSummary; navigation: { primary: BackyNavigationItem[]; footer?: BackyNavigationItem[]; [key: string]: unknown } }>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/navigation`);
   }
 

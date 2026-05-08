@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { BackyPage } from '@backy-cms/core';
 import { getSiteByIdOrSlug, getSiteNavigation } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { buildSiteNavigation } from '@/lib/navigation';
 
 interface RouteParams {
   params: Promise<{
@@ -45,30 +46,6 @@ const canonicalPathForRepositoryPage = (page: Pick<BackyPage, 'isHomepage' | 'sl
     : `/${page.slug}`;
 };
 
-const navigationFromRepositoryPages = (pages: BackyPage[]) => ({
-  primary: pages
-    .filter(isPubliclyReadable)
-    .map((page) => ({
-      id: `nav_${page.id}`,
-      type: 'page' as const,
-      pageId: page.id,
-      label: page.title,
-      title: page.title,
-      slug: page.slug,
-      path: canonicalPathForRepositoryPage(page),
-      status: page.status,
-      isHomepage: page.isHomepage,
-      children: [],
-    }))
-    .sort((a, b) => {
-      if (a.isHomepage !== b.isHomepage) {
-        return a.isHomepage ? -1 : 1;
-      }
-
-      return a.label.localeCompare(b.label) || a.path.localeCompare(b.path);
-    }),
-});
-
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -99,7 +76,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             slug: site.slug,
             name: site.name,
           },
-          navigation: navigationFromRepositoryPages(pages.items),
+          navigation: buildSiteNavigation(site.settings, pages.items.filter(isPubliclyReadable).map((page) => ({
+            ...page,
+            meta: {
+              ...page.meta,
+              canonical: canonicalPathForRepositoryPage(page),
+            },
+          }))),
         },
       });
     }

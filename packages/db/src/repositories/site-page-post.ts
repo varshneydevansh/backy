@@ -158,6 +158,35 @@ const normalizeSiteRedirectRules = (value: unknown): SiteSettings['redirectRules
         : []
 );
 
+const normalizeNavigationItems = (value: unknown): SiteSettings['navigation']['primary'] => (
+    Array.isArray(value)
+        ? value.filter(isRecord).map((item) => {
+            const type: SiteSettings['navigation']['primary'][number]['type'] = item.type === 'page' || item.type === 'route' || item.type === 'url' ? item.type : 'route';
+            const target: SiteSettings['navigation']['primary'][number]['target'] = item.target === '_blank' ? '_blank' : '_self';
+            return {
+                id: typeof item.id === 'string' && item.id.length > 0 ? item.id : undefined,
+                type,
+                label: typeof item.label === 'string' ? item.label : '',
+                pageId: typeof item.pageId === 'string' ? item.pageId : undefined,
+                path: typeof item.path === 'string' ? item.path : undefined,
+                href: typeof item.href === 'string' ? item.href : undefined,
+                target,
+                visible: typeof item.visible === 'boolean' ? item.visible : undefined,
+                children: normalizeNavigationItems(item.children),
+            };
+        }).filter((item) => item.label.length > 0 || item.type === 'page')
+        : []
+);
+
+const normalizeNavigation = (value: unknown): SiteSettings['navigation'] => (
+    isRecord(value)
+        ? {
+            primary: normalizeNavigationItems(value.primary),
+            footer: normalizeNavigationItems(value.footer),
+        }
+        : { primary: [], footer: [] }
+);
+
 const normalizeSettings = (value: unknown): SiteSettings => ({
     ...DEFAULT_SITE_SETTINGS,
     ...(isRecord(value) ? value : {}),
@@ -174,6 +203,7 @@ const normalizeSettings = (value: unknown): SiteSettings => ({
         ...(isRecord(value) && isRecord(value.social) ? value.social : {}),
     },
     redirectRules: normalizeSiteRedirectRules(isRecord(value) ? value.redirectRules : undefined),
+    navigation: normalizeNavigation(isRecord(value) ? value.navigation : undefined),
 });
 
 const normalizeMeta = (value: unknown): PageMeta => (

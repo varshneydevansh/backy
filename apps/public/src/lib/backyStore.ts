@@ -26,6 +26,7 @@ import {
   normalizeCollectionListRoutePattern,
   normalizeCollectionRoutePattern,
 } from './collectionRoutes';
+import { buildSiteNavigation, type PublicNavigationItem } from './navigation';
 import { normalizeRedirectRules } from './redirectRules';
 
 interface PageMeta {
@@ -115,18 +116,7 @@ interface StorePage {
   scheduledAt: string | null;
 }
 
-interface SiteNavigationItem {
-  id: string;
-  type: 'page';
-  pageId: string;
-  label: string;
-  title: string;
-  slug: string;
-  path: string;
-  status: StorePage['status'];
-  isHomepage: boolean;
-  children: SiteNavigationItem[];
-}
+type SiteNavigationItem = PublicNavigationItem;
 
 interface StoreBlogPost {
   id: string;
@@ -416,6 +406,10 @@ const createDefaultSiteSettings = (): SiteSettings => ({
   analytics: {},
   social: {},
   redirectRules: [],
+  navigation: {
+    primary: [],
+    footer: [],
+  },
 });
 
 const SITE_LIST: StoreSite[] = [
@@ -2994,6 +2988,26 @@ export function getSiteByIdOrSlug(identifier: string): StoreSite | undefined {
 function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): SiteSettings {
   const settingsInput = toRecord(input);
   const base = current || createDefaultSiteSettings();
+  const navigationInput = toRecord(settingsInput.navigation);
+  const normalizeNavigationItems = (value: unknown): SiteSettings['navigation']['primary'] => (
+    Array.isArray(value)
+      ? value.map(toRecord).map((item) => {
+          const type: SiteSettings['navigation']['primary'][number]['type'] = item.type === 'page' || item.type === 'route' || item.type === 'url' ? item.type : 'route';
+          const target: SiteSettings['navigation']['primary'][number]['target'] = item.target === '_blank' ? '_blank' : '_self';
+          return {
+            id: sanitizeString(item.id) || undefined,
+            type,
+            label: sanitizeString(item.label),
+            pageId: sanitizeString(item.pageId) || undefined,
+            path: sanitizeString(item.path) || undefined,
+            href: sanitizeString(item.href) || undefined,
+            target,
+            visible: typeof item.visible === 'boolean' ? item.visible : undefined,
+            children: normalizeNavigationItems(item.children),
+          };
+        }).filter((item) => item.type === 'page' || item.label.length > 0)
+      : []
+  );
 
   return {
     ...base,
@@ -3013,6 +3027,12 @@ function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): Sit
     redirectRules: settingsInput.redirectRules === undefined
       ? [...base.redirectRules]
       : normalizeRedirectRules(settingsInput.redirectRules),
+    navigation: settingsInput.navigation === undefined
+      ? base.navigation
+      : {
+          primary: navigationInput.primary === undefined ? base.navigation.primary : normalizeNavigationItems(navigationInput.primary),
+          footer: navigationInput.footer === undefined ? base.navigation.footer : normalizeNavigationItems(navigationInput.footer),
+        },
   };
 }
 
@@ -4130,30 +4150,10 @@ export function getPageSummary(siteId: string, options: { includeUnpublished?: b
 export function getSiteNavigation(
   siteId: string,
   options: { includeUnpublished?: boolean } = {},
-): { primary: SiteNavigationItem[] } {
+): { primary: SiteNavigationItem[]; footer: SiteNavigationItem[] } {
+  const site = getSiteByIdOrSlug(siteId);
   const pages = getPageSummary(siteId, options);
-  const primary = pages
-    .map((page) => ({
-      id: `nav_${page.id}`,
-      type: 'page' as const,
-      pageId: page.id,
-      label: page.title,
-      title: page.title,
-      slug: page.slug,
-      path: getCanonicalPathForPage(page),
-      status: page.status,
-      isHomepage: page.isHomepage,
-      children: [],
-    }))
-    .sort((a, b) => {
-      if (a.isHomepage !== b.isHomepage) {
-        return a.isHomepage ? -1 : 1;
-      }
-
-      return a.label.localeCompare(b.label) || a.path.localeCompare(b.path);
-    });
-
-  return { primary };
+  return buildSiteNavigation(site?.settings, pages);
 }
 
 export function getPageBySlug(

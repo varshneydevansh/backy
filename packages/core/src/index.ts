@@ -64,6 +64,10 @@ export const DEFAULT_SITE_SETTINGS = {
   analytics: {},
   social: {},
   redirectRules: [],
+  navigation: {
+    primary: [],
+    footer: [],
+  },
 } as const;
 
 /**

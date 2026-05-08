@@ -76,7 +76,7 @@ Backy has the right direction but lacks the production maturity.
 | Taxonomies | Categories/tags/custom taxonomies | Blog category/tag types exist; admin workflow incomplete | Add category/tag CRUD, assignment UI, public filtering, API contracts |
 | Revisions | Content and template revisions | PageVersion type/schema exists, no complete UI/API loop | Add revision graph, diff, rollback, publish snapshots, audit metadata |
 | Users/RBAC | Users, roles, permissions, authenticated API scopes | Mock auth; limited roles | Add session provider, team/site scoped roles, invite flow, access audits |
-| REST/headless | Stable JSON APIs with auth rules | Public endpoints exist, `/api/sites/:siteId/manifest` now provides a site-level frontend discovery document with schema refs, capabilities, route patterns, redirect/gone metadata, endpoint URLs, module summaries, collections, forms, media/font counts, and navigation, and `/api/sites/:siteId/openapi` exports a site-scoped OpenAPI 3.1 document for the public frontend surface including redirect/gone route schemas. Runtime data still uses the seeded/JSON adapter and some legacy endpoints have inconsistent envelopes. | Add generated SDK examples, CORS hardening, API keys, read/write route separation, and DB-backed services |
+| REST/headless | Stable JSON APIs with auth rules | Public endpoints exist, `/api/sites/:siteId/manifest` now provides a site-level frontend discovery document with schema refs, capabilities, route patterns, redirect/gone metadata, configured navigation, endpoint URLs, module summaries, collections, forms, and media/font counts, and `/api/sites/:siteId/openapi` exports a site-scoped OpenAPI 3.1 document for the public frontend surface including redirect/gone route schemas. Runtime data still uses the seeded/JSON adapter and some legacy endpoints have inconsistent envelopes. | Add generated SDK examples, CORS hardening, API keys, read/write route separation, and DB-backed services |
 | Themes/global styles | Site-wide styles and per-block style supports | Theme types/settings exist; no compiler pipeline | Add theme token compiler, per-block token inheritance, CSS var output |
 
 ## 5. Highest-priority missing platform modules
@@ -136,7 +136,7 @@ Backy has the right direction but lacks the production maturity.
 - Site/page resolution works against seeded and DB-backed site settings for slug, path, redirects, gone routes, dynamic lists/items, and unpublished guards; domain and locale routing are still incomplete.
 - Public renderer exists; needs to consume the canonical content contract rather than local types.
 - Forms/comments are relatively advanced for a prototype; they need durable persistence, abuse controls that survive process restarts, admin ownership checks, and export/integration workflows.
-- Public API needs stable response envelopes, OpenAPI, SDK examples, cache policy, CORS policy, and preview token behavior.
+- Public API needs stable response envelopes, OpenAPI, SDK examples, cache policy, CORS policy, navigation/domain/locale variants, and preview token behavior.
 
 ### Shared packages
 

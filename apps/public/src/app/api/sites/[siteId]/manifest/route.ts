@@ -22,6 +22,7 @@ import {
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeCollectionListRoutePattern, normalizeCollectionRoutePattern } from '@/lib/collectionRoutes';
+import { buildSiteNavigation } from '@/lib/navigation';
 import { normalizeRedirectRules } from '@/lib/redirectRules';
 
 interface RouteParams {
@@ -122,29 +123,6 @@ const manifestRedirectRules = (
     statusCode: rule.statusCode,
     resolveUrl: `/api/sites/${siteId}/resolve?path=${encodeURIComponent(rule.from)}`,
   }));
-
-const repositoryNavigation = (pages: BackyPage[]) => ({
-  primary: pages
-    .filter(isPubliclyReadable)
-    .map((page) => ({
-      id: `nav_${page.id}`,
-      type: 'page',
-      pageId: page.id,
-      label: page.title,
-      title: page.title,
-      slug: page.slug,
-      path: pagePath(page),
-      status: page.status,
-      isHomepage: page.isHomepage,
-      children: [],
-    }))
-    .sort((left, right) => {
-      if (left.isHomepage !== right.isHomepage) {
-        return left.isHomepage ? -1 : 1;
-      }
-      return left.label.localeCompare(right.label) || left.path.localeCompare(right.path);
-    }),
-});
 
 const buildRepositoryManifest = (
   input: {
@@ -362,7 +340,13 @@ const buildRepositoryManifest = (
           listUrl: `/api/sites/${input.site.id}/media`,
         },
       },
-      navigation: repositoryNavigation(input.pages),
+      navigation: buildSiteNavigation(input.site.settings, input.pages.filter(isPubliclyReadable).map((page) => ({
+        ...page,
+        meta: {
+          ...page.meta,
+          canonical: pagePath(page),
+        },
+      }))),
     },
   };
 };

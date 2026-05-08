@@ -551,12 +551,73 @@ try {
     assert(update.json?.data?.page?.title === 'Updated Admin Contract Page', `${update.url} expected updated title`);
     assert(update.json?.data?.page?.status === 'published', `${update.url} expected published status`);
 
+    const navigationSettings = await request(`/api/admin/sites/${createdSiteId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        settings: {
+          navigation: {
+            primary: [
+              {
+                id: 'contract-nav-page',
+                type: 'page',
+                pageId: createdPageId,
+                label: 'Contract Page',
+                children: [
+                  {
+                    id: 'contract-nav-child',
+                    type: 'route',
+                    label: 'Child Route',
+                    path: `/${pageSlug}#details`,
+                  },
+                ],
+              },
+              {
+                id: 'contract-nav-docs',
+                type: 'url',
+                label: 'Docs',
+                href: 'https://example.com/docs',
+                target: '_blank',
+              },
+            ],
+            footer: [
+              {
+                id: 'contract-footer-page',
+                type: 'page',
+                pageId: createdPageId,
+                label: 'Footer Page',
+              },
+            ],
+          },
+        },
+      }),
+    });
+    assert(navigationSettings.response.status === 200, `${navigationSettings.url} expected navigation settings update`);
+    assert(navigationSettings.json?.data?.site?.settings?.navigation?.primary?.some((item) => item.id === 'contract-nav-page'), `${navigationSettings.url} missing persisted navigation item`);
+
     const publicNavigation = await request(`/api/sites/${createdSiteId}/navigation`);
     assert(publicNavigation.response.status === 200, `${publicNavigation.url} expected 200, got ${publicNavigation.response.status}`);
     assert(publicNavigation.json?.success === true, `${publicNavigation.url} expected success envelope`);
     assert(
-      publicNavigation.json?.data?.navigation?.primary?.some((item) => item.pageId === createdPageId && item.path === `/${pageSlug}`),
-      `${publicNavigation.url} missing created page navigation item`,
+      publicNavigation.json?.data?.navigation?.primary?.some((item) => (
+        item.id === 'contract-nav-page'
+        && item.pageId === createdPageId
+        && item.path === `/${pageSlug}`
+        && item.children?.some((child) => child.id === 'contract-nav-child' && child.path === `/${pageSlug}#details`)
+      )),
+      `${publicNavigation.url} missing configured nested page navigation item`,
+    );
+    assert(
+      publicNavigation.json?.data?.navigation?.primary?.some((item) => (
+        item.id === 'contract-nav-docs' && item.type === 'url' && item.href === 'https://example.com/docs' && item.target === '_blank'
+      )),
+      `${publicNavigation.url} missing custom URL navigation item`,
+    );
+    assert(
+      publicNavigation.json?.data?.navigation?.footer?.some((item) => item.id === 'contract-footer-page' && item.pageId === createdPageId),
+      `${publicNavigation.url} missing configured footer navigation item`,
     );
 
     const renderPayload = await request(`/api/sites/${createdSiteId}/render?path=/${pageSlug}`);
@@ -575,8 +636,8 @@ try {
     assert(revalidatedRender.response.headers.get('etag') === renderEtag, `${revalidatedRender.url} expected matching render etag`);
     validateAiRenderPayload(renderPayload.json, 'page render payload');
     assert(
-      renderPayload.json?.data?.navigation?.primary?.some((item) => item.pageId === createdPageId && item.path === `/${pageSlug}`),
-      `${renderPayload.url} missing render navigation manifest`,
+      renderPayload.json?.data?.navigation?.primary?.some((item) => item.id === 'contract-nav-page' && item.pageId === createdPageId),
+      `${renderPayload.url} missing configured render navigation manifest`,
     );
     assert(
       renderPayload.json?.data?.assets?.fonts?.some((font) => font.id === createdMediaId && font.family === 'Contract Sans Display'),

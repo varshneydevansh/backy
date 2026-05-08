@@ -30,6 +30,7 @@ import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRoutePath } from '@/lib/routeResolver';
 import { matchCollectionItemRoute, matchCollectionListRoute } from '@/lib/collectionRoutes';
+import { buildSiteNavigation } from '@/lib/navigation';
 
 interface RouteParams {
   params: Promise<{
@@ -69,12 +70,42 @@ const repositorySiteToStoreSite = (site: Site): StoreSite => ({
   customDomain: site.customDomain || null,
   status: site.isPublished ? 'published' : 'draft',
   isPublished: site.isPublished,
+  settings: site.settings,
   theme: {
     colors: isRecord(site.theme?.colors) ? site.theme.colors as Record<string, string> : {},
     fonts: isRecord(site.theme?.fonts) ? site.theme.fonts as StoreSite['theme']['fonts'] : {},
     spacing: isRecord(site.theme?.spacing) ? site.theme.spacing as StoreSite['theme']['spacing'] : undefined,
     customCSS: typeof site.theme?.customCSS === 'string' ? site.theme.customCSS : '',
   },
+});
+
+const repositoryNavigation = async (
+  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
+  site: Site,
+) => {
+  const pages = await repositories.pages.list({
+    siteId: site.id,
+    includeUnpublished: false,
+    status: 'published',
+    limit: 100,
+    offset: 0,
+  });
+
+  return buildSiteNavigation(site.settings, pages.items.filter(isPubliclyReadable));
+};
+
+const withRepositoryNavigation = async <TPayload extends { data?: { navigation?: unknown } }>(
+  payload: TPayload,
+  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
+  site: Site,
+): Promise<TPayload> => ({
+  ...payload,
+  data: payload.data
+    ? {
+        ...payload.data,
+        navigation: await repositoryNavigation(repositories, site),
+      }
+    : payload.data,
 });
 
 const repositoryPageToStorePage = (page: BackyPage): StorePage => {
@@ -222,7 +253,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         }
 
         return publicContractJson(
-          buildPublicBlogPostRenderPayload(storeSite, repositoryPostToStorePost(post), { requestId, path }),
+          await withRepositoryNavigation(
+            buildPublicBlogPostRenderPayload(storeSite, repositoryPostToStorePost(post), { requestId, path }),
+            repositories,
+            site,
+          ),
           {
             requestId,
             request,
@@ -240,7 +275,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         : false;
       if (page && (isPubliclyReadable(page) || canPreviewPage)) {
         return publicContractJson(
-          buildPublicRenderPayload(storeSite, repositoryPageToStorePage(page), { requestId, path }),
+          await withRepositoryNavigation(
+            buildPublicRenderPayload(storeSite, repositoryPageToStorePage(page), { requestId, path }),
+            repositories,
+            site,
+          ),
           {
             requestId,
             request,
@@ -271,11 +310,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           offset: 0,
         });
         return publicContractJson(
-          buildPublicCollectionListRenderPayload(
-            storeSite,
-            repositoryCollectionToStoreCollection(collection),
-            records.items.filter(isPubliclyReadable).map(repositoryRecordToStoreRecord),
-            { requestId, path },
+          await withRepositoryNavigation(
+            buildPublicCollectionListRenderPayload(
+              storeSite,
+              repositoryCollectionToStoreCollection(collection),
+              records.items.filter(isPubliclyReadable).map(repositoryRecordToStoreRecord),
+              { requestId, path },
+            ),
+            repositories,
+            site,
           ),
           {
             requestId,
@@ -300,11 +343,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           && isPubliclyReadable(record)
         ) {
           return publicContractJson(
-            buildPublicCollectionItemRenderPayload(
-              storeSite,
-              repositoryCollectionToStoreCollection(collection),
-              repositoryRecordToStoreRecord(record),
-              { requestId, path },
+            await withRepositoryNavigation(
+              buildPublicCollectionItemRenderPayload(
+                storeSite,
+                repositoryCollectionToStoreCollection(collection),
+                repositoryRecordToStoreRecord(record),
+                { requestId, path },
+              ),
+              repositories,
+              site,
             ),
             {
               requestId,
