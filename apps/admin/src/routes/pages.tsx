@@ -8,15 +8,23 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { Plus, Layout, Edit, Trash2, Home } from 'lucide-react';
-import { deletePage as deletePageFromApi, listPages } from '@/lib/adminContentApi';
+import { ExternalLink, Eye, Filter, Plus, Layout, Edit, Trash2, Home } from 'lucide-react';
+import {
+  archivePage,
+  createPagePreview,
+  deletePage as deletePageFromApi,
+  getSiteReadiness,
+  listPages,
+  publishPage,
+  type PageReadiness,
+} from '@/lib/adminContentApi';
 import { useStore, type Page } from '@/stores/mockStore';
 import { useDataTable, type Column } from '@/hooks/useDataTable';
 import { PageShell } from '@/components/layout/PageShell';
 import { DataGrid } from '@/components/ui/DataGrid';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { formatDate } from '@/lib/utils';
+import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/pages')({
   component: PagesLayout,
@@ -41,12 +49,118 @@ function PagesLayout() {
 
 function PagesListView() {
   const navigate = useNavigate();
-  const { sites, pages, setPages, deletePage } = useStore();
+  const { sites, pages, setPages, deletePage, updatePage } = useStore();
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingReadiness, setIsLoadingReadiness] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedSiteId, setSelectedSiteId] = useState(() => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo');
+  const [statusFilter, setStatusFilter] = useState<'all' | Page['status']>('all');
+  const [healthFilter, setHealthFilter] = useState<'all' | 'blocked'>('all');
+  const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(() => new Set());
+  const [bulkAction, setBulkAction] = useState<'publish' | 'archive' | 'delete' | ''>('');
+  const [isBulkBusy, setIsBulkBusy] = useState(false);
+  const [readinessMap, setReadinessMap] = useState<Record<string, PageReadiness>>({});
+  const [previewingPageId, setPreviewingPageId] = useState<string | null>(null);
+  const activeSite = useMemo(
+    () => sites.find((site) => (site.publicSiteId || site.id) === selectedSiteId) || sites[0],
+    [selectedSiteId, sites],
+  );
   const activeSiteId = useMemo(
-    () => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo',
-    [sites],
+    () => activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo',
+    [activeSite, selectedSiteId],
+  );
+  const visiblePages = useMemo(
+    () => pages.filter((page) => {
+      const matchesStatus = statusFilter === 'all' || page.status === statusFilter;
+      const matchesHealth = healthFilter === 'all' || readinessMap[page.id]?.statusLabel === healthFilter;
+
+      return matchesStatus && matchesHealth;
+    }),
+    [healthFilter, pages, readinessMap, statusFilter],
+  );
+  const pageMetrics = useMemo(
+    () => ({
+      total: pages.length,
+      published: pages.filter((page) => page.status === 'published').length,
+      draft: pages.filter((page) => page.status === 'draft').length,
+      scheduled: pages.filter((page) => page.status === 'scheduled').length,
+      blocked: pages.filter((page) => readinessMap[page.id]?.statusLabel === 'blocked').length,
+    }),
+    [pages, readinessMap],
+  );
+  const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
+  const siteSlug = activeSite?.slug || activeSiteId;
+  const selectedPages = useMemo(
+    () => pages.filter((page) => selectedPageIds.has(page.id)),
+    [pages, selectedPageIds],
+  );
+
+  const setPageStatusFilter = (status: 'all' | Page['status']) => {
+    setStatusFilter(status);
+    setHealthFilter('all');
+  };
+
+  const showBlockedPages = () => {
+    setStatusFilter('all');
+    setHealthFilter('blocked');
+  };
+
+  const togglePageSelection = (pageId: string) => {
+    setSelectedPageIds((current) => {
+      const next = new Set(current);
+
+      if (next.has(pageId)) {
+        next.delete(pageId);
+      } else {
+        next.add(pageId);
+      }
+
+      return next;
+    });
+  };
+
+  const setPageSelection = (targetPages: Page[], selected: boolean) => {
+    setSelectedPageIds((current) => {
+      const next = new Set(current);
+      targetPages.forEach((page) => {
+        if (selected) {
+          next.add(page.id);
+        } else {
+          next.delete(page.id);
+        }
+      });
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (sites.length > 0 && !sites.some((site) => (site.publicSiteId || site.id) === selectedSiteId)) {
+      setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
+    }
+  }, [selectedSiteId, sites]);
+
+  const refreshPages = useMemo(
+    () => async (siteId: string) => {
+      setIsLoading(true);
+      setIsLoadingReadiness(true);
+      setError(null);
+
+      try {
+        const [backendPages, readiness] = await Promise.all([
+          listPages(siteId),
+          getSiteReadiness(siteId).catch(() => null),
+        ]);
+        setPages(backendPages);
+        setSelectedPageIds((current) => new Set(backendPages.filter((page) => current.has(page.id)).map((page) => page.id)));
+        setReadinessMap(Object.fromEntries((readiness?.pages || []).map((page) => [page.id, page])));
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : 'Unable to load pages');
+      } finally {
+        setIsLoading(false);
+        setIsLoadingReadiness(false);
+      }
+    },
+    [setPages],
   );
 
   useEffect(() => {
@@ -54,12 +168,18 @@ function PagesListView() {
 
     const loadPages = async () => {
       setIsLoading(true);
+      setIsLoadingReadiness(true);
       setError(null);
 
       try {
-        const backendPages = await listPages(activeSiteId);
+        const [backendPages, readiness] = await Promise.all([
+          listPages(activeSiteId),
+          getSiteReadiness(activeSiteId).catch(() => null),
+        ]);
         if (!cancelled) {
           setPages(backendPages);
+          setSelectedPageIds((current) => new Set(backendPages.filter((page) => current.has(page.id)).map((page) => page.id)));
+          setReadinessMap(Object.fromEntries((readiness?.pages || []).map((page) => [page.id, page])));
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -68,6 +188,7 @@ function PagesListView() {
       } finally {
         if (!cancelled) {
           setIsLoading(false);
+          setIsLoadingReadiness(false);
         }
       }
     };
@@ -79,6 +200,24 @@ function PagesListView() {
     };
   }, [activeSiteId, setPages]);
 
+  const publicPageUrl = (page: Page) => (
+    `${publicBaseUrl}/sites/${encodeURIComponent(siteSlug)}${pagePublicPath(page)}`
+  );
+
+  const handlePreviewPage = async (page: Page) => {
+    setPreviewingPageId(page.id);
+    setError(null);
+
+    try {
+      const preview = await createPagePreview(page.siteId || activeSiteId, page.id);
+      window.open(preview.url, '_blank', 'noopener,noreferrer');
+    } catch (previewError) {
+      setError(previewError instanceof Error ? previewError.message : 'Unable to create page preview');
+    } finally {
+      setPreviewingPageId(null);
+    }
+  };
+
   const handleDeletePage = async (page: Page) => {
     if (!confirm('Delete page?')) {
       return;
@@ -89,12 +228,79 @@ function PagesListView() {
     try {
       await deletePageFromApi(page.siteId || activeSiteId, page.id);
       deletePage(page.id);
+      setSelectedPageIds((current) => {
+        const next = new Set(current);
+        next.delete(page.id);
+        return next;
+      });
+      setReadinessMap((current) => {
+        const next = { ...current };
+        delete next[page.id];
+        return next;
+      });
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete page');
     }
   };
 
+  const handleBulkAction = async () => {
+    if (!bulkAction || selectedPages.length === 0) {
+      return;
+    }
+
+    if (bulkAction === 'delete' && !confirm(`Delete ${selectedPages.length} selected page${selectedPages.length === 1 ? '' : 's'}?`)) {
+      return;
+    }
+
+    setIsBulkBusy(true);
+    setError(null);
+
+    try {
+      if (bulkAction === 'publish') {
+        const updatedPages = await Promise.all(
+          selectedPages.map((page) => publishPage(page.siteId || activeSiteId, page.id)),
+        );
+        updatedPages.forEach((page) => updatePage(page.id, page));
+      }
+
+      if (bulkAction === 'archive') {
+        const updatedPages = await Promise.all(
+          selectedPages.map((page) => archivePage(page.siteId || activeSiteId, page.id)),
+        );
+        updatedPages.forEach((page) => updatePage(page.id, page));
+      }
+
+      if (bulkAction === 'delete') {
+        await Promise.all(
+          selectedPages.map((page) => deletePageFromApi(page.siteId || activeSiteId, page.id)),
+        );
+        selectedPages.forEach((page) => deletePage(page.id));
+      }
+
+      setSelectedPageIds(new Set());
+      setBulkAction('');
+      await refreshPages(activeSiteId);
+    } catch (bulkError) {
+      setError(bulkError instanceof Error ? bulkError.message : 'Unable to apply bulk action');
+    } finally {
+      setIsBulkBusy(false);
+    }
+  };
+
   const columns: Column<Page>[] = [
+    {
+      key: 'id',
+      label: 'Select',
+      render: (page) => (
+        <input
+          type="checkbox"
+          aria-label={`Select ${page.title}`}
+          checked={selectedPageIds.has(page.id)}
+          onChange={() => togglePageSelection(page.id)}
+          className="size-4 rounded border-border text-primary focus:ring-ring"
+        />
+      )
+    },
     {
       key: 'title',
       label: 'Page Title',
@@ -110,7 +316,7 @@ function PagesListView() {
           </div>
           <div>
             <div className="font-medium text-foreground">{page.title}</div>
-            <div className="text-xs text-muted-foreground">/{page.slug}</div>
+            <div className="text-xs text-muted-foreground">{pagePublicPath(page)}</div>
           </div>
         </div>
       )
@@ -119,7 +325,42 @@ function PagesListView() {
       key: 'status',
       label: 'Status',
       sortable: true,
-      render: (page) => <StatusBadge status={page.status} />
+      render: (page) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={page.status} />
+          {page.scheduledAt && (
+            <span className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
+              {formatDate(page.scheduledAt)}
+            </span>
+          )}
+        </div>
+      )
+    },
+    {
+      key: 'meta',
+      label: 'Health',
+      render: (page) => {
+        const readiness = readinessMap[page.id];
+        const firstIssue = readiness?.checks.find((check) => check.status !== 'pass');
+        return readiness ? (
+          <div className="flex flex-col gap-1">
+            <StatusBadge
+              status={readiness.statusLabel}
+              type={readiness.statusLabel === 'ready' ? 'success' : readiness.statusLabel === 'blocked' ? 'error' : 'warning'}
+            />
+            <span className="text-xs text-muted-foreground">{readiness.score}% ready · {readiness.elementCount} elements</span>
+            {firstIssue && (
+              <span className="max-w-64 truncate text-xs text-muted-foreground" title={firstIssue.message}>
+                {firstIssue.message}
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            {isLoadingReadiness ? 'Checking...' : 'Not checked'}
+          </span>
+        );
+      }
     },
     {
       key: 'lastUpdated',
@@ -132,8 +373,30 @@ function PagesListView() {
       label: '',
       render: (page) => (
         <div className="flex items-center justify-end gap-2">
+          {page.status === 'published' && (
+            <a
+              href={publicPageUrl(page)}
+              target="_blank"
+              rel="noreferrer"
+              title="Open published page"
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          )}
+          <button
+            onClick={() => {
+              void handlePreviewPage(page);
+            }}
+            disabled={previewingPageId === page.id}
+            title="Preview page"
+            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Eye className="w-4 h-4" />
+          </button>
           <button
             onClick={() => navigate({ to: '/pages/$pageId/edit', params: { pageId: page.id } })}
+            title="Edit page"
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
           >
             <Edit className="w-4 h-4" />
@@ -142,6 +405,7 @@ function PagesListView() {
             onClick={() => {
               void handleDeletePage(page);
             }}
+            title="Delete page"
             className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
           >
             <Trash2 className="w-4 h-4" />
@@ -162,10 +426,12 @@ function PagesListView() {
     totalPages,
     totalItems
   } = useDataTable({
-    data: pages,
+    data: visiblePages,
     columns,
     pageSize: 10
   });
+  const hasPages = pages.length > 0;
+  const selectedTablePages = data.filter((page) => selectedPageIds.has(page.id));
 
   return (
     <PageShell
@@ -193,7 +459,92 @@ function PagesListView() {
         </div>
       )}
 
-      <div className="flex items-center gap-4 mb-6">
+      <div className="mb-6 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid gap-3 md:grid-cols-4">
+          {[
+            { label: 'All', value: pageMetrics.total, onSelect: () => setPageStatusFilter('all'), active: statusFilter === 'all' && healthFilter === 'all' },
+            { label: 'Published', value: pageMetrics.published, onSelect: () => setPageStatusFilter('published'), active: statusFilter === 'published' && healthFilter === 'all' },
+            { label: 'Draft', value: pageMetrics.draft, onSelect: () => setPageStatusFilter('draft'), active: statusFilter === 'draft' && healthFilter === 'all' },
+            { label: 'Blocked', value: pageMetrics.blocked, onSelect: showBlockedPages, active: healthFilter === 'blocked' },
+          ].map((metric) => (
+            <button
+              key={metric.label}
+              type="button"
+              onClick={metric.onSelect}
+              className={cn(
+                'rounded-lg border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-muted',
+                metric.active && 'border-primary bg-primary/5',
+              )}
+            >
+              <div className="text-xs font-medium text-muted-foreground">{metric.label}</div>
+              <div className="mt-1 font-mono text-2xl font-semibold">{metric.value}</div>
+            </button>
+          ))}
+        </div>
+        <div className="rounded-lg border border-border bg-card px-4 py-3">
+          <div className="text-xs font-medium text-muted-foreground">Active Site</div>
+          <select
+            value={activeSiteId}
+            onChange={(event) => {
+              setSelectedSiteId(event.target.value);
+              setStatusFilter('all');
+              setHealthFilter('all');
+            }}
+            className="mt-2 w-full min-w-52 rounded-lg border bg-background px-3 py-2 text-sm"
+          >
+            {sites.length === 0 ? (
+              <option value="site-demo">Demo site</option>
+            ) : sites.map((site) => (
+              <option key={site.id} value={site.publicSiteId || site.id}>
+                {site.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {hasPages && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
+          <span className="text-sm font-medium">{selectedPageIds.size} selected</span>
+          <button
+            type="button"
+            onClick={() => setPageSelection(data, selectedTablePages.length !== data.length)}
+            disabled={data.length === 0}
+            className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {selectedTablePages.length === data.length && data.length > 0 ? 'Clear visible' : 'Select visible'}
+          </button>
+          <select
+            value={bulkAction}
+            onChange={(event) => setBulkAction(event.target.value as typeof bulkAction)}
+            className="min-w-44 rounded-lg border bg-background px-3 py-2 text-sm"
+          >
+            <option value="">Bulk action...</option>
+            <option value="publish">Publish selected</option>
+            <option value="archive">Archive selected</option>
+            <option value="delete">Delete selected</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => void handleBulkAction()}
+            disabled={!bulkAction || selectedPages.length === 0 || isBulkBusy}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isBulkBusy ? 'Applying...' : 'Apply'}
+          </button>
+          {selectedPages.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedPageIds(new Set())}
+              className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              Clear selection
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3 mb-6">
         <div className="relative flex-1 max-w-sm">
           <input
             type="text"
@@ -203,6 +554,30 @@ function PagesListView() {
             className="w-full pl-4 pr-4 py-2 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
+        <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card p-1">
+          <Filter className="ml-2 size-4 text-muted-foreground" />
+          {(['all', 'published', 'draft', 'scheduled', 'archived'] as const).map((status) => (
+            <button
+              key={status}
+              type="button"
+              onClick={() => setPageStatusFilter(status)}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                statusFilter === status && healthFilter === 'all' && 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground',
+              )}
+            >
+              {status}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => void refreshPages(activeSiteId)}
+          disabled={isLoading}
+          className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Refresh
+        </button>
       </div>
 
       <DataGrid
@@ -217,16 +592,37 @@ function PagesListView() {
         emptyState={
           <EmptyState
             icon={Layout}
-            title="No pages found"
-            description="Create your first page to start building."
+            title={hasPages ? 'No matching pages' : 'No pages yet'}
+            description={
+              hasPages
+                ? 'No pages match the current search or status filter.'
+                : 'Create the first page for this site, then open it in the visual editor.'
+            }
             action={
-              <Link
-                to="/pages/new"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 mt-4"
-              >
-                <Plus className="w-4 h-4" />
-                Create Page
-              </Link>
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                {hasPages && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setStatusFilter('all');
+                      setHealthFilter('all');
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 font-medium transition-colors hover:bg-accent"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+                <button
+                  type="button"
+                  data-testid="pages-empty-create"
+                  onClick={() => navigate({ to: '/pages/new' })}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  <Plus className="w-4 h-4" />
+                  {hasPages ? 'New Page' : 'Create First Page'}
+                </button>
+              </div>
             }
           />
         }
@@ -234,3 +630,31 @@ function PagesListView() {
     </PageShell>
   );
 }
+
+const getEnvValue = (key: string): string => {
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+  return env[key]?.trim() ?? '';
+};
+
+const getPublicBaseUrl = (): string => {
+  const envBase = (
+    getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
+    getEnvValue('VITE_PUBLIC_API_URL') ||
+    getEnvValue('VITE_API_BASE_URL') ||
+    ''
+  ).trim();
+
+  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+    return 'http://localhost:3001';
+  }
+
+  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+    .replace(/\/api\/admin$/, '')
+    .replace(/\/api$/, '')
+    .replace(/\/$/, '');
+};
+
+const pagePublicPath = (page: Page): string => {
+  const slug = (page.slug || '').replace(/^\/+|\/+$/g, '');
+  return !slug || slug === 'home' ? '/' : `/${slug}`;
+};
