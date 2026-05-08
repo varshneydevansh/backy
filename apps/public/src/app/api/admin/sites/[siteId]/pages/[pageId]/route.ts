@@ -18,10 +18,12 @@ import {
   getAdminPageById,
   getPageBySlug,
   getSiteByIdOrSlug,
+  listCollections,
   updateAdminPage,
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { pageRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
+import { findPageRouteConflict } from '@/lib/routeConflicts';
 
 export const runtime = 'nodejs';
 
@@ -207,6 +209,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       const status = statusFromInput(body.status) || page.status;
       const title = typeof body.title === 'string' ? body.title : page.title;
+      const collections = await repositories.collections.list({
+        siteId: site.id,
+        includeUnpublished: true,
+        status: 'all',
+        limit: 100,
+        offset: 0,
+      });
+      const routeConflict = findPageRouteConflict({ id: page.id, slug: nextSlug, title, isHomepage: page.isHomepage }, collections.items);
+      if (routeConflict) {
+        return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
+      }
       const content = contentDocumentFromInput(body.content, page, { title, slug: nextSlug, status });
       await repositories.contentWorkflows.createRevision({
         siteId: site.id,
@@ -263,6 +276,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (conflict && conflict.id !== page.id) {
         return errorResponse(409, 'SLUG_CONFLICT', 'A page with this slug already exists', requestId);
       }
+    }
+
+    const routeConflict = findPageRouteConflict(
+      { id: page.id, slug: nextSlug || page.slug, title: typeof body.title === 'string' ? body.title : page.title, isHomepage: page.isHomepage },
+      listCollections(site.id, { includeUnpublished: true }),
+    );
+    if (routeConflict) {
+      return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
     }
 
     const updated = updateAdminPage(site.id, page.id, {

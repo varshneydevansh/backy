@@ -17,8 +17,10 @@ import {
   getPageBySlug,
   getPageSummary,
   getSiteByIdOrSlug,
+  listCollections,
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { findPageRouteConflict } from '@/lib/routeConflicts';
 
 export const runtime = 'nodejs';
 
@@ -210,6 +212,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(409, 'SLUG_CONFLICT', 'A page with this slug already exists', requestId);
       }
 
+      const collections = await repositories.collections.list({
+        siteId: site.id,
+        includeUnpublished: true,
+        status: 'all',
+        limit: 100,
+        offset: 0,
+      });
+      const routeConflict = findPageRouteConflict({ slug, title }, collections.items);
+      if (routeConflict) {
+        return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
+      }
+
       const pageId = typeof body.id === 'string' && body.id.trim().length > 0 ? body.id.trim() : `page_${slug}`;
       const created = await repositories.pages.create({
         siteId: site.id,
@@ -255,6 +269,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (getPageBySlug(site.id, slug, { includeUnpublished: true })) {
       return errorResponse(409, 'SLUG_CONFLICT', 'A page with this slug already exists', requestId);
+    }
+
+    const routeConflict = findPageRouteConflict({ slug, title }, listCollections(site.id, { includeUnpublished: true }));
+    if (routeConflict) {
+      return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
     }
 
     const page = createAdminPage(site.id, {

@@ -10,6 +10,7 @@ import type { BackyCollectionField, BackyCollectionPermissions, PublishStatus } 
 import {
   createAdminCollection,
   getCollectionByIdOrSlug,
+  getPageSummary,
   getSiteByIdOrSlug,
   listCollections,
 } from '@/lib/backyStore';
@@ -20,6 +21,7 @@ import {
   normalizeCollectionListRoutePattern,
   normalizeCollectionRoutePattern,
 } from '@/lib/collectionRoutes';
+import { findCollectionRouteConflict } from '@/lib/routeConflicts';
 
 export const runtime = 'nodejs';
 
@@ -180,6 +182,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Collection list route pattern cannot include :recordSlug', requestId);
       }
 
+      const pages = await repositories.pages.list({
+        siteId: site.id,
+        includeUnpublished: true,
+        status: 'all',
+        limit: 100,
+        offset: 0,
+      });
+      const routeConflict = findCollectionRouteConflict({
+        slug,
+        name,
+        routePattern,
+        listRoutePattern,
+      }, pages.items);
+      if (routeConflict) {
+        return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
+      }
+
       const collection = (await repositories.collections.create({
         siteId: site.id,
         name,
@@ -227,6 +246,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const listRoutePattern = parseListRoutePattern(body.listRoutePattern, slug);
     if (body.listRoutePattern !== undefined && listRoutePattern === null) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Collection list route pattern cannot include :recordSlug', requestId);
+    }
+
+    const routeConflict = findCollectionRouteConflict({
+      slug,
+      name,
+      routePattern,
+      listRoutePattern,
+    }, getPageSummary(site.id, { includeUnpublished: true }));
+    if (routeConflict) {
+      return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
     }
 
     const collection = createAdminCollection(site.id, {

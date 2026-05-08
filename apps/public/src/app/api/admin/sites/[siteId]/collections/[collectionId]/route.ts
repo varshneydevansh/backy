@@ -11,6 +11,7 @@ import type { BackyCollectionField, BackyCollectionPermissions, PublishStatus } 
 import {
   deleteAdminCollection,
   getCollectionByIdOrSlug,
+  getPageSummary,
   getSiteByIdOrSlug,
   updateAdminCollection,
 } from '@/lib/backyStore';
@@ -21,6 +22,7 @@ import {
   normalizeCollectionListRoutePattern,
   normalizeCollectionRoutePattern,
 } from '@/lib/collectionRoutes';
+import { findCollectionRouteConflict } from '@/lib/routeConflicts';
 
 export const runtime = 'nodejs';
 
@@ -177,6 +179,24 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Collection list route pattern cannot include :recordSlug', requestId);
       }
 
+      const pages = await repositories.pages.list({
+        siteId: site.id,
+        includeUnpublished: true,
+        status: 'all',
+        limit: 100,
+        offset: 0,
+      });
+      const routeConflict = findCollectionRouteConflict({
+        id: collection.id,
+        slug: nextSlug || collection.slug,
+        name: typeof body.name === 'string' ? body.name.trim() : collection.name,
+        routePattern: routePattern === undefined ? collection.routePattern : routePattern,
+        listRoutePattern: listRoutePattern === undefined ? collection.listRoutePattern : listRoutePattern,
+      }, pages.items);
+      if (routeConflict) {
+        return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
+      }
+
       const updated = (await repositories.collections.update(site.id, collection.id, {
         ...(typeof body.name === 'string' ? { name: body.name.trim() } : {}),
         ...(body.description === undefined ? {} : { description: typeof body.description === 'string' ? body.description : null }),
@@ -223,6 +243,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const listRoutePattern = parseListRoutePattern(body.listRoutePattern, nextSlug || collection.slug);
     if (body.listRoutePattern !== undefined && listRoutePattern === null) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Collection list route pattern cannot include :recordSlug', requestId);
+    }
+
+    const routeConflict = findCollectionRouteConflict({
+      id: collection.id,
+      slug: nextSlug || collection.slug,
+      name: typeof body.name === 'string' ? body.name.trim() : collection.name,
+      routePattern: routePattern === undefined ? collection.routePattern : routePattern,
+      listRoutePattern: listRoutePattern === undefined ? collection.listRoutePattern : listRoutePattern,
+    }, getPageSummary(site.id, { includeUnpublished: true }));
+    if (routeConflict) {
+      return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
     }
 
     const updated = updateAdminCollection(site.id, collection.id, {

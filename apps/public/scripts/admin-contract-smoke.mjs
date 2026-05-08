@@ -116,6 +116,7 @@ try {
   const collectionSlug = `admin-contract-collection-${unique}`;
   const collectionRecordSlug = `admin-contract-record-${unique}`;
   const boundPageSlug = `admin-contract-bound-page-${unique}`;
+  const routeConflictPageSlug = `admin-contract-route-conflict-${unique}`;
   const adminDevOrigin = 'http://localhost:5173';
 
   await record('api cors allows local admin dev origin', async () => {
@@ -1253,6 +1254,58 @@ try {
     assert(publicCollectionSchema?.routePattern === '/directory/:recordSlug', `${publicCollections.url} missing collection route pattern`);
     assert(publicCollectionSchema?.fields?.some((field) => field.key === 'category' && field.type === 'select' && field.options?.includes('Featured')), `${publicCollections.url} missing select option schema`);
     assert(publicCollectionSchema?.fields?.some((field) => field.key === 'labels' && field.type === 'tags' && field.options?.includes('Evergreen')), `${publicCollections.url} missing tags option schema`);
+
+    const conflictingPage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Route Conflict Page',
+        slug: routeConflictPageSlug,
+        status: 'published',
+        content: { canvasSize: { width: 1200, height: 720 }, elements: [] },
+      }),
+    });
+    assert(conflictingPage.response.status === 201, `${conflictingPage.url} expected 201, got ${conflictingPage.response.status}`);
+    const routeConflictPageId = conflictingPage.json.data.page.id;
+    createdPageId = routeConflictPageId;
+
+    const blockedCollectionRoute = await request(`/api/admin/sites/${createdSiteId}/collections`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Route Conflict Collection',
+        slug: `route-conflict-collection-${unique}`,
+        listRoutePattern: `/${routeConflictPageSlug}`,
+        routePattern: `/${routeConflictPageSlug}/:recordSlug`,
+        status: 'published',
+        fields: [{ key: 'title', label: 'Title', type: 'text' }],
+      }),
+    });
+    assert(blockedCollectionRoute.response.status === 409, `${blockedCollectionRoute.url} expected route conflict 409`);
+    assert(blockedCollectionRoute.json?.error?.code === 'ROUTE_CONFLICT', `${blockedCollectionRoute.url} expected ROUTE_CONFLICT`);
+
+    const removeRouteConflictPage = await request(`/api/admin/sites/${createdSiteId}/pages/${routeConflictPageId}`, { method: 'DELETE' });
+    assert(removeRouteConflictPage.response.status === 200, `${removeRouteConflictPage.url} expected 200, got ${removeRouteConflictPage.response.status}`);
+    createdPageId = null;
+
+    const blockedPageRoute = await request(`/api/admin/sites/${createdSiteId}/pages`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Directory Conflict Page',
+        slug: 'directory',
+        status: 'published',
+        content: { canvasSize: { width: 1200, height: 720 }, elements: [] },
+      }),
+    });
+    assert(blockedPageRoute.response.status === 409, `${blockedPageRoute.url} expected route conflict 409`);
+    assert(blockedPageRoute.json?.error?.code === 'ROUTE_CONFLICT', `${blockedPageRoute.url} expected ROUTE_CONFLICT`);
 
     const blockedPublicCreate = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records`, {
       method: 'POST',
