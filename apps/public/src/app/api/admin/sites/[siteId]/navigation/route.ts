@@ -14,6 +14,7 @@ import {
 } from '@/lib/backyStore';
 import { buildSiteNavigation, normalizeNavigationConfig } from '@/lib/navigation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 
 export const runtime = 'nodejs';
 
@@ -207,6 +208,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           navigation,
         },
       });
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'navigation',
+        entity: 'site',
+        entityId: site.id,
+        reason: 'site-navigation-updated',
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -221,6 +230,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             settings: updated.item.settings.navigation,
             resolved: buildSiteNavigation(updated.item.settings, pages.items),
           },
+          cacheInvalidation,
         },
       });
     }

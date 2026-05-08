@@ -22,6 +22,7 @@ import {
 } from '@/lib/collectionRoutes';
 import { normalizeRedirectRules, type RedirectStatusCode } from '@/lib/redirectRules';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { recordSiteCacheInvalidation, type PublicCacheInvalidation } from '@/lib/cacheInvalidation';
 
 export const runtime = 'nodejs';
 
@@ -374,7 +375,7 @@ const responsePayload = (
   requestId: string,
   site: { id: string; slug: string; name: string; settings?: SiteSettings },
   conflicts: RedirectConflict[],
-  options: { persisted?: boolean } = {},
+  options: { persisted?: boolean; cacheInvalidation?: PublicCacheInvalidation } = {},
 ) => {
   const settings = site.settings || defaultSiteSettings();
   return NextResponse.json({
@@ -391,6 +392,7 @@ const responsePayload = (
         conflicts,
         persisted: options.persisted !== false,
       },
+      ...(options.cacheInvalidation ? { cacheInvalidation: options.cacheInvalidation } : {}),
     },
   });
 };
@@ -526,12 +528,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           redirectRules: validation.rules,
         },
       });
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'routing',
+        entity: 'site',
+        entityId: site.id,
+        reason: 'site-redirects-updated',
+        requestId,
+      });
 
       const routeCandidates = await buildRepositoryRouteCandidates(repositories, site.id);
       return responsePayload(
         requestId,
         updated.item,
         redirectConflicts(validation.rules, routeCandidates.routes, routeCandidates.collections),
+        { cacheInvalidation },
       );
     }
 

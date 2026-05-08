@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { DEFAULT_SITE_SETTINGS, type BackyCacheInvalidationEvent, type SiteSettings } from '@backy-cms/core';
+import { DEFAULT_SITE_SETTINGS, type SiteSettings } from '@backy-cms/core';
 import {
   listCollectionRecords,
   listCollections,
@@ -18,6 +18,7 @@ import {
   buildCollectionListPath,
 } from '@/lib/collectionRoutes';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { recordSiteCacheInvalidation, type PublicCacheInvalidation } from '@/lib/cacheInvalidation';
 
 export const runtime = 'nodejs';
 
@@ -352,7 +353,7 @@ const responsePayload = (
   requestId: string,
   site: { id: string; slug: string; name: string; settings?: SiteSettings },
   preview: SeoPreview,
-  cacheInvalidation?: Pick<BackyCacheInvalidationEvent, 'scope' | 'reason' | 'revision' | 'createdAt'>,
+  cacheInvalidation?: PublicCacheInvalidation,
 ) => {
   const settings = site.settings || defaultSiteSettings();
   return NextResponse.json({
@@ -425,15 +426,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           seo: validation.seo,
         },
       });
-      const cacheInvalidation = await repositories.cacheInvalidations.record({
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
         siteId: site.id,
         scope: 'seo',
         entity: 'site',
         entityId: site.id,
         reason: 'site-seo-updated',
-        metadata: {
-          requestId,
-        },
+        requestId,
       });
 
       return responsePayload(
