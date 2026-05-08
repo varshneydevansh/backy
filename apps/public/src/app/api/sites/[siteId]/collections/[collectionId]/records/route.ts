@@ -18,6 +18,7 @@ import {
   validateCollectionRecordValues,
   type StoreCollection,
 } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -30,7 +31,10 @@ interface RouteParams {
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string, details?: unknown) => (
-  NextResponse.json({ success: false, requestId, error: { code, message, details } }, { status })
+  publicContractJson(
+    { success: false, requestId, error: { code, message, details } },
+    { status, requestId, cache: 'error' },
+  )
 );
 
 const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
@@ -114,8 +118,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (slug && records.length === 0) {
         return errorResponse(404, 'COLLECTION_RECORD_NOT_FOUND', 'Collection record not found', requestId);
       }
+      const cacheRevision = await repositories.cacheInvalidations.latestRevision({
+        siteId: site.id,
+        scope: 'content',
+      }) || undefined;
 
-      return NextResponse.json({
+      return publicContractJson({
         success: true,
         requestId,
         data: {
@@ -134,6 +142,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           total: records.length,
           hasMore: false,
         },
+      }, {
+        requestId,
+        request,
+        cache: 'discovery',
+        siteId: site.id,
+        cacheRevision,
       });
     }
 
@@ -166,7 +180,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'COLLECTION_RECORD_NOT_FOUND', 'Collection record not found', requestId);
     }
 
-    return NextResponse.json({
+    return publicContractJson({
       success: true,
       requestId,
       data: {
@@ -177,6 +191,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       collection,
       records: payload.records,
       pagination: payload.pagination,
+    }, {
+      requestId,
+      request,
+      cache: 'discovery',
+      siteId: site.id,
     });
   } catch (error) {
     console.error('Public collection records API error:', error);

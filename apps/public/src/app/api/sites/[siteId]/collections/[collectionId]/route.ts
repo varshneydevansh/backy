@@ -4,8 +4,9 @@
  * GET /api/sites/[siteId]/collections/[collectionId]
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getCollectionByIdOrSlug, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -18,7 +19,7 @@ interface RouteParams {
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -28,7 +29,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
       errorMessage: message,
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
@@ -50,14 +51,24 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (!collection || collection.status !== 'published' || !collection.permissions.publicRead) {
         return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
       }
+      const cacheRevision = await repositories.cacheInvalidations.latestRevision({
+        siteId: site.id,
+        scope: 'content',
+      }) || undefined;
 
-      return NextResponse.json({
+      return publicContractJson({
         success: true,
         requestId,
         data: {
           collection,
         },
         collection,
+      }, {
+        requestId,
+        request,
+        cache: 'discovery',
+        siteId: site.id,
+        cacheRevision,
       });
     }
 
@@ -72,13 +83,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
     }
 
-    return NextResponse.json({
+    return publicContractJson({
       success: true,
       requestId,
       data: {
         collection,
       },
       collection,
+    }, {
+      requestId,
+      request,
+      cache: 'discovery',
+      siteId: site.id,
     });
   } catch (error) {
     console.error('Public collection detail API error:', error);

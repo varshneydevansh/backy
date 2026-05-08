@@ -1506,6 +1506,19 @@ try {
 
     const publicCollections = await request(`/api/sites/${createdSiteId}/collections`);
     assert(publicCollections.response.status === 200, `${publicCollections.url} expected 200, got ${publicCollections.response.status}`);
+    assert(publicCollections.response.headers.get('x-backy-cache-scope') === 'discovery', `${publicCollections.url} missing discovery cache scope`);
+    assert(publicCollections.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${publicCollections.url} missing contract version header`);
+    assert(publicCollections.response.headers.get('x-backy-site-id') === createdSiteId, `${publicCollections.url} missing site id header`);
+    const publicCollectionsCacheRevision = publicCollections.response.headers.get('x-backy-cache-revision');
+    assert(publicCollectionsCacheRevision, `${publicCollections.url} missing collection cache revision`);
+    const publicCollectionsEtag = publicCollections.response.headers.get('etag');
+    assert(publicCollectionsEtag?.startsWith('"backy-'), `${publicCollections.url} missing collection etag`);
+    const revalidatedPublicCollections = await request(`/api/sites/${createdSiteId}/collections`, {
+      headers: { 'if-none-match': publicCollectionsEtag },
+    });
+    assert(revalidatedPublicCollections.response.status === 304, `${revalidatedPublicCollections.url} expected collection 304, got ${revalidatedPublicCollections.response.status}`);
+    assert(revalidatedPublicCollections.response.headers.get('etag') === publicCollectionsEtag, `${revalidatedPublicCollections.url} expected matching collection etag`);
+    assert(revalidatedPublicCollections.response.headers.get('x-backy-cache-revision') === publicCollectionsCacheRevision, `${revalidatedPublicCollections.url} expected matching collection cache revision`);
     assert(publicCollections.json?.success === true, `${publicCollections.url} expected success envelope`);
     assert(publicCollections.json?.data?.collections?.some((collection) => collection.id === createdCollectionId), `${publicCollections.url} missing public collection in data envelope`);
     assert(publicCollections.json?.collections?.some((collection) => collection.id === createdCollectionId), `${publicCollections.url} missing public collection`);
@@ -1514,6 +1527,13 @@ try {
     assert(publicCollectionSchema?.routePattern === '/directory/:recordSlug', `${publicCollections.url} missing collection route pattern`);
     assert(publicCollectionSchema?.fields?.some((field) => field.key === 'category' && field.type === 'select' && field.options?.includes('Featured')), `${publicCollections.url} missing select option schema`);
     assert(publicCollectionSchema?.fields?.some((field) => field.key === 'labels' && field.type === 'tags' && field.options?.includes('Evergreen')), `${publicCollections.url} missing tags option schema`);
+
+    const publicCollectionDetail = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}`);
+    assert(publicCollectionDetail.response.status === 200, `${publicCollectionDetail.url} expected 200, got ${publicCollectionDetail.response.status}`);
+    assert(publicCollectionDetail.response.headers.get('x-backy-cache-scope') === 'discovery', `${publicCollectionDetail.url} missing discovery cache scope`);
+    assert(publicCollectionDetail.response.headers.get('x-backy-cache-revision'), `${publicCollectionDetail.url} missing collection detail cache revision`);
+    assert(publicCollectionDetail.response.headers.get('etag')?.startsWith('"backy-'), `${publicCollectionDetail.url} missing collection detail etag`);
+    assert(publicCollectionDetail.json?.data?.collection?.id === createdCollectionId, `${publicCollectionDetail.url} returned wrong public collection detail`);
 
     const conflictingPage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
       method: 'POST',
@@ -2235,6 +2255,19 @@ try {
 
     const publicRecords = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records?slug=${collectionRecordSlug}`);
     assert(publicRecords.response.status === 200, `${publicRecords.url} expected 200, got ${publicRecords.response.status}`);
+    assert(publicRecords.response.headers.get('x-backy-cache-scope') === 'discovery', `${publicRecords.url} missing discovery cache scope`);
+    assert(publicRecords.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${publicRecords.url} missing contract version header`);
+    assert(publicRecords.response.headers.get('x-backy-site-id') === createdSiteId, `${publicRecords.url} missing site id header`);
+    const publicRecordsCacheRevision = publicRecords.response.headers.get('x-backy-cache-revision');
+    assert(publicRecordsCacheRevision, `${publicRecords.url} missing collection records cache revision`);
+    const publicRecordsEtag = publicRecords.response.headers.get('etag');
+    assert(publicRecordsEtag?.startsWith('"backy-'), `${publicRecords.url} missing collection records etag`);
+    const revalidatedPublicRecords = await request(`/api/sites/${createdSiteId}/collections/${createdCollectionId}/records?slug=${collectionRecordSlug}`, {
+      headers: { 'if-none-match': publicRecordsEtag },
+    });
+    assert(revalidatedPublicRecords.response.status === 304, `${revalidatedPublicRecords.url} expected collection records 304, got ${revalidatedPublicRecords.response.status}`);
+    assert(revalidatedPublicRecords.response.headers.get('etag') === publicRecordsEtag, `${revalidatedPublicRecords.url} expected matching collection records etag`);
+    assert(revalidatedPublicRecords.response.headers.get('x-backy-cache-revision') === publicRecordsCacheRevision, `${revalidatedPublicRecords.url} expected matching collection records cache revision`);
     assert(publicRecords.json?.success === true, `${publicRecords.url} expected success envelope`);
     assert(publicRecords.json?.data?.records?.[0]?.id === createdCollectionRecordId, `${publicRecords.url} returned wrong public collection record in data envelope`);
     assert(publicRecords.json?.records?.[0]?.id === createdCollectionRecordId, `${publicRecords.url} returned wrong public collection record`);
