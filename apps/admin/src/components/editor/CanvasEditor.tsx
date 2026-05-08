@@ -888,9 +888,7 @@ export function CanvasEditor({
     const nextIds = ids.filter((id) => !!findElementById(elements, id));
     setSelectedIds(nextIds);
     setSelectedId(nextIds[0] ?? null);
-    if (nextIds.length === 1) {
-      setRightPanel('properties');
-    } else if (nextIds.length > 1) {
+    if (nextIds.length > 1) {
       setRightPanel('layers');
     }
   }, [elements, findElementById]);

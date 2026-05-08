@@ -892,6 +892,92 @@ const testLayerGrouping = async (client, elementIds) => {
   };
 };
 
+const selectLayerIds = async (client, elementIds) => {
+  const [firstId] = elementIds;
+
+  await evaluate(client, `(() => {
+    if (!document.querySelector('[data-layer-id="${firstId}"]')) {
+      const layersButton = Array.from(document.querySelectorAll('button')).find((button) => (
+        (button.textContent || '').trim() === 'Layers'
+      ));
+      layersButton?.click();
+    }
+    return true;
+  })()`);
+
+  let layersReady = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    layersReady = await evaluate(client, `(() => ({
+      ready: ${JSON.stringify(elementIds)}.every((id) => Boolean(document.querySelector('[data-layer-id="' + id + '"]'))),
+      body: document.body?.innerText?.slice(0, 300) || '',
+    }))()`);
+    if (layersReady.ready) {
+      break;
+    }
+    await sleep(100);
+  }
+
+  assert(layersReady?.ready, `Layer rows did not render for multi-selection: ${JSON.stringify(layersReady)}`);
+
+  let selected = null;
+  for (const [index, id] of elementIds.entries()) {
+    selected = await evaluate(client, `(() => {
+      const id = ${JSON.stringify(id)};
+      const layer = document.querySelector('[data-layer-id="' + id + '"]');
+      if (!layer) {
+        return { ok: false, reason: 'missing-layer-item', id };
+      }
+      layer.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        ctrlKey: ${index > 0 ? 'true' : 'false'},
+        metaKey: false,
+      }));
+
+      return { ok: true };
+    })()`);
+    assert(selected?.ok, `Unable to select layer ${id}: ${JSON.stringify(selected)}`);
+    await sleep(120);
+  }
+
+  const ready = await evaluate(client, `(() => ({
+    selectedLayers: Array.from(document.querySelectorAll('[data-layer-selected="true"]')).map((node) => node.getAttribute('data-layer-id')),
+    hasMultiSelection: Boolean(document.querySelector('[data-testid="editor-inspector-multi-selection"]')),
+  }))()`);
+
+  assert(
+    elementIds.every((id) => ready.selectedLayers?.includes(id)),
+    `Layer multi-selection missing expected ids: ${JSON.stringify(ready)}`,
+  );
+
+  return ready;
+};
+
+const testMultiSelectionCanvasDrag = async (client, elementIds) => {
+  assert(elementIds.length >= 2, 'Multi-selection drag test needs at least two elements');
+  await selectLayerIds(client, elementIds);
+
+  const before = await readEditorElementState(client, elementIds);
+  const drag = await dragSelectionHandle(client, elementIds[0], 50, 30, { selectFirst: false });
+  const after = await readEditorElementState(client, elementIds);
+
+  for (const elementId of elementIds) {
+    const actualDeltaX = after[elementId].x - before[elementId].x;
+    const actualDeltaY = after[elementId].y - before[elementId].y;
+    assert(
+      Math.abs(actualDeltaX - 50) <= 12 &&
+      Math.abs(actualDeltaY - 30) <= 12,
+      `${elementId} did not move with multi-selection drag: expected 50,30; got ${actualDeltaX},${actualDeltaY}; before ${JSON.stringify(before[elementId])}, after ${JSON.stringify(after[elementId])}`,
+    );
+  }
+
+  return {
+    selected: elementIds,
+    drag,
+    before,
+    after,
+  };
+};
+
 const dragSelectionHandle = async (client, elementId, deltaX, deltaY, options = {}) => {
   if (options.selectFirst !== false) {
     await selectElement(client, elementId);
@@ -1207,6 +1293,10 @@ const main = async () => {
     const inspector = await assertInspectorSelection(client, EDITOR_PATH ? 'home-heading' : 'smoke-heading');
     const fontPicker = await assertFontMediaPicker(client);
     const groupingControls = await assertGroupingControls(client);
+    const multiSelectionDrag = await testMultiSelectionCanvasDrag(
+      client,
+      EDITOR_PATH ? ['home-heading', 'home-cta'] : ['smoke-heading', 'smoke-image'],
+    );
     const grouping = await testLayerGrouping(
       client,
       EDITOR_PATH ? ['home-heading', 'home-cta'] : ['smoke-heading', 'smoke-image'],
@@ -1290,6 +1380,7 @@ const main = async () => {
       inspector,
       fontPicker,
       groupingControls,
+      multiSelectionDrag,
       grouping,
       postSaveInspector,
       persistedState,

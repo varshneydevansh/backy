@@ -93,6 +93,27 @@ interface SnapCandidate {
   offset: number;
 }
 
+interface DragSnapshot {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  zIndex: number;
+  parentId: string | null;
+  boundsWidth: number;
+  boundsHeight: number;
+}
+
+interface DragBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  boundsWidth: number;
+  boundsHeight: number;
+}
+
 const getDragSnapCandidates = (
   x: number,
   y: number,
@@ -113,14 +134,15 @@ const getDragSnapCandidates = (
 
 const collectSmartGuideTargets = (
   elements: CanvasElement[],
-  activeElementId: string,
+  activeElementIds: string | string[],
   size: CanvasSize,
 ) => {
+  const activeIds = new Set(Array.isArray(activeElementIds) ? activeElementIds : [activeElementIds]);
   const vertical = [0, size.width / 2, size.width];
   const horizontal = [0, size.height / 2, size.height];
 
   for (const element of elements) {
-    if (element.id === activeElementId || element.visible === false) {
+    if (activeIds.has(element.id) || element.visible === false) {
       continue;
     }
 
@@ -160,14 +182,14 @@ const findClosestSnap = (
 
 const resolveSmartDragSnap = (
   elements: CanvasElement[],
-  activeElementId: string,
+  activeElementIds: string | string[],
   size: CanvasSize,
   x: number,
   y: number,
   width: number,
   height: number,
 ) => {
-  const targets = collectSmartGuideTargets(elements, activeElementId, size);
+  const targets = collectSmartGuideTargets(elements, activeElementIds, size);
   const candidates = getDragSnapCandidates(x, y, width, height);
   const verticalSnap = findClosestSnap(candidates.vertical, targets.vertical);
   const horizontalSnap = findClosestSnap(candidates.horizontal, targets.horizontal);
@@ -197,6 +219,64 @@ const findElementById = (elements: CanvasElement[], targetId: string): CanvasEle
   }
 
   return null;
+};
+
+const collectDragSnapshots = (
+  elements: CanvasElement[],
+  selectedIds: Set<string>,
+  bounds: { width: number; height: number },
+  parentId: string | null = null,
+  ancestorSelected = false,
+): DragSnapshot[] => {
+  const snapshots: DragSnapshot[] = [];
+
+  for (const element of elements) {
+    const isSelected = selectedIds.has(element.id);
+    if (isSelected && !ancestorSelected) {
+      snapshots.push({
+        id: element.id,
+        x: element.x,
+        y: element.y,
+        width: element.width,
+        height: element.height,
+        zIndex: element.zIndex || 1,
+        parentId,
+        boundsWidth: bounds.width,
+        boundsHeight: bounds.height,
+      });
+    }
+
+    if (element.children?.length) {
+      snapshots.push(
+        ...collectDragSnapshots(
+          element.children,
+          selectedIds,
+          { width: element.width, height: element.height },
+          element.id,
+          ancestorSelected || isSelected,
+        ),
+      );
+    }
+  }
+
+  return snapshots;
+};
+
+const getDragBounds = (snapshots: DragSnapshot[]): DragBounds => {
+  const minX = Math.min(...snapshots.map((snapshot) => snapshot.x));
+  const minY = Math.min(...snapshots.map((snapshot) => snapshot.y));
+  const maxX = Math.max(...snapshots.map((snapshot) => snapshot.x + snapshot.width));
+  const maxY = Math.max(...snapshots.map((snapshot) => snapshot.y + snapshot.height));
+  const first = snapshots[0];
+
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(1, maxX - minX),
+    height: Math.max(1, maxY - minY),
+    boundsWidth: first.boundsWidth,
+    boundsHeight: first.boundsHeight,
+  };
 };
 
 const updateElementById = (
@@ -596,13 +676,15 @@ const EDITOR_ACTIVATION_EVENT = 'backy-open-text-editor';
 
 type DragInteraction = {
   elementId: string;
+  elementIds: string[];
+  snapshots: DragSnapshot[];
+  bounds: DragBounds;
   inputType: 'pointer' | 'mouse';
   pointerId?: number;
   startX: number;
   startY: number;
-  initialX: number;
-  initialY: number;
   raisedZIndex: number;
+  zIndexOffset: number;
 };
 
 type ResizeInteraction = {
@@ -884,18 +966,49 @@ export function Canvas({
       if ('pointerId' in e && e.pointerId !== undefined) {
         e.currentTarget.setPointerCapture?.(e.pointerId);
       }
-      onSelect(elementId);
+
+      const selectedSet = new Set(selectedIds);
+      const allSelectedSnapshots = selectedSet.has(elementId) && selectedIds.length > 1
+        ? collectDragSnapshots(elementsRef.current, selectedSet, { width: size.width, height: size.height })
+        : [];
+      const activeSnapshot = allSelectedSnapshots.find((snapshot) => snapshot.id === elementId);
+      const dragSnapshots = activeSnapshot
+        ? allSelectedSnapshots.filter((snapshot) => (
+            snapshot.parentId === activeSnapshot.parentId
+            && snapshot.boundsWidth === activeSnapshot.boundsWidth
+            && snapshot.boundsHeight === activeSnapshot.boundsHeight
+          ))
+        : [{
+            id: clickedElement.id,
+            x: clickedElement.x,
+            y: clickedElement.y,
+            width: clickedElement.width,
+            height: clickedElement.height,
+            zIndex: clickedElement.zIndex || 1,
+            parentId: null,
+            boundsWidth: size.width,
+            boundsHeight: size.height,
+          }];
+      const isMultiDrag = dragSnapshots.length > 1;
+      const minSelectedZIndex = Math.min(...dragSnapshots.map((snapshot) => snapshot.zIndex));
+      const zIndexOffset = Math.max(0, getMaxZIndex(elementsRef.current) - minSelectedZIndex + 1);
+
+      if (!isMultiDrag) {
+        onSelect(elementId);
+      }
 
       exitTextEditingForTransform();
 
       const nextDragState: DragInteraction = {
         elementId,
+        elementIds: dragSnapshots.map((snapshot) => snapshot.id),
+        snapshots: dragSnapshots,
+        bounds: getDragBounds(dragSnapshots),
         ...getPointerDetails(e),
         startX: e.clientX,
         startY: e.clientY,
-        initialX: clickedElement.x,
-        initialY: clickedElement.y,
         raisedZIndex: Math.max(clickedElement.zIndex || 1, getMaxZIndex(elementsRef.current) + 1),
+        zIndexOffset,
       };
 
       dragStateRef.current = nextDragState;
@@ -903,7 +1016,7 @@ export function Canvas({
       setDragState(nextDragState);
       setResizeState(null);
     },
-    [elements, exitTextEditingForTransform, isInteractiveHandle, isTextEditorInteraction, isPreview, onSelect]
+    [elements, exitTextEditingForTransform, isInteractiveHandle, isTextEditorInteraction, isPreview, onSelect, selectedIds, size.height, size.width]
   );
 
   /**
@@ -1016,35 +1129,49 @@ export function Canvas({
 
     const deltaX = toCanvasDelta(event.clientX - activeDragState.startX);
     const deltaY = toCanvasDelta(event.clientY - activeDragState.startY);
-    const newX = activeDragState.initialX + deltaX;
-    const newY = activeDragState.initialY + deltaY;
+    const newX = activeDragState.bounds.x + deltaX;
+    const newY = activeDragState.bounds.y + deltaY;
     let nextGuides: AlignmentGuide[] = [];
 
-    const result = updateElementById(elementsRef.current, activeDragState.elementId, (element) => {
-      const snappedX = snapToGrid(clampToCanvas(newX, element.width, size.width));
-      const snappedY = snapToGrid(clampToCanvas(newY, element.height, size.height));
-      const smartSnap = resolveSmartDragSnap(
-        elementsRef.current,
-        activeDragState.elementId,
-        size,
-        snappedX,
-        snappedY,
-        element.width,
-        element.height,
-      );
-      nextGuides = smartSnap.guides;
+    const snappedX = snapToGrid(clampToCanvas(newX, activeDragState.bounds.width, activeDragState.bounds.boundsWidth));
+    const snappedY = snapToGrid(clampToCanvas(newY, activeDragState.bounds.height, activeDragState.bounds.boundsHeight));
+    const smartSnap = resolveSmartDragSnap(
+      elementsRef.current,
+      activeDragState.elementIds,
+      size,
+      snappedX,
+      snappedY,
+      activeDragState.bounds.width,
+      activeDragState.bounds.height,
+    );
+    nextGuides = smartSnap.guides;
 
-      return {
+    const moveDeltaX = clampToCanvas(smartSnap.x, activeDragState.bounds.width, activeDragState.bounds.boundsWidth) - activeDragState.bounds.x;
+    const moveDeltaY = clampToCanvas(smartSnap.y, activeDragState.bounds.height, activeDragState.bounds.boundsHeight) - activeDragState.bounds.y;
+    const snapshotById = new Map(activeDragState.snapshots.map((snapshot) => [snapshot.id, snapshot]));
+    let nextElements = elementsRef.current;
+
+    for (const elementId of activeDragState.elementIds) {
+      const snapshot = snapshotById.get(elementId);
+      if (!snapshot) {
+        continue;
+      }
+
+      const result = updateElementById(nextElements, elementId, (element) => ({
         ...element,
-        x: clampToCanvas(smartSnap.x, element.width, size.width),
-        y: clampToCanvas(smartSnap.y, element.height, size.height),
-        zIndex: activeDragState.raisedZIndex,
-      };
-    });
+        x: clampToCanvas(snapshot.x + moveDeltaX, snapshot.width, snapshot.boundsWidth),
+        y: clampToCanvas(snapshot.y + moveDeltaY, snapshot.height, snapshot.boundsHeight),
+        zIndex: activeDragState.elementIds.length > 1
+          ? snapshot.zIndex + activeDragState.zIndexOffset
+          : activeDragState.raisedZIndex,
+      }));
+
+      nextElements = result.elements;
+    }
 
     setAlignmentGuides(nextGuides);
-    elementsRef.current = result.elements;
-    onElementsChange(result.elements, { transient: true, selectedId: activeDragState.elementId });
+    elementsRef.current = nextElements;
+    onElementsChange(nextElements, { transient: true, selectedId: activeDragState.elementId });
   }, [isPreview, onElementsChange, size.height, size.width, toCanvasDelta]);
 
   const handleGlobalElementUp = useCallback((event?: MouseEvent | PointerEvent) => {
