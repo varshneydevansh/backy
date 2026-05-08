@@ -1887,6 +1887,11 @@ try {
       `${dynamicListRender.url} missing dynamic list dataset record`,
     );
 
+    const hostedDynamicList = await request(`/sites/${siteSlug}${dynamicListPath}`);
+    assert(hostedDynamicList.response.status === 200, `${hostedDynamicList.url} expected hosted dynamic list page`);
+    assert(hostedDynamicList.text.includes('Admin Contract Collection'), `${hostedDynamicList.url} missing hosted dynamic list title`);
+    assert(hostedDynamicList.text.includes('Collection Record'), `${hostedDynamicList.url} missing hosted dynamic list record`);
+
     const dynamicItemPath = `/directory/${collectionRecordSlug}`;
     const dynamicResolve = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(dynamicItemPath)}`);
     assert(dynamicResolve.response.status === 200, `${dynamicResolve.url} expected 200, got ${dynamicResolve.response.status}`);
@@ -1915,6 +1920,10 @@ try {
       )),
       `${dynamicRender.url} missing dynamic item field option metadata`,
     );
+
+    const hostedDynamicItem = await request(`/sites/${siteSlug}${dynamicItemPath}`);
+    assert(hostedDynamicItem.response.status === 200, `${hostedDynamicItem.url} expected hosted dynamic item page`);
+    assert(hostedDynamicItem.text.includes('Collection Record'), `${hostedDynamicItem.url} missing hosted dynamic item title`);
 
     const createBoundPage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
       method: 'POST',
@@ -2040,6 +2049,9 @@ try {
 
     const hiddenDynamicListRender = await request(`/api/sites/${createdSiteId}/render?path=${encodeURIComponent(dynamicListPath)}`);
     assert(hiddenDynamicListRender.response.status === 404, `${hiddenDynamicListRender.url} expected draft collection dynamic list render to be hidden`);
+
+    const hiddenHostedDynamicList = await request(`/sites/${siteSlug}${dynamicListPath}`);
+    assert(hiddenHostedDynamicList.response.status === 404, `${hiddenHostedDynamicList.url} expected draft collection hosted dynamic list to be hidden`);
 
     const removeRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records/${createdCollectionRecordId}`, { method: 'DELETE' });
     assert(removeRecord.response.status === 200, `${removeRecord.url} expected 200, got ${removeRecord.response.status}`);

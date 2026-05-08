@@ -8,21 +8,30 @@
  */
 
 import { notFound } from 'next/navigation';
-import type { BackyPage, Site } from '@backy-cms/core';
+import type { BackyCollection, BackyCollectionRecord, BackyPage, Site } from '@backy-cms/core';
 import {
     getCanonicalPathForPage,
     getCollectionRecordByIdOrSlug,
     getMediaList,
     getPageByPath,
     getSiteByIdOrSlug,
+    listCollectionRecords,
     listCollections,
     validatePreviewToken,
+    type StoreCollection,
+    type StoreCollectionRecord,
+    type StoreSite,
 } from '@/lib/backyStore';
 import { PageRenderer, type PageContent } from '@/components/PageRenderer';
 import AnimationHydrator from '@/components/AnimationHydrator';
-import { buildCollectionItemContent, resolveElementDataBindings } from '@/lib/renderPayload';
+import { buildCollectionItemContent, buildCollectionListContent, resolveElementDataBindings } from '@/lib/renderPayload';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
-import { buildCollectionItemPath, matchCollectionItemRoute } from '@/lib/collectionRoutes';
+import {
+    buildCollectionItemPath,
+    buildCollectionListPath,
+    matchCollectionItemRoute,
+    matchCollectionListRoute,
+} from '@/lib/collectionRoutes';
 import type { Metadata } from 'next';
 
 type HostedSite =
@@ -67,9 +76,31 @@ async function getPage(siteId: string, pageSlug: string, previewToken?: string) 
     return canPreview ? previewPage : getPageByPath(siteId, pageSlug);
 }
 
-function getDynamicCollectionItem(siteId: string, pathParts: string[] | undefined) {
+type HostedDynamicCollectionRoute =
+    | {
+        type: 'list';
+        collection: StoreCollection;
+        records: StoreCollectionRecord[];
+        canonical: string;
+    }
+    | {
+        type: 'item';
+        collection: StoreCollection;
+        record: StoreCollectionRecord;
+        canonical: string;
+    };
+
+function getDynamicCollectionRoute(siteId: string, pathParts: string[] | undefined): HostedDynamicCollectionRoute | null {
     const path = pathParts && pathParts.length > 0 ? `/${pathParts.join('/')}` : '/';
-    const dynamicItemMatch = matchCollectionItemRoute(path, listCollections(siteId));
+    const collections = listCollections(siteId);
+    const dynamicListMatch = matchCollectionListRoute(path, collections);
+    if (dynamicListMatch) {
+        const { collection, canonical } = dynamicListMatch;
+        const records = listCollectionRecords(siteId, collection.id, { limit: 100 }).records;
+        return { type: 'list', collection, records, canonical };
+    }
+
+    const dynamicItemMatch = matchCollectionItemRoute(path, collections);
     if (!dynamicItemMatch) {
         return null;
     }
@@ -77,7 +108,7 @@ function getDynamicCollectionItem(siteId: string, pathParts: string[] | undefine
     const { collection, recordSlug, canonical } = dynamicItemMatch;
     const record = getCollectionRecordByIdOrSlug(siteId, collection.id, recordSlug);
 
-    return collection && record ? { collection, record, canonical } : null;
+    return collection && record ? { type: 'item', collection, record, canonical } : null;
 }
 
 function getCollectionRecordTitle(record: { slug: string; values: Record<string, unknown> }) {
@@ -151,6 +182,19 @@ function repositoryTheme(site: Site) {
     };
 }
 
+function repositorySiteToStoreSite(site: Site): StoreSite {
+    return {
+        id: site.id,
+        name: site.name,
+        slug: site.slug,
+        description: site.description || '',
+        customDomain: site.customDomain || null,
+        status: site.isPublished ? 'published' : 'draft',
+        isPublished: site.isPublished,
+        theme: repositoryTheme(site) as StoreSite['theme'],
+    };
+}
+
 function repositoryPageContent(page: BackyPage): PageContent {
     return {
         elements: page.content.elements as unknown as PageContent['elements'],
@@ -173,6 +217,110 @@ function canonicalPathForRepositoryPage(page: Pick<BackyPage, 'isHomepage' | 'sl
     return typeof page.meta?.canonical === 'string' && page.meta.canonical.length > 0
         ? page.meta.canonical
         : `/${page.slug}`;
+}
+
+const repositoryCollectionToStoreCollection = (collection: BackyCollection): StoreCollection => ({
+    id: collection.id,
+    siteId: collection.siteId,
+    name: collection.name,
+    slug: collection.slug,
+    listRoutePattern: collection.listRoutePattern || null,
+    routePattern: collection.routePattern || null,
+    description: collection.description || null,
+    status: collection.status === 'published' || collection.status === 'archived' ? collection.status : 'draft',
+    fields: collection.fields.map((field, index) => ({
+        id: field.id,
+        key: field.key,
+        label: field.label,
+        type: field.type,
+        required: field.required === true,
+        unique: field.unique === true,
+        sortOrder: index,
+        helpText: null,
+        options: field.options,
+        referenceCollectionId: field.referenceCollectionId || null,
+        defaultValue: field.defaultValue,
+    })),
+    permissions: {
+        publicRead: collection.permissions.publicRead,
+        publicCreate: collection.permissions.publicCreate,
+        publicUpdate: collection.permissions.publicUpdate === true,
+        publicDelete: collection.permissions.publicDelete === true,
+    },
+    createdAt: collection.createdAt,
+    updatedAt: collection.updatedAt,
+});
+
+const repositoryRecordToStoreRecord = (record: BackyCollectionRecord): StoreCollectionRecord => ({
+    id: record.id,
+    siteId: record.siteId,
+    collectionId: record.collectionId,
+    slug: record.slug,
+    status: record.status,
+    values: record.values,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    publishedAt: record.publishedAt || null,
+    scheduledAt: record.scheduledAt || null,
+});
+
+async function getRepositoryDynamicCollectionRoute(
+    hostedSite: Extract<HostedSite, { mode: 'database' }>,
+    pathParts: string[] | undefined,
+): Promise<HostedDynamicCollectionRoute | null> {
+    const path = pathParts && pathParts.length > 0 ? `/${pathParts.join('/')}` : '/';
+    const collections = await hostedSite.repositories.collections.list({
+        siteId: hostedSite.site.id,
+        status: 'published',
+        includeUnpublished: false,
+        limit: 100,
+        offset: 0,
+    });
+    const publicCollections = collections.items.filter((collection) => (
+        collection.status === 'published' && collection.permissions.publicRead
+    ));
+    const dynamicListMatch = matchCollectionListRoute(path, publicCollections);
+    if (dynamicListMatch) {
+        const { collection, canonical } = dynamicListMatch;
+        const records = await hostedSite.repositories.collections.listRecords({
+            siteId: hostedSite.site.id,
+            collectionId: collection.id,
+            status: 'published',
+            includeUnpublished: false,
+            limit: 100,
+            offset: 0,
+        });
+
+        return {
+            type: 'list',
+            collection: repositoryCollectionToStoreCollection(collection),
+            records: records.items.filter(isPubliclyReadable).map(repositoryRecordToStoreRecord),
+            canonical,
+        };
+    }
+
+    const dynamicItemMatch = matchCollectionItemRoute(path, publicCollections);
+    if (!dynamicItemMatch) {
+        return null;
+    }
+
+    const { collection, recordSlug, canonical } = dynamicItemMatch;
+    const record = await hostedSite.repositories.collections.getRecordBySlug(
+        hostedSite.site.id,
+        collection.id,
+        recordSlug,
+    );
+
+    if (!record || !isPubliclyReadable(record)) {
+        return null;
+    }
+
+    return {
+        type: 'item',
+        collection: repositoryCollectionToStoreCollection(collection),
+        record: repositoryRecordToStoreRecord(record),
+        canonical,
+    };
 }
 
 // ==========================================================================
@@ -204,7 +352,55 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
     if (hostedSite.mode === 'database') {
         const { site } = hostedSite;
         const page = await getRepositoryPage(hostedSite, pageSlug, previewToken);
-        if (!page) return { title: 'Page Not Found' };
+        if (!page) {
+            const dynamicRoute = await getRepositoryDynamicCollectionRoute(hostedSite, path);
+            if (!dynamicRoute) return { title: 'Page Not Found' };
+
+            if (dynamicRoute.type === 'list') {
+                const description = dynamicRoute.collection.description || '';
+                return {
+                    title: dynamicRoute.collection.name,
+                    description,
+                    alternates: {
+                        canonical: dynamicRoute.canonical,
+                    },
+                    robots: {
+                        index: dynamicRoute.collection.status === 'published',
+                        follow: true,
+                    },
+                    openGraph: {
+                        title: dynamicRoute.collection.name,
+                        description,
+                        url: dynamicRoute.canonical,
+                        siteName: site.name,
+                    },
+                };
+            }
+
+            const title = getCollectionRecordTitle(dynamicRoute.record);
+            const descriptionValue = dynamicRoute.record.values.summary
+                || dynamicRoute.record.values.description
+                || dynamicRoute.collection.description
+                || '';
+            const description = typeof descriptionValue === 'string' ? descriptionValue : '';
+            return {
+                title,
+                description,
+                alternates: {
+                    canonical: dynamicRoute.canonical,
+                },
+                robots: {
+                    index: dynamicRoute.record.status === 'published',
+                    follow: true,
+                },
+                openGraph: {
+                    title,
+                    description,
+                    url: dynamicRoute.canonical,
+                    siteName: site.name,
+                },
+            };
+        }
 
         const canonicalPath = canonicalPathForRepositoryPage(page);
         return {
@@ -231,17 +427,38 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
     const { site } = hostedSite;
     const page = await getPage(site.id, pageSlug, previewToken);
     if (!page) {
-        const dynamicItem = getDynamicCollectionItem(site.id, path);
-        if (!dynamicItem) return { title: 'Page Not Found' };
+        const dynamicRoute = getDynamicCollectionRoute(site.id, path);
+        if (!dynamicRoute) return { title: 'Page Not Found' };
 
-        const title = getCollectionRecordTitle(dynamicItem.record);
-        const descriptionValue = dynamicItem.record.values.summary
-            || dynamicItem.record.values.description
-            || dynamicItem.record.values.bio
-            || dynamicItem.collection.description
+        if (dynamicRoute.type === 'list') {
+            const description = dynamicRoute.collection.description || '';
+            return {
+                title: dynamicRoute.collection.name,
+                description,
+                alternates: {
+                    canonical: dynamicRoute.canonical,
+                },
+                robots: {
+                    index: dynamicRoute.collection.status === 'published',
+                    follow: true,
+                },
+                openGraph: {
+                    title: dynamicRoute.collection.name,
+                    description,
+                    url: dynamicRoute.canonical,
+                    siteName: site.name,
+                },
+            };
+        }
+
+        const title = getCollectionRecordTitle(dynamicRoute.record);
+        const descriptionValue = dynamicRoute.record.values.summary
+            || dynamicRoute.record.values.description
+            || dynamicRoute.record.values.bio
+            || dynamicRoute.collection.description
             || '';
         const description = typeof descriptionValue === 'string' ? descriptionValue : '';
-        const canonicalPath = dynamicItem.canonical;
+        const canonicalPath = dynamicRoute.canonical;
 
         return {
             title,
@@ -250,7 +467,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
                 canonical: canonicalPath,
             },
             robots: {
-                index: dynamicItem.record.status === 'published',
+                index: dynamicRoute.record.status === 'published',
                 follow: true,
             },
             openGraph: {
@@ -300,7 +517,30 @@ export default async function SitePage({ params, searchParams }: PageProps) {
         const { site } = hostedSite;
         const page = await getRepositoryPage(hostedSite, pageSlug, previewToken);
         if (!page) {
-            notFound();
+            const dynamicRoute = await getRepositoryDynamicCollectionRoute(hostedSite, path);
+            if (!dynamicRoute) {
+                notFound();
+            }
+
+            const storeSite = repositorySiteToStoreSite(site);
+            const dynamicContent = dynamicRoute.type === 'list'
+                ? buildCollectionListContent(storeSite, dynamicRoute.collection, dynamicRoute.records) as unknown as PageContent
+                : buildCollectionItemContent(storeSite, dynamicRoute.collection, dynamicRoute.record) as unknown as PageContent;
+
+            return (
+                <>
+                    <PageRenderer
+                        content={dynamicContent}
+                        theme={repositoryTheme(site)}
+                        fontAssets={await getRepositoryFontAssets(hostedSite)}
+                        siteId={site.id}
+                        pageSlug={(dynamicRoute.type === 'list'
+                            ? buildCollectionListPath(dynamicRoute.collection)
+                            : buildCollectionItemPath(dynamicRoute.collection, dynamicRoute.record.slug)).replace(/^\//, '')}
+                    />
+                    <AnimationHydrator />
+                </>
+            );
         }
 
         return (
@@ -347,12 +587,14 @@ export default async function SitePage({ params, searchParams }: PageProps) {
         );
     }
 
-    const dynamicItem = getDynamicCollectionItem(site.id, path);
-    if (!dynamicItem) {
+    const dynamicRoute = getDynamicCollectionRoute(site.id, path);
+    if (!dynamicRoute) {
         notFound();
     }
 
-    const dynamicContent = buildCollectionItemContent(site, dynamicItem.collection, dynamicItem.record) as unknown as PageContent;
+    const dynamicContent = dynamicRoute.type === 'list'
+        ? buildCollectionListContent(site, dynamicRoute.collection, dynamicRoute.records) as unknown as PageContent
+        : buildCollectionItemContent(site, dynamicRoute.collection, dynamicRoute.record) as unknown as PageContent;
 
     return (
         <>
@@ -364,7 +606,9 @@ export default async function SitePage({ params, searchParams }: PageProps) {
                 theme={site.theme}
                 fontAssets={fontAssets}
                 siteId={site.id}
-                pageSlug={buildCollectionItemPath(dynamicItem.collection, dynamicItem.record.slug).replace(/^\//, '')}
+                pageSlug={(dynamicRoute.type === 'list'
+                    ? buildCollectionListPath(dynamicRoute.collection)
+                    : buildCollectionItemPath(dynamicRoute.collection, dynamicRoute.record.slug)).replace(/^\//, '')}
             />
 
             {/* Client-side animation hydration */}
