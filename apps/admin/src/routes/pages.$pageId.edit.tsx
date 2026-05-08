@@ -60,6 +60,7 @@ function PageEditorRoute() {
   const [readinessLoading, setReadinessLoading] = useState(false);
   const [readinessError, setReadinessError] = useState<string | null>(null);
   const [editorResetVersion, setEditorResetVersion] = useState(0);
+  const [pendingRestoreRevision, setPendingRestoreRevision] = useState<ContentRevision | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -323,10 +324,6 @@ function PageEditorRoute() {
   };
 
   const restoreRevision = async (revision: ContentRevision) => {
-    if (!confirm(`Restore "${revision.snapshotTitle}" from this revision?`)) {
-      return;
-    }
-
     setIsWorkflowBusy(true);
     setSaveWarning(null);
     setWorkflowNotice(null);
@@ -337,6 +334,7 @@ function PageEditorRoute() {
       updatePage(pageId, restoredPage);
       setEditorResetVersion((current) => current + 1);
       setWorkflowNotice('Page revision restored.');
+      setPendingRestoreRevision(null);
     } catch (error) {
       setSaveWarning(error instanceof Error ? error.message : 'Unable to restore page revision.');
     } finally {
@@ -502,7 +500,7 @@ function PageEditorRoute() {
                   <button
                     type="button"
                     disabled={isWorkflowBusy}
-                    onClick={() => void restoreRevision(revision)}
+                    onClick={() => setPendingRestoreRevision(revision)}
                     className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
                     title="Restore revision"
                   >
@@ -531,6 +529,49 @@ function PageEditorRoute() {
         }}
         className="h-[calc(100vh-6rem)] min-h-[760px] w-full overflow-hidden rounded-lg border border-border shadow-sm"
       />
+
+      {pendingRestoreRevision && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
+                <RotateCcw className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Restore this page revision?</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  The canvas will be replaced with this saved page snapshot. Save a new revision first if you need to keep the current design.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              <div className="font-medium text-foreground">
+                {pendingRestoreRevision.note || pendingRestoreRevision.snapshotTitle || 'Revision snapshot'}
+              </div>
+              <div>
+                {new Date(pendingRestoreRevision.createdAt).toLocaleString()} · {pendingRestoreRevision.snapshotStatus}
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingRestoreRevision(null)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void restoreRevision(pendingRestoreRevision)}
+                disabled={isWorkflowBusy}
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:opacity-60"
+              >
+                Restore revision
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
