@@ -326,6 +326,10 @@ assert(media.data.media || media.data.pagination, 'media() missing media list da
 if (media.data.media?.length > 0) {
   const mediaDetail = await client.mediaAsset(media.data.media[0].id);
   assert(mediaDetail.data.media?.id === media.data.media[0].id, 'mediaAsset() returned wrong media asset');
+  assert(
+    client.mediaFileUrl(media.data.media[0].id).includes(`/api/sites/${client.getSiteId()}/media/${media.data.media[0].id}/file`),
+    'mediaFileUrl() returned wrong media file URL',
+  );
 }
 
 const reusableSections = await client.reusableSections();
@@ -585,6 +589,7 @@ console.log(JSON.stringify({
     'navigation',
     'seo',
     'media',
+    'mediaFileUrl',
     'reusableSections',
     'forms',
     'formDefinition',

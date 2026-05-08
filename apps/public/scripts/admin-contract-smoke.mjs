@@ -392,6 +392,30 @@ try {
     const hiddenPrivateFontDetail = await request(`/api/sites/${createdSiteId}/media/${createdMediaId}`);
     assert(hiddenPrivateFontDetail.response.status === 404, `${hiddenPrivateFontDetail.url} expected private media detail to be hidden`);
 
+    const unsignedPrivateFontFile = await request(`/api/sites/${createdSiteId}/media/${createdMediaId}/file`);
+    assert(unsignedPrivateFontFile.response.status === 403, `${unsignedPrivateFontFile.url} expected unsigned private media file to be blocked`);
+    assert(unsignedPrivateFontFile.json?.error?.code === 'MEDIA_SIGNATURE_INVALID', `${unsignedPrivateFontFile.url} expected signature error`);
+
+    const signedPrivateFont = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}/signed-url`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        expiresInSeconds: 120,
+        disposition: 'inline',
+      }),
+    });
+    assert(signedPrivateFont.response.status === 200, `${signedPrivateFont.url} expected signed URL response`);
+    assert(signedPrivateFont.json?.data?.path?.includes(`/api/sites/${createdSiteId}/media/${createdMediaId}/file?`), `${signedPrivateFont.url} missing signed file path`);
+    assert(signedPrivateFont.json?.data?.expiresAt, `${signedPrivateFont.url} missing signed expiry`);
+
+    const signedPrivateFontFile = await request(signedPrivateFont.json.data.path);
+    assert(signedPrivateFontFile.response.status === 200, `${signedPrivateFontFile.url} expected signed private media file to load`);
+    assert(signedPrivateFontFile.response.headers.get('x-backy-cache-scope') === 'private', `${signedPrivateFontFile.url} expected private cache scope`);
+    assert(signedPrivateFontFile.response.headers.get('x-backy-media-id') === createdMediaId, `${signedPrivateFontFile.url} missing media id header`);
+    assert(signedPrivateFontFile.text === 'contract-font', `${signedPrivateFontFile.url} returned unexpected signed private content`);
+
     const publicUpdate = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, {
       method: 'PATCH',
       headers: {
@@ -2275,6 +2299,7 @@ try {
       assert(frontendManifest.json?.data?.endpoints?.seo === `/api/sites/${createdSiteId}/seo`, `${frontendManifest.url} missing SEO endpoint`);
       assert(frontendManifest.json?.data?.endpoints?.sitemap === `/api/sites/${createdSiteId}/seo?format=sitemap`, `${frontendManifest.url} missing sitemap endpoint`);
       assert(frontendManifest.json?.data?.endpoints?.mediaDetail === `/api/sites/${createdSiteId}/media/{mediaId}`, `${frontendManifest.url} missing media detail endpoint template`);
+      assert(frontendManifest.json?.data?.endpoints?.mediaFile === `/api/sites/${createdSiteId}/media/{mediaId}/file`, `${frontendManifest.url} missing media file endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.reusableSections === `/api/sites/${createdSiteId}/reusable-sections`, `${frontendManifest.url} missing reusable sections endpoint`);
       assert(frontendManifest.json?.data?.endpoints?.formDetail === `/api/sites/${createdSiteId}/forms/{formId}`, `${frontendManifest.url} missing form detail endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.formDefinition === `/api/sites/${createdSiteId}/forms/{formId}/definition`, `${frontendManifest.url} missing form definition endpoint template`);
@@ -2347,6 +2372,7 @@ try {
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/render`]?.get, `${publicOpenApi.url} missing render operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/seo`]?.get, `${publicOpenApi.url} missing SEO discovery operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/media/{mediaId}`]?.get, `${publicOpenApi.url} missing media detail operation`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/media/{mediaId}/file`]?.get, `${publicOpenApi.url} missing media file operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/collections/{collectionId}/records`]?.post, `${publicOpenApi.url} missing public collection create operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/reusable-sections`]?.get, `${publicOpenApi.url} missing reusable sections list operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/reusable-sections/{sectionId}`]?.get, `${publicOpenApi.url} missing reusable section detail operation`);

@@ -614,6 +614,18 @@ export class BackyClient {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/media/${encodeURIComponent(mediaId)}`);
   }
 
+  mediaFileUrl(
+    mediaId: string,
+    access: { token?: string; expiresAt?: number; disposition?: 'inline' | 'attachment' } = {},
+  ): string {
+    const searchParams = new URLSearchParams();
+    if (access.token) searchParams.set('token', access.token);
+    if (access.expiresAt) searchParams.set('expiresAt', String(access.expiresAt));
+    if (access.disposition) searchParams.set('disposition', access.disposition);
+    const query = searchParams.toString();
+    return `${this.baseUrl}/api/sites/${encodeURIComponent(this.requireSiteId())}/media/${encodeURIComponent(mediaId)}/file${query ? `?${query}` : ''}`;
+  }
+
   collections(siteId = this.requireSiteId()): Promise<BackyEnvelope<{ collections: BackyCollectionSchema[] }>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/collections`);
   }
