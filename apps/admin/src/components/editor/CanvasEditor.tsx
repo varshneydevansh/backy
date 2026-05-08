@@ -1153,7 +1153,29 @@ export function CanvasEditor({
    */
   const handleSelect = useCallback((id: string | null) => {
     setSelectedId(id);
+    setSelectedIds(id ? [id] : []);
   }, []);
+
+  const handleCanvasToggleSelect = useCallback((id: string) => {
+    if (!findElementById(elements, id)) {
+      return;
+    }
+
+    setSelectedIds((current) => {
+      const nextIds = current.includes(id)
+        ? current.filter((selected) => selected !== id)
+        : [...current, id];
+
+      setSelectedId(nextIds[0] ?? null);
+      if (nextIds.length === 1) {
+        setRightPanel('properties');
+      } else if (nextIds.length > 1) {
+        setRightPanel('layers');
+      }
+
+      return nextIds;
+    });
+  }, [elements, findElementById]);
 
   /**
    * Handle elements change
@@ -2171,7 +2193,9 @@ export function CanvasEditor({
                       elements={elements}
                       onElementsChange={handleElementsChange}
                       selectedId={selectedId}
+                      selectedIds={selectedIds}
                       onSelect={handleSelect}
+                      onToggleSelect={handleCanvasToggleSelect}
                       size={size}
                       onSizeChange={(newSize) => {
                         setSize(newSize);
@@ -2236,7 +2260,9 @@ export function CanvasEditor({
                           elements={elements}
                           onElementsChange={handleElementsChange}
                           selectedId={selectedId}
+                          selectedIds={selectedIds}
                           onSelect={handleSelect}
+                          onToggleSelect={handleCanvasToggleSelect}
                           size={size}
                           onSizeChange={(newSize) => {
                             setSize(newSize);

@@ -576,8 +576,12 @@ interface CanvasProps {
   ) => void;
   /** Currently selected element ID */
   selectedId: string | null;
+  /** Currently selected element IDs for multi-select editing */
+  selectedIds?: string[];
   /** Callback when element is selected */
   onSelect: (id: string | null) => void;
+  /** Callback when an element is toggled into or out of multi-selection */
+  onToggleSelect?: (id: string) => void;
   /** Canvas size configuration */
   size: CanvasSize;
   /** Callback when canvas size changes */
@@ -664,7 +668,9 @@ export function Canvas({
   elements,
   onElementsChange,
   selectedId,
+  selectedIds = selectedId ? [selectedId] : [],
   onSelect,
+  onToggleSelect,
   size,
   onSizeChange,
   isPreview = false,
@@ -1425,8 +1431,9 @@ export function Canvas({
           <CanvasElementComponent
             key={element.id}
             element={element}
-            isSelected={element.id === selectedId}
+            isSelected={element.id === selectedId || selectedIds.includes(element.id)}
             selectedId={selectedId}
+            selectedIds={selectedIds}
             draggingId={dragState?.elementId ?? resizeState?.elementId ?? null}
             isPreview={isPreview}
             onDragStart={handleElementDragStart}
@@ -1437,9 +1444,14 @@ export function Canvas({
                 elementId: element.id,
                 elementType: element.type,
               });
+              if (e.shiftKey || e.metaKey || e.ctrlKey) {
+                onToggleSelect?.(element.id);
+                return;
+              }
               onSelect(element.id);
             }}
             onSelectElement={onSelect}
+            onToggleSelectElement={onToggleSelect}
             onUpdate={(updates) => handleElementPropsUpdate(element.id, updates)}
             onUpdateElement={handleElementPropsUpdate}
             onDrop={(event) => handleCanvasElementDrop(event, element.id)}
@@ -1476,12 +1488,14 @@ interface CanvasElementComponentProps {
   element: CanvasElement;
   isSelected: boolean;
   selectedId: string | null;
+  selectedIds: string[];
   draggingId: string | null;
   isPreview: boolean;
   onDragStart: (e: React.PointerEvent | React.MouseEvent, elementId: string) => void;
   onResizeStart: (e: React.MouseEvent | React.PointerEvent, elementId: string, handle: 'nw' | 'ne' | 'sw' | 'se') => void;
   onClick: (e: React.MouseEvent) => void;
   onSelectElement: (elementId: string) => void;
+  onToggleSelectElement?: (elementId: string) => void;
   onUpdate: (updates: { [key: string]: unknown }) => void;
   onUpdateElement: (elementId: string, updates: { [key: string]: unknown }) => void;
   onDrop?: (e: React.DragEvent, forcedParentId?: string) => void;
@@ -1494,12 +1508,14 @@ function CanvasElementComponent({
   element,
   isSelected,
   selectedId,
+  selectedIds,
   draggingId,
   isPreview,
   onDragStart,
   onResizeStart,
   onClick,
   onSelectElement,
+  onToggleSelectElement,
   onUpdate,
   onUpdateElement,
   onDrop,
@@ -1524,17 +1540,23 @@ function CanvasElementComponent({
         <CanvasElementComponent
           key={child.id}
           element={child}
-          isSelected={child.id === resolvedSelectedId}
+          isSelected={child.id === resolvedSelectedId || selectedIds.includes(child.id)}
           selectedId={resolvedSelectedId}
+          selectedIds={selectedIds}
           draggingId={draggingId}
           isPreview={isPreview}
           onDragStart={onDragStart}
           onResizeStart={onResizeStart}
           onClick={(event) => {
             event.stopPropagation();
+            if (event.shiftKey || event.metaKey || event.ctrlKey) {
+              onToggleSelectElement?.(child.id);
+              return;
+            }
             onSelectElement(child.id);
           }}
           onSelectElement={onSelectElement}
+          onToggleSelectElement={onToggleSelectElement}
           onUpdate={(updates) => onUpdateElement(child.id, updates)}
           onUpdateElement={onUpdateElement}
           onDrop={(event, forcedParentId) => onDrop?.(event, forcedParentId)}
