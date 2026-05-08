@@ -60,6 +60,8 @@ function BlogListView() {
   const [bulkAction, setBulkAction] = useState<'publish' | 'archive' | 'delete' | ''>('');
   const [isBulkBusy, setIsBulkBusy] = useState(false);
   const [previewingPostId, setPreviewingPostId] = useState<string | null>(null);
+  const [pendingDeletePost, setPendingDeletePost] = useState<BlogPost | null>(null);
+  const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const activeSite = useMemo(
     () => sites.find((site) => (site.publicSiteId || site.id) === selectedSiteId) || sites[0],
     [selectedSiteId, sites],
@@ -228,10 +230,6 @@ function BlogListView() {
   };
 
   const handleDeletePost = async (post: BlogPost) => {
-    if (!confirm('Delete this post?')) {
-      return;
-    }
-
     setError(null);
 
     try {
@@ -242,6 +240,7 @@ function BlogListView() {
         next.delete(post.id);
         return next;
       });
+      setPendingDeletePost(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete post');
     }
@@ -252,7 +251,8 @@ function BlogListView() {
       return;
     }
 
-    if (bulkAction === 'delete' && !confirm(`Delete ${selectedPosts.length} selected post${selectedPosts.length === 1 ? '' : 's'}?`)) {
+    if (bulkAction === 'delete' && !pendingBulkDelete) {
+      setPendingBulkDelete(true);
       return;
     }
 
@@ -273,6 +273,7 @@ function BlogListView() {
       if (bulkAction === 'delete') {
         await Promise.all(selectedPosts.map((post) => deleteBlogPost(activeSiteId, post.id)));
         selectedPosts.forEach((post) => deletePost(post.id));
+        setPendingBulkDelete(false);
       }
 
       setSelectedPostIds(new Set());
@@ -390,7 +391,7 @@ function BlogListView() {
             <Edit className="w-4 h-4" />
           </button>
           <button
-            onClick={() => void handleDeletePost(post)}
+            onClick={() => setPendingDeletePost(post)}
             title="Delete post"
             className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
           >
@@ -506,7 +507,10 @@ function BlogListView() {
           </button>
           <select
             value={bulkAction}
-            onChange={(event) => setBulkAction(event.target.value as typeof bulkAction)}
+            onChange={(event) => {
+              setBulkAction(event.target.value as typeof bulkAction);
+              setPendingBulkDelete(false);
+            }}
             className="min-w-44 rounded-lg border bg-background px-3 py-2 text-sm"
           >
             <option value="">Bulk action...</option>
@@ -518,10 +522,16 @@ function BlogListView() {
             type="button"
             onClick={() => void handleBulkAction()}
             disabled={!bulkAction || selectedPosts.length === 0 || isBulkBusy}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+            className={cn(
+              'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-primary-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+              bulkAction === 'delete'
+                ? 'bg-red-600 hover:bg-red-700'
+                : 'bg-primary hover:bg-primary/90',
+            )}
           >
             {bulkAction === 'publish' && <CheckCircle2 className="size-4" />}
             {bulkAction === 'archive' && <Archive className="size-4" />}
+            {bulkAction === 'delete' && <Trash2 className="size-4" />}
             {isBulkBusy ? 'Applying...' : 'Apply'}
           </button>
           {selectedPosts.length > 0 && (
@@ -680,6 +690,80 @@ function BlogListView() {
           />
         }
       />
+
+      {pendingDeletePost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Delete {pendingDeletePost.title}?</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This removes the post from the backend and from public API delivery. Archive it instead if you only want it hidden.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Route: <span className="font-medium text-foreground">/blog/{pendingDeletePost.slug}</span>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDeletePost(null)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeletePost(pendingDeletePost)}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+              >
+                Delete post
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingBulkDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  Delete {selectedPosts.length} selected post{selectedPosts.length === 1 ? '' : 's'}?
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Selected posts will be removed from the site and from frontend API delivery.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingBulkDelete(false)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkAction()}
+                disabled={isBulkBusy}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+              >
+                Delete posts
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }
