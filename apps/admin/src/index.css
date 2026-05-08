@@ -20,25 +20,31 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 210 33% 98%;
+    --foreground: 220 24% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 220 24% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
+    --popover-foreground: 220 24% 10%;
+    --primary: 174 70% 25%;
+    --primary-foreground: 180 35% 98%;
+    --secondary: 210 28% 94%;
+    --secondary-foreground: 220 24% 16%;
+    --muted: 210 28% 94%;
+    --muted-foreground: 217 14% 42%;
+    --accent: 173 48% 92%;
+    --accent-foreground: 176 70% 19%;
+    --destructive: 358 72% 48%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --success: 158 64% 31%;
+    --success-foreground: 160 45% 98%;
+    --warning: 35 88% 39%;
+    --warning-foreground: 42 50% 98%;
+    --info: 198 82% 34%;
+    --info-foreground: 198 45% 98%;
+    --border: 214 24% 88%;
+    --input: 214 24% 88%;
+    --ring: 174 70% 25%;
     --radius: 0.5rem;
   }
 
@@ -59,6 +65,12 @@
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
+    --success: 158 64% 40%;
+    --success-foreground: 160 45% 98%;
+    --warning: 35 88% 48%;
+    --warning-foreground: 42 50% 98%;
+    --info: 198 82% 45%;
+    --info-foreground: 198 45% 98%;
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
@@ -80,7 +92,22 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: Geist, Aptos, ui-sans-serif, system-ui, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
+    font-variant-numeric: tabular-nums;
+    background-image:
+      linear-gradient(hsl(214 24% 88% / 0.45) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(214 24% 88% / 0.35) 1px, transparent 1px);
+    background-size: 44px 44px;
+    background-attachment: fixed;
+  }
+
+  code,
+  kbd,
+  samp,
+  pre,
+  .font-mono {
+    font-family: "JetBrains Mono", "SFMono-Regular", ui-monospace, monospace;
   }
 }
 

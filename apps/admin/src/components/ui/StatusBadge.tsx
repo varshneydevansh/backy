@@ -53,11 +53,11 @@ export function StatusBadge({ status, type, className }: StatusBadgeProps) {
     const label = labelCase(normalizedStatus);
 
     const variants = {
-        success: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-900',
-        warning: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-900',
-        error: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-900',
-        neutral: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400 border-gray-200 dark:border-gray-800',
-        info: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-900',
+        success: 'border-success/25 bg-success/10 text-success',
+        warning: 'border-warning/25 bg-warning/10 text-warning',
+        error: 'border-destructive/25 bg-destructive/10 text-destructive',
+        neutral: 'border-border bg-muted text-muted-foreground',
+        info: 'border-info/25 bg-info/10 text-info',
     };
 
     return (

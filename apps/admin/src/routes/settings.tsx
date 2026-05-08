@@ -11,7 +11,7 @@
  * @license MIT
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import {
   Palette,
@@ -24,12 +24,22 @@ import {
   Code,
   Server,
   ExternalLink,
+  History,
+  RefreshCw,
+  Cloud,
+  Rocket,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/Button';
+import { Notice } from '@/components/ui/Notice';
+import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
+import { SegmentedTabs, type SegmentedTabItem } from '@/components/ui/SegmentedTabs';
 import { useStore, type DeliveryMode } from '@/stores/mockStore';
 import {
   getSettings,
+  listAdminAuditLogs,
   regenerateSettingsApiKeys,
+  type AdminAuditLog,
   type SiteSettingsInput,
   updateSettings as updateBackendSettings,
 } from '@/lib/adminContentApi';
@@ -46,11 +56,14 @@ export const Route = createFileRoute('/settings')({
 // TABS
 // ============================================
 
-const TABS = [
+type SettingsTab = 'general' | 'appearance' | 'seo' | 'delivery' | 'infrastructure' | 'notifications' | 'security';
+
+const TABS: Array<SegmentedTabItem<SettingsTab>> = [
   { id: 'general', name: 'General', icon: Globe },
   { id: 'appearance', name: 'Appearance', icon: Palette },
   { id: 'seo', name: 'SEO', icon: Database },
   { id: 'delivery', name: 'Delivery', icon: Code },
+  { id: 'infrastructure', name: 'Infrastructure', icon: Cloud },
   { id: 'notifications', name: 'Notifications', icon: Bell },
   { id: 'security', name: 'Security', icon: Shield },
 ];
@@ -191,9 +204,16 @@ function buildCopyText(base: string, path: string): string {
 // ============================================
 
 function SettingsPage() {
-  const [activeTab, setActiveTab] = useState('general');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('managed-hosting');
   const [runtimeStorage, setRuntimeStorage] = useState<SiteSettingsInput['runtimeStorage']>();
+  const [integrations, setIntegrations] = useState<NonNullable<SiteSettingsInput['integrations']>>({});
+  const [runtimeDatabase, setRuntimeDatabase] = useState<SiteSettingsInput['runtimeDatabase']>();
+  const [runtimeSupabase, setRuntimeSupabase] = useState<SiteSettingsInput['runtimeSupabase']>();
+  const [runtimeVercel, setRuntimeVercel] = useState<SiteSettingsInput['runtimeVercel']>();
+  const [settingsAuditLogs, setSettingsAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [auditNotice, setAuditNotice] = useState<string | null>(null);
+  const [isAuditLoading, setIsAuditLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -202,9 +222,37 @@ function SettingsPage() {
   const publicApiKey = useStore((state) => state.settings.apiKeys.publicApiKey);
   const adminApiKey = useStore((state) => state.settings.apiKeys.adminApiKey);
 
+  const applyBackendSettings = useCallback((backendSettings: SiteSettingsInput) => {
+    updateSettings(backendSettings);
+    setDeliveryMode(backendSettings.deliveryMode);
+    setRuntimeStorage(backendSettings.runtimeStorage);
+    setIntegrations(backendSettings.integrations || {});
+    setRuntimeDatabase(backendSettings.runtimeDatabase);
+    setRuntimeSupabase(backendSettings.runtimeSupabase);
+    setRuntimeVercel(backendSettings.runtimeVercel);
+  }, [updateSettings]);
+
   useEffect(() => {
     setDeliveryMode(persistedDeliveryMode);
   }, [persistedDeliveryMode]);
+
+  const loadSettingsAuditLogs = useCallback(async () => {
+    setIsAuditLoading(true);
+    setAuditNotice(null);
+
+    try {
+      const result = await listAdminAuditLogs({
+        entity: 'settings',
+        entityId: 'platform',
+        limit: 8,
+      });
+      setSettingsAuditLogs(result.logs);
+    } catch {
+      setAuditNotice('Unable to load settings audit trail.');
+    } finally {
+      setIsAuditLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -213,9 +261,7 @@ function SettingsPage() {
       try {
         const backendSettings = await getSettings();
         if (!cancelled) {
-          updateSettings(backendSettings);
-          setDeliveryMode(backendSettings.deliveryMode);
-          setRuntimeStorage(backendSettings.runtimeStorage);
+          applyBackendSettings(backendSettings);
           setNotice(null);
         }
       } catch {
@@ -230,19 +276,22 @@ function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [updateSettings]);
+  }, [applyBackendSettings]);
+
+  useEffect(() => {
+    void loadSettingsAuditLogs();
+  }, [loadSettingsAuditLogs]);
 
   const handleSave = async () => {
     setIsSaving(true);
     setNotice(null);
 
     try {
-      const backendSettings = await updateBackendSettings({ deliveryMode });
-      updateSettings(backendSettings);
-      setDeliveryMode(backendSettings.deliveryMode);
-      setRuntimeStorage(backendSettings.runtimeStorage);
+      const backendSettings = await updateBackendSettings({ deliveryMode, integrations });
+      applyBackendSettings(backendSettings);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      await loadSettingsAuditLogs();
     } catch {
       setNotice('Backend save failed. Settings were not persisted.');
     } finally {
@@ -255,20 +304,19 @@ function SettingsPage() {
 
     try {
       const backendSettings = await regenerateSettingsApiKeys();
-      updateSettings(backendSettings);
-      setDeliveryMode(backendSettings.deliveryMode);
-      setRuntimeStorage(backendSettings.runtimeStorage);
+      applyBackendSettings(backendSettings);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      await loadSettingsAuditLogs();
     } catch {
       setNotice('Backend key regeneration failed. API keys were not changed.');
     }
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex animate-fade-in flex-col gap-6">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Settings</h1>
           <p className="text-muted-foreground mt-1">
@@ -276,58 +324,26 @@ function SettingsPage() {
           </p>
         </div>
 
-        <button
+        <Button
+          variant="primary"
           onClick={() => void handleSave()}
           disabled={isSaving}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-lg font-medium',
-            'bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed'
-          )}
+          iconStart={saved ? <Check className="size-4" /> : <Save className="size-4" />}
         >
-          {saved ? (
-            <>
-              <Check className="w-4 h-4" />
-              Saved
-            </>
-          ) : (
-            <>
-              <Save className="w-4 h-4" />
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </>
-          )}
-        </button>
+          {saved ? 'Saved' : isSaving ? 'Saving...' : 'Save Changes'}
+        </Button>
       </div>
 
       {notice && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          {notice}
-        </div>
+        <Notice tone="warning">{notice}</Notice>
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-border">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                'flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors',
-                activeTab === tab.id
-                  ? 'text-primary border-b-2 border-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <Icon className="w-4 h-4" />
-              {tab.name}
-            </button>
-          );
-        })}
-      </div>
+      <SegmentedTabs items={TABS} value={activeTab} onChange={setActiveTab} />
 
       {/* Tab Content */}
-      <div className="bg-card border border-border rounded-xl p-6">
+      <Panel>
+        <PanelContent className="pt-5">
         {activeTab === 'general' && <GeneralSettings />}
         {activeTab === 'appearance' && <AppearanceSettings />}
         {activeTab === 'seo' && <SEOSettings />}
@@ -338,15 +354,29 @@ function SettingsPage() {
             onChange={setDeliveryMode}
           />
         )}
+        {activeTab === 'infrastructure' && (
+          <InfrastructureSettings
+            integrations={integrations}
+            runtimeDatabase={runtimeDatabase}
+            runtimeSupabase={runtimeSupabase}
+            runtimeVercel={runtimeVercel}
+            onChange={setIntegrations}
+          />
+        )}
         {activeTab === 'notifications' && <NotificationSettings />}
         {activeTab === 'security' && (
           <SecuritySettings
             publicApiKey={publicApiKey}
             adminApiKey={adminApiKey}
             onRegenerateKeys={handleRegenerateKeys}
+            auditLogs={settingsAuditLogs}
+            isAuditLoading={isAuditLoading}
+            auditNotice={auditNotice}
+            onRefreshAudit={() => void loadSettingsAuditLogs()}
           />
         )}
-      </div>
+        </PanelContent>
+      </Panel>
     </div>
   );
 }
@@ -626,45 +656,43 @@ function EndpointBlock({
   onCopy: (url: string) => void;
 }) {
   return (
-    <div className="rounded-lg border border-border p-4">
-      <h4 className="font-medium mb-3">{title}</h4>
-      <ul className="space-y-3 text-sm">
-        {endpoints.map((endpoint) => {
-          const fullUrl = buildCopyText(baseUrl, endpoint.path);
-          return (
-            <li
-              key={`${title}-${endpoint.method}-${endpoint.path}`}
-              className="rounded-lg border border-border px-3 py-2"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-mono text-xs text-foreground">
-                    <span className="inline-flex items-center rounded bg-muted px-2 py-0.5 mr-2 font-bold">
-                      {endpoint.method}
-                    </span>
-                    {fullUrl}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {endpoint.description}
-                  </p>
+    <Panel>
+      <PanelHeader title={title} />
+      <PanelContent>
+        <ul className="flex flex-col gap-3 text-sm">
+          {endpoints.map((endpoint) => {
+            const fullUrl = buildCopyText(baseUrl, endpoint.path);
+            return (
+              <li
+                key={`${title}-${endpoint.method}-${endpoint.path}`}
+                className="rounded-lg border border-border px-3 py-2"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-all font-mono text-xs text-foreground">
+                      <span className="mr-2 inline-flex items-center rounded bg-muted px-2 py-0.5 font-bold">
+                        {endpoint.method}
+                      </span>
+                      {fullUrl}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {endpoint.description}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => onCopy(fullUrl)}
+                    className={copiedEndpoint === fullUrl ? 'text-success' : undefined}
+                  >
+                    {copiedEndpoint === fullUrl ? 'Copied' : 'Copy'}
+                  </Button>
                 </div>
-                <button
-                  onClick={() => onCopy(fullUrl)}
-                  className={cn(
-                    'text-xs px-2 py-1 rounded border border-border hover:bg-accent transition-colors',
-                    copiedEndpoint === fullUrl
-                      ? 'text-emerald-600 font-medium'
-                      : 'text-foreground'
-                  )}
-                >
-                  {copiedEndpoint === fullUrl ? 'Copied' : 'Copy'}
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+              </li>
+            );
+          })}
+        </ul>
+      </PanelContent>
+    </Panel>
   );
 }
 
@@ -696,7 +724,7 @@ function DeliveryModeSettings({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <div id="managed">
         <h3 className="text-lg font-semibold mb-4">Delivery Mode</h3>
         <div className="grid gap-3">
@@ -744,7 +772,7 @@ function DeliveryModeSettings({
             className="text-xs text-primary inline-flex items-center gap-1 hover:underline"
           >
             {value === 'managed-hosting' ? 'Managed docs' : 'API docs'}
-            <ExternalLink className="w-3.5 h-3.5" />
+            <ExternalLink className="size-3.5" />
           </a>
         </div>
       </div>
@@ -762,8 +790,8 @@ function DeliveryModeSettings({
               className={cn(
                 'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium',
                 runtimeStorage.configured
-                  ? 'bg-emerald-50 text-emerald-700'
-                  : 'bg-amber-50 text-amber-700'
+                  ? 'bg-success/10 text-success'
+                  : 'bg-warning/10 text-warning'
               )}
             >
               {runtimeStorage.configured ? 'Configured' : 'Needs config'}
@@ -796,19 +824,19 @@ function DeliveryModeSettings({
             )}
           </dl>
           {runtimeStorage.missing.length > 0 && (
-            <p className="mt-4 text-sm text-amber-700">
+            <p className="mt-4 text-sm text-warning">
               Missing configuration: {runtimeStorage.missing.join(', ')}
             </p>
           )}
           {runtimeStorage.error && (
-            <p className="mt-2 text-sm text-amber-700">{runtimeStorage.error}</p>
+            <p className="mt-2 text-sm text-warning">{runtimeStorage.error}</p>
           )}
         </div>
       )}
 
-      <div id="api" className="space-y-4">
+      <div id="api" className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
-          <Server className="w-4 h-4 text-foreground" />
+          <Server className="size-4 text-foreground" />
           <h3 className="text-lg font-semibold">API Access</h3>
         </div>
         <p className="text-sm text-muted-foreground">
@@ -845,6 +873,298 @@ function DeliveryModeSettings({
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================
+// INFRASTRUCTURE SETTINGS
+// ============================================
+
+type IntegrationSettings = NonNullable<SiteSettingsInput['integrations']>;
+type SupabaseSettings = NonNullable<IntegrationSettings['supabase']>;
+type VercelSettings = NonNullable<IntegrationSettings['vercel']>;
+
+const inputClassName = cn(
+  'w-full rounded-lg border border-input bg-background px-3 py-2 text-sm',
+  'focus:outline-none focus:ring-2 focus:ring-ring'
+);
+
+function RuntimeCard({
+  title,
+  description,
+  status,
+  configured,
+  details,
+}: {
+  title: string;
+  description: string;
+  status: string;
+  configured: boolean;
+  details: Array<{ label: string; value?: string | boolean | null }>;
+}) {
+  return (
+    <Panel>
+      <PanelHeader
+        title={title}
+        description={description}
+        action={
+          <span
+            className={cn(
+              'inline-flex rounded-full px-2.5 py-1 text-xs font-medium',
+              configured ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+            )}
+          >
+            {status}
+          </span>
+        }
+      />
+      <PanelContent>
+        <dl className="grid gap-3 text-sm">
+          {details.map((item) => (
+            <div key={item.label} className="flex items-center justify-between gap-3">
+              <dt className="text-muted-foreground">{item.label}</dt>
+              <dd className="max-w-[60%] truncate text-right font-mono text-xs">
+                {item.value === true ? 'yes' : item.value === false ? 'no' : item.value || 'not set'}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </PanelContent>
+    </Panel>
+  );
+}
+
+function InfrastructureSettings({
+  integrations,
+  runtimeDatabase,
+  runtimeSupabase,
+  runtimeVercel,
+  onChange,
+}: {
+  integrations: IntegrationSettings;
+  runtimeDatabase?: SiteSettingsInput['runtimeDatabase'];
+  runtimeSupabase?: SiteSettingsInput['runtimeSupabase'];
+  runtimeVercel?: SiteSettingsInput['runtimeVercel'];
+  onChange: (next: IntegrationSettings) => void;
+}) {
+  const supabase: SupabaseSettings = integrations.supabase || {};
+  const vercel: VercelSettings = integrations.vercel || {};
+
+  const updateSupabase = (next: Partial<SupabaseSettings>) => {
+    onChange({
+      ...integrations,
+      supabase: {
+        ...supabase,
+        ...next,
+      },
+    });
+  };
+
+  const updateVercel = (next: Partial<VercelSettings>) => {
+    onChange({
+      ...integrations,
+      vercel: {
+        ...vercel,
+        ...next,
+      },
+    });
+  };
+
+  const useRuntimeSupabase = () => {
+    updateSupabase({
+      projectUrl: runtimeSupabase?.projectUrl || supabase.projectUrl || '',
+      projectRef: runtimeSupabase?.projectRef || supabase.projectRef || '',
+      databaseEnabled: Boolean(runtimeSupabase?.databaseUrlConfigured || supabase.databaseEnabled),
+      storageEnabled: Boolean(runtimeSupabase?.storageBucket || supabase.storageEnabled),
+    });
+  };
+
+  const useRuntimeVercel = () => {
+    updateVercel({
+      projectId: runtimeVercel?.projectId || vercel.projectId || '',
+      productionDomain: runtimeVercel?.url || vercel.productionDomain || '',
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h3 className="text-lg font-semibold">Infrastructure connections</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Persist non-secret connection metadata here. Real tokens and database URLs stay in environment variables.
+        </p>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <RuntimeCard
+          title="Database runtime"
+          description="Current persistence mode used by Backy APIs."
+          status={runtimeDatabase?.configured ? 'Configured' : 'Needs config'}
+          configured={Boolean(runtimeDatabase?.configured)}
+          details={[
+            { label: 'Mode', value: runtimeDatabase?.mode },
+            { label: 'Provider', value: runtimeDatabase?.provider },
+            { label: 'Host/path', value: runtimeDatabase?.host || runtimeDatabase?.path },
+          ]}
+        />
+        <RuntimeCard
+          title="Supabase runtime"
+          description="Detected Supabase environment capability."
+          status={runtimeSupabase?.configured ? 'Configured' : 'Needs env'}
+          configured={Boolean(runtimeSupabase?.configured)}
+          details={[
+            { label: 'Project ref', value: runtimeSupabase?.projectRef },
+            { label: 'Database URL', value: runtimeSupabase?.databaseUrlConfigured },
+            { label: 'Storage bucket', value: runtimeSupabase?.storageBucket },
+          ]}
+        />
+        <RuntimeCard
+          title="Vercel runtime"
+          description="Detected deployment metadata for hosted Backy."
+          status={runtimeVercel?.configured ? 'Configured' : 'Needs env'}
+          configured={Boolean(runtimeVercel?.configured)}
+          details={[
+            { label: 'On Vercel', value: runtimeVercel?.onVercel },
+            { label: 'Project ID', value: runtimeVercel?.projectId },
+            { label: 'Environment', value: runtimeVercel?.environment },
+          ]}
+        />
+      </div>
+
+      {runtimeDatabase?.error && (
+        <Notice tone="warning" title="Database runtime issue">
+          {runtimeDatabase.error}
+        </Notice>
+      )}
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Panel>
+          <PanelHeader
+            title="Supabase"
+            description="Use Supabase for Postgres persistence, storage, and auth-ready metadata."
+            icon={<Cloud className="size-4" />}
+            action={
+              <Button size="sm" onClick={useRuntimeSupabase}>
+                Use detected env
+              </Button>
+            }
+          />
+          <PanelContent>
+            <div className="flex flex-col gap-4">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Project URL</span>
+                <input
+                  value={supabase.projectUrl || ''}
+                  onChange={(event) => updateSupabase({ projectUrl: event.target.value })}
+                  placeholder="https://project-ref.supabase.co"
+                  className={inputClassName}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Project ref</span>
+                <input
+                  value={supabase.projectRef || ''}
+                  onChange={(event) => updateSupabase({ projectRef: event.target.value })}
+                  placeholder="project-ref"
+                  className={inputClassName}
+                />
+              </label>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {[
+                  ['databaseEnabled', 'Database'],
+                  ['storageEnabled', 'Storage'],
+                  ['authEnabled', 'Auth'],
+                ].map(([key, label]) => (
+                  <label key={key} className="flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(supabase[key as keyof SupabaseSettings])}
+                      onChange={(event) => updateSupabase({ [key]: event.target.checked } as Partial<SupabaseSettings>)}
+                      className="size-4 rounded border-input"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              {runtimeSupabase?.missing && runtimeSupabase.missing.length > 0 && (
+                <Notice tone="warning">
+                  Missing Supabase env: {runtimeSupabase.missing.join(', ')}
+                </Notice>
+              )}
+            </div>
+          </PanelContent>
+        </Panel>
+
+        <Panel>
+          <PanelHeader
+            title="Vercel"
+            description="Track deployment ownership for hosted Backy and future deploy workflows."
+            icon={<Rocket className="size-4" />}
+            action={
+              <Button size="sm" onClick={useRuntimeVercel}>
+                Use detected env
+              </Button>
+            }
+          />
+          <PanelContent>
+            <div className="flex flex-col gap-4">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Project ID</span>
+                <input
+                  value={vercel.projectId || ''}
+                  onChange={(event) => updateVercel({ projectId: event.target.value })}
+                  placeholder="prj_..."
+                  className={inputClassName}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Team slug</span>
+                <input
+                  value={vercel.teamSlug || ''}
+                  onChange={(event) => updateVercel({ teamSlug: event.target.value })}
+                  placeholder="team-or-account"
+                  className={inputClassName}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Production domain</span>
+                <input
+                  value={vercel.productionDomain || ''}
+                  onChange={(event) => updateVercel({ productionDomain: event.target.value })}
+                  placeholder="backy.example.com"
+                  className={inputClassName}
+                />
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(vercel.autoDeploy)}
+                    onChange={(event) => updateVercel({ autoDeploy: event.target.checked })}
+                    className="size-4 rounded border-input"
+                  />
+                  Auto deploy
+                </label>
+                <label className="flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={vercel.previewDeployments !== false}
+                    onChange={(event) => updateVercel({ previewDeployments: event.target.checked })}
+                    className="size-4 rounded border-input"
+                  />
+                  Preview deploys
+                </label>
+              </div>
+              {runtimeVercel?.missing && runtimeVercel.missing.length > 0 && (
+                <Notice tone="warning">
+                  Missing Vercel env: {runtimeVercel.missing.join(', ')}
+                </Notice>
+              )}
+            </div>
+          </PanelContent>
+        </Panel>
+      </div>
     </div>
   );
 }
@@ -908,12 +1228,19 @@ function SecuritySettings({
   publicApiKey,
   adminApiKey,
   onRegenerateKeys,
+  auditLogs,
+  isAuditLoading,
+  auditNotice,
+  onRefreshAudit,
 }: {
   publicApiKey: string;
   adminApiKey: string;
   onRegenerateKeys: () => void;
+  auditLogs: AdminAuditLog[];
+  isAuditLoading: boolean;
+  auditNotice: string | null;
+  onRefreshAudit: () => void;
 }) {
-
   return (
     <div className="space-y-6">
       <div>
@@ -1002,6 +1329,150 @@ function SecuritySettings({
             </p>
           </div>
         </div>
+      </div>
+
+      <AuditTrail
+        logs={auditLogs}
+        isLoading={isAuditLoading}
+        notice={auditNotice}
+        onRefresh={onRefreshAudit}
+      />
+    </div>
+  );
+}
+
+const asRecord = (value: unknown): Record<string, unknown> | null => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+);
+
+const textFromRecord = (value: Record<string, unknown> | undefined, key: string): string | null => {
+  const raw = value?.[key];
+  return typeof raw === 'string' && raw.trim() ? raw : null;
+};
+
+function formatAuditTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function auditTitle(log: AdminAuditLog): string {
+  if (log.action === 'settings.update') {
+    return 'Settings updated';
+  }
+  if (log.action === 'settings.api_keys.regenerate') {
+    return 'API keys regenerated';
+  }
+  return log.action;
+}
+
+function auditDescription(log: AdminAuditLog): string {
+  const beforeMode = textFromRecord(log.before, 'deliveryMode');
+  const afterMode = textFromRecord(log.after, 'deliveryMode');
+  const metadata = asRecord(log.metadata);
+  const changedKeys = Array.isArray(metadata?.changedKeys)
+    ? metadata.changedKeys.filter((key): key is string => typeof key === 'string')
+    : [];
+  const scope = typeof metadata?.scope === 'string' ? metadata.scope : null;
+
+  if (beforeMode && afterMode && beforeMode !== afterMode) {
+    return `Delivery mode changed from ${beforeMode} to ${afterMode}.`;
+  }
+
+  if (scope) {
+    return `Regenerated ${scope === 'all' ? 'public and admin' : scope} API key${scope === 'all' ? 's' : ''}.`;
+  }
+
+  if (changedKeys.length > 0) {
+    return `Changed ${changedKeys.join(', ')}.`;
+  }
+
+  return `Request ${log.requestId || log.id}`;
+}
+
+function AuditTrail({
+  logs,
+  isLoading,
+  notice,
+  onRefresh,
+}: {
+  logs: AdminAuditLog[];
+  isLoading: boolean;
+  notice: string | null;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-border p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <History className="w-4 h-4 text-foreground" />
+            <h3 className="text-lg font-semibold">Settings Audit Trail</h3>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Recent settings and API-key changes recorded by the backend.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={isLoading}
+          className={cn(
+            'inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium',
+            'hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed'
+          )}
+        >
+          <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
+          Refresh
+        </button>
+      </div>
+
+      {notice && (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {notice}
+        </div>
+      )}
+
+      <div className="mt-4 divide-y divide-border rounded-lg border border-border">
+        {isLoading && logs.length === 0 ? (
+          <div className="px-4 py-5 text-sm text-muted-foreground">
+            Loading audit trail...
+          </div>
+        ) : logs.length === 0 ? (
+          <div className="px-4 py-5 text-sm text-muted-foreground">
+            No settings audit events have been recorded yet.
+          </div>
+        ) : (
+          logs.map((log) => (
+            <div key={log.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+              <div className="min-w-0">
+                <p className="font-medium">{auditTitle(log)}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {auditDescription(log)}
+                </p>
+                {log.requestId && (
+                  <p className="font-mono text-xs text-muted-foreground mt-2 break-all">
+                    {log.requestId}
+                  </p>
+                )}
+              </div>
+              <div className="text-right text-xs text-muted-foreground">
+                <p>{formatAuditTime(log.createdAt)}</p>
+                <p className="mt-1">{log.actorId || 'admin'}</p>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
