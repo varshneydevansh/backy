@@ -72,6 +72,24 @@ interface ApiSiteNavigationResponse {
 
 export interface AdminSiteRedirects {
   rules: SiteRedirectRule[];
+  conflicts?: AdminSiteRedirectConflict[];
+  persisted?: boolean;
+}
+
+export interface AdminSiteRedirectConflict {
+  index: number;
+  ruleId?: string;
+  from: string;
+  to?: string;
+  kind: 'source-route-conflict' | 'target-route-missing';
+  severity: 'warning';
+  message: string;
+  route?: {
+    type: 'page' | 'post' | 'dynamicList' | 'dynamicItem';
+    id: string;
+    path: string;
+    title: string;
+  };
 }
 
 interface ApiSiteRedirectsResponse {
@@ -1346,6 +1364,26 @@ export async function updateSiteRedirects(
 
   if (!response.ok || !payload.success || !payload.data) {
     throw new Error(payload.error?.message || 'Unable to save site redirects');
+  }
+
+  return payload.data.redirects;
+}
+
+export async function previewSiteRedirects(
+  siteId: string,
+  redirectRules: SiteRedirectRule[],
+): Promise<AdminSiteRedirects> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/redirects`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ redirectRules }),
+  });
+  const payload = await readJson<ApiSiteRedirectsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to preview site redirects');
   }
 
   return payload.data.redirects;

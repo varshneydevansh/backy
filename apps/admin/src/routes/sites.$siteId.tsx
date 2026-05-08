@@ -36,12 +36,13 @@ import {
   getSiteReadiness,
   getSiteSeoSettings,
   listPages,
+  previewSiteRedirects,
   updateSiteRedirects,
   updateSiteNavigation,
   updateSiteSeoSettings,
   updateSite as updateSiteFromApi,
 } from '@/lib/adminContentApi';
-import type { AdminSiteSeoSettings, SiteReadiness } from '@/lib/adminContentApi';
+import type { AdminSiteRedirectConflict, AdminSiteSeoSettings, SiteReadiness } from '@/lib/adminContentApi';
 import type { Page } from '@/stores/mockStore';
 import type {
   Comment,
@@ -90,8 +91,10 @@ interface SiteNavigationEditorState {
 
 interface SiteRedirectEditorState {
   rules: SiteRedirectRule[];
+  conflicts: AdminSiteRedirectConflict[];
   loading: boolean;
   saving: boolean;
+  previewing: boolean;
   errorMessage: string | null;
   notice: string | null;
 }
@@ -416,8 +419,10 @@ function EditSitePage() {
   });
   const [redirectState, setRedirectState] = useState<SiteRedirectEditorState>({
     rules: [],
+    conflicts: [],
     loading: false,
     saving: false,
+    previewing: false,
     errorMessage: null,
     notice: null,
   });
@@ -583,6 +588,7 @@ function EditSitePage() {
       setRedirectState((prev) => ({
         ...prev,
         rules: redirects.rules || [],
+        conflicts: redirects.conflicts || [],
         loading: false,
         notice: null,
       }));
@@ -599,6 +605,7 @@ function EditSitePage() {
     setRedirectState((prev) => ({
       ...prev,
       notice: null,
+      conflicts: [],
       rules: [...prev.rules, makeRedirectRule()],
     }));
   };
@@ -607,6 +614,7 @@ function EditSitePage() {
     setRedirectState((prev) => ({
       ...prev,
       notice: null,
+      conflicts: [],
       rules: prev.rules.map((rule) => (
         (rule.id || rule.from) === ruleId
           ? normalizeRedirectEditorRule({ ...rule, ...updates })
@@ -619,8 +627,32 @@ function EditSitePage() {
     setRedirectState((prev) => ({
       ...prev,
       notice: null,
+      conflicts: [],
       rules: prev.rules.filter((rule) => (rule.id || rule.from) !== ruleId),
     }));
+  };
+
+  const handlePreviewRedirects = async () => {
+    if (!siteApiId) return;
+    setRedirectState((prev) => ({ ...prev, previewing: true, errorMessage: null, notice: null }));
+
+    try {
+      const redirects = await previewSiteRedirects(siteApiId, redirectState.rules.map(normalizeRedirectEditorRule));
+      setRedirectState((prev) => ({
+        ...prev,
+        conflicts: redirects.conflicts || [],
+        previewing: false,
+        notice: (redirects.conflicts || []).length > 0
+          ? 'Preview found route warnings. Review them before saving.'
+          : 'Preview found no route conflicts.',
+      }));
+    } catch (error) {
+      setRedirectState((prev) => ({
+        ...prev,
+        previewing: false,
+        errorMessage: error instanceof Error ? error.message : 'Unable to preview site redirects.',
+      }));
+    }
   };
 
   const handleSaveRedirects = async () => {
@@ -632,8 +664,11 @@ function EditSitePage() {
       setRedirectState((prev) => ({
         ...prev,
         rules: redirects.rules || [],
+        conflicts: redirects.conflicts || [],
         saving: false,
-        notice: 'Redirect rules saved and available to hosted sites and custom frontends.',
+        notice: (redirects.conflicts || []).length > 0
+          ? 'Redirect rules saved with route warnings. Review conflict previews below.'
+          : 'Redirect rules saved and available to hosted sites and custom frontends.',
       }));
       void loadReadiness();
     } catch (error) {
@@ -1786,7 +1821,7 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void loadRedirectEditor()}
-                disabled={!siteApiId || redirectState.loading || redirectState.saving}
+                disabled={!siteApiId || redirectState.loading || redirectState.saving || redirectState.previewing}
                 className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RefreshCw className={cn('h-4 w-4', redirectState.loading && 'animate-spin')} />
@@ -1795,7 +1830,7 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={handleAddRedirectRule}
-                disabled={redirectState.loading || redirectState.saving}
+                disabled={redirectState.loading || redirectState.saving || redirectState.previewing}
                 className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Plus className="h-4 w-4" />
@@ -1803,8 +1838,17 @@ function EditSitePage() {
               </button>
               <button
                 type="button"
+                onClick={() => void handlePreviewRedirects()}
+                disabled={!siteApiId || redirectState.loading || redirectState.saving || redirectState.previewing}
+                className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <AlertTriangle className="h-4 w-4" />
+                {redirectState.previewing ? 'Previewing...' : 'Preview conflicts'}
+              </button>
+              <button
+                type="button"
                 onClick={() => void handleSaveRedirects()}
-                disabled={!siteApiId || redirectState.loading || redirectState.saving}
+                disabled={!siteApiId || redirectState.loading || redirectState.saving || redirectState.previewing}
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-4 w-4" />
@@ -1821,6 +1865,31 @@ function EditSitePage() {
           {redirectState.notice && (
             <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
               {redirectState.notice}
+            </div>
+          )}
+          {redirectState.conflicts.length > 0 && (
+            <div className="mt-4 space-y-2" data-testid="site-redirect-conflicts">
+              {redirectState.conflicts.map((conflict) => (
+                <div
+                  key={`${conflict.kind}-${conflict.index}-${conflict.ruleId || conflict.from}`}
+                  className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                >
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="font-semibold">
+                        Rule {conflict.index + 1}: {conflict.kind === 'source-route-conflict' ? 'Source shadows an existing route' : 'Destination does not resolve'}
+                      </div>
+                      <div className="mt-1 text-xs leading-5">{conflict.message}</div>
+                      {conflict.route && (
+                        <div className="mt-1 text-xs opacity-80">
+                          Existing route: {conflict.route.type} · {conflict.route.title} · {conflict.route.path}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 

@@ -756,6 +756,41 @@ try {
     assert(invalidRedirectSettings.response.status === 400, `${invalidRedirectSettings.url} expected invalid redirect 400`);
     assert(invalidRedirectSettings.json?.error?.code === 'REDIRECT_VALIDATION', `${invalidRedirectSettings.url} expected REDIRECT_VALIDATION`);
 
+    const redirectPreview = await request(`/api/admin/sites/${createdSiteId}/redirects`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        redirectRules: [
+          {
+            id: 'contract-redirect-preview-conflict',
+            from: `/${pageSlug}`,
+            to: '/missing-contract-target',
+            statusCode: 302,
+            enabled: true,
+          },
+        ],
+      }),
+    });
+    assert(redirectPreview.response.status === 200, `${redirectPreview.url} expected redirect preview 200`);
+    assert(redirectPreview.json?.data?.redirects?.persisted === false, `${redirectPreview.url} expected non-persisted preview`);
+    assert(
+      redirectPreview.json?.data?.redirects?.conflicts?.some((conflict) => (
+        conflict.kind === 'source-route-conflict'
+        && conflict.from === `/${pageSlug}`
+        && conflict.route?.type === 'page'
+      )),
+      `${redirectPreview.url} missing redirect source route conflict preview`,
+    );
+    assert(
+      redirectPreview.json?.data?.redirects?.conflicts?.some((conflict) => (
+        conflict.kind === 'target-route-missing'
+        && conflict.to === '/missing-contract-target'
+      )),
+      `${redirectPreview.url} missing redirect missing target preview`,
+    );
+
     const redirectSettings = await request(`/api/admin/sites/${createdSiteId}/redirects`, {
       method: 'PATCH',
       headers: {
@@ -786,10 +821,12 @@ try {
       )),
       `${redirectSettings.url} missing persisted redirect rule`,
     );
+    assert(Array.isArray(redirectSettings.json?.data?.redirects?.conflicts), `${redirectSettings.url} missing redirect conflict preview array`);
 
     const adminRedirects = await request(`/api/admin/sites/${createdSiteId}/redirects`);
     assert(adminRedirects.response.status === 200, `${adminRedirects.url} expected redirects read 200`);
     assert(adminRedirects.json?.data?.redirects?.rules?.some((rule) => rule.id === 'contract-gone' && rule.statusCode === 410), `${adminRedirects.url} missing saved gone rule`);
+    assert(Array.isArray(adminRedirects.json?.data?.redirects?.conflicts), `${adminRedirects.url} missing saved redirect conflict preview array`);
 
     const redirectedRoute = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(redirectSourcePath)}`);
     assert(redirectedRoute.response.status === 200, `${redirectedRoute.url} expected redirect route resolve`);

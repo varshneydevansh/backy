@@ -113,6 +113,15 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Navigation items include page id, label/title, slug, canonical path, status, homepage flag, and child arrays.
   - Current implementation derives primary navigation from publishable pages in the runtime content adapter. Production completion still needs editable menus, nested page hierarchy, redirects, locale-aware paths, and custom/external links.
 
+- `GET /api/admin/sites/:siteId/redirects`
+- `POST /api/admin/sites/:siteId/redirects`
+- `PATCH /api/admin/sites/:siteId/redirects`
+  - Admin redirect and 410 route management for hosted sites and custom frontends.
+  - `GET` returns persisted rules plus route warning diagnostics.
+  - `POST` validates a submitted rule list and returns the normalized rules plus conflict diagnostics without persisting them.
+  - `PATCH` validates and saves rules, then returns the saved rules plus conflict diagnostics.
+  - Conflict diagnostics warn when an enabled source path shadows an existing page, post, dynamic list, or dynamic item route pattern, and when an internal redirect destination does not currently resolve.
+
 - `GET /api/sites/:siteId/seo`
 - `GET /api/sites/:siteId/seo?format=sitemap`
 - `GET /api/sites/:siteId/seo?format=robots`
