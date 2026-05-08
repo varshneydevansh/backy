@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getSiteByIdOrSlug, listAuditEvents } from '@/lib/backyStore';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { BackyAuditLogEntry } from '@backy-cms/core';
 
@@ -14,8 +15,16 @@ type AuditKind = 'form-submission' | 'contact-shared' | 'contact-status' | 'comm
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const privateResponse = <TBody>(body: TBody, requestId: string, status = 200) => (
+  publicContractJson(body, {
+    status,
+    requestId,
+    cache: 'private',
+  })
+);
+
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -25,7 +34,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
       errorMessage: message,
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
@@ -118,7 +127,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         .filter((event) => commentId ? event.commentId === commentId : true)
         .filter((event) => contactId ? event.contactId === contactId : true);
 
-      return NextResponse.json({
+      return privateResponse({
         success: true,
         requestId: responseRequestId,
         data: {
@@ -137,7 +146,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           ...result.pagination,
           total: events.length,
         },
-      });
+      }, responseRequestId);
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -155,7 +164,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       offset,
     });
 
-    return NextResponse.json({
+    return privateResponse({
       success: true,
       requestId: responseRequestId,
       data: {
@@ -168,7 +177,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       events: result.events,
       count: result.count,
       pagination: result.pagination,
-    });
+    }, responseRequestId);
   } catch (error) {
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', responseRequestId);
