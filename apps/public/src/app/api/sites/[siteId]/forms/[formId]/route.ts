@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getFormById, getSiteByIdOrSlug, listFormSubmissions } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -12,7 +13,7 @@ interface RouteParams {
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-    NextResponse.json(
+    publicContractJson(
         {
             success: false,
             requestId,
@@ -22,7 +23,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
             },
             errorMessage: message,
         },
-        { status },
+        { status, requestId, cache: 'error' },
     )
 );
 
@@ -61,7 +62,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
               offset: Number.isFinite(offset) ? offset : 0,
             });
 
-            return NextResponse.json({
+            return publicContractJson({
               success: true,
               requestId,
               data: {
@@ -76,6 +77,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
                 data: submissions.items,
                 pagination: submissions.pagination,
               },
+            }, {
+              requestId,
+              request: _request,
+              cache: 'private',
+              siteId: site.id,
             });
         }
 
@@ -105,7 +111,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
           offset: Number.isFinite(offset) ? offset : 0,
         });
 
-        return NextResponse.json({
+        return publicContractJson({
           success: true,
           requestId,
           data: {
@@ -114,6 +120,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
           },
           form,
           submissions,
+        }, {
+          requestId,
+          request: _request,
+          cache: 'private',
+          siteId: site.id,
         });
     } catch (error) {
         console.error('API Error:', error);

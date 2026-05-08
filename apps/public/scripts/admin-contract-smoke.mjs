@@ -1806,12 +1806,25 @@ try {
 
       const listedForms = await request(`/api/sites/${createdSiteId}/forms?pageId=${formWritePageId}`);
       assert(listedForms.response.status === 200, `${listedForms.url} expected 200, got ${listedForms.response.status}`);
+      assert(listedForms.response.headers.get('x-backy-cache-scope') === 'discovery', `${listedForms.url} missing forms cache scope`);
+      assert(listedForms.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${listedForms.url} missing forms contract version`);
+      assert(listedForms.response.headers.get('x-backy-site-id') === createdSiteId, `${listedForms.url} missing forms site id header`);
+      assert(listedForms.response.headers.get('x-backy-cache-revision'), `${listedForms.url} missing forms cache revision`);
+      const listedFormsEtag = listedForms.response.headers.get('etag');
+      assert(listedFormsEtag?.startsWith('"backy-'), `${listedForms.url} missing forms etag`);
+      const revalidatedListedForms = await request(`/api/sites/${createdSiteId}/forms?pageId=${formWritePageId}`, {
+        headers: { 'if-none-match': listedFormsEtag },
+      });
+      assert(revalidatedListedForms.response.status === 304, `${revalidatedListedForms.url} expected forms 304, got ${revalidatedListedForms.response.status}`);
+      assert(revalidatedListedForms.response.headers.get('etag') === listedFormsEtag, `${revalidatedListedForms.url} expected matching forms etag`);
       assert(listedForms.json?.success === true, `${listedForms.url} expected success envelope`);
       assert(listedForms.json?.data?.forms?.some((form) => form.id === 'contract-form-write'), `${listedForms.url} missing form in data envelope`);
       assert(listedForms.json?.forms?.some((form) => form.id === 'contract-form-write'), `${listedForms.url} missing legacy forms list`);
 
       const formDetailBeforeSubmission = await request(`/api/sites/${createdSiteId}/forms/contract-form-write`);
       assert(formDetailBeforeSubmission.response.status === 200, `${formDetailBeforeSubmission.url} expected 200, got ${formDetailBeforeSubmission.response.status}`);
+      assert(formDetailBeforeSubmission.response.headers.get('x-backy-cache-scope') === 'private', `${formDetailBeforeSubmission.url} expected private form detail cache scope`);
+      assert(formDetailBeforeSubmission.response.headers.get('cache-control') === 'no-store', `${formDetailBeforeSubmission.url} expected no-store form detail cache`);
       assert(formDetailBeforeSubmission.json?.success === true, `${formDetailBeforeSubmission.url} expected success envelope`);
       assert(formDetailBeforeSubmission.json?.data?.form?.id === 'contract-form-write', `${formDetailBeforeSubmission.url} missing form in data envelope`);
       assert(formDetailBeforeSubmission.json?.form?.id === 'contract-form-write', `${formDetailBeforeSubmission.url} missing legacy form`);
