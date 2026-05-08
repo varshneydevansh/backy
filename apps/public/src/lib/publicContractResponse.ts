@@ -21,6 +21,7 @@ export interface PublicContractResponseOptions {
   contractVersion?: string;
   schemaVersion?: string;
   siteId?: string;
+  cacheRevision?: string;
 }
 
 export const withPublicContractHeaders = (
@@ -39,6 +40,10 @@ export const withPublicContractHeaders = (
 
   if (options.siteId) {
     response.headers.set('x-backy-site-id', options.siteId);
+  }
+
+  if (options.cacheRevision) {
+    response.headers.set('x-backy-cache-revision', options.cacheRevision);
   }
 
   return response;
@@ -75,6 +80,11 @@ const createEtag = (value: unknown) => {
 
   return `"backy-${hash}"`;
 };
+
+export const createPublicCacheRevision = (value: unknown) => createHash('sha256')
+  .update(JSON.stringify(normalizeEtagValue(value)))
+  .digest('base64url')
+  .slice(0, 20);
 
 const normalizeEtagValue = (value: unknown): unknown => {
   if (Array.isArray(value)) {

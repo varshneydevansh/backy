@@ -25,6 +25,11 @@ import {
 } from '@/lib/seoDiscovery';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { buildCollectionItemPath, buildCollectionListPath } from '@/lib/collectionRoutes';
+import {
+  createPublicCacheRevision,
+  publicContractJson,
+  withPublicContractHeaders,
+} from '@/lib/publicContractResponse';
 
 interface RouteParams {
   params: Promise<{
@@ -33,6 +38,44 @@ interface RouteParams {
 }
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const seoCacheRevision = (
+  site: {
+    id: string;
+    slug: string;
+    customDomain?: string | null;
+    settings?: Site['settings'];
+    isPublished: boolean;
+    updatedAt?: string;
+  },
+  discovery: SeoDiscovery,
+) => createPublicCacheRevision({
+  site: {
+    id: site.id,
+    slug: site.slug,
+    customDomain: site.customDomain || null,
+    isPublished: site.isPublished,
+    updatedAt: site.updatedAt,
+    settings: site.settings?.seo,
+  },
+  routes: discovery.routes.map((route) => ({
+    type: route.type,
+    id: route.id,
+    canonical: route.canonical,
+    canonicalUrl: route.canonicalUrl,
+    title: route.title,
+    description: route.description,
+    updatedAt: route.updatedAt,
+    priority: route.priority,
+    changeFrequency: route.changeFrequency,
+    robots: route.robots,
+    openGraph: route.openGraph,
+    keywords: route.keywords,
+    jsonLd: route.jsonLd,
+  })),
+  sitemap: discovery.sitemap,
+  robots: discovery.robots,
+});
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
   NextResponse.json(
@@ -361,35 +404,56 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
 
       const discovery = await buildRepositorySeoDiscovery(site, repositories, origin);
+      const cacheRevision = seoCacheRevision(site, discovery);
       const format = new URL(request.url).searchParams.get('format');
 
       if (format === 'sitemap') {
-        return new NextResponse(buildSitemapXml(sitemapRoutes(discovery)), {
-          headers: {
-            'content-type': 'application/xml; charset=utf-8',
-            'cache-control': 'public, max-age=60, stale-while-revalidate=300',
-            'x-backy-request-id': requestId,
-            'x-backy-site-id': site.id,
+        return withPublicContractHeaders(
+          new NextResponse(buildSitemapXml(sitemapRoutes(discovery)), {
+            headers: {
+              'content-type': 'application/xml; charset=utf-8',
+            },
+          }),
+          {
+            requestId,
+            cache: 'discovery',
+            siteId: site.id,
+            cacheRevision,
           },
-        });
+        );
       }
 
       if (format === 'robots') {
-        return new NextResponse(buildRobotsTxtFromDiscovery(discovery), {
-          headers: {
-            'content-type': 'text/plain; charset=utf-8',
-            'cache-control': 'public, max-age=60, stale-while-revalidate=300',
-            'x-backy-request-id': requestId,
-            'x-backy-site-id': site.id,
+        return withPublicContractHeaders(
+          new NextResponse(buildRobotsTxtFromDiscovery(discovery), {
+            headers: {
+              'content-type': 'text/plain; charset=utf-8',
+            },
+          }),
+          {
+            requestId,
+            cache: 'discovery',
+            siteId: site.id,
+            cacheRevision,
           },
-        });
+        );
       }
 
-      return NextResponse.json({
+      return publicContractJson({
         success: true,
         requestId,
         data: discovery,
         routes: discovery.routes,
+      }, {
+        requestId,
+        request,
+        cache: 'discovery',
+        siteId: site.id,
+        cacheRevision,
+        etagSeed: {
+          discovery,
+          cacheRevision,
+        },
       });
     }
 
@@ -400,35 +464,56 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const discovery = buildSeoDiscovery(site, { origin });
+    const cacheRevision = seoCacheRevision(site, discovery);
     const format = new URL(request.url).searchParams.get('format');
 
     if (format === 'sitemap') {
-      return new NextResponse(buildSitemapXml(sitemapRoutes(discovery)), {
-        headers: {
-          'content-type': 'application/xml; charset=utf-8',
-          'cache-control': 'public, max-age=60, stale-while-revalidate=300',
-          'x-backy-request-id': requestId,
-          'x-backy-site-id': site.id,
+      return withPublicContractHeaders(
+        new NextResponse(buildSitemapXml(sitemapRoutes(discovery)), {
+          headers: {
+            'content-type': 'application/xml; charset=utf-8',
+          },
+        }),
+        {
+          requestId,
+          cache: 'discovery',
+          siteId: site.id,
+          cacheRevision,
         },
-      });
+      );
     }
 
     if (format === 'robots') {
-      return new NextResponse(buildRobotsTxtFromDiscovery(discovery), {
-        headers: {
-          'content-type': 'text/plain; charset=utf-8',
-          'cache-control': 'public, max-age=60, stale-while-revalidate=300',
-          'x-backy-request-id': requestId,
-          'x-backy-site-id': site.id,
+      return withPublicContractHeaders(
+        new NextResponse(buildRobotsTxtFromDiscovery(discovery), {
+          headers: {
+            'content-type': 'text/plain; charset=utf-8',
+          },
+        }),
+        {
+          requestId,
+          cache: 'discovery',
+          siteId: site.id,
+          cacheRevision,
         },
-      });
+      );
     }
 
-    return NextResponse.json({
+    return publicContractJson({
       success: true,
       requestId,
       data: discovery,
       routes: discovery.routes,
+    }, {
+      requestId,
+      request,
+      cache: 'discovery',
+      siteId: site.id,
+      cacheRevision,
+      etagSeed: {
+        discovery,
+        cacheRevision,
+      },
     });
   } catch (error) {
     console.error('Public SEO API error:', error);

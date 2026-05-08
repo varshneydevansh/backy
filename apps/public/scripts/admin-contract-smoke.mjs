@@ -1966,6 +1966,16 @@ try {
 
       const seoDiscovery = await request(`/api/sites/${createdSiteId}/seo`);
       assert(seoDiscovery.response.status === 200, `${seoDiscovery.url} expected 200, got ${seoDiscovery.response.status}`);
+      assert(seoDiscovery.response.headers.get('x-backy-cache-scope') === 'discovery', `${seoDiscovery.url} missing SEO cache scope`);
+      const seoCacheRevision = seoDiscovery.response.headers.get('x-backy-cache-revision');
+      assert(seoCacheRevision, `${seoDiscovery.url} missing SEO cache revision`);
+      const seoEtag = seoDiscovery.response.headers.get('etag');
+      assert(seoEtag?.startsWith('"backy-'), `${seoDiscovery.url} missing SEO etag`);
+      const revalidatedSeo = await request(`/api/sites/${createdSiteId}/seo`, {
+        headers: { 'if-none-match': seoEtag },
+      });
+      assert(revalidatedSeo.response.status === 304, `${revalidatedSeo.url} expected SEO 304, got ${revalidatedSeo.response.status}`);
+      assert(revalidatedSeo.response.headers.get('x-backy-cache-revision') === seoCacheRevision, `${revalidatedSeo.url} expected matching SEO cache revision`);
       assert(seoDiscovery.json?.success === true, `${seoDiscovery.url} expected success envelope`);
       assert(seoDiscovery.json?.data?.routes?.some((route) => route.type === 'page' && route.canonical === `/${pageSlug}-form-write`), `${seoDiscovery.url} missing temporary page SEO route`);
       assert(seoDiscovery.json?.data?.site?.canonicalBaseUrl === `https://${customDomain}`, `${seoDiscovery.url} missing custom-domain canonical base URL`);
@@ -1993,11 +2003,13 @@ try {
       const seoSitemap = await request(`/api/sites/${createdSiteId}/seo?format=sitemap`);
       assert(seoSitemap.response.status === 200, `${seoSitemap.url} expected 200, got ${seoSitemap.response.status}`);
       assert(seoSitemap.response.headers.get('content-type')?.includes('application/xml'), `${seoSitemap.url} expected XML sitemap content type`);
+      assert(seoSitemap.response.headers.get('x-backy-cache-revision') === seoCacheRevision, `${seoSitemap.url} missing matching SEO cache revision`);
       assert(seoSitemap.text.includes(`https://${customDomain}/${pageSlug}-form-write`), `${seoSitemap.url} missing custom-domain temporary page in sitemap`);
 
       const seoRobots = await request(`/api/sites/${createdSiteId}/seo?format=robots`);
       assert(seoRobots.response.status === 200, `${seoRobots.url} expected 200, got ${seoRobots.response.status}`);
       assert(seoRobots.response.headers.get('content-type')?.includes('text/plain'), `${seoRobots.url} expected robots text content type`);
+      assert(seoRobots.response.headers.get('x-backy-cache-revision') === seoCacheRevision, `${seoRobots.url} missing matching SEO cache revision`);
       assert(seoRobots.text.includes(`Sitemap: https://${customDomain}/sitemap.xml`), `${seoRobots.url} missing custom-domain sitemap pointer`);
       assert(seoRobots.text.includes('Disallow: /contract-private'), `${seoRobots.url} missing custom robots rule`);
 

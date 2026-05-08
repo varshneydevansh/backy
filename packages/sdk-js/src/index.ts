@@ -34,6 +34,7 @@ export interface BackyResponseMeta {
   etag?: string;
   cacheControl?: string;
   cacheScope?: string;
+  cacheRevision?: string;
   contractVersion?: string;
   schemaVersion?: string;
   requestId?: string;
@@ -1007,6 +1008,7 @@ function extractResponseMeta(response: Response): BackyResponseMeta {
     etag: response.headers.get('etag') || undefined,
     cacheControl: response.headers.get('cache-control') || undefined,
     cacheScope: response.headers.get('x-backy-cache-scope') || undefined,
+    cacheRevision: response.headers.get('x-backy-cache-revision') || undefined,
     contractVersion: response.headers.get('x-backy-contract-version') || undefined,
     schemaVersion: response.headers.get('x-backy-schema-version') || undefined,
     requestId: response.headers.get('x-backy-request-id') || undefined,
