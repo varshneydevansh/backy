@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getSiteByIdOrSlug, getCommentReportReasons } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -12,7 +13,7 @@ interface RouteParams {
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -22,7 +23,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
       errorMessage: message,
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
@@ -40,13 +41,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
 
       const reasons = getCommentReportReasons();
-      return NextResponse.json({
+      return publicContractJson({
         success: true,
         requestId,
         data: {
           reasons,
         },
         reasons,
+      }, {
+        requestId,
+        request,
+        cache: 'discovery',
+        siteId: site.id,
       });
     }
 
@@ -56,13 +62,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const reasons = getCommentReportReasons();
-    return NextResponse.json({
+    return publicContractJson({
       success: true,
       requestId,
       data: {
         reasons,
       },
       reasons,
+    }, {
+      requestId,
+      request,
+      cache: 'discovery',
+      siteId: site.id,
     });
   } catch (error) {
     console.error('API Error:', error);

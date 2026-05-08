@@ -181,6 +181,7 @@ An AI-built frontend should need only these inputs:
 
 5. Interaction manifest
    - forms, comments, search, filters, submit endpoints, validation rules, auth requirements, captcha/anti-spam hints.
+   - public moderation metadata such as comment report reasons should be discoverable through contract/cache-aware endpoints, not duplicated inside generated frontends.
 
 6. SEO manifest
    - title, description, canonical, robots, OG/Twitter, JSON-LD, sitemap priority/change frequency.

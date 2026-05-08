@@ -977,6 +977,17 @@ try {
 
     const reportReasons = await request(`/api/sites/${createdSiteId}/comments/report-reasons`);
     assert(reportReasons.response.status === 200, `${reportReasons.url} expected 200, got ${reportReasons.response.status}`);
+    assert(reportReasons.response.headers.get('x-backy-cache-scope') === 'discovery', `${reportReasons.url} missing report reasons cache scope`);
+    assert(reportReasons.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${reportReasons.url} missing report reasons contract version`);
+    assert(reportReasons.response.headers.get('x-backy-site-id') === createdSiteId, `${reportReasons.url} missing report reasons site id header`);
+    assert(reportReasons.response.headers.get('x-backy-cache-revision'), `${reportReasons.url} missing report reasons cache revision`);
+    const reportReasonsEtag = reportReasons.response.headers.get('etag');
+    assert(reportReasonsEtag?.startsWith('"backy-'), `${reportReasons.url} missing report reasons etag`);
+    const revalidatedReportReasons = await request(`/api/sites/${createdSiteId}/comments/report-reasons`, {
+      headers: { 'if-none-match': reportReasonsEtag },
+    });
+    assert(revalidatedReportReasons.response.status === 304, `${revalidatedReportReasons.url} expected report reasons 304, got ${revalidatedReportReasons.response.status}`);
+    assert(revalidatedReportReasons.response.headers.get('etag') === reportReasonsEtag, `${revalidatedReportReasons.url} expected matching report reasons etag`);
     assert(reportReasons.json?.success === true, `${reportReasons.url} expected success envelope`);
     assert(reportReasons.json?.data?.reasons?.includes('spam'), `${reportReasons.url} missing report reason in data envelope`);
     assert(reportReasons.json?.reasons?.includes('spam'), `${reportReasons.url} missing legacy report reasons`);
