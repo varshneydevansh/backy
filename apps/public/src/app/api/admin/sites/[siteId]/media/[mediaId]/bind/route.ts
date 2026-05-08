@@ -12,6 +12,7 @@ import {
   getSiteByIdOrSlug,
   updateMediaItem,
 } from '@/lib/backyStore';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { MediaItem } from '@backy-cms/core';
 
@@ -205,12 +206,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media item not found', requestId);
     }
+    const cacheInvalidation = repositories
+      ? await recordSiteCacheInvalidation(repositories, {
+          siteId: site.id,
+          scope: 'media',
+          entity: 'media',
+          entityId: updated.id,
+          reason: action === 'bind' ? 'media-bound' : 'media-unbound',
+          requestId,
+        })
+      : undefined;
 
     return NextResponse.json({
       success: true,
       requestId,
       data: {
         media: updated,
+        cacheInvalidation,
         binding: action === 'bind'
           ? bindingUpdate.bindings.find((binding) => binding.scope === targetType && binding.targetId === targetId) || null
           : null,

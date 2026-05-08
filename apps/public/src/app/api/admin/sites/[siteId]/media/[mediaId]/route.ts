@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteMediaItem, getMediaById, getSiteByIdOrSlug, updateMediaItem } from '@/lib/backyStore';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getMediaStorageAdapter, getMediaStoragePathFromUrl } from '@/lib/mediaStorage';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -99,8 +100,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         metadata: metadataFromInput(body.metadata),
         tags: stringArrayFromInput(body.tags),
       });
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'media',
+        entity: 'media',
+        entityId: updated.item.id,
+        reason: 'media-updated',
+        requestId,
+      });
 
-      return NextResponse.json({ success: true, requestId, data: { media: updated.item } });
+      return NextResponse.json({ success: true, requestId, data: { media: updated.item, cacheInvalidation } });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -148,6 +157,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
       await repositories.media.delete(site.id, mediaId);
       await deleteUploadedFile(site.id, media.url);
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'media',
+        entity: 'media',
+        entityId: media.id,
+        reason: 'media-deleted',
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -155,6 +172,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         data: {
           deleted: true,
           mediaId,
+          cacheInvalidation,
         },
       });
     }

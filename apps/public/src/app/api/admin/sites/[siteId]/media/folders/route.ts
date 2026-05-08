@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createMediaFolder, getSiteByIdOrSlug, listMediaFolders } from '@/lib/backyStore';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -105,8 +106,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           sortOrder: numberFromInput(body.sortOrder),
         })).item
       : createMediaFolder(site.id, body);
+    const cacheInvalidation = repositories
+      ? await recordSiteCacheInvalidation(repositories, {
+          siteId: site.id,
+          scope: 'media',
+          entity: 'mediaFolder',
+          entityId: folder.id,
+          reason: 'media-folder-created',
+          requestId,
+        })
+      : undefined;
 
-    return NextResponse.json({ success: true, requestId, data: { folder } }, { status: 201 });
+    return NextResponse.json({ success: true, requestId, data: { folder, cacheInvalidation } }, { status: 201 });
   } catch (error) {
     console.error('Admin media folder create API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);

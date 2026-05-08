@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteMediaFolder, getSiteByIdOrSlug, updateMediaFolder } from '@/lib/backyStore';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -75,8 +76,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         parentId,
         sortOrder: numberFromInput(body.sortOrder),
       })).item;
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'media',
+        entity: 'mediaFolder',
+        entityId: folder.id,
+        reason: 'media-folder-updated',
+        requestId,
+      });
 
-      return NextResponse.json({ success: true, requestId, data: { folder } });
+      return NextResponse.json({ success: true, requestId, data: { folder, cacheInvalidation } });
     }
 
     const folder = updateMediaFolder(site.id, folderId, body);
@@ -112,8 +121,18 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (!deleted) {
       return errorResponse(404, 'FOLDER_NOT_FOUND', 'Media folder not found', requestId);
     }
+    const cacheInvalidation = repositories
+      ? await recordSiteCacheInvalidation(repositories, {
+          siteId: site.id,
+          scope: 'media',
+          entity: 'mediaFolder',
+          entityId: folderId,
+          reason: 'media-folder-deleted',
+          requestId,
+        })
+      : undefined;
 
-    return NextResponse.json({ success: true, requestId, data: { deleted: true, folderId } });
+    return NextResponse.json({ success: true, requestId, data: { deleted: true, folderId, cacheInvalidation } });
   } catch (error) {
     console.error('Admin media folder delete API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);

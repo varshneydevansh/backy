@@ -8,6 +8,7 @@
 import { extname } from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
 import { createMediaItem, getMediaList, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getMediaStorageAdapter, getMediaStoragePath } from '@/lib/mediaStorage';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { MediaItem } from '@backy-cms/core';
@@ -337,6 +338,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           uploadedBy: mediaInput.uploadedBy,
         })).item
       : createMediaItem(site.id, mediaInput);
+    const cacheInvalidation = repositories
+      ? await recordSiteCacheInvalidation(repositories, {
+          siteId: site.id,
+          scope: 'media',
+          entity: 'media',
+          entityId: media.id,
+          reason: 'media-created',
+          requestId,
+        })
+      : undefined;
 
     return NextResponse.json(
       {
@@ -344,6 +355,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
         data: {
           media,
+          cacheInvalidation,
         },
       },
       { status: 201 },
