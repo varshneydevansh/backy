@@ -14,6 +14,7 @@ import { Route as SitesRouteImport } from './routes/sites'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PagesRouteImport } from './routes/pages'
+import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as MediaRouteImport } from './routes/media'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as FormsRouteImport } from './routes/forms'
@@ -52,6 +53,11 @@ const ProductsRoute = ProductsRouteImport.update({
 const PagesRoute = PagesRouteImport.update({
   id: '/pages',
   path: '/pages',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrdersRoute = OrdersRouteImport.update({
+  id: '/orders',
+  path: '/orders',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MediaRoute = MediaRouteImport.update({
@@ -132,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/forms': typeof FormsRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
+  '/orders': typeof OrdersRoute
   '/pages': typeof PagesRouteWithChildren
   '/products': typeof ProductsRoute
   '/settings': typeof SettingsRoute
@@ -153,6 +160,7 @@ export interface FileRoutesByTo {
   '/forms': typeof FormsRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
+  '/orders': typeof OrdersRoute
   '/pages': typeof PagesRouteWithChildren
   '/products': typeof ProductsRoute
   '/settings': typeof SettingsRoute
@@ -175,6 +183,7 @@ export interface FileRoutesById {
   '/forms': typeof FormsRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
+  '/orders': typeof OrdersRoute
   '/pages': typeof PagesRouteWithChildren
   '/products': typeof ProductsRoute
   '/settings': typeof SettingsRoute
@@ -198,6 +207,7 @@ export interface FileRouteTypes {
     | '/forms'
     | '/login'
     | '/media'
+    | '/orders'
     | '/pages'
     | '/products'
     | '/settings'
@@ -219,6 +229,7 @@ export interface FileRouteTypes {
     | '/forms'
     | '/login'
     | '/media'
+    | '/orders'
     | '/pages'
     | '/products'
     | '/settings'
@@ -240,6 +251,7 @@ export interface FileRouteTypes {
     | '/forms'
     | '/login'
     | '/media'
+    | '/orders'
     | '/pages'
     | '/products'
     | '/settings'
@@ -262,6 +274,7 @@ export interface RootRouteChildren {
   FormsRoute: typeof FormsRoute
   LoginRoute: typeof LoginRoute
   MediaRoute: typeof MediaRoute
+  OrdersRoute: typeof OrdersRoute
   PagesRoute: typeof PagesRouteWithChildren
   ProductsRoute: typeof ProductsRoute
   SettingsRoute: typeof SettingsRoute
@@ -304,6 +317,13 @@ declare module '@tanstack/react-router' {
       path: '/pages'
       fullPath: '/pages'
       preLoaderRoute: typeof PagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/orders': {
+      id: '/orders'
+      path: '/orders'
+      fullPath: '/orders'
+      preLoaderRoute: typeof OrdersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/media': {
@@ -462,6 +482,7 @@ const rootRouteChildren: RootRouteChildren = {
   FormsRoute: FormsRoute,
   LoginRoute: LoginRoute,
   MediaRoute: MediaRoute,
+  OrdersRoute: OrdersRoute,
   PagesRoute: PagesRouteWithChildren,
   ProductsRoute: ProductsRoute,
   SettingsRoute: SettingsRoute,

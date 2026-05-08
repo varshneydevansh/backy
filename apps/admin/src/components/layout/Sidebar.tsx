@@ -23,6 +23,7 @@ import {
   Database,
   ClipboardList,
   ShoppingBag,
+  Receipt,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -65,6 +66,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Collections', to: '/collections', icon: Database },
   { label: 'Forms', to: '/forms', icon: ClipboardList },
   { label: 'Products', to: '/products', icon: ShoppingBag },
+  { label: 'Orders', to: '/orders', icon: Receipt },
   { label: 'Media', to: '/media', icon: Image },
   { label: 'Users', to: '/users', icon: Users },
   { label: 'Settings', to: '/settings', icon: Settings },
