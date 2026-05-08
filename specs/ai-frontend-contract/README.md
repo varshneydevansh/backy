@@ -46,6 +46,8 @@ The rule is simple: a custom frontend can look completely different from the Bac
    - SEO discovery: `GET /api/sites/:siteId/seo`
    - comments: `GET /api/sites/:siteId/pages/:pageId/comments?status=approved`
 
+Public blog category, tag, and author feeds emit Backy contract/cache headers, ETags, conditional 304 responses, and database-mode `content` cache revisions. Database-mode category/tag mutations record scoped invalidation events so custom frontends can revalidate taxonomy archives and filters.
+
 Site settings can now define a primary and footer navigation tree using `page`, `route`, and `url` items. Public navigation responses and render payloads preserve nested children, external URL targets, and page references while filtering out unpublished page targets. Public navigation reads emit Backy contract/cache headers, ETags, conditional 304 responses, and database-mode site-level cache revisions. If no custom primary menu exists, Backy falls back to a publishable-page navigation list.
 
 Admin clients can manage that menu directly through `GET/PATCH /api/admin/sites/:siteId/navigation`. The endpoint validates page references before saving and returns both the stored navigation settings and the resolved public navigation tree. In database mode, successful navigation saves record a scoped cache invalidation event.

@@ -4,8 +4,9 @@
  * GET /api/sites/[siteId]/blog/tags
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getSiteByIdOrSlug, listBlogTags } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { resolveRepositorySite } from '@/lib/repositoryContentWorkflow';
 
@@ -18,7 +19,7 @@ interface RouteParams {
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -28,7 +29,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
       errorMessage: message,
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
@@ -45,12 +46,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
       const tags = await repositories.blogTaxonomy.listTags(site.id);
+      const cacheRevision = await repositories.cacheInvalidations.latestRevision({
+        siteId: site.id,
+        scope: 'content',
+      }) || undefined;
 
-      return NextResponse.json({
+      return publicContractJson({
         success: true,
         requestId,
         data: { tags },
         tags,
+      }, {
+        requestId,
+        request,
+        cache: 'discovery',
+        siteId: site.id,
+        cacheRevision,
       });
     }
 
@@ -61,13 +72,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
     const tags = listBlogTags(site.id);
 
-    return NextResponse.json({
+    return publicContractJson({
       success: true,
       requestId,
       data: {
         tags,
       },
       tags,
+    }, {
+      requestId,
+      request,
+      cache: 'discovery',
+      siteId: site.id,
     });
   } catch (error) {
     console.error('Blog tags API error:', error);

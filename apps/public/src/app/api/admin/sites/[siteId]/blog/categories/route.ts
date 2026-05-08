@@ -14,6 +14,7 @@ import {
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { resolveRepositorySite } from '@/lib/repositoryContentWorkflow';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 
 export const runtime = 'nodejs';
 
@@ -134,6 +135,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         color: typeof body.color === 'string' || body.color === null ? body.color : undefined,
         sortOrder: typeof body.sortOrder === 'number' ? body.sortOrder : undefined,
       });
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'blogCategory',
+        entityId: created.item.id,
+        reason: 'blog-category-created',
+        requestId,
+      });
 
       return NextResponse.json(
         {
@@ -141,6 +150,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           requestId,
           data: {
             category: created.item,
+            cacheInvalidation,
           },
         },
         { status: 201 },

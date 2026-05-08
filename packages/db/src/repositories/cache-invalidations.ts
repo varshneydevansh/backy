@@ -81,6 +81,8 @@ const normalizeEntity = (value: unknown): BackyRepositoryEntity => {
         value === 'site' ||
         value === 'page' ||
         value === 'post' ||
+        value === 'blogCategory' ||
+        value === 'blogTag' ||
         value === 'collection' ||
         value === 'collectionRecord' ||
         value === 'media' ||

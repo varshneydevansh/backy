@@ -15,6 +15,7 @@ import {
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { resolveRepositorySite } from '@/lib/repositoryContentWorkflow';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 
 export const runtime = 'nodejs';
 
@@ -145,8 +146,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         color: typeof body.color === 'string' || body.color === null ? body.color : undefined,
         sortOrder: typeof body.sortOrder === 'number' ? body.sortOrder : undefined,
       });
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'blogCategory',
+        entityId: updated.item.id,
+        reason: 'blog-category-updated',
+        requestId,
+      });
 
-      return NextResponse.json({ success: true, requestId, data: { category: updated.item } });
+      return NextResponse.json({ success: true, requestId, data: { category: updated.item, cacheInvalidation } });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -214,8 +223,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       if (!deleted) {
         return errorResponse(404, 'CATEGORY_NOT_FOUND', 'Category not found', requestId);
       }
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'blogCategory',
+        entityId: category.id,
+        reason: 'blog-category-deleted',
+        requestId,
+      });
 
-      return NextResponse.json({ success: true, requestId, data: { deleted: true, categoryId: category.id } });
+      return NextResponse.json({ success: true, requestId, data: { deleted: true, categoryId: category.id, cacheInvalidation } });
     }
 
     const site = getSiteByIdOrSlug(siteId);

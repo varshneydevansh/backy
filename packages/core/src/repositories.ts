@@ -99,6 +99,8 @@ export type BackyRepositoryEntity =
   | 'site'
   | 'page'
   | 'post'
+  | 'blogCategory'
+  | 'blogTag'
   | 'collection'
   | 'collectionRecord'
   | 'media'

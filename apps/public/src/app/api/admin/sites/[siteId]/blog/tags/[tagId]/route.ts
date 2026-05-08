@@ -15,6 +15,7 @@ import {
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { resolveRepositorySite } from '@/lib/repositoryContentWorkflow';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 
 export const runtime = 'nodejs';
 
@@ -143,8 +144,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         slug: nextSlug || undefined,
         description: typeof body.description === 'string' || body.description === null ? body.description : undefined,
       });
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'blogTag',
+        entityId: updated.item.id,
+        reason: 'blog-tag-updated',
+        requestId,
+      });
 
-      return NextResponse.json({ success: true, requestId, data: { tag: updated.item } });
+      return NextResponse.json({ success: true, requestId, data: { tag: updated.item, cacheInvalidation } });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -212,8 +221,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       if (!deleted) {
         return errorResponse(404, 'TAG_NOT_FOUND', 'Tag not found', requestId);
       }
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'blogTag',
+        entityId: tag.id,
+        reason: 'blog-tag-deleted',
+        requestId,
+      });
 
-      return NextResponse.json({ success: true, requestId, data: { deleted: true, tagId: tag.id } });
+      return NextResponse.json({ success: true, requestId, data: { deleted: true, tagId: tag.id, cacheInvalidation } });
     }
 
     const site = getSiteByIdOrSlug(siteId);

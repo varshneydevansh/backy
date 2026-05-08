@@ -1265,6 +1265,8 @@ try {
 
     const publicAuthors = await request(`/api/sites/${createdSiteId}/blog/authors`);
     assert(publicAuthors.response.status === 200, `${publicAuthors.url} expected 200, got ${publicAuthors.response.status}`);
+    assert(publicAuthors.response.headers.get('x-backy-cache-scope') === 'discovery', `${publicAuthors.url} missing public authors cache scope`);
+    assert(publicAuthors.response.headers.get('etag')?.startsWith('"backy-'), `${publicAuthors.url} missing public authors etag`);
     assert(publicAuthors.json?.success === true, `${publicAuthors.url} expected success envelope`);
     assert(publicAuthors.json?.data?.authors?.some((author) => author.id === 'user-admin'), `${publicAuthors.url} missing public admin author in data envelope`);
     assert(publicAuthors.json?.authors?.some((author) => author.id === 'user-admin'), `${publicAuthors.url} missing public admin author`);
@@ -1464,12 +1466,25 @@ try {
 
     const publicCategories = await request(`/api/sites/${createdSiteId}/blog/categories`);
     assert(publicCategories.response.status === 200, `${publicCategories.url} expected 200, got ${publicCategories.response.status}`);
+    assert(publicCategories.response.headers.get('x-backy-cache-scope') === 'discovery', `${publicCategories.url} missing public categories cache scope`);
+    assert(publicCategories.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${publicCategories.url} missing public categories contract version`);
+    assert(publicCategories.response.headers.get('x-backy-site-id') === createdSiteId, `${publicCategories.url} missing public categories site id header`);
+    assert(publicCategories.response.headers.get('x-backy-cache-revision'), `${publicCategories.url} missing public categories cache revision`);
+    const publicCategoriesEtag = publicCategories.response.headers.get('etag');
+    assert(publicCategoriesEtag?.startsWith('"backy-'), `${publicCategories.url} missing public categories etag`);
+    const revalidatedPublicCategories = await request(`/api/sites/${createdSiteId}/blog/categories`, {
+      headers: { 'if-none-match': publicCategoriesEtag },
+    });
+    assert(revalidatedPublicCategories.response.status === 304, `${revalidatedPublicCategories.url} expected categories 304, got ${revalidatedPublicCategories.response.status}`);
+    assert(revalidatedPublicCategories.response.headers.get('etag') === publicCategoriesEtag, `${revalidatedPublicCategories.url} expected matching categories etag`);
     assert(publicCategories.json?.success === true, `${publicCategories.url} expected success envelope`);
     assert(publicCategories.json?.data?.categories?.some((category) => category.id === createdCategoryId), `${publicCategories.url} missing public category in data envelope`);
     assert(publicCategories.json?.categories?.some((category) => category.id === createdCategoryId), `${publicCategories.url} missing public category`);
 
     const publicTags = await request(`/api/sites/${createdSiteId}/blog/tags`);
     assert(publicTags.response.status === 200, `${publicTags.url} expected 200, got ${publicTags.response.status}`);
+    assert(publicTags.response.headers.get('x-backy-cache-scope') === 'discovery', `${publicTags.url} missing public tags cache scope`);
+    assert(publicTags.response.headers.get('etag')?.startsWith('"backy-'), `${publicTags.url} missing public tags etag`);
     assert(publicTags.json?.success === true, `${publicTags.url} expected success envelope`);
     assert(publicTags.json?.data?.tags?.some((tag) => tag.id === createdTagId), `${publicTags.url} missing public tag in data envelope`);
     assert(publicTags.json?.tags?.some((tag) => tag.id === createdTagId), `${publicTags.url} missing public tag`);
