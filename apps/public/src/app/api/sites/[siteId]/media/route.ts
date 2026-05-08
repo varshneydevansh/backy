@@ -6,9 +6,10 @@
  * GET /api/sites/[siteId]/media - List public media files
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import type { MediaItem } from '@backy-cms/core';
 import { getMediaList, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -20,7 +21,7 @@ interface RouteParams {
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-    NextResponse.json(
+    publicContractJson(
         {
             success: false,
             requestId,
@@ -30,7 +31,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
             },
             errorMessage: message,
         },
-        { status },
+        { status, requestId, cache: 'error' },
     )
 );
 
@@ -93,12 +94,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 .filter((item) => postId ? item.postIds.includes(postId) || (item.scope === 'post' && item.scopeTargetId === postId) : true)
                 .filter((item) => tag ? item.tags.includes(tag) : true);
             const mediaPayload = paginateMedia(filtered, limit, offset);
+            const cacheRevision = await repositories.cacheInvalidations.latestRevision({
+                siteId: site.id,
+                scope: 'media',
+            }) || undefined;
 
-            return NextResponse.json({
+            return publicContractJson({
                 success: true,
                 requestId,
                 data: mediaPayload,
                 ...mediaPayload,
+            }, {
+                requestId,
+                request,
+                cache: 'discovery',
+                siteId: site.id,
+                cacheRevision,
             });
         }
 
@@ -120,11 +131,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             offset,
         });
 
-        return NextResponse.json({
+        return publicContractJson({
             success: true,
             requestId,
             data: mediaPayload,
             ...mediaPayload,
+        }, {
+            requestId,
+            request,
+            cache: 'discovery',
+            siteId: site.id,
         });
     } catch (error) {
         console.error('API Error:', error);

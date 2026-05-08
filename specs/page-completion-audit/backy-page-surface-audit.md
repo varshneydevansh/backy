@@ -71,7 +71,7 @@ Backy should not be called complete until these gates are satisfied:
 
 1. **Real admin persistence API**: add authenticated admin endpoints for sites/pages/posts/users/settings and move admin store writes behind API helpers.
 2. **Editor completion pass**: layers panel, snapping/alignment, undo/redo hardening, responsive canvas modes, composed presets, saved reusable sections, preview/publish, and revision autosave.
-3. **Media management completion**: delete/update metadata, search/tags/folders, alt/caption editor, font registration, object storage abstraction.
+3. **Media management completion**: public media feeds now expose cache revision headers/ETags; remaining work is remote provider selection, quotas, transforms, signed/private delivery, font variant grouping, and stronger bulk/reference management.
 4. **Publishing model**: add cache invalidation, preview token audit events, and broaden hosted preview tests into the main CI path.
 5. **Backend validation/test suite**: broaden endpoint contract tests (`test:preview-contract`, `test:admin-contract`), editor serialization tests, render payload schema validation, and smoke tests for every admin page.
 
