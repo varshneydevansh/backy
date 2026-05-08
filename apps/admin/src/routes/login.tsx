@@ -54,6 +54,7 @@ function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [resetNotice, setResetNotice] = useState<string | null>(null);
 
   /**
    * Validate form inputs
@@ -83,6 +84,7 @@ function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
+    setResetNotice(null);
 
     if (!validateForm()) return;
 
@@ -216,17 +218,24 @@ function LoginPage() {
           </form>
 
           {/* Footer Links */}
-          <div className="mt-6 text-center text-sm">
-            <a
-              href="#"
+          <div className="mt-6 space-y-3 text-center text-sm">
+            <button
+              type="button"
               className="text-primary hover:underline"
-              onClick={(e) => {
-                e.preventDefault();
-                alert('Password reset coming soon!');
+              onClick={() => {
+                setResetNotice('Password reset is not connected yet. Use a demo account for local testing.');
               }}
             >
               Forgot password?
-            </a>
+            </button>
+            {resetNotice && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-amber-800">
+                <div className="flex gap-2">
+                  <Mail className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{resetNotice}</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
