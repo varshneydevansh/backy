@@ -1,6 +1,6 @@
 import type { BlogPost, Page, Site, User } from '@/stores/mockStore';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
-import type { SiteNavigationConfig, SiteRedirectRule, SiteSettings } from '@backy-cms/core';
+import type { Comment, CommentStatus, CommentTargetType, SiteNavigationConfig, SiteRedirectRule, SiteSettings } from '@backy-cms/core';
 
 type AdminSiteStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 
@@ -514,6 +514,45 @@ interface ApiFormSubmissionResponse {
   };
 }
 
+interface ApiPagination {
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+interface ApiListCommentsResponse {
+  success: boolean;
+  data?: {
+    siteId: string;
+    comments: Comment[];
+    count: number;
+    pagination?: ApiPagination;
+  };
+  comments?: Comment[];
+  count?: number;
+  pagination?: ApiPagination;
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiUpdateCommentsResponse {
+  success: boolean;
+  data?: {
+    siteId: string;
+    updated: Comment[];
+    updatedCount: number;
+    missingIds: string[];
+  };
+  updated?: Comment[];
+  updatedCount?: number;
+  missingIds?: string[];
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiSettings {
   deliveryMode: SiteSettingsInput['deliveryMode'];
   apiKeys: {
@@ -933,6 +972,46 @@ export interface FormSubmissionList {
     offset: number;
     hasMore: boolean;
   };
+}
+
+export type CommentModerationStatus = CommentStatus;
+export type CommentModerationTarget = CommentTargetType | 'all';
+export type CommentModerationSort = 'newest' | 'oldest';
+
+export type AdminComment = Comment;
+
+export interface CommentListFilters {
+  status?: CommentStatus | 'all';
+  targetType?: CommentModerationTarget;
+  targetId?: string;
+  requestId?: string;
+  q?: string;
+  parentOnly?: boolean;
+  parentId?: string | null;
+  sort?: CommentModerationSort;
+  limit?: number;
+  offset?: number;
+}
+
+export interface CommentListResult {
+  comments: AdminComment[];
+  count: number;
+  pagination: ApiPagination;
+}
+
+export interface UpdateCommentsInput {
+  commentIds: string[];
+  status: CommentStatus;
+  reviewedBy?: string | null;
+  actor?: string | null;
+  rejectionReason?: string | null;
+  blockReason?: string | null;
+}
+
+export interface UpdateCommentsResult {
+  updated: AdminComment[];
+  updatedCount: number;
+  missingIds: string[];
 }
 
 export interface BlogCategory {
@@ -2244,6 +2323,69 @@ export async function updateFormSubmission(
   }
 
   return submission;
+}
+
+export async function listComments(
+  siteId: string,
+  filters: CommentListFilters = {},
+): Promise<CommentListResult> {
+  const query = new URLSearchParams();
+  query.set('limit', String(filters.limit || 100));
+  query.set('offset', String(filters.offset || 0));
+  if (filters.status && filters.status !== 'all') query.set('status', filters.status);
+  if (filters.targetType && filters.targetType !== 'all') query.set('targetType', filters.targetType);
+  if (filters.targetId) query.set('targetId', filters.targetId);
+  if (filters.requestId) query.set('requestId', filters.requestId);
+  if (filters.q) query.set('q', filters.q);
+  if (filters.parentOnly !== undefined) query.set('parentOnly', String(filters.parentOnly));
+  if (filters.parentId !== undefined && filters.parentId !== null) query.set('parentId', filters.parentId);
+  if (filters.sort) query.set('sort', filters.sort);
+
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/comments?${query.toString()}`);
+  const payload = await readJson<ApiListCommentsResponse>(response);
+  const comments = payload.data?.comments || payload.comments;
+  const count = payload.data?.count ?? payload.count ?? comments?.length ?? 0;
+  const pagination = payload.data?.pagination || payload.pagination || {
+    total: count,
+    limit: filters.limit || comments?.length || 100,
+    offset: filters.offset || 0,
+    hasMore: false,
+  };
+
+  if (!response.ok || !payload.success || !comments) {
+    throw new Error(payload.error?.message || 'Unable to load comments');
+  }
+
+  return {
+    comments,
+    count,
+    pagination,
+  };
+}
+
+export async function updateComments(
+  siteId: string,
+  input: UpdateCommentsInput,
+): Promise<UpdateCommentsResult> {
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/comments`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiUpdateCommentsResponse>(response);
+  const updated = payload.data?.updated || payload.updated;
+
+  if (!response.ok || !payload.success || !updated) {
+    throw new Error(payload.error?.message || 'Unable to update comments');
+  }
+
+  return {
+    updated,
+    updatedCount: payload.data?.updatedCount ?? payload.updatedCount ?? updated.length,
+    missingIds: payload.data?.missingIds || payload.missingIds || [],
+  };
 }
 
 export async function listCollections(siteId: string): Promise<Collection[]> {

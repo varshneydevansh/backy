@@ -18,6 +18,7 @@ import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as MediaRouteImport } from './routes/media'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as FormsRouteImport } from './routes/forms'
+import { Route as CommentsRouteImport } from './routes/comments'
 import { Route as CollectionsRouteImport } from './routes/collections'
 import { Route as BlogRouteImport } from './routes/blog'
 import { Route as IndexRouteImport } from './routes/index'
@@ -73,6 +74,11 @@ const LoginRoute = LoginRouteImport.update({
 const FormsRoute = FormsRouteImport.update({
   id: '/forms',
   path: '/forms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CommentsRoute = CommentsRouteImport.update({
+  id: '/comments',
+  path: '/comments',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CollectionsRoute = CollectionsRouteImport.update({
@@ -135,6 +141,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/blog': typeof BlogRouteWithChildren
   '/collections': typeof CollectionsRoute
+  '/comments': typeof CommentsRoute
   '/forms': typeof FormsRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
@@ -157,6 +164,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/blog': typeof BlogRouteWithChildren
   '/collections': typeof CollectionsRoute
+  '/comments': typeof CommentsRoute
   '/forms': typeof FormsRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
@@ -180,6 +188,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/blog': typeof BlogRouteWithChildren
   '/collections': typeof CollectionsRoute
+  '/comments': typeof CommentsRoute
   '/forms': typeof FormsRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
@@ -204,6 +213,7 @@ export interface FileRouteTypes {
     | '/'
     | '/blog'
     | '/collections'
+    | '/comments'
     | '/forms'
     | '/login'
     | '/media'
@@ -226,6 +236,7 @@ export interface FileRouteTypes {
     | '/'
     | '/blog'
     | '/collections'
+    | '/comments'
     | '/forms'
     | '/login'
     | '/media'
@@ -248,6 +259,7 @@ export interface FileRouteTypes {
     | '/'
     | '/blog'
     | '/collections'
+    | '/comments'
     | '/forms'
     | '/login'
     | '/media'
@@ -271,6 +283,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BlogRoute: typeof BlogRouteWithChildren
   CollectionsRoute: typeof CollectionsRoute
+  CommentsRoute: typeof CommentsRoute
   FormsRoute: typeof FormsRoute
   LoginRoute: typeof LoginRoute
   MediaRoute: typeof MediaRoute
@@ -345,6 +358,13 @@ declare module '@tanstack/react-router' {
       path: '/forms'
       fullPath: '/forms'
       preLoaderRoute: typeof FormsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/comments': {
+      id: '/comments'
+      path: '/comments'
+      fullPath: '/comments'
+      preLoaderRoute: typeof CommentsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/collections': {
@@ -479,6 +499,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BlogRoute: BlogRouteWithChildren,
   CollectionsRoute: CollectionsRoute,
+  CommentsRoute: CommentsRoute,
   FormsRoute: FormsRoute,
   LoginRoute: LoginRoute,
   MediaRoute: MediaRoute,
