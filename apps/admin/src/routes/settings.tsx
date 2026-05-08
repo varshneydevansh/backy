@@ -30,6 +30,7 @@ import { useStore, type DeliveryMode } from '@/stores/mockStore';
 import {
   getSettings,
   regenerateSettingsApiKeys,
+  type SiteSettingsInput,
   updateSettings as updateBackendSettings,
 } from '@/lib/adminContentApi';
 
@@ -192,6 +193,7 @@ function buildCopyText(base: string, path: string): string {
 function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general');
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('managed-hosting');
+  const [runtimeStorage, setRuntimeStorage] = useState<SiteSettingsInput['runtimeStorage']>();
   const [saved, setSaved] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -213,6 +215,7 @@ function SettingsPage() {
         if (!cancelled) {
           updateSettings(backendSettings);
           setDeliveryMode(backendSettings.deliveryMode);
+          setRuntimeStorage(backendSettings.runtimeStorage);
           setNotice(null);
         }
       } catch {
@@ -237,6 +240,7 @@ function SettingsPage() {
       const backendSettings = await updateBackendSettings({ deliveryMode });
       updateSettings(backendSettings);
       setDeliveryMode(backendSettings.deliveryMode);
+      setRuntimeStorage(backendSettings.runtimeStorage);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch {
@@ -253,6 +257,7 @@ function SettingsPage() {
       const backendSettings = await regenerateSettingsApiKeys();
       updateSettings(backendSettings);
       setDeliveryMode(backendSettings.deliveryMode);
+      setRuntimeStorage(backendSettings.runtimeStorage);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch {
@@ -327,7 +332,11 @@ function SettingsPage() {
         {activeTab === 'appearance' && <AppearanceSettings />}
         {activeTab === 'seo' && <SEOSettings />}
         {activeTab === 'delivery' && (
-          <DeliveryModeSettings value={deliveryMode} onChange={setDeliveryMode} />
+          <DeliveryModeSettings
+            value={deliveryMode}
+            runtimeStorage={runtimeStorage}
+            onChange={setDeliveryMode}
+          />
         )}
         {activeTab === 'notifications' && <NotificationSettings />}
         {activeTab === 'security' && (
@@ -661,9 +670,11 @@ function EndpointBlock({
 
 function DeliveryModeSettings({
   value,
+  runtimeStorage,
   onChange,
 }: {
   value: DeliveryMode;
+  runtimeStorage?: SiteSettingsInput['runtimeStorage'];
   onChange: (next: DeliveryMode) => void;
 }) {
   const [copiedEndpoint, setCopiedEndpoint] = useState('');
@@ -737,6 +748,63 @@ function DeliveryModeSettings({
           </a>
         </div>
       </div>
+
+      {runtimeStorage && (
+        <div className="rounded-xl border border-border p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-medium">Media storage runtime</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Uploads are currently routed through the {runtimeStorage.provider} provider.
+              </p>
+            </div>
+            <span
+              className={cn(
+                'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium',
+                runtimeStorage.configured
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'bg-amber-50 text-amber-700'
+              )}
+            >
+              {runtimeStorage.configured ? 'Configured' : 'Needs config'}
+            </span>
+          </div>
+          <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+            {runtimeStorage.bucket && (
+              <div>
+                <dt className="text-xs text-muted-foreground">Bucket</dt>
+                <dd className="font-mono text-xs">{runtimeStorage.bucket}</dd>
+              </div>
+            )}
+            {runtimeStorage.region && (
+              <div>
+                <dt className="text-xs text-muted-foreground">Region</dt>
+                <dd className="font-mono text-xs">{runtimeStorage.region}</dd>
+              </div>
+            )}
+            {runtimeStorage.publicUrl && (
+              <div>
+                <dt className="text-xs text-muted-foreground">Public URL</dt>
+                <dd className="font-mono text-xs break-all">{runtimeStorage.publicUrl}</dd>
+              </div>
+            )}
+            {runtimeStorage.basePath && (
+              <div>
+                <dt className="text-xs text-muted-foreground">Local path</dt>
+                <dd className="font-mono text-xs break-all">{runtimeStorage.basePath}</dd>
+              </div>
+            )}
+          </dl>
+          {runtimeStorage.missing.length > 0 && (
+            <p className="mt-4 text-sm text-amber-700">
+              Missing configuration: {runtimeStorage.missing.join(', ')}
+            </p>
+          )}
+          {runtimeStorage.error && (
+            <p className="mt-2 text-sm text-amber-700">{runtimeStorage.error}</p>
+          )}
+        </div>
+      )}
 
       <div id="api" className="space-y-4">
         <div className="flex items-center gap-2">

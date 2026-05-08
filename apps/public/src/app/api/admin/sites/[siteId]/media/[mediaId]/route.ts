@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteMediaItem, getMediaById, getSiteByIdOrSlug, updateMediaItem } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
-import { getMediaStorageAdapter, getMediaStoragePathFromUrl } from '@/lib/mediaStorage';
+import { getMediaStorageAdapter, getMediaStoragePathFromMedia } from '@/lib/mediaStorage';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -47,15 +47,19 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
   }
 };
 
-const deleteUploadedFile = async (siteId: string, url: string | null | undefined) => {
-  const storagePath = getMediaStoragePathFromUrl(siteId, url);
+const deleteUploadedFile = async (
+  siteId: string,
+  media: { url?: string | null; metadata?: unknown },
+) => {
+  const storagePath = getMediaStoragePathFromMedia(siteId, media);
 
   if (!storagePath) {
     return;
   }
 
   try {
-    await getMediaStorageAdapter().delete(storagePath);
+    const storage = await getMediaStorageAdapter();
+    await storage.delete(storagePath);
   } catch {
     // Missing storage objects should not make catalog deletion fail.
   }
@@ -156,7 +160,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       }
 
       await repositories.media.delete(site.id, mediaId);
-      await deleteUploadedFile(site.id, media.url);
+      await deleteUploadedFile(site.id, media);
       const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
         siteId: site.id,
         scope: 'media',
@@ -189,7 +193,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media item not found', requestId);
     }
 
-    await deleteUploadedFile(site.id, media.url);
+    await deleteUploadedFile(site.id, media);
 
     return NextResponse.json({
       success: true,

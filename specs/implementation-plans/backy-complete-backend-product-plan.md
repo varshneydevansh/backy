@@ -396,7 +396,9 @@ The next implementation should not start by adding more UI screens. The product 
   - `@backy/storage` now exposes a provider-neutral adapter contract for upload, read, delete, public URL, signed URL, list, exists, and stat operations.
   - Local storage blocks path traversal, provides deterministic site/type/date key generation through `createStoragePath`, and is covered by `npm run test:smoke --workspace @backy/storage`.
   - S3/R2 and Supabase adapters expose the same contract shape with upload metadata/cache controls and signed URL support.
-  - Admin media upload/delete routes now use the local adapter while preserving the existing `/uploads/sites/:siteId/...` URL shape for stored assets.
+  - Admin media upload/delete/read routes now resolve the runtime storage adapter from environment configuration: default local storage, S3/R2-compatible storage, or Supabase Storage.
+  - Upload metadata records the storage provider path so private delivery and cleanup work even when the public URL is remote and not shaped like `/uploads/...`.
+  - `GET /api/admin/settings` exposes a non-secret `runtimeStorage` diagnostic summary that the admin Delivery settings page renders for operators.
 - **Validation**:
   - Storage adapter tests with local temp storage.
 
@@ -411,7 +413,7 @@ The next implementation should not start by adding more UI screens. The product 
 - **Acceptance Criteria**:
   - Page/post/template usage is queryable.
 - **Current progress**:
-  - Runtime media APIs persist upload metadata, extension metadata, alt text, captions, tags, folders, visibility, page/post bindings, and uploaded font registration metadata through local adapter-backed file storage.
+  - Runtime media APIs persist upload metadata, extension metadata, storage path/provider metadata, alt text, captions, tags, folders, visibility, page/post bindings, and uploaded font registration metadata through the configured storage adapter.
   - `npm run test:admin-contract --workspace @backy/public` verifies font upload metadata, storage-backed public asset readability, metadata merge preservation after edits, public font listing, private visibility hiding, and page media binding.
 - **Validation**:
   - Upload and usage repository tests.

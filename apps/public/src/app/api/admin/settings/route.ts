@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSettings, regenerateAdminApiKeys, updateAdminSettings } from '@/lib/backyStore';
+import { getMediaStorageConfigSummary } from '@/lib/mediaStorage';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { BackyJsonObject, BackySettings } from '@backy-cms/core';
 
@@ -51,6 +52,7 @@ const toAdminSettings = (settings: BackySettings) => ({
     adminApiKey: settings.apiKeys.secretKeyId || '',
   },
   storage: settings.storage || {},
+  runtimeStorage: getMediaStorageConfigSummary(),
   auth: settings.auth || {},
   integrations: settings.integrations || {},
   updatedAt: settings.updatedAt,
@@ -81,7 +83,10 @@ export async function GET(request: NextRequest) {
       success: true,
       requestId,
       data: {
-        settings: getAdminSettings(),
+        settings: {
+          ...getAdminSettings(),
+          runtimeStorage: getMediaStorageConfigSummary(),
+        },
       },
     });
   } catch (error) {
@@ -145,7 +150,10 @@ export async function PATCH(request: NextRequest) {
       success: true,
       requestId,
       data: {
-        settings,
+        settings: {
+          ...settings,
+          runtimeStorage: getMediaStorageConfigSummary(),
+        },
       },
     });
   } catch (error) {
@@ -188,7 +196,10 @@ export async function POST(request: NextRequest) {
       success: true,
       requestId,
       data: {
-        settings,
+        settings: {
+          ...settings,
+          runtimeStorage: getMediaStorageConfigSummary(),
+        },
       },
     });
   } catch (error) {

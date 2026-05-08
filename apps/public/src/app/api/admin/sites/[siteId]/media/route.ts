@@ -321,7 +321,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const mediaFolder = mediaType === 'font' ? 'fonts' : `${mediaType}s`;
     const storagePath = getMediaStoragePath({ siteId: site.id, mediaFolder, storedFilename });
     const metadata = parseMetadata(formData.get('metadata'));
-    const upload = await getMediaStorageAdapter().upload(Buffer.from(await file.arrayBuffer()), {
+    const storage = await getMediaStorageAdapter();
+    const upload = await storage.upload(Buffer.from(await file.arrayBuffer()), {
       path: storagePath,
       filename: storedFilename,
       mimeType,
@@ -346,6 +347,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       metadata: {
         ...metadata,
         extension: extension.replace(/^\./, ''),
+        storagePath: upload.path,
+        storageProvider: storage.provider,
         thumbnailUrl: mediaType === 'image' ? upload.url : null,
         tags: toStringList(formData.get('tags')),
         scope,

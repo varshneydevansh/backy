@@ -3079,6 +3079,10 @@ try {
     assert(json?.data?.settings?.deliveryMode, `${url} missing deliveryMode`);
     assert(json?.data?.settings?.apiKeys?.publicApiKey, `${url} missing publicApiKey`);
     assert(json?.data?.settings?.apiKeys?.adminApiKey, `${url} missing adminApiKey`);
+    assert(json?.data?.settings?.runtimeStorage?.provider, `${url} missing runtime storage provider`);
+    assert(typeof json?.data?.settings?.runtimeStorage?.configured === 'boolean', `${url} missing runtime storage configured flag`);
+    assert(Array.isArray(json?.data?.settings?.runtimeStorage?.missing), `${url} missing runtime storage missing list`);
+    assert(!JSON.stringify(json.data.settings.runtimeStorage).includes('SECRET'), `${url} exposed storage secret names or values`);
     originalDeliveryMode = json.data.settings.deliveryMode;
   });
 

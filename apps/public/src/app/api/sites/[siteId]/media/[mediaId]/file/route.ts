@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
-import { getMediaStorageAdapter, getMediaStoragePathFromUrl } from '@/lib/mediaStorage';
+import { getMediaStorageAdapter, getMediaStoragePathFromMedia } from '@/lib/mediaStorage';
 import { verifySignedMediaAccess } from '@/lib/mediaSigning';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -72,12 +72,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return jsonError(403, 'MEDIA_SIGNATURE_INVALID', 'A valid signed media URL is required.', requestId);
     }
 
-    const storagePath = getMediaStoragePathFromUrl(site.id, media.url);
+    const storagePath = getMediaStoragePathFromMedia(site.id, media);
     if (!storagePath) {
       return jsonError(404, 'MEDIA_FILE_NOT_FOUND', 'Media file could not be resolved from storage.', requestId);
     }
 
-    const buffer = await getMediaStorageAdapter().read(storagePath);
+    const storage = await getMediaStorageAdapter();
+    const buffer = await storage.read(storagePath);
     const response = new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {

@@ -483,6 +483,7 @@ interface ApiSettings {
     publicApiKey: string;
     adminApiKey: string;
   };
+  runtimeStorage?: SiteSettingsInput['runtimeStorage'];
   updatedAt?: string;
 }
 
@@ -711,6 +712,18 @@ export interface SiteSettingsInput {
   apiKeys: {
     publicApiKey: string;
     adminApiKey: string;
+  };
+  runtimeStorage?: {
+    provider: 'local' | 's3' | 'supabase';
+    configured: boolean;
+    publicUrl?: string;
+    basePath?: string;
+    bucket?: string;
+    region?: string;
+    endpoint?: string;
+    forcePathStyle?: boolean;
+    missing: string[];
+    error?: string;
   };
 }
 
@@ -1560,6 +1573,7 @@ export async function getSettings(): Promise<SiteSettingsInput> {
   return {
     deliveryMode: payload.data.settings.deliveryMode,
     apiKeys: payload.data.settings.apiKeys,
+    runtimeStorage: payload.data.settings.runtimeStorage,
   };
 }
 
@@ -1580,6 +1594,7 @@ export async function updateSettings(input: Partial<SiteSettingsInput>): Promise
   return {
     deliveryMode: payload.data.settings.deliveryMode,
     apiKeys: payload.data.settings.apiKeys,
+    runtimeStorage: payload.data.settings.runtimeStorage,
   };
 }
 
@@ -1600,6 +1615,7 @@ export async function regenerateSettingsApiKeys(): Promise<SiteSettingsInput> {
   return {
     deliveryMode: payload.data.settings.deliveryMode,
     apiKeys: payload.data.settings.apiKeys,
+    runtimeStorage: payload.data.settings.runtimeStorage,
   };
 }
 
