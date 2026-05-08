@@ -14,6 +14,7 @@ import {
   updateAdminSite,
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { normalizeNavigationConfig } from '@/lib/navigation';
 import { normalizeRedirectRules } from '@/lib/redirectRules';
 
 export const runtime = 'nodejs';
@@ -76,37 +77,6 @@ const toStringRecord = (value: unknown): Record<string, string> => {
   }, {});
 };
 
-const normalizeNavigationItems = (value: unknown): SiteSettings['navigation']['primary'] => (
-  Array.isArray(value)
-    ? value.filter(isRecord).map((item) => {
-        const type: SiteSettings['navigation']['primary'][number]['type'] = item.type === 'page' || item.type === 'route' || item.type === 'url' ? item.type : 'route';
-        const target: SiteSettings['navigation']['primary'][number]['target'] = item.target === '_blank' ? '_blank' : '_self';
-        return {
-          id: typeof item.id === 'string' && item.id.length > 0 ? item.id : undefined,
-          type,
-          label: typeof item.label === 'string' ? item.label.trim() : '',
-          pageId: typeof item.pageId === 'string' ? item.pageId : undefined,
-          path: typeof item.path === 'string' ? item.path : undefined,
-          href: typeof item.href === 'string' ? item.href : undefined,
-          target,
-          visible: typeof item.visible === 'boolean' ? item.visible : undefined,
-          children: normalizeNavigationItems(item.children),
-        };
-      }).filter((item) => item.type === 'page' || item.label.length > 0)
-    : []
-);
-
-const normalizeNavigation = (current: SiteSettings['navigation'], input: unknown): SiteSettings['navigation'] => {
-  if (!isRecord(input)) {
-    return current;
-  }
-
-  return {
-    primary: input.primary === undefined ? current.primary : normalizeNavigationItems(input.primary),
-    footer: input.footer === undefined ? current.footer : normalizeNavigationItems(input.footer),
-  };
-};
-
 const mergeSiteSettings = (current: SiteSettings, input: unknown): SiteSettings | undefined => {
   if (!isRecord(input)) {
     return undefined;
@@ -132,7 +102,7 @@ const mergeSiteSettings = (current: SiteSettings, input: unknown): SiteSettings 
       : normalizeRedirectRules(input.redirectRules),
     navigation: input.navigation === undefined
       ? current.navigation
-      : normalizeNavigation(current.navigation, input.navigation),
+      : normalizeNavigationConfig(input.navigation, current.navigation),
   };
 };
 

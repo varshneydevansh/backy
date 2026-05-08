@@ -26,7 +26,7 @@ import {
   normalizeCollectionListRoutePattern,
   normalizeCollectionRoutePattern,
 } from './collectionRoutes';
-import { buildSiteNavigation, type PublicNavigationItem } from './navigation';
+import { buildSiteNavigation, normalizeNavigationConfig, type PublicNavigationItem } from './navigation';
 import { normalizeRedirectRules } from './redirectRules';
 
 interface PageMeta {
@@ -2988,26 +2988,6 @@ export function getSiteByIdOrSlug(identifier: string): StoreSite | undefined {
 function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): SiteSettings {
   const settingsInput = toRecord(input);
   const base = current || createDefaultSiteSettings();
-  const navigationInput = toRecord(settingsInput.navigation);
-  const normalizeNavigationItems = (value: unknown): SiteSettings['navigation']['primary'] => (
-    Array.isArray(value)
-      ? value.map(toRecord).map((item) => {
-          const type: SiteSettings['navigation']['primary'][number]['type'] = item.type === 'page' || item.type === 'route' || item.type === 'url' ? item.type : 'route';
-          const target: SiteSettings['navigation']['primary'][number]['target'] = item.target === '_blank' ? '_blank' : '_self';
-          return {
-            id: sanitizeString(item.id) || undefined,
-            type,
-            label: sanitizeString(item.label),
-            pageId: sanitizeString(item.pageId) || undefined,
-            path: sanitizeString(item.path) || undefined,
-            href: sanitizeString(item.href) || undefined,
-            target,
-            visible: typeof item.visible === 'boolean' ? item.visible : undefined,
-            children: normalizeNavigationItems(item.children),
-          };
-        }).filter((item) => item.type === 'page' || item.label.length > 0)
-      : []
-  );
 
   return {
     ...base,
@@ -3029,10 +3009,7 @@ function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): Sit
       : normalizeRedirectRules(settingsInput.redirectRules),
     navigation: settingsInput.navigation === undefined
       ? base.navigation
-      : {
-          primary: navigationInput.primary === undefined ? base.navigation.primary : normalizeNavigationItems(navigationInput.primary),
-          footer: navigationInput.footer === undefined ? base.navigation.footer : normalizeNavigationItems(navigationInput.footer),
-        },
+      : normalizeNavigationConfig(settingsInput.navigation, base.navigation),
   };
 }
 

@@ -551,51 +551,71 @@ try {
     assert(update.json?.data?.page?.title === 'Updated Admin Contract Page', `${update.url} expected updated title`);
     assert(update.json?.data?.page?.status === 'published', `${update.url} expected published status`);
 
-    const navigationSettings = await request(`/api/admin/sites/${createdSiteId}`, {
+    const invalidNavigation = await request(`/api/admin/sites/${createdSiteId}/navigation`, {
       method: 'PATCH',
       headers: {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        settings: {
-          navigation: {
-            primary: [
+        primary: [
+          {
+            id: 'contract-nav-missing-page',
+            type: 'page',
+            pageId: 'missing-page-id',
+            label: 'Missing page',
+          },
+        ],
+      }),
+    });
+    assert(invalidNavigation.response.status === 400, `${invalidNavigation.url} expected invalid navigation 400`);
+    assert(invalidNavigation.json?.error?.code === 'NAVIGATION_VALIDATION', `${invalidNavigation.url} expected NAVIGATION_VALIDATION`);
+
+    const navigationSettings = await request(`/api/admin/sites/${createdSiteId}/navigation`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        primary: [
+          {
+            id: 'contract-nav-page',
+            type: 'page',
+            pageId: createdPageId,
+            label: 'Contract Page',
+            children: [
               {
-                id: 'contract-nav-page',
-                type: 'page',
-                pageId: createdPageId,
-                label: 'Contract Page',
-                children: [
-                  {
-                    id: 'contract-nav-child',
-                    type: 'route',
-                    label: 'Child Route',
-                    path: `/${pageSlug}#details`,
-                  },
-                ],
-              },
-              {
-                id: 'contract-nav-docs',
-                type: 'url',
-                label: 'Docs',
-                href: 'https://example.com/docs',
-                target: '_blank',
-              },
-            ],
-            footer: [
-              {
-                id: 'contract-footer-page',
-                type: 'page',
-                pageId: createdPageId,
-                label: 'Footer Page',
+                id: 'contract-nav-child',
+                type: 'route',
+                label: 'Child Route',
+                path: `/${pageSlug}#details`,
               },
             ],
           },
-        },
+          {
+            id: 'contract-nav-docs',
+            type: 'url',
+            label: 'Docs',
+            href: 'https://example.com/docs',
+            target: '_blank',
+          },
+        ],
+        footer: [
+          {
+            id: 'contract-footer-page',
+            type: 'page',
+            pageId: createdPageId,
+            label: 'Footer Page',
+          },
+        ],
       }),
     });
     assert(navigationSettings.response.status === 200, `${navigationSettings.url} expected navigation settings update`);
-    assert(navigationSettings.json?.data?.site?.settings?.navigation?.primary?.some((item) => item.id === 'contract-nav-page'), `${navigationSettings.url} missing persisted navigation item`);
+    assert(navigationSettings.json?.data?.navigation?.settings?.primary?.some((item) => item.id === 'contract-nav-page'), `${navigationSettings.url} missing persisted navigation item`);
+    assert(navigationSettings.json?.data?.navigation?.resolved?.primary?.some((item) => item.id === 'contract-nav-docs' && item.href === 'https://example.com/docs'), `${navigationSettings.url} missing resolved custom URL item`);
+
+    const adminNavigation = await request(`/api/admin/sites/${createdSiteId}/navigation`);
+    assert(adminNavigation.response.status === 200, `${adminNavigation.url} expected navigation read 200`);
+    assert(adminNavigation.json?.data?.navigation?.settings?.primary?.some((item) => item.id === 'contract-nav-page'), `${adminNavigation.url} missing saved navigation item`);
 
     const publicNavigation = await request(`/api/sites/${createdSiteId}/navigation`);
     assert(publicNavigation.response.status === 200, `${publicNavigation.url} expected 200, got ${publicNavigation.response.status}`);

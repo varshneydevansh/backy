@@ -162,35 +162,41 @@ async function createSdkSmokeFixture() {
             enabled: true,
           },
         ],
-        navigation: {
-          primary: [
-            {
-              id: 'sdk-smoke-nav-page',
-              type: 'page',
-              pageId,
-              label: 'SDK Smoke Page',
-              children: [
-                {
-                  id: 'sdk-smoke-nav-child',
-                  type: 'route',
-                  label: 'SDK Child',
-                  path: `/${pageSlug}#child`,
-                },
-              ],
-            },
-            {
-              id: 'sdk-smoke-nav-docs',
-              type: 'url',
-              label: 'SDK Docs',
-              href: 'https://example.com/sdk',
-              target: '_blank',
-            },
-          ],
-        },
       },
     }),
   });
   assert(routeSettings.response.status === 200, `${routeSettings.url} expected redirect settings update 200`);
+
+  const navigationSettings = await request(`/api/admin/sites/${siteId}/navigation`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      primary: [
+        {
+          id: 'sdk-smoke-nav-page',
+          type: 'page',
+          pageId,
+          label: 'SDK Smoke Page',
+          children: [
+            {
+              id: 'sdk-smoke-nav-child',
+              type: 'route',
+              label: 'SDK Child',
+              path: `/${pageSlug}#child`,
+            },
+          ],
+        },
+        {
+          id: 'sdk-smoke-nav-docs',
+          type: 'url',
+          label: 'SDK Docs',
+          href: 'https://example.com/sdk',
+          target: '_blank',
+        },
+      ],
+    }),
+  });
+  assert(navigationSettings.response.status === 200, `${navigationSettings.url} expected navigation settings update 200`);
 
   const reusableSection = await request(`/api/admin/sites/${siteId}/reusable-sections`, {
     method: 'POST',

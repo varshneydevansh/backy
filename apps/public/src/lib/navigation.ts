@@ -1,5 +1,8 @@
 import type { SiteSettings } from '@backy-cms/core';
 
+export type SiteNavigationConfig = SiteSettings['navigation'];
+export type SiteNavigationConfigItem = SiteSettings['navigation']['primary'][number];
+
 type NavigationPage = {
   id: string;
   title: string;
@@ -175,6 +178,44 @@ const normalizeConfiguredMenu = (
         .filter((item): item is PublicNavigationItem => !!item)
     : []
 );
+
+export function normalizeNavigationConfig(
+  input: unknown,
+  current: SiteNavigationConfig = { primary: [], footer: [] },
+): SiteNavigationConfig {
+  if (!isRecord(input)) {
+    return current;
+  }
+
+  const normalizeItems = (value: unknown): SiteNavigationConfigItem[] => (
+    Array.isArray(value)
+      ? value.filter(isRecord).map((item, index) => {
+          const type: SiteNavigationConfigItem['type'] = item.type === 'page' || item.type === 'url' || item.type === 'route'
+            ? item.type
+            : 'route';
+          const target: SiteNavigationConfigItem['target'] = item.target === '_blank' ? '_blank' : '_self';
+          const children = normalizeItems(item.children);
+
+          return {
+            id: toText(item.id) || `nav_${type}_${index}`,
+            type,
+            label: toText(item.label) || '',
+            pageId: toText(item.pageId),
+            path: type === 'route' ? normalizePath(item.path || item.href) : toText(item.path),
+            href: type === 'url' ? toText(item.href) : toText(item.href || item.path),
+            target,
+            visible: typeof item.visible === 'boolean' ? item.visible : undefined,
+            children,
+          };
+        }).filter((item) => item.type === 'page' || item.label.length > 0)
+      : []
+  );
+
+  return {
+    primary: input.primary === undefined ? current.primary : normalizeItems(input.primary),
+    footer: input.footer === undefined ? current.footer || [] : normalizeItems(input.footer),
+  };
+}
 
 export function buildSiteNavigation(
   settings: Pick<SiteSettings, 'navigation'> | undefined | null,

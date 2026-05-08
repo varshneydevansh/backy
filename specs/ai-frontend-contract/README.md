@@ -47,6 +47,8 @@ The rule is simple: a custom frontend can look completely different from the Bac
 
 Site settings can now define a primary and footer navigation tree using `page`, `route`, and `url` items. Public navigation responses and render payloads preserve nested children, external URL targets, and page references while filtering out unpublished page targets. If no custom primary menu exists, Backy falls back to a publishable-page navigation list.
 
+Admin clients can manage that menu directly through `GET/PATCH /api/admin/sites/:siteId/navigation`. The endpoint validates page references before saving and returns both the stored navigation settings and the resolved public navigation tree.
+
 4. Submit interactions.
    - forms: `POST /api/sites/:siteId/forms/:formId/submissions`
    - page comments: `POST /api/sites/:siteId/pages/:pageId/comments`
