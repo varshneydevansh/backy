@@ -3,17 +3,26 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   ArrowLeft,
   CheckCircle,
+  ChevronDown,
+  ChevronUp,
   MinusCircle,
   CircleSlash,
+  CornerDownRight,
   Download,
+  Eye,
+  EyeOff,
   ExternalLink,
   Globe,
   AlertTriangle,
+  Link2,
+  Menu,
+  Plus,
   RefreshCw,
   Save,
   Send,
   Trash2,
   Users,
+  X,
 } from 'lucide-react';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
@@ -21,16 +30,22 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { cn } from '@/lib/utils';
 import {
   deleteSite as deleteSiteFromApi,
+  getSiteNavigation,
   getSiteReadiness,
+  listPages,
+  updateSiteNavigation,
   updateSite as updateSiteFromApi,
 } from '@/lib/adminContentApi';
 import type { SiteReadiness } from '@/lib/adminContentApi';
+import type { Page } from '@/stores/mockStore';
 import type {
   Comment,
   Contact,
   FormDefinition,
   FormSubmission,
   CommentReportReason,
+  SiteNavigationConfig,
+  SiteNavigationConfigItem,
 } from '@backy-cms/core';
 
 interface SiteFormManagementState {
@@ -56,6 +71,16 @@ type ContactStatusFilter = 'all' | 'new' | 'contacted' | 'qualified' | 'archived
 type CommentStatusFilter = 'all' | 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked';
 type SiteStatusFilter = 'published' | 'draft' | 'archived';
 type CommentTargetFilter = 'all' | 'page' | 'post';
+type NavigationMenuKey = 'primary' | 'footer';
+
+interface SiteNavigationEditorState {
+  navigation: SiteNavigationConfig;
+  pages: Page[];
+  loading: boolean;
+  saving: boolean;
+  errorMessage: string | null;
+  notice: string | null;
+}
 
 const DEFAULT_COMMENT_REPORT_REASONS: CommentReportReason[] = [
   'spam',
@@ -67,6 +92,113 @@ const DEFAULT_COMMENT_REPORT_REASONS: CommentReportReason[] = [
   'privacy',
   'other',
 ];
+
+const EMPTY_NAVIGATION: SiteNavigationConfig = {
+  primary: [],
+  footer: [],
+};
+
+function makeNavigationItem(type: SiteNavigationConfigItem['type'], pages: Page[]): SiteNavigationConfigItem {
+  const firstPublishedPage = pages.find((page) => page.status === 'published') || pages[0];
+  const id = `nav_${type}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+
+  if (type === 'page') {
+    return {
+      id,
+      type,
+      label: firstPublishedPage?.title || 'Page link',
+      pageId: firstPublishedPage?.id || '',
+      target: '_self',
+      visible: true,
+      children: [],
+    };
+  }
+
+  if (type === 'url') {
+    return {
+      id,
+      type,
+      label: 'External link',
+      href: 'https://',
+      target: '_blank',
+      visible: true,
+      children: [],
+    };
+  }
+
+  return {
+    id,
+    type,
+    label: 'Internal route',
+    path: '/',
+    target: '_self',
+    visible: true,
+    children: [],
+  };
+}
+
+function updateNavigationItems(
+  items: SiteNavigationConfigItem[],
+  itemId: string,
+  updater: (item: SiteNavigationConfigItem) => SiteNavigationConfigItem,
+): SiteNavigationConfigItem[] {
+  return items.map((item) => {
+    if (item.id === itemId || (!item.id && item.label === itemId)) {
+      return updater(item);
+    }
+
+    return {
+      ...item,
+      children: item.children ? updateNavigationItems(item.children, itemId, updater) : item.children,
+    };
+  });
+}
+
+function removeNavigationItem(items: SiteNavigationConfigItem[], itemId: string): SiteNavigationConfigItem[] {
+  return items
+    .filter((item) => !(item.id === itemId || (!item.id && item.label === itemId)))
+    .map((item) => ({
+      ...item,
+      children: item.children ? removeNavigationItem(item.children, itemId) : item.children,
+    }));
+}
+
+function addNavigationChild(
+  items: SiteNavigationConfigItem[],
+  parentId: string,
+  child: SiteNavigationConfigItem,
+): SiteNavigationConfigItem[] {
+  return items.map((item) => {
+    if (item.id === parentId || (!item.id && item.label === parentId)) {
+      return {
+        ...item,
+        children: [...(item.children || []), child],
+      };
+    }
+
+    return {
+      ...item,
+      children: item.children ? addNavigationChild(item.children, parentId, child) : item.children,
+    };
+  });
+}
+
+function moveNavigationRootItem(
+  items: SiteNavigationConfigItem[],
+  itemId: string,
+  direction: -1 | 1,
+): SiteNavigationConfigItem[] {
+  const index = items.findIndex((item) => item.id === itemId || (!item.id && item.label === itemId));
+  const nextIndex = index + direction;
+  if (index < 0 || nextIndex < 0 || nextIndex >= items.length) {
+    return items;
+  }
+
+  const next = [...items];
+  const [item] = next.splice(index, 1);
+  next.splice(nextIndex, 0, item);
+  return next;
+}
 
 const apiBase = (() => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
@@ -193,6 +325,14 @@ function EditSitePage() {
   const [readiness, setReadiness] = useState<SiteReadiness | null>(null);
   const [readinessLoading, setReadinessLoading] = useState(false);
   const [readinessError, setReadinessError] = useState<string | null>(null);
+  const [navigationState, setNavigationState] = useState<SiteNavigationEditorState>({
+    navigation: EMPTY_NAVIGATION,
+    pages: [],
+    loading: false,
+    saving: false,
+    errorMessage: null,
+    notice: null,
+  });
   const [submissionStatus, setSubmissionStatus] = useState<SubmissionStatusFilter>('pending');
   const [contactStatus, setContactStatus] = useState<ContactStatusFilter>('all');
   const [commentStatus, setCommentStatus] = useState<CommentStatusFilter>('pending');
@@ -233,6 +373,108 @@ function EditSitePage() {
       setReadinessError(error instanceof Error ? error.message : 'Unable to load site readiness.');
     } finally {
       setReadinessLoading(false);
+    }
+  };
+
+  const loadNavigationEditor = async () => {
+    if (!siteApiId) return;
+    setNavigationState((prev) => ({ ...prev, loading: true, errorMessage: null }));
+
+    try {
+      const [siteNavigation, pages] = await Promise.all([
+        getSiteNavigation(siteApiId),
+        listPages(siteApiId),
+      ]);
+
+      setNavigationState((prev) => ({
+        ...prev,
+        navigation: {
+          primary: siteNavigation.settings.primary || [],
+          footer: siteNavigation.settings.footer || [],
+        },
+        pages,
+        loading: false,
+        notice: null,
+      }));
+    } catch (error) {
+      setNavigationState((prev) => ({
+        ...prev,
+        loading: false,
+        errorMessage: error instanceof Error ? error.message : 'Unable to load site navigation.',
+      }));
+    }
+  };
+
+  const updateNavigationMenu = (
+    menu: NavigationMenuKey,
+    updater: (items: SiteNavigationConfigItem[]) => SiteNavigationConfigItem[],
+  ) => {
+    setNavigationState((prev) => ({
+      ...prev,
+      notice: null,
+      navigation: {
+        ...prev.navigation,
+        [menu]: updater(prev.navigation[menu] || []),
+      },
+    }));
+  };
+
+  const handleAddNavigationItem = (menu: NavigationMenuKey, type: SiteNavigationConfigItem['type']) => {
+    updateNavigationMenu(menu, (items) => [...items, makeNavigationItem(type, navigationState.pages)]);
+  };
+
+  const handleAddNavigationChild = (
+    menu: NavigationMenuKey,
+    parentId: string,
+    type: SiteNavigationConfigItem['type'],
+  ) => {
+    updateNavigationMenu(menu, (items) => addNavigationChild(items, parentId, makeNavigationItem(type, navigationState.pages)));
+  };
+
+  const handleUpdateNavigationItem = (
+    menu: NavigationMenuKey,
+    itemId: string,
+    updates: Partial<SiteNavigationConfigItem>,
+  ) => {
+    updateNavigationMenu(menu, (items) => updateNavigationItems(items, itemId, (item) => ({
+      ...item,
+      ...updates,
+      label: updates.pageId && item.type === 'page'
+        ? navigationState.pages.find((page) => page.id === updates.pageId)?.title || item.label
+        : updates.label ?? item.label,
+    })));
+  };
+
+  const handleRemoveNavigationItem = (menu: NavigationMenuKey, itemId: string) => {
+    updateNavigationMenu(menu, (items) => removeNavigationItem(items, itemId));
+  };
+
+  const handleMoveNavigationRootItem = (menu: NavigationMenuKey, itemId: string, direction: -1 | 1) => {
+    updateNavigationMenu(menu, (items) => moveNavigationRootItem(items, itemId, direction));
+  };
+
+  const handleSaveNavigation = async () => {
+    if (!siteApiId) return;
+    setNavigationState((prev) => ({ ...prev, saving: true, errorMessage: null, notice: null }));
+
+    try {
+      const siteNavigation = await updateSiteNavigation(siteApiId, navigationState.navigation);
+      setNavigationState((prev) => ({
+        ...prev,
+        navigation: {
+          primary: siteNavigation.settings.primary || [],
+          footer: siteNavigation.settings.footer || [],
+        },
+        saving: false,
+        notice: 'Navigation saved and available to public/front-end contracts.',
+      }));
+      void loadReadiness();
+    } catch (error) {
+      setNavigationState((prev) => ({
+        ...prev,
+        saving: false,
+        errorMessage: error instanceof Error ? error.message : 'Unable to save site navigation.',
+      }));
     }
   };
 
@@ -896,6 +1138,7 @@ function EditSitePage() {
   useEffect(() => {
     if (siteApiId) {
       void loadReadiness();
+      void loadNavigationEditor();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteApiId]);
@@ -1212,6 +1455,80 @@ function EditSitePage() {
               )}
             </>
           )}
+        </section>
+
+        <section className="bg-card border border-border rounded-xl p-6 shadow-sm" data-testid="site-navigation-panel">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Menu className="h-5 w-5 text-primary" />
+                <h2 className="text-xl font-semibold">Site navigation</h2>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Primary and footer menus used by hosted pages, custom frontends, manifest discovery, and render payloads.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void loadNavigationEditor()}
+                disabled={!siteApiId || navigationState.loading || navigationState.saving}
+                className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RefreshCw className={cn('h-4 w-4', navigationState.loading && 'animate-spin')} />
+                Refresh
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveNavigation()}
+                disabled={!siteApiId || navigationState.loading || navigationState.saving}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" />
+                {navigationState.saving ? 'Saving...' : 'Save navigation'}
+              </button>
+            </div>
+          </div>
+
+          {navigationState.errorMessage && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {navigationState.errorMessage}
+            </div>
+          )}
+          {navigationState.notice && (
+            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              {navigationState.notice}
+            </div>
+          )}
+
+          <div className="mt-5 grid gap-5 xl:grid-cols-2">
+            <NavigationMenuEditor
+              title="Primary menu"
+              description="Header navigation and the default menu for generated/custom frontends."
+              menu="primary"
+              items={navigationState.navigation.primary}
+              pages={navigationState.pages}
+              loading={navigationState.loading}
+              onAddItem={handleAddNavigationItem}
+              onAddChild={handleAddNavigationChild}
+              onUpdateItem={handleUpdateNavigationItem}
+              onRemoveItem={handleRemoveNavigationItem}
+              onMoveRootItem={handleMoveNavigationRootItem}
+            />
+            <NavigationMenuEditor
+              title="Footer menu"
+              description="Secondary links for policies, support, and lower-priority routes."
+              menu="footer"
+              items={navigationState.navigation.footer || []}
+              pages={navigationState.pages}
+              loading={navigationState.loading}
+              onAddItem={handleAddNavigationItem}
+              onAddChild={handleAddNavigationChild}
+              onUpdateItem={handleUpdateNavigationItem}
+              onRemoveItem={handleRemoveNavigationItem}
+              onMoveRootItem={handleMoveNavigationRootItem}
+            />
+          </div>
         </section>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -1915,5 +2232,299 @@ function EditSitePage() {
         </section>
       </div>
     </PageShell>
+  );
+}
+
+interface NavigationMenuEditorProps {
+  title: string;
+  description: string;
+  menu: NavigationMenuKey;
+  items: SiteNavigationConfigItem[];
+  pages: Page[];
+  loading: boolean;
+  onAddItem: (menu: NavigationMenuKey, type: SiteNavigationConfigItem['type']) => void;
+  onAddChild: (menu: NavigationMenuKey, parentId: string, type: SiteNavigationConfigItem['type']) => void;
+  onUpdateItem: (menu: NavigationMenuKey, itemId: string, updates: Partial<SiteNavigationConfigItem>) => void;
+  onRemoveItem: (menu: NavigationMenuKey, itemId: string) => void;
+  onMoveRootItem: (menu: NavigationMenuKey, itemId: string, direction: -1 | 1) => void;
+}
+
+function NavigationMenuEditor({
+  title,
+  description,
+  menu,
+  items,
+  pages,
+  loading,
+  onAddItem,
+  onAddChild,
+  onUpdateItem,
+  onRemoveItem,
+  onMoveRootItem,
+}: NavigationMenuEditorProps) {
+  return (
+    <div className="rounded-lg border border-border bg-background">
+      <div className="border-b border-border px-4 py-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold">{title}</h3>
+            <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+          </div>
+          <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium tabular-nums text-muted-foreground">
+            {items.length}
+          </span>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => onAddItem(menu, 'page')}
+            disabled={loading || pages.length === 0}
+            className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Page
+          </button>
+          <button
+            type="button"
+            onClick={() => onAddItem(menu, 'route')}
+            disabled={loading}
+            className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Route
+          </button>
+          <button
+            type="button"
+            onClick={() => onAddItem(menu, 'url')}
+            disabled={loading}
+            className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            URL
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-3 p-3">
+        {loading ? (
+          <div className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
+            Loading navigation...
+          </div>
+        ) : items.length === 0 ? (
+          <div className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
+            Add links to create this menu.
+          </div>
+        ) : (
+          items.map((item, index) => (
+            <NavigationItemEditor
+              key={item.id || `${menu}-${index}`}
+              menu={menu}
+              item={item}
+              pages={pages}
+              depth={0}
+              rootIndex={index}
+              rootCount={items.length}
+              onAddChild={onAddChild}
+              onUpdateItem={onUpdateItem}
+              onRemoveItem={onRemoveItem}
+              onMoveRootItem={onMoveRootItem}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface NavigationItemEditorProps {
+  menu: NavigationMenuKey;
+  item: SiteNavigationConfigItem;
+  pages: Page[];
+  depth: number;
+  rootIndex: number;
+  rootCount: number;
+  onAddChild: (menu: NavigationMenuKey, parentId: string, type: SiteNavigationConfigItem['type']) => void;
+  onUpdateItem: (menu: NavigationMenuKey, itemId: string, updates: Partial<SiteNavigationConfigItem>) => void;
+  onRemoveItem: (menu: NavigationMenuKey, itemId: string) => void;
+  onMoveRootItem: (menu: NavigationMenuKey, itemId: string, direction: -1 | 1) => void;
+}
+
+function NavigationItemEditor({
+  menu,
+  item,
+  pages,
+  depth,
+  rootIndex,
+  rootCount,
+  onAddChild,
+  onUpdateItem,
+  onRemoveItem,
+  onMoveRootItem,
+}: NavigationItemEditorProps) {
+  const itemId = item.id || item.label;
+  const canNest = depth < 2 && Boolean(item.id);
+
+  return (
+    <div className={cn('rounded-lg border bg-card shadow-sm', depth > 0 && 'ml-5')}>
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        {depth > 0 ? (
+          <CornerDownRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        ) : (
+          <Menu className="h-4 w-4 shrink-0 text-muted-foreground" />
+        )}
+        <select
+          value={item.type}
+          onChange={(event) => onUpdateItem(menu, itemId, {
+            type: event.target.value as SiteNavigationConfigItem['type'],
+            pageId: event.target.value === 'page' ? pages[0]?.id || '' : undefined,
+            path: event.target.value === 'route' ? item.path || '/' : undefined,
+            href: event.target.value === 'url' ? item.href || 'https://' : undefined,
+          })}
+          className="h-8 rounded-md border bg-background px-2 text-xs font-medium"
+        >
+          <option value="page">Page</option>
+          <option value="route">Route</option>
+          <option value="url">URL</option>
+        </select>
+        <input
+          value={item.label}
+          onChange={(event) => onUpdateItem(menu, itemId, { label: event.target.value })}
+          className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm"
+          placeholder="Label"
+        />
+        <button
+          type="button"
+          onClick={() => onUpdateItem(menu, itemId, { visible: item.visible === false ? true : false })}
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+          title={item.visible === false ? 'Show item' : 'Hide item'}
+          aria-label={item.visible === false ? 'Show item' : 'Hide item'}
+        >
+          {item.visible === false ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+        {depth === 0 && (
+          <>
+            <button
+              type="button"
+              onClick={() => onMoveRootItem(menu, itemId, -1)}
+              disabled={rootIndex === 0}
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              title="Move up"
+              aria-label="Move up"
+            >
+              <ChevronUp className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onMoveRootItem(menu, itemId, 1)}
+              disabled={rootIndex >= rootCount - 1}
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              title="Move down"
+              aria-label="Move down"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </button>
+          </>
+        )}
+        <button
+          type="button"
+          onClick={() => onRemoveItem(menu, itemId)}
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+          title="Remove item"
+          aria-label="Remove item"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="grid gap-3 p-3 md:grid-cols-[minmax(0,1fr)_120px]">
+        <div>
+          {item.type === 'page' ? (
+            <select
+              value={item.pageId || ''}
+              onChange={(event) => onUpdateItem(menu, itemId, { pageId: event.target.value })}
+              className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+            >
+              <option value="">Select page</option>
+              {pages.map((page) => (
+                <option key={page.id} value={page.id}>
+                  {page.title} ({page.status})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="relative">
+              <Link2 className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <input
+                value={item.type === 'url' ? item.href || '' : item.path || ''}
+                onChange={(event) => onUpdateItem(menu, itemId, item.type === 'url'
+                  ? { href: event.target.value }
+                  : { path: event.target.value })}
+                className="h-9 w-full rounded-md border bg-background pl-8 pr-2 text-sm"
+                placeholder={item.type === 'url' ? 'https://example.com' : '/about'}
+              />
+            </div>
+          )}
+        </div>
+
+        <select
+          value={item.target || '_self'}
+          onChange={(event) => onUpdateItem(menu, itemId, { target: event.target.value as SiteNavigationConfigItem['target'] })}
+          className="h-9 rounded-md border bg-background px-2 text-sm"
+        >
+          <option value="_self">Same tab</option>
+          <option value="_blank">New tab</option>
+        </select>
+      </div>
+
+      {canNest && (
+        <div className="flex flex-wrap gap-2 border-t border-border px-3 py-2">
+          <button
+            type="button"
+            onClick={() => onAddChild(menu, itemId, 'page')}
+            disabled={pages.length === 0}
+            className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Child page
+          </button>
+          <button
+            type="button"
+            onClick={() => onAddChild(menu, itemId, 'route')}
+            className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Child route
+          </button>
+          <button
+            type="button"
+            onClick={() => onAddChild(menu, itemId, 'url')}
+            className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Child URL
+          </button>
+        </div>
+      )}
+
+      {item.children && item.children.length > 0 && (
+        <div className="space-y-3 border-t border-border p-3">
+          {item.children.map((child, childIndex) => (
+            <NavigationItemEditor
+              key={child.id || `${itemId}-${childIndex}`}
+              menu={menu}
+              item={child}
+              pages={pages}
+              depth={depth + 1}
+              rootIndex={childIndex}
+              rootCount={item.children?.length || 0}
+              onAddChild={onAddChild}
+              onUpdateItem={onUpdateItem}
+              onRemoveItem={onRemoveItem}
+              onMoveRootItem={onMoveRootItem}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

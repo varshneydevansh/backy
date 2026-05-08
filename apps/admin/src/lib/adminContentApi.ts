@@ -1,5 +1,6 @@
 import type { BlogPost, Page, Site, User } from '@/stores/mockStore';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
+import type { SiteNavigationConfig } from '@backy-cms/core';
 
 type AdminSiteStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 
@@ -29,6 +30,40 @@ interface ApiSiteResponse {
   success: boolean;
   data?: {
     site: ApiSite;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+export interface AdminNavigationResolvedItem {
+  id: string;
+  type: 'page' | 'route' | 'url';
+  label: string;
+  title?: string;
+  pageId?: string;
+  slug?: string;
+  path?: string;
+  href?: string;
+  target?: '_self' | '_blank';
+  status?: string;
+  isHomepage?: boolean;
+  children: AdminNavigationResolvedItem[];
+}
+
+export interface AdminSiteNavigation {
+  settings: SiteNavigationConfig;
+  resolved: {
+    primary: AdminNavigationResolvedItem[];
+    footer: AdminNavigationResolvedItem[];
+  };
+}
+
+interface ApiSiteNavigationResponse {
+  success: boolean;
+  data?: {
+    site: Pick<ApiSite, 'id' | 'slug' | 'name'>;
+    navigation: AdminSiteNavigation;
   };
   error?: {
     message?: string;
@@ -1224,6 +1259,37 @@ export async function getSiteReadiness(siteId: string): Promise<SiteReadiness> {
   }
 
   return payload.data.readiness;
+}
+
+export async function getSiteNavigation(siteId: string): Promise<AdminSiteNavigation> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/navigation`);
+  const payload = await readJson<ApiSiteNavigationResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load site navigation');
+  }
+
+  return payload.data.navigation;
+}
+
+export async function updateSiteNavigation(
+  siteId: string,
+  navigation: SiteNavigationConfig,
+): Promise<AdminSiteNavigation> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/navigation`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ navigation }),
+  });
+  const payload = await readJson<ApiSiteNavigationResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to save site navigation');
+  }
+
+  return payload.data.navigation;
 }
 
 export async function getPageReadiness(siteId: string, pageId: string): Promise<PageReadiness> {
