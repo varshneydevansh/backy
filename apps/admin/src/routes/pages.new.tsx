@@ -11,25 +11,38 @@ import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { cn } from '@/lib/utils';
 
+interface NewPageSearch {
+    siteId?: string;
+}
+
 export const Route = createFileRoute('/pages/new')({
+    validateSearch: (search: Record<string, unknown>): NewPageSearch => ({
+        siteId: typeof search.siteId === 'string' ? search.siteId : undefined,
+    }),
     component: NewPageRoute,
 });
 
 function NewPageRoute() {
     const navigate = useNavigate();
+    const search = Route.useSearch();
     const { sites, pages, setPages } = useStore();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
+    const requestedSiteId = search.siteId && sites.some((site) => (site.publicSiteId || site.id) === search.siteId)
+        ? search.siteId
+        : defaultSiteId;
 
     // Default to first site if available
     const [formData, setFormData] = useState({
         title: '',
         slug: '',
-        siteId: sites[0]?.publicSiteId || sites[0]?.id || 'site-demo',
+        siteId: requestedSiteId,
         template: 'blank',
         status: 'draft' as 'draft' | 'published' | 'scheduled',
         scheduledAt: null as string | null,
     });
+    const selectedSite = sites.find((site) => (site.publicSiteId || site.id) === formData.siteId);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -63,7 +76,7 @@ function NewPageRoute() {
     return (
         <PageShell
             title="Create New Page"
-            description="Add a new page to your site."
+            description={selectedSite ? `Add a page to ${selectedSite.name}.` : 'Add a new page to your site.'}
             action={
                 <button onClick={() => navigate({ to: '/pages' })} className="p-2 rounded-lg hover:bg-accent">
                     <ArrowLeft className="w-5 h-5" />
@@ -82,10 +95,11 @@ function NewPageRoute() {
 
                         {/* Site Selection */}
                         <div>
-                            <label className="block text-sm font-medium mb-2">Target Site</label>
+                            <label htmlFor="page-target-site" className="block text-sm font-medium mb-2">Target Site</label>
                             <div className="relative">
                                 <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                                 <select
+                                    id="page-target-site"
                                     value={formData.siteId}
                                     onChange={(e) => setFormData({ ...formData, siteId: e.target.value })}
                                     className="w-full pl-10 pr-4 py-2.5 rounded-lg border bg-background"
@@ -106,8 +120,9 @@ function NewPageRoute() {
 
                         {/* Title */}
                         <div>
-                            <label className="block text-sm font-medium mb-2">Page Title</label>
+                            <label htmlFor="page-title" className="block text-sm font-medium mb-2">Page Title</label>
                             <input
+                                id="page-title"
                                 type="text"
                                 value={formData.title}
                                 onChange={(e) => setFormData({
@@ -123,12 +138,13 @@ function NewPageRoute() {
 
                         {/* Slug */}
                         <div>
-                            <label className="block text-sm font-medium mb-2">URL Slug</label>
+                            <label htmlFor="page-slug" className="block text-sm font-medium mb-2">URL Slug</label>
                             <div className="flex items-center">
                                 <span className="px-4 py-2.5 rounded-l-lg border border-r-0 bg-muted text-muted-foreground text-sm">
                                     /
                                 </span>
                                 <input
+                                    id="page-slug"
                                     type="text"
                                     value={formData.slug}
                                     onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
@@ -178,8 +194,9 @@ function NewPageRoute() {
 
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div>
-                                <label className="block text-sm font-medium mb-2">Status</label>
+                                <label htmlFor="page-status" className="block text-sm font-medium mb-2">Status</label>
                                 <select
+                                    id="page-status"
                                     value={formData.status}
                                     onChange={(e) => {
                                         const status = e.target.value as typeof formData.status;
@@ -199,8 +216,9 @@ function NewPageRoute() {
 
                             {formData.status === 'scheduled' && (
                                 <div>
-                                    <label className="block text-sm font-medium mb-2">Publish Date</label>
+                                    <label htmlFor="page-scheduled-at" className="block text-sm font-medium mb-2">Publish Date</label>
                                     <input
+                                        id="page-scheduled-at"
                                         type="datetime-local"
                                         value={toDateTimeLocalValue(formData.scheduledAt)}
                                         onChange={(e) => setFormData({

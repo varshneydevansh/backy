@@ -441,6 +441,7 @@ function PagesListView() {
       action={
         <Link
           to="/pages/new"
+          search={{ siteId: activeSiteId }}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -483,8 +484,11 @@ function PagesListView() {
           ))}
         </div>
         <div className="rounded-lg border border-border bg-card px-4 py-3">
-          <div className="text-xs font-medium text-muted-foreground">Active Site</div>
+          <label htmlFor="pages-active-site" className="text-xs font-medium text-muted-foreground">
+            Active Site
+          </label>
           <select
+            id="pages-active-site"
             value={activeSiteId}
             onChange={(event) => {
               setSelectedSiteId(event.target.value);
@@ -622,7 +626,7 @@ function PagesListView() {
                 <button
                   type="button"
                   data-testid="pages-empty-create"
-                  onClick={() => navigate({ to: '/pages/new' })}
+                  onClick={() => navigate({ to: '/pages/new', search: { siteId: activeSiteId } })}
                   className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                 >
                   <Plus className="w-4 h-4" />
