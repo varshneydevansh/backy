@@ -21,6 +21,7 @@ import {
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { findPageRouteConflict } from '@/lib/routeConflicts';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 
 export const runtime = 'nodejs';
 
@@ -236,6 +237,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         content: contentDocumentFromInput(body.content, { id: pageId, title, slug, status }),
         meta: isRecord(body.meta) ? body.meta : undefined,
       });
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'page',
+        entityId: created.item.id,
+        reason: 'page-created',
+        requestId,
+      });
 
       return NextResponse.json(
         {
@@ -243,6 +252,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           requestId,
           data: {
             page: adminPageFromRepositoryPage(created.item),
+            cacheInvalidation,
           },
         },
         { status: 201 },

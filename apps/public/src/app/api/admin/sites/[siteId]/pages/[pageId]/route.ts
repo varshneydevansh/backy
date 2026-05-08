@@ -24,6 +24,7 @@ import {
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { pageRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
 import { findPageRouteConflict } from '@/lib/routeConflicts';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 
 export const runtime = 'nodejs';
 
@@ -242,12 +243,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         meta: isRecord(body.meta) ? body.meta : undefined,
         revisionNote: typeof body.revisionNote === 'string' ? body.revisionNote : undefined,
       });
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'page',
+        entityId: page.id,
+        reason: 'page-updated',
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
         requestId,
         data: {
           page: adminPageFromRepositoryPage(updated.item),
+          cacheInvalidation,
         },
       });
     }
@@ -327,6 +337,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       if (!deleted) {
         return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
       }
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'page',
+        entityId: pageId,
+        reason: 'page-deleted',
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -334,6 +352,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         data: {
           deleted: true,
           pageId,
+          cacheInvalidation,
         },
       });
     }

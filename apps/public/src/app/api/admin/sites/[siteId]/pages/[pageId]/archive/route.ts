@@ -3,6 +3,7 @@ import type { BackyPage } from '@backy-cms/core';
 import { archiveAdminPage, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { pageRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 
 export const runtime = 'nodejs';
 
@@ -66,12 +67,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         createdBy: request.headers.get('x-backy-actor') || 'admin',
       });
       const archived = await repositories.pages.archive(site.id, pageId);
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'page',
+        entityId: pageId,
+        reason: 'page-archived',
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
         requestId,
         data: {
           page: adminPageFromRepositoryPage(archived.item),
+          cacheInvalidation,
         },
       });
     }
