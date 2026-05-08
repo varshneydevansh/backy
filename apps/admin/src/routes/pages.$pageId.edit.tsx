@@ -529,7 +529,7 @@ function PageEditorRoute() {
           targetId: pageId,
           targetLabel: page.title,
         }}
-      // Pages use fixed layout, so no custom className/width by default
+        className="h-[calc(100vh-6rem)] min-h-[760px] w-full overflow-hidden rounded-lg border border-border shadow-sm"
       />
     </div>
   );

@@ -459,7 +459,7 @@ function EditBlogPostPage() {
             }
             description="Edit the article, its publishing state, and its public design in one workspace."
         >
-            <div className="mx-auto w-full max-w-[1760px] pb-24">
+            <div className="w-full pb-24">
                 {(loadError || saveWarning) && (
                     <Notice tone="warning" className="mb-4">
                         {saveWarning || `${loadError} Using the local post copy.`}
@@ -471,7 +471,7 @@ function EditBlogPostPage() {
                     </Notice>
                 )}
 
-                <form onSubmit={handleSubmit} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
+                <form onSubmit={handleSubmit} className="grid gap-5">
                     <div className="min-w-0 space-y-6">
                         <Panel className="overflow-hidden">
                             <PanelHeader
@@ -533,7 +533,7 @@ function EditBlogPostPage() {
                                     </span>
                                 </>
                             }
-                            className="relative min-h-[760px] xl:h-[calc(100vh-180px)] xl:min-h-[860px]"
+                            className="relative min-h-[760px] xl:h-[calc(100vh-168px)] xl:min-h-[860px]"
                         >
                             <CanvasEditor
                                 mode="blog"
@@ -559,7 +559,7 @@ function EditBlogPostPage() {
                         </EditorWorkspaceFrame>
                     </div>
 
-                    <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
+                    <aside className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-4">
                         <Panel>
                             <PanelHeader
                                 title="Publish"

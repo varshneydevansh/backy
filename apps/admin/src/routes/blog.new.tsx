@@ -209,14 +209,14 @@ function NewBlogPostPage() {
             }
             description="Create a post and design its public page from the same workspace."
         >
-            <div className="mx-auto w-full max-w-[1760px] pb-24">
+            <div className="w-full pb-24">
                 {error && (
                     <Notice tone="warning" className="mb-4">
                         {error}. The post was not created because the backend did not persist it.
                     </Notice>
                 )}
 
-                <form onSubmit={handleSubmit} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+                <form onSubmit={handleSubmit} className="grid gap-5">
 
                     <div className="min-w-0 space-y-6">
                         <Panel className="overflow-hidden">
@@ -284,7 +284,7 @@ function NewBlogPostPage() {
                                     </span>
                                 </>
                             }
-                            className="relative min-h-[760px] xl:h-[calc(100vh-180px)] xl:min-h-[860px]"
+                            className="relative min-h-[760px] xl:h-[calc(100vh-168px)] xl:min-h-[860px]"
                         >
                             <CanvasEditor
                                 mode="blog"
@@ -304,7 +304,7 @@ function NewBlogPostPage() {
                         </EditorWorkspaceFrame>
                     </div>
 
-                    <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
+                    <aside className="grid gap-4 xl:grid-cols-3">
                         <Panel>
                             <PanelHeader
                                 title="Publish"

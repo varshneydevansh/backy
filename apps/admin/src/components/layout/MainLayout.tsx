@@ -11,9 +11,11 @@
  * @license MIT
  */
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouterState } from '@tanstack/react-router';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { cn } from '@/lib/utils';
 
 // ============================================
 // TYPES
@@ -40,8 +42,22 @@ interface MainLayoutProps {
  * @returns Layout component
  */
 export function MainLayout({ children }: MainLayoutProps) {
+  const routerState = useRouterState();
+  const pathname = routerState.location.pathname;
+  const isEditorWorkspace = useMemo(() => (
+    pathname === '/blog/new' ||
+    /^\/blog\/[^/]+$/.test(pathname) ||
+    /^\/pages\/[^/]+\/edit$/.test(pathname)
+  ), [pathname]);
+
   /** Whether the sidebar is collapsed */
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(isEditorWorkspace);
+
+  useEffect(() => {
+    if (isEditorWorkspace) {
+      setSidebarCollapsed(true);
+    }
+  }, [isEditorWorkspace]);
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -60,8 +76,8 @@ export function MainLayout({ children }: MainLayoutProps) {
         />
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto p-6">
-          <div className="max-w-7xl mx-auto">
+        <main className={cn('flex-1 overflow-auto', isEditorWorkspace ? 'bg-muted/40 p-3 lg:p-4' : 'p-6')}>
+          <div className={cn(isEditorWorkspace ? 'w-full min-w-0' : 'max-w-7xl mx-auto')}>
             {children}
           </div>
         </main>
