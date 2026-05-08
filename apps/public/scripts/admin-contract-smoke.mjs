@@ -751,6 +751,17 @@ try {
 
     const resolvedPage = await request(`/api/sites/${createdSiteId}/resolve?path=/${pageSlug}`);
     assert(resolvedPage.response.status === 200, `${resolvedPage.url} expected 200, got ${resolvedPage.response.status}`);
+    assert(resolvedPage.response.headers.get('x-backy-cache-scope') === 'discovery', `${resolvedPage.url} missing resolve cache scope`);
+    assert(resolvedPage.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${resolvedPage.url} missing resolve contract version`);
+    assert(resolvedPage.response.headers.get('x-backy-site-id') === createdSiteId, `${resolvedPage.url} missing resolve site id header`);
+    assert(resolvedPage.response.headers.get('x-backy-cache-revision'), `${resolvedPage.url} missing resolve cache revision`);
+    const resolvedPageEtag = resolvedPage.response.headers.get('etag');
+    assert(resolvedPageEtag?.startsWith('"backy-'), `${resolvedPage.url} missing resolve etag`);
+    const revalidatedResolvedPage = await request(`/api/sites/${createdSiteId}/resolve?path=/${pageSlug}`, {
+      headers: { 'if-none-match': resolvedPageEtag },
+    });
+    assert(revalidatedResolvedPage.response.status === 304, `${revalidatedResolvedPage.url} expected resolve 304, got ${revalidatedResolvedPage.response.status}`);
+    assert(revalidatedResolvedPage.response.headers.get('etag') === resolvedPageEtag, `${revalidatedResolvedPage.url} expected matching resolve etag`);
     assert(resolvedPage.json?.success === true, `${resolvedPage.url} expected success envelope`);
     assert(resolvedPage.json?.data?.route?.type === 'page', `${resolvedPage.url} expected page route`);
     assert(resolvedPage.json?.data?.route?.resource?.id === createdPageId, `${resolvedPage.url} returned wrong resolved page`);
@@ -851,12 +862,15 @@ try {
 
     const redirectedRoute = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(redirectSourcePath)}`);
     assert(redirectedRoute.response.status === 200, `${redirectedRoute.url} expected redirect route resolve`);
+    assert(redirectedRoute.response.headers.get('x-backy-cache-scope') === 'discovery', `${redirectedRoute.url} missing redirect resolve cache scope`);
+    assert(redirectedRoute.response.headers.get('etag')?.startsWith('"backy-'), `${redirectedRoute.url} missing redirect resolve etag`);
     assert(redirectedRoute.json?.data?.route?.type === 'redirect', `${redirectedRoute.url} expected redirect route`);
     assert(redirectedRoute.json?.data?.route?.resource?.to === `/${pageSlug}`, `${redirectedRoute.url} returned wrong redirect target`);
     assert(redirectedRoute.json?.data?.route?.resource?.statusCode === 301, `${redirectedRoute.url} returned wrong redirect status code`);
 
     const goneRoute = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(goneSourcePath)}`);
     assert(goneRoute.response.status === 410, `${goneRoute.url} expected 410 gone route`);
+    assert(goneRoute.response.headers.get('x-backy-cache-scope') === 'discovery', `${goneRoute.url} missing gone resolve cache scope`);
     assert(goneRoute.json?.success === false, `${goneRoute.url} expected gone error envelope`);
     assert(goneRoute.json?.data?.route?.type === 'gone', `${goneRoute.url} expected gone route`);
 
@@ -2417,6 +2431,8 @@ try {
     const dynamicListPath = `/directory`;
     const dynamicListResolve = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(dynamicListPath)}`);
     assert(dynamicListResolve.response.status === 200, `${dynamicListResolve.url} expected 200, got ${dynamicListResolve.response.status}`);
+    assert(dynamicListResolve.response.headers.get('x-backy-cache-scope') === 'discovery', `${dynamicListResolve.url} missing dynamic list resolve cache scope`);
+    assert(dynamicListResolve.response.headers.get('etag')?.startsWith('"backy-'), `${dynamicListResolve.url} missing dynamic list resolve etag`);
     assert(dynamicListResolve.json?.data?.route?.type === 'dynamicList', `${dynamicListResolve.url} expected dynamic list route`);
     assert(dynamicListResolve.json?.data?.route?.resource?.id === createdCollectionId, `${dynamicListResolve.url} returned wrong dynamic list collection`);
     assert(dynamicListResolve.json?.data?.route?.resource?.recordsUrl === `/api/sites/${createdSiteId}/collections/${createdCollectionId}/records`, `${dynamicListResolve.url} returned wrong dynamic list records URL`);
@@ -2444,6 +2460,8 @@ try {
     const dynamicItemPath = `/directory/${collectionRecordSlug}`;
     const dynamicResolve = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(dynamicItemPath)}`);
     assert(dynamicResolve.response.status === 200, `${dynamicResolve.url} expected 200, got ${dynamicResolve.response.status}`);
+    assert(dynamicResolve.response.headers.get('x-backy-cache-scope') === 'discovery', `${dynamicResolve.url} missing dynamic item resolve cache scope`);
+    assert(dynamicResolve.response.headers.get('etag')?.startsWith('"backy-'), `${dynamicResolve.url} missing dynamic item resolve etag`);
     assert(dynamicResolve.json?.data?.route?.type === 'dynamicItem', `${dynamicResolve.url} expected dynamic item route`);
     assert(dynamicResolve.json?.data?.route?.resource?.id === createdCollectionRecordId, `${dynamicResolve.url} returned wrong dynamic item record`);
     assert(dynamicResolve.json?.data?.route?.resource?.collectionId === createdCollectionId, `${dynamicResolve.url} returned wrong dynamic item collection`);

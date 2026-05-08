@@ -4,9 +4,10 @@
  * GET /api/sites/[siteId]/resolve?path=/about
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import type { BackyCollection, BackyCollectionRecord, BackyPage, Site } from '@backy-cms/core';
 import { getSiteByIdOrSlug, getSiteNavigation } from '@/lib/backyStore';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRoutePath, resolveSiteRoute } from '@/lib/routeResolver';
 import { matchCollectionItemRoute, matchCollectionListRoute } from '@/lib/collectionRoutes';
@@ -22,7 +23,7 @@ interface RouteParams {
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string, path?: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -42,18 +43,20 @@ const errorResponse = (status: number, code: string, message: string, requestId:
           }
         : undefined,
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
 const redirectRouteResponse = (
+  request: Request,
   route: ResolvedRedirectRoute,
   site: { id: string; slug: string; name: string; status: string },
   requestId: string,
+  options: { previewToken?: string | null; cacheRevision?: string } = {},
 ) => {
   const isGone = route.type === 'gone';
 
-  return NextResponse.json(
+  return publicContractJson(
     {
       success: !isGone,
       requestId,
@@ -73,7 +76,14 @@ const redirectRouteResponse = (
         },
       },
     },
-    { status: isGone ? 410 : 200 },
+    {
+      status: isGone ? 410 : 200,
+      requestId,
+      request,
+      cache: options.previewToken ? 'private' : 'discovery',
+      siteId: site.id,
+      cacheRevision: options.cacheRevision,
+    },
   );
 };
 
@@ -163,15 +173,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (!site) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId, path);
       }
+      const cacheRevision = previewToken
+        ? undefined
+        : await repositories.cacheInvalidations.latestRevision({ siteId: site.id }) || undefined;
 
       const redirectRoute = resolveRedirectRoute(site.settings, path);
       if (redirectRoute) {
-        return redirectRouteResponse(redirectRoute, {
+        return redirectRouteResponse(request, redirectRoute, {
           id: site.id,
           slug: site.slug,
           name: site.name,
           status: siteStatus(site),
-        }, requestId);
+        }, requestId, { previewToken, cacheRevision });
       }
 
       const blogMatch = path.match(/^\/blog\/([^/]+)$/);
@@ -190,7 +203,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           ? post.meta.canonical
           : `/blog/${post.slug}`;
 
-        return NextResponse.json({
+        return publicContractJson({
           success: true,
           requestId,
           data: {
@@ -217,6 +230,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
             navigation: await repositoryNavigation(repositories, site),
           },
+        }, {
+          requestId,
+          request,
+          cache: previewToken ? 'private' : 'discovery',
+          siteId: site.id,
+          cacheRevision,
         });
       }
 
@@ -247,7 +266,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           });
           const recordCount = records.items.filter(isPubliclyReadable).length;
 
-          return NextResponse.json({
+          return publicContractJson({
             success: true,
             requestId,
             data: {
@@ -267,6 +286,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               },
               navigation: await repositoryNavigation(repositories, site),
             },
+          }, {
+            requestId,
+            request,
+            cache: previewToken ? 'private' : 'discovery',
+            siteId: site.id,
+            cacheRevision,
           });
         }
 
@@ -287,7 +312,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           return errorResponse(404, 'ROUTE_NOT_FOUND', 'Route not found', requestId, path);
         }
 
-        return NextResponse.json({
+        return publicContractJson({
           success: true,
           requestId,
           data: {
@@ -321,11 +346,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
             navigation: await repositoryNavigation(repositories, site),
           },
+        }, {
+          requestId,
+          request,
+          cache: previewToken ? 'private' : 'discovery',
+          siteId: site.id,
+          cacheRevision,
         });
       }
 
       const canonical = canonicalPathForRepositoryPage(page);
-      return NextResponse.json({
+      return publicContractJson({
         success: true,
         requestId,
         data: {
@@ -352,6 +383,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           },
           navigation: await repositoryNavigation(repositories, site),
         },
+      }, {
+        requestId,
+        request,
+        cache: previewToken ? 'private' : 'discovery',
+        siteId: site.id,
+        cacheRevision,
       });
     }
 
@@ -367,15 +404,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     if (route.type === 'redirect' || route.type === 'gone') {
-      return redirectRouteResponse(route, {
+      return redirectRouteResponse(request, route, {
         id: site.id,
         slug: site.slug,
         name: site.name,
         status: site.status,
-      }, requestId);
+      }, requestId, { previewToken });
     }
 
-    return NextResponse.json({
+    return publicContractJson({
       success: true,
       requestId,
       data: {
@@ -388,6 +425,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         route,
         navigation: getSiteNavigation(site.id),
       },
+    }, {
+      requestId,
+      request,
+      cache: previewToken ? 'private' : 'discovery',
+      siteId: site.id,
     });
   } catch (error) {
     console.error('Route resolve API error:', error);
