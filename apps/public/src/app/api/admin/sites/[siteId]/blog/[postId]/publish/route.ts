@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { BackyPost } from '@backy-cms/core';
 import { getAdminBlogPostById, getSiteByIdOrSlug, publishAdminBlogPost } from '@/lib/backyStore';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { buildRepositorySiteReadiness, buildSiteReadiness } from '@/lib/siteReadiness';
 import { postRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
@@ -91,12 +92,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         createdBy: request.headers.get('x-backy-actor') || 'admin',
       });
       const published = await repositories.posts.publish(site.id, postId);
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'post',
+        entityId: published.item.id,
+        reason: 'post-published',
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
         requestId,
         data: {
           post: adminPostFromRepositoryPost(published.item),
+          cacheInvalidation,
         },
       });
     }

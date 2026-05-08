@@ -20,6 +20,7 @@ import {
   getSiteByIdOrSlug,
   updateAdminBlogPost,
 } from '@/lib/backyStore';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { postRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
 
@@ -238,12 +239,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         meta: isRecord(body.meta) ? body.meta : undefined,
         revisionNote: typeof body.revisionNote === 'string' ? body.revisionNote : undefined,
       });
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'post',
+        entityId: updated.item.id,
+        reason: 'post-updated',
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
         requestId,
         data: {
           post: adminPostFromRepositoryPost(updated.item),
+          cacheInvalidation,
         },
       });
     }
@@ -319,6 +329,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       if (!deleted) {
         return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
       }
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'post',
+        entityId: postId,
+        reason: 'post-deleted',
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -326,6 +344,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         data: {
           deleted: true,
           postId,
+          cacheInvalidation,
         },
       });
     }

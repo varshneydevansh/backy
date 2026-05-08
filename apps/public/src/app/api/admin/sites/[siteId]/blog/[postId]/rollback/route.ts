@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSiteByIdOrSlug, rollbackAdminBlogPost } from '@/lib/backyStore';
+import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import {
   adminPostFromRepositoryPost,
@@ -75,12 +76,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         currentPost.id,
         postUpdateFromRevisionSnapshot(revision.snapshot, currentPost),
       );
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'content',
+        entity: 'post',
+        entityId: rolledBack.item.id,
+        reason: 'post-rolled-back',
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
         requestId,
         data: {
           post: adminPostFromRepositoryPost(rolledBack.item),
+          cacheInvalidation,
         },
       });
     }
