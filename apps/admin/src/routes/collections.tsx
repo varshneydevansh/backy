@@ -271,6 +271,9 @@ function CollectionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [validationDetails, setValidationDetails] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [pendingCollectionDelete, setPendingCollectionDelete] = useState<Collection | null>(null);
+  const [pendingRecordDelete, setPendingRecordDelete] = useState<CollectionRecord | null>(null);
+  const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
   const shortcutRecordAppliedRef = useRef(false);
 
@@ -295,6 +298,17 @@ function CollectionsPage() {
   const recordRangeEnd = Math.min(recordPagination.total, recordPagination.offset + records.length);
   const selectedRecordsOnPage = records.filter((record) => selectedRecordIds.includes(record.id));
   const allRecordsOnPageSelected = records.length > 0 && selectedRecordsOnPage.length === records.length;
+  const collectionMetrics = useMemo(() => {
+    const published = collections.filter((collection) => collection.status === 'published').length;
+    const fields = collections.reduce((total, collection) => total + collection.fields.length, 0);
+
+    return [
+      { label: 'Collections', value: collections.length, detail: `${published} public schemas` },
+      { label: 'Fields', value: fields, detail: 'Reusable data controls' },
+      { label: 'Records loaded', value: recordPagination.total, detail: activeCollection?.name || 'No collection selected' },
+      { label: 'Selected', value: selectedRecordIds.length, detail: 'Ready for bulk actions' },
+    ];
+  }, [activeCollection?.name, collections, recordPagination.total, selectedRecordIds.length]);
 
   const updateRecordFilters = (updates: Partial<typeof recordFilters>) => {
     setRecordFilters((prev) => ({ ...prev, ...updates }));
@@ -557,9 +571,6 @@ function CollectionsPage() {
   };
 
   const handleDeleteCollection = async (collection: Collection) => {
-    if (!confirm(`Delete ${collection.name} and all of its records?`)) {
-      return;
-    }
 
     setError(null);
     setValidationDetails([]);
@@ -576,6 +587,7 @@ function CollectionsPage() {
           resetCollectionForm();
         }
       }
+      setPendingCollectionDelete(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete collection');
     }
@@ -623,7 +635,7 @@ function CollectionsPage() {
   };
 
   const handleDeleteRecord = async (record: CollectionRecord) => {
-    if (!activeCollection || !confirm(`Delete record ${record.slug}?`)) {
+    if (!activeCollection) {
       return;
     }
 
@@ -636,6 +648,7 @@ function CollectionsPage() {
       if (selectedRecordId === record.id) {
         setSelectedRecordId(null);
       }
+      setPendingRecordDelete(null);
       void loadRecords(activeCollection.id);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete collection record');
@@ -667,7 +680,6 @@ function CollectionsPage() {
 
   const handleBulkDeleteRecords = async () => {
     if (!activeCollection || selectedRecordIds.length === 0) return;
-    if (!confirm(`Delete ${selectedRecordIds.length} selected records?`)) return;
 
     setError(null);
     setValidationDetails([]);
@@ -683,6 +695,7 @@ function CollectionsPage() {
         setSelectedRecordId(null);
       }
       setSelectedRecordIds([]);
+      setPendingBulkDelete(false);
       setNotice(`${result.deleted} records deleted${result.skipped ? `, ${result.skipped} skipped` : ''}.`);
       void loadRecords(activeCollection.id);
     } catch (bulkError) {
@@ -794,6 +807,16 @@ function CollectionsPage() {
         </div>
       )}
 
+      <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {collectionMetrics.map((metric) => (
+          <div key={metric.label} className="rounded-lg border border-border bg-card p-4 shadow-sm">
+            <p className="text-sm font-medium text-muted-foreground">{metric.label}</p>
+            <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground tabular-nums">{metric.value}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{metric.detail}</p>
+          </div>
+        ))}
+      </div>
+
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <label className="text-sm font-medium text-muted-foreground" htmlFor="collection-site">
           Site
@@ -856,7 +879,7 @@ function CollectionsPage() {
                 {activeCollection && (
                   <button
                     type="button"
-                    onClick={() => void handleDeleteCollection(activeCollection)}
+                    onClick={() => setPendingCollectionDelete(activeCollection)}
                     className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -1291,7 +1314,7 @@ function CollectionsPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => void handleBulkDeleteRecords()}
+                      onClick={() => setPendingBulkDelete(true)}
                       className="rounded-lg border border-red-200 px-3 py-2 text-red-700 hover:bg-red-50"
                     >
                       Delete
@@ -1365,7 +1388,7 @@ function CollectionsPage() {
                             <td className="px-4 py-3 text-right">
                               <button
                                 type="button"
-                                onClick={() => void handleDeleteRecord(record)}
+                                onClick={() => setPendingRecordDelete(record)}
                                 className="rounded-lg p-2 text-muted-foreground hover:bg-red-50 hover:text-red-700"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -1546,6 +1569,111 @@ function CollectionsPage() {
           )}
         </div>
       </div>
+
+      {pendingCollectionDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Delete {pendingCollectionDelete.name}?</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This deletes the schema and every record in it. Archive the collection if you only want to remove it from public delivery.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Slug: <span className="font-medium text-foreground">/{pendingCollectionDelete.slug}</span>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingCollectionDelete(null)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteCollection(pendingCollectionDelete)}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+              >
+                Delete collection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingRecordDelete && activeCollection && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Delete {pendingRecordDelete.slug}?</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This removes the record from {activeCollection.name} and from any frontend route using it.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingRecordDelete(null)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteRecord(pendingRecordDelete)}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+              >
+                Delete record
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingBulkDelete && activeCollection && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Delete {selectedRecordIds.length} selected records?</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  The selected {activeCollection.name} records will be removed from the API and public routes.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingBulkDelete(false)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkDeleteRecords()}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+              >
+                Delete records
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }
