@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import {
   bulkUpdateCommentStatus,
   getSiteByIdOrSlug,
@@ -8,6 +8,7 @@ import {
   resolveRepositorySite,
   updateRepositoryCommentStatus,
 } from '@/lib/commentRepositorySupport';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { CommentStatus, CommentTargetType } from '@backy-cms/core';
 
@@ -122,8 +123,16 @@ function parsePatchPayload(raw: unknown) {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const privateResponse = <TBody>(body: TBody, requestId: string, status = 200) => (
+  publicContractJson(body, {
+    status,
+    requestId,
+    cache: 'private',
+  })
+);
+
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -133,7 +142,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
       errorMessage: message,
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
@@ -176,7 +185,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         offset: Number.isFinite(offset) ? offset : 0,
       });
 
-      return NextResponse.json({
+      return privateResponse({
         success: true,
         requestId: responseRequestId,
         data: {
@@ -189,7 +198,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         comments: result.items,
         count: result.pagination.total,
         pagination: result.pagination,
-      });
+      }, responseRequestId);
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -222,7 +231,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       offset: Number.isFinite(offset) ? offset : 0,
     });
 
-    return NextResponse.json({
+    return privateResponse({
       success: true,
       requestId: responseRequestId,
       data: {
@@ -235,7 +244,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       comments: result.comments,
       count: result.count,
       pagination: result.pagination,
-    });
+    }, responseRequestId);
   } catch (error) {
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', responseRequestId);
@@ -284,7 +293,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'COMMENTS_NOT_UPDATED', 'No comments were updated.', responseRequestId);
       }
 
-      return NextResponse.json({
+      return privateResponse({
         success: true,
         requestId: responseRequestId,
         data: {
@@ -297,7 +306,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         updated,
         updatedCount: updated.length,
         missingIds,
-      });
+      }, responseRequestId);
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -325,7 +334,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'COMMENTS_NOT_UPDATED', 'No comments were updated.', responseRequestId);
     }
 
-    return NextResponse.json({
+    return privateResponse({
       success: true,
       requestId: responseRequestId,
       data: {
@@ -338,7 +347,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       updated: result.updated,
       updatedCount: result.updated.length,
       missingIds: result.missingIds,
-    });
+    }, responseRequestId);
   } catch (error) {
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', responseRequestId);

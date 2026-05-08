@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import {
   getCommentById,
   getSiteByIdOrSlug,
@@ -9,6 +9,7 @@ import {
   reportRepositoryComment,
   resolveRepositorySite,
 } from '@/lib/commentRepositorySupport';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -20,8 +21,16 @@ interface RouteParams {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const privateResponse = <TBody>(body: TBody, requestId: string, status = 200) => (
+  publicContractJson(body, {
+    status,
+    requestId,
+    cache: 'private',
+  })
+);
+
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -31,7 +40,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
       errorMessage: message,
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
@@ -88,13 +97,18 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       }
 
       const reasons = getCommentReportReasons();
-      return NextResponse.json({
+      return publicContractJson({
         success: true,
         requestId,
         data: {
           reasons,
         },
         reasons,
+      }, {
+        requestId,
+        request: _request,
+        cache: 'discovery',
+        siteId: site.id,
       });
     }
 
@@ -104,13 +118,18 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     }
 
     const reasons = getCommentReportReasons();
-    return NextResponse.json({
+    return publicContractJson({
       success: true,
       requestId,
       data: {
         reasons,
       },
       reasons,
+    }, {
+      requestId,
+      request: _request,
+      cache: 'discovery',
+      siteId: site.id,
     });
   } catch (error) {
     console.error('API Error:', error);
@@ -148,14 +167,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId: payload.requestId,
       });
 
-      return NextResponse.json({
+      return privateResponse({
         success: true,
         requestId,
         data: {
           comment: updated,
         },
         comment: updated,
-      }, { status: 201 });
+      }, requestId, 201);
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -186,14 +205,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(409, 'COMMENT_REPORT_FAILED', 'Unable to process report', requestId);
     }
 
-    return NextResponse.json({
+    return privateResponse({
       success: true,
       requestId,
       data: {
         comment: updated,
       },
       comment: updated,
-    }, { status: 201 });
+    }, requestId, 201);
   } catch (error) {
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', baseRequestId);

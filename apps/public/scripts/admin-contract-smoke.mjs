@@ -45,6 +45,14 @@ async function request(pathOrUrl, init) {
   };
 }
 
+function assertBackyContract(result, scope, label = result.url) {
+  assert(result.response.headers.get('x-backy-cache-scope') === scope, `${label} expected ${scope} cache scope`);
+  assert(result.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${label} missing contract version`);
+  if (scope === 'private' || scope === 'error') {
+    assert(result.response.headers.get('cache-control') === 'no-store', `${label} expected no-store cache control`);
+  }
+}
+
 async function record(name, fn) {
   const startedAt = Date.now();
   await fn();
@@ -915,6 +923,7 @@ try {
       }),
     });
     assert(pageComment.response.status === 201, `${pageComment.url} expected 201, got ${pageComment.response.status}`);
+    assertBackyContract(pageComment, 'private');
     assert(pageComment.json?.success === true, `${pageComment.url} expected success envelope`);
     assert(pageComment.json?.data?.comment?.status === 'approved', `${pageComment.url} expected approved comment in data envelope`);
     assert(pageComment.json?.comment?.id === pageComment.json?.data?.comment?.id, `${pageComment.url} expected legacy comment to match data envelope`);
@@ -922,12 +931,14 @@ try {
 
     const pageComments = await request(`/api/sites/${createdSiteId}/pages/${createdPageId}/comments?status=approved&requestId=contract-page-comment`);
     assert(pageComments.response.status === 200, `${pageComments.url} expected 200, got ${pageComments.response.status}`);
+    assertBackyContract(pageComments, 'private');
     assert(pageComments.json?.success === true, `${pageComments.url} expected success envelope`);
     assert(pageComments.json?.data?.comments?.some((comment) => comment.id === pageCommentId), `${pageComments.url} missing comment in data envelope`);
     assert(pageComments.json?.comments?.some((comment) => comment.id === pageCommentId), `${pageComments.url} missing legacy comment list`);
 
     const pageCommentDetail = await request(`/api/sites/${createdSiteId}/pages/${createdPageId}/comments/${pageCommentId}`);
     assert(pageCommentDetail.response.status === 200, `${pageCommentDetail.url} expected 200, got ${pageCommentDetail.response.status}`);
+    assertBackyContract(pageCommentDetail, 'private');
     assert(pageCommentDetail.json?.success === true, `${pageCommentDetail.url} expected success envelope`);
     assert(pageCommentDetail.json?.data?.comment?.id === pageCommentId, `${pageCommentDetail.url} missing comment in data envelope`);
     assert(pageCommentDetail.json?.comment?.id === pageCommentId, `${pageCommentDetail.url} missing legacy comment`);
@@ -944,18 +955,21 @@ try {
       }),
     });
     assert(pageCommentReview.response.status === 200, `${pageCommentReview.url} expected 200, got ${pageCommentReview.response.status}`);
+    assertBackyContract(pageCommentReview, 'private');
     assert(pageCommentReview.json?.success === true, `${pageCommentReview.url} expected success envelope`);
     assert(pageCommentReview.json?.requestId === 'contract-page-comment-review', `${pageCommentReview.url} expected request id`);
     assert(pageCommentReview.json?.data?.comment?.id === pageCommentId, `${pageCommentReview.url} missing reviewed comment in data envelope`);
 
     const siteComments = await request(`/api/sites/${createdSiteId}/comments?targetType=page&targetId=${createdPageId}&status=approved&requestId=contract-page-comment`);
     assert(siteComments.response.status === 200, `${siteComments.url} expected 200, got ${siteComments.response.status}`);
+    assertBackyContract(siteComments, 'private');
     assert(siteComments.json?.success === true, `${siteComments.url} expected success envelope`);
     assert(siteComments.json?.data?.comments?.some((comment) => comment.id === pageCommentId), `${siteComments.url} missing site comment in data envelope`);
     assert(siteComments.json?.comments?.some((comment) => comment.id === pageCommentId), `${siteComments.url} missing legacy site comment list`);
 
     const siteCommentDetail = await request(`/api/sites/${createdSiteId}/comments/${pageCommentId}`);
     assert(siteCommentDetail.response.status === 200, `${siteCommentDetail.url} expected 200, got ${siteCommentDetail.response.status}`);
+    assertBackyContract(siteCommentDetail, 'private');
     assert(siteCommentDetail.json?.success === true, `${siteCommentDetail.url} expected success envelope`);
     assert(siteCommentDetail.json?.data?.comment?.id === pageCommentId, `${siteCommentDetail.url} missing site comment in data envelope`);
     assert(siteCommentDetail.json?.comment?.id === pageCommentId, `${siteCommentDetail.url} missing legacy site comment`);
@@ -972,6 +986,7 @@ try {
       }),
     });
     assert(siteCommentReview.response.status === 200, `${siteCommentReview.url} expected 200, got ${siteCommentReview.response.status}`);
+    assertBackyContract(siteCommentReview, 'private');
     assert(siteCommentReview.json?.success === true, `${siteCommentReview.url} expected success envelope`);
     assert(siteCommentReview.json?.data?.comment?.id === pageCommentId, `${siteCommentReview.url} missing reviewed site comment in data envelope`);
 
@@ -994,6 +1009,9 @@ try {
 
     const commentReportReasons = await request(`/api/sites/${createdSiteId}/comments/${pageCommentId}/report`);
     assert(commentReportReasons.response.status === 200, `${commentReportReasons.url} expected 200, got ${commentReportReasons.response.status}`);
+    assertBackyContract(commentReportReasons, 'discovery');
+    assert(commentReportReasons.response.headers.get('x-backy-site-id') === createdSiteId, `${commentReportReasons.url} missing comment report reason site id header`);
+    assert(commentReportReasons.response.headers.get('etag')?.startsWith('"backy-'), `${commentReportReasons.url} missing comment report reason etag`);
     assert(commentReportReasons.json?.success === true, `${commentReportReasons.url} expected success envelope`);
     assert(commentReportReasons.json?.data?.reasons?.includes('spam'), `${commentReportReasons.url} missing report reason in data envelope`);
     assert(commentReportReasons.json?.reasons?.includes('spam'), `${commentReportReasons.url} missing legacy report reasons`);
@@ -1010,6 +1028,7 @@ try {
       }),
     });
     assert(reportedComment.response.status === 201, `${reportedComment.url} expected 201, got ${reportedComment.response.status}`);
+    assertBackyContract(reportedComment, 'private');
     assert(reportedComment.json?.success === true, `${reportedComment.url} expected success envelope`);
     assert(reportedComment.json?.requestId === 'contract-page-comment-report', `${reportedComment.url} expected request id`);
     assert(reportedComment.json?.data?.comment?.id === pageCommentId, `${reportedComment.url} missing reported comment in data envelope`);

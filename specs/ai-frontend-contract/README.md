@@ -49,7 +49,7 @@ The rule is simple: a custom frontend can look completely different from the Bac
 
 Public blog category, tag, and author feeds emit Backy contract/cache headers, ETags, conditional 304 responses, and database-mode `content` cache revisions. Database-mode category/tag mutations record scoped invalidation events so custom frontends can revalidate taxonomy archives and filters.
 
-Comment report-reason discovery emits Backy contract/cache headers, ETags, conditional 304 responses, and a public cache revision so generated/custom frontends can reuse moderation UI metadata without hardcoding the reason list.
+Comment report-reason discovery emits Backy contract/cache headers, ETags, conditional 304 responses, and a public cache revision so generated/custom frontends can reuse moderation UI metadata without hardcoding the reason list. Comment list/detail/moderation/report submission endpoints also emit Backy contract headers, but they remain `private`/`no-store` because current payloads can include visitor identity and moderation data.
 
 Site settings can now define a primary and footer navigation tree using `page`, `route`, and `url` items. Public navigation responses and render payloads preserve nested children, external URL targets, and page references while filtering out unpublished page targets. Public navigation reads emit Backy contract/cache headers, ETags, conditional 304 responses, and database-mode site-level cache revisions. If no custom primary menu exists, Backy falls back to a publishable-page navigation list.
 

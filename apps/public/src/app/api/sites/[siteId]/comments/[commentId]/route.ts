@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import {
   getCommentById,
   getSiteByIdOrSlug,
@@ -8,6 +8,7 @@ import {
   resolveRepositorySite,
   updateRepositoryCommentStatus,
 } from '@/lib/commentRepositorySupport';
+import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { Comment } from '@backy-cms/core';
 
@@ -22,8 +23,16 @@ type CommentStatus = 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const privateResponse = <TBody>(body: TBody, requestId: string, status = 200) => (
+  publicContractJson(body, {
+    status,
+    requestId,
+    cache: 'private',
+  })
+);
+
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json(
+  publicContractJson(
     {
       success: false,
       requestId,
@@ -33,7 +42,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
       errorMessage: message,
     },
-    { status },
+    { status, requestId, cache: 'error' },
   )
 );
 
@@ -116,14 +125,14 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
       }
 
-      return NextResponse.json({
+      return privateResponse({
         success: true,
         requestId,
         data: {
           comment,
         },
         comment,
-      });
+      }, requestId);
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -136,14 +145,14 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
     }
 
-    return NextResponse.json({
+    return privateResponse({
       success: true,
       requestId,
       data: {
         comment,
       },
       comment,
-    });
+    }, requestId);
   } catch (error) {
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
@@ -183,14 +192,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         requestId: payload.requestId,
       });
 
-      return NextResponse.json({
+      return privateResponse({
         success: true,
         requestId,
         data: {
           comment: updated as Comment,
         },
         comment: updated as Comment,
-      });
+      }, requestId);
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -222,14 +231,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return errorResponse(409, 'COMMENT_UPDATE_FAILED', 'Unable to update comment', requestId);
     }
 
-    return NextResponse.json({
+    return privateResponse({
       success: true,
       requestId,
       data: {
         comment: updated as Comment,
       },
       comment: updated as Comment,
-    });
+    }, requestId);
   } catch (error) {
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', baseRequestId);
