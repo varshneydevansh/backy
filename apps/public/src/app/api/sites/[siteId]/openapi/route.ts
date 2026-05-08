@@ -8,6 +8,7 @@ import { NextRequest } from 'next/server';
 import { getSiteByIdOrSlug, listCollections, listFormsBySite, listReusableSections } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { normalizeRedirectRules } from '@/lib/redirectRules';
 
 interface RouteParams {
   params: Promise<{
@@ -79,6 +80,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           slug: repositorySite.slug,
           name: repositorySite.name,
           isPublished: repositorySite.isPublished,
+          settings: repositorySite.settings,
         }
       : storeSite;
 
@@ -105,6 +107,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const collectionIds = collections.map((collection) => collection.id);
     const formIds = forms.map((form) => form.id);
     const reusableSectionIds = reusableSections.map((section) => section.id);
+    const redirectRules = normalizeRedirectRules(site.settings?.redirectRules).filter((rule) => rule.enabled);
 
     return publicContractJson({
       openapi: '3.1.0',
@@ -182,6 +185,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 content: {
                   'application/json': {
                     schema: { $ref: '#/components/schemas/RouteResolveEnvelope' },
+                  },
+                },
+              },
+              '410': {
+                description: 'Resolved route is intentionally gone',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/GoneRouteResolveEnvelope' },
                   },
                 },
               },
@@ -1027,10 +1038,144 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             required: ['site', 'route'],
             properties: {
               site: { type: 'object', additionalProperties: true },
-              route: { type: 'object', additionalProperties: true },
+              route: { $ref: '#/components/schemas/ResolvedRoute' },
               navigation: { type: 'object', additionalProperties: true },
             },
           }),
+          GoneRouteResolveEnvelope: {
+            type: 'object',
+            required: ['success', 'requestId', 'error', 'data'],
+            properties: {
+              success: { const: false },
+              requestId: { type: 'string' },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { const: 'ROUTE_GONE' },
+                  message: { type: 'string' },
+                },
+              },
+              data: {
+                type: 'object',
+                required: ['site', 'route'],
+                properties: {
+                  site: { type: 'object', additionalProperties: true },
+                  route: { $ref: '#/components/schemas/GoneRoute' },
+                  navigation: { type: 'object', additionalProperties: true },
+                },
+              },
+            },
+          },
+          ResolvedRoute: {
+            oneOf: [
+              { $ref: '#/components/schemas/PageRoute' },
+              { $ref: '#/components/schemas/PostRoute' },
+              { $ref: '#/components/schemas/DynamicListRoute' },
+              { $ref: '#/components/schemas/DynamicItemRoute' },
+              { $ref: '#/components/schemas/RedirectRoute' },
+              { $ref: '#/components/schemas/GoneRoute' },
+            ],
+          },
+          PageRoute: {
+            type: 'object',
+            required: ['type', 'path', 'status', 'canonical', 'params', 'resource'],
+            properties: {
+              type: { const: 'page' },
+              path: { type: 'string' },
+              status: { type: 'string' },
+              canonical: { type: 'string' },
+              params: { type: 'object', additionalProperties: { type: 'string' } },
+              resource: { type: 'object', additionalProperties: true },
+            },
+            additionalProperties: true,
+          },
+          PostRoute: {
+            type: 'object',
+            required: ['type', 'path', 'status', 'canonical', 'params', 'resource'],
+            properties: {
+              type: { const: 'post' },
+              path: { type: 'string' },
+              status: { type: 'string' },
+              canonical: { type: 'string' },
+              params: { type: 'object', additionalProperties: { type: 'string' } },
+              resource: { type: 'object', additionalProperties: true },
+            },
+            additionalProperties: true,
+          },
+          DynamicListRoute: {
+            type: 'object',
+            required: ['type', 'path', 'status', 'canonical', 'params', 'resource'],
+            properties: {
+              type: { const: 'dynamicList' },
+              path: { type: 'string' },
+              status: { type: 'string' },
+              canonical: { type: 'string' },
+              params: { type: 'object', additionalProperties: { type: 'string' } },
+              resource: { type: 'object', additionalProperties: true },
+            },
+            additionalProperties: true,
+          },
+          DynamicItemRoute: {
+            type: 'object',
+            required: ['type', 'path', 'status', 'canonical', 'params', 'resource'],
+            properties: {
+              type: { const: 'dynamicItem' },
+              path: { type: 'string' },
+              status: { type: 'string' },
+              canonical: { type: 'string' },
+              params: { type: 'object', additionalProperties: { type: 'string' } },
+              resource: { type: 'object', additionalProperties: true },
+            },
+            additionalProperties: true,
+          },
+          RedirectRoute: {
+            type: 'object',
+            required: ['type', 'path', 'status', 'canonical', 'params', 'resource'],
+            properties: {
+              type: { const: 'redirect' },
+              path: { type: 'string' },
+              status: { const: 'published' },
+              canonical: { type: 'string' },
+              params: { type: 'object', additionalProperties: { type: 'string' } },
+              resource: {
+                type: 'object',
+                required: ['id', 'kind', 'from', 'to', 'statusCode'],
+                properties: {
+                  id: { type: 'string' },
+                  kind: { const: 'redirect' },
+                  from: { type: 'string' },
+                  to: { type: 'string' },
+                  statusCode: { enum: [301, 302, 307, 308] },
+                },
+                additionalProperties: true,
+              },
+            },
+            additionalProperties: true,
+          },
+          GoneRoute: {
+            type: 'object',
+            required: ['type', 'path', 'status', 'canonical', 'params', 'resource'],
+            properties: {
+              type: { const: 'gone' },
+              path: { type: 'string' },
+              status: { const: 'archived' },
+              canonical: { type: 'string' },
+              params: { type: 'object', additionalProperties: { type: 'string' } },
+              resource: {
+                type: 'object',
+                required: ['id', 'kind', 'from', 'statusCode'],
+                properties: {
+                  id: { type: 'string' },
+                  kind: { const: 'gone' },
+                  from: { type: 'string' },
+                  statusCode: { const: 410 },
+                },
+                additionalProperties: true,
+              },
+            },
+            additionalProperties: true,
+          },
           NavigationEnvelope: envelopeSchema({
             type: 'object',
             required: ['site', 'navigation'],
@@ -1199,6 +1344,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         collectionIds,
         formIds,
         reusableSectionIds,
+        redirectRules: redirectRules.map((rule) => ({
+          id: rule.id,
+          from: rule.from,
+          to: rule.to,
+          statusCode: rule.statusCode,
+        })),
       },
     }, {
       requestId,

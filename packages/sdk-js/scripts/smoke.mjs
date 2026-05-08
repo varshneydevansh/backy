@@ -139,6 +139,33 @@ async function createSdkSmokeFixture() {
   assert(page.response.status === 201, `${page.url} expected page create 201, got ${page.response.status}`);
   const pageId = page.json?.data?.page?.id;
   assert(pageId, 'temporary SDK smoke page missing id');
+  const redirectPath = `/sdk-old-${pageSlug}`;
+  const gonePath = `/sdk-retired-${pageSlug}`;
+
+  const routeSettings = await request(`/api/admin/sites/${siteId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      settings: {
+        redirectRules: [
+          {
+            id: 'sdk-smoke-redirect',
+            from: redirectPath,
+            to: `/${pageSlug}`,
+            statusCode: 301,
+            enabled: true,
+          },
+          {
+            id: 'sdk-smoke-gone',
+            from: gonePath,
+            statusCode: 410,
+            enabled: true,
+          },
+        ],
+      },
+    }),
+  });
+  assert(routeSettings.response.status === 200, `${routeSettings.url} expected redirect settings update 200`);
 
   const reusableSection = await request(`/api/admin/sites/${siteId}/reusable-sections`, {
     method: 'POST',
@@ -187,6 +214,8 @@ async function createSdkSmokeFixture() {
     siteSlug,
     pageId,
     pageSlug,
+    redirectPath,
+    gonePath,
     collectionId,
     reusableSectionId,
   };
@@ -232,6 +261,8 @@ assert(revalidatedManifest.notModified === true, 'manifestCached() did not retur
 const openapi = await client.openapi();
 assert(openapi.openapi === '3.1.0', 'openapi() did not return an OpenAPI 3.1 document');
 assert(openapi.paths?.[manifest.data.endpoints.openapi]?.get, 'openapi() missing manifest-advertised OpenAPI path');
+assert(openapi.components?.schemas?.RedirectRoute, 'openapi() missing redirect route schema');
+assert(openapi.components?.schemas?.GoneRoute, 'openapi() missing gone route schema');
 
 const cachedOpenapi = await client.openapiCached();
 assert(cachedOpenapi.notModified === false, 'openapiCached() first request should return a body');
@@ -296,6 +327,11 @@ if (runWriteSmoke) {
     await writeClient.discoverSite(fixture.siteSlug);
 
     const fixtureManifest = await writeClient.manifest();
+    assert(fixtureManifest.data.capabilities?.redirectRoutes === true, 'fixture manifest missing redirect route capability');
+    assert(
+      fixtureManifest.data.modules?.routing?.redirectRules?.items?.some?.((rule) => rule.from === fixture.redirectPath && rule.statusCode === 301),
+      'fixture manifest missing redirect route metadata',
+    );
     assert(
       fixtureManifest.data.modules?.forms?.some?.((form) => form.id === 'sdk-smoke-form'),
       'fixture manifest missing SDK smoke form',
@@ -304,6 +340,21 @@ if (runWriteSmoke) {
       fixtureManifest.data.modules?.reusableSections?.items?.some?.((section) => section.id === fixture.reusableSectionId),
       'fixture manifest missing SDK smoke reusable section',
     );
+
+    const fixtureOpenapi = await writeClient.openapi();
+    assert(
+      fixtureOpenapi['x-backy']?.redirectRules?.some?.((rule) => rule.from === fixture.redirectPath && rule.statusCode === 301),
+      'fixture OpenAPI missing redirect route vendor metadata',
+    );
+
+    const redirected = await writeClient.resolve(fixture.redirectPath);
+    assert(redirected.data.route?.type === 'redirect', 'resolve() did not return a redirect route');
+    assert(redirected.data.route?.resource?.to === `/${fixture.pageSlug}`, 'resolve() returned the wrong redirect target');
+
+    const gone = await writeClient.resolve(fixture.gonePath);
+    assert(gone.success === false, 'resolve() should return a non-throwing gone envelope');
+    assert(gone.data.route?.type === 'gone', 'resolve() did not expose gone route data');
+    writeChecks.push('routeRedirects');
 
     const savedSections = await writeClient.reusableSections({ tag: 'sdk' });
     assert(savedSections.data.sections?.some?.((section) => section.id === fixture.reusableSectionId), 'reusableSections() missing SDK smoke reusable section');

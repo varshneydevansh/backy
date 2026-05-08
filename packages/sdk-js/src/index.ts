@@ -26,6 +26,7 @@ export interface BackyErrorEnvelope {
     message: string;
     details?: unknown;
   };
+  data?: unknown;
 }
 
 export interface BackyResponseMeta {
@@ -296,11 +297,60 @@ export interface BackyEventListOptions extends BackyListOptions {
   kind?: string;
 }
 
+export type BackyResolvedRouteType = 'page' | 'post' | 'dynamicList' | 'dynamicItem' | 'redirect' | 'gone' | 'notFound';
+
+export interface BackyResolvedRouteBase<TRouteType extends BackyResolvedRouteType = BackyResolvedRouteType> {
+  type: TRouteType;
+  path: string;
+  status?: string;
+  canonical?: string;
+  params?: Record<string, string>;
+  resource?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export type BackyRenderableRoute = BackyResolvedRouteBase<'page' | 'post' | 'dynamicList' | 'dynamicItem' | 'notFound'>;
+
+export interface BackyRedirectRoute extends BackyResolvedRouteBase<'redirect'> {
+  type: 'redirect';
+  status: 'published';
+  canonical: string;
+  resource: {
+    id: string;
+    kind: 'redirect';
+    from: string;
+    to: string;
+    statusCode: 301 | 302 | 307 | 308;
+    [key: string]: unknown;
+  };
+}
+
+export interface BackyGoneRoute extends BackyResolvedRouteBase<'gone'> {
+  type: 'gone';
+  status: 'archived';
+  resource: {
+    id: string;
+    kind: 'gone';
+    from: string;
+    statusCode: 410;
+    [key: string]: unknown;
+  };
+}
+
+export type BackyResolvedRoute = BackyRenderableRoute | BackyRedirectRoute | BackyGoneRoute;
+
 export interface BackyRouteResolve {
   site: BackySiteSummary;
-  route: Record<string, unknown>;
+  route: BackyResolvedRoute;
   navigation?: { primary?: BackyNavigationItem[]; [key: string]: unknown };
 }
+
+export type BackyRouteResolveResult =
+  | BackyEnvelope<BackyRouteResolve>
+  | (BackyErrorEnvelope & {
+      success: false;
+      data: BackyRouteResolve & { route: BackyGoneRoute };
+    });
 
 export interface BackySeoRoute {
   type: 'page' | 'post' | 'dynamicItem' | string;
@@ -345,6 +395,23 @@ export interface BackyFrontendManifest {
   endpoints: Record<string, string>;
   routePatterns: Array<Record<string, unknown>>;
   modules: {
+    routing?: {
+      supportedRouteTypes?: BackyResolvedRouteType[];
+      redirectRules?: {
+        count?: number;
+        items?: Array<{
+          id?: string;
+          type: 'redirect' | 'gone';
+          from: string;
+          to?: string | null;
+          statusCode: 301 | 302 | 307 | 308 | 410;
+          resolveUrl?: string;
+          [key: string]: unknown;
+        }>;
+        [key: string]: unknown;
+      };
+      [key: string]: unknown;
+    };
     pages?: { count: number; items: Array<Record<string, unknown>> };
     blog?: Record<string, unknown>;
     collections?: BackyCollectionSchema[];
@@ -468,8 +535,8 @@ export class BackyClient {
     });
   }
 
-  resolve(path: string, options: { previewToken?: string; siteId?: string } = {}): Promise<BackyEnvelope<BackyRouteResolve>> {
-    return this.request(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/resolve`, {
+  resolve(path: string, options: { previewToken?: string; siteId?: string } = {}): Promise<BackyRouteResolveResult> {
+    return this.requestRouteResolve(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/resolve`, {
       query: { path, previewToken: options.previewToken },
     });
   }
@@ -734,6 +801,34 @@ export class BackyClient {
     return json;
   }
 
+  private async requestRouteResolve(
+    path: string,
+    options: {
+      query?: Record<string, string | number | boolean | undefined>;
+      requestId?: string;
+    } = {},
+  ): Promise<BackyRouteResolveResult> {
+    const { response, json } = await this.fetchJson(path, options);
+    const responsePath = response.url ? new URL(response.url).pathname : path;
+
+    if (response.status === 410 && isBackyGoneRouteResolveEnvelope(json)) {
+      return json;
+    }
+
+    if (!response.ok) {
+      if (isBackyErrorEnvelope(json)) {
+        throw new BackyApiError(response.status, json);
+      }
+      throw new Error(`Backy API request failed with HTTP ${response.status} for ${responsePath}.`);
+    }
+
+    if (!isBackyEnvelope<BackyRouteResolve>(json)) {
+      throw new Error(`Backy API returned an invalid route envelope for ${responsePath}.`);
+    }
+
+    return json;
+  }
+
   private async requestRawJson(
     path: string,
     options: {
@@ -866,6 +961,15 @@ function isBackyErrorEnvelope(value: unknown): value is BackyErrorEnvelope {
     typeof (value as { error?: { code?: unknown; message?: unknown } }).error?.code === 'string' &&
     typeof (value as { error?: { code?: unknown; message?: unknown } }).error?.message === 'string',
   );
+}
+
+function isBackyGoneRouteResolveEnvelope(value: unknown): value is BackyRouteResolveResult {
+  if (!isBackyErrorEnvelope(value)) {
+    return false;
+  }
+
+  const data = value.data as { route?: { type?: unknown; resource?: { statusCode?: unknown } } } | undefined;
+  return data?.route?.type === 'gone' && data.route.resource?.statusCode === 410;
 }
 
 function normalizeCommentInput(input: BackyCommentInput): Record<string, unknown> {

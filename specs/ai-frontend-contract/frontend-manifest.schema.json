@@ -52,7 +52,8 @@
             "collectionRecords",
             "reusableSections",
             "dynamicListRoutes",
-            "dynamicItemRoutes"
+            "dynamicItemRoutes",
+            "redirectRoutes"
           ]
         },
         "endpoints": {
@@ -78,6 +79,43 @@
           "type": "object",
           "additionalProperties": true,
           "properties": {
+            "routing": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "supportedRouteTypes": {
+                  "type": "array",
+                  "items": {
+                    "enum": ["page", "post", "dynamicList", "dynamicItem", "redirect", "gone", "notFound"]
+                  }
+                },
+                "redirectRules": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "count": { "type": "number", "minimum": 0 },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "id": { "type": "string" },
+                          "type": { "enum": ["redirect", "gone"] },
+                          "from": { "type": "string", "minLength": 1 },
+                          "to": { "type": ["string", "null"] },
+                          "statusCode": { "enum": [301, 302, 307, 308, 410] },
+                          "resolveUrl": { "type": "string", "minLength": 1 }
+                        },
+                        "required": ["type", "from", "statusCode", "resolveUrl"]
+                      }
+                    }
+                  },
+                  "required": ["count", "items"]
+                }
+              },
+              "required": ["supportedRouteTypes", "redirectRules"]
+            },
             "pages": {
               "type": "object",
               "properties": {
@@ -172,7 +210,7 @@
               "required": ["count", "publicCount", "fontCount", "types", "listUrl"]
             }
           },
-          "required": ["pages", "blog", "collections", "forms", "reusableSections", "media"]
+          "required": ["routing", "pages", "blog", "collections", "forms", "reusableSections", "media"]
         },
         "navigation": { "type": "object" }
       },

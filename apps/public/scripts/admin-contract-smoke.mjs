@@ -1696,6 +1696,7 @@ try {
       assert(frontendManifest.json?.data?.capabilities?.seoDiscovery === true, `${frontendManifest.url} missing SEO discovery capability`);
       assert(frontendManifest.json?.data?.capabilities?.collectionWriteForms === true, `${frontendManifest.url} missing collection write form capability`);
       assert(frontendManifest.json?.data?.capabilities?.dynamicListRoutes === true, `${frontendManifest.url} missing dynamic list route capability`);
+      assert(frontendManifest.json?.data?.capabilities?.redirectRoutes === true, `${frontendManifest.url} missing redirect route capability`);
       assert(frontendManifest.json?.data?.capabilities?.reusableSections === true, `${frontendManifest.url} missing reusable sections capability`);
       assert(frontendManifest.json?.data?.contract?.schemas?.renderPayload?.includes('content-payload.schema.json'), `${frontendManifest.url} missing render schema reference`);
       assert(frontendManifest.json?.data?.endpoints?.openapi === `/api/sites/${createdSiteId}/openapi`, `${frontendManifest.url} missing OpenAPI endpoint`);
@@ -1707,6 +1708,21 @@ try {
       assert(frontendManifest.json?.data?.endpoints?.formContacts === `/api/sites/${createdSiteId}/forms/{formId}/contacts`, `${frontendManifest.url} missing form contacts endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.commentReport === `/api/sites/${createdSiteId}/comments/{commentId}/report`, `${frontendManifest.url} missing comment report endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.events === `/api/sites/${createdSiteId}/events`, `${frontendManifest.url} missing events endpoint`);
+      assert(frontendManifest.json?.data?.modules?.routing?.supportedRouteTypes?.includes('redirect'), `${frontendManifest.url} missing redirect route type support`);
+      assert(frontendManifest.json?.data?.modules?.routing?.supportedRouteTypes?.includes('gone'), `${frontendManifest.url} missing gone route type support`);
+      assert(frontendManifest.json?.data?.modules?.routing?.redirectRules?.items?.some((rule) => (
+        rule.id === 'contract-redirect'
+        && rule.type === 'redirect'
+        && rule.from === `/old-${pageSlug}`
+        && rule.to === `/${pageSlug}`
+        && rule.statusCode === 301
+      )), `${frontendManifest.url} missing redirect rule manifest`);
+      assert(frontendManifest.json?.data?.modules?.routing?.redirectRules?.items?.some((rule) => (
+        rule.id === 'contract-gone'
+        && rule.type === 'gone'
+        && rule.from === `/retired-${pageSlug}`
+        && rule.statusCode === 410
+      )), `${frontendManifest.url} missing gone rule manifest`);
       assert(frontendManifest.json?.data?.modules?.collections?.some((collection) => (
         collection.id === createdCollectionId
         && collection.listRoutePattern === '/directory'
@@ -1773,9 +1789,17 @@ try {
       assert(publicOpenApi.json?.components?.schemas?.ReusableSectionListEnvelope, `${publicOpenApi.url} missing reusable section list schema`);
       assert(publicOpenApi.json?.components?.schemas?.CommentReportEnvelope, `${publicOpenApi.url} missing comment report schema`);
       assert(publicOpenApi.json?.components?.schemas?.EventsEnvelope, `${publicOpenApi.url} missing interaction event schema`);
+      assert(publicOpenApi.json?.components?.schemas?.RedirectRoute, `${publicOpenApi.url} missing redirect route schema`);
+      assert(publicOpenApi.json?.components?.schemas?.GoneRoute, `${publicOpenApi.url} missing gone route schema`);
+      assert(publicOpenApi.json?.components?.schemas?.GoneRouteResolveEnvelope, `${publicOpenApi.url} missing gone route resolve envelope schema`);
       assert(publicOpenApi.json?.['x-backy']?.collectionIds?.includes(createdCollectionId), `${publicOpenApi.url} missing collection id vendor extension`);
       assert(publicOpenApi.json?.['x-backy']?.reusableSectionIds?.includes(manifestReusableSectionId), `${publicOpenApi.url} missing reusable section id vendor extension`);
       assert(publicOpenApi.json?.['x-backy']?.formIds?.includes('contract-form-write'), `${publicOpenApi.url} missing form id vendor extension`);
+      assert(publicOpenApi.json?.['x-backy']?.redirectRules?.some((rule) => (
+        rule.id === 'contract-redirect'
+        && rule.from === `/old-${pageSlug}`
+        && rule.statusCode === 301
+      )), `${publicOpenApi.url} missing redirect rule vendor extension`);
     } finally {
       if (manifestReusableSectionId) {
         await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${manifestReusableSectionId}`, { method: 'DELETE' }).catch(() => {});

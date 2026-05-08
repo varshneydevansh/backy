@@ -22,6 +22,7 @@ import {
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeCollectionListRoutePattern, normalizeCollectionRoutePattern } from '@/lib/collectionRoutes';
+import { normalizeRedirectRules } from '@/lib/redirectRules';
 
 interface RouteParams {
   params: Promise<{
@@ -108,6 +109,20 @@ const dynamicCollectionRoutePatterns = (
   ];
 });
 
+const manifestRedirectRules = (
+  siteId: string,
+  settings: Pick<Site['settings'], 'redirectRules'> | undefined | null,
+) => normalizeRedirectRules(settings?.redirectRules)
+  .filter((rule) => rule.enabled)
+  .map((rule) => ({
+    id: rule.id,
+    type: rule.statusCode === 410 ? 'gone' : 'redirect',
+    from: rule.from,
+    to: rule.statusCode === 410 ? null : rule.to,
+    statusCode: rule.statusCode,
+    resolveUrl: `/api/sites/${siteId}/resolve?path=${encodeURIComponent(rule.from)}`,
+  }));
+
 const repositoryNavigation = (pages: BackyPage[]) => ({
   primary: pages
     .filter(isPubliclyReadable)
@@ -148,6 +163,7 @@ const buildRepositoryManifest = (
 ) => {
   const fonts = input.media.filter((item) => item.type === 'font');
   const publicCollections = input.collections.filter((collection) => collection.permissions.publicRead);
+  const redirectRules = manifestRedirectRules(input.site.id, input.site.settings);
 
   return {
     success: true,
@@ -194,6 +210,7 @@ const buildRepositoryManifest = (
         collectionWriteForms: input.forms.some((form) => form.collectionTarget?.enabled),
         dynamicListRoutes: publicCollections.length > 0,
         dynamicItemRoutes: publicCollections.length > 0,
+        redirectRoutes: redirectRules.length > 0,
         reusableSections: input.reusableSections.length > 0,
         previewTokens: true,
       },
@@ -248,6 +265,13 @@ const buildRepositoryManifest = (
         ...dynamicCollectionRoutePatterns(input.site.id, publicCollections),
       ],
       modules: {
+        routing: {
+          supportedRouteTypes: ['page', 'post', 'dynamicList', 'dynamicItem', 'redirect', 'gone'],
+          redirectRules: {
+            count: redirectRules.length,
+            items: redirectRules,
+          },
+        },
         pages: {
           count: input.pages.length,
           items: input.pages.map((page) => ({
@@ -406,6 +430,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const tags = listBlogTags(site.id);
     const authors = listBlogAuthors(site.id);
     const fonts = media.media.filter((item) => item.type === 'font');
+    const redirectRules = manifestRedirectRules(site.id, site.settings);
 
     const manifest = {
       success: true,
@@ -452,6 +477,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           collectionWriteForms: forms.some((form) => form.collectionTarget?.enabled),
           dynamicListRoutes: collections.length > 0,
           dynamicItemRoutes: collections.length > 0,
+          redirectRoutes: redirectRules.length > 0,
           reusableSections: reusableSections.length > 0,
           previewTokens: true,
         },
@@ -506,6 +532,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           ...dynamicCollectionRoutePatterns(site.id, collections),
         ],
         modules: {
+          routing: {
+            supportedRouteTypes: ['page', 'post', 'dynamicList', 'dynamicItem', 'redirect', 'gone'],
+            redirectRules: {
+              count: redirectRules.length,
+              items: redirectRules,
+            },
+          },
           pages: {
             count: pages.length,
             items: pages.map((page) => ({
