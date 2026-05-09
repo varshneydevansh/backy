@@ -6,11 +6,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { AlertTriangle, Archive, CheckCircle2, ExternalLink, Eye, Filter, Plus, FileText, Edit, Trash2 } from 'lucide-react';
+import { AlertTriangle, Archive, CheckCircle2, Copy, Download, ExternalLink, Eye, Filter, Plus, FileText, Edit, Trash2 } from 'lucide-react';
 import {
   archiveBlogPost,
   createBlogPostPreview,
   deleteBlogPost,
+  getAdminApiBase,
   listBlogAuthors,
   listBlogCategories,
   listBlogPosts,
@@ -71,6 +72,7 @@ function BlogListView() {
   const { sites, posts, setPosts, deletePost, updatePost } = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [tags, setTags] = useState<BlogTag[]>([]);
   const [authors, setAuthors] = useState<BlogAuthor[]>([]);
@@ -95,6 +97,8 @@ function BlogListView() {
   );
   const siteSlug = activeSite?.slug || activeSiteId;
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
+  const adminBaseUrl = useMemo(() => getAdminApiBase(), []);
+  const createPostSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const visiblePosts = useMemo(
     () => posts.filter((post) => (
       (statusFilter === 'all' || post.status === statusFilter) &&
@@ -118,6 +122,16 @@ function BlogListView() {
     () => posts.filter((post) => selectedPostIds.has(post.id)),
     [posts, selectedPostIds],
   );
+  const handoffPost = selectedPosts[0] || posts.find((post) => post.status === 'published') || posts[0] || null;
+  const handoffPostSegment = handoffPost?.id ? encodeURIComponent(handoffPost.id) : '{postId}';
+  const handoffPostSlug = handoffPost?.slug ? encodeURIComponent(handoffPost.slug) : '{postSlug}';
+  const publicBlogUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/blog`;
+  const publicPostBySlugUrl = `${publicBlogUrl}?slug=${handoffPostSlug}`;
+  const publicPostRenderUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/render?path=${encodeURIComponent(handoffPost ? `/blog/${handoffPost.slug}` : '/blog/{postSlug}')}`;
+  const adminBlogUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/blog`;
+  const adminBlogPostUrl = `${adminBlogUrl}/${handoffPostSegment}`;
+  const adminBlogReadinessUrl = `${adminBlogPostUrl}/readiness`;
+  const adminBlogPreviewUrl = `${adminBlogPostUrl}/preview`;
 
   const refreshPosts = useMemo(
     () => async (siteId: string) => {
@@ -241,6 +255,7 @@ function BlogListView() {
   const handlePreviewPost = async (post: BlogPost) => {
     setPreviewingPostId(post.id);
     setError(null);
+    setNotice(null);
 
     try {
       const preview = await createBlogPostPreview(activeSiteId, post.id);
@@ -254,6 +269,7 @@ function BlogListView() {
 
   const handleDeletePost = async (post: BlogPost) => {
     setError(null);
+    setNotice(null);
 
     try {
       await deleteBlogPost(activeSiteId, post.id);
@@ -281,6 +297,7 @@ function BlogListView() {
 
     setIsBulkBusy(true);
     setError(null);
+    setNotice(null);
 
     try {
       if (bulkAction === 'publish') {
@@ -518,6 +535,128 @@ function BlogListView() {
     siteSlug,
     tags.length,
   ]);
+  const blogHandoff = useMemo(() => ({
+    generatedAt: new Date().toISOString(),
+    site: {
+      id: activeSiteId,
+      name: activeSite?.name || activeSiteId,
+      slug: siteSlug,
+    },
+    endpoints: {
+      publicPosts: publicBlogUrl,
+      publicPostBySlug: publicPostBySlugUrl,
+      publicRender: publicPostRenderUrl,
+      adminPosts: adminBlogUrl,
+      adminPostDetail: adminBlogPostUrl,
+      adminPostReadiness: adminBlogReadinessUrl,
+      adminPostPreview: adminBlogPreviewUrl,
+    },
+    readiness: {
+      score: editorialReadiness.score,
+      checks: editorialReadiness.checks,
+    },
+    metrics: postMetrics,
+    filters: {
+      search: searchQuery,
+      status: statusFilter,
+      categoryId: selectedCategoryId || null,
+      tagId: selectedTagId || null,
+      authorId: selectedAuthorId || null,
+      selected: selectedPostIds.size,
+      visible: data.length,
+      currentPage,
+      totalPages,
+      totalItems,
+    },
+    taxonomy: {
+      categories: categories.map((category) => ({ id: category.id, name: category.name, slug: category.slug })),
+      tags: tags.map((tag) => ({ id: tag.id, name: tag.name, slug: tag.slug })),
+      authors: authors.map((author) => ({ id: author.id, name: author.name, postCount: author.postCount })),
+    },
+    posts: data.map((post) => ({
+      id: post.id,
+      title: post.title,
+      slug: post.slug,
+      path: `/blog/${post.slug}`,
+      status: post.status,
+      scheduledAt: post.scheduledAt || null,
+      author: post.author,
+      categoryIds: post.categoryIds || [],
+      tagIds: post.tagIds || [],
+      publicUrl: post.status === 'published' ? publicPostUrl(post) : null,
+    })),
+    selectedPost: handoffPost
+      ? {
+          id: handoffPost.id,
+          title: handoffPost.title,
+          slug: handoffPost.slug,
+          path: `/blog/${handoffPost.slug}`,
+          status: handoffPost.status,
+        }
+      : null,
+    workflows: editorialReadiness.workflow,
+    guardrails: [
+      'New post links carry the active siteId into the creation workspace.',
+      'Preview before publishing because public route shape depends on site slug and post slug.',
+      'Archive posts when hiding from public delivery without permanent removal.',
+      'Use taxonomy and author data for frontend blog lists, filters, feeds, and detail pages.',
+    ],
+  }), [
+    activeSite?.name,
+    activeSiteId,
+    adminBlogPostUrl,
+    adminBlogPreviewUrl,
+    adminBlogReadinessUrl,
+    adminBlogUrl,
+    authors,
+    categories,
+    currentPage,
+    data,
+    editorialReadiness.checks,
+    editorialReadiness.score,
+    editorialReadiness.workflow,
+    handoffPost,
+    postMetrics,
+    publicBlogUrl,
+    publicPostBySlugUrl,
+    publicPostRenderUrl,
+    searchQuery,
+    selectedAuthorId,
+    selectedCategoryId,
+    selectedPostIds.size,
+    selectedTagId,
+    siteSlug,
+    statusFilter,
+    tags,
+    totalItems,
+    totalPages,
+  ]);
+  const blogHandoffText = useMemo(() => JSON.stringify(blogHandoff, null, 2), [blogHandoff]);
+
+  const copyBlogText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setError(null);
+      setNotice(`${label} copied.`);
+    } catch {
+      setNotice(null);
+      setError(value);
+    }
+  };
+
+  const downloadBlogHandoff = () => {
+    const blob = new Blob([blogHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${siteSlug || activeSiteId}-backy-blog-handoff.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setNotice('Blog handoff manifest downloaded.');
+  };
 
   return (
     <PageShell
@@ -526,6 +665,7 @@ function BlogListView() {
       action={
         <Link
           to="/blog/new"
+          search={createPostSearch}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -536,6 +676,12 @@ function BlogListView() {
       {error && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {error}
+        </div>
+      )}
+
+      {notice && (
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          {notice}
         </div>
       )}
 
@@ -562,13 +708,33 @@ function BlogListView() {
               Control the full blog surface for the active site: drafts, taxonomy, authors, previews, bulk publishing, archive state, and frontend article delivery.
             </p>
           </div>
-          <Link
-            to="/blog/new"
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
-          >
-            <Plus className="h-4 w-4" />
-            New post
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void copyBlogText(blogHandoffText, 'Blog handoff manifest')}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              <Copy className="size-4" />
+              Copy handoff
+            </button>
+            <button
+              type="button"
+              onClick={downloadBlogHandoff}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              <Download className="size-4" />
+              Download JSON
+            </button>
+            <Link
+              to="/blog/new"
+              search={createPostSearch}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+              data-testid="blog-command-create"
+            >
+              <Plus className="h-4 w-4" />
+              New post
+            </Link>
+          </div>
         </div>
 
         <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
@@ -666,6 +832,44 @@ function BlogListView() {
           </select>
         </div>
       </div>
+
+      <section className="mb-6 rounded-lg border border-border bg-card p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">Blog API contract</h2>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Public post list/detail delivery plus private admin endpoints for drafts, previews, readiness, publish, archive, and delete flows.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void copyBlogText(publicBlogUrl, 'Blog posts API URL')}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            >
+              <Copy className="h-4 w-4" />
+              Copy API
+            </button>
+            <button
+              type="button"
+              onClick={() => void copyBlogText(blogHandoffText, 'Blog handoff manifest')}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            >
+              <Copy className="h-4 w-4" />
+              Copy handoff
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <BlogApiSnippet label="Public posts" value={publicBlogUrl} />
+          <BlogApiSnippet label="Post by slug" value={publicPostBySlugUrl} />
+          <BlogApiSnippet label="Admin posts" value={adminBlogUrl} />
+          <BlogApiSnippet label="Preview" value={adminBlogPreviewUrl} />
+        </div>
+      </section>
 
       {hasPosts && (
         <div id="blog-bulk" className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 scroll-mt-24">
@@ -850,15 +1054,15 @@ function BlogListView() {
                       Clear Filters
                     </button>
                   )}
-                  <button
-                    type="button"
+                  <Link
+                    to="/blog/new"
+                    search={createPostSearch}
                     data-testid="blog-empty-create"
-                    onClick={() => navigate({ to: '/blog/new' })}
                     className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                   >
                     <Plus className="w-4 h-4" />
                     {hasPosts ? 'New Post' : 'Create First Post'}
-                  </button>
+                  </Link>
                 </div>
               }
             />
@@ -947,6 +1151,17 @@ const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
   return env[key]?.trim() ?? '';
 };
+
+function BlogApiSnippet({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="mb-1 text-xs font-medium text-muted-foreground">{label}</div>
+      <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+        {value}
+      </code>
+    </div>
+  );
+}
 
 const getPublicBaseUrl = (): string => {
   const envBase = (

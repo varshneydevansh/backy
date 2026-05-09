@@ -33,7 +33,14 @@ import {
   serializeCanvasContent,
 } from '@/components/editor/editorCatalog';
 
+interface BlogNewSearch {
+    siteId?: string;
+}
+
 export const Route = createFileRoute('/blog/new')({
+    validateSearch: (search: Record<string, unknown>): BlogNewSearch => ({
+        siteId: typeof search.siteId === 'string' ? search.siteId : undefined,
+    }),
     component: NewBlogPostPage,
 });
 
@@ -74,12 +81,17 @@ const BLOG_CREATE_WORKFLOW = [
 
 function NewBlogPostPage() {
     const navigate = useNavigate();
+    const search = Route.useSearch();
     const { sites, posts, setPosts } = useStore();
     const { user } = useAuthStore();
 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [activeSiteId, setActiveSiteId] = useState(() => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo');
+    const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
+    const requestedSiteId = search.siteId && sites.some((site) => (site.publicSiteId || site.id) === search.siteId)
+        ? search.siteId
+        : defaultSiteId;
+    const [activeSiteId, setActiveSiteId] = useState(requestedSiteId);
 
     // Form State
     const [title, setTitle] = useState('');
