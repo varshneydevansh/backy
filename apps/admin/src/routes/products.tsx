@@ -891,6 +891,8 @@ function ProductsRoute() {
   };
 
   const createProductsCollection = async () => {
+    if (isSaving) return;
+
     setIsSaving(true);
     setError(null);
     setNotice(null);
@@ -923,6 +925,8 @@ function ProductsRoute() {
 
   const syncProductsCollection = async () => {
     if (!productCollection) return;
+    if (isSaving) return;
+
     setIsSaving(true);
     setError(null);
     setNotice(null);
@@ -1027,8 +1031,11 @@ function ProductsRoute() {
 
   const changeProductStatus = async (product: CollectionRecord, status: ContentStatus) => {
     if (!productCollection) return;
+    if (isSaving) return;
+
     setIsSaving(true);
     setError(null);
+    setNotice(null);
 
     try {
       const updated = await updateCollectionRecord(activeSiteId, productCollection.id, product.id, {
@@ -1040,6 +1047,7 @@ function ProductsRoute() {
       if (selectedProductId === updated.id) {
         setFormState(productToForm(updated));
       }
+      setNotice(`Product ${status}.`);
     } catch (statusError) {
       setError(statusError instanceof Error ? statusError.message : 'Unable to update product');
     } finally {
@@ -1049,8 +1057,11 @@ function ProductsRoute() {
 
   const removeProduct = async (product: CollectionRecord) => {
     if (!productCollection) return;
+    if (isSaving) return;
+
     setIsSaving(true);
     setError(null);
+    setNotice(null);
 
     try {
       await deleteCollectionRecord(activeSiteId, productCollection.id, product.id);
@@ -1059,6 +1070,7 @@ function ProductsRoute() {
         resetForm();
       }
       setPendingDeleteProduct(null);
+      setNotice('Product deleted.');
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete product');
     } finally {
