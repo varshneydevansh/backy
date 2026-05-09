@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { CheckSquare, Code2, Copy, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Save, Trash2, Type, Upload, X } from 'lucide-react';
+import { CheckSquare, Code2, Copy, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Save, Trash2, Type, Upload, Video, X } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
@@ -117,6 +117,10 @@ function MediaPage() {
   const publicMediaFileUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/{mediaId}/file`;
   const publicMediaTransformUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/{mediaId}/transform?width=1200&quality=75`;
   const adminMediaUploadUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media`;
+  const getAssetDeliveryUrl = useCallback(
+    (asset: MediaAsset) => getPublicMediaFileUrl(asset.id, siteId),
+    [siteId],
+  );
   const uploadTargetFolderId = uploadFolderId === 'current'
     ? selectedFolderId === undefined ? null : selectedFolderId
     : uploadFolderId === 'root' ? null : uploadFolderId;
@@ -1621,15 +1625,9 @@ function MediaPage() {
                 />
                 <span className="sr-only">Select {file.name}</span>
               </label>
-              {/* Preview */}
               <div className="aspect-square bg-muted flex items-center justify-center relative">
-                {file.type === 'image' && file.url ? (
-                  <img src={file.url} alt={file.name} className="w-full h-full object-cover" />
-                ) : (
-                  <File className="w-12 h-12 text-muted-foreground" />
-                )}
+                <MediaAssetPreview file={file} />
 
-                {/* Overlay */}
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                   <button
                     className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100"
@@ -1639,6 +1637,28 @@ function MediaPage() {
                   >
                     <Edit3 className="w-4 h-4" />
                   </button>
+                  {file.visibility !== 'private' && (
+                    <>
+                      <button
+                        className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100"
+                        onClick={() => void copyMediaApiText(getAssetDeliveryUrl(file), `${file.name} delivery URL`)}
+                        title="Copy delivery URL"
+                        aria-label={`Copy delivery URL for ${file.name}`}
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                      <a
+                        href={getAssetDeliveryUrl(file)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100"
+                        title="Open delivered file"
+                        aria-label={`Open delivered file for ${file.name}`}
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    </>
+                  )}
                   <button
                     className="p-2 bg-white rounded-lg text-red-600 hover:bg-red-50"
                     onClick={() => setPendingDeleteAsset(file)}
@@ -1652,8 +1672,15 @@ function MediaPage() {
 
               {/* Info */}
               <div className="p-3">
-                <p className="font-medium text-sm truncate" title={file.name}>{file.name}</p>
-                <p className="text-xs text-muted-foreground">{file.size} · {file.visibility || 'public'}</p>
+                <div className="flex items-start gap-2">
+                  <MediaTypeIcon type={file.type} className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm truncate" title={file.name}>{file.name}</p>
+                    <p className="text-xs capitalize text-muted-foreground">
+                      {file.type === 'file' ? 'document' : file.type} · {file.size} · {file.visibility || 'public'}
+                    </p>
+                  </div>
+                </div>
                 {file.folderId && (
                   <p className="mt-1 text-xs text-muted-foreground">
                     {folders.find((folder) => folder.id === file.folderId)?.name || 'Folder'}
@@ -2675,9 +2702,67 @@ function MediaApiSnippet({ label, value }: { label: string; value: string }) {
   );
 }
 
+function MediaTypeIcon({ type, className }: { type: MediaAsset['type']; className?: string }) {
+  if (type === 'image') {
+    return <ImageIcon className={className} />;
+  }
+
+  if (type === 'video') {
+    return <Video className={className} />;
+  }
+
+  if (type === 'font') {
+    return <Type className={className} />;
+  }
+
+  if (type === 'file') {
+    return <FileText className={className} />;
+  }
+
+  return <File className={className} />;
+}
+
+function MediaAssetPreview({ file }: { file: MediaAsset }) {
+  if (file.type === 'image' && file.url) {
+    return <img src={file.url} alt={file.altText || file.name} className="h-full w-full object-cover" />;
+  }
+
+  if (file.type === 'video' && file.url) {
+    return (
+      <video
+        src={file.url}
+        className="h-full w-full object-cover"
+        muted
+        preload="metadata"
+        aria-label={file.name}
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-4 text-center">
+      <span className="flex size-14 items-center justify-center rounded-xl border border-border bg-background text-muted-foreground shadow-sm">
+        <MediaTypeIcon type={file.type} className="h-7 w-7" />
+      </span>
+      <span className="max-w-full truncate rounded bg-background/80 px-2 py-1 text-xs font-medium capitalize text-muted-foreground">
+        {file.type === 'file' ? 'document' : file.type}
+      </span>
+    </div>
+  );
+}
+
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
   return env[key]?.trim() ?? '';
+};
+
+const isLocalAdminDevHost = (): boolean => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
+    && window.location.port !== '3001';
 };
 
 const getPublicBaseUrl = (): string => {
@@ -2688,7 +2773,7 @@ const getPublicBaseUrl = (): string => {
     ''
   ).trim();
 
-  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+  if (!envBase && isLocalAdminDevHost()) {
     return 'http://localhost:3001';
   }
 
