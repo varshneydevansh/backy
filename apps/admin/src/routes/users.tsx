@@ -98,6 +98,34 @@ const roleBadgeClass: Record<UserRole, string> = {
   viewer: 'border-slate-200 bg-slate-50 text-slate-700',
 };
 
+const USER_CONTROL_AREAS = [
+  {
+    title: 'Access health',
+    detail: 'Review active admins, pending invites, suspended users, and role integrity.',
+    href: '#users-metrics',
+  },
+  {
+    title: 'User API',
+    detail: 'List, invite, update, remove, copy endpoints, and export visible users.',
+    href: '#users-api',
+  },
+  {
+    title: 'Directory controls',
+    detail: 'Search, filter, refresh, and page through the account directory.',
+    href: '#users-directory-controls',
+  },
+  {
+    title: 'People directory',
+    detail: 'Edit role/status, open user detail, and remove access from one table.',
+    href: '#users-directory',
+  },
+  {
+    title: 'Role permissions',
+    detail: 'Compare owner, admin, editor, and viewer capabilities before handoff.',
+    href: '#users-permissions',
+  },
+] as const;
+
 function UsersLayout() {
   const routerState = useRouterState();
   const isExactUsersRoute = routerState.location.pathname === '/users';
@@ -432,7 +460,101 @@ function UsersListView() {
       }
       className="w-full"
     >
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="users-command-center">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">Users command center</h2>
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                accessReadiness.score >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+              )}
+              >
+                {accessReadiness.score}% ready
+              </span>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Control workspace membership, role authority, invite states, access reviews, private user APIs, and exportable user records.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={data.length === 0}
+              onClick={handleExportUsers}
+              iconStart={<Download className="size-4" />}
+            >
+              Export CSV
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void loadUsers()}
+              disabled={isLoading}
+              iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}
+            >
+              Refresh users
+            </Button>
+            <Link to="/users/new">
+              <Button iconStart={<Send className="size-4" />}>
+                Invite user
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+          <div className="rounded-lg border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold">Access readiness</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Checks admin continuity, role integrity, pending invites, suspended accounts, and invite delivery gaps.
+            </p>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn('h-full rounded-full', accessReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                style={{ width: `${accessReadiness.score}%` }}
+              />
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {accessReadiness.checks.map((check) => (
+                <UserReadinessCheck key={check.label} {...check} />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex items-center gap-2">
+              <Shield className="size-4 text-primary" />
+              <h3 className="text-sm font-semibold">Account workflow</h3>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {accessReadiness.workflow.map((step, index) => (
+                <UserWorkflowStep key={step.label} index={index + 1} {...step} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <h3 className="text-sm font-semibold">Users control map</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Jump to access health, API contracts, directory controls, the people table, and role permissions.</p>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {USER_CONTROL_AREAS.map((area) => (
+              <a
+                key={area.title}
+                href={area.href}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div id="users-metrics" className="grid gap-3 scroll-mt-24 md:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => (
           <div key={metric.label} className="rounded-lg border border-border bg-card p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
@@ -451,7 +573,7 @@ function UsersListView() {
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="min-w-0 space-y-6">
-          <Panel>
+          <Panel id="users-api" className="scroll-mt-24">
             <PanelHeader
               title="User access API"
               description="Private admin endpoints for listing users, inviting collaborators, and updating account roles or status."
@@ -541,7 +663,7 @@ function UsersListView() {
             </PanelContent>
           </Panel>
 
-          <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+          <div id="users-directory-controls" className="rounded-lg border border-border bg-card p-4 shadow-sm scroll-mt-24">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="relative min-w-0 flex-1 lg:max-w-xl">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -612,51 +734,53 @@ function UsersListView() {
             )}
           </div>
 
-          <DataGrid
-            columns={columns}
-            data={data}
-            loading={isLoading}
-            sortConfig={sortConfig}
-            onSort={handleSort}
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={setCurrentPage}
-            totalItems={totalItems}
-            emptyState={
-              <EmptyState
-                icon={hasActiveFilters ? Search : User}
-                title={hasActiveFilters ? 'No users match those controls' : 'No users found'}
-                description={hasActiveFilters ? 'Clear the search or filters to see the full access list.' : 'Invite people before you hand off content, commerce, or publishing work.'}
-                action={
-                  hasActiveFilters ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSearchQuery('');
-                        setRoleFilter('all');
-                        setStatusFilter('all');
-                        setCurrentPage(1);
-                      }}
-                      className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
-                    >
-                      Clear filters
-                    </button>
-                  ) : (
-                    <Link
-                      to="/users/new"
-                      className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Invite user
-                    </Link>
-                  )
-                }
-              />
-            }
-          />
+          <div id="users-directory" className="scroll-mt-24">
+            <DataGrid
+              columns={columns}
+              data={data}
+              loading={isLoading}
+              sortConfig={sortConfig}
+              onSort={handleSort}
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              totalItems={totalItems}
+              emptyState={
+                <EmptyState
+                  icon={hasActiveFilters ? Search : User}
+                  title={hasActiveFilters ? 'No users match those controls' : 'No users found'}
+                  description={hasActiveFilters ? 'Clear the search or filters to see the full access list.' : 'Invite people before you hand off content, commerce, or publishing work.'}
+                  action={
+                    hasActiveFilters ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery('');
+                          setRoleFilter('all');
+                          setStatusFilter('all');
+                          setCurrentPage(1);
+                        }}
+                        className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+                      >
+                        Clear filters
+                      </button>
+                    ) : (
+                      <Link
+                        to="/users/new"
+                        className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Invite user
+                      </Link>
+                    )
+                  }
+                />
+              }
+            />
+          </div>
         </div>
 
-        <aside className="space-y-4">
+        <aside id="users-permissions" className="space-y-4 scroll-mt-24">
           <Panel>
             <PanelHeader
               title="Role permissions"
