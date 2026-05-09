@@ -170,6 +170,8 @@ export interface CanvasEditorProps {
     size?: CanvasSize
   ) => void;
   validateSettings?: (settings: PageSettings) => string | null;
+  publishDisabled?: boolean;
+  publishDisabledReason?: string;
 }
 
 const normalizeTypeToken = (value: string): string => {
@@ -274,6 +276,8 @@ export function CanvasEditor({
   mediaContext,
   onChange,
   validateSettings,
+  publishDisabled = false,
+  publishDisabledReason,
 }: CanvasEditorProps) {
   const media = useStore((state) => state.media);
   const setMedia = useStore((state) => state.setMedia);
@@ -2029,14 +2033,20 @@ export function CanvasEditor({
   }, [handleSaveWrapper, markChanges]);
 
   const handleTogglePublish = useCallback(async () => {
+    const nextStatus = pageSettings.status === 'published' ? 'draft' : 'published';
+    if (nextStatus === 'published' && publishDisabled) {
+      setEditorNotice(publishDisabledReason || 'Resolve page readiness issues before publishing.');
+      return;
+    }
+
     const nextSettings: PageSettings = {
       ...pageSettings,
-      status: pageSettings.status === 'published' ? 'draft' : 'published',
+      status: nextStatus,
     };
     setPageSettings(nextSettings);
     markChanges();
     await handleSaveWrapper(nextSettings, true);
-  }, [handleSaveWrapper, pageSettings, markChanges]);
+  }, [handleSaveWrapper, pageSettings, markChanges, publishDisabled, publishDisabledReason]);
 
   const performReload = useCallback(() => {
     const nextElements = getInitialElements();
@@ -2738,23 +2748,29 @@ export function CanvasEditor({
                   <button
                     type="button"
                     onClick={handleTogglePublish}
-                    disabled={isSaving}
+                    disabled={isSaving || (pageSettings.status !== 'published' && publishDisabled)}
                     className={cn(
                       'px-2 py-1.5 rounded-md text-sm font-medium',
                       pageSettings.status === 'published'
                         ? 'bg-amber-500 text-white hover:bg-amber-500/90'
                         : 'bg-emerald-600 text-white hover:bg-emerald-600/90',
-                      isSaving ? 'opacity-70 cursor-not-allowed' : '',
+                      isSaving || (pageSettings.status !== 'published' && publishDisabled)
+                        ? 'opacity-70 cursor-not-allowed'
+                        : '',
                     )}
                     title={
                       pageSettings.status === 'published'
                         ? 'Set page back to draft'
-                        : 'Publish page'
+                        : publishDisabled
+                          ? publishDisabledReason || 'Resolve page readiness issues before publishing'
+                          : 'Publish page'
                     }
                     aria-label={
                       pageSettings.status === 'published'
                         ? 'Unpublish page'
-                        : 'Publish page'
+                        : publishDisabled
+                          ? publishDisabledReason || 'Publish disabled'
+                          : 'Publish page'
                     }
                   >
                     {pageSettings.status === 'published' ? 'Unpublish' : 'Publish'}

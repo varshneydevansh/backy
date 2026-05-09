@@ -332,6 +332,11 @@ function PageEditorRoute() {
     return selectedSitePages.find((candidate) => candidate.id !== page.id && getPagePublicPath(candidate) === nextPath) || null;
   };
   const currentRouteConflict = findRouteConflict(initialSettings);
+  const publishDisabledReason = currentRouteConflict
+    ? `${publicPath} conflicts with "${currentRouteConflict.title}". Choose another slug before publishing.`
+    : isReadinessBlocked
+      ? pageReadinessFindings.find((check) => check.severity === 'error')?.message || 'Resolve page readiness errors before publishing.'
+      : null;
   const validatePageSettings = (settings: PageSettings) => {
     const nextSlug = slugify(settings.slug || settings.title || 'page');
     const nextPath = getPublicPathForSettings(settings);
@@ -544,6 +549,11 @@ function PageEditorRoute() {
         throw new Error(validationMessage);
       }
 
+      if (settings.status === 'published' && page.status !== 'published' && publishDisabledReason) {
+        setSaveWarning(publishDisabledReason);
+        throw new Error(publishDisabledReason);
+      }
+
       const savedPage = await updatePageFromApi(siteId, pageId, {
         title: settings.title,
         slug: settings.slug,
@@ -746,9 +756,9 @@ function PageEditorRoute() {
             <Button
               type="button"
               onClick={() => void applyWorkflow('publish')}
-              disabled={isWorkflowBusy || page.status === 'published' || isReadinessBlocked}
+              disabled={isWorkflowBusy || page.status === 'published' || Boolean(publishDisabledReason)}
               iconStart={<CheckCircle2 className="size-4" />}
-              title={isReadinessBlocked ? 'Resolve page readiness errors before publishing' : 'Publish page'}
+              title={publishDisabledReason || 'Publish page'}
             >
               Publish
             </Button>
@@ -908,6 +918,8 @@ function PageEditorRoute() {
                 targetLabel: page.title,
               }}
               validateSettings={validatePageSettings}
+              publishDisabled={Boolean(publishDisabledReason)}
+              publishDisabledReason={publishDisabledReason || undefined}
               className="h-full w-full"
             />
           </EditorWorkspaceFrame>
@@ -935,11 +947,11 @@ function PageEditorRoute() {
                 </Button>
                 <Button
                   onClick={() => void applyWorkflow('publish')}
-                  disabled={isWorkflowBusy || page.status === 'published' || isReadinessBlocked}
+                  disabled={isWorkflowBusy || page.status === 'published' || Boolean(publishDisabledReason)}
                   variant="primary"
                   iconStart={<CheckCircle2 className="size-4" />}
                   className="w-full"
-                  title={isReadinessBlocked ? 'Resolve page readiness errors before publishing' : 'Publish page'}
+                  title={publishDisabledReason || 'Publish page'}
                 >
                   Publish
                 </Button>
