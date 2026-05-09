@@ -370,6 +370,7 @@ function StatCard({
   detail,
   icon: Icon,
   to,
+  search,
   tone,
 }: {
   label: string;
@@ -377,11 +378,13 @@ function StatCard({
   detail: string;
   icon: ElementType;
   to: '/sites' | '/pages' | '/blog' | '/media' | '/users' | '/collections' | '/forms' | '/comments' | '/products' | '/orders';
+  search?: { siteId: string };
   tone: string;
 }) {
   return (
     <Link
       to={to}
+      search={search}
       className="group rounded-lg border border-border bg-card p-5 shadow-sm transition-colors hover:border-primary/40 hover:bg-accent/30"
     >
       <div className="flex items-start justify-between gap-4">
@@ -412,17 +415,20 @@ function DashboardReadinessCheck({
   detail,
   ready,
   to,
+  search,
 }: {
   label: string;
   detail: string;
   ready: boolean;
   to: DashboardReadinessRoute;
+  search?: { siteId: string };
 }) {
   const Icon = ready ? CheckCircle2 : AlertTriangle;
 
   return (
     <Link
       to={to}
+      search={search}
       className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 transition-colors hover:bg-accent"
     >
       <Icon className={cn('mt-0.5 size-4 shrink-0', ready ? 'text-success' : 'text-warning')} />
@@ -652,6 +658,13 @@ function Index() {
     users: `${adminBaseUrl}/users`,
     settings: `${adminBaseUrl}/settings`,
   };
+  const getDashboardRouteSearch = (
+    to: '/sites' | '/pages' | '/blog' | '/media' | '/users' | '/settings' | '/collections' | '/forms' | '/comments' | '/products' | '/orders' | '/sites/new' | '/pages/new' | '/blog/new',
+  ) => (
+    ['/pages', '/blog', '/media', '/collections', '/forms', '/comments', '/products', '/orders', '/pages/new', '/blog/new'].includes(to)
+      ? { siteId: activeSiteId }
+      : undefined
+  );
   const frontendHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -673,20 +686,20 @@ function Index() {
     adminEndpoints: adminContractUrls,
     controlRoutes: {
       sites: '/sites',
-      pages: '/pages',
+      pages: `/pages?siteId=${encodeURIComponent(activeSiteId)}`,
       pageBuilder: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}`,
       contactPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=contact`,
       registrationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
       storefrontPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
       blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
-      blog: '/blog',
-      media: '/media',
-      collections: '/collections',
-      forms: '/forms',
-      contacts: '/contacts',
-      comments: '/comments',
-      products: '/products',
-      orders: '/orders',
+      blog: `/blog?siteId=${encodeURIComponent(activeSiteId)}`,
+      media: `/media?siteId=${encodeURIComponent(activeSiteId)}`,
+      collections: `/collections?siteId=${encodeURIComponent(activeSiteId)}`,
+      forms: `/forms?siteId=${encodeURIComponent(activeSiteId)}`,
+      contacts: `/contacts?siteId=${encodeURIComponent(activeSiteId)}`,
+      comments: `/comments?siteId=${encodeURIComponent(activeSiteId)}`,
+      products: `/products?siteId=${encodeURIComponent(activeSiteId)}`,
+      orders: `/orders?siteId=${encodeURIComponent(activeSiteId)}`,
       users: '/users',
       settings: '/settings',
     },
@@ -1062,7 +1075,7 @@ function Index() {
               </div>
               <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                 {platformReadiness.checks.slice(0, 6).map((check) => (
-                  <DashboardReadinessCheck key={check.label} {...check} />
+                  <DashboardReadinessCheck key={check.label} {...check} search={getDashboardRouteSearch(check.to)} />
                 ))}
               </div>
             </div>
@@ -1114,6 +1127,7 @@ function Index() {
                 <Link
                   key={module.title}
                   to={module.href}
+                  search={getDashboardRouteSearch(module.href)}
                   className="group rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -1178,7 +1192,7 @@ function Index() {
 
         <div id="dashboard-stats" className="grid grid-cols-1 gap-4 scroll-mt-24 sm:grid-cols-2 xl:grid-cols-5">
           {stats.map((stat) => (
-            <StatCard key={stat.label} {...stat} />
+            <StatCard key={stat.label} {...stat} search={getDashboardRouteSearch(stat.to)} />
           ))}
         </div>
 
@@ -1219,7 +1233,7 @@ function Index() {
           <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
               {platformReadiness.checks.map((check) => (
-                <DashboardReadinessCheck key={check.label} {...check} />
+                <DashboardReadinessCheck key={check.label} {...check} search={getDashboardRouteSearch(check.to)} />
               ))}
             </div>
 
@@ -1264,6 +1278,7 @@ function Index() {
                   <Link
                     key={action.label}
                     to={action.to}
+                    search={getDashboardRouteSearch(action.to)}
                     className="group rounded-lg border border-border p-4 transition-colors hover:border-primary/40 hover:bg-accent/40"
                   >
                     <div className="flex items-center gap-3">
@@ -1326,6 +1341,7 @@ function Index() {
                   </Link>
                   <Link
                     to="/products"
+                    search={{ siteId: activeSiteId }}
                     className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
                   >
                     <div className="text-sm font-semibold text-foreground">Product catalog</div>
@@ -1333,6 +1349,7 @@ function Index() {
                   </Link>
                   <Link
                     to="/orders"
+                    search={{ siteId: activeSiteId }}
                     className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
                   >
                     <div className="text-sm font-semibold text-foreground">Order queue</div>
@@ -1340,6 +1357,7 @@ function Index() {
                   </Link>
                   <Link
                     to="/forms"
+                    search={{ siteId: activeSiteId }}
                     className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
                   >
                     <div className="text-sm font-semibold text-foreground">Form builder</div>
@@ -1575,6 +1593,7 @@ function Index() {
                 </Link>
                 <Link
                   to="/collections"
+                  search={{ siteId: activeSiteId }}
                   className="inline-flex min-h-11 items-center justify-between rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
                 >
                   Manage frontend datasets
