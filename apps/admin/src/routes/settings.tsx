@@ -580,6 +580,12 @@ function SettingsPage() {
       seo: next,
     });
   };
+  const openSettingsTab = (tab: SettingsTab) => {
+    setActiveTab(tab);
+    window.requestAnimationFrame(() => {
+      document.getElementById('settings-tab-content')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    });
+  };
 
   return (
     <div className="flex animate-fade-in flex-col gap-6">
@@ -588,7 +594,7 @@ function SettingsPage() {
         <div>
           <h1 className="text-2xl font-bold">Settings</h1>
           <p className="text-muted-foreground mt-1">
-            Manage your CMS settings and preferences
+            Control delivery, infrastructure, design defaults, API keys, notifications, and security for every frontend.
           </p>
         </div>
 
@@ -606,106 +612,110 @@ function SettingsPage() {
         <Notice tone="warning">{notice}</Notice>
       )}
 
-      <Panel>
-        <PanelHeader
-          title="Platform readiness"
-          description="One place to see whether Backy can securely power managed sites, custom frontends, media, database-backed content, and deploy workflows."
-          icon={<Server className="size-4" />}
-          action={
-            <span className={cn(
-              'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold',
-              platformReadiness.score >= 80
-                ? 'bg-emerald-50 text-emerald-700'
-                : 'bg-amber-50 text-amber-700',
-            )}
-            >
-              {platformReadiness.score}% ready
-            </span>
-          }
-        />
-        <PanelContent>
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
-            <div className="rounded-lg border border-border bg-background p-4">
+      <div id="settings-command-center" className="scroll-mt-24" data-testid="settings-command-center">
+        <Panel>
+          <PanelHeader
+            title="Settings command center"
+            description="One place to see whether Backy can securely power managed sites, custom frontends, media, database-backed content, Supabase, and Vercel deploy workflows."
+            icon={<Server className="size-4" />}
+            action={
+              <span className={cn(
+                'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold',
+                platformReadiness.score >= 80
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'bg-amber-50 text-amber-700',
+              )}
+              >
+                {platformReadiness.score}% ready
+              </span>
+            }
+          />
+          <PanelContent>
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Backend control health</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Checks the pieces a Wix/WordPress-style backend needs before frontends depend on it.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    {deliveryMode === 'custom-frontend' ? 'Headless' : 'Managed'}
+                  </span>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={cn(
+                      'h-full rounded-full',
+                      platformReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500',
+                    )}
+                    style={{ width: `${platformReadiness.score}%` }}
+                  />
+                </div>
+                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {platformReadiness.checks.map((check) => (
+                    <SettingsReadinessCheck key={check.label} {...check} />
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex items-center gap-2">
+                  <Code className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold">Setup workflow</h3>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {platformReadiness.workflow.map((step, index) => (
+                    <SettingsWorkflowStep key={step.label} index={index + 1} {...step} />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-border bg-background p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-semibold">Backend control health</h3>
+                  <h3 className="text-sm font-semibold">Settings control map</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Checks the pieces a Wix/WordPress-style backend needs before frontends depend on it.
+                    Jump to the settings that control public APIs, visual defaults, infrastructure, notifications, and security.
                   </p>
                 </div>
-                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                  {deliveryMode === 'custom-frontend' ? 'Headless' : 'Managed'}
-                </span>
-              </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-                <div
-                  className={cn(
-                    'h-full rounded-full',
-                    platformReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500',
-                  )}
-                  style={{ width: `${platformReadiness.score}%` }}
-                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openSettingsTab('infrastructure')}
+                  iconStart={<Cloud className="size-4" />}
+                >
+                  Open infrastructure
+                </Button>
               </div>
               <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                {platformReadiness.checks.map((check) => (
-                  <SettingsReadinessCheck key={check.label} {...check} />
+                {SETTINGS_CONTROL_AREAS.map((area) => (
+                  <button
+                    key={area.title}
+                    type="button"
+                    onClick={() => openSettingsTab(area.tab)}
+                    className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                  </button>
                 ))}
               </div>
             </div>
-
-            <div className="rounded-lg border border-border bg-background p-4">
-              <div className="flex items-center gap-2">
-                <Code className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold">Setup workflow</h3>
-              </div>
-              <div className="mt-3 grid gap-2">
-                {platformReadiness.workflow.map((step, index) => (
-                  <SettingsWorkflowStep key={step.label} index={index + 1} {...step} />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-lg border border-border bg-background p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold">Settings control map</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Jump to the settings that control public APIs, visual defaults, infrastructure, notifications, and security.
-                </p>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setActiveTab('infrastructure')}
-                iconStart={<Cloud className="size-4" />}
-              >
-                Open infrastructure
-              </Button>
-            </div>
-            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {SETTINGS_CONTROL_AREAS.map((area) => (
-                <button
-                  key={area.title}
-                  type="button"
-                  onClick={() => setActiveTab(area.tab)}
-                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
-                >
-                  <div className="text-sm font-semibold text-foreground">{area.title}</div>
-                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </PanelContent>
-      </Panel>
+          </PanelContent>
+        </Panel>
+      </div>
 
       {/* Tabs */}
-      <SegmentedTabs items={TABS} value={activeTab} onChange={setActiveTab} />
+      <div id="settings-tabs" className="scroll-mt-24">
+        <SegmentedTabs items={TABS} value={activeTab} onChange={setActiveTab} />
+      </div>
 
       {/* Tab Content */}
-      <Panel>
+      <Panel id="settings-tab-content" className="scroll-mt-24">
         <PanelContent className="pt-5">
         {activeTab === 'general' && (
           <GeneralSettings value={generalSettings} onChange={updateGeneralSettings} />
