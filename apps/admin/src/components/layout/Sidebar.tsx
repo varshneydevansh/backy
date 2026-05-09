@@ -53,6 +53,11 @@ interface NavItem {
   badge?: string;
 }
 
+interface NavSection {
+  label: string;
+  items: NavItem[];
+}
+
 // ============================================
 // NAVIGATION ITEMS
 // ============================================
@@ -60,20 +65,45 @@ interface NavItem {
 /**
  * Main navigation items for the sidebar
  */
-const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', to: '/', icon: LayoutDashboard },
-  { label: 'Sites', to: '/sites', icon: Globe },
-  { label: 'Pages', to: '/pages', icon: FileText },
-  { label: 'Blog', to: '/blog', icon: Newspaper },
-  { label: 'Collections', to: '/collections', icon: Database },
-  { label: 'Forms', to: '/forms', icon: ClipboardList },
-  { label: 'Products', to: '/products', icon: ShoppingBag },
-  { label: 'Orders', to: '/orders', icon: Receipt },
-  { label: 'Comments', to: '/comments', icon: MessageSquare },
-  { label: 'Contacts', to: '/contacts', icon: Contact },
-  { label: 'Media', to: '/media', icon: Image },
-  { label: 'Users', to: '/users', icon: Users },
-  { label: 'Settings', to: '/settings', icon: Settings },
+const NAV_SECTIONS: NavSection[] = [
+  {
+    label: 'Workspace',
+    items: [
+      { label: 'Dashboard', to: '/', icon: LayoutDashboard },
+      { label: 'Sites', to: '/sites', icon: Globe },
+    ],
+  },
+  {
+    label: 'Content',
+    items: [
+      { label: 'Pages', to: '/pages', icon: FileText },
+      { label: 'Blog', to: '/blog', icon: Newspaper },
+      { label: 'Media', to: '/media', icon: Image },
+      { label: 'Collections', to: '/collections', icon: Database },
+    ],
+  },
+  {
+    label: 'Commerce',
+    items: [
+      { label: 'Products', to: '/products', icon: ShoppingBag },
+      { label: 'Orders', to: '/orders', icon: Receipt },
+    ],
+  },
+  {
+    label: 'Audience',
+    items: [
+      { label: 'Forms', to: '/forms', icon: ClipboardList },
+      { label: 'Contacts', to: '/contacts', icon: Contact },
+      { label: 'Comments', to: '/comments', icon: MessageSquare },
+    ],
+  },
+  {
+    label: 'Platform',
+    items: [
+      { label: 'Users', to: '/users', icon: Users },
+      { label: 'Settings', to: '/settings', icon: Settings },
+    ],
+  },
 ];
 
 // ============================================
@@ -116,41 +146,53 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
-        {NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
-          const isActive = location.pathname === item.to ||
-            location.pathname.startsWith(`${item.to}/`);
-
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors',
-                'hover:bg-accent hover:text-accent-foreground',
-                isActive
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'text-muted-foreground',
-                collapsed && 'justify-center px-2'
-              )}
-              title={collapsed ? item.label : undefined}
-            >
-              <Icon className="w-5 h-5 flex-shrink-0" />
-
+      <nav className="flex-1 overflow-y-auto px-2 py-4" aria-label="Primary">
+        <div className="space-y-5">
+          {NAV_SECTIONS.map((section) => (
+            <div key={section.label} className="space-y-1">
               {!collapsed && (
-                <>
-                  <span className="flex-1 truncate">{item.label}</span>
-                  {item.badge && (
-                    <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
-                      {item.badge}
-                    </span>
-                  )}
-                </>
+                <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+                  {section.label}
+                </div>
               )}
-            </Link>
-          );
-        })}
+              {section.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.to ||
+                  (item.to !== '/' && location.pathname.startsWith(`${item.to}/`));
+
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={cn(
+                      'flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                      'hover:bg-accent hover:text-accent-foreground',
+                      isActive
+                        ? 'bg-primary/10 font-medium text-primary'
+                        : 'text-muted-foreground',
+                      collapsed && 'justify-center px-2'
+                    )}
+                    title={collapsed ? item.label : undefined}
+                    aria-label={item.label}
+                  >
+                    <Icon className="h-5 w-5 flex-shrink-0" />
+
+                    {!collapsed && (
+                      <>
+                        <span className="flex-1 truncate">{item.label}</span>
+                        {item.badge && (
+                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                            {item.badge}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+        </div>
       </nav>
 
       {/* Collapse Toggle */}
