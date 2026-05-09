@@ -40,6 +40,34 @@ export const Route = createFileRoute('/contacts')({
 
 type ContactStatusFilter = ContactStatus | 'all';
 
+const CONTACT_CONTROL_AREAS = [
+  {
+    title: 'Site scope',
+    detail: 'Choose the website whose captured leads and signup flows are being reviewed.',
+    href: '#contacts-site',
+  },
+  {
+    title: 'Pipeline health',
+    detail: 'Monitor new, contacted, qualified, archived, and total lead volume.',
+    href: '#contacts-metrics',
+  },
+  {
+    title: 'Contact API',
+    detail: 'List contacts, update lifecycle status, and hand private endpoints to custom tools.',
+    href: '#contacts-api',
+  },
+  {
+    title: 'Lead inbox',
+    detail: 'Search, filter, export, annotate, and route every captured record.',
+    href: '#contacts-inbox',
+  },
+  {
+    title: 'Lifecycle actions',
+    detail: 'Move records through new, contacted, qualified, and archived states.',
+    href: '#contacts-actions',
+  },
+] as const;
+
 interface ContactInbox {
   form: FormDefinition;
   contacts: AdminContact[];
@@ -107,6 +135,61 @@ function ContactsRoute() {
     qualified: allContacts.filter((contact) => contact.status === 'qualified').length,
     archived: allContacts.filter((contact) => contact.status === 'archived').length,
   }), [allContacts]);
+  const pipelineReadiness = useMemo(() => {
+    if (apiForm) {
+      return null;
+    }
+
+    const checks = [
+      {
+        label: 'Form sources',
+        detail: forms.length > 0
+          ? `${forms.length} source form${forms.length === 1 ? '' : 's'} connected.`
+          : 'Connect public forms before contacts can be captured.',
+        ready: forms.length > 0,
+      },
+      {
+        label: 'Lead records',
+        detail: metrics.contacts > 0
+          ? `${metrics.contacts} contact${metrics.contacts === 1 ? '' : 's'} captured.`
+          : 'No lead records have entered this site pipeline yet.',
+        ready: metrics.contacts > 0,
+      },
+      {
+        label: 'Follow-up queue',
+        detail: metrics.new > 0
+          ? `${metrics.new} new lead${metrics.new === 1 ? '' : 's'} need review.`
+          : 'New lead queue is clear.',
+        ready: true,
+      },
+      {
+        label: 'Qualification',
+        detail: metrics.qualified > 0
+          ? `${metrics.qualified} qualified contact${metrics.qualified === 1 ? '' : 's'}.`
+          : 'Use qualified status when a lead is ready for sales or membership.',
+        ready: metrics.contacts === 0 || metrics.qualified > 0,
+      },
+      {
+        label: 'Archive hygiene',
+        detail: metrics.archived > 0
+          ? `${metrics.archived} archived record${metrics.archived === 1 ? '' : 's'}.`
+          : 'Archive stale or rejected leads to keep the inbox focused.',
+        ready: true,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      checks,
+      workflow: [
+        { label: 'Capture', detail: 'Forms, registrations, and signup blocks create contact records.' },
+        { label: 'Review', detail: 'Search by person, form, phone, email, note, or request ID.' },
+        { label: 'Qualify', detail: 'Move records through contacted and qualified stages.' },
+        { label: 'Sync', detail: 'Export CSV or use the private contact API for custom systems.' },
+      ],
+    };
+  }, [apiForm, forms.length, metrics.archived, metrics.contacts, metrics.new, metrics.qualified]);
   const apiFormReadiness = useMemo(() => {
     if (!apiForm) {
       return {
@@ -179,6 +262,7 @@ function ContactsRoute() {
       ],
     };
   }, [apiForm, contactsByForm]);
+  const commandReadiness = pipelineReadiness || apiFormReadiness;
 
   const loadContacts = async () => {
     setIsLoading(true);
@@ -372,7 +456,113 @@ function ContactsRoute() {
         </div>
       )}
 
-      <div className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="contacts-command-center">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">Contacts command center</h2>
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                commandReadiness.score >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+              )}
+              >
+                {commandReadiness.score}% ready
+              </span>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Control lead capture, source forms, CRM lifecycle states, internal notes, CSV exports, and private contact APIs for custom frontends.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={handleExportContacts}
+              disabled={filteredContacts.length === 0}
+              iconStart={<Download className="size-4" />}
+            >
+              Export CSV
+            </Button>
+            <Button onClick={() => void loadContacts()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+              Refresh contacts
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+          <div className="rounded-lg border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold">Lead pipeline readiness</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Checks source availability, contact capture, follow-up queues, lifecycle usage, and sync readiness.
+            </p>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn('h-full rounded-full', commandReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                style={{ width: `${commandReadiness.score}%` }}
+              />
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {commandReadiness.checks.map((check) => (
+                <ContactReadinessCheck key={check.label} {...check} />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="size-4 text-primary" />
+              <h3 className="text-sm font-semibold">Lead workflow</h3>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {commandReadiness.workflow.map((step, index) => (
+                <ContactWorkflowStep key={step.label} index={index + 1} {...step} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <h3 className="text-sm font-semibold">Contacts control map</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, health metrics, API handoff, inbox review, and lifecycle controls.</p>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {CONTACT_CONTROL_AREAS.map((area) => (
+              <a
+                key={area.title}
+                href={area.href}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div id="contacts-site" className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 scroll-mt-24">
+        <label className="text-sm font-medium text-muted-foreground" htmlFor="contacts-active-site-inline">
+          Active site
+        </label>
+        <select
+          id="contacts-active-site-inline"
+          aria-label="Active contacts site"
+          value={activeSiteId}
+          onChange={(event) => setSelectedSiteId(event.target.value)}
+          className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
+        >
+          {sites.length === 0 ? (
+            <option value="site-demo">Demo site</option>
+          ) : sites.map((site) => (
+            <option key={site.id} value={site.publicSiteId || site.id}>
+              {site.name}
+            </option>
+          ))}
+        </select>
+        <span className="text-sm text-muted-foreground">
+          {activeSite?.name || activeSiteId} lead pipeline
+        </span>
+      </div>
+
+      <div id="contacts-metrics" className="mb-6 grid gap-3 scroll-mt-24 md:grid-cols-2 xl:grid-cols-5">
         <Metric label="Contacts" value={metrics.contacts} icon={<Contact className="size-4" />} />
         <Metric label="New" value={metrics.new} icon={<Mail className="size-4" />} />
         <Metric label="Contacted" value={metrics.contacted} icon={<Phone className="size-4" />} />
@@ -380,7 +570,7 @@ function ContactsRoute() {
         <Metric label="Archived" value={metrics.archived} icon={<Archive className="size-4" />} />
       </div>
 
-      <Panel>
+      <Panel id="contacts-inbox" className="scroll-mt-24">
         <PanelHeader
           title="Lead Inbox"
           description={`${filteredContacts.length}/${allContacts.length} visible contacts`}
@@ -404,8 +594,8 @@ function ContactsRoute() {
           }
         />
         <PanelContent>
-          {apiForm && (
-            <div className="mb-5 rounded-lg border border-border bg-muted/30 p-4">
+          {apiForm ? (
+            <div id="contacts-api" className="mb-5 rounded-lg border border-border bg-muted/30 p-4 scroll-mt-24">
               <div className="mb-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
                 <div className="rounded-lg border border-border bg-background p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -491,9 +681,28 @@ function ContactsRoute() {
                 <ApiSnippet label="Update contact" value={contactUpdateUrl} />
               </div>
             </div>
+          ) : (
+            <div id="contacts-api" className="mb-5 rounded-lg border border-dashed border-border bg-muted/30 p-4 scroll-mt-24">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    <Code2 className="size-4" />
+                    Contact pipeline API
+                  </div>
+                  <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                    Create or connect a public form with lead sharing to expose contact list and update endpoints.
+                  </p>
+                </div>
+                <Link to="/forms">
+                  <Button variant="outline" iconStart={<Mail className="size-4" />}>
+                    Configure forms
+                  </Button>
+                </Link>
+              </div>
+            </div>
           )}
 
-          <div className="mb-4 flex flex-wrap items-center gap-3">
+          <div id="contacts-actions" className="mb-4 flex flex-wrap items-center gap-3 scroll-mt-24">
             <div className="relative min-w-64 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <input
