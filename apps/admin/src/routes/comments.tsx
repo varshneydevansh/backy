@@ -28,7 +28,6 @@ import {
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { cn, formatDate } from '@/lib/utils';
@@ -38,6 +37,17 @@ export const Route = createFileRoute('/comments')({
 });
 
 type CommentStatusFilter = CommentModerationStatus | 'all';
+type CommentTriageFilter =
+  | 'all'
+  | 'reported'
+  | 'replies'
+  | 'top-level'
+  | 'anonymous'
+  | 'authenticated'
+  | 'missing-email'
+  | 'reviewed'
+  | 'unreviewed';
+type CommentSortFilter = 'newest' | 'oldest';
 
 const COMMENT_CONTROL_AREAS = [
   {
@@ -138,6 +148,8 @@ function CommentsRoute() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<CommentStatusFilter>('all');
   const [targetTypeFilter, setTargetTypeFilter] = useState<CommentModerationTarget>('all');
+  const [triageFilter, setTriageFilter] = useState<CommentTriageFilter>('all');
+  const [sortFilter, setSortFilter] = useState<CommentSortFilter>('newest');
   const [searchQuery, setSearchQuery] = useState('');
   const [moderationReason, setModerationReason] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -163,9 +175,10 @@ function CommentsRoute() {
     if (statusFilter !== 'all') query.set('status', statusFilter);
     if (targetTypeFilter !== 'all') query.set('targetType', targetTypeFilter);
     if (searchQuery.trim()) query.set('q', searchQuery.trim());
+    if (sortFilter) query.set('sort', sortFilter);
 
     return `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments?${query.toString()}`;
-  }, [activeSiteId, publicBaseUrl, searchQuery, statusFilter, targetTypeFilter]);
+  }, [activeSiteId, publicBaseUrl, searchQuery, sortFilter, statusFilter, targetTypeFilter]);
   const moderationBulkUpdateUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments`;
   const moderationSingleUpdateUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/{commentId}`;
   const filteredComments = useMemo(() => {
@@ -174,18 +187,50 @@ function CommentsRoute() {
     return comments.filter((comment) => {
       const matchesStatus = statusFilter === 'all' || comment.status === statusFilter;
       const matchesTarget = targetTypeFilter === 'all' || comment.targetType === targetTypeFilter;
+      const isReported = (comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length);
+      const isReply = Boolean(comment.parentId);
+      const isAuthenticated = Boolean(comment.userId);
+      const hasAuthorEmail = Boolean(comment.authorEmail?.trim());
+      const isReviewed = Boolean(comment.reviewedAt || comment.reviewedBy || comment.rejectionReason || comment.blockReason);
+      const matchesTriage = (
+        triageFilter === 'all' ||
+        (triageFilter === 'reported' && isReported) ||
+        (triageFilter === 'replies' && isReply) ||
+        (triageFilter === 'top-level' && !isReply) ||
+        (triageFilter === 'anonymous' && !isAuthenticated) ||
+        (triageFilter === 'authenticated' && isAuthenticated) ||
+        (triageFilter === 'missing-email' && !hasAuthorEmail) ||
+        (triageFilter === 'reviewed' && isReviewed) ||
+        (triageFilter === 'unreviewed' && !isReviewed)
+      );
       const target = targetByKey.get(`${comment.targetType}:${comment.targetId}`);
       const matchesSearch = !normalizedSearch || [
         comment.authorName,
         comment.authorEmail,
+        comment.authorWebsite,
         comment.content,
         comment.requestId,
+        comment.reportReasons?.join(' '),
+        comment.rejectionReason,
+        comment.blockReason,
         target?.label,
+        target?.path,
       ].some((value) => String(value || '').toLowerCase().includes(normalizedSearch));
 
-      return matchesStatus && matchesTarget && matchesSearch;
+      return matchesStatus && matchesTarget && matchesTriage && matchesSearch;
+    }).sort((left, right) => {
+      const leftTime = new Date(left.createdAt).getTime();
+      const rightTime = new Date(right.createdAt).getTime();
+      return sortFilter === 'oldest' ? leftTime - rightTime : rightTime - leftTime;
     });
-  }, [comments, searchQuery, statusFilter, targetByKey, targetTypeFilter]);
+  }, [comments, searchQuery, sortFilter, statusFilter, targetByKey, targetTypeFilter, triageFilter]);
+  const hasActiveCommentFilters = Boolean(
+    searchQuery.trim() ||
+    statusFilter !== 'all' ||
+    targetTypeFilter !== 'all' ||
+    triageFilter !== 'all' ||
+    sortFilter !== 'newest',
+  );
   const metrics = useMemo(() => ({
     total: comments.length,
     pending: comments.filter((comment) => comment.status === 'pending').length,
@@ -281,7 +326,11 @@ function CommentsRoute() {
     filters: {
       status: statusFilter,
       targetType: targetTypeFilter,
+      triage: triageFilter,
+      sort: sortFilter,
       query: searchQuery.trim(),
+      visible: filteredComments.length,
+      total: comments.length,
     },
     moderationStates: ['pending', 'approved', 'rejected', 'spam', 'blocked'],
     selectedCommentIds: selectedIds,
@@ -302,6 +351,7 @@ function CommentsRoute() {
       parentId: comment.parentId,
       status: comment.status,
       reportCount: comment.reportCount || 0,
+      isReply: Boolean(comment.parentId),
       hasAuthorName: Boolean(comment.authorName),
       hasAuthorEmail: Boolean(comment.authorEmail),
       hasAuthorWebsite: Boolean(comment.authorWebsite),
@@ -351,10 +401,12 @@ function CommentsRoute() {
     publicBaseUrl,
     searchQuery,
     selectedIds,
+    sortFilter,
     statusFilter,
     targetByKey,
     targetTypeFilter,
     targets,
+    triageFilter,
   ]);
   const moderationHandoffText = useMemo(() => JSON.stringify(moderationHandoff, null, 2), [moderationHandoff]);
   const moderationReasonText = moderationReason.trim();
@@ -473,6 +525,13 @@ function CommentsRoute() {
     setError(null);
     setNotice('Comment moderation handoff manifest downloaded.');
   };
+  const clearCommentFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setTargetTypeFilter('all');
+    setTriageFilter('all');
+    setSortFilter('newest');
+  };
 
   const handleExportComments = () => {
     if (filteredComments.length === 0) return;
@@ -532,7 +591,11 @@ function CommentsRoute() {
             id="comments-active-site"
             aria-label="Active Site"
             value={activeSiteId}
-            onChange={(event) => setSelectedSiteId(event.target.value)}
+            onChange={(event) => {
+              setSelectedSiteId(event.target.value);
+              clearCommentFilters();
+              setSelectedIds([]);
+            }}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
           >
             {sites.length === 0 ? (
@@ -689,7 +752,11 @@ function CommentsRoute() {
           id="comments-active-site-inline"
           aria-label="Active comments site"
           value={activeSiteId}
-          onChange={(event) => setSelectedSiteId(event.target.value)}
+          onChange={(event) => {
+            setSelectedSiteId(event.target.value);
+            clearCommentFilters();
+            setSelectedIds([]);
+          }}
           className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
         >
           {sites.length === 0 ? (
@@ -811,6 +878,31 @@ function CommentsRoute() {
               <option value="page">Pages</option>
               <option value="post">Posts</option>
             </select>
+            <select
+              aria-label="Comment triage filter"
+              value={triageFilter}
+              onChange={(event) => setTriageFilter(event.target.value as CommentTriageFilter)}
+              className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+            >
+              <option value="all">All triage</option>
+              <option value="reported">Reported only</option>
+              <option value="replies">Replies only</option>
+              <option value="top-level">Top-level only</option>
+              <option value="anonymous">Anonymous authors</option>
+              <option value="authenticated">Authenticated authors</option>
+              <option value="missing-email">Missing email</option>
+              <option value="reviewed">Reviewed</option>
+              <option value="unreviewed">Unreviewed</option>
+            </select>
+            <select
+              aria-label="Comment sort order"
+              value={sortFilter}
+              onChange={(event) => setSortFilter(event.target.value as CommentSortFilter)}
+              className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+            >
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+            </select>
             <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-muted p-1">
               <Filter className="ml-2 size-4 text-muted-foreground" />
               {(['all', 'pending', 'approved', 'rejected', 'spam', 'blocked'] as const).map((status) => (
@@ -828,6 +920,11 @@ function CommentsRoute() {
                 </button>
               ))}
             </div>
+            {hasActiveCommentFilters && (
+              <Button variant="outline" onClick={clearCommentFilters}>
+                Clear filters
+              </Button>
+            )}
           </div>
 
           <div className="mb-4 rounded-lg border border-border bg-card p-4">
@@ -876,11 +973,18 @@ function CommentsRoute() {
               <div className="size-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
             </div>
           ) : filteredComments.length === 0 ? (
-            <EmptyState
-              icon={MessageSquare}
-              title="No comments match this view"
-              description="Try another status, target type, or search query."
-            />
+            <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center">
+              <MessageSquare className="mx-auto size-10 text-muted-foreground" />
+              <div className="mt-3 text-sm font-medium text-foreground">No comments match this view</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                Try another status, target type, triage state, sort order, or search query.
+              </div>
+              {hasActiveCommentFilters && (
+                <Button variant="outline" onClick={clearCommentFilters} className="mt-4">
+                  Clear filters
+                </Button>
+              )}
+            </div>
           ) : (
             <div className="space-y-3">
               <label className="flex w-fit items-center gap-2 text-sm text-muted-foreground">
