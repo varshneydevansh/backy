@@ -1,5 +1,5 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
-import { createFileRoute, Link, useNavigate, useRouterState } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   Archive,
@@ -41,12 +41,8 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
 import { getPublicMediaFileUrl } from '@/lib/mediaApi';
-import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
-
-export const Route = createFileRoute('/products')({
-  component: ProductsRoute,
-});
 
 const PRODUCT_CONTROL_AREAS = [
   {
@@ -80,6 +76,16 @@ type ProductStatusFilter = ContentStatus | 'all';
 type ProductTypeFilter = ProductFormState['productType'] | 'all';
 type ProductStockFilter = 'all' | 'in-stock' | 'low-stock' | 'out-of-stock' | 'featured' | 'checkout-missing';
 
+interface ProductsSearch {
+  siteId?: string;
+  status?: ProductStatusFilter;
+  type?: ProductTypeFilter;
+  stock?: ProductStockFilter;
+  category?: string;
+  q?: string;
+  productId?: string;
+}
+
 interface ProductFormState {
   title: string;
   slug: string;
@@ -110,6 +116,40 @@ interface ProductFormState {
 
 const PRODUCT_COLLECTION_SLUG = 'products';
 const ORDERS_COLLECTION_SLUG = 'orders';
+const PRODUCT_STATUS_FILTERS: ProductStatusFilter[] = ['all', 'published', 'draft', 'scheduled', 'archived'];
+const PRODUCT_TYPE_FILTERS: ProductTypeFilter[] = ['all', 'physical', 'digital', 'service'];
+const PRODUCT_STOCK_FILTERS: ProductStockFilter[] = ['all', 'in-stock', 'low-stock', 'out-of-stock', 'featured', 'checkout-missing'];
+
+const isProductStatusFilter = (value: unknown): value is ProductStatusFilter => (
+  typeof value === 'string' && PRODUCT_STATUS_FILTERS.includes(value as ProductStatusFilter)
+);
+
+const isProductTypeFilter = (value: unknown): value is ProductTypeFilter => (
+  typeof value === 'string' && PRODUCT_TYPE_FILTERS.includes(value as ProductTypeFilter)
+);
+
+const isProductStockFilter = (value: unknown): value is ProductStockFilter => (
+  typeof value === 'string' && PRODUCT_STOCK_FILTERS.includes(value as ProductStockFilter)
+);
+
+const normalizedSearchString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+export const Route = createFileRoute('/products')({
+  validateSearch: (search: Record<string, unknown>): ProductsSearch => ({
+    siteId: normalizedSearchString(search.siteId),
+    status: isProductStatusFilter(search.status) ? search.status : undefined,
+    type: isProductTypeFilter(search.type) ? search.type : undefined,
+    stock: isProductStockFilter(search.stock) ? search.stock : undefined,
+    category: normalizedSearchString(search.category),
+    q: normalizedSearchString(search.q),
+    productId: normalizedSearchString(search.productId),
+  }),
+  component: ProductsRoute,
+});
 
 interface ProductVariantFormState {
   title: string;
@@ -257,19 +297,19 @@ const EMPTY_PRODUCT_FORM: ProductFormState = {
 
 function ProductsRoute() {
   const navigate = useNavigate();
-  const routerState = useRouterState();
+  const routeSearch = Route.useSearch();
   const { sites } = useStore();
-  const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
+  const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
   const [productCollection, setProductCollection] = useState<Collection | null>(null);
   const [ordersCollection, setOrdersCollection] = useState<Collection | null>(null);
   const [products, setProducts] = useState<CollectionRecord[]>([]);
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(routeSearch.productId || null);
   const [formState, setFormState] = useState<ProductFormState>(EMPTY_PRODUCT_FORM);
-  const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>('all');
-  const [productTypeFilter, setProductTypeFilter] = useState<ProductTypeFilter>('all');
-  const [stockFilter, setStockFilter] = useState<ProductStockFilter>('all');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>(routeSearch.status || 'all');
+  const [productTypeFilter, setProductTypeFilter] = useState<ProductTypeFilter>(routeSearch.type || 'all');
+  const [stockFilter, setStockFilter] = useState<ProductStockFilter>(routeSearch.stock || 'all');
+  const [categoryFilter, setCategoryFilter] = useState(routeSearch.category || 'all');
+  const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
@@ -661,6 +701,33 @@ function ProductsRoute() {
     stockFilter,
   ]);
   const productHandoffText = useMemo(() => JSON.stringify(productHandoff, null, 2), [productHandoff]);
+  const productsRouteSearch = useMemo<ProductsSearch>(() => ({
+    siteId: activeSiteId,
+    ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+    ...(productTypeFilter !== 'all' ? { type: productTypeFilter } : {}),
+    ...(stockFilter !== 'all' ? { stock: stockFilter } : {}),
+    ...(categoryFilter !== 'all' ? { category: categoryFilter } : {}),
+    ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
+    ...(selectedProductId ? { productId: selectedProductId } : {}),
+  }), [activeSiteId, categoryFilter, productTypeFilter, searchQuery, selectedProductId, statusFilter, stockFilter]);
+
+  const updateProductsRouteSearch = (next: ProductsSearch) => {
+    const merged: ProductsSearch = {
+      ...productsRouteSearch,
+      ...next,
+    };
+    const normalized: ProductsSearch = {
+      siteId: merged.siteId || activeSiteId,
+      ...(merged.status && merged.status !== 'all' ? { status: merged.status } : {}),
+      ...(merged.type && merged.type !== 'all' ? { type: merged.type } : {}),
+      ...(merged.stock && merged.stock !== 'all' ? { stock: merged.stock } : {}),
+      ...(merged.category && merged.category !== 'all' ? { category: merged.category } : {}),
+      ...(merged.q?.trim() ? { q: merged.q.trim() } : {}),
+      ...(merged.productId ? { productId: merged.productId } : {}),
+    };
+
+    navigate({ to: '/products', search: normalized, replace: true });
+  };
 
   const loadProducts = async () => {
     setIsLoading(true);
@@ -698,23 +765,35 @@ function ProductsRoute() {
   }, [selectedSiteId, sites]);
 
   useEffect(() => {
-    const requestedSiteId = getSiteSearchParam();
-    if (!requestedSiteId) return;
+    const nextSiteId = routeSearch.siteId
+      ? getSiteSelectionFromSearch(sites, routeSearch.siteId)
+      : selectedSiteId;
+    const siteChanged = nextSiteId !== selectedSiteId;
 
-    const nextSiteId = getSiteSelectionFromSearch(sites);
-    if (nextSiteId === selectedSiteId) return;
+    if (siteChanged) {
+      setSelectedSiteId(nextSiteId);
+      setFormState(EMPTY_PRODUCT_FORM);
+      setGalleryImageDraft('');
+      setVariantDraft({ title: '', sku: '', option: '', price: '', inventory: '' });
+    }
 
-    setSelectedSiteId(nextSiteId);
-    setSelectedProductId(null);
-    setFormState(EMPTY_PRODUCT_FORM);
-    setGalleryImageDraft('');
-    setVariantDraft({ title: '', sku: '', option: '', price: '', inventory: '' });
-    setSearchQuery('');
-    setStatusFilter('all');
-    setProductTypeFilter('all');
-    setStockFilter('all');
-    setCategoryFilter('all');
-  }, [routerState.location.search, selectedSiteId, sites]);
+    setSelectedProductId(routeSearch.productId || null);
+    setSearchQuery(routeSearch.q || '');
+    setStatusFilter(routeSearch.status || 'all');
+    setProductTypeFilter(routeSearch.type || 'all');
+    setStockFilter(routeSearch.stock || 'all');
+    setCategoryFilter(routeSearch.category || 'all');
+  }, [
+    routeSearch.category,
+    routeSearch.productId,
+    routeSearch.q,
+    routeSearch.siteId,
+    routeSearch.status,
+    routeSearch.stock,
+    routeSearch.type,
+    selectedSiteId,
+    sites,
+  ]);
 
   useEffect(() => {
     void loadProducts();
@@ -737,6 +816,12 @@ function ProductsRoute() {
       price: '',
       inventory: '',
     });
+    updateProductsRouteSearch({ productId: undefined });
+  };
+
+  const selectProductForEditing = (productId: string) => {
+    setSelectedProductId(productId);
+    updateProductsRouteSearch({ productId });
   };
 
   const openMediaPicker = (target: 'image' | 'gallery' | 'download') => {
@@ -908,6 +993,7 @@ function ProductsRoute() {
 
       setProducts((current) => [saved, ...current.filter((product) => product.id !== saved.id)]);
       setSelectedProductId(saved.id);
+      updateProductsRouteSearch({ productId: saved.id });
       setNotice(selectedProduct ? 'Product updated.' : 'Product created.');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save product');
@@ -1015,6 +1101,13 @@ function ProductsRoute() {
     setProductTypeFilter('all');
     setStockFilter('all');
     setCategoryFilter('all');
+    updateProductsRouteSearch({
+      status: undefined,
+      type: undefined,
+      stock: undefined,
+      category: undefined,
+      q: undefined,
+    });
   };
   const selectProductsSite = (nextSiteId: string) => {
     setSelectedSiteId(nextSiteId);
@@ -1022,7 +1115,11 @@ function ProductsRoute() {
     setFormState(EMPTY_PRODUCT_FORM);
     setGalleryImageDraft('');
     setVariantDraft({ title: '', sku: '', option: '', price: '', inventory: '' });
-    clearCatalogFilters();
+    setSearchQuery('');
+    setStatusFilter('all');
+    setProductTypeFilter('all');
+    setStockFilter('all');
+    setCategoryFilter('all');
     navigate({ to: '/products', search: { siteId: nextSiteId }, replace: true });
   };
 
@@ -1403,7 +1500,11 @@ function ProductsRoute() {
                     <input
                       aria-label="Search products"
                       value={searchQuery}
-                      onChange={(event) => setSearchQuery(event.target.value)}
+                      onChange={(event) => {
+                        const q = event.target.value;
+                        setSearchQuery(q);
+                        updateProductsRouteSearch({ q: q || undefined });
+                      }}
                       placeholder="Search products..."
                       className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm"
                     />
@@ -1413,7 +1514,10 @@ function ProductsRoute() {
                       <button
                         key={status}
                         type="button"
-                        onClick={() => setStatusFilter(status)}
+                        onClick={() => {
+                          setStatusFilter(status);
+                          updateProductsRouteSearch({ status });
+                        }}
                         className={cn(
                           'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground hover:bg-background hover:text-foreground',
                           statusFilter === status && 'bg-background text-foreground shadow-sm',
@@ -1426,7 +1530,11 @@ function ProductsRoute() {
                   <select
                     aria-label="Product type filter"
                     value={productTypeFilter}
-                    onChange={(event) => setProductTypeFilter(event.target.value as ProductTypeFilter)}
+                    onChange={(event) => {
+                      const type = event.target.value as ProductTypeFilter;
+                      setProductTypeFilter(type);
+                      updateProductsRouteSearch({ type });
+                    }}
                     className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
                   >
                     <option value="all">All types</option>
@@ -1437,7 +1545,11 @@ function ProductsRoute() {
                   <select
                     aria-label="Product category filter"
                     value={categoryFilter}
-                    onChange={(event) => setCategoryFilter(event.target.value)}
+                    onChange={(event) => {
+                      const category = event.target.value;
+                      setCategoryFilter(category);
+                      updateProductsRouteSearch({ category });
+                    }}
                     className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
                   >
                     <option value="all">All categories</option>
@@ -1448,7 +1560,11 @@ function ProductsRoute() {
                   <select
                     aria-label="Product stock filter"
                     value={stockFilter}
-                    onChange={(event) => setStockFilter(event.target.value as ProductStockFilter)}
+                    onChange={(event) => {
+                      const stock = event.target.value as ProductStockFilter;
+                      setStockFilter(stock);
+                      updateProductsRouteSearch({ stock });
+                    }}
                     className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
                   >
                     <option value="all">All stock</option>
@@ -1488,7 +1604,7 @@ function ProductsRoute() {
                         key={product.id}
                         product={product}
                         selected={product.id === selectedProductId}
-                        onEdit={() => setSelectedProductId(product.id)}
+                        onEdit={() => selectProductForEditing(product.id)}
                         onPublish={() => void changeProductStatus(product, 'published')}
                         onArchive={() => void changeProductStatus(product, 'archived')}
                         onDelete={() => setPendingDeleteProduct(product)}
