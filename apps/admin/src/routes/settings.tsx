@@ -11,9 +11,10 @@
  * @license MIT
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import {
+  AlertTriangle,
   Palette,
   Globe,
   Shield,
@@ -28,6 +29,7 @@ import {
   RefreshCw,
   Cloud,
   Rocket,
+  CheckCircle2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
@@ -229,6 +231,43 @@ const ADMIN_API_ENDPOINTS: ApiEndpoint[] = [
   },
 ];
 
+const SETTINGS_CONTROL_AREAS: Array<{
+  tab: SettingsTab;
+  title: string;
+  detail: string;
+}> = [
+  {
+    tab: 'delivery',
+    title: 'Frontend API delivery',
+    detail: 'Choose managed rendering or headless API mode and copy public/admin endpoint contracts.',
+  },
+  {
+    tab: 'infrastructure',
+    title: 'Supabase and Vercel',
+    detail: 'Connect database, storage, deployment ownership, preview deploys, and hosting metadata.',
+  },
+  {
+    tab: 'appearance',
+    title: 'Design tokens',
+    detail: 'Control global colors, typography, and frontend defaults that custom designs can consume.',
+  },
+  {
+    tab: 'seo',
+    title: 'SEO and analytics',
+    detail: 'Set title templates, social previews, keywords, analytics, and public metadata defaults.',
+  },
+  {
+    tab: 'notifications',
+    title: 'Workflow alerts',
+    detail: 'Route user registrations, publishes, forms, comments, and system events to the right channels.',
+  },
+  {
+    tab: 'security',
+    title: 'Access and audit',
+    detail: 'Manage API keys, account rules, two-factor requirements, session length, and audit history.',
+  },
+];
+
 function getEnvValue(key: string): string {
   const env =
     (import.meta as unknown as { env?: Record<string, string | undefined> }).env ??
@@ -407,6 +446,115 @@ function SettingsPage() {
       ...(integrations.notifications?.inApp || {}),
     },
   };
+  const platformReadiness = useMemo(() => {
+    const savedGeneral = integrations.general;
+    const savedAppearance = integrations.appearance;
+    const savedSeo = integrations.seo;
+    const savedNotifications = integrations.notifications;
+    const supabase = integrations.supabase;
+    const vercel = integrations.vercel;
+    const storageConfigured = runtimeStorage?.configured === true;
+    const databaseConfigured = runtimeDatabase?.configured === true;
+    const supabaseConfigured = runtimeSupabase?.configured === true
+      || Boolean(supabase?.databaseEnabled || supabase?.storageEnabled || supabase?.authEnabled);
+    const vercelConfigured = runtimeVercel?.configured === true
+      || Boolean(vercel?.projectId || vercel?.productionDomain);
+    const securityConfigured = Boolean(publicApiKey && adminApiKey && (authSettings?.minPasswordLength || 0) >= 10);
+    const checks = [
+      {
+        label: 'Delivery mode',
+        detail: deliveryMode === 'custom-frontend'
+          ? 'Headless API mode is selected for custom frontends.'
+          : 'Managed rendering is selected for Backy-served pages.',
+        ready: Boolean(deliveryMode),
+      },
+      {
+        label: 'API keys',
+        detail: publicApiKey && adminApiKey ? 'Public and admin keys exist.' : 'Generate public and admin API keys.',
+        ready: Boolean(publicApiKey && adminApiKey),
+      },
+      {
+        label: 'Storage runtime',
+        detail: runtimeStorage
+          ? storageConfigured
+            ? `${runtimeStorage.provider} storage is configured.`
+            : `Missing ${runtimeStorage.missing?.join(', ') || 'storage configuration'}.`
+          : 'Storage runtime has not reported yet.',
+        ready: storageConfigured,
+      },
+      {
+        label: 'Database runtime',
+        detail: runtimeDatabase
+          ? databaseConfigured
+            ? `${runtimeDatabase.provider || runtimeDatabase.mode || 'database'} is configured.`
+            : runtimeDatabase.error || 'Database runtime needs configuration.'
+          : 'Database runtime has not reported yet.',
+        ready: databaseConfigured,
+      },
+      {
+        label: 'Supabase connection',
+        detail: supabaseConfigured
+          ? 'Supabase metadata or runtime capability is present.'
+          : 'Add Supabase project metadata or environment variables.',
+        ready: supabaseConfigured,
+      },
+      {
+        label: 'Vercel deployment',
+        detail: vercelConfigured
+          ? 'Vercel runtime or project metadata is present.'
+          : 'Add Vercel project metadata or deploy environment variables.',
+        ready: vercelConfigured,
+      },
+      {
+        label: 'Design and SEO defaults',
+        detail: savedGeneral || savedAppearance || savedSeo
+          ? 'Global site metadata, design, or SEO defaults have been customized.'
+          : 'Customize defaults before using them as frontend tokens.',
+        ready: Boolean(savedGeneral || savedAppearance || savedSeo),
+      },
+      {
+        label: 'Security baseline',
+        detail: securityConfigured
+          ? 'Keys and password policy are present.'
+          : 'Review API keys and password/session policy.',
+        ready: securityConfigured,
+      },
+      {
+        label: 'Notification routing',
+        detail: savedNotifications
+          ? 'Notification preferences are stored.'
+          : 'Review publish, form, registration, and system alerts.',
+        ready: Boolean(savedNotifications),
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      checks,
+      workflow: [
+        { label: 'Choose delivery', detail: 'Decide managed rendering or custom frontend API mode.' },
+        { label: 'Connect runtime', detail: 'Wire storage, database, Supabase, and Vercel environment metadata.' },
+        { label: 'Lock access', detail: 'Regenerate keys, set auth policy, and confirm audit visibility.' },
+        { label: 'Publish contracts', detail: 'Use public/admin endpoints plus design and SEO defaults in any frontend.' },
+      ],
+    };
+  }, [
+    adminApiKey,
+    authSettings?.minPasswordLength,
+    deliveryMode,
+    integrations.appearance,
+    integrations.general,
+    integrations.notifications,
+    integrations.seo,
+    integrations.supabase,
+    integrations.vercel,
+    publicApiKey,
+    runtimeDatabase,
+    runtimeStorage,
+    runtimeSupabase,
+    runtimeVercel,
+  ]);
 
   const updateNotificationSettings = (next: NotificationSettingsConfig) => {
     setIntegrations({
@@ -457,6 +605,101 @@ function SettingsPage() {
       {notice && (
         <Notice tone="warning">{notice}</Notice>
       )}
+
+      <Panel>
+        <PanelHeader
+          title="Platform readiness"
+          description="One place to see whether Backy can securely power managed sites, custom frontends, media, database-backed content, and deploy workflows."
+          icon={<Server className="size-4" />}
+          action={
+            <span className={cn(
+              'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold',
+              platformReadiness.score >= 80
+                ? 'bg-emerald-50 text-emerald-700'
+                : 'bg-amber-50 text-amber-700',
+            )}
+            >
+              {platformReadiness.score}% ready
+            </span>
+          }
+        />
+        <PanelContent>
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Backend control health</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Checks the pieces a Wix/WordPress-style backend needs before frontends depend on it.
+                  </p>
+                </div>
+                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                  {deliveryMode === 'custom-frontend' ? 'Headless' : 'Managed'}
+                </span>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn(
+                    'h-full rounded-full',
+                    platformReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500',
+                  )}
+                  style={{ width: `${platformReadiness.score}%` }}
+                />
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {platformReadiness.checks.map((check) => (
+                  <SettingsReadinessCheck key={check.label} {...check} />
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-center gap-2">
+                <Code className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Setup workflow</h3>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {platformReadiness.workflow.map((step, index) => (
+                  <SettingsWorkflowStep key={step.label} index={index + 1} {...step} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-border bg-background p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Settings control map</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Jump to the settings that control public APIs, visual defaults, infrastructure, notifications, and security.
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setActiveTab('infrastructure')}
+                iconStart={<Cloud className="size-4" />}
+              >
+                Open infrastructure
+              </Button>
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {SETTINGS_CONTROL_AREAS.map((area) => (
+                <button
+                  key={area.title}
+                  type="button"
+                  onClick={() => setActiveTab(area.tab)}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </PanelContent>
+      </Panel>
 
       {/* Tabs */}
       <SegmentedTabs items={TABS} value={activeTab} onChange={setActiveTab} />
@@ -510,6 +753,34 @@ function SettingsPage() {
         )}
         </PanelContent>
       </Panel>
+    </div>
+  );
+}
+
+function SettingsReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  const Icon = ready ? CheckCircle2 : AlertTriangle;
+
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-card px-3 py-2">
+      <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', ready ? 'text-emerald-600' : 'text-amber-600')} />
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function SettingsWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
     </div>
   );
 }
