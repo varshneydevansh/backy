@@ -1228,7 +1228,7 @@ function ProductsRoute() {
                 {isSaving ? 'Setting up...' : 'Set up products'}
               </Button>
             ) : (
-              <Button onClick={resetForm} iconStart={<Plus className="size-4" />}>
+              <Button onClick={resetForm} disabled={isSaving} iconStart={<Plus className="size-4" />}>
                 New product
               </Button>
             )}
@@ -1649,7 +1649,8 @@ function ProductsRoute() {
               icon={<Package className="size-4" />}
             />
             <PanelContent>
-              <form onSubmit={saveProduct} className="space-y-4">
+              <form onSubmit={saveProduct}>
+                <fieldset disabled={isSaving} className={cn('space-y-4', isSaving && 'opacity-70')}>
                 <Field label="Title">
                   <input
                     value={formState.title}
@@ -2078,6 +2079,7 @@ function ProductsRoute() {
                     {isSaving ? 'Saving...' : selectedProduct ? 'Save Product' : 'Create Product'}
                   </Button>
                 </div>
+                </fieldset>
               </form>
             </PanelContent>
           </Panel>
@@ -2105,7 +2107,8 @@ function ProductsRoute() {
               <button
                 type="button"
                 onClick={() => setPendingDeleteProduct(null)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                disabled={isSaving}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -2113,9 +2116,9 @@ function ProductsRoute() {
                 type="button"
                 onClick={() => void removeProduct(pendingDeleteProduct)}
                 disabled={isSaving}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Delete product
+                {isSaving ? 'Deleting...' : 'Delete product'}
               </button>
             </div>
           </div>
