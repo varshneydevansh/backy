@@ -130,6 +130,7 @@ function PageEditorRoute() {
   const [editorResetVersion, setEditorResetVersion] = useState(0);
   const [pendingRestoreRevision, setPendingRestoreRevision] = useState<ContentRevision | null>(null);
   const [isWorkspaceFocus, setIsWorkspaceFocus] = useState(routeSearch.focus === 'canvas');
+  const isPageEditorWorkflowBusy = isWorkflowBusy || isPreviewBusy || readinessLoading;
 
   useEffect(() => {
     let cancelled = false;
@@ -538,6 +539,12 @@ function PageEditorRoute() {
     settings: PageSettings,
     canvasSize: CanvasSize = initialCanvasSize
   ) => {
+    if (isWorkflowBusy || isPreviewBusy) {
+      const message = 'Wait for the current preview, publish, archive, or restore workflow before saving.';
+      setSaveWarning(message);
+      throw new Error(message);
+    }
+
     const content = serializeCanvasContent(elements, canvasSize, undefined, {
       documentId: page.id,
       kind: 'page',
@@ -599,6 +606,8 @@ function PageEditorRoute() {
   };
 
   const applyWorkflow = async (action: 'publish' | 'archive') => {
+    if (isPageEditorWorkflowBusy) return;
+
     setIsWorkflowBusy(true);
     setSaveWarning(null);
     setWorkflowNotice(null);
@@ -633,6 +642,8 @@ function PageEditorRoute() {
   };
 
   const generatePreview = async () => {
+    if (isPageEditorWorkflowBusy) return;
+
     setIsPreviewBusy(true);
     setSaveWarning(null);
 
@@ -655,6 +666,8 @@ function PageEditorRoute() {
   };
 
   const restoreRevision = async (revision: ContentRevision) => {
+    if (isPageEditorWorkflowBusy) return;
+
     setIsWorkflowBusy(true);
     setSaveWarning(null);
     setWorkflowNotice(null);
@@ -700,6 +713,7 @@ function PageEditorRoute() {
           type="button"
           variant="outline"
           onClick={() => setWorkspaceFocusRoute(!isWorkspaceFocus)}
+          disabled={isPageEditorWorkflowBusy}
           iconStart={isWorkspaceFocus ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
         >
           {isWorkspaceFocus ? 'Show page panels' : 'Focus canvas'}
@@ -770,7 +784,7 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void generatePreview()}
-              disabled={isPreviewBusy || editorHasUnsavedChanges}
+              disabled={isPageEditorWorkflowBusy || editorHasUnsavedChanges}
               iconStart={<Eye className="size-4" />}
               title={editorHasUnsavedChanges ? 'Save the canvas before generating a preview' : 'Preview page'}
             >
@@ -780,7 +794,7 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void loadPageReadiness()}
-              disabled={readinessLoading}
+              disabled={isPageEditorWorkflowBusy}
               iconStart={<RefreshCw className={cn('size-4', readinessLoading && 'animate-spin')} />}
             >
               Refresh readiness
@@ -788,7 +802,7 @@ function PageEditorRoute() {
             <Button
               type="button"
               onClick={() => void applyWorkflow('publish')}
-              disabled={isWorkflowBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
+              disabled={isPageEditorWorkflowBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
               iconStart={<CheckCircle2 className="size-4" />}
               title={externalWorkflowDisabledReason || 'Publish page'}
             >
@@ -887,6 +901,7 @@ function PageEditorRoute() {
               variant="outline"
               size="sm"
               onClick={() => setWorkspaceFocusRoute(false)}
+              disabled={isPageEditorWorkflowBusy}
               iconStart={<Minimize2 className="size-4" />}
             >
               Show panels
@@ -978,7 +993,7 @@ function PageEditorRoute() {
               <div className="grid gap-2">
                 <Button
                   onClick={() => void generatePreview()}
-                  disabled={isPreviewBusy || editorHasUnsavedChanges}
+                  disabled={isPageEditorWorkflowBusy || editorHasUnsavedChanges}
                   variant="outline"
                   iconStart={<Eye className="size-4" />}
                   className="w-full"
@@ -988,7 +1003,7 @@ function PageEditorRoute() {
                 </Button>
                 <Button
                   onClick={() => void applyWorkflow('publish')}
-                  disabled={isWorkflowBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
+                  disabled={isPageEditorWorkflowBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
                   variant="primary"
                   iconStart={<CheckCircle2 className="size-4" />}
                   className="w-full"
@@ -998,7 +1013,7 @@ function PageEditorRoute() {
                 </Button>
                 <Button
                   onClick={() => void applyWorkflow('archive')}
-                  disabled={isWorkflowBusy || page.status === 'archived' || editorHasUnsavedChanges}
+                  disabled={isPageEditorWorkflowBusy || page.status === 'archived' || editorHasUnsavedChanges}
                   variant="outline"
                   iconStart={<Archive className="size-4" />}
                   className="w-full"
@@ -1035,8 +1050,8 @@ function PageEditorRoute() {
                 <button
                   type="button"
                   onClick={() => void loadPageReadiness()}
-                  disabled={readinessLoading}
-                  className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                  disabled={isPageEditorWorkflowBusy}
+                  className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                   title="Refresh page readiness"
                 >
                   <RefreshCw className={readinessLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
@@ -1115,9 +1130,9 @@ function PageEditorRoute() {
                         </div>
                         <button
                           type="button"
-                          disabled={isWorkflowBusy || editorHasUnsavedChanges}
+                          disabled={isPageEditorWorkflowBusy || editorHasUnsavedChanges}
                           onClick={() => setPendingRestoreRevision(revision)}
-                          className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                          className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                           title={editorHasUnsavedChanges ? 'Save or reload the canvas before restoring' : 'Restore revision'}
                         >
                           <RotateCcw className="h-4 w-4" />
@@ -1159,17 +1174,18 @@ function PageEditorRoute() {
               <button
                 type="button"
                 onClick={() => setPendingRestoreRevision(null)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                disabled={isPageEditorWorkflowBusy}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void restoreRevision(pendingRestoreRevision)}
-                disabled={isWorkflowBusy || editorHasUnsavedChanges}
-                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:opacity-60"
+                disabled={isPageEditorWorkflowBusy || editorHasUnsavedChanges}
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Restore revision
+                {isWorkflowBusy ? 'Restoring...' : 'Restore revision'}
               </button>
             </div>
           </div>
