@@ -2575,7 +2575,7 @@ export async function updateContact(
   siteId: string,
   formId: string,
   contactId: string,
-  input: { status: ContactStatus },
+  input: { status?: ContactStatus; notes?: string | null },
 ): Promise<AdminContact> {
   const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/forms/${formId}/contacts/${contactId}`, {
     method: 'PATCH',

@@ -12,6 +12,7 @@ import {
   Mail,
   Phone,
   RefreshCw,
+  Save,
   Search,
   ShieldCheck,
   UserCheck,
@@ -170,6 +171,33 @@ function ContactsRoute() {
       setNotice(`${updated.name || updated.email || 'Contact'} marked ${status}.`);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'Unable to update contact');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleNotes = async (contact: AdminContact, notes: string) => {
+    setUpdatingId(contact.id);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const updated = await updateContact(activeSiteId, contact.formId, contact.id, { notes: notes.trim() || null });
+      setContactsByForm((current) => {
+        const inbox = current[contact.formId];
+        if (!inbox) return current;
+
+        return {
+          ...current,
+          [contact.formId]: {
+            ...inbox,
+            contacts: inbox.contacts.map((item) => (item.id === updated.id ? updated : item)),
+          },
+        };
+      });
+      setNotice(`Notes saved for ${updated.name || updated.email || 'contact'}.`);
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : 'Unable to save contact notes');
     } finally {
       setUpdatingId(null);
     }
@@ -412,6 +440,7 @@ function ContactsRoute() {
                   form={formById.get(contact.formId)}
                   disabled={updatingId === contact.id}
                   onStatus={(status) => void handleStatus(contact, status)}
+                  onNotes={(notes) => void handleNotes(contact, notes)}
                 />
               ))}
             </div>
@@ -462,12 +491,22 @@ function ContactCard({
   form,
   disabled,
   onStatus,
+  onNotes,
 }: {
   contact: AdminContact;
   form?: FormDefinition;
   disabled: boolean;
   onStatus: (status: ContactStatus) => void;
+  onNotes: (notes: string) => void;
 }) {
+  const [notesDraft, setNotesDraft] = useState(contact.notes || '');
+
+  useEffect(() => {
+    setNotesDraft(contact.notes || '');
+  }, [contact.notes]);
+
+  const notesChanged = notesDraft.trim() !== (contact.notes || '').trim();
+
   return (
     <article className="rounded-lg border border-border bg-background p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -498,9 +537,32 @@ function ContactCard({
             {contact.phone}
           </a>
         ) : null}
-        {contact.notes ? (
-          <p className="line-clamp-2 text-muted-foreground">{contact.notes}</p>
-        ) : null}
+      </div>
+
+      <div className="mt-4 rounded-md border border-border bg-muted/40 p-3">
+        <label className="text-xs font-medium text-muted-foreground" htmlFor={`contact-notes-${contact.id}`}>
+          Internal notes
+        </label>
+        <textarea
+          id={`contact-notes-${contact.id}`}
+          value={notesDraft}
+          onChange={(event) => setNotesDraft(event.target.value)}
+          rows={3}
+          className="mt-2 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+          placeholder="Follow-up context, qualification notes, or next steps."
+        />
+        <div className="mt-2 flex justify-end">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={disabled || !notesChanged}
+            onClick={() => onNotes(notesDraft)}
+            iconStart={<Save className="size-4" />}
+            aria-label={`Save notes for ${contact.name || contact.email || contact.id}`}
+          >
+            Save notes
+          </Button>
+        </div>
       </div>
 
       {contact.sourceValues && Object.keys(contact.sourceValues).length > 0 ? (

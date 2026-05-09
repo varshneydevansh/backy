@@ -20,6 +20,11 @@ interface RouteParams {
 
 type ContactStatus = 'new' | 'contacted' | 'qualified' | 'archived';
 
+interface ContactUpdateBody {
+  status?: ContactStatus;
+  notes?: string | null;
+}
+
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const privateResponse = <TBody>(body: TBody, requestId: string, status = 200) => (
@@ -131,17 +136,29 @@ function parseStatus(raw: unknown): ContactStatus | null {
   return null;
 }
 
-function parseBody(raw: unknown): { status: ContactStatus } | null {
+function parseNullableString(raw: unknown): string | null | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+
+  return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : null;
+}
+
+function parseBody(raw: unknown): ContactUpdateBody | null {
   if (!raw || typeof raw !== 'object') {
     return null;
   }
 
   const status = parseStatus((raw as { status?: unknown }).status);
-  if (!status) {
+  const notes = parseNullableString((raw as { notes?: unknown }).notes);
+  if (!status && notes === undefined) {
     return null;
   }
 
-  return { status };
+  return {
+    ...(status ? { status } : {}),
+    ...(notes !== undefined ? { notes } : {}),
+  };
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
@@ -163,7 +180,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       const body = parseBody(await request.json().catch(() => null));
       if (!body) {
-        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status is required.', requestId);
+        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status or notes is required.', requestId);
       }
 
       const contact = await repositories.forms.getContactById(site.id, form.id, contactId);
@@ -173,6 +190,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       const updated = (await repositories.forms.updateContact(site.id, contact.id, {
         status: body.status,
+        notes: body.notes,
       })).item;
 
       return privateResponse({
@@ -197,7 +215,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const body = parseBody(await request.json().catch(() => null));
     if (!body) {
-      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status is required.', requestId);
+      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status or notes is required.', requestId);
     }
 
     const contact = getContactById(contactId);
@@ -207,13 +225,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const updated = updateContactStatus(contact.id, {
       status: body.status,
+      notes: body.notes,
     });
 
     if (!updated) {
       return errorResponse(409, 'CONTACT_UPDATE_FAILED', 'Unable to update contact', requestId);
     }
 
-    if (form.notificationWebhook) {
+    if (body.status && form.notificationWebhook) {
       const sourceSubmission = updated.sourceSubmissionId
         ? getSubmissionById(updated.sourceSubmissionId)
         : null;
@@ -225,7 +244,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         requestId: webhookRequestId,
         contactId: updated.id,
         submissionId: updated.sourceSubmissionId || undefined,
-        contactStatus: updated.status,
+        contactStatus: body.status,
         siteId: site.id,
       });
     }

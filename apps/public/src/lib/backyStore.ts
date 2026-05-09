@@ -6537,7 +6537,8 @@ export function updateFormSubmissionStatus(
 export function updateContactStatus(
   contactId: string,
   updates: {
-    status: Contact['status'];
+    status?: Contact['status'];
+    notes?: string | null;
   },
 ): Contact | undefined {
   refreshPersistedInteractionStore();
@@ -6545,7 +6546,12 @@ export function updateContactStatus(
   const contact = contactStore.find((item) => item.id === contactId);
   if (!contact) return undefined;
 
-  contact.status = updates.status;
+  if (updates.status !== undefined) {
+    contact.status = updates.status;
+  }
+  if (updates.notes !== undefined) {
+    contact.notes = updates.notes;
+  }
   contact.updatedAt = new Date().toISOString();
 
   setContactStore(contactStore.map((item) => (item.id === contact.id ? contact : item)));
