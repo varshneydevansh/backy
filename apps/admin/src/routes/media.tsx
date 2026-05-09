@@ -2,7 +2,7 @@
  * BACKY CMS - MEDIA PAGE
  */
 
-import { useCallback, useEffect, useMemo, useState, type DragEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { AlertTriangle, CheckCircle2, CheckSquare, Code2, Copy, Download, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Music, Save, Trash2, Type, Upload, Video, X } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
+import { DEFAULT_MAX_TAGS, parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 import {
   getSettings,
   listAdminAuditLogs,
@@ -125,30 +126,6 @@ const MEDIA_EXPORT_COLUMNS = [
   'updated_at',
 ] as const;
 
-const MAX_MEDIA_TAGS = 24;
-
-const normalizeMediaTags = (tags: string[]): string[] => {
-  const seen = new Set<string>();
-
-  return tags
-    .flatMap((tag) => tag.split(/[,\n]/g))
-    .map((tag) => tag.trim().replace(/\s+/g, ' '))
-    .filter(Boolean)
-    .filter((tag) => {
-      const key = tag.toLowerCase();
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    })
-    .slice(0, MAX_MEDIA_TAGS);
-};
-
-const parseMediaTags = (value: string): string[] => normalizeMediaTags(value.split(/[,\n]/g));
-
-const serializeMediaTags = (tags: string[]): string => normalizeMediaTags(tags).join(', ');
-
 function MediaPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -233,9 +210,9 @@ function MediaPage() {
   const uploadTargetFolderLabel = uploadTargetFolderId
     ? folders.find((folder) => folder.id === uploadTargetFolderId)?.name || 'Selected folder'
     : 'Root';
-  const uploadTagList = useMemo(() => parseMediaTags(uploadTags), [uploadTags]);
+  const uploadTagList = useMemo(() => parseTagInput(uploadTags), [uploadTags]);
   const setUploadTagList = useCallback((nextTags: string[]) => {
-    setUploadTags(serializeMediaTags(nextTags));
+    setUploadTags(serializeTagValues(nextTags));
   }, []);
 
   const publicFileUrl = useMemo(
@@ -1488,9 +1465,9 @@ function MediaPage() {
             <div className="space-y-1">
               <div className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
                 <span>Default tags</span>
-                <span className="font-mono">{uploadTagList.length}/{MAX_MEDIA_TAGS}</span>
+                <span className="font-mono">{uploadTagList.length}/{DEFAULT_MAX_TAGS}</span>
               </div>
-              <MediaTagEditor
+              <TagInput
                 tags={uploadTagList}
                 onChange={setUploadTagList}
                 placeholder="Add hero, product, brand..."
@@ -2318,9 +2295,9 @@ function MediaPage() {
 
                 <div>
                   <label className="mb-1 block text-sm font-medium">Tags</label>
-                  <MediaTagEditor
-                    tags={parseMediaTags(metadataForm.tags)}
-                    onChange={(tags) => setMetadataForm((current) => ({ ...current, tags: serializeMediaTags(tags) }))}
+                  <TagInput
+                    tags={parseTagInput(metadataForm.tags)}
+                    onChange={(tags) => setMetadataForm((current) => ({ ...current, tags: serializeTagValues(tags) }))}
                     placeholder="Add hero, product, brand..."
                     ariaLabel="Media asset tags"
                   />
@@ -3227,80 +3204,6 @@ function MediaPage() {
         </div>
       )}
     </PageShell>
-  );
-}
-
-function MediaTagEditor({
-  tags,
-  onChange,
-  placeholder,
-  ariaLabel,
-}: {
-  tags: string[];
-  onChange: (tags: string[]) => void;
-  placeholder: string;
-  ariaLabel: string;
-}) {
-  const [draft, setDraft] = useState('');
-
-  const commitDraft = () => {
-    const nextTags = normalizeMediaTags([...tags, draft]);
-    if (nextTags.length !== tags.length || nextTags.some((tag, index) => tag !== tags[index])) {
-      onChange(nextTags);
-    }
-    setDraft('');
-  };
-
-  const removeTag = (tagToRemove: string) => {
-    onChange(tags.filter((tag) => tag !== tagToRemove));
-  };
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter' || event.key === ',') {
-      event.preventDefault();
-      commitDraft();
-      return;
-    }
-
-    if (event.key === 'Backspace' && draft.length === 0 && tags.length > 0) {
-      onChange(tags.slice(0, -1));
-    }
-  };
-
-  return (
-    <div className="rounded-lg border border-border bg-background px-2.5 py-2 transition focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
-      {tags.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          {tags.map((tag) => (
-            <span
-              key={tag}
-              className="inline-flex min-h-7 max-w-full items-center gap-1 rounded-md border border-border bg-muted/70 px-2 text-xs font-medium text-foreground"
-            >
-              <span className="truncate">{tag}</span>
-              <button
-                type="button"
-                onClick={() => removeTag(tag)}
-                className="rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
-                aria-label={`Remove tag ${tag}`}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      <input
-        type="text"
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={handleKeyDown}
-        onBlur={commitDraft}
-        disabled={tags.length >= MAX_MEDIA_TAGS}
-        className="min-h-8 w-full border-0 bg-transparent px-0 text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
-        placeholder={tags.length >= MAX_MEDIA_TAGS ? 'Maximum tags reached' : placeholder}
-        aria-label={ariaLabel}
-      />
-    </div>
   );
 }
 

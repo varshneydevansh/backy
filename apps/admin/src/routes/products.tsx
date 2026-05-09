@@ -37,6 +37,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
 import { cn, formatDate } from '@/lib/utils';
 
@@ -1424,14 +1425,19 @@ function ProductsRoute() {
                       placeholder="Templates"
                     />
                   </Field>
-                  <Field label="Tags">
-                    <input
-                      value={formState.tags}
-                      onChange={(event) => setFormState((current) => ({ ...current, tags: event.target.value }))}
-                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
-                      placeholder="premium, landing-page"
+                  <div className="block space-y-2">
+                    <div className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
+                      <span>Tags</span>
+                      <span className="font-mono">{parseTags(formState.tags).length}/20</span>
+                    </div>
+                    <TagInput
+                      tags={parseTags(formState.tags)}
+                      onChange={(tags) => setFormState((current) => ({ ...current, tags: serializeTagValues(tags, 20) }))}
+                      placeholder="Add premium, landing-page..."
+                      ariaLabel="Product tags"
+                      maxTags={20}
                     />
-                  </Field>
+                  </div>
                   <Field label="Vendor">
                     <input
                       value={formState.vendor}
@@ -1863,16 +1869,12 @@ const asInventoryPolicy = (value: unknown): ProductFormState['inventoryPolicy'] 
 );
 
 const parseTags = (value: string): string[] => (
-  value
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter(Boolean)
-    .slice(0, 20)
+  parseTagInput(value, 20)
 );
 
 const formatTags = (value: unknown): string[] => {
   if (Array.isArray(value)) {
-    return value.map((tag) => String(tag).trim()).filter(Boolean);
+    return parseTagInput(value.join(','), 20);
   }
   if (typeof value === 'string') {
     return parseTags(value);
