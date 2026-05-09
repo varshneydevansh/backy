@@ -150,6 +150,7 @@ const ORDER_FIELDS: CollectionField[] = [
 
 const ORDER_EXPORT_COLUMNS = [
   'order_id',
+  'active_site_id',
   'slug',
   'record_status',
   'order_number',
@@ -181,8 +182,45 @@ const ORDER_EXPORT_COLUMNS = [
   'refund_amount',
   'refund_reason',
   'notes',
+  'admin_order_url',
+  'public_blocked_url',
+  'admin_only',
+  'backend_systems',
   'created_at',
   'updated_at',
+] as const;
+
+const ORDER_BACKEND_SYSTEMS = [
+  {
+    key: 'capture',
+    title: 'Order capture',
+    detail: 'Checkout, manual, API, import, and POS records normalize into a private Backy order collection.',
+  },
+  {
+    key: 'payment',
+    title: 'Payment reconciliation',
+    detail: 'Payment status, provider, reference, checkout session, paid time, refunds, and accounting export fields.',
+  },
+  {
+    key: 'fulfillment',
+    title: 'Fulfillment operations',
+    detail: 'Processing state, carrier, tracking number, tracking URL, fulfilled time, and cancellation flow.',
+  },
+  {
+    key: 'customer',
+    title: 'Customer support',
+    detail: 'Customer name, email, phone, customer ID, billing/shipping addresses, and private order notes.',
+  },
+  {
+    key: 'security',
+    title: 'Private API security',
+    detail: 'Orders stay admin-only; public read, create, update, and delete access must remain disabled.',
+  },
+  {
+    key: 'reporting',
+    title: 'Operations reporting',
+    detail: 'Revenue, paid orders, refunds, fulfillment queue, processing count, and CSV exports.',
+  },
 ] as const;
 
 const EMPTY_ORDER_FORM: OrderFormState = {
@@ -414,6 +452,7 @@ function OrdersRoute() {
       publicDelete: Boolean(ordersCollection?.permissions.publicDelete),
       adminOnly: ordersApiReady,
     },
+    backendSystems: ORDER_BACKEND_SYSTEMS,
     readiness: {
       ready: ordersApiReady,
       score: orderReadiness.score,
@@ -745,7 +784,12 @@ function OrdersRoute() {
     if (filteredOrders.length === 0) return;
 
     const rows = filteredOrders.map((order) => {
-      const exportRecord = orderToExportRecord(order);
+      const exportRecord = orderToExportRecord(order, {
+        activeSiteId,
+        adminOrdersApiUrl,
+        publicOrdersApiUrl,
+        adminOnly: ordersApiReady,
+      });
       return ORDER_EXPORT_COLUMNS.map((column) => exportRecord[column]);
     });
     const csv = [ORDER_EXPORT_COLUMNS, ...rows]
@@ -975,6 +1019,34 @@ function OrdersRoute() {
                   Missing order fields: {missingOrderFields.join(', ')}. Sync the schema before relying on fulfillment workflows.
                 </div>
               )}
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Private order backend contract</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Backy owns these admin-only commerce systems so custom storefronts can create orders server-side without exposing customer, payment, or fulfillment data publicly.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    {ORDER_BACKEND_SYSTEMS.length} systems
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {ORDER_BACKEND_SYSTEMS.map((system) => (
+                    <div key={system.key} className="rounded-lg border border-border bg-card p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-foreground">{system.title}</div>
+                          <div className="mt-1 text-xs leading-5 text-muted-foreground">{system.detail}</div>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                          {system.key}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </PanelContent>
         </Panel>
@@ -1871,8 +1943,19 @@ const optionalNumber = (value: unknown): number | null => (
   value === null || value === undefined || value === '' ? null : toNumber(value)
 );
 
-const orderToExportRecord = (order: CollectionRecord): Record<OrderExportColumn, string | number | null> => ({
+interface OrderExportContext {
+  activeSiteId: string;
+  adminOrdersApiUrl: string;
+  publicOrdersApiUrl: string;
+  adminOnly: boolean;
+}
+
+const orderToExportRecord = (
+  order: CollectionRecord,
+  context: OrderExportContext,
+): Record<OrderExportColumn, string | number | boolean | null> => ({
   order_id: order.id,
+  active_site_id: context.activeSiteId,
   slug: order.slug,
   record_status: order.status,
   order_number: String(readOrderValue(order.values, 'ordernumber', order.slug)),
@@ -1904,6 +1987,10 @@ const orderToExportRecord = (order: CollectionRecord): Record<OrderExportColumn,
   refund_amount: optionalNumber(readOrderValue(order.values, 'refundamount', null)),
   refund_reason: String(readOrderValue(order.values, 'refundreason', '')),
   notes: String(order.values.notes || ''),
+  admin_order_url: `${context.adminOrdersApiUrl}/${encodeURIComponent(order.id)}`,
+  public_blocked_url: context.publicOrdersApiUrl,
+  admin_only: context.adminOnly,
+  backend_systems: ORDER_BACKEND_SYSTEMS.map((system) => `${system.key}:${system.title}`).join('; '),
   created_at: order.createdAt || '',
   updated_at: order.updatedAt || '',
 });
