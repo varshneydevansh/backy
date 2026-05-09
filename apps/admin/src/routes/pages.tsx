@@ -1761,6 +1761,7 @@ function PagesListView() {
           }}
           currentPage={currentPage}
           totalPages={totalPages}
+          pageSize={10}
           onPageChange={(page) => {
             setCurrentPage(page);
             updatePagesRouteSearch({ page });

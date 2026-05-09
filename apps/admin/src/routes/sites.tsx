@@ -1031,6 +1031,7 @@ function SitesListView() {
           onSort={handleSort}
           currentPage={currentPage}
           totalPages={totalPages}
+          pageSize={10}
           onPageChange={setCurrentPage}
           totalItems={totalItems}
           emptyState={

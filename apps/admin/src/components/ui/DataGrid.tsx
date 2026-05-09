@@ -24,6 +24,7 @@ interface DataGridProps<T> {
     totalPages?: number;
     onPageChange?: (page: number) => void;
     totalItems?: number;
+    pageSize?: number;
 }
 
 export function DataGrid<T extends { id: string }>({
@@ -36,8 +37,12 @@ export function DataGrid<T extends { id: string }>({
     currentPage = 1,
     totalPages = 1,
     onPageChange,
-    totalItems
+    totalItems,
+    pageSize = data.length || 1
 }: DataGridProps<T>) {
+    const itemCount = totalItems ?? data.length;
+    const firstVisibleItem = itemCount === 0 ? 0 : ((currentPage - 1) * pageSize) + 1;
+    const lastVisibleItem = Math.min(itemCount, firstVisibleItem + data.length - 1);
 
     if (loading) {
         return (
@@ -99,12 +104,14 @@ export function DataGrid<T extends { id: string }>({
             {totalPages > 1 && onPageChange && (
                 <div className="flex items-center justify-between px-2">
                     <p className="text-sm text-muted-foreground">
-                        Showing {data.length} of {totalItems} items
+                        Showing {firstVisibleItem}-{lastVisibleItem} of {itemCount} items
                     </p>
                     <div className="flex items-center gap-2">
                         <button
+                            type="button"
                             onClick={() => onPageChange(currentPage - 1)}
                             disabled={currentPage === 1}
+                            aria-label="Previous page"
                             className="p-2 rounded-lg border border-border hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <ChevronLeft className="w-4 h-4" />
@@ -113,8 +120,10 @@ export function DataGrid<T extends { id: string }>({
                             Page {currentPage} of {totalPages}
                         </span>
                         <button
+                            type="button"
                             onClick={() => onPageChange(currentPage + 1)}
                             disabled={currentPage === totalPages}
+                            aria-label="Next page"
                             className="p-2 rounded-lg border border-border hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <ChevronRight className="w-4 h-4" />
