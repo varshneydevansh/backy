@@ -1260,6 +1260,7 @@ function ProductsRoute() {
                     </p>
                     <Link
                       to="/orders"
+                      search={{ siteId: activeSiteId }}
                       className="mt-3 inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-background px-3 text-xs font-medium hover:bg-accent"
                     >
                       Open orders
