@@ -594,6 +594,8 @@ function BlogListView() {
     setSelectedPostIds(new Set());
   }, [routerState.location.search, selectedSiteId, sites, setCurrentPage, setSearchQuery]);
   const selectedCurrentRows = data.filter((post) => selectedPostIds.has(post.id));
+  const visiblePostIdSet = useMemo(() => new Set(data.map((post) => post.id)), [data]);
+  const hiddenSelectedCount = Math.max(0, selectedPosts.length - selectedCurrentRows.length);
   const hasPosts = siteScopedPosts.length > 0;
   const editorialReadiness = useMemo(() => {
     const hasSite = Boolean(activeSite || activeSiteId);
@@ -1181,7 +1183,9 @@ function BlogListView() {
 
       {hasPosts && (
         <div id="blog-bulk" className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 scroll-mt-24">
-          <span className="text-sm font-medium">{selectedPostIds.size} selected</span>
+          <span className="text-sm font-medium">
+            {selectedPosts.length} selected{hiddenSelectedCount > 0 ? `, ${hiddenSelectedCount} not visible` : ''}
+          </span>
           <button
             type="button"
             onClick={() => setPostSelection(data, selectedCurrentRows.length !== data.length)}
@@ -1227,6 +1231,21 @@ function BlogListView() {
             >
               Clear selection
             </button>
+          )}
+          {hiddenSelectedCount > 0 && (
+            <div className="flex min-w-0 items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              <span className="min-w-0">
+                Bulk actions will include {hiddenSelectedCount} selected post{hiddenSelectedCount === 1 ? '' : 's'} outside the current table view.
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedPostIds((current) => new Set([...current].filter((postId) => visiblePostIdSet.has(postId))))}
+                className="shrink-0 rounded-md border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-900 transition hover:bg-amber-100"
+              >
+                Clear non-visible
+              </button>
+            </div>
           )}
         </div>
       )}
