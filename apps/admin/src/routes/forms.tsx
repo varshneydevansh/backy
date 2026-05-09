@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import {
+  AlertTriangle,
   CheckCircle2,
   ClipboardList,
   Code2,
@@ -91,6 +92,81 @@ function FormsRoute() {
       : '',
     [selectedForm, selectedFormSamplePayloadText, selectedFormSubmitUrl],
   );
+  const selectedFormReadiness = useMemo(() => {
+    if (!selectedForm) {
+      return {
+        score: 0,
+        checks: [],
+        workflow: [],
+      };
+    }
+
+    const hasFields = selectedForm.fields.length > 0;
+    const hasRequiredIdentity = selectedForm.fields.some((field) => (
+      ['email', 'tel'].includes(field.type) || ['email', 'phone'].includes(field.key)
+    ));
+    const hasSpamGuard = Boolean(selectedForm.enableHoneypot || selectedForm.enableCaptcha);
+    const hasDestination = Boolean(selectedForm.contactShare?.enabled || selectedForm.collectionTarget?.enabled);
+    const checks = [
+      {
+        label: 'Public definition',
+        detail: selectedForm.isActive
+          ? 'Available for frontend renderers and page blocks.'
+          : 'Inactive forms are hidden from public delivery.',
+        ready: selectedForm.isActive,
+      },
+      {
+        label: 'Fields',
+        detail: hasFields
+          ? `${selectedForm.fields.length} fields, ${selectedForm.fields.filter((field) => field.required).length} required`
+          : 'Add fields before using this form in a page or app.',
+        ready: hasFields,
+      },
+      {
+        label: 'Lead identity',
+        detail: hasRequiredIdentity
+          ? 'Email or phone field is available for contact workflows.'
+          : 'Add email or phone if this should create contacts.',
+        ready: hasRequiredIdentity,
+      },
+      {
+        label: 'Spam guard',
+        detail: hasSpamGuard
+          ? [selectedForm.enableHoneypot ? 'honeypot' : null, selectedForm.enableCaptcha ? 'captcha' : null].filter(Boolean).join(' + ')
+          : 'Enable honeypot or captcha before exposing high-traffic forms.',
+        ready: hasSpamGuard,
+      },
+      {
+        label: 'Destination',
+        detail: hasDestination
+          ? [
+              selectedForm.contactShare?.enabled ? 'contact inbox' : null,
+              selectedForm.collectionTarget?.enabled ? 'collection record' : null,
+            ].filter(Boolean).join(' + ')
+          : 'Submissions stay in the form inbox only.',
+        ready: hasDestination,
+      },
+      {
+        label: 'Review mode',
+        detail: selectedForm.moderationMode === 'auto-approve'
+          ? 'Submissions can skip manual review.'
+          : 'Manual review protects public workflows.',
+        ready: true,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      checks,
+      workflow: [
+        { label: 'Render', detail: 'Fetch definition and build fields dynamically.' },
+        { label: 'Submit', detail: 'POST values, requestId, and timing metadata.' },
+        { label: 'Protect', detail: hasSpamGuard ? 'Spam guards run before persistence.' : 'Add spam guard for public launches.' },
+        { label: 'Route', detail: hasDestination ? 'Share to contacts or a collection target.' : 'Keep in form inbox for admin review.' },
+      ],
+    };
+  }, [selectedForm]);
   const selectedInbox = selectedForm ? inboxByForm[selectedForm.id] : null;
   const selectedSubmissions = selectedInbox?.submissions || [];
   const filteredSubmissions = useMemo(
@@ -330,7 +406,7 @@ function FormsRoute() {
         />
       ) : (
         <div className="grid gap-6 xl:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
-          <Panel className="overflow-hidden">
+          <Panel className="self-start overflow-hidden">
             <PanelHeader
               title="Form library"
               description={`${forms.length} form${forms.length === 1 ? '' : 's'} on ${activeSite?.name || activeSiteId}`}
@@ -404,6 +480,54 @@ function FormsRoute() {
                   }
                 />
                 <PanelContent>
+                  <div className="mb-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+                    <div className="rounded-lg border border-border bg-muted/30 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-semibold">Form readiness</h3>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Checks public delivery, field shape, lead identity, spam protection, destinations, and review mode.
+                          </p>
+                        </div>
+                        <span className={cn(
+                          'rounded-full px-2.5 py-1 text-xs font-semibold',
+                          selectedFormReadiness.score >= 80
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : 'bg-amber-50 text-amber-700',
+                        )}
+                        >
+                          {selectedFormReadiness.score}% ready
+                        </span>
+                      </div>
+                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-background">
+                        <div
+                          className={cn(
+                            'h-full rounded-full',
+                            selectedFormReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500',
+                          )}
+                          style={{ width: `${selectedFormReadiness.score}%` }}
+                        />
+                      </div>
+                      <div className="mt-4 grid gap-2 md:grid-cols-2">
+                        {selectedFormReadiness.checks.map((check) => (
+                          <FormReadinessCheck key={check.label} {...check} />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-border bg-muted/30 p-4">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="size-4 text-primary" />
+                        <h3 className="text-sm font-semibold">Submission workflow</h3>
+                      </div>
+                      <div className="mt-3 grid gap-2">
+                        {selectedFormReadiness.workflow.map((step, index) => (
+                          <FormWorkflowStep key={step.label} index={index + 1} {...step} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="mb-5 rounded-lg border border-border bg-muted/30 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
@@ -557,6 +681,34 @@ function MetaTile({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-border bg-background px-3 py-3">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="mt-1 truncate text-sm font-semibold capitalize">{value}</div>
+    </div>
+  );
+}
+
+function FormReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  const Icon = ready ? CheckCircle2 : AlertTriangle;
+
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-background px-3 py-2">
+      <Icon className={cn('mt-0.5 size-4 shrink-0', ready ? 'text-emerald-600' : 'text-amber-600')} />
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function FormWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-border bg-background px-3 py-2">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
     </div>
   );
 }
@@ -725,6 +877,12 @@ const getEnvValue = (key: string): string => {
   return env[key]?.trim() ?? '';
 };
 
+const isLocalAdminHost = () => {
+  if (typeof window === 'undefined') return false;
+
+  return ['localhost', '127.0.0.1'].includes(window.location.hostname) && window.location.port !== '3001';
+};
+
 const getPublicBaseUrl = (): string => {
   const envBase = (
     getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
@@ -733,7 +891,7 @@ const getPublicBaseUrl = (): string => {
     ''
   ).trim();
 
-  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+  if (!envBase && isLocalAdminHost()) {
     return 'http://localhost:3001';
   }
 
