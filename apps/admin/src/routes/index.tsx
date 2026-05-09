@@ -671,6 +671,25 @@ function Index() {
     },
     publicEndpoints: frontendContractUrls,
     adminEndpoints: adminContractUrls,
+    controlRoutes: {
+      sites: '/sites',
+      pages: '/pages',
+      pageBuilder: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}`,
+      contactPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=contact`,
+      registrationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
+      storefrontPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
+      blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
+      blog: '/blog',
+      media: '/media',
+      collections: '/collections',
+      forms: '/forms',
+      contacts: '/contacts',
+      comments: '/comments',
+      products: '/products',
+      orders: '/orders',
+      users: '/users',
+      settings: '/settings',
+    },
     commerce: {
       catalogEndpoint: frontendContractUrls.products,
       orderIntakeEndpoint: frontendContractUrls.orderIntake,
@@ -1258,6 +1277,82 @@ function Index() {
                     </div>
                   </Link>
                 ))}
+              </div>
+
+              <div className="mt-5 rounded-lg border border-border bg-background p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Launch-ready workflows</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Jump straight into the concrete Backy surfaces that create public pages, sellable objects, lead capture, and member access.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    {activeSite?.name || activeSiteId}
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  <Link
+                    to="/pages/new"
+                    search={{ siteId: activeSiteId, template: 'registration' }}
+                    className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <div className="text-sm font-semibold text-foreground">Registration page</div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">Seed member/signup capture that hands off to Forms and Users.</div>
+                  </Link>
+                  <Link
+                    to="/pages/new"
+                    search={{ siteId: activeSiteId, template: 'contact' }}
+                    className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <div className="text-sm font-semibold text-foreground">Contact page</div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">Create an editable inquiry page connected to Backy form capture.</div>
+                  </Link>
+                  <Link
+                    to="/pages/new"
+                    search={{ siteId: activeSiteId, template: 'storefront' }}
+                    className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <div className="text-sm font-semibold text-foreground">Storefront page</div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">Start a public shop surface for products, cart handoff, and checkout intake.</div>
+                  </Link>
+                  <Link
+                    to="/pages/new"
+                    search={{ siteId: activeSiteId, template: 'blog-index' }}
+                    className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <div className="text-sm font-semibold text-foreground">Blog index page</div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">Seed a post list page with taxonomy, feeds, and article route handoff.</div>
+                  </Link>
+                  <Link
+                    to="/products"
+                    className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <div className="text-sm font-semibold text-foreground">Product catalog</div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">Manage pricing, inventory, product media, delivery, and storefront API data.</div>
+                  </Link>
+                  <Link
+                    to="/orders"
+                    className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <div className="text-sm font-semibold text-foreground">Order queue</div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">Review checkout intake, payment state, fulfillment, refunds, and support notes.</div>
+                  </Link>
+                  <Link
+                    to="/forms"
+                    className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <div className="text-sm font-semibold text-foreground">Form builder</div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">Configure registration, contact, lead, and custom submission workflows.</div>
+                  </Link>
+                  <Link
+                    to="/users"
+                    className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <div className="text-sm font-semibold text-foreground">Member access</div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">Manage roles, invites, registration handoff, and auth/provider readiness.</div>
+                  </Link>
+                </div>
               </div>
             </section>
 
