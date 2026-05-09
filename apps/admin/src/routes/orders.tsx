@@ -1,5 +1,5 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
-import { createFileRoute, Link, useNavigate, useRouterState } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   Archive,
@@ -41,13 +41,9 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
-
-export const Route = createFileRoute('/orders')({
-  component: OrdersRoute,
-});
 
 const ORDER_CONTROL_AREAS = [
   {
@@ -85,6 +81,16 @@ type OrderSource = 'web' | 'manual' | 'api' | 'import' | 'pos';
 type PaymentStatusFilter = PaymentStatus | 'all';
 type FulfillmentStatusFilter = FulfillmentStatus | 'all';
 type OrderSourceFilter = OrderSource | 'all';
+
+interface OrdersSearch {
+  siteId?: string;
+  workflow?: OrderFilter;
+  payment?: PaymentStatusFilter;
+  fulfillment?: FulfillmentStatusFilter;
+  source?: OrderSourceFilter;
+  q?: string;
+  orderId?: string;
+}
 
 interface OrderLineItemDraft {
   title: string;
@@ -143,6 +149,45 @@ interface OrderFormState {
 }
 
 const ORDERS_COLLECTION_SLUG = 'orders';
+const ORDER_FILTERS: OrderFilter[] = ['all', 'open', 'paid', 'fulfilled', 'cancelled'];
+const PAYMENT_STATUS_FILTERS: PaymentStatusFilter[] = ['all', 'pending', 'paid', 'failed', 'refunded'];
+const FULFILLMENT_STATUS_FILTERS: FulfillmentStatusFilter[] = ['all', 'unfulfilled', 'processing', 'fulfilled', 'cancelled'];
+const ORDER_SOURCE_FILTERS: OrderSourceFilter[] = ['all', 'web', 'manual', 'api', 'import', 'pos'];
+
+const isOrderFilter = (value: unknown): value is OrderFilter => (
+  typeof value === 'string' && ORDER_FILTERS.includes(value as OrderFilter)
+);
+
+const isPaymentStatusFilter = (value: unknown): value is PaymentStatusFilter => (
+  typeof value === 'string' && PAYMENT_STATUS_FILTERS.includes(value as PaymentStatusFilter)
+);
+
+const isFulfillmentStatusFilter = (value: unknown): value is FulfillmentStatusFilter => (
+  typeof value === 'string' && FULFILLMENT_STATUS_FILTERS.includes(value as FulfillmentStatusFilter)
+);
+
+const isOrderSourceFilter = (value: unknown): value is OrderSourceFilter => (
+  typeof value === 'string' && ORDER_SOURCE_FILTERS.includes(value as OrderSourceFilter)
+);
+
+const normalizedSearchString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+export const Route = createFileRoute('/orders')({
+  validateSearch: (search: Record<string, unknown>): OrdersSearch => ({
+    siteId: normalizedSearchString(search.siteId),
+    workflow: isOrderFilter(search.workflow) ? search.workflow : undefined,
+    payment: isPaymentStatusFilter(search.payment) ? search.payment : undefined,
+    fulfillment: isFulfillmentStatusFilter(search.fulfillment) ? search.fulfillment : undefined,
+    source: isOrderSourceFilter(search.source) ? search.source : undefined,
+    q: normalizedSearchString(search.q),
+    orderId: normalizedSearchString(search.orderId),
+  }),
+  component: OrdersRoute,
+});
 
 const ORDER_FIELDS: CollectionField[] = [
   { key: 'ordernumber', label: 'Order Number', type: 'text', required: true, unique: true, sortOrder: 10 },
@@ -288,11 +333,11 @@ const EMPTY_ORDER_FORM: OrderFormState = {
 function OrdersRoute() {
   const { sites } = useStore();
   const navigate = useNavigate();
-  const routerState = useRouterState();
-  const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
+  const routeSearch = Route.useSearch();
+  const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
   const [ordersCollection, setOrdersCollection] = useState<Collection | null>(null);
   const [orders, setOrders] = useState<CollectionRecord[]>([]);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(routeSearch.orderId || null);
   const [formState, setFormState] = useState<OrderFormState>(EMPTY_ORDER_FORM);
   const [itemDraft, setItemDraft] = useState<OrderLineItemDraft>({
     title: '',
@@ -301,11 +346,11 @@ function OrdersRoute() {
     quantity: '1',
     price: '',
   });
-  const [filter, setFilter] = useState<OrderFilter>('all');
-  const [paymentFilter, setPaymentFilter] = useState<PaymentStatusFilter>('all');
-  const [fulfillmentFilter, setFulfillmentFilter] = useState<FulfillmentStatusFilter>('all');
-  const [sourceFilter, setSourceFilter] = useState<OrderSourceFilter>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [filter, setFilter] = useState<OrderFilter>(routeSearch.workflow || 'all');
+  const [paymentFilter, setPaymentFilter] = useState<PaymentStatusFilter>(routeSearch.payment || 'all');
+  const [fulfillmentFilter, setFulfillmentFilter] = useState<FulfillmentStatusFilter>(routeSearch.fulfillment || 'all');
+  const [sourceFilter, setSourceFilter] = useState<OrderSourceFilter>(routeSearch.source || 'all');
+  const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -630,6 +675,33 @@ function OrdersRoute() {
     sourceFilter,
   ]);
   const orderHandoffText = useMemo(() => JSON.stringify(orderHandoff, null, 2), [orderHandoff]);
+  const ordersRouteSearch = useMemo<OrdersSearch>(() => ({
+    siteId: activeSiteId,
+    ...(filter !== 'all' ? { workflow: filter } : {}),
+    ...(paymentFilter !== 'all' ? { payment: paymentFilter } : {}),
+    ...(fulfillmentFilter !== 'all' ? { fulfillment: fulfillmentFilter } : {}),
+    ...(sourceFilter !== 'all' ? { source: sourceFilter } : {}),
+    ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
+    ...(selectedOrderId ? { orderId: selectedOrderId } : {}),
+  }), [activeSiteId, filter, fulfillmentFilter, paymentFilter, searchQuery, selectedOrderId, sourceFilter]);
+
+  const updateOrdersRouteSearch = (next: OrdersSearch) => {
+    const merged: OrdersSearch = {
+      ...ordersRouteSearch,
+      ...next,
+    };
+    const normalized: OrdersSearch = {
+      siteId: merged.siteId || activeSiteId,
+      ...(merged.workflow && merged.workflow !== 'all' ? { workflow: merged.workflow } : {}),
+      ...(merged.payment && merged.payment !== 'all' ? { payment: merged.payment } : {}),
+      ...(merged.fulfillment && merged.fulfillment !== 'all' ? { fulfillment: merged.fulfillment } : {}),
+      ...(merged.source && merged.source !== 'all' ? { source: merged.source } : {}),
+      ...(merged.q?.trim() ? { q: merged.q.trim() } : {}),
+      ...(merged.orderId ? { orderId: merged.orderId } : {}),
+    };
+
+    navigate({ to: '/orders', search: normalized, replace: true });
+  };
 
   const loadOrders = async () => {
     setIsLoading(true);
@@ -666,28 +738,40 @@ function OrdersRoute() {
   }, [selectedSiteId, sites]);
 
   useEffect(() => {
-    const requestedSiteId = getSiteSearchParam();
-    if (!requestedSiteId) return;
+    const nextSiteId = routeSearch.siteId
+      ? getSiteSelectionFromSearch(sites, routeSearch.siteId)
+      : selectedSiteId;
+    const siteChanged = nextSiteId !== selectedSiteId;
 
-    const nextSiteId = getSiteSelectionFromSearch(sites);
-    if (nextSiteId === selectedSiteId) return;
+    if (siteChanged) {
+      setSelectedSiteId(nextSiteId);
+      setFormState(EMPTY_ORDER_FORM);
+      setItemDraft({
+        title: '',
+        sku: '',
+        variant: '',
+        quantity: '1',
+        price: '',
+      });
+    }
 
-    setSelectedSiteId(nextSiteId);
-    setSelectedOrderId(null);
-    setFormState(EMPTY_ORDER_FORM);
-    setItemDraft({
-      title: '',
-      sku: '',
-      variant: '',
-      quantity: '1',
-      price: '',
-    });
-    setSearchQuery('');
-    setFilter('all');
-    setPaymentFilter('all');
-    setFulfillmentFilter('all');
-    setSourceFilter('all');
-  }, [routerState.location.search, selectedSiteId, sites]);
+    setSelectedOrderId(routeSearch.orderId || null);
+    setSearchQuery(routeSearch.q || '');
+    setFilter(routeSearch.workflow || 'all');
+    setPaymentFilter(routeSearch.payment || 'all');
+    setFulfillmentFilter(routeSearch.fulfillment || 'all');
+    setSourceFilter(routeSearch.source || 'all');
+  }, [
+    routeSearch.fulfillment,
+    routeSearch.orderId,
+    routeSearch.payment,
+    routeSearch.q,
+    routeSearch.siteId,
+    routeSearch.source,
+    routeSearch.workflow,
+    selectedSiteId,
+    sites,
+  ]);
 
   useEffect(() => {
     void loadOrders();
@@ -712,6 +796,12 @@ function OrdersRoute() {
       quantity: '1',
       price: '',
     });
+    updateOrdersRouteSearch({ orderId: undefined });
+  };
+
+  const selectOrderForEditing = (orderId: string) => {
+    setSelectedOrderId(orderId);
+    updateOrdersRouteSearch({ orderId });
   };
 
   const setLineItems = (items: OrderLineItem[]) => {
@@ -882,6 +972,7 @@ function OrdersRoute() {
 
       setOrders((current) => [saved, ...current.filter((order) => order.id !== saved.id)]);
       setSelectedOrderId(saved.id);
+      updateOrdersRouteSearch({ orderId: saved.id });
       setNotice(selectedOrder ? 'Order updated.' : 'Order recorded.');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save order');
@@ -993,6 +1084,13 @@ function OrdersRoute() {
     setPaymentFilter('all');
     setFulfillmentFilter('all');
     setSourceFilter('all');
+    updateOrdersRouteSearch({
+      workflow: undefined,
+      payment: undefined,
+      fulfillment: undefined,
+      source: undefined,
+      q: undefined,
+    });
   };
   const selectOrdersSite = (nextSiteId: string) => {
     setSelectedSiteId(nextSiteId);
@@ -1005,7 +1103,11 @@ function OrdersRoute() {
       quantity: '1',
       price: '',
     });
-    clearOrderFilters();
+    setSearchQuery('');
+    setFilter('all');
+    setPaymentFilter('all');
+    setFulfillmentFilter('all');
+    setSourceFilter('all');
     navigate({ to: '/orders', search: { siteId: nextSiteId }, replace: true });
   };
 
@@ -1368,7 +1470,11 @@ function OrdersRoute() {
                   <input
                     aria-label="Search orders"
                     value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
+                    onChange={(event) => {
+                      const q = event.target.value;
+                      setSearchQuery(q);
+                      updateOrdersRouteSearch({ q: q || undefined });
+                    }}
                     placeholder="Search orders..."
                     className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm"
                   />
@@ -1378,7 +1484,10 @@ function OrdersRoute() {
                     <button
                       key={status}
                       type="button"
-                      onClick={() => setFilter(status)}
+                      onClick={() => {
+                        setFilter(status);
+                        updateOrdersRouteSearch({ workflow: status });
+                      }}
                       className={cn(
                         'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground hover:bg-background hover:text-foreground',
                         filter === status && 'bg-background text-foreground shadow-sm',
@@ -1391,7 +1500,11 @@ function OrdersRoute() {
                 <select
                   aria-label="Payment status filter"
                   value={paymentFilter}
-                  onChange={(event) => setPaymentFilter(event.target.value as PaymentStatusFilter)}
+                  onChange={(event) => {
+                    const payment = event.target.value as PaymentStatusFilter;
+                    setPaymentFilter(payment);
+                    updateOrdersRouteSearch({ payment });
+                  }}
                   className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
                 >
                   <option value="all">All payments</option>
@@ -1403,7 +1516,11 @@ function OrdersRoute() {
                 <select
                   aria-label="Fulfillment status filter"
                   value={fulfillmentFilter}
-                  onChange={(event) => setFulfillmentFilter(event.target.value as FulfillmentStatusFilter)}
+                  onChange={(event) => {
+                    const fulfillment = event.target.value as FulfillmentStatusFilter;
+                    setFulfillmentFilter(fulfillment);
+                    updateOrdersRouteSearch({ fulfillment });
+                  }}
                   className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
                 >
                   <option value="all">All fulfillment</option>
@@ -1415,7 +1532,11 @@ function OrdersRoute() {
                 <select
                   aria-label="Order source filter"
                   value={sourceFilter}
-                  onChange={(event) => setSourceFilter(event.target.value as OrderSourceFilter)}
+                  onChange={(event) => {
+                    const source = event.target.value as OrderSourceFilter;
+                    setSourceFilter(source);
+                    updateOrdersRouteSearch({ source });
+                  }}
                   className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
                 >
                   <option value="all">All sources</option>
@@ -1456,7 +1577,7 @@ function OrdersRoute() {
                       order={order}
                       selected={order.id === selectedOrderId}
                       disabled={isSaving}
-                      onEdit={() => setSelectedOrderId(order.id)}
+                      onEdit={() => selectOrderForEditing(order.id)}
                       onPaid={() => void updateOrderWorkflow(order, { orderStatus: 'paid', paymentStatus: 'paid', paidAt: new Date().toISOString() })}
                       onFulfilled={() => void updateOrderWorkflow(order, { orderStatus: 'fulfilled', fulfillmentStatus: 'fulfilled', fulfilledAt: new Date().toISOString() })}
                       onCancelled={() => void updateOrderWorkflow(order, { orderStatus: 'cancelled', fulfillmentStatus: 'cancelled' })}
