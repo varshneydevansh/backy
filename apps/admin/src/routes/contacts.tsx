@@ -9,6 +9,7 @@ import {
   Copy,
   Download,
   ExternalLink,
+  FileText,
   Filter,
   Mail,
   Phone,
@@ -65,6 +66,41 @@ const CONTACT_CONTROL_AREAS = [
     title: 'Lifecycle actions',
     detail: 'Move records through new, contacted, qualified, and archived states.',
     href: '#contacts-actions',
+  },
+] as const;
+
+const CONTACT_WORKFLOW_SURFACES = [
+  {
+    key: 'forms',
+    title: 'Forms',
+    detail: 'Design public lead forms, enable contact sharing, and map submitted fields into CRM identity records.',
+    route: '/forms',
+  },
+  {
+    key: 'contactPage',
+    title: 'Contact page',
+    detail: 'Seed an editable page with a connected contact form block for public inquiries and service requests.',
+    route: '/pages/new',
+    template: 'contact',
+  },
+  {
+    key: 'registrationPage',
+    title: 'Registration page',
+    detail: 'Create account/signup pages that capture member leads before auth provider credentials are wired.',
+    route: '/pages/new',
+    template: 'registration',
+  },
+  {
+    key: 'users',
+    title: 'Users',
+    detail: 'Promote captured members into role-scoped users, collaborators, editors, or private audience accounts.',
+    route: '/users',
+  },
+  {
+    key: 'settings',
+    title: 'Settings',
+    detail: 'Connect runtime database, auth, and provider infrastructure before production lead capture.',
+    route: '/settings',
   },
 ] as const;
 
@@ -285,6 +321,13 @@ function ContactsRoute() {
         list: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts?limit=100`,
         update: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/{contactId}`,
       })),
+    },
+    controlRoutes: {
+      forms: '/forms',
+      contactPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=contact`,
+      registrationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
+      users: '/users',
+      settings: '/settings',
     },
     readiness: {
       score: commandReadiness.score,
@@ -666,6 +709,47 @@ function ContactsRoute() {
                 <div className="text-sm font-semibold text-foreground">{area.title}</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
               </a>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <FileText className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold">Connected lead workflows</h3>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Contacts are useful only when capture pages, form definitions, member handoff, and runtime infrastructure are connected.
+              </p>
+            </div>
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              {CONTACT_WORKFLOW_SURFACES.length} surfaces
+            </span>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {CONTACT_WORKFLOW_SURFACES.map((surface) => (
+              surface.route === '/pages/new' ? (
+                <Link
+                  key={surface.key}
+                  to="/pages/new"
+                  search={{ siteId: activeSiteId, template: surface.template }}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="text-sm font-semibold text-foreground">{surface.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
+                </Link>
+              ) : (
+                <Link
+                  key={surface.key}
+                  to={surface.route}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="text-sm font-semibold text-foreground">{surface.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
+                </Link>
+              )
             ))}
           </div>
         </div>
