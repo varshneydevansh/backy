@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Home, Layout, Save, Sparkles } from 'lucide-react';
-import { createPage, getAdminApiBase } from '@/lib/adminContentApi';
+import { createPage, getAdminApiBase, listPages } from '@/lib/adminContentApi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore, type Page } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
@@ -218,8 +218,10 @@ function NewPageRoute() {
     const search = Route.useSearch();
     const { sites, pages, setPages } = useStore();
     const [isLoading, setIsLoading] = useState(false);
+    const [isCheckingPages, setIsCheckingPages] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    const isPageCreateBusy = isLoading || isCheckingPages;
     const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
     const requestedSite = search.siteId
         ? sites.find((site) => siteMatchesIdentifier(site, search.siteId || ''))
@@ -251,6 +253,8 @@ function NewPageRoute() {
         isHomepage: nextFormData.isHomepage,
     });
     const updatePageDraft = (next: Partial<typeof formData>) => {
+        if (isPageCreateBusy) return;
+
         const nextFormData = {
             ...formData,
             ...next,
@@ -261,6 +265,43 @@ function NewPageRoute() {
         setNotice(null);
         navigate({ to: '/pages/new', search: buildRouteSearchFromForm(nextFormData), replace: true });
     };
+
+    useEffect(() => {
+        let cancelled = false;
+        const siteId = formData.siteId;
+
+        if (!siteId) return;
+
+        const loadSelectedSitePages = async () => {
+            setIsCheckingPages(true);
+
+            try {
+                const backendPages = await listPages(siteId);
+                if (!cancelled) {
+                    const siteIdentifiers = new Set(
+                        [siteId, selectedSite?.id, selectedSite?.publicSiteId].filter((value): value is string => Boolean(value)),
+                    );
+                    const otherPages = pages.filter((page) => !siteIdentifiers.has(page.siteId));
+                    setPages([...backendPages, ...otherPages]);
+                    setError(null);
+                }
+            } catch (loadError) {
+                if (!cancelled) {
+                    setError(loadError instanceof Error ? loadError.message : 'Unable to check existing pages for this site');
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsCheckingPages(false);
+                }
+            }
+        };
+
+        void loadSelectedSitePages();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [formData.siteId, selectedSite?.id, selectedSite?.publicSiteId, setPages]);
 
     useEffect(() => {
         if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, formData.siteId))) {
@@ -318,6 +359,7 @@ function NewPageRoute() {
     ]);
 
     const selectPageSite = (nextSiteId: string) => {
+        if (isPageCreateBusy) return;
         updatePageDraft({ siteId: nextSiteId });
     };
     const selectedTemplate = useMemo(
@@ -325,6 +367,8 @@ function NewPageRoute() {
         [formData.template],
     );
     const handleTemplateChange = (nextTemplate: PageTemplate) => {
+        if (isPageCreateBusy) return;
+
         const currentDefaults = TEMPLATE_DEFAULTS[formData.template];
         const nextDefaults = TEMPLATE_DEFAULTS[nextTemplate];
         const shouldApplyTitle = !formData.title.trim() || formData.title === currentDefaults.title;
@@ -363,18 +407,20 @@ function NewPageRoute() {
     const canSubmit = Boolean(
         formData.title.trim()
         && formData.siteId
+        && !isCheckingPages
         && hasSchedule
         && !routeConflict
         && (!formData.isHomepage || formData.slug.trim() || formData.title.trim()),
     );
     const submitBlockerMessage = useMemo(() => {
         if (isLoading || canSubmit) return null;
+        if (isCheckingPages) return 'Checking existing routes for this site before creating the page.';
         if (!selectedSite) return 'Select a target site before creating this page.';
         if (!formData.title.trim()) return 'Add a page title so Backy can create a named page and editor document.';
         if (routeConflict) return `The ${routePreview} route is already used by "${routeConflict.title}".`;
         if (!hasSchedule) return 'Choose a publish date before creating a scheduled page.';
         return 'Review the required page basics before creating this page.';
-    }, [canSubmit, formData.title, hasSchedule, isLoading, routeConflict, routePreview, selectedSite]);
+    }, [canSubmit, formData.title, hasSchedule, isCheckingPages, isLoading, routeConflict, routePreview, selectedSite]);
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
         const hasStarterCanvas = selectedTemplate.sections.length > 0;
@@ -592,6 +638,8 @@ function NewPageRoute() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isPageCreateBusy) return;
+
         if (!canSubmit) {
             if (routeConflict) {
                 setError(`Route ${routePreview} is already used by "${routeConflict.title}". Choose another slug or edit that page first`);
@@ -654,7 +702,7 @@ function NewPageRoute() {
                 <button
                     type="button"
                     onClick={() => navigate({ to: '/pages', search: { siteId: formData.siteId } })}
-                    disabled={isLoading}
+                    disabled={isPageCreateBusy}
                     className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
                     <ArrowLeft className="h-4 w-4" />
@@ -702,7 +750,7 @@ function NewPageRoute() {
                         <button
                             type="button"
                             onClick={() => navigate({ to: '/sites/new' })}
-                            disabled={isLoading}
+                            disabled={isPageCreateBusy}
                             className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             <Globe className="h-4 w-4" />
@@ -810,7 +858,7 @@ function NewPageRoute() {
                                     id="page-target-site"
                                     value={formData.siteId}
                                     onChange={(e) => selectPageSite(e.target.value)}
-                                    disabled={isLoading}
+                                    disabled={isPageCreateBusy}
                                     className="w-full rounded-lg border bg-background py-2.5 pl-10 pr-4 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                     required
                                 >
@@ -839,7 +887,7 @@ function NewPageRoute() {
                                         slug: formData.slug ? formData.slug : slugify(e.target.value),
                                     })}
                                     placeholder="About us"
-                                    disabled={isLoading}
+                                    disabled={isPageCreateBusy}
                                     className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                     required
                                 />
@@ -857,7 +905,7 @@ function NewPageRoute() {
                                         value={formData.slug}
                                         onChange={(e) => updatePageDraft({ slug: slugify(e.target.value) })}
                                         placeholder="about"
-                                        disabled={isLoading || formData.isHomepage}
+                                        disabled={isPageCreateBusy || formData.isHomepage}
                                         className="min-w-0 flex-1 rounded-r-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                     />
                                 </div>
@@ -872,19 +920,19 @@ function NewPageRoute() {
                                 onChange={(e) => updatePageDraft({ description: e.target.value })}
                                 placeholder="Short summary for search previews and frontend route metadata."
                                 rows={3}
-                                disabled={isLoading}
+                                disabled={isPageCreateBusy}
                                 className="w-full resize-none rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                             />
                         </div>
 
                         <label className={cn(
                             'flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background p-3 transition hover:bg-accent',
-                            isLoading && 'cursor-not-allowed opacity-70'
+                            isPageCreateBusy && 'cursor-not-allowed opacity-70'
                         )}>
                             <input
                                 type="checkbox"
                                 checked={formData.isHomepage}
-                                disabled={isLoading}
+                                disabled={isPageCreateBusy}
                                 onChange={(e) => {
                                     const isHomepage = e.target.checked;
                                     updatePageDraft({
@@ -921,7 +969,7 @@ function NewPageRoute() {
                                             params: { pageId: routeConflict.id },
                                             search: { siteId: formData.siteId },
                                         })}
-                                        disabled={isLoading}
+                                        disabled={isPageCreateBusy}
                                         className="inline-flex shrink-0 items-center justify-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                         Open existing page
@@ -951,7 +999,7 @@ function NewPageRoute() {
                                         className={cn(
                                             'flex cursor-pointer flex-col rounded-lg border p-4 transition-all hover:shadow-sm',
                                             formData.template === tmpl.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/50',
-                                            isLoading && 'cursor-not-allowed opacity-70'
+                                            isPageCreateBusy && 'cursor-not-allowed opacity-70'
                                         )}
                                     >
                                         <input
@@ -960,7 +1008,7 @@ function NewPageRoute() {
                                             value={tmpl.id}
                                             checked={formData.template === tmpl.id}
                                             onChange={(e) => handleTemplateChange(e.target.value as PageTemplate)}
-                                            disabled={isLoading}
+                                            disabled={isPageCreateBusy}
                                             className="sr-only"
                                         />
                                         <div className="mb-1 flex items-center gap-2">
@@ -995,7 +1043,7 @@ function NewPageRoute() {
                                             scheduledAt: status === 'scheduled' ? formData.scheduledAt : null,
                                         });
                                     }}
-                                    disabled={isLoading}
+                                    disabled={isPageCreateBusy}
                                     className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     <option value="draft">Draft</option>
@@ -1014,7 +1062,7 @@ function NewPageRoute() {
                                         onChange={(e) => updatePageDraft({
                                             scheduledAt: fromDateTimeLocalValue(e.target.value),
                                         })}
-                                        disabled={isLoading}
+                                        disabled={isPageCreateBusy}
                                         className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                         required
                                     />
@@ -1037,16 +1085,16 @@ function NewPageRoute() {
                             <button
                                 type="button"
                                 onClick={() => navigate({ to: '/pages', search: { siteId: formData.siteId } })}
-                                disabled={isLoading}
+                                disabled={isPageCreateBusy}
                                 className="rounded-lg border px-6 py-2.5 font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
-                                disabled={isLoading || !canSubmit}
+                                disabled={isPageCreateBusy || !canSubmit}
                                 title={submitBlockerMessage || 'Create page and open the visual editor'}
-                                aria-disabled={isLoading || !canSubmit}
+                                aria-disabled={isPageCreateBusy || !canSubmit}
                                 className={cn(
                                     'flex items-center justify-center gap-2 rounded-lg px-6 py-2.5',
                                     'bg-primary text-primary-foreground font-medium',
@@ -1054,7 +1102,7 @@ function NewPageRoute() {
                                 )}
                             >
                                 <Save className="w-4 h-4" />
-                                {isLoading ? 'Creating...' : 'Create Page'}
+                                {isLoading ? 'Creating...' : isCheckingPages ? 'Checking routes...' : 'Create Page'}
                             </button>
                         </div>
                     </div>
