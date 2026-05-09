@@ -226,9 +226,34 @@ function NewBlogPostPage() {
 
     useEffect(() => {
         if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, activeSiteId))) {
-            setActiveSiteId(sites[0].publicSiteId || sites[0].id);
+            const fallbackSiteId = sites[0].publicSiteId || sites[0].id;
+            setActiveSiteId(fallbackSiteId);
+            navigate({ to: '/blog/new', search: { siteId: fallbackSiteId }, replace: true });
         }
-    }, [activeSiteId, sites]);
+    }, [activeSiteId, navigate, sites]);
+
+    useEffect(() => {
+        const nextRequestedSite = search.siteId
+            ? sites.find((site) => siteMatchesIdentifier(site, search.siteId || ''))
+            : undefined;
+        const nextSiteId = nextRequestedSite?.publicSiteId || nextRequestedSite?.id || search.siteId || defaultSiteId;
+        if (nextSiteId === activeSiteId) return;
+
+        setActiveSiteId(nextSiteId);
+        setSelectedCategoryIds([]);
+        setSelectedTagIds([]);
+        setError(null);
+        setNotice(null);
+    }, [activeSiteId, defaultSiteId, search.siteId, sites]);
+
+    const selectBlogSite = (nextSiteId: string) => {
+        setActiveSiteId(nextSiteId);
+        setSelectedCategoryIds([]);
+        setSelectedTagIds([]);
+        setError(null);
+        setNotice(null);
+        navigate({ to: '/blog/new', search: { siteId: nextSiteId }, replace: true });
+    };
 
     const toggleSelection = (
         id: string,
@@ -746,14 +771,11 @@ function NewBlogPostPage() {
                             <PanelHeader title="Site and author" icon={<Globe className="size-4" />} />
                             <PanelContent className="space-y-4">
                                 <div className="space-y-2">
-                                    <label className="text-xs font-medium text-muted-foreground">Target site</label>
+                                    <label htmlFor="blog-create-active-site" className="text-xs font-medium text-muted-foreground">Target site</label>
                                     <select
+                                        id="blog-create-active-site"
                                         value={activeSiteId}
-                                        onChange={(event) => {
-                                            setActiveSiteId(event.target.value);
-                                            setSelectedCategoryIds([]);
-                                            setSelectedTagIds([]);
-                                        }}
+                                        onChange={(event) => selectBlogSite(event.target.value)}
                                         className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                                     >
                                         {sites.length === 0 ? (
