@@ -95,7 +95,7 @@ function ContactsRoute() {
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const formById = useMemo(() => new Map(forms.map((form) => [form.id, form])), [forms]);
   const apiForm = useMemo(
-    () => forms.find((form) => form.id === selectedFormId) || forms[0] || null,
+    () => selectedFormId === 'all' ? null : forms.find((form) => form.id === selectedFormId) || null,
     [forms, selectedFormId],
   );
   const contactsUrl = apiForm
@@ -128,6 +128,11 @@ function ContactsRoute() {
       return matchesForm && matchesStatus && matchesSearch;
     });
   }, [allContacts, formById, searchQuery, selectedFormId, statusFilter]);
+  const exportSourceKeys = useMemo(() => (
+    Array.from(new Set(filteredContacts.flatMap((contact) => (
+      contact.sourceValues ? Object.keys(contact.sourceValues) : []
+    )))).sort((a, b) => a.localeCompare(b))
+  ), [filteredContacts]);
   const metrics = useMemo(() => ({
     contacts: allContacts.length,
     new: allContacts.filter((contact) => contact.status === 'new').length,
@@ -302,6 +307,11 @@ function ContactsRoute() {
       pageId: apiForm.pageId,
       postId: apiForm.postId,
     } : null,
+    export: {
+      csvIncludesIdentity: true,
+      csvIncludesSourceValues: true,
+      sourceValueKeys: exportSourceKeys,
+    },
     sources: forms.map((form) => {
       const contacts = contactsByForm[form.id]?.contacts || [];
       return {
@@ -352,6 +362,7 @@ function ContactsRoute() {
     contactUpdateUrl,
     contactsByForm,
     contactsUrl,
+    exportSourceKeys,
     forms,
     metrics,
     publicBaseUrl,
@@ -497,6 +508,7 @@ function ContactsRoute() {
       'created_at',
       'updated_at',
       'request_id',
+      ...exportSourceKeys.map((key) => `source_${key}`),
     ];
     const rows = filteredContacts.map((contact) => {
       const form = formById.get(contact.formId);
@@ -512,6 +524,7 @@ function ContactsRoute() {
         contact.createdAt || '',
         contact.updatedAt || '',
         contact.requestId || '',
+        ...exportSourceKeys.map((key) => formatContactSourceValue(contact.sourceValues?.[key])),
       ];
     });
     const csv = [header, ...rows]
@@ -817,7 +830,7 @@ function ContactsRoute() {
                     Contact pipeline API
                   </div>
                   <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                    Create or connect a public form with lead sharing to expose contact list and update endpoints.
+                    Select one source form to expose its contact list and update endpoints. The all-forms view is an admin aggregate.
                   </p>
                 </div>
                 <Link to="/forms">
@@ -1117,6 +1130,13 @@ function statusType(status: ContactStatus) {
   if (status === 'contacted') return 'info';
   return 'neutral';
 }
+
+const formatContactSourceValue = (value: unknown): string => {
+  if (value === null || value === undefined || value === '') return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.map(formatContactSourceValue).filter(Boolean).join(', ');
+  return JSON.stringify(value);
+};
 
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
