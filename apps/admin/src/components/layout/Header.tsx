@@ -332,6 +332,28 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     navigate({ to: '/settings' });
   };
 
+  const openNotificationSummaryTarget = () => {
+    setNotificationsOpen(false);
+
+    if (pendingComments.length > 0) {
+      navigate({ to: '/comments' });
+      return;
+    }
+
+    if (workflowNotifications[0]) {
+      handleWorkflowNotification(workflowNotifications[0]);
+      return;
+    }
+
+    navigate({ to: '/' });
+  };
+
+  const notificationSummaryLabel = pendingComments.length > 0
+    ? 'Open moderation queue'
+    : workflowNotifications[0]
+      ? workflowNotifications[0].actionLabel
+      : 'Open dashboard';
+
   const loadGlobalSearch = async () => {
     if (searchLoading || searchLoadedForSiteId === activeSiteId) return;
     setSearchLoading(true);
@@ -712,13 +734,10 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setNotificationsOpen(false);
-                    navigate({ to: pendingComments.length > 0 ? '/comments' : '/' });
-                  }}
+                  onClick={openNotificationSummaryTarget}
                   className="flex w-full items-center justify-center border-t border-border px-4 py-3 text-sm font-medium text-primary hover:bg-accent focus-ring"
                 >
-                  {pendingComments.length > 0 ? 'Open moderation queue' : 'Open dashboard'}
+                  {notificationSummaryLabel}
                 </button>
               </div>
             </>
