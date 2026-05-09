@@ -89,6 +89,40 @@ const BLOG_FRONTEND_SYSTEMS = [
   },
 ] as const;
 
+const BLOG_WORKFLOW_SURFACES = [
+  {
+    key: 'blogIndex',
+    title: 'Blog index page',
+    detail: 'Seed a public listing page that binds to Backy posts, taxonomy, excerpts, pagination, and article routes.',
+    route: '/pages/new',
+    template: 'blog-index',
+  },
+  {
+    key: 'media',
+    title: 'Media',
+    detail: 'Manage covers, inline assets, author images, downloads, and responsive images used by posts.',
+    route: '/media',
+  },
+  {
+    key: 'comments',
+    title: 'Comments',
+    detail: 'Moderate public article discussions, reported replies, blocked authors, and approved comment feeds.',
+    route: '/comments',
+  },
+  {
+    key: 'users',
+    title: 'Authors and users',
+    detail: 'Coordinate author identity, collaborator permissions, membership handoff, and publishing authority.',
+    route: '/users',
+  },
+  {
+    key: 'settings',
+    title: 'Settings',
+    detail: 'Confirm API keys, delivery mode, auth policy, and storage/database runtime before public publishing.',
+    route: '/settings',
+  },
+] as const;
+
 const BLOG_EXPORT_COLUMNS = [
   'post_id',
   'active_site_id',
@@ -612,6 +646,13 @@ function BlogListView() {
       adminPostReadiness: adminBlogReadinessUrl,
       adminPostPreview: adminBlogPreviewUrl,
     },
+    controlRoutes: {
+      blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
+      media: '/media',
+      comments: '/comments',
+      users: '/users',
+      settings: '/settings',
+    },
     export: {
       format: 'csv',
       columns: BLOG_EXPORT_COLUMNS,
@@ -921,6 +962,47 @@ function BlogListView() {
                 <div className="text-sm font-semibold text-foreground">{area.title}</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
               </a>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <FileText className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold">Connected editorial workflows</h3>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Blog publishing works best when the public index page, media library, comments, author identity, and runtime settings are wired together.
+              </p>
+            </div>
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              {BLOG_WORKFLOW_SURFACES.length} surfaces
+            </span>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {BLOG_WORKFLOW_SURFACES.map((surface) => (
+              surface.route === '/pages/new' ? (
+                <Link
+                  key={surface.key}
+                  to="/pages/new"
+                  search={{ siteId: activeSiteId, template: surface.template }}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="text-sm font-semibold text-foreground">{surface.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
+                </Link>
+              ) : (
+                <Link
+                  key={surface.key}
+                  to={surface.route}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="text-sm font-semibold text-foreground">{surface.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
+                </Link>
+              )
             ))}
           </div>
         </div>
