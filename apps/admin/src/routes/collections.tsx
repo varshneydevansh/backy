@@ -622,6 +622,9 @@ function CollectionsPage() {
   const [pendingRecordDelete, setPendingRecordDelete] = useState<CollectionRecord | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const isCollectionMutationPending = isSavingCollection || isImportingRecords || isExportingRecords;
+  const isRecordMutationPending = isSavingRecord || isImportingRecords || isExportingRecords;
+  const isCollectionsBusy = isLoading || isRecordsLoading || isCollectionMutationPending || isRecordMutationPending;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -958,6 +961,8 @@ function CollectionsPage() {
   };
 
   const updateRecordFilters = (updates: Partial<typeof recordFilters>) => {
+    if (isCollectionsBusy) return;
+
     const nextFilters = { ...recordFilters, ...updates };
     setRecordFilters(nextFilters);
     setRecordPagination((prev) => ({ ...prev, offset: 0 }));
@@ -973,6 +978,8 @@ function CollectionsPage() {
   };
 
   const toggleRecordSelection = (recordId: string, selected: boolean) => {
+    if (isCollectionsBusy) return;
+
     setSelectedRecordIds((prev) => (
       selected
         ? [...new Set([...prev, recordId])]
@@ -981,6 +988,8 @@ function CollectionsPage() {
   };
 
   const togglePageRecordSelection = (selected: boolean) => {
+    if (isCollectionsBusy) return;
+
     const pageIds = records.map((record) => record.id);
     setSelectedRecordIds((prev) => (
       selected
@@ -1092,6 +1101,8 @@ function CollectionsPage() {
   };
 
   const selectCollectionsSite = (nextSiteId: string) => {
+    if (isCollectionsBusy) return;
+
     setSelectedSiteId(nextSiteId);
     resetCollectionsWorkspace();
     navigate({ to: '/collections', search: { siteId: nextSiteId }, replace: true });
@@ -1141,6 +1152,8 @@ function CollectionsPage() {
   ]);
 
   const applyCollectionTemplate = (template: CollectionTemplate) => {
+    if (isCollectionsBusy) return;
+
     setSelectedCollectionId(null);
     setSelectedRecordId(null);
     setSelectedRecordIds([]);
@@ -1329,6 +1342,8 @@ function CollectionsPage() {
 
   const handleCollectionSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isSavingCollection) return;
+
     setIsSavingCollection(true);
     setError(null);
     setValidationDetails([]);
@@ -1373,7 +1388,9 @@ function CollectionsPage() {
   };
 
   const handleDeleteCollection = async (collection: Collection) => {
+    if (isSavingCollection) return;
 
+    setIsSavingCollection(true);
     setError(null);
     setValidationDetails([]);
     setNotice(null);
@@ -1390,14 +1407,18 @@ function CollectionsPage() {
         }
       }
       setPendingCollectionDelete(null);
+      setNotice('Collection deleted.');
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete collection');
+    } finally {
+      setIsSavingCollection(false);
     }
   };
 
   const handleRecordSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!activeCollection) return;
+    if (isSavingRecord) return;
 
     setIsSavingRecord(true);
     setError(null);
@@ -1441,7 +1462,9 @@ function CollectionsPage() {
     if (!activeCollection) {
       return;
     }
+    if (isSavingRecord) return;
 
+    setIsSavingRecord(true);
     setError(null);
     setValidationDetails([]);
     setNotice(null);
@@ -1453,15 +1476,20 @@ function CollectionsPage() {
         updateCollectionsRouteSearch({ recordId: undefined });
       }
       setPendingRecordDelete(null);
+      setNotice('Collection record deleted.');
       void loadRecords(activeCollection.id);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete collection record');
+    } finally {
+      setIsSavingRecord(false);
     }
   };
 
   const handleBulkUpdateStatus = async (status: CollectionRecord['status']) => {
     if (!activeCollection || selectedRecordIds.length === 0) return;
+    if (isSavingRecord) return;
 
+    setIsSavingRecord(true);
     setError(null);
     setValidationDetails([]);
     setNotice(null);
@@ -1479,12 +1507,16 @@ function CollectionsPage() {
       void loadRecords(activeCollection.id);
     } catch (bulkError) {
       showApiError(bulkError, 'Unable to update selected collection records');
+    } finally {
+      setIsSavingRecord(false);
     }
   };
 
   const handleBulkDeleteRecords = async () => {
     if (!activeCollection || selectedRecordIds.length === 0) return;
+    if (isSavingRecord) return;
 
+    setIsSavingRecord(true);
     setError(null);
     setValidationDetails([]);
     setNotice(null);
@@ -1505,11 +1537,14 @@ function CollectionsPage() {
       void loadRecords(activeCollection.id);
     } catch (bulkError) {
       showApiError(bulkError, 'Unable to delete selected collection records');
+    } finally {
+      setIsSavingRecord(false);
     }
   };
 
   const handleExportRecords = async () => {
     if (!activeCollection) return;
+    if (isCollectionsBusy) return;
 
     setIsExportingRecords(true);
     setError(null);
@@ -1533,6 +1568,7 @@ function CollectionsPage() {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(objectUrl);
+      setNotice('Collection records CSV exported.');
     } catch (exportError) {
       setError(exportError instanceof Error ? exportError.message : 'Unable to export collection records');
     } finally {
@@ -1542,6 +1578,7 @@ function CollectionsPage() {
 
   const handleImportRecords = async (event: ChangeEvent<HTMLInputElement>) => {
     if (!activeCollection) return;
+    if (isCollectionsBusy) return;
 
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1577,16 +1614,18 @@ function CollectionsPage() {
           <button
             type="button"
             onClick={() => void loadCollections()}
-            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            disabled={isCollectionsBusy}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Refresh collections"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
           <button
             type="button"
             onClick={resetCollectionForm}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            disabled={isCollectionsBusy}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Create new collection"
           >
             <Plus className="h-4 w-4" />
@@ -1650,7 +1689,7 @@ function CollectionsPage() {
             <button
               type="button"
               onClick={downloadCollectionSchemaCsv}
-              disabled={collections.length === 0}
+              disabled={collections.length === 0 || isCollectionsBusy}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="h-4 w-4" />
@@ -1659,8 +1698,8 @@ function CollectionsPage() {
             <button
               type="button"
               onClick={() => void loadCollections()}
-              disabled={isLoading}
-              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"
+              disabled={isCollectionsBusy}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               Refresh
@@ -1668,7 +1707,8 @@ function CollectionsPage() {
             <button
               type="button"
               onClick={resetCollectionForm}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              disabled={isCollectionsBusy}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Plus className="h-4 w-4" />
               New collection
@@ -1799,7 +1839,8 @@ function CollectionsPage() {
               <button
                 type="button"
                 onClick={() => applyCollectionTemplate(template)}
-                className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+                disabled={isCollectionsBusy}
+                className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Use template
               </button>
@@ -1849,7 +1890,7 @@ function CollectionsPage() {
           <button
             type="button"
             onClick={downloadCollectionSchemaCsv}
-            disabled={collections.length === 0}
+            disabled={collections.length === 0 || isCollectionsBusy}
             className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Download className="h-4 w-4" />
@@ -1966,8 +2007,9 @@ function CollectionsPage() {
         <select
           id="collection-site"
           value={activeSiteId}
+          disabled={isCollectionsBusy}
           onChange={(event) => selectCollectionsSite(event.target.value)}
-          className="rounded-lg border bg-background px-3 py-2 text-sm"
+          className="rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
         >
           {sites.map((site) => (
             <option key={site.id} value={site.publicSiteId || site.id}>
@@ -1993,8 +2035,9 @@ function CollectionsPage() {
               <button
                 key={collection.id}
                 type="button"
+                disabled={isCollectionsBusy}
                 onClick={() => selectCollection(collection)}
-                className={`w-full px-4 py-3 text-left transition-colors hover:bg-muted ${
+                className={`w-full px-4 py-3 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60 ${
                   collection.id === selectedCollectionId ? 'bg-primary/10' : ''
                 }`}
               >
@@ -2025,7 +2068,8 @@ function CollectionsPage() {
                   <button
                     type="button"
                     onClick={() => setPendingCollectionDelete(activeCollection)}
-                    className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50"
+                    disabled={isCollectionsBusy}
+                    className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Trash2 className="h-4 w-4" />
                     Delete
@@ -2033,8 +2077,8 @@ function CollectionsPage() {
                 )}
                 <button
                   type="submit"
-                  disabled={isSavingCollection}
-                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                  disabled={isCollectionsBusy}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Save className="h-4 w-4" />
                   {isSavingCollection ? 'Saving...' : 'Save schema'}
@@ -2042,6 +2086,7 @@ function CollectionsPage() {
               </div>
             </div>
 
+            <fieldset disabled={isCollectionsBusy} className="min-w-0">
             <div className="grid gap-4 p-4 lg:grid-cols-4">
               <label className="space-y-1 text-sm">
                 <span className="font-medium">Name</span>
@@ -2125,6 +2170,7 @@ function CollectionsPage() {
                     label="Public read"
                     description="Frontend pages can list and render records."
                     checked={collectionForm.permissions.publicRead}
+                    disabled={isCollectionsBusy}
                     onChange={(checked) => setCollectionForm((prev) => ({
                       ...prev,
                       permissions: {
@@ -2137,6 +2183,7 @@ function CollectionsPage() {
                     label="Visitor create"
                     description="Public POST creates draft records."
                     checked={collectionForm.permissions.publicCreate}
+                    disabled={isCollectionsBusy}
                     onChange={(checked) => setCollectionForm((prev) => ({
                       ...prev,
                       permissions: {
@@ -2181,7 +2228,8 @@ function CollectionsPage() {
                     ...prev,
                     fields: [...prev.fields, createEmptyField((prev.fields.length + 1) * 10)],
                   }))}
-                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
+                  disabled={isCollectionsBusy}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Plus className="h-4 w-4" />
                   Add field
@@ -2278,8 +2326,8 @@ function CollectionsPage() {
                           <button
                             type="button"
                             onClick={() => removeField(index)}
-                            disabled={collectionForm.fields.length === 1}
-                            className="rounded-lg p-2 text-muted-foreground hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
+                            disabled={collectionForm.fields.length === 1 || isCollectionsBusy}
+                            className="rounded-lg p-2 text-muted-foreground hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -2290,6 +2338,7 @@ function CollectionsPage() {
                 </table>
               </div>
             </div>
+            </fieldset>
           </form>
 
           {activeCollection && (
@@ -2323,8 +2372,8 @@ function CollectionsPage() {
                   <button
                     type="button"
                     onClick={() => importInputRef.current?.click()}
-                    disabled={isImportingRecords}
-                    className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
+                    disabled={isCollectionsBusy}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                     aria-label="Import collection records CSV"
                   >
                     <Upload className="h-4 w-4" />
@@ -2333,8 +2382,8 @@ function CollectionsPage() {
                   <button
                     type="button"
                     onClick={() => void handleExportRecords()}
-                    disabled={isExportingRecords}
-                    className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
+                    disabled={isCollectionsBusy}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Download className="h-4 w-4" />
                     {isExportingRecords ? 'Exporting...' : 'Export CSV'}
@@ -2342,11 +2391,13 @@ function CollectionsPage() {
                   <button
                     type="button"
                     onClick={() => {
+                      if (isCollectionsBusy) return;
                       setSelectedRecordId(null);
                       setRecordForm({ slug: '', status: 'published', values: {} });
                       updateCollectionsRouteSearch({ recordId: undefined });
                     }}
-                    className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
+                    disabled={isCollectionsBusy}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Plus className="h-4 w-4" />
                     New record
@@ -2360,7 +2411,8 @@ function CollectionsPage() {
                   <input
                     value={recordFilters.search}
                     onChange={(event) => updateRecordFilters({ search: event.target.value })}
-                    className="w-full rounded-lg border bg-background px-3 py-2"
+                    disabled={isCollectionsBusy}
+                    className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                     placeholder="Search values"
                   />
                 </label>
@@ -2368,10 +2420,11 @@ function CollectionsPage() {
                   <span className="font-medium">Status</span>
                   <select
                     value={recordFilters.status}
+                    disabled={isCollectionsBusy}
                     onChange={(event) => updateRecordFilters({
                       status: event.target.value as RecordStatusFilter,
                     })}
-                    className="w-full rounded-lg border bg-background px-3 py-2"
+                    className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="">All</option>
                     <option value="published">Published</option>
@@ -2384,11 +2437,12 @@ function CollectionsPage() {
                   <span className="font-medium">Field</span>
                   <select
                     value={recordFilters.fieldKey}
+                    disabled={isCollectionsBusy}
                     onChange={(event) => updateRecordFilters({
                       fieldKey: event.target.value,
                       fieldValue: event.target.value ? recordFilters.fieldValue : '',
                     })}
-                    className="w-full rounded-lg border bg-background px-3 py-2"
+                    className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="">Any field</option>
                     {activeCollection.fields.map((field) => (
@@ -2401,8 +2455,8 @@ function CollectionsPage() {
                   <input
                     value={recordFilters.fieldValue}
                     onChange={(event) => updateRecordFilters({ fieldValue: event.target.value })}
-                    disabled={!recordFilters.fieldKey}
-                    className="w-full rounded-lg border bg-background px-3 py-2 disabled:opacity-60"
+                    disabled={!recordFilters.fieldKey || isCollectionsBusy}
+                    className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                     placeholder="Contains"
                   />
                 </label>
@@ -2410,8 +2464,9 @@ function CollectionsPage() {
                   <span className="font-medium">Sort by</span>
                   <select
                     value={recordFilters.sortBy}
+                    disabled={isCollectionsBusy}
                     onChange={(event) => updateRecordFilters({ sortBy: event.target.value })}
-                    className="w-full rounded-lg border bg-background px-3 py-2"
+                    className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="updatedAt">Updated</option>
                     <option value="createdAt">Created</option>
@@ -2426,10 +2481,11 @@ function CollectionsPage() {
                   <span className="font-medium">Direction</span>
                   <select
                     value={recordFilters.sortDirection}
+                    disabled={isCollectionsBusy}
                     onChange={(event) => updateRecordFilters({
                       sortDirection: event.target.value === 'asc' ? 'asc' : 'desc',
                     })}
-                    className="w-full rounded-lg border bg-background px-3 py-2"
+                    className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="desc">Descending</option>
                     <option value="asc">Ascending</option>
@@ -2446,35 +2502,43 @@ function CollectionsPage() {
                     <button
                       type="button"
                       onClick={() => void handleBulkUpdateStatus('published')}
-                      className="rounded-lg border border-border px-3 py-2 hover:bg-background"
+                      disabled={isCollectionsBusy}
+                      className="rounded-lg border border-border px-3 py-2 hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Publish
                     </button>
                     <button
                       type="button"
                       onClick={() => void handleBulkUpdateStatus('draft')}
-                      className="rounded-lg border border-border px-3 py-2 hover:bg-background"
+                      disabled={isCollectionsBusy}
+                      className="rounded-lg border border-border px-3 py-2 hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Draft
                     </button>
                     <button
                       type="button"
                       onClick={() => void handleBulkUpdateStatus('archived')}
-                      className="rounded-lg border border-border px-3 py-2 hover:bg-background"
+                      disabled={isCollectionsBusy}
+                      className="rounded-lg border border-border px-3 py-2 hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Archive
                     </button>
                     <button
                       type="button"
                       onClick={() => setSelectedRecordIds([])}
-                      className="rounded-lg border border-border px-3 py-2 hover:bg-background"
+                      disabled={isCollectionsBusy}
+                      className="rounded-lg border border-border px-3 py-2 hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Clear
                     </button>
                     <button
                       type="button"
-                      onClick={() => setPendingBulkDelete(true)}
-                      className="rounded-lg border border-red-200 px-3 py-2 text-red-700 hover:bg-red-50"
+                      onClick={() => {
+                        if (isCollectionsBusy) return;
+                        setPendingBulkDelete(true);
+                      }}
+                      disabled={isCollectionsBusy}
+                      className="rounded-lg border border-red-200 px-3 py-2 text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Delete
                     </button>
@@ -2491,6 +2555,7 @@ function CollectionsPage() {
                           <input
                             type="checkbox"
                             checked={allRecordsOnPageSelected}
+                            disabled={isCollectionsBusy}
                             onChange={(event) => togglePageRecordSelection(event.target.checked)}
                             aria-label="Select all records on this page"
                           />
@@ -2518,6 +2583,7 @@ function CollectionsPage() {
                               <input
                                 type="checkbox"
                                 checked={selectedRecordIds.includes(record.id)}
+                                disabled={isCollectionsBusy}
                                 onChange={(event) => toggleRecordSelection(record.id, event.target.checked)}
                                 aria-label={`Select record ${record.slug}`}
                               />
@@ -2526,10 +2592,12 @@ function CollectionsPage() {
                               <button
                                 type="button"
                                 onClick={() => {
+                                  if (isCollectionsBusy) return;
                                   setSelectedRecordId(record.id);
                                   updateCollectionsRouteSearch({ recordId: record.id });
                                 }}
-                                className="font-medium text-foreground hover:text-primary"
+                                disabled={isCollectionsBusy}
+                                className="font-medium text-foreground hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 {record.slug}
                               </button>
@@ -2550,8 +2618,12 @@ function CollectionsPage() {
                             <td className="px-4 py-3 text-right">
                               <button
                                 type="button"
-                                onClick={() => setPendingRecordDelete(record)}
-                                className="rounded-lg p-2 text-muted-foreground hover:bg-red-50 hover:text-red-700"
+                                onClick={() => {
+                                  if (isCollectionsBusy) return;
+                                  setPendingRecordDelete(record);
+                                }}
+                                disabled={isCollectionsBusy}
+                                className="rounded-lg p-2 text-muted-foreground hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>
@@ -2570,7 +2642,9 @@ function CollectionsPage() {
                         Rows
                         <select
                           value={recordPagination.limit}
+                          disabled={isCollectionsBusy}
                           onChange={(event) => {
+                            if (isCollectionsBusy) return;
                             const limit = Number(event.target.value);
                             setRecordPagination((prev) => ({
                               ...prev,
@@ -2579,7 +2653,7 @@ function CollectionsPage() {
                             }));
                             updateCollectionsRouteSearch({ limit, offset: undefined });
                           }}
-                          className="rounded-lg border bg-background px-2 py-1 text-foreground"
+                          className="rounded-lg border bg-background px-2 py-1 text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <option value={25}>25</option>
                           <option value={50}>50</option>
@@ -2592,6 +2666,7 @@ function CollectionsPage() {
                       <button
                         type="button"
                         onClick={() => {
+                          if (isCollectionsBusy) return;
                           const offset = Math.max(0, recordPagination.offset - recordPagination.limit);
                           setRecordPagination((prev) => ({
                             ...prev,
@@ -2599,7 +2674,7 @@ function CollectionsPage() {
                           }));
                           updateCollectionsRouteSearch({ offset: offset || undefined });
                         }}
-                        disabled={recordPagination.offset === 0 || isRecordsLoading}
+                        disabled={recordPagination.offset === 0 || isCollectionsBusy}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted disabled:opacity-40"
                         aria-label="Previous records page"
                       >
@@ -2608,6 +2683,7 @@ function CollectionsPage() {
                       <button
                         type="button"
                         onClick={() => {
+                          if (isCollectionsBusy) return;
                           const offset = recordPagination.offset + recordPagination.limit;
                           setRecordPagination((prev) => ({
                             ...prev,
@@ -2615,7 +2691,7 @@ function CollectionsPage() {
                           }));
                           updateCollectionsRouteSearch({ offset });
                         }}
-                        disabled={!recordPagination.hasMore || isRecordsLoading}
+                        disabled={!recordPagination.hasMore || isCollectionsBusy}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted disabled:opacity-40"
                         aria-label="Next records page"
                       >
@@ -2625,13 +2701,14 @@ function CollectionsPage() {
                   </div>
                 </div>
 
-                <form onSubmit={handleRecordSubmit} className="space-y-4 p-4">
+                <form onSubmit={handleRecordSubmit} className="p-4">
+                  <fieldset disabled={isCollectionsBusy} className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold">{selectedRecord ? 'Edit record' : 'Create record'}</h3>
                     <button
                       type="submit"
-                      disabled={isSavingRecord}
-                      className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                      disabled={isCollectionsBusy}
+                      className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <Save className="h-4 w-4" />
                       {isSavingRecord ? 'Saving...' : 'Save'}
@@ -2737,6 +2814,7 @@ function CollectionsPage() {
                       )}
                     </label>
                   ))}
+                  </fieldset>
                 </form>
               </div>
             </section>
@@ -2765,16 +2843,18 @@ function CollectionsPage() {
               <button
                 type="button"
                 onClick={() => setPendingCollectionDelete(null)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+                disabled={isSavingCollection}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void handleDeleteCollection(pendingCollectionDelete)}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+                disabled={isSavingCollection}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Delete collection
+                {isSavingCollection ? 'Deleting...' : 'Delete collection'}
               </button>
             </div>
           </div>
@@ -2799,16 +2879,18 @@ function CollectionsPage() {
               <button
                 type="button"
                 onClick={() => setPendingRecordDelete(null)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+                disabled={isSavingRecord}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void handleDeleteRecord(pendingRecordDelete)}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+                disabled={isSavingRecord}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Delete record
+                {isSavingRecord ? 'Deleting...' : 'Delete record'}
               </button>
             </div>
           </div>
@@ -2833,16 +2915,18 @@ function CollectionsPage() {
               <button
                 type="button"
                 onClick={() => setPendingBulkDelete(false)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+                disabled={isSavingRecord}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void handleBulkDeleteRecords()}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+                disabled={isSavingRecord}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Delete records
+                {isSavingRecord ? 'Deleting...' : 'Delete records'}
               </button>
             </div>
           </div>
