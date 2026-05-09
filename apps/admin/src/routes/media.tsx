@@ -3,7 +3,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import { AlertTriangle, CheckCircle2, CheckSquare, Code2, Copy, Download, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Music, Save, Trash2, Type, Upload, Video, X } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -39,7 +39,7 @@ import {
   type MediaFolder,
   type SignedMediaUrl,
 } from '@/lib/mediaApi';
-import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatBytes } from '@/lib/utils';
 import { useStore, type MediaAsset } from '@/stores/mockStore';
 
@@ -129,6 +129,8 @@ const MEDIA_EXPORT_COLUMNS = [
 ] as const;
 
 function MediaPage() {
+  const navigate = useNavigate();
+  const routerState = useRouterState();
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -222,6 +224,27 @@ function MediaPage() {
       setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
     }
   }, [selectedSiteId, sites]);
+
+  const resetMediaWorkspaceState = useCallback(() => {
+    setSelectedMediaIds([]);
+    setSelectedAsset(null);
+    setSelectedFolderId(undefined);
+    setSearchQuery('');
+    setTypeFilter('all');
+    setVisibilityFilter('all');
+    setUsageFilter('all');
+  }, []);
+
+  useEffect(() => {
+    const requestedSiteId = getSiteSearchParam();
+    if (!requestedSiteId) return;
+
+    const nextSiteId = getSiteSelectionFromSearch(sites, getDefaultMediaSiteId());
+    if (nextSiteId === selectedSiteId) return;
+
+    setSelectedSiteId(nextSiteId);
+    resetMediaWorkspaceState();
+  }, [resetMediaWorkspaceState, routerState.location.search, selectedSiteId, sites]);
 
   const getAssetDeliveryUrl = useCallback(
     (asset: MediaAsset) => getPublicMediaFileUrl(asset.id, siteId),
@@ -1347,14 +1370,10 @@ function MediaPage() {
               aria-label="Active media site"
               value={siteId}
               onChange={(event) => {
-                setSelectedSiteId(event.target.value);
-                setSelectedMediaIds([]);
-                setSelectedAsset(null);
-                setSelectedFolderId(undefined);
-                setSearchQuery('');
-                setTypeFilter('all');
-                setVisibilityFilter('all');
-                setUsageFilter('all');
+                const nextSiteId = event.target.value;
+                setSelectedSiteId(nextSiteId);
+                resetMediaWorkspaceState();
+                navigate({ to: '/media', search: { siteId: nextSiteId }, replace: true });
               }}
               className="min-h-10 min-w-56 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring"
             >
@@ -1481,7 +1500,7 @@ function MediaPage() {
               <Link
                 key={surface.title}
                 to={surface.route}
-                search={activeSiteRouteSearch}
+                search={surface.route === '/settings' ? undefined : activeSiteRouteSearch}
                 className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
               >
                 <div className="text-sm font-semibold text-foreground">{surface.title}</div>
@@ -3183,6 +3202,7 @@ function MediaPage() {
                         <Link
                           to="/pages/$pageId/edit"
                           params={{ pageId: id }}
+                          search={activeSiteRouteSearch}
                           className="flex min-w-0 items-start gap-3 hover:text-primary"
                         >
                           <Layout className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
@@ -3213,6 +3233,7 @@ function MediaPage() {
                         <Link
                           to="/blog/$postId"
                           params={{ postId: id }}
+                          search={activeSiteRouteSearch}
                           className="flex min-w-0 items-start gap-3 hover:text-primary"
                         >
                           <FileText className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
