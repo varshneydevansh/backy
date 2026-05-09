@@ -84,6 +84,34 @@ const SITE_CONTROL_AREAS = [
   },
 ] as const;
 
+const SITE_LIST_CONTROL_AREAS = [
+  {
+    title: 'Workspace health',
+    detail: 'Review site totals, public state, page coverage, and domain setup.',
+    href: '#sites-health',
+  },
+  {
+    title: 'Frontend API',
+    detail: 'Copy manifest, OpenAPI, render, and admin site management URLs.',
+    href: '#sites-api',
+  },
+  {
+    title: 'Feature systems',
+    detail: 'Jump into pages, blog, commerce, forms, files, and delivery setup.',
+    href: '#sites-workflows',
+  },
+  {
+    title: 'Library controls',
+    detail: 'Search, filter, refresh, export, change status, preview, and manage sites.',
+    href: '#sites-controls',
+  },
+  {
+    title: 'Site library',
+    detail: 'Open each workspace, preview its public route, or archive old projects.',
+    href: '#sites-library',
+  },
+] as const;
+
 const getDisplayDomain = (site: Site) => site.customDomain || `${site.slug}.backy.app`;
 
 const getPublicPreviewHref = (site: Site) => {
@@ -465,7 +493,94 @@ function SitesListView() {
       }
       className="w-full"
     >
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="sites-command-center">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">Sites command center</h2>
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                siteLaunchReadiness.score >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+              )}
+              >
+                {siteLaunchReadiness.score}% ready
+              </span>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Control site workspaces, publish state, preview domains, frontend contracts, and the feature systems each website needs.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void loadSites()}
+              disabled={isLoading}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />
+              Refresh sites
+            </button>
+            <Link
+              to="/sites/new"
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+            >
+              <Plus className="size-4" />
+              New site
+            </Link>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+          <div className="rounded-lg border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold">Workspace launch readiness</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Checks site inventory, public workspaces, page coverage, domain routing, API handoff, and publishing hygiene.
+            </p>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn('h-full rounded-full', siteLaunchReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                style={{ width: `${siteLaunchReadiness.score}%` }}
+              />
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {siteLaunchReadiness.checks.map((check) => (
+                <SiteLaunchCheck key={check.label} {...check} />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold">Site operating workflow</h3>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {siteLaunchReadiness.workflow.map((step, index) => (
+                <SiteWorkflowStep key={step.label} index={index + 1} {...step} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <h3 className="text-sm font-semibold">Sites control map</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Jump to health, frontend APIs, feature systems, library controls, and site records.</p>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {SITE_LIST_CONTROL_AREAS.map((area) => (
+              <a
+                key={area.title}
+                href={area.href}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div id="sites-health" className="grid gap-3 scroll-mt-24 md:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => (
           <div key={metric.label} className="rounded-lg border border-border bg-card p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
@@ -482,7 +597,7 @@ function SitesListView() {
         ))}
       </div>
 
-      <Panel>
+      <Panel id="sites-api" className="scroll-mt-24">
         <PanelHeader
           title="Site frontend API"
           description="Discovery, rendering, and admin management endpoints for custom frontends connected to this workspace."
@@ -565,7 +680,7 @@ function SitesListView() {
             </div>
           </div>
 
-          <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <div id="sites-workflows" className="mt-4 rounded-lg border border-border bg-background p-4 scroll-mt-24">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold">Frontend control map</h3>
@@ -605,7 +720,7 @@ function SitesListView() {
         </PanelContent>
       </Panel>
 
-      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+      <div id="sites-controls" className="rounded-lg border border-border bg-card p-4 shadow-sm scroll-mt-24">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative min-w-0 flex-1 lg:max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -661,47 +776,49 @@ function SitesListView() {
         )}
       </div>
 
-      <DataGrid
-        columns={columns}
-        data={data}
-        loading={isLoading}
-        sortConfig={sortConfig}
-        onSort={handleSort}
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={setCurrentPage}
-        totalItems={totalItems}
-        emptyState={
-          <EmptyState
-            icon={hasActiveFilters ? Search : Globe}
-            title={hasActiveFilters ? 'No sites match those controls' : 'No sites found'}
-            description={hasActiveFilters ? 'Clear the search or filters to return to the full workspace list.' : 'Create the first site before adding pages, navigation, media, products, or forms.'}
-            action={
-              hasActiveFilters ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setStatusFilter('all');
-                    setCurrentPage(1);
-                  }}
-                  className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
-                >
-                  Clear filters
-                </button>
-              ) : (
-                <Link
-                  to="/sites/new"
-                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
-                >
-                  <Plus className="h-4 w-4" />
-                  Create site
-                </Link>
-              )
-            }
-          />
-        }
-      />
+      <div id="sites-library" className="scroll-mt-24">
+        <DataGrid
+          columns={columns}
+          data={data}
+          loading={isLoading}
+          sortConfig={sortConfig}
+          onSort={handleSort}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          totalItems={totalItems}
+          emptyState={
+            <EmptyState
+              icon={hasActiveFilters ? Search : Globe}
+              title={hasActiveFilters ? 'No sites match those controls' : 'No sites found'}
+              description={hasActiveFilters ? 'Clear the search or filters to return to the full workspace list.' : 'Create the first site before adding pages, navigation, media, products, or forms.'}
+              action={
+                hasActiveFilters ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setStatusFilter('all');
+                      setCurrentPage(1);
+                    }}
+                    className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+                  >
+                    Clear filters
+                  </button>
+                ) : (
+                  <Link
+                    to="/sites/new"
+                    className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Create site
+                  </Link>
+                )
+              }
+            />
+          }
+        />
+      </div>
 
       {pendingDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
