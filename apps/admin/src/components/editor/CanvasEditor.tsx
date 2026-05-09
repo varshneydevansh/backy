@@ -1455,35 +1455,94 @@ export function CanvasEditor({
     }
 
     updateElementsWithHistory((currentElements) => {
-      const selected = findElementById(currentElements, selectedId);
-      if (!selected || selected.locked) {
+      const primaryEntry = findElementEntry(currentElements, selectedId);
+      if (!primaryEntry || primaryEntry.element.locked) {
         return currentElements;
       }
 
-      const nextX = alignment === 'left'
-        ? 0
-        : alignment === 'center'
-          ? Math.max(0, Math.round((size.width - selected.width) / 2))
-          : alignment === 'right'
-            ? Math.max(0, size.width - selected.width)
-            : selected.x;
-      const nextY = alignment === 'top'
-        ? 0
-        : alignment === 'middle'
-          ? Math.max(0, Math.round((size.height - selected.height) / 2))
-          : alignment === 'bottom'
-            ? Math.max(0, size.height - selected.height)
-            : selected.y;
+      const alignEntries = (selectedIds.length > 1
+        ? selectedIds
+            .map((id) => findElementEntry(currentElements, id))
+            .filter((entry): entry is { element: CanvasElement; parentId: string | null } => (
+              !!entry &&
+              entry.parentId === primaryEntry.parentId &&
+              !entry.element.locked &&
+              entry.element.visible !== false
+            ))
+        : [primaryEntry]
+      );
 
-      const result = updateElementById(currentElements, selectedId, (element) => ({
-        ...element,
-        x: nextX,
-        y: nextY,
-      }));
+      if (alignEntries.length === 0) {
+        return currentElements;
+      }
 
-      return result.updated ? result.elements : currentElements;
+      const parentBounds = primaryEntry.parentId
+        ? findElementEntry(currentElements, primaryEntry.parentId)?.element
+        : null;
+      const boundsWidth = parentBounds?.width ?? size.width;
+      const boundsHeight = parentBounds?.height ?? size.height;
+      const minX = Math.min(...alignEntries.map((entry) => entry.element.x));
+      const minY = Math.min(...alignEntries.map((entry) => entry.element.y));
+      const maxX = Math.max(...alignEntries.map((entry) => entry.element.x + entry.element.width));
+      const maxY = Math.max(...alignEntries.map((entry) => entry.element.y + entry.element.height));
+      const groupWidth = maxX - minX;
+      const groupHeight = maxY - minY;
+      let groupDeltaX = 0;
+      let groupDeltaY = 0;
+
+      if (alignEntries.length === 1) {
+        const selected = alignEntries[0].element;
+        const nextX = alignment === 'left'
+          ? 0
+          : alignment === 'center'
+            ? Math.max(0, Math.round((boundsWidth - selected.width) / 2))
+            : alignment === 'right'
+              ? Math.max(0, boundsWidth - selected.width)
+              : selected.x;
+        const nextY = alignment === 'top'
+          ? 0
+          : alignment === 'middle'
+            ? Math.max(0, Math.round((boundsHeight - selected.height) / 2))
+            : alignment === 'bottom'
+              ? Math.max(0, boundsHeight - selected.height)
+              : selected.y;
+        groupDeltaX = nextX - selected.x;
+        groupDeltaY = nextY - selected.y;
+      } else {
+        groupDeltaX = alignment === 'left'
+          ? -minX
+          : alignment === 'center'
+            ? Math.round((boundsWidth - groupWidth) / 2) - minX
+            : alignment === 'right'
+              ? boundsWidth - maxX
+              : 0;
+        groupDeltaY = alignment === 'top'
+          ? -minY
+          : alignment === 'middle'
+            ? Math.round((boundsHeight - groupHeight) / 2) - minY
+            : alignment === 'bottom'
+              ? boundsHeight - maxY
+              : 0;
+      }
+
+      if (groupDeltaX === 0 && groupDeltaY === 0) {
+        return currentElements;
+      }
+
+      let nextElements = currentElements;
+      for (const entry of alignEntries) {
+        const result = updateElementById(nextElements, entry.element.id, (element) => ({
+          ...element,
+          x: element.x + groupDeltaX,
+          y: element.y + groupDeltaY,
+        }));
+
+        nextElements = result.updated ? result.elements : nextElements;
+      }
+
+      return nextElements;
     }, selectedId);
-  }, [findElementById, selectedId, size.height, size.width, updateElementsWithHistory]);
+  }, [findElementEntry, selectedId, selectedIds, size.height, size.width, updateElementsWithHistory]);
 
   /**
    * Handle drag start from component library
