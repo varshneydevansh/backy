@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   ArrowLeft,
@@ -84,6 +84,39 @@ type CommentStatusFilter = 'all' | 'pending' | 'approved' | 'rejected' | 'spam' 
 type SiteStatusFilter = 'published' | 'draft' | 'archived';
 type CommentTargetFilter = 'all' | 'page' | 'post';
 type NavigationMenuKey = 'primary' | 'footer';
+
+const SITE_WORKSPACE_AREAS = [
+  {
+    title: 'Publish readiness',
+    detail: 'Readiness score, blockers, warnings, public pages, posts, media, collections, and reusable sections.',
+    href: '#site-readiness',
+  },
+  {
+    title: 'Navigation',
+    detail: 'Primary and footer menus exposed to hosted pages, manifests, and custom frontends.',
+    href: '#site-navigation',
+  },
+  {
+    title: 'Redirects',
+    detail: 'Route moves, 301/302/307/308 rules, 410 retired pages, and conflict previews.',
+    href: '#site-redirects',
+  },
+  {
+    title: 'SEO defaults',
+    detail: 'Title templates, descriptions, social images, sitemap, robots, JSON-LD, and route previews.',
+    href: '#site-seo',
+  },
+  {
+    title: 'Site settings',
+    detail: 'Name, slug, custom domain, description, visibility, and destructive workspace actions.',
+    href: '#site-settings',
+  },
+  {
+    title: 'Automation queues',
+    detail: 'Forms, submissions, lead sharing, comments, moderation, exports, and request tracing.',
+    href: '#site-automation',
+  },
+] as const;
 
 interface SiteNavigationEditorState {
   navigation: SiteNavigationConfig;
@@ -1516,6 +1549,103 @@ function EditSitePage() {
     })) || []),
   ];
   const readinessSummary = readiness?.summary;
+  const siteWorkspaceReadiness = useMemo(() => {
+    const navigationItems = [
+      ...(navigationState.navigation.primary || []),
+      ...(navigationState.navigation.footer || []),
+    ];
+    const readyByBackend = readiness?.statusLabel === 'ready';
+    const hasNavigation = navigationItems.length > 0;
+    const redirectsClean = redirectState.conflicts.length === 0;
+    const hasSeoDefaults = Boolean(
+      seoState.seo.titleTemplate ||
+      seoState.seo.defaultDescription ||
+      seoState.seo.defaultOgImage ||
+      seoState.seo.favicon ||
+      seoState.seo.jsonLd?.length,
+    );
+    const hasAutomation = state.forms.length > 0 || state.submissionCount > 0 || state.contactCount > 0 || state.commentCount > 0;
+    const hasDomain = Boolean(formData.customDomain || site?.customDomain || site?.slug);
+    const checks = [
+      {
+        label: 'Publish state',
+        detail: readyByBackend
+          ? `Backend readiness is ${readiness?.score ?? 0}%.`
+          : readiness
+            ? `${readinessSummary?.errors ?? 0} errors and ${readinessSummary?.warnings ?? 0} warnings need review.`
+            : 'Run readiness to validate public delivery.',
+        ready: readyByBackend,
+      },
+      {
+        label: 'Navigation model',
+        detail: hasNavigation
+          ? `${navigationItems.length} menu item${navigationItems.length === 1 ? '' : 's'} configured`
+          : 'Add primary or footer menu links for frontend navigation.',
+        ready: hasNavigation,
+      },
+      {
+        label: 'Route hygiene',
+        detail: redirectsClean
+          ? `${redirectState.rules.length} redirect/gone rule${redirectState.rules.length === 1 ? '' : 's'} without conflicts`
+          : `${redirectState.conflicts.length} redirect conflict${redirectState.conflicts.length === 1 ? '' : 's'} found`,
+        ready: redirectsClean,
+      },
+      {
+        label: 'SEO defaults',
+        detail: hasSeoDefaults
+          ? 'Site SEO defaults are available to hosted and custom frontend routes.'
+          : 'Add default SEO metadata before relying on public discovery.',
+        ready: hasSeoDefaults,
+      },
+      {
+        label: 'Public address',
+        detail: hasDomain
+          ? formData.customDomain || `${formData.slug || site?.slug}.backy.app`
+          : 'Set a slug or custom domain for previews and frontend routing.',
+        ready: hasDomain,
+      },
+      {
+        label: 'Automation queues',
+        detail: hasAutomation
+          ? `${state.forms.length} forms, ${state.contactCount} leads, ${state.commentCount} comments`
+          : 'Connect forms, leads, or comments to complete the site workflow.',
+        ready: hasAutomation,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      checks,
+      workflow: [
+        { label: 'Structure', detail: 'Set site identity, routes, menus, and redirect behavior.' },
+        { label: 'Optimize', detail: 'Tune SEO, crawler rules, social previews, and readiness blockers.' },
+        { label: 'Operate', detail: 'Review submissions, leads, comments, exports, and request-level events.' },
+        { label: 'Publish', detail: 'Use this site as a managed frontend or a clean API contract for custom builds.' },
+      ],
+    };
+  }, [
+    formData.customDomain,
+    formData.slug,
+    navigationState.navigation.footer,
+    navigationState.navigation.primary,
+    readiness,
+    readinessSummary?.errors,
+    readinessSummary?.warnings,
+    redirectState.conflicts.length,
+    redirectState.rules.length,
+    seoState.seo.defaultDescription,
+    seoState.seo.defaultOgImage,
+    seoState.seo.favicon,
+    seoState.seo.jsonLd?.length,
+    seoState.seo.titleTemplate,
+    site?.customDomain,
+    site?.slug,
+    state.commentCount,
+    state.contactCount,
+    state.forms.length,
+    state.submissionCount,
+  ]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -1572,6 +1702,8 @@ function EditSitePage() {
     );
   }
 
+  const publicSiteUrl = `https://${formData.customDomain || site.customDomain || `${formData.slug || site.slug}.backy.app`}`;
+
   return (
     <PageShell
       title={`Edit ${site.name}`}
@@ -1584,8 +1716,9 @@ function EditSitePage() {
           <ArrowLeft className="w-5 h-5" />
         </button>
       }
+      className="w-full"
     >
-      <div className="max-w-6xl mx-auto space-y-8">
+      <div className="w-full space-y-8">
         <div className="bg-card border border-border rounded-xl p-6 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -1597,22 +1730,142 @@ function EditSitePage() {
                 <StatusBadge status={site.status} />
               </div>
               <a
-                href={`https://${site.customDomain || `${site.slug}.backy.app`}`}
+                href={publicSiteUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 mt-1"
               >
-                {site.customDomain || `${site.slug}.backy.app`}
+                {formData.customDomain || site.customDomain || `${formData.slug || site.slug}.backy.app`}
                 <ExternalLink className="w-3 h-3" />
               </a>
             </div>
           </div>
-          <button className="px-4 py-2 rounded-lg bg-accent hover:bg-accent/80 font-medium text-sm">
+          <a
+            href={publicSiteUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent hover:bg-accent/80 font-medium text-sm"
+          >
+            <ExternalLink className="w-4 h-4" />
             Visit Site
-          </button>
+          </a>
         </div>
 
-        <section className="bg-card border border-border rounded-xl p-6 shadow-sm" data-testid="site-readiness-panel">
+        <section className="bg-card border border-border rounded-xl p-6 shadow-sm" data-testid="site-workspace-command-center">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-xl font-semibold">Site command center</h2>
+                <span className={cn(
+                  'rounded-full px-2.5 py-1 text-xs font-semibold',
+                  siteWorkspaceReadiness.score >= 80
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'bg-amber-50 text-amber-700',
+                )}
+                >
+                  {siteWorkspaceReadiness.score}% ready
+                </span>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Control this website as a full workspace: public readiness, menus, redirects, SEO, publishing, forms, leads, comments, and frontend contracts.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href="#site-settings"
+                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+              >
+                <Save className="h-4 w-4" />
+                Site settings
+              </a>
+              <a
+                href={publicSiteUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open public site
+              </a>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Workspace operating state</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Checks whether the pieces this site needs for managed hosting and custom frontend delivery are present.
+                  </p>
+                </div>
+                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                  {formData.status}
+                </span>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn(
+                    'h-full rounded-full',
+                    siteWorkspaceReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500',
+                  )}
+                  style={{ width: `${siteWorkspaceReadiness.score}%` }}
+                />
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {siteWorkspaceReadiness.checks.map((check) => (
+                  <SiteWorkspaceCheck key={check.label} {...check} />
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Site workflow</h3>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {siteWorkspaceReadiness.workflow.map((step, index) => (
+                  <SiteWorkflowStep key={step.label} index={index + 1} {...step} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-border bg-background p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Workspace control map</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Jump to the exact controls that define this site’s frontend behavior and backend operations.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadReadiness()}
+                disabled={!siteApiId || readinessLoading}
+                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RefreshCw className={cn('h-4 w-4', readinessLoading && 'animate-spin')} />
+                Refresh readiness
+              </button>
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {SITE_WORKSPACE_AREAS.map((area) => (
+                <a
+                  key={area.title}
+                  href={area.href}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                </a>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="site-readiness" className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24" data-testid="site-readiness-panel">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="flex items-center gap-2">
@@ -1780,7 +2033,7 @@ function EditSitePage() {
           )}
         </section>
 
-        <section className="bg-card border border-border rounded-xl p-6 shadow-sm" data-testid="site-navigation-panel">
+        <section id="site-navigation" className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24" data-testid="site-navigation-panel">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="flex items-center gap-2">
@@ -1854,7 +2107,7 @@ function EditSitePage() {
           </div>
         </section>
 
-        <section className="bg-card border border-border rounded-xl p-6 shadow-sm" data-testid="site-redirects-panel">
+        <section id="site-redirects" className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24" data-testid="site-redirects-panel">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="flex items-center gap-2">
@@ -2026,7 +2279,7 @@ function EditSitePage() {
           </div>
         </section>
 
-        <section className="bg-card border border-border rounded-xl p-6 shadow-sm" data-testid="site-seo-panel">
+        <section id="site-seo" className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24" data-testid="site-seo-panel">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="flex items-center gap-2">
@@ -2293,7 +2546,7 @@ function EditSitePage() {
           </div>
         </section>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form id="site-settings" onSubmit={handleSubmit} className="space-y-6 scroll-mt-24">
           {siteSettingsError && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               {siteSettingsError}
@@ -2388,7 +2641,7 @@ function EditSitePage() {
           </div>
         </form>
 
-        <section className="space-y-4">
+        <section id="site-automation" className="space-y-4 scroll-mt-24">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-xl font-semibold">Site automation queues</h2>
@@ -3052,6 +3305,34 @@ function EditSitePage() {
         )}
       </div>
     </PageShell>
+  );
+}
+
+function SiteWorkspaceCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  const Icon = ready ? CheckCircle : AlertTriangle;
+
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-card px-3 py-2">
+      <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', ready ? 'text-emerald-600' : 'text-amber-600')} />
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function SiteWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
   );
 }
 
