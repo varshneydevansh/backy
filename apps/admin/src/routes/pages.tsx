@@ -13,6 +13,7 @@ import {
   archivePage,
   createPagePreview,
   deletePage as deletePageFromApi,
+  getPageReadiness,
   getSiteReadiness,
   listPages,
   publishPage,
@@ -653,6 +654,15 @@ function PagesListView() {
     setNotice(null);
 
     try {
+      const readiness = await getPageReadiness(page.siteId || activeSiteId, page.id);
+      setReadinessMap((current) => ({ ...current, [page.id]: readiness }));
+      const blocker = getPublishBlocker(readiness);
+
+      if (blocker) {
+        setError(`${page.title} is blocked: ${blocker}`);
+        return;
+      }
+
       const updated = await publishPage(page.siteId || activeSiteId, page.id);
       updatePage(page.id, updated);
       setNotice(`${updated.title || page.title} published.`);
@@ -719,6 +729,29 @@ function PagesListView() {
 
     try {
       if (bulkAction === 'publish') {
+        const readinessResults = await Promise.all(
+          selectedPages.map(async (page) => ({
+            page,
+            readiness: await getPageReadiness(page.siteId || activeSiteId, page.id),
+          })),
+        );
+        setReadinessMap((current) => ({
+          ...current,
+          ...Object.fromEntries(readinessResults.map(({ page, readiness }) => [page.id, readiness])),
+        }));
+
+        const blockedPages = readinessResults
+          .map(({ page, readiness }) => ({ page, blocker: getPublishBlocker(readiness) }))
+          .filter((result): result is { page: Page; blocker: string } => Boolean(result.blocker));
+
+        if (blockedPages.length > 0) {
+          setError(`${blockedPages.length} selected page${blockedPages.length === 1 ? ' is' : 's are'} blocked: ${blockedPages
+            .slice(0, 3)
+            .map(({ page, blocker }) => `${page.title} - ${blocker}`)
+            .join('; ')}${blockedPages.length > 3 ? '; ...' : ''}`);
+          return;
+        }
+
         const updatedPages = await Promise.all(
           selectedPages.map((page) => publishPage(page.siteId || activeSiteId, page.id)),
         );
@@ -1926,4 +1959,15 @@ const pagePublicPath = (page: Page): string => {
     return '/';
   }
   return !slug || slug === 'home' ? '/' : `/${slug}`;
+};
+
+const getPublishBlocker = (readiness: PageReadiness): string | null => {
+  if (readiness.statusLabel !== 'blocked') {
+    return null;
+  }
+
+  const firstBlockingCheck = readiness.checks.find((check) => check.severity === 'error' && check.status !== 'pass')
+    || readiness.checks.find((check) => check.status !== 'pass');
+
+  return firstBlockingCheck?.message || 'Resolve page readiness errors before publishing.';
 };
