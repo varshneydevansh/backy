@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, Archive, ArrowLeft, CheckCircle2, ExternalLink, Eye, History, RefreshCw, RotateCcw } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowLeft, CheckCircle2, Copy, Download, ExternalLink, Eye, History, RefreshCw, RotateCcw } from 'lucide-react';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
 import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
@@ -16,6 +16,7 @@ import { PageSettings } from '@/components/editor/PageSettingsModal';
 import {
   archivePage,
   createPagePreview,
+  getAdminApiBase,
   getPage,
   getPageReadiness,
   listPageRevisions,
@@ -318,6 +319,112 @@ function PageEditorRoute() {
       { label: 'Publish', detail: 'Publish or archive after the backend confirms the page is not blocked.' },
     ],
   };
+  const adminPageUrl = `${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/pages/${encodeURIComponent(pageId)}`;
+  const publicApiBase = getAdminApiBase().replace(/\/api\/admin$/, '/api');
+  const publicPath = page.isHomepage || page.slug === 'home' || page.slug === '' ? '/' : `/${page.slug}`;
+  const publicRenderUrl = `${publicApiBase}/sites/${encodeURIComponent(siteId)}/render?path=${encodeURIComponent(publicPath)}`;
+  const publicResolveUrl = `${publicApiBase}/sites/${encodeURIComponent(siteId)}/resolve?path=${encodeURIComponent(publicPath)}`;
+  const editorHandoff = {
+    generatedAt: new Date().toISOString(),
+    page: {
+      id: page.id,
+      title: page.title,
+      slug: page.slug,
+      path: publicPath,
+      status: page.status,
+      scheduledAt: page.scheduledAt || null,
+      isHomepage: Boolean(page.isHomepage),
+    },
+    site: {
+      id: siteId,
+      name: sites.find((site) => (site.publicSiteId || site.id) === siteId)?.name || siteId,
+    },
+    endpoints: {
+      readUpdateDelete: adminPageUrl,
+      revisions: `${adminPageUrl}/revisions`,
+      readiness: `${adminPageUrl}/readiness`,
+      preview: `${adminPageUrl}/preview`,
+      publish: `${adminPageUrl}/publish`,
+      archive: `${adminPageUrl}/archive`,
+      rollback: `${adminPageUrl}/rollback/{revisionId}`,
+      publicRender: publicRenderUrl,
+      publicResolve: publicResolveUrl,
+    },
+    canvas: {
+      width: initialCanvasSize.width,
+      height: initialCanvasSize.height,
+      rootLayerCount: elementCount,
+      fallbackSeeded: initialElements.length === 0,
+      mediaContext: {
+        siteId,
+        scope: 'page',
+        targetId: pageId,
+      },
+    },
+    editorCapabilities: [
+      'Drag and resize elements on the page canvas.',
+      'Group selected sibling layers with Cmd/Ctrl+G and ungroup with Shift+Cmd/Ctrl+G.',
+      'Save selected elements as reusable sections from the component library.',
+      'Bind media, forms, and CMS-ready element props through the inspector.',
+      'Persist canvas, settings, route, status, metadata, and revision notes through the page update endpoint.',
+    ],
+    readiness: {
+      score: editorReadiness.score,
+      checks: editorReadiness.checks,
+      backend: pageReadiness
+        ? {
+            score: pageReadiness.score,
+            statusLabel: pageReadiness.statusLabel,
+            elementCount: pageReadiness.elementCount,
+            canvasSize: pageReadiness.canvasSize,
+          }
+        : null,
+    },
+    revisions: revisions.map((revision) => ({
+      id: revision.id,
+      note: revision.note,
+      createdAt: revision.createdAt,
+      status: revision.snapshotStatus,
+    })),
+    preview: previewUrl
+      ? {
+          url: previewUrl,
+          expiresAt: previewExpiresAt,
+        }
+      : null,
+    guardrails: [
+      'Publish is blocked when backend readiness reports blocking errors.',
+      'Saving records a revision snapshot before editor changes are persisted.',
+      'Restoring a revision replaces the canvas with a saved backend snapshot.',
+      'Frontend renderers should use public resolve/render endpoints and treat admin endpoints as private.',
+    ],
+  };
+  const editorHandoffText = JSON.stringify(editorHandoff, null, 2);
+
+  const copyEditorHandoffText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setSaveWarning(null);
+      setWorkflowNotice(`${label} copied.`);
+    } catch {
+      setWorkflowNotice(null);
+      setSaveWarning(value);
+    }
+  };
+
+  const downloadEditorHandoff = () => {
+    const blob = new Blob([editorHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${page.slug || page.id}-backy-page-editor-handoff.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setSaveWarning(null);
+    setWorkflowNotice('Page editor handoff manifest downloaded.');
+  };
 
   const handleSave = async (
     elements: CanvasElement[],
@@ -476,6 +583,22 @@ function PageEditorRoute() {
             <Button
               type="button"
               variant="outline"
+              onClick={() => void copyEditorHandoffText(editorHandoffText, 'Page editor handoff manifest')}
+              iconStart={<Copy className="size-4" />}
+            >
+              Copy handoff
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={downloadEditorHandoff}
+              iconStart={<Download className="size-4" />}
+            >
+              Download JSON
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
               onClick={() => void generatePreview()}
               disabled={isPreviewBusy}
               iconStart={<Eye className="size-4" />}
@@ -555,6 +678,24 @@ function PageEditorRoute() {
             <EditorMetaTile label="Canvas" value={`${initialCanvasSize.width} x ${initialCanvasSize.height}px`} />
             <EditorMetaTile label="Elements" value={`${elementCount}`} />
             <EditorMetaTile label="Status" value={page.status} />
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void copyEditorHandoffText(adminPageUrl, 'Page editor API URL')}
+              iconStart={<Copy className="size-4" />}
+            >
+              Copy API URL
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void copyEditorHandoffText(editorHandoffText, 'Page editor handoff manifest')}
+              iconStart={<Copy className="size-4" />}
+            >
+              Copy handoff
+            </Button>
           </div>
         </div>
       </section>
