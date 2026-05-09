@@ -2,7 +2,7 @@
  * BACKY CMS - NEW PAGE
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Home, Layout, Save, Sparkles } from 'lucide-react';
 import { createPage, getAdminApiBase } from '@/lib/adminContentApi';
@@ -184,7 +184,7 @@ function NewPageRoute() {
     const requestedSite = search.siteId
         ? sites.find((site) => siteMatchesIdentifier(site, search.siteId || ''))
         : undefined;
-    const requestedSiteId = requestedSite?.publicSiteId || requestedSite?.id || defaultSiteId;
+    const requestedSiteId = requestedSite?.publicSiteId || requestedSite?.id || search.siteId || defaultSiteId;
     const templateDefaults = search.template ? TEMPLATE_DEFAULTS[search.template] : TEMPLATE_DEFAULTS.blank;
 
     // Default to first site if available
@@ -199,6 +199,32 @@ function NewPageRoute() {
         description: templateDefaults.description,
     });
     const selectedSite = sites.find((site) => siteMatchesIdentifier(site, formData.siteId));
+    useEffect(() => {
+        if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, formData.siteId))) {
+            const fallbackSiteId = sites[0].publicSiteId || sites[0].id;
+            setFormData((current) => ({ ...current, siteId: fallbackSiteId }));
+            navigate({ to: '/pages/new', search: { siteId: fallbackSiteId, template: formData.template }, replace: true });
+        }
+    }, [formData.siteId, formData.template, navigate, sites]);
+
+    useEffect(() => {
+        const nextRequestedSite = search.siteId
+            ? sites.find((site) => siteMatchesIdentifier(site, search.siteId || ''))
+            : undefined;
+        const nextSiteId = nextRequestedSite?.publicSiteId || nextRequestedSite?.id || search.siteId || defaultSiteId;
+        if (nextSiteId === formData.siteId) return;
+
+        setFormData((current) => ({ ...current, siteId: nextSiteId }));
+        setError(null);
+        setNotice(null);
+    }, [defaultSiteId, formData.siteId, search.siteId, sites]);
+
+    const selectPageSite = (nextSiteId: string) => {
+        setFormData((current) => ({ ...current, siteId: nextSiteId }));
+        setError(null);
+        setNotice(null);
+        navigate({ to: '/pages/new', search: { siteId: nextSiteId, template: formData.template }, replace: true });
+    };
     const selectedTemplate = useMemo(
         () => TEMPLATE_OPTIONS.find((template) => template.id === formData.template) || TEMPLATE_OPTIONS[0],
         [formData.template],
@@ -510,7 +536,7 @@ function NewPageRoute() {
         try {
             const created = await createPage(formData.siteId, input);
             setPages([created, ...pages.filter((page) => page.id !== created.id)]);
-            navigate({ to: '/pages/$pageId/edit', params: { pageId: created.id } });
+            navigate({ to: '/pages/$pageId/edit', params: { pageId: created.id }, search: { siteId: formData.siteId } });
         } catch (createError) {
             setError(createError instanceof Error ? createError.message : 'Unable to create page');
         } finally {
@@ -679,7 +705,7 @@ function NewPageRoute() {
                                 <select
                                     id="page-target-site"
                                     value={formData.siteId}
-                                    onChange={(e) => setFormData({ ...formData, siteId: e.target.value })}
+                                    onChange={(e) => selectPageSite(e.target.value)}
                                     className="w-full rounded-lg border bg-background py-2.5 pl-10 pr-4 text-sm outline-none transition focus:ring-2 focus:ring-ring"
                                     required
                                 >
