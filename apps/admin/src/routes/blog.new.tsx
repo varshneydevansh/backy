@@ -4,9 +4,10 @@
 
 import { useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, FileText, Globe, PenLine, Save, Tags, UserRound } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, FileText, Globe, PenLine, Save, Tags, UserRound } from 'lucide-react';
 import {
     createBlogPost,
+    getAdminApiBase,
     listBlogAuthors,
     listBlogCategories,
     listBlogTags,
@@ -70,6 +71,11 @@ const BLOG_CREATE_CONTROL_AREAS = [
         detail: 'Categories and tags used by blog lists, filters, and feeds.',
         href: '#blog-create-taxonomy',
     },
+    {
+        title: 'API handoff',
+        detail: 'Create endpoint, payload preview, frontend route, and canvas contract.',
+        href: '#blog-create-api',
+    },
 ] as const;
 
 const BLOG_CREATE_WORKFLOW = [
@@ -87,6 +93,7 @@ function NewBlogPostPage() {
 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [notice, setNotice] = useState<string | null>(null);
     const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
     const requestedSiteId = search.siteId && sites.some((site) => (site.publicSiteId || site.id) === search.siteId)
         ? search.siteId
@@ -177,6 +184,11 @@ function NewBlogPostPage() {
     const slugValue = slug || slugify(title);
     const selectedAuthor = authors.find((author) => author.id === selectedAuthorId);
     const selectedSite = sites.find((site) => (site.publicSiteId || site.id) === activeSiteId);
+    const adminBlogUrl = useMemo(
+        () => `${getAdminApiBase()}/sites/${encodeURIComponent(activeSiteId)}/blog`,
+        [activeSiteId],
+    );
+    const routePath = `/blog/${slugValue || 'post-slug'}`;
     const readinessChecks = [
         { label: 'Title', complete: title.trim().length > 0 },
         { label: 'Slug', complete: slugValue.trim().length > 0 },
@@ -188,6 +200,106 @@ function NewBlogPostPage() {
     const readinessScore = Math.round((readyCount / readinessChecks.length) * 100);
     const canSubmit = title.trim().length > 0 && slugValue.trim().length > 0 && (status !== 'scheduled' || Boolean(scheduledAt));
     const submitLabel = status === 'published' ? 'Publish post' : status === 'scheduled' ? 'Schedule post' : 'Save draft';
+    const createPayloadPreview = useMemo(() => ({
+        title: title.trim() || 'Untitled post',
+        slug: slugValue || 'post-slug',
+        excerpt: excerpt.trim(),
+        status,
+        scheduledAt: status === 'scheduled' ? scheduledAt : null,
+        authorId: selectedAuthorId || user?.id || 'admin',
+        categoryIds: selectedCategoryIds,
+        tagIds: selectedTagIds,
+        content: `${canvasElements.length} root layer${canvasElements.length === 1 ? '' : 's'}`,
+        canvas: {
+            width: canvasSize.width,
+            height: canvasSize.height,
+        },
+    }), [
+        canvasElements.length,
+        canvasSize.height,
+        canvasSize.width,
+        excerpt,
+        scheduledAt,
+        selectedAuthorId,
+        selectedCategoryIds,
+        selectedTagIds,
+        slugValue,
+        status,
+        title,
+        user?.id,
+    ]);
+    const creationHandoff = useMemo(() => ({
+        generatedAt: new Date().toISOString(),
+        endpoint: {
+            method: 'POST',
+            url: adminBlogUrl,
+        },
+        site: {
+            id: activeSiteId,
+            name: selectedSite?.name || activeSiteId,
+            slug: selectedSite?.slug || activeSiteId,
+        },
+        route: {
+            path: routePath,
+            slug: slugValue || 'post-slug',
+            publicCollectionPath: '/blog',
+        },
+        readiness: {
+            score: readinessScore,
+            checks: readinessChecks,
+        },
+        editorial: {
+            title: title.trim() || 'Untitled post',
+            excerpt: excerpt.trim(),
+            status,
+            scheduledAt: status === 'scheduled' ? scheduledAt : null,
+            author: selectedAuthor
+                ? { id: selectedAuthor.id, name: selectedAuthor.name }
+                : { id: selectedAuthorId || user?.id || 'admin', name: user?.fullName || 'Admin' },
+            categoryIds: selectedCategoryIds,
+            tagIds: selectedTagIds,
+        },
+        canvas: {
+            width: canvasSize.width,
+            height: canvasSize.height,
+            rootLayerCount: canvasElements.length,
+            supportsGrouping: true,
+            supportsResponsivePreview: true,
+            source: 'Backy CanvasEditor serialized content',
+        },
+        payloadPreview: createPayloadPreview,
+        nextStep: 'Created posts open in the blog editor where publishing, revisions, taxonomy, SEO, and the public canvas can be refined.',
+        guardrails: [
+            'Backend owns duplicate slug validation per site.',
+            'Scheduled posts require a publish date before they can be created.',
+            'The public frontend should render the saved canvas content for this route instead of hardcoding blog templates.',
+            'Categories, tags, and author IDs are site-scoped and should be read from Backy before rendering filters or bylines.',
+        ],
+    }), [
+        activeSiteId,
+        adminBlogUrl,
+        canvasElements.length,
+        canvasSize.height,
+        canvasSize.width,
+        createPayloadPreview,
+        excerpt,
+        readinessChecks,
+        readinessScore,
+        routePath,
+        scheduledAt,
+        selectedAuthor,
+        selectedAuthorId,
+        selectedCategoryIds,
+        selectedSite?.name,
+        selectedSite?.slug,
+        selectedTagIds,
+        slugValue,
+        status,
+        title,
+        user?.fullName,
+        user?.id,
+    ]);
+    const creationHandoffText = useMemo(() => JSON.stringify(creationHandoff, null, 2), [creationHandoff]);
 
     // Dummy settings for CanvasEditor (since we manage settings externally)
     const dummySettings: PageSettings = {
@@ -198,15 +310,42 @@ function NewBlogPostPage() {
         meta: { title, description: excerpt }
     };
 
+    const copyCreationText = async (value: string, label: string) => {
+        try {
+            await navigator.clipboard.writeText(value);
+            setError(null);
+            setNotice(`${label} copied.`);
+        } catch {
+            setNotice(null);
+            setError(value);
+        }
+    };
+
+    const downloadCreationHandoff = () => {
+        const blob = new Blob([creationHandoffText], { type: 'application/json;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `${slugValue || 'new-post'}-backy-blog-create-handoff.json`;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+        setError(null);
+        setNotice('Blog creation handoff manifest downloaded.');
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!canSubmit) {
             setError(status === 'scheduled' && !scheduledAt ? 'Choose a publish date before scheduling' : 'Add a title and URL slug before saving');
+            setNotice(null);
             return;
         }
 
         setIsLoading(true);
         setError(null);
+        setNotice(null);
 
     // Serialize canvas elements for storage
         const content = serializeCanvasContent(canvasElements, canvasSize, undefined, {
@@ -263,6 +402,11 @@ function NewBlogPostPage() {
                         {error}. The post was not created because the backend did not persist it.
                     </Notice>
                 )}
+                {notice && (
+                    <Notice tone="success" className="mb-4">
+                        {notice}
+                    </Notice>
+                )}
 
                 <form onSubmit={handleSubmit} className="grid gap-5">
                     <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="blog-create-command-center">
@@ -282,9 +426,27 @@ function NewBlogPostPage() {
                                     Create the article record and its public design in one workspace: editorial metadata, canvas layout, publishing state, author, taxonomy, and frontend route.
                                 </p>
                             </div>
-                            <Button type="submit" disabled={isLoading || !canSubmit} variant="primary" iconStart={<Save className="size-4" />}>
-                                {isLoading ? 'Saving...' : submitLabel}
-                            </Button>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                    type="button"
+                                    onClick={() => void copyCreationText(creationHandoffText, 'Blog creation handoff manifest')}
+                                    variant="outline"
+                                    iconStart={<Copy className="size-4" />}
+                                >
+                                    Copy handoff
+                                </Button>
+                                <Button
+                                    type="button"
+                                    onClick={downloadCreationHandoff}
+                                    variant="outline"
+                                    iconStart={<Download className="size-4" />}
+                                >
+                                    Download JSON
+                                </Button>
+                                <Button type="submit" disabled={isLoading || !canSubmit} variant="primary" iconStart={<Save className="size-4" />}>
+                                    {isLoading ? 'Saving...' : submitLabel}
+                                </Button>
+                            </div>
                         </div>
 
                         <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
@@ -322,7 +484,7 @@ function NewBlogPostPage() {
                         <div className="mt-4 rounded-lg border border-border bg-background p-4">
                             <h3 className="text-sm font-semibold">Post creation control map</h3>
                             <p className="mt-1 text-sm text-muted-foreground">Jump to draft fields, canvas design, publishing, ownership, and taxonomy.</p>
-                            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+                            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
                                 {BLOG_CREATE_CONTROL_AREAS.map((area) => (
                                     <a
                                         key={area.title}
@@ -566,6 +728,55 @@ function NewBlogPostPage() {
                                     selectedIds={selectedTagIds}
                                     onToggle={(id) => toggleSelection(id, selectedTagIds, setSelectedTagIds)}
                                 />
+                            </PanelContent>
+                        </Panel>
+
+                        <Panel id="blog-create-api" className="scroll-mt-24">
+                            <PanelHeader
+                                title="API handoff"
+                                description="Create endpoint and frontend payload shape."
+                                icon={<Code2 className="size-4" />}
+                            />
+                            <PanelContent className="space-y-4">
+                                <div className="rounded-lg border border-border bg-background p-3">
+                                    <div className="text-xs font-medium text-muted-foreground">Create endpoint</div>
+                                    <div className="mt-2 break-all font-mono text-xs text-foreground">{adminBlogUrl}</div>
+                                </div>
+
+                                <div className="rounded-lg border border-border bg-background p-3">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                            <div className="text-xs font-medium text-muted-foreground">Public route</div>
+                                            <div className="mt-1 font-mono text-xs text-foreground">{routePath}</div>
+                                        </div>
+                                        <span className="rounded bg-muted px-2 py-1 text-xs text-muted-foreground">POST</span>
+                                    </div>
+                                </div>
+
+                                <pre className="max-h-72 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
+{JSON.stringify(createPayloadPreview, null, 2)}
+                                </pre>
+
+                                <div className="grid gap-2">
+                                    <Button
+                                        type="button"
+                                        onClick={() => void copyCreationText(adminBlogUrl, 'Blog create API URL')}
+                                        variant="outline"
+                                        iconStart={<Copy className="size-4" />}
+                                        className="w-full"
+                                    >
+                                        Copy URL
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        onClick={() => void copyCreationText(creationHandoffText, 'Blog creation handoff manifest')}
+                                        variant="outline"
+                                        iconStart={<Copy className="size-4" />}
+                                        className="w-full"
+                                    >
+                                        Copy handoff
+                                    </Button>
+                                </div>
                             </PanelContent>
                         </Panel>
                     </aside>
