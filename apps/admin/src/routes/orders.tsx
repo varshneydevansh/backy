@@ -1,5 +1,5 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   Archive,
@@ -1154,6 +1154,16 @@ function OrdersRoute() {
       orderId: undefined,
     });
   };
+  const openProductsWorkspace = () => {
+    if (isOrdersBusy) return;
+
+    navigate({ to: '/products', search: activeSiteSearch });
+  };
+  const openStorefrontPage = () => {
+    if (isOrdersBusy) return;
+
+    navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'storefront' } });
+  };
   const selectOrdersSite = (nextSiteId: string) => {
     if (isOrdersBusy) return;
 
@@ -1234,30 +1244,12 @@ function OrdersRoute() {
             <Button variant="outline" onClick={exportOrdersCsv} disabled={isOrdersBusy || filteredOrders.length === 0} iconStart={<Download className="size-4" />}>
               Export CSV
             </Button>
-            <Link
-              to="/products"
-              search={activeSiteSearch}
-              aria-disabled={isOrdersBusy}
-              className={cn(
-                'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
-                isOrdersBusy && 'pointer-events-none opacity-60',
-              )}
-            >
-              <ShoppingCart className="size-4" />
+            <Button variant="outline" onClick={openProductsWorkspace} disabled={isOrdersBusy} iconStart={<ShoppingCart className="size-4" />}>
               Products
-            </Link>
-            <Link
-              to="/pages/new"
-              search={{ siteId: activeSiteId, template: 'storefront' }}
-              aria-disabled={isOrdersBusy}
-              className={cn(
-                'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
-                isOrdersBusy && 'pointer-events-none opacity-60',
-              )}
-            >
-              <Sparkles className="size-4" />
+            </Button>
+            <Button variant="outline" onClick={openStorefrontPage} disabled={isOrdersBusy} iconStart={<Sparkles className="size-4" />}>
               Storefront page
-            </Link>
+            </Button>
             {!ordersCollection ? (
               <Button onClick={() => void createOrdersCollection()} disabled={isOrdersBusy} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set up orders'}
@@ -1352,30 +1344,12 @@ function OrdersRoute() {
                 <Button onClick={() => void copyOrdersApiUrl(publicOrderIntakeUrl, 'Checkout intake URL')} disabled={isOrdersBusy} iconStart={<Copy className="size-4" />}>
                   Copy checkout
                 </Button>
-                <Link
-                  to="/products"
-                  search={activeSiteSearch}
-                  aria-disabled={isOrdersBusy}
-                  className={cn(
-                    'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
-                    isOrdersBusy && 'pointer-events-none opacity-60',
-                  )}
-                >
-                  <ShoppingCart className="size-4" />
+                <Button variant="outline" onClick={openProductsWorkspace} disabled={isOrdersBusy} iconStart={<ShoppingCart className="size-4" />}>
                   Products
-                </Link>
-                <Link
-                  to="/pages/new"
-                  search={{ siteId: activeSiteId, template: 'storefront' }}
-                  aria-disabled={isOrdersBusy}
-                  className={cn(
-                    'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
-                    isOrdersBusy && 'pointer-events-none opacity-60',
-                  )}
-                >
-                  <Sparkles className="size-4" />
+                </Button>
+                <Button variant="outline" onClick={openStorefrontPage} disabled={isOrdersBusy} iconStart={<Sparkles className="size-4" />}>
                   Storefront page
-                </Link>
+                </Button>
                 <a
                   href={adminOrdersApiUrl}
                   target="_blank"
@@ -1516,30 +1490,12 @@ function OrdersRoute() {
               <Button onClick={() => void createOrdersCollection()} disabled={isOrdersBusy} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set Up Orders'}
               </Button>
-              <Link
-                to="/products"
-                search={activeSiteSearch}
-                aria-disabled={isOrdersBusy}
-                className={cn(
-                  'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
-                  isOrdersBusy && 'pointer-events-none opacity-60',
-                )}
-              >
-                <ShoppingCart className="size-4" />
+              <Button variant="outline" onClick={openProductsWorkspace} disabled={isOrdersBusy} iconStart={<ShoppingCart className="size-4" />}>
                 Set up products
-              </Link>
-              <Link
-                to="/pages/new"
-                search={{ siteId: activeSiteId, template: 'storefront' }}
-                aria-disabled={isOrdersBusy}
-                className={cn(
-                  'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
-                  isOrdersBusy && 'pointer-events-none opacity-60',
-                )}
-              >
-                <Sparkles className="size-4" />
+              </Button>
+              <Button variant="outline" onClick={openStorefrontPage} disabled={isOrdersBusy} iconStart={<Sparkles className="size-4" />}>
                 Start storefront page
-              </Link>
+              </Button>
             </div>
           }
         />
