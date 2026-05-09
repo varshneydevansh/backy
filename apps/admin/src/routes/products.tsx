@@ -1,6 +1,7 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import {
+  AlertTriangle,
   Archive,
   Boxes,
   CheckCircle2,
@@ -41,6 +42,34 @@ import { cn, formatDate } from '@/lib/utils';
 export const Route = createFileRoute('/products')({
   component: ProductsRoute,
 });
+
+const PRODUCT_CONTROL_AREAS = [
+  {
+    title: 'Site scope',
+    detail: 'Choose the website whose storefront catalog is being managed.',
+    href: '#products-site',
+  },
+  {
+    title: 'Storefront API',
+    detail: 'Public product list and detail endpoints for custom frontends.',
+    href: '#products-api',
+  },
+  {
+    title: 'Catalog health',
+    detail: 'Inventory, published/draft counts, low stock, and digital products.',
+    href: '#products-metrics',
+  },
+  {
+    title: 'Catalog grid',
+    detail: 'Search, filter, publish, archive, edit, and delete products.',
+    href: '#products-catalog',
+  },
+  {
+    title: 'Product editor',
+    detail: 'Pricing, SKU, media, delivery, tax, stock, SEO, and status controls.',
+    href: '#products-editor',
+  },
+] as const;
 
 type ProductStatusFilter = ContentStatus | 'all';
 
@@ -166,6 +195,78 @@ function ProductsRoute() {
     }).length,
     digital: products.filter((product) => product.values.productType === 'digital').length,
   }), [products]);
+  const catalogReadiness = useMemo(() => {
+    const hasSchema = Boolean(productCollection);
+    const hasProducts = products.length > 0;
+    const hasPublished = metrics.published > 0;
+    const hasInventory = metrics.inventory > 0 || metrics.digital > 0;
+    const hasImages = products.some((product) => Boolean(product.values.imageUrl));
+    const hasPricing = products.some((product) => toNumber(product.values.price) > 0);
+    const checks = [
+      {
+        label: 'Catalog schema',
+        detail: hasSchema ? 'Products collection exists.' : 'Set up the products collection.',
+        ready: hasSchema,
+      },
+      {
+        label: 'Commerce fields',
+        detail: missingProductFields.length === 0
+          ? 'Pricing, SKU, inventory, image, delivery, tax, and SEO fields are present.'
+          : `${missingProductFields.length} field${missingProductFields.length === 1 ? '' : 's'} need sync.`,
+        ready: hasSchema && missingProductFields.length === 0,
+      },
+      {
+        label: 'Storefront API',
+        detail: productApiReady ? 'Public read API is ready for storefronts.' : 'Publish and sync the schema before storefront handoff.',
+        ready: productApiReady,
+      },
+      {
+        label: 'Product inventory',
+        detail: hasProducts ? `${products.length} product${products.length === 1 ? '' : 's'} in the catalog.` : 'Create the first sellable product.',
+        ready: hasProducts,
+      },
+      {
+        label: 'Published products',
+        detail: hasPublished ? `${metrics.published} product${metrics.published === 1 ? '' : 's'} public.` : 'Publish products before a frontend lists them.',
+        ready: hasPublished,
+      },
+      {
+        label: 'Pricing',
+        detail: hasPricing ? 'At least one product has storefront pricing.' : 'Add prices before selling products.',
+        ready: hasPricing,
+      },
+      {
+        label: 'Stock or delivery',
+        detail: hasInventory ? `${metrics.inventory} units or ${metrics.digital} digital product${metrics.digital === 1 ? '' : 's'}.` : 'Add inventory or digital delivery metadata.',
+        ready: hasInventory,
+      },
+      {
+        label: 'Product media',
+        detail: hasImages ? 'Product imagery is attached.' : 'Attach media so storefront cards are not text-only.',
+        ready: hasImages || products.length === 0,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      checks,
+      workflow: [
+        { label: 'Setup', detail: 'Create or sync the products schema with pricing, SKU, stock, image, SEO, and delivery fields.' },
+        { label: 'Merchandise', detail: 'Add product data, attach media, set featured/taxable/shipping controls, and write descriptions.' },
+        { label: 'Publish', detail: 'Publish catalog records and expose public read APIs for custom storefront pages.' },
+        { label: 'Operate', detail: 'Track inventory, low stock, digital products, drafts, and archived products from one catalog view.' },
+      ],
+    };
+  }, [
+    metrics.digital,
+    metrics.inventory,
+    metrics.published,
+    missingProductFields.length,
+    productApiReady,
+    productCollection,
+    products,
+  ]);
 
   const loadProducts = async () => {
     setIsLoading(true);
@@ -413,8 +514,91 @@ function ProductsRoute() {
         </div>
       )}
 
+      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="products-command-center">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">Catalog command center</h2>
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                catalogReadiness.score >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+              )}
+              >
+                {catalogReadiness.score}% ready
+              </span>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Control sellable product data for every storefront: schema, pricing, inventory, media, delivery, tax, SEO, publishing, and public API handoff.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {!productCollection ? (
+              <Button onClick={() => void createProductsCollection()} disabled={isSaving} iconStart={<Sparkles className="size-4" />}>
+                {isSaving ? 'Setting up...' : 'Set up products'}
+              </Button>
+            ) : (
+              <Button onClick={resetForm} iconStart={<Plus className="size-4" />}>
+                New product
+              </Button>
+            )}
+            <Button onClick={() => void loadProducts()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+              Refresh
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+          <div className="rounded-lg border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold">Catalog readiness</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Checks whether product data can be listed, priced, merchandised, published, and consumed by custom storefronts.
+            </p>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn('h-full rounded-full', catalogReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                style={{ width: `${catalogReadiness.score}%` }}
+              />
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {catalogReadiness.checks.map((check) => (
+                <ProductReadinessCheck key={check.label} {...check} />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex items-center gap-2">
+              <ShoppingBag className="size-4 text-primary" />
+              <h3 className="text-sm font-semibold">Storefront workflow</h3>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {catalogReadiness.workflow.map((step, index) => (
+                <ProductWorkflowStep key={step.label} index={index + 1} {...step} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <h3 className="text-sm font-semibold">Product control map</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, storefront API, catalog health, product grid, and editor controls.</p>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {PRODUCT_CONTROL_AREAS.map((area) => (
+              <a
+                key={area.title}
+                href={area.href}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {productCollection && (
-        <Panel className="mb-6">
+        <Panel id="products-api" className="mb-6 scroll-mt-24">
           <PanelHeader
             title="Storefront API"
             description="Use these endpoints from any frontend to list and render sellable products."
@@ -474,7 +658,31 @@ function ProductsRoute() {
         </Panel>
       )}
 
-      <div className="mb-6 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div id="products-site" className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 scroll-mt-24">
+        <label className="text-sm font-medium text-muted-foreground" htmlFor="products-active-site-inline">
+          Active site
+        </label>
+        <select
+          id="products-active-site-inline"
+          aria-label="Active product site"
+          value={activeSiteId}
+          onChange={(event) => setSelectedSiteId(event.target.value)}
+          className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
+        >
+          {sites.length === 0 ? (
+            <option value="site-demo">Demo site</option>
+          ) : sites.map((site) => (
+            <option key={site.id} value={site.publicSiteId || site.id}>
+              {site.name}
+            </option>
+          ))}
+        </select>
+        <span className="text-sm text-muted-foreground">
+          {activeSite?.name || activeSiteId} storefront catalog
+        </span>
+      </div>
+
+      <div id="products-metrics" className="mb-6 grid gap-3 scroll-mt-24 md:grid-cols-3 xl:grid-cols-6">
         <Metric label="Products" value={metrics.total} icon={<Package className="size-4" />} />
         <Metric label="Published" value={metrics.published} icon={<CheckCircle2 className="size-4" />} />
         <Metric label="Draft" value={metrics.draft} icon={<Edit3 className="size-4" />} />
@@ -497,7 +705,7 @@ function ProductsRoute() {
       ) : (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
           <div className="min-w-0 space-y-6">
-            <Panel>
+            <Panel id="products-catalog" className="scroll-mt-24">
               <PanelHeader
                 title="Catalog"
                 description={`${filteredProducts.length}/${products.length} visible products`}
@@ -556,7 +764,7 @@ function ProductsRoute() {
             </Panel>
           </div>
 
-          <Panel className="xl:sticky xl:top-4 xl:self-start">
+          <Panel id="products-editor" className="scroll-mt-24 xl:sticky xl:top-4 xl:self-start">
             <PanelHeader
               title={selectedProduct ? 'Edit product' : 'New product'}
               description="Pricing, inventory, public status, and storefront metadata."
@@ -837,6 +1045,38 @@ function Metric({ label, value, icon }: { label: string; value: number; icon: Re
         <span className="text-muted-foreground">{icon}</span>
       </div>
       <div className="mt-1 font-mono text-2xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function ProductReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="flex items-start gap-2">
+        {ready ? (
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+        ) : (
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+        )}
+        <div>
+          <div className="text-sm font-semibold text-foreground">{label}</div>
+          <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProductWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex gap-3 rounded-lg border border-border bg-card p-3">
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div>
+        <div className="text-sm font-semibold text-foreground">{label}</div>
+        <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
     </div>
   );
 }
