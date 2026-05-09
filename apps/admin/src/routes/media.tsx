@@ -172,6 +172,7 @@ function MediaPage() {
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const publicMediaListUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media?limit=100`;
   const publicMediaDetailUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/{mediaId}`;
+  const publicMediaFontsUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/fonts`;
   const publicMediaFileUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/{mediaId}/file`;
   const publicMediaTransformUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/{mediaId}/transform?width=1200&quality=75`;
   const adminMediaUploadUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media`;
@@ -415,6 +416,7 @@ function MediaPage() {
     endpoints: {
       list: publicMediaListUrl,
       detail: publicMediaDetailUrl,
+      fonts: publicMediaFontsUrl,
       file: publicMediaFileUrl,
       transform: publicMediaTransformUrl,
       adminUpload: adminMediaUploadUrl,
@@ -494,6 +496,7 @@ function MediaPage() {
     mediaAnalytics.unusedAssets,
     mediaQuota,
     publicMediaDetailUrl,
+    publicMediaFontsUrl,
     publicMediaFileUrl,
     publicMediaListUrl,
     publicMediaTransformUrl,
@@ -1439,6 +1442,14 @@ function MediaPage() {
               >
                 Copy list
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void copyMediaApiText(publicMediaFontsUrl, 'Font manifest URL')}
+                iconStart={<Type className="size-4" />}
+              >
+                Copy fonts
+              </Button>
             </div>
           }
         />
@@ -1453,6 +1464,7 @@ function MediaPage() {
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             <MediaApiSnippet label="Public media list" value={publicMediaListUrl} />
             <MediaApiSnippet label="Public media detail" value={publicMediaDetailUrl} />
+            <MediaApiSnippet label="Font manifest" value={publicMediaFontsUrl} />
             <MediaApiSnippet label="File delivery" value={publicMediaFileUrl} />
             <MediaApiSnippet label="Image transform" value={publicMediaTransformUrl} />
             <MediaApiSnippet label="Admin upload" value={adminMediaUploadUrl} />

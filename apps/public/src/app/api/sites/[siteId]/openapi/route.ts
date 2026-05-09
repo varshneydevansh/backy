@@ -297,6 +297,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
           },
         },
+        [`/api/sites/${site.id}/media/fonts`]: {
+          get: {
+            tags: ['Media'],
+            summary: 'Fetch public uploaded font families, variants, and @font-face CSS',
+            operationId: 'getBackyFontManifest',
+            responses: {
+              '200': {
+                description: 'Font manifest',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/FontManifestEnvelope' },
+                  },
+                },
+              },
+            },
+          },
+        },
         [`/api/sites/${site.id}/media/{mediaId}`]: {
           get: {
             tags: ['Media'],
@@ -1286,6 +1303,59 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 pagination: { type: 'object', additionalProperties: true },
               },
             }),
+          },
+          FontManifestEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['schemaVersion', 'siteId', 'families', 'fonts', 'css', 'counts'],
+            properties: {
+              schemaVersion: { const: 'backy.font-manifest.v1' },
+              siteId: { type: 'string' },
+              families: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  required: ['family', 'fallbackStack', 'display', 'cssFamily', 'variants', 'assetIds'],
+                  properties: {
+                    family: { type: 'string' },
+                    fallbackStack: { type: 'string' },
+                    display: { type: 'string' },
+                    cssFamily: { type: 'string' },
+                    variants: { type: 'array', items: { $ref: '#/components/schemas/FontVariant' } },
+                    assetIds: { type: 'array', items: { type: 'string' } },
+                  },
+                },
+              },
+              fonts: { type: 'array', items: { $ref: '#/components/schemas/FontVariant' } },
+              css: { type: 'string' },
+              counts: {
+                type: 'object',
+                required: ['families', 'variants'],
+                properties: {
+                  families: { type: 'integer', minimum: 0 },
+                  variants: { type: 'integer', minimum: 0 },
+                },
+              },
+            },
+          }),
+          FontVariant: {
+            type: 'object',
+            required: ['id', 'mediaId', 'family', 'weight', 'style', 'display', 'fallbackStack', 'cssFamily', 'url'],
+            properties: {
+              id: { type: 'string' },
+              mediaId: { type: 'string' },
+              family: { type: 'string' },
+              weight: { type: 'string' },
+              style: { type: 'string' },
+              display: { type: 'string' },
+              fallbackStack: { type: 'string' },
+              cssFamily: { type: 'string' },
+              url: { type: 'string' },
+              mimeType: { type: 'string' },
+              sizeBytes: { type: 'integer', minimum: 0 },
+              originalName: { type: 'string' },
+              folderId: { type: ['string', 'null'] },
+              tags: { type: 'array', items: { type: 'string' } },
+            },
           },
           MediaDetailEnvelope: envelopeSchema({
             type: 'object',
