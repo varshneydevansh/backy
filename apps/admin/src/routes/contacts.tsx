@@ -40,6 +40,7 @@ export const Route = createFileRoute('/contacts')({
 });
 
 type ContactStatusFilter = ContactStatus | 'all';
+type ContactQualityFilter = 'all' | 'missing-email' | 'missing-phone' | 'needs-notes' | 'has-source-values' | 'ready-to-promote';
 
 const CONTACT_CONTROL_AREAS = [
   {
@@ -117,6 +118,7 @@ function ContactsRoute() {
   const [contactsByForm, setContactsByForm] = useState<Record<string, ContactInbox>>({});
   const [selectedFormId, setSelectedFormId] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<ContactStatusFilter>('all');
+  const [qualityFilter, setQualityFilter] = useState<ContactQualityFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -151,6 +153,19 @@ function ContactsRoute() {
       const form = formById.get(contact.formId);
       const matchesForm = selectedFormId === 'all' || contact.formId === selectedFormId;
       const matchesStatus = statusFilter === 'all' || contact.status === statusFilter;
+      if (!matchesForm || !matchesStatus) return false;
+
+      const hasEmail = Boolean(contact.email?.trim());
+      const hasPhone = Boolean(contact.phone?.trim());
+      const hasNotes = Boolean(contact.notes?.trim());
+      const hasSourceValues = Boolean(contact.sourceValues && Object.keys(contact.sourceValues).length > 0);
+
+      if (qualityFilter === 'missing-email' && hasEmail) return false;
+      if (qualityFilter === 'missing-phone' && hasPhone) return false;
+      if (qualityFilter === 'needs-notes' && hasNotes) return false;
+      if (qualityFilter === 'has-source-values' && !hasSourceValues) return false;
+      if (qualityFilter === 'ready-to-promote' && (contact.status !== 'qualified' || !hasEmail)) return false;
+
       const matchesSearch = !normalizedSearch || [
         contact.name,
         contact.email,
@@ -161,9 +176,15 @@ function ContactsRoute() {
         form?.name,
       ].some((value) => String(value || '').toLowerCase().includes(normalizedSearch));
 
-      return matchesForm && matchesStatus && matchesSearch;
+      return matchesSearch;
     });
-  }, [allContacts, formById, searchQuery, selectedFormId, statusFilter]);
+  }, [allContacts, formById, qualityFilter, searchQuery, selectedFormId, statusFilter]);
+  const hasActiveContactFilters = Boolean(
+    searchQuery.trim() ||
+    selectedFormId !== 'all' ||
+    statusFilter !== 'all' ||
+    qualityFilter !== 'all',
+  );
   const exportSourceKeys = useMemo(() => (
     Array.from(new Set(filteredContacts.flatMap((contact) => (
       contact.sourceValues ? Object.keys(contact.sourceValues) : []
@@ -338,7 +359,10 @@ function ContactsRoute() {
     filters: {
       formId: selectedFormId,
       status: statusFilter,
+      quality: qualityFilter,
       query: searchQuery.trim(),
+      visible: filteredContacts.length,
+      total: allContacts.length,
     },
     selectedSourceForm: apiForm ? {
       id: apiForm.id,
@@ -354,6 +378,7 @@ function ContactsRoute() {
       csvIncludesIdentity: true,
       csvIncludesSourceValues: true,
       sourceValueKeys: exportSourceKeys,
+      filteredRows: filteredContacts.length,
     },
     sources: forms.map((form) => {
       const contacts = contactsByForm[form.id]?.contacts || [];
@@ -406,9 +431,11 @@ function ContactsRoute() {
     contactsByForm,
     contactsUrl,
     exportSourceKeys,
+    filteredContacts.length,
     forms,
     metrics,
     publicBaseUrl,
+    qualityFilter,
     searchQuery,
     selectedFormId,
     statusFilter,
@@ -583,6 +610,12 @@ function ContactsRoute() {
     anchor.remove();
     URL.revokeObjectURL(url);
   };
+  const clearContactFilters = () => {
+    setSearchQuery('');
+    setSelectedFormId('all');
+    setStatusFilter('all');
+    setQualityFilter('all');
+  };
 
   return (
     <PageShell
@@ -594,7 +627,10 @@ function ContactsRoute() {
             id="contacts-active-site"
             aria-label="Active Site"
             value={activeSiteId}
-            onChange={(event) => setSelectedSiteId(event.target.value)}
+            onChange={(event) => {
+              setSelectedSiteId(event.target.value);
+              clearContactFilters();
+            }}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
           >
             {sites.length === 0 ? (
@@ -763,7 +799,10 @@ function ContactsRoute() {
           id="contacts-active-site-inline"
           aria-label="Active contacts site"
           value={activeSiteId}
-          onChange={(event) => setSelectedSiteId(event.target.value)}
+          onChange={(event) => {
+            setSelectedSiteId(event.target.value);
+            clearContactFilters();
+          }}
           className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
         >
           {sites.length === 0 ? (
@@ -949,6 +988,19 @@ function ContactsRoute() {
                 <option key={form.id} value={form.id}>{form.title || form.name}</option>
               ))}
             </select>
+            <select
+              aria-label="Lead quality filter"
+              value={qualityFilter}
+              onChange={(event) => setQualityFilter(event.target.value as ContactQualityFilter)}
+              className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+            >
+              <option value="all">All lead quality</option>
+              <option value="missing-email">Missing email</option>
+              <option value="missing-phone">Missing phone</option>
+              <option value="needs-notes">Needs notes</option>
+              <option value="has-source-values">Has source values</option>
+              <option value="ready-to-promote">Ready to promote</option>
+            </select>
             <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-muted p-1">
               <Filter className="ml-2 size-4 text-muted-foreground" />
               {(['all', 'new', 'contacted', 'qualified', 'archived'] as const).map((status) => (
@@ -966,6 +1018,11 @@ function ContactsRoute() {
                 </button>
               ))}
             </div>
+            {hasActiveContactFilters && (
+              <Button variant="outline" onClick={clearContactFilters}>
+                Clear filters
+              </Button>
+            )}
           </div>
 
           {isLoading && allContacts.length === 0 ? (
@@ -984,8 +1041,16 @@ function ContactsRoute() {
               }
             />
           ) : filteredContacts.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
-              No contacts match this view.
+            <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center">
+              <div className="text-sm font-medium text-foreground">No contacts match this view</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                Change the search, form, lifecycle, or lead quality filters to broaden the inbox.
+              </div>
+              {hasActiveContactFilters && (
+                <Button variant="outline" onClick={clearContactFilters} className="mt-4">
+                  Clear filters
+                </Button>
+              )}
             </div>
           ) : (
             <div className="grid gap-3 lg:grid-cols-2">
