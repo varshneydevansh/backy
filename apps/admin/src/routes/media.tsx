@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { CheckSquare, Code2, Copy, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Save, Trash2, Type, Upload, Video, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CheckSquare, Code2, Copy, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Save, Trash2, Type, Upload, Video, X } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
@@ -43,6 +43,39 @@ import { useStore, type MediaAsset } from '@/stores/mockStore';
 export const Route = createFileRoute('/media')({
   component: MediaPage,
 });
+
+const MEDIA_CONTROL_AREAS = [
+  {
+    title: 'Upload intake',
+    detail: 'Drag, drop, choose visibility, folder destination, and default tags.',
+    href: '#media-upload',
+  },
+  {
+    title: 'Frontend API',
+    detail: 'Public list, detail, file delivery, transforms, and admin upload endpoints.',
+    href: '#media-api',
+  },
+  {
+    title: 'Storage health',
+    detail: 'Runtime provider, quota, missing config, and delivery base path.',
+    href: '#media-storage',
+  },
+  {
+    title: 'Folders',
+    detail: 'Organize files into folders without breaking asset references.',
+    href: '#media-folders',
+  },
+  {
+    title: 'Bulk controls',
+    detail: 'Move, reclassify visibility, select visible assets, and delete in batches.',
+    href: '#media-bulk',
+  },
+  {
+    title: 'Font delivery',
+    detail: 'Group uploaded fonts by family, variants, fallback, display, and visibility.',
+    href: '#media-fonts',
+  },
+] as const;
 
 function MediaPage() {
   const [isDragging, setIsDragging] = useState(false);
@@ -243,6 +276,96 @@ function MediaPage() {
       }))
       .sort((a, b) => a.family.localeCompare(b.family));
   }, [files]);
+  const mediaLibraryReadiness = useMemo(() => {
+    const storageReady = runtimeStorage?.configured === true;
+    const quotaReady = !mediaQuota || mediaQuota.remainingBytes > 0;
+    const hasAssets = files.length > 0;
+    const hasFolders = folders.length > 0 || mediaAnalytics.folderedAssets > 0;
+    const hasPublicDelivery = mediaAnalytics.publicAssets > 0;
+    const hasPrivateWorkflow = mediaAnalytics.privateAssets > 0 || uploadVisibility === 'private';
+    const hasReferences = mediaAnalytics.referencedAssets > 0;
+    const hasFonts = fontGroups.length > 0;
+    const checks = [
+      {
+        label: 'Storage runtime',
+        detail: runtimeStorage
+          ? storageReady
+            ? `${runtimeStorage.provider} storage is configured.`
+            : `Missing ${runtimeStorage.missing?.join(', ') || 'storage configuration'}.`
+          : 'Runtime storage summary has not loaded.',
+        ready: storageReady,
+      },
+      {
+        label: 'Quota headroom',
+        detail: mediaQuota ? `${formatBytes(mediaQuota.remainingBytes)} remaining` : 'Quota data will appear after the media API responds.',
+        ready: quotaReady,
+      },
+      {
+        label: 'Library inventory',
+        detail: hasAssets ? `${files.length} asset${files.length === 1 ? '' : 's'} in the library` : 'Upload the first image, video, document, or font.',
+        ready: hasAssets,
+      },
+      {
+        label: 'Folder organization',
+        detail: hasFolders
+          ? `${folders.length} folder${folders.length === 1 ? '' : 's'} · ${mediaAnalytics.folderedAssets} foldered assets`
+          : 'Create folders to keep site media organized.',
+        ready: hasFolders,
+      },
+      {
+        label: 'Public delivery',
+        detail: hasPublicDelivery
+          ? `${mediaAnalytics.publicAssets} public asset${mediaAnalytics.publicAssets === 1 ? '' : 's'} ready for frontends`
+          : 'Mark assets public when they should be available to frontend routes.',
+        ready: hasPublicDelivery,
+      },
+      {
+        label: 'Private delivery',
+        detail: hasPrivateWorkflow
+          ? 'Private signed URL workflow is available for protected files.'
+          : 'Switch upload defaults or metadata to private for protected downloads.',
+        ready: true,
+      },
+      {
+        label: 'Reference coverage',
+        detail: hasReferences
+          ? `${mediaAnalytics.referencedAssets} referenced asset${mediaAnalytics.referencedAssets === 1 ? '' : 's'}`
+          : `${mediaAnalytics.unusedAssets} unused asset${mediaAnalytics.unusedAssets === 1 ? '' : 's'} need binding review`,
+        ready: hasReferences || files.length === 0,
+      },
+      {
+        label: 'Font controls',
+        detail: hasFonts
+          ? `${fontGroups.length} font famil${fontGroups.length === 1 ? 'y' : 'ies'} registered`
+          : 'Upload fonts to expose typographic controls to the editor.',
+        ready: hasFonts || files.length === 0,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      checks,
+      workflow: [
+        { label: 'Upload', detail: 'Drop images, videos, documents, or fonts with visibility, folder, and tag defaults.' },
+        { label: 'Organize', detail: 'Group media into folders, edit metadata, alt text, captions, and delivery rules.' },
+        { label: 'Bind', detail: 'Attach assets to pages/posts and prepare transforms or signed URLs as needed.' },
+        { label: 'Deliver', detail: 'Expose public files, private signed delivery, transforms, and font manifests to frontends.' },
+      ],
+    };
+  }, [
+    files.length,
+    folders.length,
+    fontGroups.length,
+    mediaAnalytics.folderedAssets,
+    mediaAnalytics.privateAssets,
+    mediaAnalytics.publicAssets,
+    mediaAnalytics.referencedAssets,
+    mediaAnalytics.unusedAssets,
+    mediaQuota,
+    runtimeStorage,
+    uploadVisibility,
+  ]);
 
   const loadLibrary = useCallback(async () => {
     setIsLoading(true);
@@ -869,7 +992,99 @@ function MediaPage() {
         </div>
       }
     >
-      <div className="mb-8 grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="media-library-command-center">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">Media command center</h2>
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                mediaLibraryReadiness.score >= 80
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'bg-amber-50 text-amber-700',
+              )}
+              >
+                {mediaLibraryReadiness.score}% ready
+              </span>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Control the central file layer for every site: uploads, folders, visibility, signed delivery, transforms, font files, and frontend media APIs.
+            </p>
+          </div>
+          <label
+            htmlFor="header-upload"
+            className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+          >
+            <Upload className="h-4 w-4" />
+            Upload files
+          </label>
+        </div>
+
+        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Library readiness</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Checks whether media can be uploaded, organized, transformed, protected, and delivered to custom frontends.
+                </p>
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {files.length} assets
+              </span>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn(
+                  'h-full rounded-full',
+                  mediaLibraryReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500',
+                )}
+                style={{ width: `${mediaLibraryReadiness.score}%` }}
+              />
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {mediaLibraryReadiness.checks.map((check) => (
+                <MediaReadinessCheck key={check.label} {...check} />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex items-center gap-2">
+              <ImageIcon className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold">Media workflow</h3>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {mediaLibraryReadiness.workflow.map((step, index) => (
+                <MediaWorkflowStep key={step.label} index={index + 1} {...step} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <div>
+            <h3 className="text-sm font-semibold">Media control map</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Jump to upload, API, storage, folders, bulk controls, and font delivery settings.
+            </p>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {MEDIA_CONTROL_AREAS.map((area) => (
+              <a
+                key={area.title}
+                href={area.href}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div id="media-upload" className="mb-8 grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px] scroll-mt-24">
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -1003,7 +1218,7 @@ function MediaPage() {
         </div>
       ) : null}
 
-      <Panel className="mb-6">
+      <Panel className="mb-6 scroll-mt-24" id="media-api">
         <PanelHeader
           title="Frontend media API"
           description="Public delivery endpoints and private upload contract for custom frontends, editors, and storefronts."
@@ -1037,7 +1252,7 @@ function MediaPage() {
         </PanelContent>
       </Panel>
 
-      <Panel className="mb-6">
+      <Panel className="mb-6 scroll-mt-24" id="media-storage">
         <PanelHeader
           title="Storage health"
           description="Runtime provider and site quota for files served to custom frontends."
@@ -1149,7 +1364,7 @@ function MediaPage() {
         </PanelContent>
       </Panel>
 
-      <Panel className="mb-6">
+      <Panel className="mb-6 scroll-mt-24" id="media-analytics">
         <PanelHeader
           title="Usage analytics"
           description="Reference coverage, delivery visibility, type mix, and replacement activity for the currently loaded library."
@@ -1335,7 +1550,7 @@ function MediaPage() {
         </select>
       </div>
 
-      <div className="mb-6 rounded-xl border border-border bg-card p-4">
+      <div id="media-folders" className="mb-6 rounded-xl border border-border bg-card p-4 scroll-mt-24">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 font-semibold">
             <Folder className="h-4 w-4" />
@@ -1417,7 +1632,7 @@ function MediaPage() {
       </div>
 
       {files.length > 0 && (
-        <Panel className="mb-6">
+        <Panel className="mb-6 scroll-mt-24" id="media-bulk">
           <PanelHeader
             title="Bulk management"
             description="Select visible assets, move them between folders, change delivery visibility, or remove them from the library."
@@ -1516,7 +1731,7 @@ function MediaPage() {
       )}
 
       {fontGroups.length > 0 && (
-        <Panel className="mb-6">
+        <Panel className="mb-6 scroll-mt-24" id="media-fonts">
           <PanelHeader
             title="Font families"
             description="Registered uploaded fonts grouped by family, variants, fallback stack, and frontend delivery visibility."
@@ -2679,6 +2894,34 @@ function MediaPage() {
         </div>
       )}
     </PageShell>
+  );
+}
+
+function MediaReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  const Icon = ready ? CheckCircle2 : AlertTriangle;
+
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-card px-3 py-2">
+      <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', ready ? 'text-emerald-600' : 'text-amber-600')} />
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function MediaWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
   );
 }
 

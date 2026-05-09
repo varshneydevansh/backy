@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 interface PanelProps {
   children: ReactNode;
   className?: string;
+  id?: string;
 }
 
 interface PanelHeaderProps {
@@ -14,9 +15,9 @@ interface PanelHeaderProps {
   className?: string;
 }
 
-export function Panel({ children, className }: PanelProps) {
+export function Panel({ children, className, id }: PanelProps) {
   return (
-    <section className={cn('rounded-lg border border-border bg-card shadow-sm', className)}>
+    <section id={id} className={cn('rounded-lg border border-border bg-card shadow-sm', className)}>
       {children}
     </section>
   );
