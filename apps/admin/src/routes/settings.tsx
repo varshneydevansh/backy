@@ -681,6 +681,7 @@ function SettingsPage() {
     try {
       const backendSettings = await updateBackendSettings({ deliveryMode, auth: authSettings, integrations });
       applyBackendSettings(backendSettings);
+      window.dispatchEvent(new CustomEvent('backy:settings-saved'));
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       await loadSettingsAuditLogs();

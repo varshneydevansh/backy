@@ -376,6 +376,11 @@ export function Header({ onSidebarToggle }: HeaderProps) {
 
     setNotificationsOpen(false);
 
+    if (shortcut.id === 'settings') {
+      navigate({ to: '/settings', search: { tab: 'notifications' } });
+      return;
+    }
+
     if (shortcut.id === 'site') {
       navigate({ to: '/sites/$siteId', params: { siteId: activeSiteRouteId } });
       return;
@@ -554,7 +559,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
       navigate({ to: '/', search: activeSiteSearch });
       return;
     }
-    navigate({ to: '/settings' });
+    navigate({ to: '/settings', search: { tab: 'notifications' } });
   };
 
   const openNotificationSummaryTarget = () => {
@@ -573,7 +578,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     }
 
     if (commentsAlertsDisabled) {
-      navigate({ to: '/settings' });
+      navigate({ to: '/settings', search: { tab: 'notifications' } });
       return;
     }
 
@@ -859,6 +864,18 @@ export function Header({ onSidebarToggle }: HeaderProps) {
 
   useEffect(() => {
     void loadNotifications();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSiteId]);
+
+  useEffect(() => {
+    const handleSettingsSaved = () => {
+      void loadNotifications();
+    };
+
+    window.addEventListener('backy:settings-saved', handleSettingsSaved);
+    return () => {
+      window.removeEventListener('backy:settings-saved', handleSettingsSaved);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSiteId]);
 
