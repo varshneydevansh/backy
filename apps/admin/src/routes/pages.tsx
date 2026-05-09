@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { AlertTriangle, CheckCircle2, Code2, Copy, ExternalLink, Eye, Filter, Plus, Layout, Edit, Trash2, Home } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Code2, Copy, ExternalLink, Eye, Filter, Plus, Layout, Edit, Trash2, Home, RefreshCw } from 'lucide-react';
 import {
   archivePage,
   createPagePreview,
@@ -29,6 +29,34 @@ import { cn, formatDate } from '@/lib/utils';
 export const Route = createFileRoute('/pages')({
   component: PagesLayout,
 });
+
+const PAGES_CONTROL_AREAS = [
+  {
+    title: 'Site scope',
+    detail: 'Choose which website page library is being managed.',
+    href: '#pages-site',
+  },
+  {
+    title: 'Page health',
+    detail: 'Review totals, drafts, published pages, and publish blockers.',
+    href: '#pages-health',
+  },
+  {
+    title: 'Frontend API',
+    detail: 'Copy public page, resolve, render, preview, and readiness endpoints.',
+    href: '#pages-api',
+  },
+  {
+    title: 'Library controls',
+    detail: 'Search, filter, refresh, select, and bulk publish/archive/delete.',
+    href: '#pages-filters',
+  },
+  {
+    title: 'Page library',
+    detail: 'Open the visual editor, preview, publish, archive, or delete pages.',
+    href: '#pages-library',
+  },
+] as const;
 
 /**
  * Layout component that decides what to render based on current path:
@@ -563,8 +591,96 @@ function PagesListView() {
         </div>
       )}
 
+      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="pages-command-center">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">Pages command center</h2>
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                pageDesignReadiness.score >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+              )}
+              >
+                {pageDesignReadiness.score}% ready
+              </span>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Control the site page library, visual editor entry points, publish readiness, public render APIs, preview links, and bulk page operations.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void refreshPages(activeSiteId)}
+              disabled={isLoading}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />
+              Refresh pages
+            </button>
+            <button
+              type="button"
+              onClick={openCreatePage}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <Plus className="size-4" />
+              New Page
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+          <div className="rounded-lg border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold">Page library readiness</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Checks page presence, homepage route, canvas content, public delivery, readiness coverage, and publish blockers.
+            </p>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn('h-full rounded-full', pageDesignReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                style={{ width: `${pageDesignReadiness.score}%` }}
+              />
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {pageDesignReadiness.checks.map((check) => (
+                <PageReadinessCheck key={check.label} {...check} />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex items-center gap-2">
+              <Layout className="size-4 text-primary" />
+              <h3 className="text-sm font-semibold">Page workflow</h3>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {pageDesignReadiness.workflow.map((step, index) => (
+                <PageWorkflowStep key={step.label} index={index + 1} {...step} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <h3 className="text-sm font-semibold">Pages control map</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, page health, frontend APIs, library controls, and page records.</p>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {PAGES_CONTROL_AREAS.map((area) => (
+              <a
+                key={area.title}
+                href={area.href}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <div className="mb-6 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-        <div className="grid gap-3 md:grid-cols-4">
+        <div id="pages-health" className="grid gap-3 scroll-mt-24 md:grid-cols-4">
           {[
             { label: 'All', value: pageMetrics.total, onSelect: () => setPageStatusFilter('all'), active: statusFilter === 'all' && healthFilter === 'all' },
             { label: 'Published', value: pageMetrics.published, onSelect: () => setPageStatusFilter('published'), active: statusFilter === 'published' && healthFilter === 'all' },
@@ -585,7 +701,7 @@ function PagesListView() {
             </button>
           ))}
         </div>
-        <div className="rounded-lg border border-border bg-card px-4 py-3">
+        <div id="pages-site" className="rounded-lg border border-border bg-card px-4 py-3 scroll-mt-24">
           <label htmlFor="pages-active-site" className="text-xs font-medium text-muted-foreground">
             Active Site
           </label>
@@ -610,7 +726,7 @@ function PagesListView() {
         </div>
       </div>
 
-      <section className="mb-6 rounded-lg border border-border bg-card">
+      <section id="pages-api" className="mb-6 rounded-lg border border-border bg-card scroll-mt-24">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
           <div>
             <div className="flex items-center gap-2">
@@ -746,7 +862,7 @@ function PagesListView() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3 mb-6">
+      <div id="pages-filters" className="flex flex-wrap items-center gap-3 mb-6 scroll-mt-24">
         <div className="relative flex-1 max-w-sm">
           <input
             type="text"
@@ -783,54 +899,56 @@ function PagesListView() {
         </button>
       </div>
 
-      <DataGrid
-        columns={columns}
-        data={data}
-        sortConfig={sortConfig}
-        onSort={handleSort}
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={setCurrentPage}
-        totalItems={totalItems}
-        emptyState={
-          <EmptyState
-            icon={Layout}
-            title={hasPages ? 'No matching pages' : 'No pages yet'}
-            description={
-              hasPages
-                ? 'No pages match the current search or status filter.'
-                : 'Create the first page for this site, then open it in the visual editor.'
-            }
-            action={
-              <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-                {hasPages && (
+      <div id="pages-library" className="scroll-mt-24">
+        <DataGrid
+          columns={columns}
+          data={data}
+          sortConfig={sortConfig}
+          onSort={handleSort}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          totalItems={totalItems}
+          emptyState={
+            <EmptyState
+              icon={Layout}
+              title={hasPages ? 'No matching pages' : 'No pages yet'}
+              description={
+                hasPages
+                  ? 'No pages match the current search or status filter.'
+                  : 'Create the first page for this site, then open it in the visual editor.'
+              }
+              action={
+                <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                  {hasPages && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setStatusFilter('all');
+                        setHealthFilter('all');
+                      }}
+                      className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 font-medium transition-colors hover:bg-accent"
+                    >
+                      Clear Filters
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => {
-                      setSearchQuery('');
-                      setStatusFilter('all');
-                      setHealthFilter('all');
-                    }}
-                    className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 font-medium transition-colors hover:bg-accent"
+                    onClick={openCreatePage}
+                    data-testid="pages-empty-create"
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                    aria-label={hasPages ? 'Create page after clearing filters' : 'Create first page for active site'}
                   >
-                    Clear Filters
+                    <Plus className="w-4 h-4" />
+                    {hasPages ? 'New Page' : 'Create First Page'}
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={openCreatePage}
-                  data-testid="pages-empty-create"
-                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                  aria-label={hasPages ? 'Create page after clearing filters' : 'Create first page for active site'}
-                >
-                  <Plus className="w-4 h-4" />
-                  {hasPages ? 'New Page' : 'Create First Page'}
-                </button>
-              </div>
-            }
-          />
-        }
-      />
+                </div>
+              }
+            />
+          }
+        />
+      </div>
 
       {pendingDeletePage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
