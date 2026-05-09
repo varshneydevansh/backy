@@ -879,7 +879,7 @@ function EditBlogPostPage() {
                     onSubmit={handleSubmit}
                     className={cn(
                         'grid gap-5',
-                        !isWorkspaceFocus && '2xl:grid-cols-[minmax(0,1fr)_360px] 2xl:items-start',
+                        !isWorkspaceFocus && '[@media(min-width:2200px)]:grid-cols-[minmax(0,1fr)_360px] [@media(min-width:2200px)]:items-start',
                     )}
                 >
                     <div className="min-w-0 space-y-6">
@@ -989,7 +989,7 @@ function EditBlogPostPage() {
                     </div>
 
                     {!isWorkspaceFocus && (
-                    <aside className="grid gap-4 xl:grid-cols-2 2xl:sticky 2xl:top-4 2xl:block 2xl:space-y-4">
+                    <aside className="grid gap-4 xl:grid-cols-2 [@media(min-width:2200px)]:sticky [@media(min-width:2200px)]:top-4 [@media(min-width:2200px)]:block [@media(min-width:2200px)]:space-y-4">
                         <Panel id="blog-editor-publish" className="scroll-mt-24">
                             <PanelHeader
                                 title="Publish"

@@ -2486,7 +2486,7 @@ export function CanvasEditor({
             ref={canvasViewportRef}
             className={cn(
               'relative flex-1 overflow-auto pb-20',
-              isCanvasFocusMode ? 'p-10' : 'p-8'
+              isCanvasFocusMode ? 'p-6 lg:p-10' : 'p-4 lg:p-6'
             )}
             style={{
               backgroundColor: '#e9edf3',
@@ -2659,7 +2659,7 @@ export function CanvasEditor({
           {/* Right Sidebar - Inspector */}
           {!isPreview && !isCanvasFocusMode && showInspectorPanel && (
             <aside
-              className="flex h-full min-h-0 w-[clamp(18rem,20vw,24rem)] min-w-[18rem] max-w-[24rem] shrink-0 flex-col border-l border-slate-200 bg-white"
+              className="flex h-full min-h-0 w-[clamp(16rem,18vw,21rem)] min-w-[16rem] max-w-[21rem] shrink-0 flex-col border-l border-slate-200 bg-white"
               data-testid="editor-inspector"
             >
               <div className="border-b border-slate-200 p-3">

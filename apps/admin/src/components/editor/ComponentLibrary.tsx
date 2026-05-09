@@ -161,7 +161,10 @@ export function ComponentLibrary({
   ];
 
   return (
-    <div className="w-72 bg-white border-r border-slate-200 flex flex-col h-full">
+    <div
+      className="flex h-full w-[clamp(15rem,16vw,18rem)] min-w-[15rem] max-w-[18rem] flex-col border-r border-slate-200 bg-white"
+      data-testid="editor-component-library"
+    >
       {/* Header */}
       <div className="p-4 border-b border-slate-200">
         <h2 className="font-semibold mb-3">Components</h2>
