@@ -377,9 +377,7 @@ export function CanvasEditor({
   const [pageSettings, setPageSettings] = useState<PageSettings>(initialSettings);
 
   // Clipboard State
-  const [clipboardElement, setClipboardElement] = useState<CanvasElement | null>(
-    null
-  );
+  const [clipboardElements, setClipboardElements] = useState<CanvasElement[]>([]);
   const [canvasScale, setCanvasScale] = useState(1);
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [isCanvasAutoFit, setIsCanvasAutoFit] = useState(true);
@@ -907,15 +905,35 @@ export function CanvasEditor({
   /**
    * Copy
    */
-  const handleCopy = useCallback(() => {
-    if (selectedId) {
-      const el = findElementById(elements, selectedId);
-      if (el) {
-        setClipboardElement(el);
-        // Optional: Show toast or feedback
-      }
+  const getSelectedSiblingEntries = useCallback((
+    currentElements: CanvasElement[],
+    options: { requireUnlocked?: boolean } = {},
+  ) => {
+    if (!selectedId) {
+      return [];
     }
-  }, [selectedId, elements]);
+
+    const primaryEntry = findElementEntry(currentElements, selectedId);
+    if (!primaryEntry) {
+      return [];
+    }
+
+    const candidateIds = selectedIds.length > 1 ? selectedIds : [selectedId];
+    return candidateIds
+      .map((id) => findElementEntry(currentElements, id))
+      .filter((entry): entry is { element: CanvasElement; parentId: string | null } => (
+        !!entry &&
+        entry.parentId === primaryEntry.parentId &&
+        (!options.requireUnlocked || !entry.element.locked)
+      ));
+  }, [findElementEntry, selectedId, selectedIds]);
+
+  const handleCopy = useCallback(() => {
+    const entries = getSelectedSiblingEntries(elements);
+    if (entries.length > 0) {
+      setClipboardElements(entries.map((entry) => JSON.parse(JSON.stringify(entry.element)) as CanvasElement));
+    }
+  }, [elements, getSelectedSiblingEntries]);
 
   const cloneElementTreeWithFreshIds = useCallback(
     (sourceElement: CanvasElement, x = 20, y = 20, parentId: string | null = null): CanvasElement => {
@@ -953,31 +971,59 @@ export function CanvasEditor({
    * Paste
    */
   const handlePaste = useCallback(() => {
-    if (clipboardElement) {
+    if (clipboardElements.length > 0) {
       const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
       const canNest = selectedElement && canAcceptNestedDrop(selectedElement.type);
-      const newElement = cloneElementTreeWithFreshIds(clipboardElement, 20, 20, canNest ? selectedElement.id : null);
-      const newElements = canNest
-        ? insertElementAsChild(elements, selectedElement.id, newElement)
-        : { elements: [...elements, newElement], updated: false };
+      const parentId = canNest ? selectedElement.id : null;
+      const pastedElements = clipboardElements.map((clipboardElement) => (
+        cloneElementTreeWithFreshIds(clipboardElement, 20, 20, parentId)
+      ));
+      let nextElements = elements;
+      let inserted = false;
 
-      const nextElements = canNest && newElements.updated ? newElements.elements : newElements.elements;
+      if (canNest) {
+        for (const pastedElement of pastedElements) {
+          const insertResult = insertElementAsChild(nextElements, selectedElement.id, pastedElement);
+          nextElements = insertResult.elements;
+          inserted = inserted || insertResult.updated;
+        }
+      } else {
+        nextElements = [...elements, ...pastedElements];
+        inserted = pastedElements.length > 0;
+      }
 
-      updateElementsWithHistory(nextElements, newElement.id);
+      if (!inserted) {
+        return;
+      }
+
+      const firstPastedId = pastedElements[0]?.id ?? null;
+      setSelectedIds(pastedElements.map((element) => element.id));
+      setSelectedId(firstPastedId);
+      updateElementsWithHistory(nextElements, firstPastedId);
     }
-  }, [clipboardElement, cloneElementTreeWithFreshIds, elements, selectedId, updateElementsWithHistory]);
+  }, [clipboardElements, cloneElementTreeWithFreshIds, elements, findElementById, selectedId, updateElementsWithHistory]);
 
   const handleDuplicate = useCallback(() => {
-    if (!selectedId) return;
-    const selectedEntry = findElementEntry(elements, selectedId);
-    if (!selectedEntry) return;
+    const entries = getSelectedSiblingEntries(elements, { requireUnlocked: true });
+    if (entries.length === 0) return;
 
-    const duplicate = cloneElementTreeWithFreshIds(selectedEntry.element, 20, 20, selectedEntry.parentId);
-    const duplicated = insertElementAsSibling(elements, selectedEntry.element.id, duplicate);
-    if (!duplicated.updated) return;
+    let nextElements = elements;
+    const duplicatedIds: string[] = [];
+    for (const entry of entries) {
+      const duplicate = cloneElementTreeWithFreshIds(entry.element, 20, 20, entry.parentId);
+      const duplicated = insertElementAsSibling(nextElements, entry.element.id, duplicate);
+      if (!duplicated.updated) continue;
 
-    updateElementsWithHistory(duplicated.elements, duplicate.id);
-  }, [cloneElementTreeWithFreshIds, elements, findElementEntry, selectedId, updateElementsWithHistory]);
+      nextElements = duplicated.elements;
+      duplicatedIds.push(duplicate.id);
+    }
+
+    if (duplicatedIds.length === 0) return;
+
+    setSelectedIds(duplicatedIds);
+    setSelectedId(duplicatedIds[0] ?? null);
+    updateElementsWithHistory(nextElements, duplicatedIds[0] ?? null);
+  }, [cloneElementTreeWithFreshIds, elements, getSelectedSiblingEntries, updateElementsWithHistory]);
 
   const handleLayerSelect = useCallback((ids: string[]) => {
     const nextIds = ids.filter((id) => !!findElementById(elements, id));
@@ -1833,34 +1879,52 @@ export function CanvasEditor({
    * Delete selected element
    */
   const deleteElement = useCallback(() => {
-    if (!selectedId) return;
-    const selectedElement = findElementById(elements, selectedId);
-    if (selectedElement?.locked) return;
+    const entries = getSelectedSiblingEntries(elements, { requireUnlocked: true });
+    if (entries.length === 0) return;
 
-    const result = removeElementById(elements, selectedId);
-    if (!result.updated) return;
+    let nextElements = elements;
+    let parentSelection: string | null = entries[0]?.parentId ?? null;
+    let removed = false;
+    for (const entry of entries) {
+      const result = removeElementById(nextElements, entry.element.id);
+      if (!result.updated) continue;
 
-    updateElementsWithHistory(result.elements, result.removedParentId || null);
-  }, [selectedId, elements, findElementById, updateElementsWithHistory]);
-
-  const handleCut = useCallback(() => {
-    if (!selectedId) return;
-
-    const selectedElement = findElementById(elements, selectedId);
-    if (!selectedElement) return;
-    if (selectedElement.locked) return;
-
-    setClipboardElement(selectedElement);
-
-    const result = removeElementById(elements, selectedId);
-    if (!result.updated) {
-      return;
+      nextElements = result.elements;
+      parentSelection = result.removedParentId || parentSelection;
+      removed = true;
     }
 
-    const parentSelection = result.removedParentId || null;
+    if (!removed) return;
+
+    setSelectedIds(parentSelection ? [parentSelection] : []);
     setSelectedId(parentSelection);
-    updateElementsWithHistory(result.elements, parentSelection);
-  }, [elements, findElementById, selectedId, updateElementsWithHistory]);
+    updateElementsWithHistory(nextElements, parentSelection);
+  }, [elements, getSelectedSiblingEntries, updateElementsWithHistory]);
+
+  const handleCut = useCallback(() => {
+    const entries = getSelectedSiblingEntries(elements, { requireUnlocked: true });
+    if (entries.length === 0) return;
+
+    setClipboardElements(entries.map((entry) => JSON.parse(JSON.stringify(entry.element)) as CanvasElement));
+
+    let nextElements = elements;
+    let parentSelection: string | null = entries[0]?.parentId ?? null;
+    let removed = false;
+    for (const entry of entries) {
+      const result = removeElementById(nextElements, entry.element.id);
+      if (!result.updated) continue;
+
+      nextElements = result.elements;
+      parentSelection = result.removedParentId || parentSelection;
+      removed = true;
+    }
+
+    if (!removed) return;
+
+    setSelectedIds(parentSelection ? [parentSelection] : []);
+    setSelectedId(parentSelection);
+    updateElementsWithHistory(nextElements, parentSelection);
+  }, [elements, getSelectedSiblingEntries, updateElementsWithHistory]);
 
   /**
    * Handle save
@@ -1930,7 +1994,7 @@ export function CanvasEditor({
     setSize(initialSize || DEFAULT_CANVAS_SIZE);
     setBreakpoint('desktop');
     setSelectedId(null);
-    setClipboardElement(null);
+    setClipboardElements([]);
     setHistory([{ elements: nextElements, selectedId: null }]);
     setHistoryIndex(0);
     setHasUnsavedChanges(false);
@@ -2372,7 +2436,8 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={handlePaste}
-              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100"
+              disabled={clipboardElements.length === 0}
+              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title="Paste layer (Cmd/Ctrl+V)"
               aria-label="Paste"
             >
