@@ -107,6 +107,19 @@ type FrontendApiCapability = {
   stillNeeded: string;
 };
 
+type SettingsDraftSnapshot = {
+  deliveryMode: DeliveryMode;
+  auth?: SiteSettingsInput['auth'];
+  integrations: NonNullable<SiteSettingsInput['integrations']>;
+};
+
+type SettingsValidationIssue = {
+  tab: SettingsTab;
+  label: string;
+  detail: string;
+  severity: 'error' | 'warning';
+};
+
 const DELIVERY_OPTIONS: Array<{
   id: DeliveryMode;
   title: string;
@@ -542,6 +555,22 @@ function buildCopyText(base: string, path: string): string {
   return `${base}${path}`;
 }
 
+function cloneSettingsDraftSnapshot(snapshot: SettingsDraftSnapshot): SettingsDraftSnapshot {
+  return JSON.parse(JSON.stringify(snapshot)) as SettingsDraftSnapshot;
+}
+
+function createSettingsDraftSnapshot(settings: Pick<SiteSettingsInput, 'deliveryMode' | 'auth' | 'integrations'>): SettingsDraftSnapshot {
+  return {
+    deliveryMode: settings.deliveryMode,
+    auth: settings.auth,
+    integrations: settings.integrations || {},
+  };
+}
+
+function settingsDraftFingerprint(snapshot: SettingsDraftSnapshot): string {
+  return JSON.stringify(snapshot);
+}
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -563,20 +592,23 @@ function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<SettingsDraftSnapshot | null>(null);
   const persistedDeliveryMode = useStore((state) => state.settings.deliveryMode);
   const updateSettings = useStore((state) => state.updateSettings);
   const publicApiKey = useStore((state) => state.settings.apiKeys.publicApiKey);
   const adminApiKey = useStore((state) => state.settings.apiKeys.adminApiKey);
 
   const applyBackendSettings = useCallback((backendSettings: SiteSettingsInput) => {
+    const snapshot = createSettingsDraftSnapshot(backendSettings);
     updateSettings(backendSettings);
-    setDeliveryMode(backendSettings.deliveryMode);
-    setAuthSettings(backendSettings.auth);
+    setDeliveryMode(snapshot.deliveryMode);
+    setAuthSettings(snapshot.auth);
     setRuntimeStorage(backendSettings.runtimeStorage);
-    setIntegrations(backendSettings.integrations || {});
+    setIntegrations(snapshot.integrations);
     setRuntimeDatabase(backendSettings.runtimeDatabase);
     setRuntimeSupabase(backendSettings.runtimeSupabase);
     setRuntimeVercel(backendSettings.runtimeVercel);
+    setLastSavedSnapshot(cloneSettingsDraftSnapshot(snapshot));
   }, [updateSettings]);
 
   useEffect(() => {
@@ -636,6 +668,11 @@ function SettingsPage() {
   }, [loadSettingsAuditLogs]);
 
   const handleSave = async () => {
+    if (blockingValidationIssues.length > 0) {
+      setNotice('Fix settings validation issues before saving.');
+      return;
+    }
+
     setIsSaving(true);
     setNotice(null);
 
@@ -666,6 +703,18 @@ function SettingsPage() {
     }
   };
 
+  const discardUnsavedChanges = () => {
+    if (!lastSavedSnapshot) {
+      return;
+    }
+
+    const snapshot = cloneSettingsDraftSnapshot(lastSavedSnapshot);
+    setDeliveryMode(snapshot.deliveryMode);
+    setAuthSettings(snapshot.auth);
+    setIntegrations(snapshot.integrations);
+    setNotice('Unsaved settings changes discarded.');
+  };
+
   const generalSettings: GeneralSettingsConfig = {
     ...DEFAULT_GENERAL_SETTINGS,
     ...(integrations.general || {}),
@@ -690,6 +739,32 @@ function SettingsPage() {
       ...(integrations.notifications?.inApp || {}),
     },
   };
+  const currentSettingsSnapshot = useMemo<SettingsDraftSnapshot>(() => ({
+    deliveryMode,
+    auth: authSettings,
+    integrations,
+  }), [authSettings, deliveryMode, integrations]);
+  const hasUnsavedChanges = lastSavedSnapshot
+    ? settingsDraftFingerprint(currentSettingsSnapshot) !== settingsDraftFingerprint(lastSavedSnapshot)
+    : false;
+  const validationIssues = useMemo(() => validateSettingsDraft({
+    deliveryMode,
+    generalSettings,
+    appearanceSettings,
+    seoSettings,
+    notificationSettings,
+    authSettings,
+    integrations,
+  }), [
+    appearanceSettings,
+    authSettings,
+    deliveryMode,
+    generalSettings,
+    integrations,
+    notificationSettings,
+    seoSettings,
+  ]);
+  const blockingValidationIssues = validationIssues.filter((issue) => issue.severity === 'error');
   const platformReadiness = useMemo(() => {
     const savedGeneral = integrations.general;
     const savedAppearance = integrations.appearance;
@@ -970,6 +1045,14 @@ function SettingsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {hasUnsavedChanges && (
+            <Button
+              variant="ghost"
+              onClick={discardUnsavedChanges}
+            >
+              Discard changes
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() => void copySettingsHandoffText(settingsHandoffText, 'Settings handoff manifest')}
@@ -987,16 +1070,29 @@ function SettingsPage() {
           <Button
             variant="primary"
             onClick={() => void handleSave()}
-            disabled={isSaving}
+            disabled={isSaving || !hasUnsavedChanges || blockingValidationIssues.length > 0}
             iconStart={saved ? <Check className="size-4" /> : <Save className="size-4" />}
           >
-            {saved ? 'Saved' : isSaving ? 'Saving...' : 'Save Changes'}
+            {saved ? 'Saved' : isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes' : 'No changes'}
           </Button>
         </div>
       </div>
 
       {notice && (
         <Notice tone="warning">{notice}</Notice>
+      )}
+
+      {hasUnsavedChanges && blockingValidationIssues.length === 0 && (
+        <Notice tone="info" title="Unsaved settings">
+          Review the current tab or save changes to update Backy’s API, frontend handoff, infrastructure metadata, and security policy.
+        </Notice>
+      )}
+
+      {validationIssues.length > 0 && (
+        <SettingsValidationSummary
+          issues={validationIssues}
+          onOpenTab={openSettingsTab}
+        />
       )}
 
       <div id="settings-command-center" className="scroll-mt-24" data-testid="settings-command-center">
@@ -1250,6 +1346,57 @@ function SettingsCapabilityCard({ capability }: { capability: FrontendApiCapabil
         </div>
       </dl>
     </div>
+  );
+}
+
+function SettingsValidationSummary({
+  issues,
+  onOpenTab,
+}: {
+  issues: SettingsValidationIssue[];
+  onOpenTab: (tab: SettingsTab) => void;
+}) {
+  const errorCount = issues.filter((issue) => issue.severity === 'error').length;
+  const groupedIssues = SETTINGS_TAB_IDS
+    .map((tab) => ({
+      tab,
+      label: TABS.find((item) => item.id === tab)?.name || tab,
+      issues: issues.filter((issue) => issue.tab === tab),
+    }))
+    .filter((group) => group.issues.length > 0);
+
+  return (
+    <Notice
+      tone={errorCount > 0 ? 'error' : 'warning'}
+      title={errorCount > 0 ? 'Settings need attention before saving' : 'Settings recommendations'}
+    >
+      <div className="grid gap-3">
+        <p>
+          {errorCount > 0
+            ? `${errorCount} blocking issue${errorCount === 1 ? '' : 's'} must be fixed.`
+            : 'These recommendations will make the frontend handoff more reliable.'}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {groupedIssues.map((group) => (
+            <button
+              key={group.tab}
+              type="button"
+              onClick={() => onOpenTab(group.tab)}
+              className="rounded-lg border border-current/20 bg-background/70 px-2.5 py-1 text-xs font-semibold transition hover:bg-background"
+            >
+              {group.label}: {group.issues.length}
+            </button>
+          ))}
+        </div>
+        <ul className="grid gap-1 text-xs leading-5">
+          {issues.slice(0, 4).map((issue) => (
+            <li key={`${issue.tab}-${issue.label}`}>
+              <span className="font-semibold">{issue.label}:</span> {issue.detail}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Notice>
   );
 }
 
@@ -2046,6 +2193,235 @@ const DEFAULT_NOTIFICATION_SETTINGS: Required<Pick<NotificationSettingsConfig, '
   digestFrequency: 'instant',
   webhookUrl: '',
 };
+
+const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
+const SIMPLE_DOMAIN_REGEX = /^(?!-)(?:[a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}$/;
+const SUPABASE_PROJECT_REF_REGEX = /^[a-z0-9-]{6,63}$/;
+
+const isValidHttpUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+const addIssue = (
+  issues: SettingsValidationIssue[],
+  issue: SettingsValidationIssue,
+) => {
+  issues.push(issue);
+};
+
+function validateSettingsDraft({
+  deliveryMode,
+  generalSettings,
+  appearanceSettings,
+  seoSettings,
+  notificationSettings,
+  authSettings,
+  integrations,
+}: {
+  deliveryMode: DeliveryMode;
+  generalSettings: GeneralSettingsConfig;
+  appearanceSettings: AppearanceSettingsConfig;
+  seoSettings: SeoSettingsConfig;
+  notificationSettings: NotificationSettingsConfig;
+  authSettings?: SiteSettingsInput['auth'];
+  integrations: IntegrationSettings;
+}): SettingsValidationIssue[] {
+  const issues: SettingsValidationIssue[] = [];
+  const appearance = resolveAppearanceSettings(appearanceSettings);
+  const policy: Required<AuthSettingsConfig> = {
+    ...DEFAULT_AUTH_SETTINGS,
+    ...(authSettings || {}),
+  };
+  const storage = integrations.storage || {};
+  const supabase = integrations.supabase || {};
+  const vercel = integrations.vercel || {};
+
+  if (!generalSettings.siteName?.trim()) {
+    addIssue(issues, {
+      tab: 'general',
+      label: 'Site name is required',
+      detail: 'Backy needs a default site name for manifests, previews, emails, and frontend handoff.',
+      severity: 'error',
+    });
+  }
+
+  if (generalSettings.siteName && generalSettings.siteName.length > 80) {
+    addIssue(issues, {
+      tab: 'general',
+      label: 'Site name is too long',
+      detail: 'Keep the default site name under 80 characters so it fits navigation, previews, and SEO templates.',
+      severity: 'warning',
+    });
+  }
+
+  Object.entries({
+    primaryColor: appearance.primaryColor,
+    secondaryColor: appearance.secondaryColor,
+    backgroundColor: appearance.backgroundColor,
+    surfaceColor: appearance.surfaceColor,
+    textColor: appearance.textColor,
+    mutedTextColor: appearance.mutedTextColor,
+  }).forEach(([key, value]) => {
+    if (!HEX_COLOR_REGEX.test(value)) {
+      addIssue(issues, {
+        tab: 'appearance',
+        label: `${key} must be a hex color`,
+        detail: 'Use six-character hex colors like #0f172a so custom frontends can consume the theme contract safely.',
+        severity: 'error',
+      });
+    }
+  });
+
+  if (appearance.baseFontSize < 12 || appearance.baseFontSize > 24) {
+    addIssue(issues, {
+      tab: 'appearance',
+      label: 'Base font size is outside the supported range',
+      detail: 'Use a base font size from 12 to 24 pixels.',
+      severity: 'error',
+    });
+  }
+
+  if (appearance.radius < 0 || appearance.radius > 32) {
+    addIssue(issues, {
+      tab: 'appearance',
+      label: 'Corner radius is outside the supported range',
+      detail: 'Use a corner radius from 0 to 32 pixels.',
+      severity: 'error',
+    });
+  }
+
+  if (appearance.spacingUnit < 2 || appearance.spacingUnit > 16) {
+    addIssue(issues, {
+      tab: 'appearance',
+      label: 'Spacing unit is outside the supported range',
+      detail: 'Use a spacing unit from 2 to 16 pixels.',
+      severity: 'error',
+    });
+  }
+
+  if (!seoSettings.titleTemplate?.includes('%s')) {
+    addIssue(issues, {
+      tab: 'seo',
+      label: 'SEO title template needs %s',
+      detail: 'Include %s where the page or post title should be inserted.',
+      severity: 'warning',
+    });
+  }
+
+  if (seoSettings.ogImageUrl && !isValidHttpUrl(seoSettings.ogImageUrl)) {
+    addIssue(issues, {
+      tab: 'seo',
+      label: 'Default OG image must be a URL',
+      detail: 'Use an http or https URL for social previews.',
+      severity: 'error',
+    });
+  }
+
+  if (storage.publicBaseUrl && !isValidHttpUrl(storage.publicBaseUrl)) {
+    addIssue(issues, {
+      tab: 'infrastructure',
+      label: 'Storage public base URL is invalid',
+      detail: 'Use the canonical http or https URL that serves public images, fonts, documents, and files.',
+      severity: 'error',
+    });
+  }
+
+  if ((storage.provider === 'supabase' || supabase.storageEnabled) && !storage.bucket && !supabase.projectRef) {
+    addIssue(issues, {
+      tab: 'infrastructure',
+      label: 'Supabase storage needs a bucket or project ref',
+      detail: 'Set a media bucket or Supabase project ref before using Supabase for file delivery.',
+      severity: 'warning',
+    });
+  }
+
+  if (supabase.projectUrl && !isValidHttpUrl(supabase.projectUrl)) {
+    addIssue(issues, {
+      tab: 'infrastructure',
+      label: 'Supabase project URL is invalid',
+      detail: 'Use the project URL from Supabase, for example https://project-ref.supabase.co.',
+      severity: 'error',
+    });
+  }
+
+  if (supabase.projectRef && !SUPABASE_PROJECT_REF_REGEX.test(supabase.projectRef)) {
+    addIssue(issues, {
+      tab: 'infrastructure',
+      label: 'Supabase project ref has an invalid format',
+      detail: 'Use lowercase letters, numbers, and hyphens only.',
+      severity: 'error',
+    });
+  }
+
+  if (deliveryMode === 'custom-frontend' && !integrations.vercel?.productionDomain && !integrations.storage?.publicBaseUrl) {
+    addIssue(issues, {
+      tab: 'delivery',
+      label: 'Custom frontend mode needs a public handoff target',
+      detail: 'Add a Vercel production domain or storage public base URL before relying on headless delivery.',
+      severity: 'warning',
+    });
+  }
+
+  if (vercel.productionDomain && (vercel.productionDomain.includes('://') || !SIMPLE_DOMAIN_REGEX.test(vercel.productionDomain))) {
+    addIssue(issues, {
+      tab: 'infrastructure',
+      label: 'Vercel production domain should be a hostname',
+      detail: 'Use a bare domain such as backy.example.com, without https:// or a path.',
+      severity: 'error',
+    });
+  }
+
+  if (notificationSettings.webhookUrl && !isValidHttpUrl(notificationSettings.webhookUrl)) {
+    addIssue(issues, {
+      tab: 'notifications',
+      label: 'Webhook URL is invalid',
+      detail: 'Use an http or https URL for workflow notifications.',
+      severity: 'error',
+    });
+  }
+
+  if (policy.minPasswordLength < 8 || policy.minPasswordLength > 128) {
+    addIssue(issues, {
+      tab: 'security',
+      label: 'Password length policy is invalid',
+      detail: 'Use a minimum password length from 8 to 128 characters.',
+      severity: 'error',
+    });
+  }
+
+  if (policy.sessionTimeoutMinutes < 15 || policy.sessionTimeoutMinutes > 10080) {
+    addIssue(issues, {
+      tab: 'security',
+      label: 'Session timeout is invalid',
+      detail: 'Use a session timeout from 15 minutes to 7 days.',
+      severity: 'error',
+    });
+  }
+
+  if (policy.allowedEmailDomains) {
+    const invalidDomains = policy.allowedEmailDomains
+      .split(',')
+      .map((domain) => domain.trim())
+      .filter(Boolean)
+      .filter((domain) => !SIMPLE_DOMAIN_REGEX.test(domain));
+
+    if (invalidDomains.length > 0) {
+      addIssue(issues, {
+        tab: 'security',
+        label: 'Allowed email domains include invalid values',
+        detail: `Check ${invalidDomains.slice(0, 3).join(', ')}.`,
+        severity: 'error',
+      });
+    }
+  }
+
+  return issues;
+}
 
 const inputClassName = cn(
   'w-full rounded-lg border border-input bg-background px-3 py-2 text-sm',
