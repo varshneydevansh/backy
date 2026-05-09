@@ -497,6 +497,116 @@ function CollectionsPage() {
       detail: 'Use public read APIs and route templates to power lists, detail pages, catalogs, and forms.',
     },
   ]), []);
+  const collectionHandoff = useMemo(() => ({
+    site: {
+      id: activeSiteId,
+      name: activeSite?.name || activeSiteId,
+      slug: activeSite?.slug,
+      status: activeSite?.status,
+    },
+    generatedAt: new Date().toISOString(),
+    endpoints: {
+      publicCollections: publicCollectionsUrl,
+      publicRecords: publicRecordsUrl,
+      publicRecordBySlug: publicRecordBySlugUrl,
+      adminCollections: adminCollectionsUrl,
+      adminRecords: adminRecordsUrl,
+      adminImport: adminImportUrl,
+      adminBulk: adminBulkUrl,
+    },
+    readiness: {
+      score: collectionReadiness.score,
+      checks: collectionReadiness.checks,
+    },
+    metrics: {
+      collections: collections.length,
+      fields: collections.reduce((total, collection) => total + collection.fields.length, 0),
+      recordsLoaded: recordPagination.total,
+      selectedRecords: selectedRecordIds.length,
+    },
+    activeCollection: activeCollection ? {
+      id: activeCollection.id,
+      name: activeCollection.name,
+      slug: activeCollection.slug,
+      status: activeCollection.status,
+      description: activeCollection.description,
+      permissions: activeCollection.permissions,
+      listRoutePattern: normalizeCollectionListRoutePattern(activeCollection.listRoutePattern, activeCollection.slug),
+      routePattern: normalizeCollectionRoutePattern(activeCollection.routePattern, activeCollection.slug),
+      listRoutePath: activeListRoutePath,
+      itemRouteTemplate: activeItemRoutePath,
+      publicApiReady: activeCollectionIsPublic,
+      fields: activeCollection.fields.map((field) => ({
+        key: field.key,
+        label: field.label,
+        type: field.type,
+        required: field.required,
+        unique: field.unique,
+        helpText: field.helpText,
+        options: field.options,
+        defaultValue: field.defaultValue,
+        referenceCollectionId: field.referenceCollectionId,
+        sortOrder: field.sortOrder,
+      })),
+      fieldHealth,
+    } : null,
+    collections: collections.map((collection) => ({
+      id: collection.id,
+      name: collection.name,
+      slug: collection.slug,
+      status: collection.status,
+      permissions: collection.permissions,
+      fieldCount: collection.fields.length,
+      publicListRoute: buildCollectionListRoutePath(collection),
+      publicItemRouteTemplate: buildCollectionRecordRouteTemplate(collection),
+      publicReadReady: collection.status === 'published' && collection.permissions.publicRead,
+    })),
+    records: records.map((record) => ({
+      id: record.id,
+      slug: record.slug,
+      status: record.status,
+      routePath: activeCollection ? buildCollectionRecordRoutePath(activeCollection, record.slug) : null,
+      valueKeys: Object.keys(record.values || {}),
+      updatedAt: record.updatedAt,
+      createdAt: record.createdAt,
+    })),
+    filters: recordFilters,
+    pagination: recordPagination,
+    selection: {
+      selectedRecordIds,
+      allRecordsOnPageSelected,
+    },
+    privacy: {
+      includesRecordValues: false,
+      note: 'Use public/admin record endpoints or CSV export for full record values. This manifest exposes schemas, routes, permissions, endpoints, counts, and record identifiers only.',
+    },
+  }), [
+    activeCollection,
+    activeCollectionIsPublic,
+    activeItemRoutePath,
+    activeListRoutePath,
+    activeSite?.name,
+    activeSite?.slug,
+    activeSite?.status,
+    activeSiteId,
+    adminBulkUrl,
+    adminCollectionsUrl,
+    adminImportUrl,
+    adminRecordsUrl,
+    allRecordsOnPageSelected,
+    collectionReadiness.checks,
+    collectionReadiness.score,
+    collections,
+    fieldHealth,
+    publicCollectionsUrl,
+    publicRecordBySlugUrl,
+    publicRecordsUrl,
+    recordFilters,
+    recordPagination,
+    records,
+    selectedRecordIds,
+  ]);
+  const collectionHandoffText = useMemo(() => JSON.stringify(collectionHandoff, null, 2), [collectionHandoff]);
 
   const updateRecordFilters = (updates: Partial<typeof recordFilters>) => {
     setRecordFilters((prev) => ({ ...prev, ...updates }));
@@ -536,6 +646,19 @@ function CollectionsPage() {
       setNotice(null);
       setError(value);
     }
+  };
+  const downloadCollectionHandoff = () => {
+    const blob = new Blob([collectionHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSiteSlug}-backy-collections-handoff.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setNotice('Collections handoff manifest downloaded.');
   };
 
   useEffect(() => {
@@ -1027,6 +1150,22 @@ function CollectionsPage() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
+              onClick={() => void copyCollectionApiText(collectionHandoffText, 'Collections handoff manifest')}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            >
+              <Copy className="h-4 w-4" />
+              Copy manifest
+            </button>
+            <button
+              type="button"
+              onClick={downloadCollectionHandoff}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            >
+              <Download className="h-4 w-4" />
+              Download JSON
+            </button>
+            <button
+              type="button"
               onClick={() => void loadCollections()}
               disabled={isLoading}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"
@@ -1131,6 +1270,14 @@ function CollectionsPage() {
           >
             <Copy className="h-4 w-4" />
             {activeCollectionIsPublic ? 'Copy public records' : 'Copy admin records'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void copyCollectionApiText(collectionHandoffText, 'Collections handoff manifest')}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+          >
+            <Copy className="h-4 w-4" />
+            Copy manifest
           </button>
         </div>
         <div className="p-4">
