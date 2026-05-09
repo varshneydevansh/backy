@@ -387,12 +387,9 @@ function PagesListView() {
   const adminPageReadinessUrl = `${adminPageDetailUrl}/readiness`;
   const adminPagePreviewUrl = `${adminPageDetailUrl}/preview`;
   const createPageSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
-  const navigateToNewPage = (template: PageCreationTemplate = 'blank') => {
-    navigate({
-      to: '/pages/new',
-      search: template === 'blank' ? createPageSearch : { ...createPageSearch, template },
-    });
-  };
+  const getCreatePageSearch = (template: PageCreationTemplate = 'blank') => (
+    template === 'blank' ? createPageSearch : { ...createPageSearch, template }
+  );
   const pageDesignReadiness = useMemo(() => {
     const checkedPages = activeSitePages.filter((page) => readinessMap[page.id]);
     const readyPages = activeSitePages.filter((page) => readinessMap[page.id]?.statusLabel === 'ready');
@@ -1230,10 +1227,10 @@ function PagesListView() {
               const ShortcutIcon = shortcut.icon;
 
               return (
-                <button
+                <Link
                   key={shortcut.key}
-                  type="button"
-                  onClick={() => navigateToNewPage(shortcut.key)}
+                  to="/pages/new"
+                  search={getCreatePageSearch(shortcut.key)}
                   className="group min-h-32 rounded-lg border border-border bg-card p-3 text-left transition hover:border-primary/50 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring"
                   data-testid={`pages-create-${shortcut.key}`}
                 >
@@ -1247,7 +1244,7 @@ function PagesListView() {
                   </div>
                   <div className="mt-3 text-sm font-semibold text-foreground">{shortcut.title}</div>
                   <div className="mt-1 text-xs leading-5 text-muted-foreground">{shortcut.detail}</div>
-                </button>
+                </Link>
               );
             })}
           </div>
@@ -1633,16 +1630,16 @@ function PagesListView() {
                       Clear Filters
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => navigateToNewPage('blank')}
+                  <Link
+                    to="/pages/new"
+                    search={createPageSearch}
                     data-testid="pages-empty-create"
                     className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                     aria-label={hasPages ? 'Create page after clearing filters' : 'Create first page for active site'}
                   >
                     <Plus className="w-4 h-4" />
                     {hasPages ? 'Create Page' : 'Create First Page'}
-                  </button>
+                  </Link>
                 </div>
               }
             />
