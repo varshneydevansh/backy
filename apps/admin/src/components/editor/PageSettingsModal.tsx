@@ -32,6 +32,14 @@ const formatJsonLd = (jsonLd: PageSettings['meta']['jsonLd']): string => (
     Array.isArray(jsonLd) && jsonLd.length > 0 ? JSON.stringify(jsonLd, null, 2) : '[]'
 );
 
+const normalizeKeywords = (keywords: string[] | undefined): string[] => (
+    Array.from(new Set((keywords || [])
+        .flatMap((keyword) => keyword.split(','))
+        .map((keyword) => keyword.trim())
+        .filter(Boolean)))
+        .slice(0, 20)
+);
+
 const parseJsonLd = (
     value: string,
 ): { ok: true; value: Array<Record<string, unknown>> } | { ok: false; message: string } => {
@@ -67,14 +75,20 @@ export function PageSettingsModal({
     const [activeTab, setActiveTab] = useState<'general' | 'seo' | 'social'>('general');
     const [validationError, setValidationError] = useState<string | null>(null);
     const [jsonLdText, setJsonLdText] = useState(() => formatJsonLd(initialSettings.meta.jsonLd));
+    const [keywordDraft, setKeywordDraft] = useState('');
     const [isSocialImagePickerOpen, setIsSocialImagePickerOpen] = useState(false);
 
     useEffect(() => {
         setSettings(initialSettings);
         setJsonLdText(formatJsonLd(initialSettings.meta.jsonLd));
+        setKeywordDraft('');
         setValidationError(null);
     }, [initialSettings, isOpen]);
 
+    const keywords = useMemo(
+        () => normalizeKeywords(settings.meta.keywords),
+        [settings.meta.keywords],
+    );
     const settingsValidation = useMemo(
         () => validateSettings?.(settings) || null,
         [settings, validateSettings],
@@ -105,10 +119,35 @@ export function PageSettingsModal({
             ...settings,
             meta: {
                 ...settings.meta,
+                keywords,
                 jsonLd: parsedJsonLd.value,
             },
         });
         onClose();
+    };
+
+    const updateKeywords = (nextKeywords: string[]) => {
+        setSettings({
+            ...settings,
+            meta: {
+                ...settings.meta,
+                keywords: normalizeKeywords(nextKeywords),
+            },
+        });
+    };
+
+    const addKeywordDraft = () => {
+        const nextKeywords = normalizeKeywords([...keywords, keywordDraft]);
+        if (nextKeywords.length === keywords.length && !keywordDraft.trim()) {
+            return;
+        }
+
+        updateKeywords(nextKeywords);
+        setKeywordDraft('');
+    };
+
+    const removeKeyword = (keyword: string) => {
+        updateKeywords(keywords.filter((item) => item !== keyword));
     };
 
     return (
@@ -299,6 +338,50 @@ export function PageSettingsModal({
                                     className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none"
                                     placeholder="Description shown in search results"
                                 />
+                            </div>
+
+                            <div>
+                                <div className="mb-1 flex items-center justify-between gap-3">
+                                    <label className="block text-sm font-medium">SEO Keywords</label>
+                                    <span className="text-xs text-muted-foreground">{keywords.length}/20</span>
+                                </div>
+                                <div className="rounded-md border bg-background px-3 py-2 focus-within:ring-1 focus-within:ring-primary">
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {keywords.map((keyword) => (
+                                            <span
+                                                key={keyword}
+                                                className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs font-medium text-foreground"
+                                            >
+                                                {keyword}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeKeyword(keyword)}
+                                                    className="rounded text-muted-foreground transition hover:text-foreground"
+                                                    aria-label={`Remove ${keyword} keyword`}
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </span>
+                                        ))}
+                                        <input
+                                            type="text"
+                                            value={keywordDraft}
+                                            onChange={(event) => setKeywordDraft(event.target.value)}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter' || event.key === ',') {
+                                                    event.preventDefault();
+                                                    addKeywordDraft();
+                                                }
+                                            }}
+                                            onBlur={addKeywordDraft}
+                                            className="min-w-[150px] flex-1 bg-transparent px-1 py-1 text-sm outline-none"
+                                            placeholder={keywords.length ? 'Add keyword...' : 'cms, website builder, portfolio'}
+                                        />
+                                    </div>
+                                </div>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    Press Enter or comma to add keywords used by frontend metadata and SEO exports.
+                                </p>
                             </div>
 
                             <div>
