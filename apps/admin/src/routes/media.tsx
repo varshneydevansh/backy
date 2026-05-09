@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { AlertTriangle, CheckCircle2, CheckSquare, Code2, Copy, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Save, Trash2, Type, Upload, Video, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CheckSquare, Code2, Copy, Download, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Save, Trash2, Type, Upload, Video, X } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
@@ -366,6 +366,110 @@ function MediaPage() {
     runtimeStorage,
     uploadVisibility,
   ]);
+  const mediaHandoff = useMemo(() => ({
+    siteId,
+    generatedAt: new Date().toISOString(),
+    storage: runtimeStorage
+      ? {
+          provider: runtimeStorage.provider,
+          configured: runtimeStorage.configured,
+          bucket: runtimeStorage.bucket,
+          basePath: runtimeStorage.basePath,
+          publicUrl: runtimeStorage.publicUrl,
+          missing: runtimeStorage.missing || [],
+        }
+      : null,
+    quota: mediaQuota
+      ? {
+          usedBytes: mediaQuota.usedBytes,
+          remainingBytes: mediaQuota.remainingBytes,
+          limitBytes: mediaQuota.limitBytes,
+          usagePercent: quotaUsagePercent,
+        }
+      : null,
+    endpoints: {
+      list: publicMediaListUrl,
+      detail: publicMediaDetailUrl,
+      file: publicMediaFileUrl,
+      transform: publicMediaTransformUrl,
+      adminUpload: adminMediaUploadUrl,
+    },
+    counts: {
+      total: files.length,
+      visible: displayedFiles.length,
+      public: mediaAnalytics.publicAssets,
+      private: mediaAnalytics.privateAssets,
+      folders: folders.length,
+      fonts: fontGroups.length,
+      referenced: mediaAnalytics.referencedAssets,
+      unused: mediaAnalytics.unusedAssets,
+    },
+    folders: folders.map((folder) => ({
+      id: folder.id,
+      name: folder.name,
+      parentId: folder.parentId,
+      assetCount: files.filter((asset) => asset.folderId === folder.id).length,
+    })),
+    fonts: fontGroups.map((group) => ({
+      family: group.family,
+      fallback: group.fallback,
+      display: group.display,
+      variants: group.variants,
+      publicCount: group.publicCount,
+      privateCount: group.privateCount,
+      assetIds: group.assets.map((asset) => asset.id),
+    })),
+    assets: files.map((asset) => ({
+      id: asset.id,
+      name: asset.name,
+      type: asset.type,
+      mimeType: typeof asset.metadata?.mimeType === 'string' ? asset.metadata.mimeType : undefined,
+      size: asset.size,
+      sizeBytes: asset.sizeBytes,
+      visibility: asset.visibility || 'public',
+      folderId: asset.folderId || null,
+      tags: asset.tags || [],
+      altText: asset.altText,
+      caption: asset.caption,
+      url: asset.visibility === 'private' ? undefined : getPublicMediaFileUrl(asset.id, siteId),
+      transformUrl: asset.visibility !== 'private' && asset.type === 'image'
+        ? getPublicImageTransformUrl(asset.id, { width: 1200, quality: 75 }, siteId)
+        : undefined,
+      references: {
+        pages: asset.targetPageIds || [],
+        posts: asset.targetPostIds || [],
+      },
+      font: asset.type === 'font'
+        ? {
+            family: asset.metadata?.fontFamily,
+            weight: asset.metadata?.fontWeight,
+            style: asset.metadata?.fontStyle,
+            fallback: asset.metadata?.fontFallback,
+            display: asset.metadata?.fontDisplay,
+          }
+        : undefined,
+      responsive: asset.responsive,
+    })),
+  }), [
+    adminMediaUploadUrl,
+    displayedFiles.length,
+    files,
+    folders,
+    fontGroups,
+    mediaAnalytics.privateAssets,
+    mediaAnalytics.publicAssets,
+    mediaAnalytics.referencedAssets,
+    mediaAnalytics.unusedAssets,
+    mediaQuota,
+    publicMediaDetailUrl,
+    publicMediaFileUrl,
+    publicMediaListUrl,
+    publicMediaTransformUrl,
+    quotaUsagePercent,
+    runtimeStorage,
+    siteId,
+  ]);
+  const mediaHandoffText = useMemo(() => JSON.stringify(mediaHandoff, null, 2), [mediaHandoff]);
 
   const loadLibrary = useCallback(async () => {
     setIsLoading(true);
@@ -948,6 +1052,19 @@ function MediaPage() {
       setError(value);
     }
   };
+  const downloadMediaHandoff = () => {
+    const blob = new Blob([mediaHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${siteId}-backy-media-handoff.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setBulkNotice('Media handoff manifest downloaded.');
+  };
 
   const referencedPages = selectedAsset
     ? (selectedAsset.targetPageIds || []).map((pageId) => ({
@@ -1011,13 +1128,31 @@ function MediaPage() {
               Control the central file layer for every site: uploads, folders, visibility, signed delivery, transforms, font files, and frontend media APIs.
             </p>
           </div>
-          <label
-            htmlFor="header-upload"
-            className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-          >
-            <Upload className="h-4 w-4" />
-            Upload files
-          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void copyMediaApiText(mediaHandoffText, 'Media handoff manifest')}
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-accent"
+            >
+              <Copy className="h-4 w-4" />
+              Copy manifest
+            </button>
+            <button
+              type="button"
+              onClick={downloadMediaHandoff}
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-accent"
+            >
+              <Download className="h-4 w-4" />
+              Download JSON
+            </button>
+            <label
+              htmlFor="header-upload"
+              className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+            >
+              <Upload className="h-4 w-4" />
+              Upload files
+            </label>
+          </div>
         </div>
 
         <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
@@ -1224,14 +1359,24 @@ function MediaPage() {
           description="Public delivery endpoints and private upload contract for custom frontends, editors, and storefronts."
           icon={<Code2 className="size-4" />}
           action={
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void copyMediaApiText(publicMediaListUrl, 'Media list URL')}
-              iconStart={<Copy className="size-4" />}
-            >
-              Copy list
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void copyMediaApiText(mediaHandoffText, 'Media handoff manifest')}
+                iconStart={<Copy className="size-4" />}
+              >
+                Copy manifest
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void copyMediaApiText(publicMediaListUrl, 'Media list URL')}
+                iconStart={<Copy className="size-4" />}
+              >
+                Copy list
+              </Button>
+            </div>
           }
         />
         <PanelContent>
