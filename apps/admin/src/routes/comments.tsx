@@ -67,6 +67,35 @@ const COMMENT_CONTROL_AREAS = [
   },
 ] as const;
 
+const COMMENT_EXPORT_COLUMNS = [
+  'site_id',
+  'comment_id',
+  'comment_thread_id',
+  'parent_id',
+  'target_type',
+  'target_id',
+  'target_title',
+  'target_path',
+  'status',
+  'author_name',
+  'author_email',
+  'author_website',
+  'user_id',
+  'content',
+  'report_count',
+  'report_reasons',
+  'rejection_reason',
+  'block_reason',
+  'reviewed_by',
+  'reviewed_at',
+  'blocked_by',
+  'blocked_at',
+  'ip_hash',
+  'created_at',
+  'updated_at',
+  'request_id',
+] as const;
+
 interface CommentTargetSummary {
   id: string;
   type: 'page' | 'post';
@@ -134,6 +163,9 @@ function CommentsRoute() {
     total: comments.length,
     pending: comments.filter((comment) => comment.status === 'pending').length,
     approved: comments.filter((comment) => comment.status === 'approved').length,
+    reported: comments.filter((comment) => (comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length)).length,
+    spam: comments.filter((comment) => comment.status === 'spam').length,
+    blocked: comments.filter((comment) => comment.status === 'blocked').length,
     flagged: comments.filter((comment) => (comment.reportCount || 0) > 0 || comment.status === 'spam' || comment.status === 'blocked').length,
   }), [comments]);
   const hasSelection = selectedIds.length > 0;
@@ -162,7 +194,9 @@ function CommentsRoute() {
       },
       {
         label: 'Safety flags',
-        detail: safetyClean ? 'No spam, blocked, or reported comments in this view.' : `${metrics.flagged} flagged comment${metrics.flagged === 1 ? '' : 's'} need cleanup`,
+        detail: safetyClean
+          ? 'No spam, blocked, or reported comments in this view.'
+          : `${metrics.flagged} flagged comment${metrics.flagged === 1 ? '' : 's'} need cleanup (${metrics.reported} reported, ${metrics.spam} spam, ${metrics.blocked} blocked)`,
         ready: safetyClean,
       },
       {
@@ -201,6 +235,10 @@ function CommentsRoute() {
       list: moderationListUrl,
       bulkUpdate: moderationBulkUpdateUrl,
       singleUpdate: moderationSingleUpdateUrl,
+      publicPageThread: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/pages/{pageId}/comments`,
+      publicBlogThread: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/blog/{postId}/comments`,
+      reportReasons: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/report-reasons`,
+      reportComment: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/{commentId}/report`,
     },
     readiness: {
       score: moderationReadiness.score,
@@ -225,14 +263,22 @@ function CommentsRoute() {
       id: comment.id,
       targetType: comment.targetType,
       targetId: comment.targetId,
+      targetLabel: targetByKey.get(`${comment.targetType}:${comment.targetId}`)?.label,
+      targetPath: targetByKey.get(`${comment.targetType}:${comment.targetId}`)?.path,
+      threadId: comment.commentThreadId,
+      parentId: comment.parentId,
       status: comment.status,
       reportCount: comment.reportCount || 0,
       hasAuthorName: Boolean(comment.authorName),
       hasAuthorEmail: Boolean(comment.authorEmail),
+      hasAuthorWebsite: Boolean(comment.authorWebsite),
+      hasUserId: Boolean(comment.userId),
       hasContent: Boolean(comment.content),
       hasReports: Boolean(comment.reportReasons?.length),
       hasRejectionReason: Boolean(comment.rejectionReason),
       hasBlockReason: Boolean(comment.blockReason),
+      reviewed: Boolean(comment.reviewedAt || comment.reviewedBy),
+      blocked: Boolean(comment.blockedAt || comment.blockedBy),
       requestId: comment.requestId,
       createdAt: comment.createdAt,
       updatedAt: comment.updatedAt,
@@ -246,6 +292,14 @@ function CommentsRoute() {
       includesCommentContent: false,
       includesAuthorIdentity: false,
       note: 'Use CSV export or the private moderation API for author identity and comment content. This manifest exposes queue shape, endpoint contracts, counts, state, and non-content flags only.',
+    },
+    export: {
+      csvIncludesCommentContent: true,
+      csvIncludesAuthorIdentity: true,
+      csvIncludesTargetRouting: true,
+      csvIncludesThreading: true,
+      csvIncludesModerationAudit: true,
+      csvColumns: COMMENT_EXPORT_COLUMNS,
     },
   }), [
     activeSite?.name,
@@ -261,9 +315,11 @@ function CommentsRoute() {
     moderationReadiness.checks,
     moderationReadiness.score,
     moderationSingleUpdateUrl,
+    publicBaseUrl,
     searchQuery,
     selectedIds,
     statusFilter,
+    targetByKey,
     targetTypeFilter,
     targets,
   ]);
@@ -388,38 +444,38 @@ function CommentsRoute() {
   const handleExportComments = () => {
     if (filteredComments.length === 0) return;
 
-    const header = [
-      'comment_id',
-      'target_type',
-      'target_id',
-      'target_title',
-      'status',
-      'author_name',
-      'author_email',
-      'content',
-      'reports',
-      'created_at',
-      'updated_at',
-      'request_id',
-    ];
     const rows = filteredComments.map((comment) => {
       const target = targetByKey.get(`${comment.targetType}:${comment.targetId}`);
       return [
+        comment.siteId,
         comment.id,
+        comment.commentThreadId || '',
+        comment.parentId || '',
         comment.targetType,
         comment.targetId,
         target?.label || '',
+        target?.path || '',
         comment.status,
         comment.authorName || '',
         comment.authorEmail || '',
+        comment.authorWebsite || '',
+        comment.userId || '',
         comment.content || '',
-        comment.reportReasons?.join('; ') || String(comment.reportCount || ''),
+        comment.reportCount || 0,
+        comment.reportReasons?.join('; ') || '',
+        comment.rejectionReason || '',
+        comment.blockReason || '',
+        comment.reviewedBy || '',
+        comment.reviewedAt || '',
+        comment.blockedBy || '',
+        comment.blockedAt || '',
+        comment.ipHash || '',
         comment.createdAt || '',
         comment.updatedAt || '',
         comment.requestId || '',
       ];
     });
-    const csv = [header, ...rows]
+    const csv = [COMMENT_EXPORT_COLUMNS, ...rows]
       .map((row) => row.map(csvEscape).join(','))
       .join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -657,10 +713,11 @@ function CommentsRoute() {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
               <MetaTile label="Visibility" value="private" />
               <MetaTile label="Bulk action" value={hasSelection ? `${selectedIds.length} selected` : 'none selected'} />
               <MetaTile label="Queue" value={`${filteredComments.length} visible`} />
+              <MetaTile label="Public threads" value="page + blog" />
             </div>
 
             <div className="mt-4 grid gap-3 lg:grid-cols-3">
