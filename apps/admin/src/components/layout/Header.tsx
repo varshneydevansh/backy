@@ -21,8 +21,12 @@ import {
   LogOut,
   ChevronDown,
   MessageSquare,
+  CheckCircle2,
+  CircleSlash,
+  RefreshCw,
+  ShieldAlert,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, getRelativeTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { useStore } from '@/stores/mockStore';
 import {
@@ -33,6 +37,7 @@ import {
   listForms,
   listPages,
   listSites,
+  updateComments,
   type AdminComment,
   type SiteSettingsInput,
 } from '@/lib/adminContentApi';
@@ -73,6 +78,9 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   const [pendingComments, setPendingComments] = useState<AdminComment[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [notificationsNotice, setNotificationsNotice] = useState<string | null>(null);
+  const [notificationsDisabled, setNotificationsDisabled] = useState(false);
+  const [updatingCommentIds, setUpdatingCommentIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchIndex, setSearchIndex] = useState<SearchResult[]>([]);
@@ -123,20 +131,48 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   const loadNotifications = async () => {
     setNotificationsLoading(true);
     setNotificationsError(null);
+    setNotificationsNotice(null);
 
     try {
       const settings = await getSettings().catch(() => undefined);
       if (!commentsNotificationsEnabled(settings)) {
         setPendingComments([]);
+        setNotificationsDisabled(true);
         return;
       }
 
+      setNotificationsDisabled(false);
       const result = await listComments(activeSiteId, { status: 'pending', limit: 5, sort: 'newest' });
       setPendingComments(result.comments);
     } catch (error) {
       setNotificationsError(error instanceof Error ? error.message : 'Unable to load notifications');
     } finally {
       setNotificationsLoading(false);
+    }
+  };
+
+  const moderateNotificationComment = async (
+    comment: AdminComment,
+    status: 'approved' | 'spam',
+  ) => {
+    setUpdatingCommentIds((current) => [...current, comment.id]);
+    setNotificationsError(null);
+    setNotificationsNotice(null);
+
+    try {
+      await updateComments(activeSiteId, {
+        commentIds: [comment.id],
+        status,
+        reviewedBy: user?.id || 'admin',
+        actor: user?.id || 'admin',
+        ...(status === 'spam' ? { rejectionReason: 'Marked as spam from notifications.' } : {}),
+      });
+      setPendingComments((current) => current.filter((item) => item.id !== comment.id));
+      setNotificationsNotice(status === 'approved' ? 'Comment approved.' : 'Comment marked as spam.');
+    } catch (error) {
+      setNotificationsError(error instanceof Error ? error.message : 'Unable to update comment');
+    } finally {
+      setUpdatingCommentIds((current) => current.filter((id) => id !== comment.id));
     }
   };
 
@@ -353,7 +389,10 @@ export function Header({ onSidebarToggle }: HeaderProps) {
               setNotificationsOpen((open) => !open);
               if (!notificationsOpen) void loadNotifications();
             }}
-            className="relative p-2 rounded-lg hover:bg-accent"
+            className={cn(
+              'relative rounded-lg p-2 transition-colors hover:bg-accent focus-ring',
+              notificationsOpen && 'bg-accent text-accent-foreground',
+            )}
           >
             <Bell className="w-5 h-5" />
             {pendingComments.length > 0 && (
@@ -369,53 +408,122 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                 className="fixed inset-0 z-10"
                 onClick={() => setNotificationsOpen(false)}
               />
-              <div className="absolute right-0 top-full z-20 mt-2 w-80 overflow-hidden rounded-lg border border-border bg-card shadow-lg">
+              <div className="absolute right-0 top-full z-20 mt-2 w-[26rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-card shadow-xl">
                 <div className="flex items-center justify-between border-b border-border px-4 py-3">
                   <div>
-                    <div className="text-sm font-semibold">Notifications</div>
-                    <div className="text-xs text-muted-foreground">Pending moderation across the active site.</div>
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      Moderation center
+                      {pendingComments.length > 0 && (
+                        <span className="rounded-md bg-red-50 px-1.5 py-0.5 text-[11px] font-semibold text-red-700">
+                          {pendingComments.length} pending
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Comments that need a decision on this site.</div>
                   </div>
                   <button
                     type="button"
                     onClick={() => void loadNotifications()}
-                    className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus-ring"
                   >
+                    <RefreshCw className={cn('size-3', notificationsLoading && 'animate-spin')} />
                     Refresh
                   </button>
                 </div>
                 <div className="max-h-80 overflow-y-auto p-2">
                   {notificationsLoading ? (
-                    <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
-                      Loading...
+                    <div className="space-y-2 p-2">
+                      {[0, 1, 2].map((item) => (
+                        <div key={item} className="rounded-lg border border-border p-3">
+                          <div className="h-3 w-32 animate-pulse rounded bg-muted" />
+                          <div className="mt-3 h-3 w-full animate-pulse rounded bg-muted" />
+                          <div className="mt-2 h-3 w-3/4 animate-pulse rounded bg-muted" />
+                        </div>
+                      ))}
                     </div>
                   ) : notificationsError ? (
                     <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                       {notificationsError}
                     </div>
+                  ) : notificationsDisabled ? (
+                    <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center">
+                      <ShieldAlert className="mx-auto size-5 text-muted-foreground" />
+                      <p className="mt-2 text-sm font-medium">In-app comment alerts are off</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Turn them on in Settings to use this moderation center.
+                      </p>
+                    </div>
                   ) : pendingComments.length === 0 ? (
-                    <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
-                      No pending comments.
+                    <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center">
+                      <CheckCircle2 className="mx-auto size-5 text-success" />
+                      <p className="mt-2 text-sm font-medium">No pending comments</p>
+                      <p className="mt-1 text-xs text-muted-foreground">New moderation tasks will appear here.</p>
                     </div>
                   ) : (
-                    pendingComments.map((comment) => (
-                      <button
-                        key={comment.id}
-                        type="button"
-                        onClick={() => {
-                          setNotificationsOpen(false);
-                          navigate({ to: '/comments' });
-                        }}
-                        className="block w-full rounded-md px-3 py-2 text-left hover:bg-accent"
-                      >
-                        <div className="flex items-center gap-2 text-sm font-medium">
-                          <MessageSquare className="size-4 text-muted-foreground" />
-                          <span className="truncate">{comment.authorName || 'Anonymous'}</span>
+                    <div className="space-y-2">
+                      {notificationsNotice && (
+                        <div className="rounded-md border border-success/20 bg-success/10 px-3 py-2 text-xs font-medium text-success">
+                          {notificationsNotice}
                         </div>
-                        <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                          {comment.content}
-                        </div>
-                      </button>
-                    ))
+                      )}
+                      {pendingComments.map((comment) => {
+                        const isUpdating = updatingCommentIds.includes(comment.id);
+                        return (
+                          <article key={comment.id} className="rounded-lg border border-border bg-background p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 text-sm font-medium">
+                                  <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
+                                  <span className="truncate">{comment.authorName || 'Anonymous'}</span>
+                                </div>
+                                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                                  <span className="capitalize">{comment.targetType}</span>
+                                  <span>{getRelativeTime(comment.createdAt)}</span>
+                                  {(comment.reportCount || 0) > 0 && (
+                                    <span className="rounded bg-warning/10 px-1.5 py-0.5 font-medium text-warning">
+                                      {comment.reportCount} reports
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setNotificationsOpen(false);
+                                  navigate({ to: '/comments' });
+                                }}
+                                className="rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 focus-ring"
+                              >
+                                Review
+                              </button>
+                            </div>
+                            <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">
+                              {comment.content}
+                            </p>
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                              <button
+                                type="button"
+                                disabled={isUpdating}
+                                onClick={() => void moderateNotificationComment(comment, 'approved')}
+                                className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-success/25 bg-success/10 px-2 text-xs font-medium text-success transition hover:bg-success/15 disabled:opacity-60"
+                              >
+                                <CheckCircle2 className="size-3.5" />
+                                Approve
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isUpdating}
+                                onClick={() => void moderateNotificationComment(comment, 'spam')}
+                                className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-destructive/20 bg-destructive/10 px-2 text-xs font-medium text-destructive transition hover:bg-destructive/15 disabled:opacity-60"
+                              >
+                                <CircleSlash className="size-3.5" />
+                                Spam
+                              </button>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
                 <button
@@ -424,7 +532,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                     setNotificationsOpen(false);
                     navigate({ to: '/comments' });
                   }}
-                  className="flex w-full items-center justify-center border-t border-border px-4 py-3 text-sm font-medium text-primary hover:bg-accent"
+                  className="flex w-full items-center justify-center border-t border-border px-4 py-3 text-sm font-medium text-primary hover:bg-accent focus-ring"
                 >
                   Open moderation queue
                 </button>
