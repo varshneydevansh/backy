@@ -41,6 +41,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 
@@ -286,7 +287,7 @@ const EMPTY_ORDER_FORM: OrderFormState = {
 
 function OrdersRoute() {
   const { sites } = useStore();
-  const [selectedSiteId, setSelectedSiteId] = useState(() => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo');
+  const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
   const [ordersCollection, setOrdersCollection] = useState<Collection | null>(null);
   const [orders, setOrders] = useState<CollectionRecord[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -656,7 +657,7 @@ function OrdersRoute() {
   };
 
   useEffect(() => {
-    if (sites.length > 0 && !sites.some((site) => (site.publicSiteId || site.id) === selectedSiteId)) {
+    if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
       setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
     }
   }, [selectedSiteId, sites]);
@@ -1040,6 +1041,7 @@ function OrdersRoute() {
             </Button>
             <Link
               to="/products"
+              search={{ siteId: activeSiteId }}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
             >
               <ShoppingCart className="size-4" />
@@ -1149,6 +1151,7 @@ function OrdersRoute() {
                 </Button>
                 <Link
                   to="/products"
+                  search={{ siteId: activeSiteId }}
                   className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
                 >
                   <ShoppingCart className="size-4" />
@@ -1301,6 +1304,7 @@ function OrdersRoute() {
               </Button>
               <Link
                 to="/products"
+                search={{ siteId: activeSiteId }}
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
               >
                 <ShoppingCart className="size-4" />
