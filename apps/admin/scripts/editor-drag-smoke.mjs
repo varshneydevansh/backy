@@ -982,16 +982,60 @@ const assertGroupingControls = async (client) => {
   const state = await evaluate(client, `(() => {
     const groupButton = document.querySelector('[data-testid="editor-group-selection"]');
     const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
+    const selectSiblingsButton = document.querySelector('[data-testid="editor-select-sibling-layers"]');
     return {
       hasGroupButton: Boolean(groupButton),
       hasUngroupButton: Boolean(ungroupButton),
+      hasSelectSiblingsButton: Boolean(selectSiblingsButton),
       groupDisabled: groupButton instanceof HTMLButtonElement ? groupButton.disabled : null,
       ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
+      selectSiblingsDisabled: selectSiblingsButton instanceof HTMLButtonElement ? selectSiblingsButton.disabled : null,
     };
   })()`);
 
   assert(state?.hasGroupButton, `Group control missing from editor toolbar: ${JSON.stringify(state)}`);
   assert(state?.hasUngroupButton, `Ungroup control missing from editor toolbar: ${JSON.stringify(state)}`);
+  assert(state?.hasSelectSiblingsButton, `Select sibling layers control missing from editor toolbar: ${JSON.stringify(state)}`);
+  return state;
+};
+
+const testSiblingScopeSelectionShortcut = async (client, requiredElementIds) => {
+  const [firstId] = requiredElementIds;
+  await selectElement(client, firstId);
+
+  await evaluate(client, `(() => {
+    const layersButton = Array.from(document.querySelectorAll('button')).find((button) => (
+      (button.textContent || '').trim() === 'Layers'
+    ));
+    layersButton?.click();
+    return true;
+  })()`);
+  await sleep(150);
+  await pressKey(client, 'a', { ctrlKey: true });
+  await sleep(250);
+
+  const state = await evaluate(client, `(() => {
+    const groupButton = document.querySelector('[data-testid="editor-group-selection"]');
+    const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
+    const selectedLayers = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
+      .map((node) => node.getAttribute('data-layer-id'))
+      .filter(Boolean);
+
+    return {
+      selectedLayers,
+      hasMultiSelection: Boolean(multiSelection),
+      groupDisabled: groupButton instanceof HTMLButtonElement ? groupButton.disabled : null,
+      inspectorText: multiSelection?.textContent || '',
+    };
+  })()`);
+
+  assert(state.hasMultiSelection, `Ctrl+A sibling selection did not reach multi-selection inspector: ${JSON.stringify(state)}`);
+  assert(state.groupDisabled === false, `Ctrl+A sibling selection did not enable grouping: ${JSON.stringify(state)}`);
+  assert(
+    requiredElementIds.every((id) => state.selectedLayers.includes(id)),
+    `Ctrl+A sibling selection missed expected layers: ${JSON.stringify({ requiredElementIds, state })}`,
+  );
+
   return state;
 };
 
@@ -1491,6 +1535,10 @@ const main = async () => {
     const inspector = await assertInspectorSelection(client, EDITOR_PATH ? 'home-heading' : 'smoke-heading');
     const fontPicker = await assertFontMediaPicker(client);
     const groupingControls = await assertGroupingControls(client);
+    const siblingScopeSelection = await testSiblingScopeSelectionShortcut(
+      client,
+      EDITOR_PATH ? ['home-heading', 'home-cta'] : ['smoke-heading', 'smoke-image'],
+    );
     const multiSelectionDrag = await testMultiSelectionCanvasDrag(
       client,
       EDITOR_PATH ? ['home-heading', 'home-cta'] : ['smoke-heading', 'smoke-image'],
@@ -1578,6 +1626,7 @@ const main = async () => {
       inspector,
       fontPicker,
       groupingControls,
+      siblingScopeSelection,
       clickAdd,
       multiSelectionDrag,
       grouping,
