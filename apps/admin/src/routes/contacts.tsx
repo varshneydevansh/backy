@@ -263,6 +263,103 @@ function ContactsRoute() {
     };
   }, [apiForm, contactsByForm]);
   const commandReadiness = pipelineReadiness || apiFormReadiness;
+  const contactHandoff = useMemo(() => ({
+    site: {
+      id: activeSiteId,
+      name: activeSite?.name || activeSiteId,
+      slug: activeSite?.slug,
+      status: activeSite?.status,
+    },
+    generatedAt: new Date().toISOString(),
+    endpoints: {
+      selectedContacts: contactsUrl,
+      selectedUpdate: contactUpdateUrl,
+      formContacts: forms.map((form) => ({
+        formId: form.id,
+        label: form.title || form.name || form.id,
+        list: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts?limit=100`,
+        update: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/{contactId}`,
+      })),
+    },
+    readiness: {
+      score: commandReadiness.score,
+      checks: commandReadiness.checks,
+    },
+    metrics,
+    lifecycleStates: ['new', 'contacted', 'qualified', 'archived'],
+    filters: {
+      formId: selectedFormId,
+      status: statusFilter,
+      query: searchQuery.trim(),
+    },
+    selectedSourceForm: apiForm ? {
+      id: apiForm.id,
+      name: apiForm.name,
+      title: apiForm.title,
+      isActive: apiForm.isActive,
+      audience: apiForm.audience,
+      contactShare: apiForm.contactShare,
+      pageId: apiForm.pageId,
+      postId: apiForm.postId,
+    } : null,
+    sources: forms.map((form) => {
+      const contacts = contactsByForm[form.id]?.contacts || [];
+      return {
+        formId: form.id,
+        name: form.name,
+        title: form.title,
+        isActive: form.isActive,
+        contactShare: form.contactShare,
+        contactCounts: {
+          total: contacts.length,
+          new: contacts.filter((contact) => contact.status === 'new').length,
+          contacted: contacts.filter((contact) => contact.status === 'contacted').length,
+          qualified: contacts.filter((contact) => contact.status === 'qualified').length,
+          archived: contacts.filter((contact) => contact.status === 'archived').length,
+        },
+      };
+    }),
+    contacts: allContacts.map((contact) => ({
+      id: contact.id,
+      formId: contact.formId,
+      status: contact.status,
+      pageId: contact.pageId,
+      postId: contact.postId,
+      sourceSubmissionId: contact.sourceSubmissionId,
+      requestId: contact.requestId,
+      hasName: Boolean(contact.name),
+      hasEmail: Boolean(contact.email),
+      hasPhone: Boolean(contact.phone),
+      hasNotes: Boolean(contact.notes),
+      hasSourceValues: Boolean(contact.sourceValues && Object.keys(contact.sourceValues).length > 0),
+      createdAt: contact.createdAt,
+      updatedAt: contact.updatedAt,
+    })),
+    privacy: {
+      includesContactIdentity: false,
+      includesSourceValues: false,
+      note: 'Use CSV export or private contact API for identity fields. This manifest only exposes endpoint contracts, lifecycle state, counts, and non-PII record flags.',
+    },
+  }), [
+    activeSite?.name,
+    activeSite?.slug,
+    activeSite?.status,
+    activeSiteId,
+    allContacts,
+    apiForm,
+    commandReadiness.checks,
+    commandReadiness.score,
+    contactUpdateUrl,
+    contactsByForm,
+    contactsUrl,
+    forms,
+    metrics,
+    publicBaseUrl,
+    searchQuery,
+    selectedFormId,
+    statusFilter,
+  ]);
+  const contactHandoffText = useMemo(() => JSON.stringify(contactHandoff, null, 2), [contactHandoff]);
 
   const loadContacts = async () => {
     setIsLoading(true);
@@ -371,6 +468,19 @@ function ContactsRoute() {
       setError(value);
     }
   };
+  const downloadContactHandoff = () => {
+    const blob = new Blob([contactHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSite?.slug || activeSiteId}-backy-contacts-handoff.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setNotice('Contact handoff manifest downloaded.');
+  };
 
   const handleExportContacts = () => {
     if (filteredContacts.length === 0) return;
@@ -474,6 +584,16 @@ function ContactsRoute() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void copyContactApiText(contactHandoffText, 'Contact handoff manifest')}
+              iconStart={<Copy className="size-4" />}
+            >
+              Copy manifest
+            </Button>
+            <Button variant="outline" onClick={downloadContactHandoff} iconStart={<Download className="size-4" />}>
+              Download JSON
+            </Button>
             <Button
               variant="outline"
               onClick={handleExportContacts}
@@ -657,6 +777,13 @@ function ContactsRoute() {
                 <div className="flex flex-wrap items-center gap-2">
                   <Button onClick={() => void copyContactApiText(contactsUrl, 'Contacts URL')} iconStart={<Copy className="size-4" />}>
                     Copy contacts
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => void copyContactApiText(contactHandoffText, 'Contact handoff manifest')}
+                    iconStart={<Copy className="size-4" />}
+                  >
+                    Copy manifest
                   </Button>
                   <a
                     href={contactsUrl}
