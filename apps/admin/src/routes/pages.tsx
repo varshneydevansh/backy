@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { AlertTriangle, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Filter, Plus, Layout, Edit, Trash2, Home, RefreshCw, Sparkles, ShoppingBag, Newspaper, Mail, UserPlus } from 'lucide-react';
+import { AlertTriangle, Archive, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Filter, Plus, Layout, Edit, Trash2, Home, RefreshCw, Sparkles, ShoppingBag, Newspaper, Mail, UserPlus } from 'lucide-react';
 import {
   archivePage,
   createPagePreview,
@@ -314,6 +314,7 @@ function PagesListView() {
   const [isBulkBusy, setIsBulkBusy] = useState(false);
   const [readinessMap, setReadinessMap] = useState<Record<string, PageReadiness>>({});
   const [previewingPageId, setPreviewingPageId] = useState<string | null>(null);
+  const [mutatingPageId, setMutatingPageId] = useState<string | null>(null);
   const [pendingDeletePage, setPendingDeletePage] = useState<Page | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -649,8 +650,41 @@ function PagesListView() {
     }
   };
 
+  const handlePublishPage = async (page: Page) => {
+    setMutatingPageId(page.id);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const updated = await publishPage(page.siteId || activeSiteId, page.id);
+      updatePage(page.id, updated);
+      setNotice(`${updated.title || page.title} published.`);
+    } catch (publishError) {
+      setError(publishError instanceof Error ? publishError.message : 'Unable to publish page');
+    } finally {
+      setMutatingPageId(null);
+    }
+  };
+
+  const handleArchivePage = async (page: Page) => {
+    setMutatingPageId(page.id);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const updated = await archivePage(page.siteId || activeSiteId, page.id);
+      updatePage(page.id, updated);
+      setNotice(`${updated.title || page.title} archived.`);
+    } catch (archiveError) {
+      setError(archiveError instanceof Error ? archiveError.message : 'Unable to archive page');
+    } finally {
+      setMutatingPageId(null);
+    }
+  };
+
   const handleDeletePage = async (page: Page) => {
     setError(null);
+    setNotice(null);
 
     try {
       await deletePageFromApi(page.siteId || activeSiteId, page.id);
@@ -666,6 +700,7 @@ function PagesListView() {
         return next;
       });
       setPendingDeletePage(null);
+      setNotice(`${page.title} deleted.`);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete page');
     }
@@ -683,6 +718,7 @@ function PagesListView() {
 
     setIsBulkBusy(true);
     setError(null);
+    setNotice(null);
 
     try {
       if (bulkAction === 'publish') {
@@ -690,6 +726,7 @@ function PagesListView() {
           selectedPages.map((page) => publishPage(page.siteId || activeSiteId, page.id)),
         );
         updatedPages.forEach((page) => updatePage(page.id, page));
+        setNotice(`${updatedPages.length} page${updatedPages.length === 1 ? '' : 's'} published.`);
       }
 
       if (bulkAction === 'archive') {
@@ -697,14 +734,17 @@ function PagesListView() {
           selectedPages.map((page) => archivePage(page.siteId || activeSiteId, page.id)),
         );
         updatedPages.forEach((page) => updatePage(page.id, page));
+        setNotice(`${updatedPages.length} page${updatedPages.length === 1 ? '' : 's'} archived.`);
       }
 
       if (bulkAction === 'delete') {
         await Promise.all(
           selectedPages.map((page) => deletePageFromApi(page.siteId || activeSiteId, page.id)),
         );
+        const deletedCount = selectedPages.length;
         selectedPages.forEach((page) => deletePage(page.id));
         setPendingBulkDelete(false);
+        setNotice(`${deletedCount} page${deletedCount === 1 ? '' : 's'} deleted.`);
       }
 
       setSelectedPageIds(new Set());
@@ -803,6 +843,30 @@ function PagesListView() {
       label: '',
       render: (page) => (
         <div className="flex items-center justify-end gap-2">
+          {page.status !== 'published' && (
+            <button
+              onClick={() => {
+                void handlePublishPage(page);
+              }}
+              disabled={mutatingPageId === page.id}
+              title="Publish page"
+              className="p-2 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+            </button>
+          )}
+          {page.status !== 'archived' && (
+            <button
+              onClick={() => {
+                void handleArchivePage(page);
+              }}
+              disabled={mutatingPageId === page.id}
+              title="Archive page"
+              className="p-2 text-muted-foreground hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Archive className="w-4 h-4" />
+            </button>
+          )}
           {page.status === 'published' && (
             <a
               href={publicPageUrl(page)}
@@ -895,7 +959,7 @@ function PagesListView() {
   };
   useEffect(() => {
     const nextSiteId = routeSearch.siteId
-      ? getSiteSelectionFromSearch(sites)
+      ? getSiteSelectionFromSearch(sites, routeSearch.siteId)
       : selectedSiteId;
     const siteChanged = nextSiteId !== selectedSiteId;
 
@@ -1489,7 +1553,10 @@ function PagesListView() {
           </button>
           <select
             value={bulkAction}
-            onChange={(event) => setBulkAction(event.target.value as typeof bulkAction)}
+            onChange={(event) => {
+              setBulkAction(event.target.value as typeof bulkAction);
+              setPendingBulkDelete(false);
+            }}
             className="min-w-44 rounded-lg border bg-background px-3 py-2 text-sm"
           >
             <option value="">Bulk action...</option>
