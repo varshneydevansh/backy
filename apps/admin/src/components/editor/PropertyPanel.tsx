@@ -298,6 +298,7 @@ interface PropertyPanelProps {
   /** Callback when element is deleted */
   onDelete?: () => void;
   mediaContext?: MediaContext;
+  disabled?: boolean;
   embedded?: boolean;
   hideHeader?: boolean;
 }
@@ -317,6 +318,7 @@ export function PropertyPanel({
   onChange,
   onDelete,
   mediaContext,
+  disabled = false,
   embedded = false,
   hideHeader = false,
 }: PropertyPanelProps) {
@@ -393,8 +395,16 @@ export function PropertyPanel({
     );
   };
 
+  const guardedOnChange = (updates: Partial<CanvasElement>) => {
+    if (disabled) {
+      return;
+    }
+
+    onChange(updates);
+  };
+
   const updateProps = (propsUpdates: Partial<ElementProps>) => {
-    onChange({
+    guardedOnChange({
       props: { ...element.props, ...propsUpdates },
     });
   };
@@ -416,7 +426,14 @@ export function PropertyPanel({
       <div id={PORTAL_TOOLBAR_CONTAINER_ID} className="px-3 pt-3" />
 
       {/* Properties */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2 pb-2">
+      <fieldset
+        disabled={disabled}
+        aria-disabled={disabled}
+        className={cn(
+          'flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2 pb-2',
+          disabled && 'cursor-not-allowed opacity-70',
+        )}
+      >
         {/* Content Section */}
         <PropertySection
           title="Content"
@@ -445,7 +462,7 @@ export function PropertyPanel({
           isExpanded={expandedSections.includes('layout')}
           onToggle={() => toggleSection('layout')}
         >
-          <LayoutProperties element={element} onChange={onChange} />
+          <LayoutProperties element={element} onChange={guardedOnChange} />
         </PropertySection>
 
         {/* Style Section */}
@@ -496,7 +513,7 @@ export function PropertyPanel({
             element={element}
             collections={collections}
             collectionsError={collectionsError}
-            onChange={onChange}
+            onChange={guardedOnChange}
           />
         </PropertySection>
 
@@ -507,20 +524,21 @@ export function PropertyPanel({
           isExpanded={expandedSections.includes('animation')}
           onToggle={() => toggleSection('animation')}
         >
-          <AnimationProperties element={element} onChange={onChange} />
+          <AnimationProperties element={element} onChange={guardedOnChange} />
         </PropertySection>
 
         {/* Delete Button */}
         <div className="pt-2">
           <button
             onClick={onDelete}
-            className="w-full py-2 px-3 flex items-center justify-center gap-2 bg-red-50 text-red-600 rounded-md hover:bg-red-100 transition-colors text-sm font-medium border border-red-100"
+            disabled={disabled}
+            className="w-full py-2 px-3 flex items-center justify-center gap-2 bg-red-50 text-red-600 rounded-md hover:bg-red-100 transition-colors text-sm font-medium border border-red-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 className="w-4 h-4" />
             Delete Element
           </button>
         </div>
-      </div>
+      </fieldset>
 
 
       {/* Modals */}
@@ -528,7 +546,7 @@ export function PropertyPanel({
         isOpen={isMediaLibraryOpen}
         onClose={() => setIsMediaLibraryOpen(false)}
         onSelect={(media) => {
-          onChange({
+          guardedOnChange({
             props: {
               ...element.props,
               [mediaField]: media.url,
@@ -548,7 +566,7 @@ export function PropertyPanel({
         isOpen={isEmojiPickerOpen}
         onClose={() => setIsEmojiPickerOpen(false)}
         onSelect={(emoji) => {
-          onChange({ props: { ...element.props, icon: emoji } });
+          guardedOnChange({ props: { ...element.props, icon: emoji } });
         }}
       />
     </div >

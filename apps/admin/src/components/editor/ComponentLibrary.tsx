@@ -65,6 +65,7 @@ interface ComponentLibraryProps {
   reusableSectionsError?: string | null;
   canSaveSelection?: boolean;
   isSavingReusableSection?: boolean;
+  disabled?: boolean;
   onAddItem?: (item: ComponentLibraryItem) => void;
   onRefreshReusableSections?: () => void;
   onSaveSelectionAsReusableSection?: () => void;
@@ -85,6 +86,7 @@ export function ComponentLibrary({
   reusableSectionsError = null,
   canSaveSelection = false,
   isSavingReusableSection = false,
+  disabled = false,
   onAddItem,
   onRefreshReusableSections,
   onSaveSelectionAsReusableSection,
@@ -220,10 +222,10 @@ export function ComponentLibrary({
           <button
             type="button"
             onClick={onSaveSelectionAsReusableSection}
-            disabled={!canSaveSelection || isSavingReusableSection}
+            disabled={disabled || !canSaveSelection || isSavingReusableSection}
             className={cn(
               'inline-flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
-              canSaveSelection && !isSavingReusableSection
+              canSaveSelection && !isSavingReusableSection && !disabled
                 ? 'bg-sky-50 text-sky-700 hover:bg-sky-100'
                 : 'bg-slate-100 text-slate-400 cursor-not-allowed'
             )}
@@ -235,8 +237,8 @@ export function ComponentLibrary({
           <button
             type="button"
             onClick={onRefreshReusableSections}
-            disabled={reusableSectionsLoading}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-50"
+            disabled={disabled || reusableSectionsLoading}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
             title="Refresh saved sections"
           >
             <RefreshCw className={cn('h-3.5 w-3.5', reusableSectionsLoading && 'animate-spin')} />
@@ -260,6 +262,7 @@ export function ComponentLibrary({
                 <LibraryItem
                   key={item.id ?? item.type}
                   item={item}
+                  disabled={disabled}
                   onDragStart={() => onDragStart?.(item)}
                   onAddItem={() => onAddItem?.(item)}
                   onRenameReusableSection={onRenameReusableSection}
@@ -286,6 +289,7 @@ export function ComponentLibrary({
 
 interface LibraryItemProps {
   item: ComponentLibraryItem;
+  disabled?: boolean;
   onDragStart: () => void;
   onAddItem?: () => void;
   onRenameReusableSection?: (sectionId: string) => void;
@@ -294,6 +298,7 @@ interface LibraryItemProps {
 
 function LibraryItem({
   item,
+  disabled = false,
   onDragStart,
   onAddItem,
   onRenameReusableSection,
@@ -350,6 +355,11 @@ function LibraryItem({
   const reusableSectionId = item.reusableContent?.sectionId;
 
   const handleDragStart = (e: DragEvent<HTMLDivElement>) => {
+    if (disabled) {
+      e.preventDefault();
+      return;
+    }
+
     e.dataTransfer.setData('application/json', JSON.stringify(item));
     e.dataTransfer.effectAllowed = 'copy';
     onDragStart();
@@ -357,13 +367,15 @@ function LibraryItem({
 
   return (
     <div
-      draggable
+      draggable={!disabled}
       onDragStart={handleDragStart}
+      aria-disabled={disabled}
       data-component-library-item={item.id ?? item.type}
       className={cn(
         'group flex items-center gap-3 p-2 rounded-md cursor-grab',
         'hover:bg-slate-100 transition-colors',
-        'active:cursor-grabbing'
+        'active:cursor-grabbing',
+        disabled && 'cursor-not-allowed opacity-60 hover:bg-transparent active:cursor-not-allowed'
       )}
       title={item.description}
     >
@@ -384,9 +396,11 @@ function LibraryItem({
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
+          if (disabled) return;
           onAddItem?.();
         }}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 opacity-0 transition-opacity hover:bg-white hover:text-slate-900 group-hover:opacity-100 focus:opacity-100"
+        disabled={disabled}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 opacity-0 transition-opacity hover:bg-white hover:text-slate-900 group-hover:opacity-100 focus:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
         title={`Add ${item.name} to canvas`}
         aria-label={`Add ${item.name} to canvas`}
         data-component-add={item.id ?? item.type}
@@ -401,9 +415,11 @@ function LibraryItem({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
+              if (disabled) return;
               onRenameReusableSection?.(reusableSectionId);
             }}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-slate-900"
+            disabled={disabled}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
             title="Rename saved section"
           >
             <Pencil className="h-3.5 w-3.5" />
@@ -414,9 +430,11 @@ function LibraryItem({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
+              if (disabled) return;
               onDeleteReusableSection?.(reusableSectionId);
             }}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-red-50 hover:text-red-700"
+            disabled={disabled}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
             title="Delete saved section"
           >
             <Trash2 className="h-3.5 w-3.5" />

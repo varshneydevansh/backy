@@ -26,6 +26,7 @@ interface LayersPanelProps {
     onLockToggle: (id: string) => void;
     onDelete: (id: string) => void;
     onDuplicate: (id: string) => void;
+    disabled?: boolean;
     embedded?: boolean;
     hideHeader?: boolean;
 }
@@ -44,6 +45,7 @@ interface LayerItemProps {
     onLockToggle: (id: string) => void;
     onDelete: (id: string) => void;
     onDuplicate: (id: string) => void;
+    disabled?: boolean;
     depth?: number;
 }
 
@@ -142,6 +144,7 @@ function LayerItem({
     onLockToggle,
     onDelete,
     onDuplicate,
+    disabled = false,
     depth = 0,
 }: LayerItemProps) {
     const [showActions, setShowActions] = useState(false);
@@ -151,7 +154,8 @@ function LayerItem({
     };
 
     const handleDragStart = (e: React.DragEvent) => {
-        if (!canReorder) {
+        if (disabled || !canReorder) {
+            e.preventDefault();
             return;
         }
         e.dataTransfer.effectAllowed = 'move';
@@ -171,17 +175,17 @@ function LayerItem({
                 gap: '8px',
                 backgroundColor: isSelected ? '#e0e7ff' : 'transparent',
                 borderBottom: '1px solid #e5e7eb',
-                cursor: 'pointer',
+                cursor: disabled ? 'not-allowed' : 'pointer',
                 opacity: isHidden ? 0.5 : 1,
                 transition: 'background-color 0.15s',
             }}
             onClick={handleClick}
             onMouseEnter={() => setShowActions(true)}
             onMouseLeave={() => setShowActions(false)}
-            draggable={canReorder}
+            draggable={!disabled && canReorder}
             onDragStart={handleDragStart}
             onDragOver={(e) => {
-                if (!canReorder) {
+                if (disabled || !canReorder) {
                     return;
                 }
                 e.preventDefault();
@@ -190,7 +194,7 @@ function LayerItem({
             onDragEnd={onDragEnd}
         >
             {/* Drag handle */}
-            <span style={{ cursor: canReorder ? 'grab' : 'default', color: '#9ca3af', opacity: canReorder ? 1 : 0.35 }}>
+            <span style={{ cursor: !disabled && canReorder ? 'grab' : 'default', color: '#9ca3af', opacity: !disabled && canReorder ? 1 : 0.35 }}>
                 <DragIcon />
             </span>
 
@@ -235,14 +239,18 @@ function LayerItem({
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
+                        if (disabled) {
+                            return;
+                        }
                         onVisibilityToggle(element.id);
                     }}
+                    disabled={disabled}
                     style={{
                         padding: '4px',
                         border: 'none',
                         background: 'none',
-                        cursor: 'pointer',
-                        color: isHidden ? '#9ca3af' : '#6b7280',
+                        cursor: disabled ? 'not-allowed' : 'pointer',
+                        color: disabled ? '#cbd5e1' : isHidden ? '#9ca3af' : '#6b7280',
                     }}
                     title={isHidden ? 'Show' : 'Hide'}
                 >
@@ -252,14 +260,18 @@ function LayerItem({
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
+                        if (disabled) {
+                            return;
+                        }
                         onLockToggle(element.id);
                     }}
+                    disabled={disabled}
                     style={{
                         padding: '4px',
                         border: 'none',
                         background: 'none',
-                        cursor: 'pointer',
-                        color: isLocked ? '#6b7280' : '#9ca3af',
+                        cursor: disabled ? 'not-allowed' : 'pointer',
+                        color: disabled ? '#cbd5e1' : isLocked ? '#6b7280' : '#9ca3af',
                     }}
                     title={isLocked ? 'Unlock' : 'Lock'}
                 >
@@ -269,18 +281,18 @@ function LayerItem({
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
-                        if (isLocked) {
+                        if (disabled || isLocked) {
                             return;
                         }
                         onDuplicate(element.id);
                     }}
-                    disabled={isLocked}
+                    disabled={disabled || isLocked}
                     style={{
                         padding: '4px',
                         border: 'none',
                         background: 'none',
-                        cursor: isLocked ? 'not-allowed' : 'pointer',
-                        color: isLocked ? '#cbd5e1' : '#6b7280',
+                        cursor: disabled || isLocked ? 'not-allowed' : 'pointer',
+                        color: disabled || isLocked ? '#cbd5e1' : '#6b7280',
                     }}
                     title={isLocked ? 'Unlock to duplicate' : 'Duplicate'}
                 >
@@ -290,18 +302,18 @@ function LayerItem({
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
-                        if (isLocked) {
+                        if (disabled || isLocked) {
                             return;
                         }
                         onDelete(element.id);
                     }}
-                    disabled={isLocked}
+                    disabled={disabled || isLocked}
                     style={{
                         padding: '4px',
                         border: 'none',
                         background: 'none',
-                        cursor: isLocked ? 'not-allowed' : 'pointer',
-                        color: isLocked ? '#cbd5e1' : '#ef4444',
+                        cursor: disabled || isLocked ? 'not-allowed' : 'pointer',
+                        color: disabled || isLocked ? '#cbd5e1' : '#ef4444',
                     }}
                     title={isLocked ? 'Unlock to delete' : 'Delete'}
                 >
@@ -325,6 +337,7 @@ export function LayersPanel({
     onLockToggle,
     onDelete,
     onDuplicate,
+    disabled = false,
     embedded = false,
     hideHeader = false,
 }: LayersPanelProps) {
@@ -351,12 +364,15 @@ export function LayersPanel({
 
     const handleDragOver = useCallback(
         (toId: string) => {
+            if (disabled) {
+                return;
+            }
             if (dragFromId !== null && dragFromId !== toId) {
                 onReorder(dragFromId, toId);
                 setDragFromId(toId);
             }
         },
-        [dragFromId, onReorder]
+        [disabled, dragFromId, onReorder]
     );
 
     const handleDragEnd = useCallback(() => {
@@ -380,7 +396,8 @@ export function LayersPanel({
                         isSelected={selectedIds.includes(element.id)}
                         isHidden={element.visible === false}
                         isLocked={element.locked === true}
-                        canReorder={element.locked !== true}
+                        canReorder={!disabled && element.locked !== true}
+                        disabled={disabled}
                         onSelect={handleSelect}
                         onDragStart={handleDragStart}
                         onDragOver={handleDragOver}
