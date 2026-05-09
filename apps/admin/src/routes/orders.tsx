@@ -1,6 +1,7 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import {
+  AlertTriangle,
   Archive,
   CheckCircle2,
   ClipboardCheck,
@@ -44,6 +45,34 @@ import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 export const Route = createFileRoute('/orders')({
   component: OrdersRoute,
 });
+
+const ORDER_CONTROL_AREAS = [
+  {
+    title: 'Site scope',
+    detail: 'Choose the website whose private order queue is being managed.',
+    href: '#orders-site',
+  },
+  {
+    title: 'Private API',
+    detail: 'Admin-only list, create, update, payment, fulfillment, and refund endpoints.',
+    href: '#orders-api',
+  },
+  {
+    title: 'Order health',
+    detail: 'Revenue, paid orders, fulfillment queue, processing, and refunds.',
+    href: '#orders-metrics',
+  },
+  {
+    title: 'Order queue',
+    detail: 'Search, filter, mark paid, fulfill, cancel, edit, and delete records.',
+    href: '#orders-queue',
+  },
+  {
+    title: 'Order editor',
+    detail: 'Customer, items, payment, fulfillment, tracking, refunds, and notes.',
+    href: '#orders-editor',
+  },
+] as const;
 
 type OrderFilter = 'all' | 'open' | 'paid' | 'fulfilled' | 'cancelled';
 type OrderWorkflowStatus = 'open' | 'paid' | 'fulfilled' | 'cancelled' | 'refunded';
@@ -207,6 +236,80 @@ function OrdersRoute() {
     )).length,
     processing: orders.filter((order) => String(readOrderValue(order.values, 'fulfillmentstatus', '')) === 'processing').length,
   }), [orders]);
+  const orderReadiness = useMemo(() => {
+    const hasSchema = Boolean(ordersCollection);
+    const hasOrders = orders.length > 0;
+    const hasPaid = metrics.paid > 0;
+    const hasFulfillmentWorkflow = metrics.needsFulfillment > 0 || metrics.processing > 0 || orders.some((order) => (
+      String(readOrderValue(order.values, 'fulfillmentstatus', '')) === 'fulfilled'
+    ));
+    const hasCustomerData = orders.some((order) => Boolean(readOrderValue(order.values, 'customername', '') && order.values.email));
+    const hasPaymentData = orders.some((order) => Boolean(readOrderValue(order.values, 'paymentreference', '') || readOrderValue(order.values, 'paymentprovider', '')));
+    const checks = [
+      {
+        label: 'Orders schema',
+        detail: hasSchema ? 'Orders collection exists.' : 'Set up the private orders collection.',
+        ready: hasSchema,
+      },
+      {
+        label: 'Private fields',
+        detail: missingOrderFields.length === 0
+          ? 'Payment, fulfillment, tracking, refund, address, and notes fields are present.'
+          : `${missingOrderFields.length} field${missingOrderFields.length === 1 ? '' : 's'} need sync.`,
+        ready: hasSchema && missingOrderFields.length === 0,
+      },
+      {
+        label: 'API security',
+        detail: ordersApiReady ? 'Order records are private and admin controlled.' : 'Sync schema and keep public order access disabled.',
+        ready: ordersApiReady,
+      },
+      {
+        label: 'Order queue',
+        detail: hasOrders ? `${orders.length} order${orders.length === 1 ? '' : 's'} recorded.` : 'Record or import the first order.',
+        ready: hasOrders,
+      },
+      {
+        label: 'Payment state',
+        detail: hasPaid ? `${metrics.paid} paid order${metrics.paid === 1 ? '' : 's'} tracked.` : 'Mark payments as paid after checkout confirms them.',
+        ready: hasPaid,
+      },
+      {
+        label: 'Fulfillment',
+        detail: hasFulfillmentWorkflow ? `${metrics.needsFulfillment} need fulfillment, ${metrics.processing} processing.` : 'Add processing or fulfilled states as orders move.',
+        ready: hasFulfillmentWorkflow || !hasOrders,
+      },
+      {
+        label: 'Customer data',
+        detail: hasCustomerData ? 'Customer names and emails are present.' : 'Capture customer contact data for order support.',
+        ready: hasCustomerData || !hasOrders,
+      },
+      {
+        label: 'Payment references',
+        detail: hasPaymentData ? 'Payment provider references are connected.' : 'Attach payment provider/reference data for reconciliation.',
+        ready: hasPaymentData || !hasOrders,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      checks,
+      workflow: [
+        { label: 'Capture', detail: 'Create the private order record from checkout, manual entry, or a server-side integration.' },
+        { label: 'Verify', detail: 'Track customer, line items, payment status, provider reference, and paid timestamp.' },
+        { label: 'Fulfill', detail: 'Move orders through processing, carrier, tracking, fulfilled date, or digital delivery notes.' },
+        { label: 'Resolve', detail: 'Handle cancellations, refunds, internal notes, and private reporting without exposing order data publicly.' },
+      ],
+    };
+  }, [
+    metrics.needsFulfillment,
+    metrics.paid,
+    metrics.processing,
+    missingOrderFields.length,
+    orders,
+    ordersApiReady,
+    ordersCollection,
+  ]);
 
   const loadOrders = async () => {
     setIsLoading(true);
@@ -468,8 +571,91 @@ function OrdersRoute() {
         </div>
       )}
 
+      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="orders-command-center">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">Order command center</h2>
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                orderReadiness.score >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+              )}
+              >
+                {orderReadiness.score}% ready
+              </span>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Control private commerce operations: checkout records, payment state, fulfillment, tracking, refunds, customer support notes, and admin API handoff.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {!ordersCollection ? (
+              <Button onClick={() => void createOrdersCollection()} disabled={isSaving} iconStart={<Sparkles className="size-4" />}>
+                {isSaving ? 'Setting up...' : 'Set up orders'}
+              </Button>
+            ) : (
+              <Button onClick={resetForm} iconStart={<Plus className="size-4" />}>
+                New order
+              </Button>
+            )}
+            <Button onClick={() => void loadOrders()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+              Refresh
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+          <div className="rounded-lg border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold">Order readiness</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Checks whether orders are private, complete enough for payment reconciliation, and ready for fulfillment work.
+            </p>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn('h-full rounded-full', orderReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                style={{ width: `${orderReadiness.score}%` }}
+              />
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {orderReadiness.checks.map((check) => (
+                <OrderReadinessCheck key={check.label} {...check} />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex items-center gap-2">
+              <Receipt className="size-4 text-primary" />
+              <h3 className="text-sm font-semibold">Order workflow</h3>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {orderReadiness.workflow.map((step, index) => (
+                <OrderWorkflowStep key={step.label} index={index + 1} {...step} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <h3 className="text-sm font-semibold">Order control map</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, private API, order health, queue, and editor controls.</p>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {ORDER_CONTROL_AREAS.map((area) => (
+              <a
+                key={area.title}
+                href={area.href}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {ordersCollection && (
-        <Panel className="mb-6">
+        <Panel id="orders-api" className="mb-6 scroll-mt-24">
           <PanelHeader
             title="Order API and security"
             description="Internal fulfillment data stays private while custom frontends can talk to the controlled admin endpoint."
@@ -548,7 +734,31 @@ function OrdersRoute() {
         </Panel>
       )}
 
-      <div className="mb-6 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div id="orders-site" className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 scroll-mt-24">
+        <label className="text-sm font-medium text-muted-foreground" htmlFor="orders-active-site-inline">
+          Active site
+        </label>
+        <select
+          id="orders-active-site-inline"
+          aria-label="Active order site"
+          value={activeSiteId}
+          onChange={(event) => setSelectedSiteId(event.target.value)}
+          className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
+        >
+          {sites.length === 0 ? (
+            <option value="site-demo">Demo site</option>
+          ) : sites.map((site) => (
+            <option key={site.id} value={site.publicSiteId || site.id}>
+              {site.name}
+            </option>
+          ))}
+        </select>
+        <span className="text-sm text-muted-foreground">
+          {activeSite?.name || activeSiteId} private order queue
+        </span>
+      </div>
+
+      <div id="orders-metrics" className="mb-6 grid gap-3 scroll-mt-24 md:grid-cols-3 xl:grid-cols-6">
         <Metric label="Orders" value={metrics.orders} icon={<Receipt className="size-4" />} />
         <Metric label="Paid Revenue" value={formatMoney(metrics.revenue, 'USD')} icon={<CreditCard className="size-4" />} />
         <Metric label="Paid" value={metrics.paid} icon={<CheckCircle2 className="size-4" />} />
@@ -570,7 +780,7 @@ function OrdersRoute() {
         />
       ) : (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-          <Panel>
+          <Panel id="orders-queue" className="scroll-mt-24">
             <PanelHeader
               title="Order Queue"
               description={`${filteredOrders.length}/${orders.length} visible orders`}
@@ -630,7 +840,7 @@ function OrdersRoute() {
             </PanelContent>
           </Panel>
 
-          <Panel className="xl:sticky xl:top-4 xl:self-start">
+          <Panel id="orders-editor" className="scroll-mt-24 xl:sticky xl:top-4 xl:self-start">
             <PanelHeader
               title={selectedOrder ? 'Edit order' : 'New order'}
               description="Customer, item, payment, and fulfillment state."
@@ -934,6 +1144,38 @@ function Metric({ label, value, icon }: { label: string; value: number | string;
         <span className="text-muted-foreground">{icon}</span>
       </div>
       <div className="mt-1 font-mono text-2xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function OrderReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="flex items-start gap-2">
+        {ready ? (
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+        ) : (
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+        )}
+        <div>
+          <div className="text-sm font-semibold text-foreground">{label}</div>
+          <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OrderWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex gap-3 rounded-lg border border-border bg-card p-3">
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div>
+        <div className="text-sm font-semibold text-foreground">{label}</div>
+        <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
     </div>
   );
 }
