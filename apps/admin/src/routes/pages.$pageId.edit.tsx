@@ -888,8 +888,8 @@ function PageEditorRoute() {
             className={cn(
               'relative',
               isWorkspaceFocus
-                ? 'min-h-[calc(100vh-220px)] xl:h-[calc(100vh-220px)] xl:min-h-[calc(100vh-220px)]'
-                : 'min-h-[820px] xl:h-[calc(100vh-96px)] xl:min-h-[960px]',
+                ? 'min-h-[calc(100vh-180px)] xl:h-[calc(100vh-180px)] xl:min-h-[calc(100vh-180px)]'
+                : 'min-h-[820px] xl:h-[calc(100vh-72px)] xl:min-h-[920px]',
             )}
           >
             <CanvasEditor

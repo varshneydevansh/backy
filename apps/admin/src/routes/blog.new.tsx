@@ -674,7 +674,7 @@ function NewBlogPostPage() {
                                         </span>
                                     </>
                                 }
-                                className="relative min-h-[760px] xl:h-[calc(100vh-168px)] xl:min-h-[860px]"
+                                className="relative min-h-[780px] xl:h-[calc(100vh-120px)] xl:min-h-[900px]"
                             >
                                 <CanvasEditor
                                     mode="blog"

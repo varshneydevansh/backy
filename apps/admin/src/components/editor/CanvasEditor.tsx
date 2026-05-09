@@ -2016,9 +2016,9 @@ export function CanvasEditor({
 
   return (
     <ActiveEditorProvider>
-      <div className={cn("flex flex-col bg-slate-100 text-slate-950", className || "fixed inset-0")}>
+      <div className={cn("flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 text-slate-950", className || "fixed inset-0")}>
         {/* Header */}
-        <header className="flex min-h-14 items-center justify-between gap-3 overflow-x-auto border-b border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
+        <header className="flex min-h-14 shrink-0 items-center justify-between gap-3 overflow-x-auto border-b border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
           {/* Left */}
           {!hideNavigation ? (
             <div className="flex shrink-0 items-center gap-4">
@@ -2044,7 +2044,7 @@ export function CanvasEditor({
           ) : <div className="w-4 shrink-0" />}
 
           {/* Center - Canvas controls */}
-          <div className="flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
+          <div className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1">
             <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
               <button
                 type="button"
@@ -2128,7 +2128,7 @@ export function CanvasEditor({
           </div>
 
           {/* Right */}
-          <div className="flex min-w-max shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+          <div className="flex min-w-max shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
             {/* Undo/Redo */}
             <button
               type="button"
@@ -2463,7 +2463,7 @@ export function CanvasEditor({
         </header>
 
         {/* Main Content */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex min-h-0 flex-1 overflow-hidden">
           {/* Left Sidebar - Component Library */}
           {!isPreview && !isCanvasFocusMode && showComponentPanel && (
             <ComponentLibrary
@@ -2485,12 +2485,12 @@ export function CanvasEditor({
           <div
             ref={canvasViewportRef}
             className={cn(
-              'relative flex-1 overflow-auto pb-20',
-              isCanvasFocusMode ? 'p-6 lg:p-10' : 'p-4 lg:p-6'
+              'relative flex-1 overflow-auto overscroll-contain pb-20',
+              isCanvasFocusMode ? 'p-6 lg:p-10 2xl:p-12' : 'p-4 lg:p-6 2xl:p-8'
             )}
             style={{
-              backgroundColor: '#e9edf3',
-              backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(71,85,105,0.24) 1px, transparent 0)',
+              backgroundColor: '#eef2f7',
+              backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(71,85,105,0.18) 1px, transparent 0)',
               backgroundSize: '20px 20px',
             }}
             onDragOver={(e) => e.preventDefault()}
@@ -2659,7 +2659,7 @@ export function CanvasEditor({
           {/* Right Sidebar - Inspector */}
           {!isPreview && !isCanvasFocusMode && showInspectorPanel && (
             <aside
-              className="flex h-full min-h-0 w-[clamp(16rem,18vw,21rem)] min-w-[16rem] max-w-[21rem] shrink-0 flex-col border-l border-slate-200 bg-white"
+              className="flex h-full min-h-0 w-[clamp(18rem,20vw,24rem)] min-w-[18rem] max-w-[24rem] shrink-0 flex-col border-l border-slate-200 bg-white"
               data-testid="editor-inspector"
             >
               <div className="border-b border-slate-200 p-3">
