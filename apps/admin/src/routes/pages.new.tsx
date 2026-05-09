@@ -4,7 +4,7 @@
 
 import { useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, Code2, FileText, Globe, Home, Layout, Save, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, FileText, Globe, Home, Layout, Save, Sparkles } from 'lucide-react';
 import { createPage } from '@/lib/adminContentApi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore } from '@/stores/mockStore';
@@ -67,6 +67,29 @@ const TEMPLATE_OPTIONS: Array<{
     },
 ];
 
+const PAGE_CREATION_AREAS = [
+    {
+        title: 'Page basics',
+        detail: 'Target site, title, route, homepage behavior, and SEO description.',
+        href: '#page-basics',
+    },
+    {
+        title: 'Starter design',
+        detail: 'Seed a real editable canvas instead of sending the editor an empty page.',
+        href: '#page-design',
+    },
+    {
+        title: 'Route preview',
+        detail: 'Confirm the public path and selected site before creating the page.',
+        href: '#page-preview',
+    },
+    {
+        title: 'Create payload',
+        detail: 'Review the metadata and canvas handoff that will be sent to the backend.',
+        href: '#page-payload',
+    },
+] as const;
+
 const slugify = (value: string) => (
     value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 );
@@ -109,6 +132,71 @@ function NewPageRoute() {
         ? '/'
         : `/${slugify(formData.slug || formData.title || 'new-page')}`;
     const canSubmit = Boolean(formData.title.trim() && formData.siteId && (!formData.isHomepage || formData.slug.trim() || formData.title.trim()));
+    const pageCreationReadiness = useMemo(() => {
+        const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
+        const hasSchedule = formData.status !== 'scheduled' || Boolean(formData.scheduledAt);
+        const hasStarterCanvas = selectedTemplate.sections.length > 0;
+        const checks = [
+            {
+                label: 'Target site',
+                detail: selectedSite ? `${selectedSite.name} will own this page.` : 'Select a site before creating a page.',
+                ready: Boolean(selectedSite),
+            },
+            {
+                label: 'Page identity',
+                detail: formData.title.trim() ? `${formData.title.trim()} -> /${formData.isHomepage ? '' : resolvedSlug}` : 'Add a page title.',
+                ready: formData.title.trim().length > 0,
+            },
+            {
+                label: 'Route shape',
+                detail: formData.isHomepage ? 'This page will resolve as the homepage.' : `Public path will be /${resolvedSlug}.`,
+                ready: Boolean(resolvedSlug && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(resolvedSlug)),
+            },
+            {
+                label: 'SEO summary',
+                detail: formData.description.trim()
+                    ? `${formData.description.trim().length} characters ready for route metadata`
+                    : 'Add a short SEO description for frontend previews.',
+                ready: formData.description.trim().length > 0,
+            },
+            {
+                label: 'Canvas seed',
+                detail: hasStarterCanvas
+                    ? `${selectedTemplate.sections.length} starter section${selectedTemplate.sections.length === 1 ? '' : 's'} will be created`
+                    : 'Blank still creates a heading and intro copy.',
+                ready: true,
+            },
+            {
+                label: 'Publish timing',
+                detail: formData.status === 'scheduled'
+                    ? hasSchedule ? 'Scheduled publish time is set.' : 'Choose a publish date for scheduled pages.'
+                    : `${formData.status} pages can be saved immediately.`,
+                ready: hasSchedule,
+            },
+        ];
+        const readyCount = checks.filter((check) => check.ready).length;
+
+        return {
+            score: Math.round((readyCount / checks.length) * 100),
+            checks,
+            workflow: [
+                { label: 'Define route', detail: 'Pick the site, title, slug, homepage flag, status, and SEO summary.' },
+                { label: 'Seed canvas', detail: 'Choose a starter template with editable sections and form blocks when needed.' },
+                { label: 'Create record', detail: 'Persist page metadata and serialized editor content through the pages API.' },
+                { label: 'Open editor', detail: 'Land in the visual editor to move, group, restyle, bind, and publish.' },
+            ],
+        };
+    }, [
+        formData.description,
+        formData.isHomepage,
+        formData.scheduledAt,
+        formData.siteId,
+        formData.slug,
+        formData.status,
+        formData.title,
+        selectedSite,
+        selectedTemplate.sections.length,
+    ]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -174,6 +262,99 @@ function NewPageRoute() {
             }
             className="w-full"
         >
+            <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="page-creation-command-center">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-base font-semibold text-foreground">Page creation command center</h2>
+                            <span className={cn(
+                                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                                pageCreationReadiness.score >= 80
+                                    ? 'bg-emerald-50 text-emerald-700'
+                                    : 'bg-amber-50 text-amber-700',
+                            )}
+                            >
+                                {pageCreationReadiness.score}% ready
+                            </span>
+                        </div>
+                        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                            Prepare the public route, metadata, template seed, publish state, and editor handoff before creating the page.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => navigate({ to: '/sites/new' })}
+                        className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+                    >
+                        <Globe className="h-4 w-4" />
+                        Create site
+                    </button>
+                </div>
+
+                <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+                    <div className="rounded-lg border border-border bg-background p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-sm font-semibold">Creation readiness</h3>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    Checks whether this page will open in the editor with a usable route, metadata, canvas, and publish plan.
+                                </p>
+                            </div>
+                            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium capitalize text-muted-foreground">
+                                {formData.template}
+                            </span>
+                        </div>
+                        <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                            <div
+                                className={cn(
+                                    'h-full rounded-full',
+                                    pageCreationReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500',
+                                )}
+                                style={{ width: `${pageCreationReadiness.score}%` }}
+                            />
+                        </div>
+                        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                            {pageCreationReadiness.checks.map((check) => (
+                                <PageCreationCheck key={check.label} {...check} />
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="rounded-lg border border-border bg-background p-4">
+                        <div className="flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-primary" />
+                            <h3 className="text-sm font-semibold">Create-to-editor workflow</h3>
+                        </div>
+                        <div className="mt-3 grid gap-2">
+                            {pageCreationReadiness.workflow.map((step, index) => (
+                                <PageCreationWorkflowStep key={step.label} index={index + 1} {...step} />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-border bg-background p-4">
+                    <div>
+                        <h3 className="text-sm font-semibold">Creation control map</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            Jump through the decisions that make a page routable, editable, and ready for custom frontend APIs.
+                        </p>
+                    </div>
+                    <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                        {PAGE_CREATION_AREAS.map((area) => (
+                            <a
+                                key={area.title}
+                                href={area.href}
+                                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                            >
+                                <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                            </a>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
                 {error && (
                     <div className="xl:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -182,7 +363,7 @@ function NewPageRoute() {
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="space-y-6 rounded-lg border border-border bg-card p-5 shadow-sm">
+                    <div id="page-basics" className="space-y-6 rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
                         <div className="flex items-start gap-3">
                             <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
                                 <FileText className="h-5 w-5" />
@@ -294,7 +475,7 @@ function NewPageRoute() {
                         </label>
                     </div>
 
-                    <div className="space-y-5 rounded-lg border border-border bg-card p-5 shadow-sm">
+                    <div id="page-design" className="space-y-5 rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
                         <div className="flex items-start gap-3">
                             <span className="rounded-lg bg-primary/10 p-2 text-primary">
                                 <Sparkles className="h-5 w-5" />
@@ -408,7 +589,7 @@ function NewPageRoute() {
                 </form>
 
                 <aside className="space-y-4">
-                    <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+                    <section id="page-preview" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
                         <div className="flex items-start gap-3">
                             <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
                                 <Globe className="h-5 w-5" />
@@ -458,7 +639,7 @@ function NewPageRoute() {
                         </div>
                     </section>
 
-                    <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+                    <section id="page-payload" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
                         <div className="flex items-start gap-3">
                             <span className="rounded-lg bg-slate-100 p-2 text-slate-700">
                                 <Code2 className="h-5 w-5" />
@@ -485,6 +666,34 @@ function NewPageRoute() {
                 </aside>
             </div>
         </PageShell>
+    );
+}
+
+function PageCreationCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+    const Icon = ready ? CheckCircle2 : AlertTriangle;
+
+    return (
+        <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-card px-3 py-2">
+            <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', ready ? 'text-emerald-600' : 'text-amber-600')} />
+            <div className="min-w-0">
+                <div className="text-xs font-semibold text-foreground">{label}</div>
+                <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+            </div>
+        </div>
+    );
+}
+
+function PageCreationWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+    return (
+        <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-xs font-semibold text-primary">
+                {index}
+            </span>
+            <div className="min-w-0">
+                <div className="text-xs font-semibold text-foreground">{label}</div>
+                <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+            </div>
+        </div>
     );
 }
 
