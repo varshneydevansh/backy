@@ -164,6 +164,39 @@ const frontendContracts = [
   { label: 'Comments', key: 'comments', detail: 'Moderation-ready public discussions' },
 ];
 
+const DASHBOARD_CONTROL_AREAS = [
+  {
+    title: 'Live site scope',
+    detail: 'Choose the active website that frontend contracts and handoff data reference.',
+    href: '#dashboard-site-scope',
+  },
+  {
+    title: 'System totals',
+    detail: 'Open sites, pages, posts, forms, media, commerce, comments, and users.',
+    href: '#dashboard-stats',
+  },
+  {
+    title: 'Platform readiness',
+    detail: 'Review backend API, keys, storage, database, Supabase, Vercel, and publish blockers.',
+    href: '#dashboard-readiness',
+  },
+  {
+    title: 'Creation workflows',
+    detail: 'Start the core builder flows: site, page, post, files, collections, and API setup.',
+    href: '#dashboard-workflows',
+  },
+  {
+    title: 'Attention queue',
+    detail: 'Resolve moderation, readiness, form, storage, and fallback-mode issues.',
+    href: '#dashboard-attention',
+  },
+  {
+    title: 'API handoff',
+    detail: 'Copy or download the public/admin contract payload for a custom frontend.',
+    href: '#dashboard-api',
+  },
+] as const;
+
 const listContactCountForDashboard = async (siteId: string, formId: string): Promise<number> => {
   try {
     const result = await listFormContacts(siteId, formId, { limit: 1 });
@@ -826,7 +859,118 @@ function Index() {
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm">
+        <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="dashboard-command-center">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-semibold text-foreground">Dashboard command center</h2>
+                <span className={cn(
+                  'rounded-full px-2.5 py-1 text-xs font-semibold',
+                  platformReadiness.score >= 80 ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                )}
+                >
+                  {platformReadiness.score}% ready
+                </span>
+                <span className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium',
+                  backendHealthy ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                )}
+                >
+                  {backendHealthy ? <CheckCircle2 className="size-3.5" /> : <AlertTriangle className="size-3.5" />}
+                  {backendHealthy ? 'Backend live' : 'Fallback mode'}
+                </span>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Start builder workflows, inspect backend readiness, switch the active API site, and export the frontend handoff payload from one workspace.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void loadDashboard()}
+                disabled={isLoading}
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                Refresh data
+              </button>
+              <button
+                type="button"
+                onClick={() => void copyDashboardText(frontendHandoffText, 'Frontend handoff manifest')}
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                <Copy className="size-4" />
+                Copy handoff
+              </button>
+              <button
+                type="button"
+                onClick={downloadFrontendHandoff}
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+              >
+                <Download className="size-4" />
+                Download JSON
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Backend platform health</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Tracks the backend capabilities a Wix-style editor and custom frontend handoff need.
+                  </p>
+                </div>
+                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                  {platformReadiness.readyCount}/{platformReadiness.total} checks
+                </span>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn('h-full rounded-full', platformReadiness.score >= 80 ? 'bg-success' : 'bg-warning')}
+                  style={{ width: `${platformReadiness.score}%` }}
+                />
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {platformReadiness.checks.slice(0, 6).map((check) => (
+                  <DashboardReadinessCheck key={check.label} {...check} />
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-center gap-2">
+                <Code2 className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold">Operating workflow</h3>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {platformReadiness.workflow.map((step, index) => (
+                  <DashboardWorkflowStep key={step.label} index={index + 1} {...step} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold">Dashboard control map</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Jump to the live site scope, totals, readiness, creation workflows, attention queue, and API handoff.</p>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+              {DASHBOARD_CONTROL_AREAS.map((area) => (
+                <a
+                  key={area.title}
+                  href={area.href}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                </a>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <div id="dashboard-site-scope" className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm scroll-mt-24">
           <span
             className={cn(
               'inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium',
@@ -861,13 +1005,13 @@ function Index() {
           {isLoading && <span className="text-muted-foreground">Updating dashboard data...</span>}
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div id="dashboard-stats" className="grid grid-cols-1 gap-4 scroll-mt-24 sm:grid-cols-2 xl:grid-cols-5">
           {stats.map((stat) => (
             <StatCard key={stat.label} {...stat} />
           ))}
         </div>
 
-        <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+        <section id="dashboard-readiness" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
@@ -924,7 +1068,7 @@ function Index() {
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
           <div className="flex flex-col gap-6 xl:col-span-2">
-            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <section id="dashboard-workflows" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="font-semibold">Build and manage</h2>
@@ -965,7 +1109,7 @@ function Index() {
               </div>
             </section>
 
-            <section className="rounded-lg border border-border bg-card shadow-sm">
+            <section id="dashboard-activity" className="rounded-lg border border-border bg-card shadow-sm scroll-mt-24">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-5">
                 <div>
                   <h2 className="font-semibold">Recent backend activity</h2>
@@ -1015,7 +1159,7 @@ function Index() {
           </div>
 
           <div className="flex flex-col gap-6">
-            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <section id="dashboard-attention" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="size-4 text-warning" />
                 <h2 className="font-semibold">Needs attention</h2>
@@ -1092,7 +1236,7 @@ function Index() {
               </dl>
             </section>
 
-            <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <section id="dashboard-api" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <Code2 className="size-4 text-primary" />
