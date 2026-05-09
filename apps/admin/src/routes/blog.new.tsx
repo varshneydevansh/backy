@@ -4,7 +4,7 @@
 
 import { useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, CalendarClock, CheckCircle2, Globe, PenLine, Save, Tags, UserRound } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, FileText, Globe, PenLine, Save, Tags, UserRound } from 'lucide-react';
 import {
     createBlogPost,
     listBlogAuthors,
@@ -36,6 +36,41 @@ import {
 export const Route = createFileRoute('/blog/new')({
     component: NewBlogPostPage,
 });
+
+const BLOG_CREATE_CONTROL_AREAS = [
+    {
+        title: 'Editorial draft',
+        detail: 'Title, slug, excerpt, status, and SEO summary for lists and feeds.',
+        href: '#blog-create-draft',
+    },
+    {
+        title: 'Design canvas',
+        detail: 'Reusable component editor for the public article page.',
+        href: '#blog-create-canvas',
+    },
+    {
+        title: 'Publishing',
+        detail: 'Draft, publish, schedule, readiness, and save controls.',
+        href: '#blog-create-publish',
+    },
+    {
+        title: 'Site and author',
+        detail: 'Target website and author profile for the new article.',
+        href: '#blog-create-owner',
+    },
+    {
+        title: 'Taxonomy',
+        detail: 'Categories and tags used by blog lists, filters, and feeds.',
+        href: '#blog-create-taxonomy',
+    },
+] as const;
+
+const BLOG_CREATE_WORKFLOW = [
+    { label: 'Draft', detail: 'Write title, slug, excerpt, author, and taxonomy for the article record.' },
+    { label: 'Design', detail: 'Use the canvas to build the public post layout with reusable components and bindings.' },
+    { label: 'Check', detail: 'Confirm summary, route, schedule state, and canvas content before saving.' },
+    { label: 'Ship', detail: 'Save draft, publish immediately, or schedule the post for the selected site.' },
+] as const;
 
 function NewBlogPostPage() {
     const navigate = useNavigate();
@@ -138,6 +173,7 @@ function NewBlogPostPage() {
         { label: 'Schedule', complete: status !== 'scheduled' || Boolean(scheduledAt) },
     ];
     const readyCount = readinessChecks.filter((check) => check.complete).length;
+    const readinessScore = Math.round((readyCount / readinessChecks.length) * 100);
     const canSubmit = title.trim().length > 0 && slugValue.trim().length > 0 && (status !== 'scheduled' || Boolean(scheduledAt));
     const submitLabel = status === 'published' ? 'Publish post' : status === 'scheduled' ? 'Schedule post' : 'Save draft';
 
@@ -217,9 +253,81 @@ function NewBlogPostPage() {
                 )}
 
                 <form onSubmit={handleSubmit} className="grid gap-5">
+                    <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="blog-create-command-center">
+                        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                            <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <h2 className="text-base font-semibold text-foreground">Post creation command center</h2>
+                                    <span className={cn(
+                                        'rounded-full px-2.5 py-1 text-xs font-semibold',
+                                        readinessScore >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                                    )}
+                                    >
+                                        {readinessScore}% ready
+                                    </span>
+                                </div>
+                                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                                    Create the article record and its public design in one workspace: editorial metadata, canvas layout, publishing state, author, taxonomy, and frontend route.
+                                </p>
+                            </div>
+                            <Button type="submit" disabled={isLoading || !canSubmit} variant="primary" iconStart={<Save className="size-4" />}>
+                                {isLoading ? 'Saving...' : submitLabel}
+                            </Button>
+                        </div>
 
+                        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+                            <div className="rounded-lg border border-border bg-background p-4">
+                                <h3 className="text-sm font-semibold">Creation readiness</h3>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    Checks the minimum article data needed before Backy can save, publish, or schedule this post.
+                                </p>
+                                <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                                    <div
+                                        className={cn('h-full rounded-full', readinessScore >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                                        style={{ width: `${readinessScore}%` }}
+                                    />
+                                </div>
+                                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+                                    {readinessChecks.map((check) => (
+                                        <BlogCreateReadinessCheck key={check.label} label={check.label} ready={check.complete} />
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="rounded-lg border border-border bg-background p-4">
+                                <div className="flex items-center gap-2">
+                                    <FileText className="size-4 text-primary" />
+                                    <h3 className="text-sm font-semibold">Create-to-publish workflow</h3>
+                                </div>
+                                <div className="mt-3 grid gap-2">
+                                    {BLOG_CREATE_WORKFLOW.map((step, index) => (
+                                        <BlogCreateWorkflowStep key={step.label} index={index + 1} {...step} />
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+                            <h3 className="text-sm font-semibold">Post creation control map</h3>
+                            <p className="mt-1 text-sm text-muted-foreground">Jump to draft fields, canvas design, publishing, ownership, and taxonomy.</p>
+                            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+                                {BLOG_CREATE_CONTROL_AREAS.map((area) => (
+                                    <a
+                                        key={area.title}
+                                        href={area.href}
+                                        className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                                    >
+                                        <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                                        <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                                    </a>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+
+                    <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_380px]">
                     <div className="min-w-0 space-y-6">
-                        <Panel className="overflow-hidden">
+                        <Panel id="blog-create-draft" className="overflow-hidden scroll-mt-24">
                             <PanelHeader
                                 title="Editorial draft"
                                 description="Title, canonical URL, and public summary."
@@ -227,8 +335,9 @@ function NewBlogPostPage() {
                             />
                             <PanelContent className="space-y-5">
                         <div className="space-y-2">
-                            <label className="text-xs font-medium text-muted-foreground">Post title</label>
+                            <label htmlFor="blog-create-title" className="text-xs font-medium text-muted-foreground">Post title</label>
                             <input
+                                id="blog-create-title"
                                 type="text"
                                 value={title}
                                 onChange={(e) => {
@@ -244,8 +353,9 @@ function NewBlogPostPage() {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                            <span className="font-mono text-muted-foreground">/blog/</span>
+                            <label htmlFor="blog-create-slug" className="font-mono text-muted-foreground">/blog/</label>
                             <input
+                                id="blog-create-slug"
                                 type="text"
                                 value={slug}
                                 onChange={(e) => setSlug(e.target.value)}
@@ -255,8 +365,9 @@ function NewBlogPostPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-xs font-medium text-muted-foreground">Excerpt</label>
+                            <label htmlFor="blog-create-excerpt" className="text-xs font-medium text-muted-foreground">Excerpt</label>
                             <textarea
+                                id="blog-create-excerpt"
                                 value={excerpt}
                                 onChange={(e) => setExcerpt(e.target.value)}
                                 rows={3}
@@ -268,44 +379,46 @@ function NewBlogPostPage() {
                             </PanelContent>
                         </Panel>
 
-                        <EditorWorkspaceFrame
-                            title="Post design canvas"
-                            description="Use components, layers, grouping, resizing, reusable sections, and data bindings to design the public post page."
-                            meta={
-                                <>
-                                    <span className="rounded bg-muted px-2 py-1 tabular-nums">
-                                        {canvasSize.width} x {canvasSize.height}px
-                                    </span>
-                                    <span className="rounded bg-muted px-2 py-1">
-                                        {canvasElements.length} root layer{canvasElements.length === 1 ? '' : 's'}
-                                    </span>
-                                    <span className="rounded bg-muted px-2 py-1">
-                                        Cmd/Ctrl+G grouping
-                                    </span>
-                                </>
-                            }
-                            className="relative min-h-[760px] xl:h-[calc(100vh-168px)] xl:min-h-[860px]"
-                        >
-                            <CanvasEditor
-                                mode="blog"
-                                initialElements={initialElements}
-                                initialSettings={dummySettings}
-                                initialSize={canvasSize}
-                                onSave={() => { }}
-                                onChange={(elements, _settings, size) => {
-                                    setCanvasElements(elements);
-                                    if (size) setCanvasSize(size);
-                                }}
-                                className="h-full w-full"
-                                hideNavigation={true}
-                                hideSettings={true}
-                                hideSave={true}
-                            />
-                        </EditorWorkspaceFrame>
+                        <div id="blog-create-canvas" className="scroll-mt-24">
+                            <EditorWorkspaceFrame
+                                title="Post design canvas"
+                                description="Use components, layers, grouping, resizing, reusable sections, and data bindings to design the public post page."
+                                meta={
+                                    <>
+                                        <span className="rounded bg-muted px-2 py-1 tabular-nums">
+                                            {canvasSize.width} x {canvasSize.height}px
+                                        </span>
+                                        <span className="rounded bg-muted px-2 py-1">
+                                            {canvasElements.length} root layer{canvasElements.length === 1 ? '' : 's'}
+                                        </span>
+                                        <span className="rounded bg-muted px-2 py-1">
+                                            Cmd/Ctrl+G grouping
+                                        </span>
+                                    </>
+                                }
+                                className="relative min-h-[760px] xl:h-[calc(100vh-168px)] xl:min-h-[860px]"
+                            >
+                                <CanvasEditor
+                                    mode="blog"
+                                    initialElements={initialElements}
+                                    initialSettings={dummySettings}
+                                    initialSize={canvasSize}
+                                    onSave={() => { }}
+                                    onChange={(elements, _settings, size) => {
+                                        setCanvasElements(elements);
+                                        if (size) setCanvasSize(size);
+                                    }}
+                                    className="h-full w-full"
+                                    hideNavigation={true}
+                                    hideSettings={true}
+                                    hideSave={true}
+                                />
+                            </EditorWorkspaceFrame>
+                        </div>
                     </div>
 
-                    <aside className="grid gap-4 xl:grid-cols-3">
-                        <Panel>
+                    <aside className="grid gap-4 xl:grid-cols-3 2xl:sticky 2xl:top-5 2xl:block 2xl:self-start 2xl:space-y-4">
+                        <Panel id="blog-create-publish" className="scroll-mt-24">
                             <PanelHeader
                                 title="Publish"
                                 description={selectedSite ? selectedSite.name : activeSiteId}
@@ -376,7 +489,7 @@ function NewBlogPostPage() {
                             </PanelContent>
                         </Panel>
 
-                        <Panel>
+                        <Panel id="blog-create-owner" className="scroll-mt-24">
                             <PanelHeader title="Site and author" icon={<Globe className="size-4" />} />
                             <PanelContent className="space-y-4">
                                 <div className="space-y-2">
@@ -424,7 +537,7 @@ function NewBlogPostPage() {
                             </PanelContent>
                         </Panel>
 
-                        <Panel>
+                        <Panel id="blog-create-taxonomy" className="scroll-mt-24">
                             <PanelHeader title="Taxonomy" icon={<Tags className="size-4" />} />
                             <PanelContent className="space-y-5">
                                 <TaxonomyPicker
@@ -444,6 +557,7 @@ function NewBlogPostPage() {
                             </PanelContent>
                         </Panel>
                     </aside>
+                    </div>
 
                 </form>
             </div>
@@ -458,6 +572,40 @@ const slugify = (value: string) => (
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)/g, '')
 );
+
+function BlogCreateReadinessCheck({ label, ready }: { label: string; ready: boolean }) {
+    return (
+        <div className="rounded-lg border border-border bg-card p-3">
+            <div className="flex items-start gap-2">
+                {ready ? (
+                    <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+                ) : (
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                )}
+                <div>
+                    <div className="text-sm font-semibold text-foreground">{label}</div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                        {ready ? 'Ready' : 'Needs work'}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function BlogCreateWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+    return (
+        <div className="flex gap-3 rounded-lg border border-border bg-card p-3">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                {index}
+            </span>
+            <div>
+                <div className="text-sm font-semibold text-foreground">{label}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+            </div>
+        </div>
+    );
+}
 
 interface TaxonomyPickerProps {
     title: string;
