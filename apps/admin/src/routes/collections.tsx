@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -249,6 +249,45 @@ const COLLECTION_FRONTEND_SYSTEMS = [
     key: 'operations',
     title: 'Operations',
     detail: 'Admin import, export, filtering, bulk status updates, archive, delete, and CSV workflows.',
+  },
+] as const;
+
+const COLLECTION_WORKFLOW_SURFACES = [
+  {
+    key: 'pages',
+    title: 'Pages',
+    detail: 'Bind records into list sections, detail pages, filters, repeaters, and dynamic page routes.',
+    route: '/pages',
+  },
+  {
+    key: 'media',
+    title: 'Media',
+    detail: 'Attach images, files, videos, fonts, downloads, and private assets through typed media fields.',
+    route: '/media',
+  },
+  {
+    key: 'products',
+    title: 'Products',
+    detail: 'Use products as a commerce-focused structured dataset with pricing, inventory, delivery, and checkout handoff.',
+    route: '/products',
+  },
+  {
+    key: 'forms',
+    title: 'Forms',
+    detail: 'Create public write paths for submissions, registrations, surveys, and visitor-created collection records.',
+    route: '/forms',
+  },
+  {
+    key: 'sites',
+    title: 'Sites',
+    detail: 'Coordinate collection list/detail route templates with site navigation, redirects, SEO, and manifests.',
+    route: '/sites',
+  },
+  {
+    key: 'settings',
+    title: 'Settings',
+    detail: 'Confirm database, storage, public API, auth, and deployment readiness before exposing dynamic records.',
+    route: '/settings',
   },
 ] as const;
 
@@ -706,6 +745,14 @@ function CollectionsPage() {
       adminRecords: adminRecordsUrl,
       adminImport: adminImportUrl,
       adminBulk: adminBulkUrl,
+    },
+    controlRoutes: {
+      pages: '/pages',
+      media: '/media',
+      products: '/products',
+      forms: '/forms',
+      sites: '/sites',
+      settings: '/settings',
     },
     export: {
       columns: COLLECTION_SCHEMA_EXPORT_COLUMNS,
@@ -1523,6 +1570,35 @@ function CollectionsPage() {
                 <div className="text-sm font-semibold text-foreground">{area.title}</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
               </a>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Database className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold">Connected data workflows</h3>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Collections become useful when records can power pages, media-backed fields, commerce objects, public form writes, site routes, and runtime API delivery.
+              </p>
+            </div>
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              {COLLECTION_WORKFLOW_SURFACES.length} surfaces
+            </span>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+            {COLLECTION_WORKFLOW_SURFACES.map((surface) => (
+              <Link
+                key={surface.key}
+                to={surface.route}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{surface.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
+              </Link>
             ))}
           </div>
         </div>
