@@ -4,11 +4,12 @@
 
 import { useCallback, useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, ExternalLink, Eye, Globe, History, PenLine, RefreshCw, RotateCcw, Save, Tags, Trash2, UserRound } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Globe, History, PenLine, RefreshCw, RotateCcw, Save, Tags, Trash2, UserRound } from 'lucide-react';
 import {
     archiveBlogPost,
     createBlogPostPreview,
     deleteBlogPost,
+    getAdminApiBase,
     getBlogPost,
     getBlogPostReadiness,
     listBlogAuthors,
@@ -72,6 +73,11 @@ const BLOG_EDITOR_CONTROL_AREAS = [
         title: 'Revisions',
         detail: 'Restore saved post snapshots when the article design needs rollback.',
         href: '#blog-editor-revisions',
+    },
+    {
+        title: 'Frontend handoff',
+        detail: 'Copy admin/public endpoints, canvas contract, taxonomy, and readiness data.',
+        href: '#blog-editor-handoff',
     },
 ] as const;
 
@@ -523,6 +529,129 @@ function EditBlogPostPage() {
             { label: 'Ship', detail: 'Preview, save, publish, schedule, or archive without leaving the editor.' },
         ],
     };
+    const adminBlogPostUrl = `${getAdminApiBase()}/sites/${encodeURIComponent(activeSiteId)}/blog/${encodeURIComponent(postId)}`;
+    const publicApiBase = getAdminApiBase().replace(/\/api\/admin$/, '/api');
+    const publicPath = `/blog/${slug || post.slug || postId}`;
+    const publicBlogUrl = `${publicApiBase}/sites/${encodeURIComponent(activeSiteId)}/blog`;
+    const publicPostBySlugUrl = `${publicBlogUrl}?slug=${encodeURIComponent(slug || post.slug || postId)}`;
+    const publicRenderUrl = `${publicApiBase}/sites/${encodeURIComponent(activeSiteId)}/render?path=${encodeURIComponent(publicPath)}`;
+    const publicResolveUrl = `${publicApiBase}/sites/${encodeURIComponent(activeSiteId)}/resolve?path=${encodeURIComponent(publicPath)}`;
+    const editorHandoff = {
+        generatedAt: new Date().toISOString(),
+        post: {
+            id: post.id,
+            title: title || post.title,
+            slug: slug || post.slug,
+            path: publicPath,
+            status,
+            scheduledAt: status === 'scheduled' ? scheduledAt : null,
+            excerpt,
+        },
+        site: {
+            id: activeSiteId,
+            name: selectedSite?.name || activeSiteId,
+            slug: selectedSite?.slug || activeSiteId,
+        },
+        endpoints: {
+            readUpdateDelete: adminBlogPostUrl,
+            revisions: `${adminBlogPostUrl}/revisions`,
+            readiness: `${adminBlogPostUrl}/readiness`,
+            preview: `${adminBlogPostUrl}/preview`,
+            publish: `${adminBlogPostUrl}/publish`,
+            archive: `${adminBlogPostUrl}/archive`,
+            rollback: `${adminBlogPostUrl}/rollback/{revisionId}`,
+            publicBlog: publicBlogUrl,
+            publicPostBySlug: publicPostBySlugUrl,
+            publicRender: publicRenderUrl,
+            publicResolve: publicResolveUrl,
+        },
+        editorial: {
+            author: selectedAuthor
+                ? { id: selectedAuthor.id, name: selectedAuthor.name }
+                : { id: selectedAuthorId, name: selectedAuthorId },
+            categoryIds: selectedCategoryIds,
+            tagIds: selectedTagIds,
+            categories: categories
+                .filter((category) => selectedCategoryIds.includes(category.id))
+                .map((category) => ({ id: category.id, name: category.name, slug: category.slug })),
+            tags: tags
+                .filter((tag) => selectedTagIds.includes(tag.id))
+                .map((tag) => ({ id: tag.id, name: tag.name, slug: tag.slug })),
+        },
+        canvas: {
+            width: canvasSize.width,
+            height: canvasSize.height,
+            rootLayerCount: canvasElements.length,
+            mediaContext: {
+                siteId: activeSiteId,
+                scope: 'post',
+                targetId: postId,
+            },
+        },
+        editorCapabilities: [
+            'Edit blog metadata, route, status, taxonomy, and SEO summary beside the public canvas.',
+            'Drag, resize, group, ungroup, layer, save reusable selections, and bind media-ready components.',
+            'Persist serialized canvas content, settings, taxonomy, and revision metadata through the blog update endpoint.',
+            'Generate preview links before publishing route changes.',
+            'Restore backend revisions when a public article design needs rollback.',
+        ],
+        readiness: {
+            score: blogEditorReadiness.score,
+            checks: blogEditorReadiness.checks,
+            backend: postReadiness
+                ? {
+                    score: postReadiness.score,
+                    statusLabel: postReadiness.statusLabel,
+                    elementCount: postReadiness.elementCount,
+                    canvasSize: postReadiness.canvasSize,
+                }
+                : null,
+        },
+        revisions: revisions.map((revision) => ({
+            id: revision.id,
+            note: revision.note,
+            createdAt: revision.createdAt,
+            status: revision.snapshotStatus,
+        })),
+        preview: previewUrl
+            ? {
+                url: previewUrl,
+                expiresAt: previewExpiresAt,
+            }
+            : null,
+        guardrails: [
+            'Publish is blocked when backend readiness reports blocking errors.',
+            'Saving records a revision snapshot before editor changes are persisted.',
+            'Frontend renderers should use public blog, resolve, or render endpoints and keep admin endpoints private.',
+            'Taxonomy IDs are site-scoped and should be refreshed before rendering filters, feeds, or bylines.',
+        ],
+    };
+    const editorHandoffText = JSON.stringify(editorHandoff, null, 2);
+
+    const copyEditorHandoffText = async (value: string, label: string) => {
+        try {
+            await navigator.clipboard.writeText(value);
+            setSaveWarning(null);
+            setWorkflowNotice(`${label} copied.`);
+        } catch {
+            setWorkflowNotice(null);
+            setSaveWarning(value);
+        }
+    };
+
+    const downloadEditorHandoff = () => {
+        const blob = new Blob([editorHandoffText], { type: 'application/json;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `${slug || post.slug || post.id}-backy-blog-editor-handoff.json`;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+        setSaveWarning(null);
+        setWorkflowNotice('Blog editor handoff manifest downloaded.');
+    };
 
     return (
         <PageShell
@@ -567,6 +696,22 @@ function EditBlogPostPage() {
                             </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => void copyEditorHandoffText(editorHandoffText, 'Blog editor handoff manifest')}
+                                iconStart={<Copy className="size-4" />}
+                            >
+                                Copy handoff
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={downloadEditorHandoff}
+                                iconStart={<Download className="size-4" />}
+                            >
+                                Download JSON
+                            </Button>
                             <Button
                                 type="submit"
                                 form="blog-editor-form"
@@ -631,8 +776,8 @@ function EditBlogPostPage() {
 
                     <div className="mt-4 rounded-lg border border-border bg-background p-4">
                         <h3 className="text-sm font-semibold">Blog editor control map</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">Jump to draft fields, the canvas, publish controls, taxonomy, and revisions.</p>
-                        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+                        <p className="mt-1 text-sm text-muted-foreground">Jump to draft fields, the canvas, publish controls, taxonomy, revisions, and frontend handoff.</p>
+                        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
                             {BLOG_EDITOR_CONTROL_AREAS.map((area) => (
                                 <a
                                     key={area.title}
@@ -649,6 +794,24 @@ function EditBlogPostPage() {
                             <BlogEditorMetaTile label="Canvas" value={`${canvasSize.width} x ${canvasSize.height}px`} />
                             <BlogEditorMetaTile label="Elements" value={`${canvasElements.length}`} />
                             <BlogEditorMetaTile label="Status" value={status} />
+                        </div>
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => void copyEditorHandoffText(adminBlogPostUrl, 'Blog editor API URL')}
+                                iconStart={<Copy className="size-4" />}
+                            >
+                                Copy API URL
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => void copyEditorHandoffText(editorHandoffText, 'Blog editor handoff manifest')}
+                                iconStart={<Copy className="size-4" />}
+                            >
+                                Copy handoff
+                            </Button>
                         </div>
                     </div>
                 </section>
@@ -888,6 +1051,65 @@ function EditBlogPostPage() {
                             </PanelContent>
                         </Panel>
 
+                        <Panel id="blog-editor-handoff" className="scroll-mt-24">
+                            <PanelHeader
+                                title="Frontend handoff"
+                                description="Admin, public, canvas, and taxonomy contract."
+                                icon={<Code2 className="size-4" />}
+                            />
+                            <PanelContent className="space-y-4">
+                                <div className="rounded-lg border border-border bg-background p-3">
+                                    <div className="text-xs font-medium text-muted-foreground">Admin endpoint</div>
+                                    <div className="mt-2 break-all font-mono text-xs text-foreground">{adminBlogPostUrl}</div>
+                                </div>
+                                <div className="rounded-lg border border-border bg-background p-3">
+                                    <div className="text-xs font-medium text-muted-foreground">Public render</div>
+                                    <div className="mt-2 break-all font-mono text-xs text-foreground">{publicRenderUrl}</div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <BlogEditorContractTile label="Route" value={publicPath} />
+                                    <BlogEditorContractTile label="Canvas" value={`${canvasSize.width} x ${canvasSize.height}`} />
+                                    <BlogEditorContractTile label="Elements" value={`${canvasElements.length}`} />
+                                    <BlogEditorContractTile label="Revisions" value={`${revisions.length}`} />
+                                </div>
+                                <pre className="max-h-72 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
+{JSON.stringify({
+    postId: post.id,
+    route: publicPath,
+    status,
+    authorId: selectedAuthorId,
+    categoryIds: selectedCategoryIds,
+    tagIds: selectedTagIds,
+    endpoints: {
+        publicPostBySlug: publicPostBySlugUrl,
+        publicRender: publicRenderUrl,
+        readiness: `${adminBlogPostUrl}/readiness`,
+    },
+}, null, 2)}
+                                </pre>
+                                <div className="grid gap-2">
+                                    <Button
+                                        type="button"
+                                        onClick={() => void copyEditorHandoffText(publicRenderUrl, 'Blog public render URL')}
+                                        variant="outline"
+                                        iconStart={<Copy className="size-4" />}
+                                        className="w-full"
+                                    >
+                                        Copy public URL
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        onClick={() => void copyEditorHandoffText(editorHandoffText, 'Blog editor handoff manifest')}
+                                        variant="outline"
+                                        iconStart={<Copy className="size-4" />}
+                                        className="w-full"
+                                    >
+                                        Copy handoff
+                                    </Button>
+                                </div>
+                            </PanelContent>
+                        </Panel>
+
                         <Panel id="blog-editor-taxonomy" className="scroll-mt-24">
                             <PanelHeader title="Author" icon={<UserRound className="size-4" />} />
                             <PanelContent className="space-y-2">
@@ -1058,6 +1280,15 @@ function BlogEditorMetaTile({ label, value }: { label: string; value: string }) 
         <div className="rounded-lg border border-border bg-card px-3 py-3">
             <div className="text-xs font-medium text-muted-foreground">{label}</div>
             <div className="mt-1 truncate text-sm font-semibold">{value}</div>
+        </div>
+    );
+}
+
+function BlogEditorContractTile({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="rounded-lg border border-border bg-card px-3 py-2">
+            <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
+            <div className="mt-1 truncate font-mono text-xs text-foreground">{value}</div>
         </div>
     );
 }
