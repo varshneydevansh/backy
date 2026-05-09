@@ -179,6 +179,7 @@ function BlogListView() {
   const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(() => new Set());
   const [bulkAction, setBulkAction] = useState<'publish' | 'archive' | 'delete' | ''>('');
   const [isBulkBusy, setIsBulkBusy] = useState(false);
+  const [mutatingPostId, setMutatingPostId] = useState<string | null>(null);
   const [previewingPostId, setPreviewingPostId] = useState<string | null>(null);
   const [pendingDeletePost, setPendingDeletePost] = useState<BlogPost | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
@@ -371,6 +372,7 @@ function BlogListView() {
   };
 
   const handleDeletePost = async (post: BlogPost) => {
+    setMutatingPostId(post.id);
     setError(null);
     setNotice(null);
 
@@ -385,6 +387,8 @@ function BlogListView() {
       setPendingDeletePost(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete post');
+    } finally {
+      setMutatingPostId(null);
     }
   };
 
@@ -520,7 +524,7 @@ function BlogListView() {
             onClick={() => {
               void handlePreviewPost(post);
             }}
-            disabled={previewingPostId === post.id}
+            disabled={previewingPostId === post.id || mutatingPostId === post.id}
             title="Preview post"
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -528,15 +532,17 @@ function BlogListView() {
           </button>
           <button
             onClick={() => navigate({ to: '/blog/$postId', params: { postId: post.id }, search: { siteId: activeSiteId } })}
+            disabled={mutatingPostId === post.id}
             title="Edit post"
-            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Edit className="w-4 h-4" />
           </button>
           <button
             onClick={() => setPendingDeletePost(post)}
+            disabled={mutatingPostId === post.id}
             title="Delete post"
-            className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -1394,16 +1400,18 @@ function BlogListView() {
               <button
                 type="button"
                 onClick={() => setPendingDeletePost(null)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                disabled={mutatingPostId === pendingDeletePost.id}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void handleDeletePost(pendingDeletePost)}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+                disabled={mutatingPostId === pendingDeletePost.id}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Delete post
+                {mutatingPostId === pendingDeletePost.id ? 'Deleting...' : 'Delete post'}
               </button>
             </div>
           </div>
@@ -1430,7 +1438,8 @@ function BlogListView() {
               <button
                 type="button"
                 onClick={() => setPendingBulkDelete(false)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                disabled={isBulkBusy}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -1438,9 +1447,9 @@ function BlogListView() {
                 type="button"
                 onClick={() => void handleBulkAction()}
                 disabled={isBulkBusy}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Delete posts
+                {isBulkBusy ? 'Deleting...' : 'Delete posts'}
               </button>
             </div>
           </div>
