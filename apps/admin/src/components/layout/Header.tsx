@@ -211,6 +211,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     [storeUsers, user],
   );
   const notificationCount = pendingComments.length + workflowNotifications.length;
+  const isNotificationMutationBusy = updatingCommentIds.length > 0;
+  const isNotificationCenterBusy = notificationsLoading || isNotificationMutationBusy;
   const workflowShortcuts = useMemo<WorkflowShortcut[]>(() => {
     const routeCount = (route: WorkflowNotification['action']['route']) => (
       workflowNotifications.filter((notification) => notification.action.route === route).length
@@ -363,6 +365,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   };
 
   const navigateToWorkflowShortcut = (shortcut: WorkflowShortcut) => {
+    if (isNotificationCenterBusy) return;
+
     setNotificationsOpen(false);
 
     if (shortcut.id === 'site') {
@@ -374,6 +378,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   };
 
   const loadNotifications = async () => {
+    if (isNotificationCenterBusy) return;
+
     setNotificationsLoading(true);
     setNotificationsError(null);
     setNotificationsNotice(null);
@@ -489,6 +495,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     comment: AdminComment,
     status: 'approved' | 'spam',
   ) => {
+    if (notificationsLoading || updatingCommentIds.includes(comment.id)) return;
+
     setUpdatingCommentIds((current) => [...current, comment.id]);
     setNotificationsError(null);
     setNotificationsNotice(null);
@@ -511,6 +519,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   };
 
   const handleWorkflowNotification = (notification: WorkflowNotification) => {
+    if (isNotificationCenterBusy) return;
+
     setNotificationsOpen(false);
 
     if (notification.action.route === 'comments') {
@@ -541,6 +551,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   };
 
   const openNotificationSummaryTarget = () => {
+    if (isNotificationCenterBusy) return;
+
     setNotificationsOpen(false);
 
     if (pendingComments.length > 0) {
@@ -863,7 +875,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
             aria-label={`${notificationCount} pending notifications`}
             onClick={() => {
               setNotificationsOpen((open) => !open);
-              if (!notificationsOpen) void loadNotifications();
+              if (!notificationsOpen && !isNotificationCenterBusy) void loadNotifications();
             }}
             className={cn(
               'relative rounded-lg p-2 transition-colors hover:bg-accent focus-ring',
@@ -900,7 +912,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                   <button
                     type="button"
                     onClick={() => void loadNotifications()}
-                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus-ring"
+                    disabled={isNotificationCenterBusy}
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <RefreshCw className={cn('size-3', notificationsLoading && 'animate-spin')} />
                     Refresh
@@ -914,7 +927,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                         key={shortcut.id}
                         type="button"
                         onClick={() => navigateToWorkflowShortcut(shortcut)}
-                        className="group rounded-lg border border-border bg-background px-2.5 py-2 text-left transition hover:border-primary/40 hover:bg-primary/5 focus-ring"
+                        disabled={isNotificationCenterBusy}
+                        className="group rounded-lg border border-border bg-background px-2.5 py-2 text-left transition hover:border-primary/40 hover:bg-primary/5 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="inline-flex size-7 items-center justify-center rounded-md bg-muted text-muted-foreground group-hover:text-primary">
@@ -992,7 +1006,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                             <button
                               type="button"
                               onClick={() => handleWorkflowNotification(notification)}
-                              className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 focus-ring"
+                              disabled={isNotificationCenterBusy}
+                              className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               {notification.actionLabel}
                             </button>
@@ -1022,10 +1037,13 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                               <button
                                 type="button"
                                 onClick={() => {
+                                  if (isNotificationCenterBusy) return;
+
                                   setNotificationsOpen(false);
                                   navigate({ to: '/comments', search: activeSiteSearch });
                                 }}
-                                className="rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 focus-ring"
+                                disabled={isNotificationCenterBusy}
+                                className="rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 Review
                               </button>
@@ -1036,18 +1054,18 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                             <div className="mt-3 grid grid-cols-2 gap-2">
                               <button
                                 type="button"
-                                disabled={isUpdating}
+                                disabled={isUpdating || notificationsLoading}
                                 onClick={() => void moderateNotificationComment(comment, 'approved')}
-                                className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-success/25 bg-success/10 px-2 text-xs font-medium text-success transition hover:bg-success/15 disabled:opacity-60"
+                                className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-success/25 bg-success/10 px-2 text-xs font-medium text-success transition hover:bg-success/15 disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 <CheckCircle2 className="size-3.5" />
                                 Approve
                               </button>
                               <button
                                 type="button"
-                                disabled={isUpdating}
+                                disabled={isUpdating || notificationsLoading}
                                 onClick={() => void moderateNotificationComment(comment, 'spam')}
-                                className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-destructive/20 bg-destructive/10 px-2 text-xs font-medium text-destructive transition hover:bg-destructive/15 disabled:opacity-60"
+                                className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-destructive/20 bg-destructive/10 px-2 text-xs font-medium text-destructive transition hover:bg-destructive/15 disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 <CircleSlash className="size-3.5" />
                                 Spam
@@ -1062,7 +1080,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                 <button
                   type="button"
                   onClick={openNotificationSummaryTarget}
-                  className="flex w-full items-center justify-center border-t border-border px-4 py-3 text-sm font-medium text-primary hover:bg-accent focus-ring"
+                  disabled={isNotificationCenterBusy}
+                  className="flex w-full items-center justify-center border-t border-border px-4 py-3 text-sm font-medium text-primary hover:bg-accent focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {notificationSummaryLabel}
                 </button>
