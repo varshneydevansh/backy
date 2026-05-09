@@ -85,6 +85,29 @@ type PaymentStatusFilter = PaymentStatus | 'all';
 type FulfillmentStatusFilter = FulfillmentStatus | 'all';
 type OrderSourceFilter = OrderSource | 'all';
 
+interface OrderLineItemDraft {
+  title: string;
+  sku: string;
+  variant: string;
+  quantity: string;
+  price: string;
+}
+
+interface OrderLineItem {
+  id: string;
+  productId: string;
+  slug: string;
+  title: string;
+  sku: string;
+  variantTitle: string;
+  variantOption: string;
+  variantSku: string;
+  quantity: number;
+  price: number;
+  currency: string;
+  lineTotal: number;
+}
+
 interface OrderFormState {
   orderNumber: string;
   customerName: string;
@@ -168,6 +191,7 @@ const ORDER_EXPORT_COLUMNS = [
   'discount_amount',
   'currency',
   'items',
+  'line_item_count',
   'order_source',
   'checkout_session_id',
   'customer_id',
@@ -267,6 +291,13 @@ function OrdersRoute() {
   const [orders, setOrders] = useState<CollectionRecord[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [formState, setFormState] = useState<OrderFormState>(EMPTY_ORDER_FORM);
+  const [itemDraft, setItemDraft] = useState<OrderLineItemDraft>({
+    title: '',
+    sku: '',
+    variant: '',
+    quantity: '1',
+    price: '',
+  });
   const [filter, setFilter] = useState<OrderFilter>('all');
   const [paymentFilter, setPaymentFilter] = useState<PaymentStatusFilter>('all');
   const [fulfillmentFilter, setFulfillmentFilter] = useState<FulfillmentStatusFilter>('all');
@@ -305,6 +336,15 @@ function OrdersRoute() {
     () => orders.find((order) => order.id === selectedOrderId) || null,
     [orders, selectedOrderId],
   );
+  const orderLineItems = useMemo(() => parseOrderLineItems(formState.items, formState.currency), [formState.currency, formState.items]);
+  const orderLineItemSubtotal = useMemo(
+    () => moneyValue(orderLineItems.reduce((sum, item) => sum + item.lineTotal, 0)),
+    [orderLineItems],
+  );
+  const orderLineItemQuantity = useMemo(
+    () => orderLineItems.reduce((sum, item) => sum + item.quantity, 0),
+    [orderLineItems],
+  );
   const hasActiveOrderFilters = Boolean(
     searchQuery.trim() ||
     filter !== 'all' ||
@@ -340,6 +380,7 @@ function OrdersRoute() {
         readOrderValue(values, 'paymentreference', ''),
         readOrderValue(values, 'trackingnumber', ''),
         values.items,
+        formatOrderItemSummary(values.items, String(values.currency || 'USD')),
       ].some((value) => String(value || '').toLowerCase().includes(normalizedSearch));
 
       return matchesSearch;
@@ -367,6 +408,7 @@ function OrdersRoute() {
     ));
     const hasCustomerData = orders.some((order) => Boolean(readOrderValue(order.values, 'customername', '') && order.values.email));
     const hasPaymentData = orders.some((order) => Boolean(readOrderValue(order.values, 'paymentreference', '') || readOrderValue(order.values, 'paymentprovider', '')));
+    const hasStructuredItems = orders.some((order) => parseOrderLineItems(order.values.items, String(order.values.currency || 'USD')).length > 0);
     const checks = [
       {
         label: 'Orders schema',
@@ -404,6 +446,11 @@ function OrdersRoute() {
         label: 'Customer data',
         detail: hasCustomerData ? 'Customer names and emails are present.' : 'Capture customer contact data for order support.',
         ready: hasCustomerData || !hasOrders,
+      },
+      {
+        label: 'Line items',
+        detail: hasStructuredItems ? 'Product and variant line items can be reviewed without reading raw JSON.' : 'Capture structured product line items from checkout or manual entry.',
+        ready: hasStructuredItems || !hasOrders,
       },
       {
         label: 'Payment references',
@@ -533,7 +580,8 @@ function OrdersRoute() {
         ? null
         : toNumber(readOrderValue(order.values, 'discountamount', 0)),
       currency: normalizeCurrency(String(order.values.currency || 'USD')),
-      items: String(order.values.items || ''),
+      itemCount: parseOrderLineItems(order.values.items, String(order.values.currency || 'USD')).length,
+      items: formatOrderItemsForExport(order.values.items, String(order.values.currency || 'USD')),
       orderSource: asOrderSource(readOrderValue(order.values, 'ordersource', undefined)),
       checkoutSessionId: String(readOrderValue(order.values, 'checkoutsessionid', '')),
       customerId: String(readOrderValue(order.values, 'customerid', '')),
@@ -629,6 +677,65 @@ function OrdersRoute() {
       ...EMPTY_ORDER_FORM,
       orderNumber: `ORD-${Date.now().toString().slice(-6)}`,
     });
+    setItemDraft({
+      title: '',
+      sku: '',
+      variant: '',
+      quantity: '1',
+      price: '',
+    });
+  };
+
+  const setLineItems = (items: OrderLineItem[]) => {
+    setFormState((current) => ({ ...current, items: serializeOrderLineItems(items, current.currency) }));
+  };
+
+  const addLineItem = () => {
+    const title = itemDraft.title.trim();
+    if (!title || orderLineItems.length >= 100) return;
+
+    const quantity = Math.max(1, Math.floor(Number(itemDraft.quantity || 1)));
+    const price = Math.max(0, Number(itemDraft.price || 0));
+    const lineItem: OrderLineItem = {
+      id: `item-${Date.now()}`,
+      productId: '',
+      slug: slugify(title),
+      title,
+      sku: itemDraft.sku.trim(),
+      variantTitle: itemDraft.variant.trim(),
+      variantOption: itemDraft.variant.trim(),
+      variantSku: '',
+      quantity,
+      price,
+      currency: normalizeCurrency(formState.currency),
+      lineTotal: moneyValue(quantity * price),
+    };
+
+    setLineItems([...orderLineItems, lineItem]);
+    setItemDraft({
+      title: '',
+      sku: '',
+      variant: '',
+      quantity: '1',
+      price: '',
+    });
+  };
+
+  const removeLineItem = (itemId: string) => {
+    setLineItems(orderLineItems.filter((item) => item.id !== itemId));
+  };
+
+  const applyLineItemTotals = () => {
+    const shippingAmount = Number(formState.shippingAmount || 0);
+    const taxAmount = Number(formState.taxAmount || 0);
+    const discountAmount = Number(formState.discountAmount || 0);
+    const total = Math.max(0, moneyValue(orderLineItemSubtotal + taxAmount + shippingAmount - discountAmount));
+
+    setFormState((current) => ({
+      ...current,
+      subtotal: orderLineItemSubtotal ? String(orderLineItemSubtotal) : current.subtotal,
+      total: String(total),
+    }));
   };
 
   const createOrdersCollection = async () => {
@@ -1582,16 +1689,118 @@ function OrdersRoute() {
                     />
                   </Field>
                 </div>
-                <Field label="Items">
-                  <textarea
-                    value={formState.items}
-                    onChange={(event) => setFormState((current) => ({ ...current, items: event.target.value }))}
-                    rows={3}
-                    required
-                    className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm"
-                    placeholder="Starter Site Template x1"
+                <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">Line items</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Review checkout product, variant, quantity, and price data without editing raw JSON.
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded bg-background px-2 py-1 font-mono text-xs text-muted-foreground">
+                        {orderLineItemQuantity} units · {formatMoney(orderLineItemSubtotal, formState.currency)}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={applyLineItemTotals}
+                        disabled={orderLineItems.length === 0}
+                      >
+                        Use totals
+                      </Button>
+                    </div>
+                  </div>
+
+                  {orderLineItems.length > 0 ? (
+                    <div className="space-y-2">
+                      {orderLineItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className="grid gap-2 rounded-lg border border-border bg-background p-2 text-sm md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_70px_90px_auto] md:items-center"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-foreground">{item.title}</div>
+                            <div className="truncate font-mono text-xs text-muted-foreground">{item.sku || item.slug || 'No SKU'}</div>
+                          </div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {item.variantTitle || item.variantOption || item.variantSku || 'Default option'}
+                          </div>
+                          <div className="font-mono text-xs text-muted-foreground">x{item.quantity}</div>
+                          <div className="font-mono text-xs text-muted-foreground">{formatMoney(item.lineTotal, item.currency)}</div>
+                          <Button size="sm" variant="ghost" onClick={() => removeLineItem(item.id)}>
+                            Remove
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border bg-background px-3 py-4 text-center text-sm text-muted-foreground">
+                      Add line items for manual orders, or they will appear here when checkout posts structured cart data.
+                    </div>
+                  )}
+
+                  <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)_80px_100px_auto]">
+                    <input
+                      aria-label="Line item title"
+                      value={itemDraft.title}
+                      onChange={(event) => setItemDraft((current) => ({ ...current, title: event.target.value }))}
+                      className="rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="Product title"
+                    />
+                    <input
+                      aria-label="Line item variant"
+                      value={itemDraft.variant}
+                      onChange={(event) => setItemDraft((current) => ({ ...current, variant: event.target.value }))}
+                      className="rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="Variant"
+                    />
+                    <input
+                      aria-label="Line item quantity"
+                      type="number"
+                      min="1"
+                      value={itemDraft.quantity}
+                      onChange={(event) => setItemDraft((current) => ({ ...current, quantity: event.target.value }))}
+                      className="rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="Qty"
+                    />
+                    <input
+                      aria-label="Line item price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={itemDraft.price}
+                      onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))}
+                      className="rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="Price"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={addLineItem}
+                      disabled={!itemDraft.title.trim() || orderLineItems.length >= 100}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                  <input
+                    aria-label="Line item SKU"
+                    value={itemDraft.sku}
+                    onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))}
+                    className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                    placeholder="Optional SKU"
                   />
-                </Field>
+
+                  <Field label="Raw item payload">
+                    <textarea
+                      value={formState.items}
+                      onChange={(event) => setFormState((current) => ({ ...current, items: event.target.value }))}
+                      rows={4}
+                      required
+                      className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 font-mono text-xs"
+                      placeholder="Structured line items JSON or a legacy item summary"
+                    />
+                  </Field>
+                </div>
                 <Field label="Shipping address">
                   <textarea
                     value={formState.shippingAddress}
@@ -1796,6 +2005,9 @@ function OrderCard({
   const paidAt = String(readOrderValue(values, 'paidat', ''));
   const fulfilledAt = String(readOrderValue(values, 'fulfilledat', ''));
   const refundAmount = toNumber(readOrderValue(values, 'refundamount', 0));
+  const lineItems = parseOrderLineItems(values.items, currency);
+  const lineItemSummary = formatOrderItemSummary(values.items, currency);
+  const lineItemQuantity = lineItems.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
     <article className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')}>
@@ -1837,6 +2049,11 @@ function OrderCard({
                 Refund {formatMoney(refundAmount, currency)}
               </span>
             ) : null}
+            {lineItems.length > 0 ? (
+              <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                {lineItems.length} item{lineItems.length === 1 ? '' : 's'} · {lineItemQuantity} unit{lineItemQuantity === 1 ? '' : 's'}
+              </span>
+            ) : null}
           </div>
         </div>
         <div className="text-right">
@@ -1849,9 +2066,9 @@ function OrderCard({
         <StatePill label="Payment" value={paymentStatus} />
         <StatePill label="Fulfillment" value={fulfillmentStatus} />
       </div>
-      {values.items ? (
+      {lineItemSummary ? (
         <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">
-          {String(values.items)}
+          {lineItemSummary}
         </p>
       ) : null}
       {(paidAt || fulfilledAt || trackingUrl) && (
@@ -1937,6 +2154,10 @@ const toNumber = (value: unknown): number => {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : 0;
 };
+
+const moneyValue = (value: number): number => (
+  Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
+);
 
 const normalizeCurrency = (value: string): string => {
   const normalized = value.trim().toUpperCase();
@@ -2105,6 +2326,103 @@ const mergeOrderFields = (currentFields: CollectionField[]): CollectionField[] =
   return [...merged, ...customFields].sort((a, b) => a.sortOrder - b.sortOrder);
 };
 
+const parseJsonArray = (value: unknown): unknown[] => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string') return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const lineItemText = (value: unknown): string => (
+  typeof value === 'string' ? value.trim() : ''
+);
+
+const normalizeOrderLineItem = (value: unknown, index: number, fallbackCurrency: string): OrderLineItem | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+
+  const record = value as Record<string, unknown>;
+  const variant = record.variant && typeof record.variant === 'object' && !Array.isArray(record.variant)
+    ? record.variant as Record<string, unknown>
+    : {};
+  const title = lineItemText(record.title || record.name);
+  if (!title) return null;
+
+  const quantity = Math.max(1, Math.floor(toNumber(record.quantity || 1)));
+  const price = moneyValue(toNumber(record.price ?? record.unitPrice ?? record.amount));
+  const lineTotal = moneyValue(toNumber(record.lineTotal ?? record.total ?? price * quantity));
+  const currency = normalizeCurrency(lineItemText(record.currency) || fallbackCurrency);
+  const variantTitle = lineItemText(variant.title || record.variantTitle || record.variantName);
+  const variantOption = lineItemText(variant.option || record.variantOption || record.option);
+  const variantSku = lineItemText(variant.sku || record.variantSku);
+
+  return {
+    id: lineItemText(record.id) || lineItemText(record.lineItemId) || `${lineItemText(record.productId) || lineItemText(record.slug) || 'item'}-${index}`,
+    productId: lineItemText(record.productId),
+    slug: lineItemText(record.slug),
+    title,
+    sku: lineItemText(record.sku),
+    variantTitle,
+    variantOption,
+    variantSku,
+    quantity,
+    price,
+    currency,
+    lineTotal,
+  };
+};
+
+const parseOrderLineItems = (value: unknown, fallbackCurrency = 'USD'): OrderLineItem[] => (
+  parseJsonArray(value)
+    .map((item, index) => normalizeOrderLineItem(item, index, fallbackCurrency))
+    .filter((item): item is OrderLineItem => Boolean(item))
+);
+
+const serializeOrderLineItems = (items: OrderLineItem[], fallbackCurrency: string): string => (
+  JSON.stringify(
+    items.map((item) => ({
+      id: item.id,
+      productId: item.productId,
+      slug: item.slug,
+      title: item.title,
+      sku: item.sku,
+      variant: item.variantTitle || item.variantOption || item.variantSku
+        ? {
+            title: item.variantTitle,
+            option: item.variantOption,
+            sku: item.variantSku,
+          }
+        : null,
+      quantity: item.quantity,
+      price: item.price,
+      currency: normalizeCurrency(item.currency || fallbackCurrency),
+      lineTotal: moneyValue(item.lineTotal || item.price * item.quantity),
+    })),
+    null,
+    2,
+  )
+);
+
+const formatOrderItemSummary = (value: unknown, fallbackCurrency = 'USD'): string => {
+  const items = parseOrderLineItems(value, fallbackCurrency);
+  if (items.length === 0) return typeof value === 'string' ? value.trim() : '';
+
+  return items
+    .map((item) => {
+      const variant = item.variantTitle || item.variantOption || item.variantSku;
+      return `${item.title}${variant ? ` (${variant})` : ''} x${item.quantity} ${formatMoney(item.lineTotal, item.currency)}`;
+    })
+    .join('; ');
+};
+
+const formatOrderItemsForExport = (value: unknown, fallbackCurrency = 'USD'): string => (
+  formatOrderItemSummary(value, fallbackCurrency)
+);
+
 type OrderExportColumn = typeof ORDER_EXPORT_COLUMNS[number];
 
 const optionalNumber = (value: unknown): number | null => (
@@ -2136,7 +2454,8 @@ const orderToExportRecord = (
   shipping_amount: optionalNumber(readOrderValue(order.values, 'shippingamount', null)),
   discount_amount: optionalNumber(readOrderValue(order.values, 'discountamount', null)),
   currency: normalizeCurrency(String(order.values.currency || 'USD')),
-  items: String(order.values.items || ''),
+  items: formatOrderItemsForExport(order.values.items, String(order.values.currency || 'USD')),
+  line_item_count: parseOrderLineItems(order.values.items, String(order.values.currency || 'USD')).length,
   order_source: asOrderSource(readOrderValue(order.values, 'ordersource', undefined)),
   checkout_session_id: String(readOrderValue(order.values, 'checkoutsessionid', '')),
   customer_id: String(readOrderValue(order.values, 'customerid', '')),
