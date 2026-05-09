@@ -126,6 +126,35 @@ const PRODUCT_FIELDS: CollectionField[] = [
   { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 210, defaultValue: true },
 ];
 
+const PRODUCT_EXPORT_COLUMNS = [
+  'product_id',
+  'slug',
+  'status',
+  'title',
+  'sku',
+  'price',
+  'compare_at_price',
+  'currency',
+  'inventory',
+  'low_stock_threshold',
+  'inventory_policy',
+  'product_type',
+  'category',
+  'tags',
+  'vendor',
+  'image_url',
+  'download_url',
+  'checkout_url',
+  'shipping_required',
+  'taxable',
+  'weight',
+  'featured',
+  'seo_title',
+  'storefront_path',
+  'created_at',
+  'updated_at',
+] as const;
+
 const EMPTY_PRODUCT_FORM: ProductFormState = {
   title: '',
   slug: '',
@@ -330,12 +359,34 @@ function ProductsRoute() {
       list: storefrontApiUrl,
       bySlug: storefrontProductDetailUrl,
     },
+    storefrontContract: {
+      collectionSlug: PRODUCT_COLLECTION_SLUG,
+      routePatterns: {
+        list: productCollection?.listRoutePattern || '/products',
+        detail: productCollection?.routePattern || '/products/:recordSlug',
+      },
+      cardFields: ['title', 'slug', 'price', 'compareAtPrice', 'currency', 'imageUrl', 'category', 'vendor', 'featured'],
+      detailFields: PRODUCT_FIELDS.map((field) => field.key),
+      filterFacets: ['status', 'category', 'tags', 'vendor', 'productType', 'featured', 'inventoryPolicy'],
+      checkout: {
+        mode: 'per-product checkoutUrl',
+        configuredProducts: products.filter((product) => Boolean(String(product.values.checkoutUrl || '').trim())).length,
+        note: 'Backy stores product checkout URLs today. Dedicated payment-session creation is still a commerce backend milestone.',
+      },
+    },
     readiness: {
       ready: productApiReady,
       score: catalogReadiness.score,
       checks: catalogReadiness.checks,
     },
     metrics,
+    export: {
+      csvIncludesPricing: true,
+      csvIncludesInventory: true,
+      csvIncludesMerchandising: true,
+      csvIncludesCheckoutUrls: true,
+      csvColumns: PRODUCT_EXPORT_COLUMNS,
+    },
     products: products.map((product) => ({
       id: product.id,
       slug: product.slug,
@@ -615,6 +666,27 @@ function ProductsRoute() {
     URL.revokeObjectURL(url);
     setNotice('Product handoff manifest downloaded.');
   };
+  const exportProductsCsv = () => {
+    if (filteredProducts.length === 0) return;
+
+    const rows = filteredProducts.map((product) => {
+      const exportRecord = productToExportRecord(product);
+      return PRODUCT_EXPORT_COLUMNS.map((column) => exportRecord[column]);
+    });
+    const csv = [PRODUCT_EXPORT_COLUMNS, ...rows]
+      .map((row) => row.map(csvEscape).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSite?.slug || activeSiteId}-products.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice(`${filteredProducts.length} visible product${filteredProducts.length === 1 ? '' : 's'} exported.`);
+  };
 
   return (
     <PageShell
@@ -678,6 +750,9 @@ function ProductsRoute() {
             </Button>
             <Button variant="outline" onClick={downloadProductHandoff} iconStart={<Download className="size-4" />}>
               Download JSON
+            </Button>
+            <Button variant="outline" onClick={exportProductsCsv} disabled={filteredProducts.length === 0} iconStart={<Download className="size-4" />}>
+              Export CSV
             </Button>
             {!productCollection ? (
               <Button onClick={() => void createProductsCollection()} disabled={isSaving} iconStart={<Sparkles className="size-4" />}>
@@ -763,6 +838,9 @@ function ProductsRoute() {
                 )}
                 <Button onClick={() => void copyProductHandoff()} iconStart={<Copy className="size-4" />}>
                   Copy manifest
+                </Button>
+                <Button onClick={exportProductsCsv} disabled={filteredProducts.length === 0} iconStart={<Download className="size-4" />}>
+                  Export CSV
                 </Button>
                 <Button onClick={() => void copyStorefrontApiUrl()} iconStart={<Copy className="size-4" />}>
                   Copy URL
@@ -1571,4 +1649,42 @@ const mergeProductFields = (currentFields: CollectionField[]): CollectionField[]
   const requiredKeys = new Set(PRODUCT_FIELDS.map((field) => field.key));
   const customFields = currentFields.filter((field) => !requiredKeys.has(field.key));
   return [...merged, ...customFields].sort((a, b) => a.sortOrder - b.sortOrder);
+};
+
+type ProductExportColumn = typeof PRODUCT_EXPORT_COLUMNS[number];
+
+const productToExportRecord = (product: CollectionRecord): Record<ProductExportColumn, string | number | boolean | null> => ({
+  product_id: product.id,
+  slug: product.slug,
+  status: product.status,
+  title: String(product.values.title || product.slug),
+  sku: String(product.values.sku || ''),
+  price: toNumber(product.values.price),
+  compare_at_price: product.values.compareAtPrice === null || product.values.compareAtPrice === undefined
+    ? null
+    : toNumber(product.values.compareAtPrice),
+  currency: normalizeCurrency(String(product.values.currency || 'USD')),
+  inventory: toNumber(product.values.inventory),
+  low_stock_threshold: toNumber(product.values.lowStockThreshold || 5),
+  inventory_policy: asInventoryPolicy(product.values.inventoryPolicy),
+  product_type: asProductType(product.values.productType),
+  category: String(product.values.category || ''),
+  tags: formatTags(product.values.tags).join('; '),
+  vendor: String(product.values.vendor || ''),
+  image_url: String(product.values.imageUrl || ''),
+  download_url: String(product.values.downloadUrl || ''),
+  checkout_url: String(product.values.checkoutUrl || ''),
+  shipping_required: product.values.shippingRequired !== false,
+  taxable: product.values.taxable !== false,
+  weight: product.values.weight === null || product.values.weight === undefined ? null : toNumber(product.values.weight),
+  featured: Boolean(product.values.featured),
+  seo_title: String(product.values.seoTitle || ''),
+  storefront_path: `/products/${product.slug}`,
+  created_at: product.createdAt || '',
+  updated_at: product.updatedAt || '',
+});
+
+const csvEscape = (value: unknown): string => {
+  const raw = String(value ?? '').replace(/\r?\n/g, '\\n');
+  return `"${raw.replace(/"/g, '""')}"`;
 };
