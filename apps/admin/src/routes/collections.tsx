@@ -219,6 +219,75 @@ const COLLECTION_TEMPLATES: CollectionTemplate[] = [
   },
 ];
 
+const COLLECTION_FRONTEND_SYSTEMS = [
+  {
+    key: 'schema',
+    title: 'Schema modeling',
+    detail: 'Field keys, labels, types, required/unique rules, options, references, defaults, and help text.',
+  },
+  {
+    key: 'routing',
+    title: 'Dynamic routing',
+    detail: 'List and detail route templates resolve collection records into public frontend paths.',
+  },
+  {
+    key: 'records',
+    title: 'Record delivery',
+    detail: 'Public record list/detail APIs power directories, portfolios, catalogs, teams, FAQs, and custom objects.',
+  },
+  {
+    key: 'relations',
+    title: 'References',
+    detail: 'Reference and multi-reference fields connect reusable datasets without hardcoding frontend joins.',
+  },
+  {
+    key: 'media',
+    title: 'Media binding',
+    detail: 'Image, video, and file fields connect collection records to Backy media and file delivery.',
+  },
+  {
+    key: 'operations',
+    title: 'Operations',
+    detail: 'Admin import, export, filtering, bulk status updates, archive, delete, and CSV workflows.',
+  },
+] as const;
+
+const COLLECTION_SCHEMA_EXPORT_COLUMNS = [
+  'collection_id',
+  'active_site_id',
+  'name',
+  'slug',
+  'status',
+  'description',
+  'public_read',
+  'public_create',
+  'public_update',
+  'public_delete',
+  'field_count',
+  'required_field_count',
+  'unique_field_count',
+  'relation_field_count',
+  'media_field_count',
+  'field_keys',
+  'field_types',
+  'required_fields',
+  'unique_fields',
+  'relation_fields',
+  'media_fields',
+  'public_list_route',
+  'public_item_route_template',
+  'public_collections_url',
+  'public_records_url',
+  'public_record_by_slug_url',
+  'admin_collection_url',
+  'admin_records_url',
+  'admin_import_url',
+  'admin_bulk_url',
+  'frontend_systems',
+  'created_at',
+  'updated_at',
+] as const;
+
 const normalizeSlug = (value: string, fallback: string) => {
   const slug = value
     .trim()
@@ -638,6 +707,10 @@ function CollectionsPage() {
       adminImport: adminImportUrl,
       adminBulk: adminBulkUrl,
     },
+    export: {
+      columns: COLLECTION_SCHEMA_EXPORT_COLUMNS,
+    },
+    frontendSystems: COLLECTION_FRONTEND_SYSTEMS,
     templates: COLLECTION_TEMPLATES.map((template) => ({
       id: template.id,
       name: template.name,
@@ -801,6 +874,31 @@ function CollectionsPage() {
     URL.revokeObjectURL(url);
     setError(null);
     setNotice('Collections handoff manifest downloaded.');
+  };
+
+  const downloadCollectionSchemaCsv = () => {
+    const rows = collections.map((collection) => {
+      const exportRecord = collectionToSchemaExportRecord(collection, {
+        activeSiteId,
+        publicBaseUrl: dynamicBaseUrl,
+        adminBaseUrl,
+      });
+      return COLLECTION_SCHEMA_EXPORT_COLUMNS.map((column) => exportRecord[column]);
+    });
+    const csv = [COLLECTION_SCHEMA_EXPORT_COLUMNS, ...rows]
+      .map((row) => row.map(csvEscape).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSiteSlug}-collection-schemas.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setNotice('Collection schema CSV exported.');
   };
 
   useEffect(() => {
@@ -1346,6 +1444,15 @@ function CollectionsPage() {
             </button>
             <button
               type="button"
+              onClick={downloadCollectionSchemaCsv}
+              disabled={collections.length === 0}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Download className="h-4 w-4" />
+              Export schemas
+            </button>
+            <button
+              type="button"
               onClick={() => void loadCollections()}
               disabled={isLoading}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"
@@ -1504,6 +1611,15 @@ function CollectionsPage() {
             <Copy className="h-4 w-4" />
             Copy manifest
           </button>
+          <button
+            type="button"
+            onClick={downloadCollectionSchemaCsv}
+            disabled={collections.length === 0}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Download className="h-4 w-4" />
+            Export schemas
+          </button>
         </div>
         <div className="p-4">
           <div className="grid gap-3 md:grid-cols-4">
@@ -1564,6 +1680,35 @@ function CollectionsPage() {
               <p className="mt-3 text-xs text-muted-foreground">
                 These field groups are what the visual page/editor layer can bind into lists, detail pages, forms, and commerce-like catalog surfaces.
               </p>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-border bg-background p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Dynamic data frontend contract</h3>
+                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                  Collections define reusable object models that any page, storefront, directory, portfolio, or custom frontend can consume without hardcoded field assumptions.
+                </p>
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {COLLECTION_FRONTEND_SYSTEMS.length} systems
+              </span>
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {COLLECTION_FRONTEND_SYSTEMS.map((system) => (
+                <div key={system.key} className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-foreground">{system.title}</div>
+                      <div className="mt-1 text-xs leading-5 text-muted-foreground">{system.detail}</div>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                      {system.key}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -2455,6 +2600,73 @@ function CollectionsPage() {
     </PageShell>
   );
 }
+
+type CollectionSchemaExportColumn = typeof COLLECTION_SCHEMA_EXPORT_COLUMNS[number];
+
+interface CollectionSchemaExportContext {
+  activeSiteId: string;
+  publicBaseUrl: string;
+  adminBaseUrl: string;
+}
+
+const collectionToSchemaExportRecord = (
+  collection: Collection,
+  context: CollectionSchemaExportContext,
+): Record<CollectionSchemaExportColumn, string | number | boolean | null> => {
+  const collectionSegment = encodeURIComponent(collection.id);
+  const siteSegment = encodeURIComponent(context.activeSiteId);
+  const publicCollectionsUrl = `${context.publicBaseUrl}/api/sites/${siteSegment}/collections`;
+  const publicRecordsUrl = `${publicCollectionsUrl}/${collectionSegment}/records?status=published`;
+  const publicRecordBySlugUrl = `${publicCollectionsUrl}/${collectionSegment}/records?slug={recordSlug}`;
+  const adminCollectionUrl = `${context.adminBaseUrl}/sites/${siteSegment}/collections/${collectionSegment}`;
+  const adminRecordsUrl = `${adminCollectionUrl}/records`;
+  const relationFields = collection.fields.filter((field) => RELATION_FIELD_TYPES.includes(field.type));
+  const mediaFields = collection.fields.filter((field) => MEDIA_FIELD_TYPES.includes(field.type));
+  const requiredFields = collection.fields.filter((field) => field.required);
+  const uniqueFields = collection.fields.filter((field) => field.unique);
+
+  return {
+    collection_id: collection.id,
+    active_site_id: context.activeSiteId,
+    name: collection.name,
+    slug: collection.slug,
+    status: collection.status,
+    description: collection.description || '',
+    public_read: collection.permissions.publicRead,
+    public_create: collection.permissions.publicCreate,
+    public_update: collection.permissions.publicUpdate,
+    public_delete: collection.permissions.publicDelete,
+    field_count: collection.fields.length,
+    required_field_count: requiredFields.length,
+    unique_field_count: uniqueFields.length,
+    relation_field_count: relationFields.length,
+    media_field_count: mediaFields.length,
+    field_keys: collection.fields.map((field) => field.key).join('; '),
+    field_types: collection.fields.map((field) => `${field.key}:${field.type}`).join('; '),
+    required_fields: requiredFields.map((field) => field.key).join('; '),
+    unique_fields: uniqueFields.map((field) => field.key).join('; '),
+    relation_fields: relationFields.map((field) => `${field.key}:${field.referenceCollectionId || 'unmapped'}`).join('; '),
+    media_fields: mediaFields.map((field) => `${field.key}:${field.type}`).join('; '),
+    public_list_route: buildCollectionListRoutePath(collection),
+    public_item_route_template: buildCollectionRecordRouteTemplate(collection),
+    public_collections_url: publicCollectionsUrl,
+    public_records_url: publicRecordsUrl,
+    public_record_by_slug_url: publicRecordBySlugUrl,
+    admin_collection_url: adminCollectionUrl,
+    admin_records_url: adminRecordsUrl,
+    admin_import_url: `${adminRecordsUrl}/import?upsert=true`,
+    admin_bulk_url: `${adminRecordsUrl}/bulk`,
+    frontend_systems: COLLECTION_FRONTEND_SYSTEMS.map((system) => `${system.key}:${system.title}`).join('; '),
+    created_at: collection.createdAt || '',
+    updated_at: collection.updatedAt || '',
+  };
+};
+
+const csvEscape = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  const text = String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
 
 function CollectionApiStat({ label, value }: { label: string; value: string }) {
   return (
