@@ -52,6 +52,14 @@ export const Route = createFileRoute('/users')({
 
 type UserRole = UserType['role'];
 type UserStatus = UserType['status'];
+type UserReviewFilter =
+  | 'all'
+  | 'admin-authority'
+  | 'content-operators'
+  | 'pending-invites'
+  | 'suspended'
+  | 'incomplete-profile'
+  | 'never-active';
 
 const ROLE_OPTIONS: Array<{ value: UserRole; label: string; detail: string }> = [
   { value: 'owner', label: 'Owner', detail: 'Billing, settings, publishing, and team authority' },
@@ -184,6 +192,7 @@ function UsersListView() {
   const [notice, setNotice] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | UserStatus>('all');
+  const [reviewFilter, setReviewFilter] = useState<UserReviewFilter>('all');
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<UserType | null>(null);
   const adminBaseUrl = useMemo(() => getAdminBaseUrl(), []);
@@ -291,9 +300,21 @@ function UsersListView() {
     users.filter((user) => {
       const roleMatches = roleFilter === 'all' || user.role === roleFilter;
       const statusMatches = statusFilter === 'all' || user.status === statusFilter;
-      return roleMatches && statusMatches;
+      const hasProfile = Boolean(user.fullName.trim()) && Boolean(user.email.trim());
+      const neverActive = isNeverActiveUser(user);
+      const reviewMatches = (
+        reviewFilter === 'all' ||
+        (reviewFilter === 'admin-authority' && (user.role === 'owner' || user.role === 'admin')) ||
+        (reviewFilter === 'content-operators' && (user.role === 'owner' || user.role === 'admin' || user.role === 'editor')) ||
+        (reviewFilter === 'pending-invites' && user.status === 'invited') ||
+        (reviewFilter === 'suspended' && user.status === 'suspended') ||
+        (reviewFilter === 'incomplete-profile' && !hasProfile) ||
+        (reviewFilter === 'never-active' && neverActive)
+      );
+
+      return roleMatches && statusMatches && reviewMatches;
     })
-  ), [roleFilter, statusFilter, users]);
+  ), [reviewFilter, roleFilter, statusFilter, users]);
 
   const handlePatchUser = async (user: UserType, updates: Partial<Pick<UserType, 'role' | 'status'>>) => {
     setUpdatingUserId(user.id);
@@ -536,6 +557,7 @@ function UsersListView() {
       search: searchQuery,
       role: roleFilter,
       status: statusFilter,
+      review: reviewFilter,
       currentPage,
       totalPages,
       totalItems,
@@ -578,6 +600,7 @@ function UsersListView() {
     accessReadiness.score,
     currentPage,
     data,
+    reviewFilter,
     roleFilter,
     searchQuery,
     statusFilter,
@@ -605,7 +628,15 @@ function UsersListView() {
     setNotice('Users handoff manifest downloaded.');
   };
 
-  const hasActiveFilters = searchQuery || roleFilter !== 'all' || statusFilter !== 'all';
+  const clearUserFilters = () => {
+    setSearchQuery('');
+    setRoleFilter('all');
+    setStatusFilter('all');
+    setReviewFilter('all');
+    setCurrentPage(1);
+  };
+
+  const hasActiveFilters = Boolean(searchQuery || roleFilter !== 'all' || statusFilter !== 'all' || reviewFilter !== 'all');
 
   return (
     <PageShell
@@ -888,6 +919,24 @@ function UsersListView() {
                 </label>
 
                 <select
+                  value={reviewFilter}
+                  onChange={(event) => {
+                    setReviewFilter(event.target.value as UserReviewFilter);
+                    setCurrentPage(1);
+                  }}
+                  className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+                  aria-label="Filter users by access review"
+                >
+                  <option value="all">All access reviews</option>
+                  <option value="admin-authority">Admin authority</option>
+                  <option value="content-operators">Content operators</option>
+                  <option value="pending-invites">Pending invites</option>
+                  <option value="suspended">Suspended accounts</option>
+                  <option value="incomplete-profile">Incomplete profiles</option>
+                  <option value="never-active">Never active</option>
+                </select>
+
+                <select
                   value={statusFilter}
                   onChange={(event) => {
                     setStatusFilter(event.target.value as 'all' | UserStatus);
@@ -912,6 +961,12 @@ function UsersListView() {
                   <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
                   Refresh
                 </button>
+
+                {hasActiveFilters && (
+                  <Button type="button" variant="outline" onClick={clearUserFilters}>
+                    Clear filters
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -942,12 +997,7 @@ function UsersListView() {
                     hasActiveFilters ? (
                       <button
                         type="button"
-                        onClick={() => {
-                          setSearchQuery('');
-                          setRoleFilter('all');
-                          setStatusFilter('all');
-                          setCurrentPage(1);
-                        }}
+                        onClick={clearUserFilters}
                         className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
                       >
                         Clear filters
@@ -1207,6 +1257,11 @@ function UserApiSnippet({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+const isNeverActiveUser = (user: UserType): boolean => {
+  const lastActive = user.lastActive.trim().toLowerCase();
+  return !lastActive || lastActive === 'never' || lastActive === 'invited';
+};
 
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
