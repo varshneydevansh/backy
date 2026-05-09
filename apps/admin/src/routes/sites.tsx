@@ -8,6 +8,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   AlertTriangle,
+  Code2,
+  Copy,
+  Download,
   Edit,
   Eye,
   Filter,
@@ -28,6 +31,8 @@ import { useDataTable, type Column } from '@/hooks/useDataTable';
 import { DataGrid } from '@/components/ui/DataGrid';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageShell } from '@/components/layout/PageShell';
+import { Button } from '@/components/ui/Button';
+import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { cn, formatDate } from '@/lib/utils';
 
@@ -58,6 +63,37 @@ const getPublicPreviewHref = (site: Site) => {
   return `/sites/${site.slug}`;
 };
 
+const getEnvValue = (key: string): string => {
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+  return env[key]?.trim() ?? '';
+};
+
+const getApiBaseUrl = (kind: 'public' | 'admin'): string => {
+  const envBase = (
+    kind === 'admin'
+      ? getEnvValue('VITE_BACKY_ADMIN_API_BASE_URL') ||
+        getEnvValue('VITE_ADMIN_API_URL') ||
+        getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
+        getEnvValue('VITE_PUBLIC_API_URL') ||
+        getEnvValue('VITE_API_BASE_URL')
+      : getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
+        getEnvValue('VITE_PUBLIC_API_URL') ||
+        getEnvValue('VITE_API_BASE_URL')
+  ).trim();
+
+  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+    return kind === 'admin' ? 'http://localhost:3001/api/admin' : 'http://localhost:3001/api';
+  }
+
+  const base = envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
+  return `${base.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api${kind === 'admin' ? '/admin' : ''}`;
+};
+
+const csvEscape = (value: unknown): string => {
+  const raw = String(value ?? '').replace(/\r?\n/g, '\\n');
+  return `"${raw.replace(/"/g, '""')}"`;
+};
+
 function SitesLayout() {
   const routerState = useRouterState();
   const isExactSitesRoute = routerState.location.pathname === '/sites';
@@ -77,6 +113,8 @@ function SitesListView() {
   const [statusFilter, setStatusFilter] = useState<SiteStatusFilter>('all');
   const [updatingSiteId, setUpdatingSiteId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Site | null>(null);
+  const publicApiBase = useMemo(() => getApiBaseUrl('public'), []);
+  const adminApiBase = useMemo(() => getApiBaseUrl('admin'), []);
 
   const loadSites = useCallback(async () => {
     setIsLoading(true);
@@ -113,6 +151,13 @@ function SitesListView() {
   const filteredSites = useMemo(() => (
     statusFilter === 'all' ? sites : sites.filter((site) => site.status === statusFilter)
   ), [sites, statusFilter]);
+  const selectedApiSite = useMemo(() => filteredSites[0] || sites[0] || null, [filteredSites, sites]);
+  const selectedApiSiteId = selectedApiSite?.publicSiteId || selectedApiSite?.id || '{siteId}';
+  const adminSitesUrl = `${adminApiBase}/sites`;
+  const adminSiteDetailUrl = `${adminApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}`;
+  const publicManifestUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/manifest`;
+  const publicOpenApiUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/openapi`;
+  const publicRenderUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/render?path=/`;
 
   const handleStatusChange = async (site: Site, status: Site['status']) => {
     setUpdatingSiteId(site.id);
@@ -143,6 +188,15 @@ function SitesListView() {
       setNotice(deleteError instanceof Error ? deleteError.message : 'Unable to delete site');
     } finally {
       setUpdatingSiteId(null);
+    }
+  };
+
+  const copySiteApiText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setNotice(`${label} copied.`);
+    } catch {
+      setNotice(value);
     }
   };
 
@@ -258,6 +312,45 @@ function SitesListView() {
 
   const hasActiveFilters = Boolean(searchQuery) || statusFilter !== 'all';
 
+  const handleExportSites = () => {
+    if (data.length === 0) return;
+
+    const header = [
+      'site_id',
+      'public_site_id',
+      'name',
+      'slug',
+      'custom_domain',
+      'status',
+      'page_count',
+      'last_updated',
+      'preview_url',
+    ];
+    const rows = data.map((site) => [
+      site.id,
+      site.publicSiteId || '',
+      site.name,
+      site.slug,
+      site.customDomain || '',
+      site.status,
+      site.pageCount || 0,
+      site.lastUpdated || '',
+      getPublicPreviewHref(site),
+    ]);
+    const csv = [header, ...rows]
+      .map((row) => row.map(csvEscape).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'backy-sites.csv';
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <PageShell
       title="Sites"
@@ -290,6 +383,51 @@ function SitesListView() {
         ))}
       </div>
 
+      <Panel>
+        <PanelHeader
+          title="Site frontend API"
+          description="Discovery, rendering, and admin management endpoints for custom frontends connected to this workspace."
+          icon={<Code2 className="size-4" />}
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={data.length === 0}
+                onClick={handleExportSites}
+                iconStart={<Download className="size-4" />}
+              >
+                Export CSV
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void copySiteApiText(publicManifestUrl, 'Site manifest URL')}
+                iconStart={<Copy className="size-4" />}
+              >
+                Copy manifest
+              </Button>
+            </div>
+          }
+        />
+        <PanelContent>
+          <div className="grid gap-3 md:grid-cols-4">
+            <SiteApiStat label="Selected site" value={selectedApiSite?.name || 'No site'} />
+            <SiteApiStat label="Published" value={`${sites.filter((site) => site.status === 'published').length}`} />
+            <SiteApiStat label="Draft" value={`${sites.filter((site) => site.status === 'draft').length}`} />
+            <SiteApiStat label="Custom domains" value={`${sites.filter((site) => site.customDomain).length}`} />
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            <SiteApiSnippet label="Frontend manifest" value={publicManifestUrl} />
+            <SiteApiSnippet label="OpenAPI schema" value={publicOpenApiUrl} />
+            <SiteApiSnippet label="Render by path" value={publicRenderUrl} />
+            <SiteApiSnippet label="Admin sites" value={adminSitesUrl} />
+            <SiteApiSnippet label="Admin site detail" value={adminSiteDetailUrl} />
+          </div>
+        </PanelContent>
+      </Panel>
+
       <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative min-w-0 flex-1 lg:max-w-md">
@@ -302,6 +440,7 @@ function SitesListView() {
                 setSearchQuery(event.target.value);
                 setCurrentPage(1);
               }}
+              aria-label="Search sites"
               className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
             />
           </div>
@@ -330,6 +469,7 @@ function SitesListView() {
               onClick={() => void loadSites()}
               disabled={isLoading}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              aria-label="Refresh sites"
             >
               <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
               Refresh
@@ -424,5 +564,25 @@ function SitesListView() {
         </div>
       )}
     </PageShell>
+  );
+}
+
+function SiteApiStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 px-3 py-3">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="mt-1 truncate text-sm font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function SiteApiSnippet({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="mb-1 text-xs font-medium text-muted-foreground">{label}</div>
+      <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+        {value}
+      </code>
+    </div>
   );
 }
