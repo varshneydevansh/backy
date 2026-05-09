@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { createFileRoute, Link, useNavigate, useRouterState } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   Archive,
@@ -33,15 +33,47 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
-
-export const Route = createFileRoute('/contacts')({
-  component: ContactsRoute,
-});
 
 type ContactStatusFilter = ContactStatus | 'all';
 type ContactQualityFilter = 'all' | 'missing-email' | 'missing-phone' | 'needs-notes' | 'has-source-values' | 'ready-to-promote';
+
+interface ContactsSearch {
+  siteId?: string;
+  formId?: string;
+  status?: ContactStatusFilter;
+  quality?: ContactQualityFilter;
+  q?: string;
+}
+
+const CONTACT_STATUS_FILTERS: ContactStatusFilter[] = ['all', 'new', 'contacted', 'qualified', 'archived'];
+const CONTACT_QUALITY_FILTERS: ContactQualityFilter[] = ['all', 'missing-email', 'missing-phone', 'needs-notes', 'has-source-values', 'ready-to-promote'];
+
+const isContactStatusFilter = (value: unknown): value is ContactStatusFilter => (
+  typeof value === 'string' && CONTACT_STATUS_FILTERS.includes(value as ContactStatusFilter)
+);
+
+const isContactQualityFilter = (value: unknown): value is ContactQualityFilter => (
+  typeof value === 'string' && CONTACT_QUALITY_FILTERS.includes(value as ContactQualityFilter)
+);
+
+const normalizedSearchString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+export const Route = createFileRoute('/contacts')({
+  validateSearch: (search: Record<string, unknown>): ContactsSearch => ({
+    siteId: normalizedSearchString(search.siteId),
+    formId: normalizedSearchString(search.formId),
+    status: isContactStatusFilter(search.status) ? search.status : undefined,
+    quality: isContactQualityFilter(search.quality) ? search.quality : undefined,
+    q: normalizedSearchString(search.q),
+  }),
+  component: ContactsRoute,
+});
 
 const CONTACT_CONTROL_AREAS = [
   {
@@ -114,15 +146,15 @@ interface ContactInbox {
 
 function ContactsRoute() {
   const navigate = useNavigate();
-  const routerState = useRouterState();
+  const routeSearch = Route.useSearch();
   const { sites } = useStore();
-  const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
+  const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
   const [forms, setForms] = useState<FormDefinition[]>([]);
   const [contactsByForm, setContactsByForm] = useState<Record<string, ContactInbox>>({});
-  const [selectedFormId, setSelectedFormId] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<ContactStatusFilter>('all');
-  const [qualityFilter, setQualityFilter] = useState<ContactQualityFilter>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFormId, setSelectedFormId] = useState<string>(routeSearch.formId || 'all');
+  const [statusFilter, setStatusFilter] = useState<ContactStatusFilter>(routeSearch.status || 'all');
+  const [qualityFilter, setQualityFilter] = useState<ContactQualityFilter>(routeSearch.quality || 'all');
+  const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -445,6 +477,29 @@ function ContactsRoute() {
     statusFilter,
   ]);
   const contactHandoffText = useMemo(() => JSON.stringify(contactHandoff, null, 2), [contactHandoff]);
+  const contactsRouteSearch = useMemo<ContactsSearch>(() => ({
+    siteId: activeSiteId,
+    ...(selectedFormId !== 'all' ? { formId: selectedFormId } : {}),
+    ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+    ...(qualityFilter !== 'all' ? { quality: qualityFilter } : {}),
+    ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
+  }), [activeSiteId, qualityFilter, searchQuery, selectedFormId, statusFilter]);
+
+  const updateContactsRouteSearch = (next: ContactsSearch) => {
+    const merged: ContactsSearch = {
+      ...contactsRouteSearch,
+      ...next,
+    };
+    const normalized: ContactsSearch = {
+      siteId: merged.siteId || activeSiteId,
+      ...(merged.formId && merged.formId !== 'all' ? { formId: merged.formId } : {}),
+      ...(merged.status && merged.status !== 'all' ? { status: merged.status } : {}),
+      ...(merged.quality && merged.quality !== 'all' ? { quality: merged.quality } : {}),
+      ...(merged.q?.trim() ? { q: merged.q.trim() } : {}),
+    };
+
+    navigate({ to: '/contacts', search: normalized, replace: true });
+  };
 
   const loadContacts = async () => {
     setIsLoading(true);
@@ -485,18 +540,28 @@ function ContactsRoute() {
   }, [selectedSiteId, sites]);
 
   useEffect(() => {
-    const requestedSiteId = getSiteSearchParam();
-    if (!requestedSiteId) return;
+    const nextSiteId = routeSearch.siteId
+      ? getSiteSelectionFromSearch(sites, routeSearch.siteId)
+      : selectedSiteId;
+    const siteChanged = nextSiteId !== selectedSiteId;
 
-    const nextSiteId = getSiteSelectionFromSearch(sites);
-    if (nextSiteId === selectedSiteId) return;
+    if (siteChanged) {
+      setSelectedSiteId(nextSiteId);
+    }
 
-    setSelectedSiteId(nextSiteId);
-    setSearchQuery('');
-    setSelectedFormId('all');
-    setStatusFilter('all');
-    setQualityFilter('all');
-  }, [routerState.location.search, selectedSiteId, sites]);
+    setSearchQuery(routeSearch.q || '');
+    setSelectedFormId(routeSearch.formId || 'all');
+    setStatusFilter(routeSearch.status || 'all');
+    setQualityFilter(routeSearch.quality || 'all');
+  }, [
+    routeSearch.formId,
+    routeSearch.q,
+    routeSearch.quality,
+    routeSearch.siteId,
+    routeSearch.status,
+    selectedSiteId,
+    sites,
+  ]);
 
   useEffect(() => {
     void loadContacts();
@@ -633,10 +698,19 @@ function ContactsRoute() {
     setSelectedFormId('all');
     setStatusFilter('all');
     setQualityFilter('all');
+    updateContactsRouteSearch({
+      formId: undefined,
+      status: undefined,
+      quality: undefined,
+      q: undefined,
+    });
   };
   const selectContactsSite = (nextSiteId: string) => {
     setSelectedSiteId(nextSiteId);
-    clearContactFilters();
+    setSearchQuery('');
+    setSelectedFormId('all');
+    setStatusFilter('all');
+    setQualityFilter('all');
     navigate({ to: '/contacts', search: { siteId: nextSiteId }, replace: true });
   };
 
@@ -994,7 +1068,11 @@ function ContactsRoute() {
                 type="search"
                 aria-label="Search contacts"
                 value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
+                onChange={(event) => {
+                  const q = event.target.value;
+                  setSearchQuery(q);
+                  updateContactsRouteSearch({ q: q || undefined });
+                }}
                 placeholder="Search contacts, forms, request IDs..."
                 className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
@@ -1002,7 +1080,11 @@ function ContactsRoute() {
             <select
               aria-label="Form filter"
               value={selectedFormId}
-              onChange={(event) => setSelectedFormId(event.target.value)}
+              onChange={(event) => {
+                const formId = event.target.value;
+                setSelectedFormId(formId);
+                updateContactsRouteSearch({ formId });
+              }}
               className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
             >
               <option value="all">All forms</option>
@@ -1013,7 +1095,11 @@ function ContactsRoute() {
             <select
               aria-label="Lead quality filter"
               value={qualityFilter}
-              onChange={(event) => setQualityFilter(event.target.value as ContactQualityFilter)}
+              onChange={(event) => {
+                const quality = event.target.value as ContactQualityFilter;
+                setQualityFilter(quality);
+                updateContactsRouteSearch({ quality });
+              }}
               className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
             >
               <option value="all">All lead quality</option>
@@ -1029,7 +1115,10 @@ function ContactsRoute() {
                 <button
                   key={status}
                   type="button"
-                  onClick={() => setStatusFilter(status)}
+                  onClick={() => {
+                    setStatusFilter(status);
+                    updateContactsRouteSearch({ status });
+                  }}
                   aria-pressed={statusFilter === status}
                   className={cn(
                     'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-background hover:text-foreground',
