@@ -4,12 +4,16 @@ import {
   Archive,
   CheckCircle2,
   ClipboardCheck,
+  Code2,
+  Copy,
   CreditCard,
+  ExternalLink,
   PackageCheck,
   Plus,
   Receipt,
   RefreshCw,
   Search,
+  ShieldCheck,
   Sparkles,
   Trash2,
 } from 'lucide-react';
@@ -107,6 +111,11 @@ function OrdersRoute() {
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
+  const adminOrdersApiUrl = ordersCollection
+    ? `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/collections/${encodeURIComponent(ordersCollection.id)}/records`
+    : '';
+  const publicOrdersApiUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${ORDERS_COLLECTION_SLUG}/records`;
   const selectedOrder = useMemo(
     () => orders.find((order) => order.id === selectedOrderId) || null,
     [orders, selectedOrderId],
@@ -313,6 +322,15 @@ function OrdersRoute() {
     }
   };
 
+  const copyOrdersApiUrl = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setNotice(`${label} copied.`);
+    } catch {
+      setNotice(value);
+    }
+  };
+
   return (
     <PageShell
       title="Orders"
@@ -320,6 +338,8 @@ function OrdersRoute() {
       action={
         <div className="flex flex-wrap items-center gap-2">
           <select
+            id="orders-active-site"
+            aria-label="Active Site"
             value={activeSiteId}
             onChange={(event) => setSelectedSiteId(event.target.value)}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
@@ -347,6 +367,63 @@ function OrdersRoute() {
         <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
           {notice}
         </div>
+      )}
+
+      {ordersCollection && (
+        <Panel className="mb-6">
+          <PanelHeader
+            title="Order API and security"
+            description="Internal fulfillment data stays private while custom frontends can talk to the controlled admin endpoint."
+            icon={<ShieldCheck className="size-4" />}
+            action={
+              <div className="flex flex-wrap items-center gap-2">
+                <Button onClick={() => void copyOrdersApiUrl(adminOrdersApiUrl, 'Internal orders API URL')} iconStart={<Copy className="size-4" />}>
+                  Copy admin API
+                </Button>
+                <a
+                  href={adminOrdersApiUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                >
+                  <ExternalLink className="size-4" />
+                  Open admin API
+                </a>
+              </div>
+            }
+          />
+          <PanelContent>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-lg border border-border bg-muted/40 p-3">
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                  <Code2 className="size-4" />
+                  Internal orders endpoint
+                </div>
+                <code className="block overflow-x-auto rounded-md bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+                  {adminOrdersApiUrl}
+                </code>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/40 p-3">
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                  <ShieldCheck className="size-4" />
+                  Public order access
+                </div>
+                <code className="block overflow-x-auto rounded-md bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+                  {publicOrdersApiUrl}
+                </code>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span className="rounded-md border border-border bg-background px-2 py-1">
+                    publicRead {ordersCollection.permissions.publicRead ? 'enabled' : 'disabled'}
+                  </span>
+                  <span className="rounded-md border border-border bg-background px-2 py-1">
+                    publicCreate {ordersCollection.permissions.publicCreate ? 'enabled' : 'disabled'}
+                  </span>
+                  <span>Use a server checkout or admin key before writing orders.</span>
+                </div>
+              </div>
+            </div>
+          </PanelContent>
+        </Panel>
       )}
 
       <div className="mb-6 grid gap-3 md:grid-cols-4">
@@ -381,6 +458,7 @@ function OrdersRoute() {
                 <div className="relative min-w-64 flex-1">
                   <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <input
+                    aria-label="Search orders"
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="Search orders..."
@@ -417,9 +495,9 @@ function OrdersRoute() {
                       selected={order.id === selectedOrderId}
                       disabled={isSaving}
                       onEdit={() => setSelectedOrderId(order.id)}
-      onPaid={() => void updateOrderWorkflow(order, { orderStatus: 'paid', paymentStatus: 'paid' })}
-      onFulfilled={() => void updateOrderWorkflow(order, { orderStatus: 'fulfilled', fulfillmentStatus: 'fulfilled' })}
-      onCancelled={() => void updateOrderWorkflow(order, { orderStatus: 'cancelled', fulfillmentStatus: 'cancelled' })}
+                      onPaid={() => void updateOrderWorkflow(order, { orderStatus: 'paid', paymentStatus: 'paid' })}
+                      onFulfilled={() => void updateOrderWorkflow(order, { orderStatus: 'fulfilled', fulfillmentStatus: 'fulfilled' })}
+                      onCancelled={() => void updateOrderWorkflow(order, { orderStatus: 'cancelled', fulfillmentStatus: 'cancelled' })}
                       onDelete={() => setPendingDeleteOrder(order)}
                     />
                   ))}
@@ -448,6 +526,7 @@ function OrdersRoute() {
                   </Field>
                   <Field label="Record status">
                     <select
+                      aria-label="Record status"
                       value={formState.recordStatus}
                       onChange={(event) => setFormState((current) => ({ ...current, recordStatus: event.target.value as ContentStatus }))}
                       className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
@@ -501,6 +580,7 @@ function OrdersRoute() {
                 <div className="grid grid-cols-3 gap-3">
                   <Field label="Order">
                     <select
+                      aria-label="Order status"
                       value={formState.orderStatus}
                       onChange={(event) => setFormState((current) => ({ ...current, orderStatus: event.target.value as OrderWorkflowStatus }))}
                       className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
@@ -514,6 +594,7 @@ function OrdersRoute() {
                   </Field>
                   <Field label="Payment">
                     <select
+                      aria-label="Payment status"
                       value={formState.paymentStatus}
                       onChange={(event) => setFormState((current) => ({ ...current, paymentStatus: event.target.value as PaymentStatus }))}
                       className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
@@ -526,6 +607,7 @@ function OrdersRoute() {
                   </Field>
                   <Field label="Fulfillment">
                     <select
+                      aria-label="Fulfillment status"
                       value={formState.fulfillmentStatus}
                       onChange={(event) => setFormState((current) => ({ ...current, fulfillmentStatus: event.target.value as FulfillmentStatus }))}
                       className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
@@ -713,6 +795,29 @@ function StatePill({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+const getEnvValue = (key: string): string => {
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+  return env[key]?.trim() ?? '';
+};
+
+const getPublicBaseUrl = (): string => {
+  const envBase = (
+    getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
+    getEnvValue('VITE_PUBLIC_API_URL') ||
+    getEnvValue('VITE_API_BASE_URL') ||
+    ''
+  ).trim();
+
+  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+    return 'http://localhost:3001';
+  }
+
+  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+    .replace(/\/api\/admin$/, '')
+    .replace(/\/api$/, '')
+    .replace(/\/$/, '');
+};
 
 const toNumber = (value: unknown): number => {
   const numberValue = Number(value);
