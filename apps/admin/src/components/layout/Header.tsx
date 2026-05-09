@@ -190,6 +190,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchLoadedForSiteId, setSearchLoadedForSiteId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const isGlobalSearchBusy = searchLoading;
 
   const selectedSiteId = getSiteSelectionFromSearch(sites);
   const activeSite = useMemo(
@@ -681,6 +682,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   }, []);
 
   const handleSearchResult = (result: SearchResult) => {
+    if (isGlobalSearchBusy) return;
+
     closeGlobalSearch();
 
     if (result.action.route === 'site') {
@@ -766,7 +769,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
         <button
           type="button"
           onClick={openGlobalSearch}
-          className="inline-flex rounded-lg p-2 transition-colors hover:bg-accent focus-ring md:hidden"
+          disabled={isGlobalSearchBusy}
+          className="inline-flex rounded-lg p-2 transition-colors hover:bg-accent focus-ring disabled:cursor-not-allowed disabled:opacity-60 md:hidden"
           aria-label="Open search"
         >
           <Search className="h-5 w-5" />
@@ -796,7 +800,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                 setSearchOpen(false);
                 return;
               }
-              if (event.key === 'Enter' && searchResults[0]) {
+              if (event.key === 'Enter' && searchResults[0] && !isGlobalSearchBusy) {
                 event.preventDefault();
                 handleSearchResult(searchResults[0]);
               }
@@ -838,7 +842,16 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                   </div>
                 ) : searchError ? (
                   <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                    {searchError}
+                    <div>{searchError}</div>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => void loadGlobalSearch()}
+                      disabled={isGlobalSearchBusy}
+                      className="mt-2 inline-flex rounded-md border border-amber-300 bg-white/70 px-2 py-1 text-xs font-medium text-amber-900 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Retry search
+                    </button>
                   </div>
                 ) : searchResults.length === 0 ? (
                   <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
@@ -849,9 +862,10 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                     <button
                       key={result.id}
                       type="button"
+                      disabled={isGlobalSearchBusy}
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => handleSearchResult(result)}
-                      className="block w-full rounded-md px-3 py-2 text-left hover:bg-accent"
+                      className="block w-full rounded-md px-3 py-2 text-left hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <div className="flex items-center justify-between gap-3">
                         <span className="truncate text-sm font-medium">{result.title}</span>
