@@ -160,6 +160,8 @@ function ContactsRoute() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const isContactMutationBusy = updatingId !== null;
+  const isContactsBusy = isLoading || isContactMutationBusy;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -487,6 +489,8 @@ function ContactsRoute() {
   }), [activeSiteId, qualityFilter, searchQuery, selectedFormId, statusFilter]);
 
   const updateContactsRouteSearch = (next: ContactsSearch) => {
+    if (isContactsBusy) return;
+
     const merged: ContactsSearch = {
       ...contactsRouteSearch,
       ...next,
@@ -503,6 +507,8 @@ function ContactsRoute() {
   };
 
   const loadContacts = async () => {
+    if (isContactsBusy) return;
+
     setIsLoading(true);
     setError(null);
     setNotice(null);
@@ -570,6 +576,8 @@ function ContactsRoute() {
   }, [activeSiteId]);
 
   const handleStatus = async (contact: AdminContact, status: ContactStatus) => {
+    if (isContactsBusy || contact.status === status) return;
+
     setUpdatingId(contact.id);
     setError(null);
     setNotice(null);
@@ -597,6 +605,8 @@ function ContactsRoute() {
   };
 
   const handleNotes = async (contact: AdminContact, notes: string) => {
+    if (isContactsBusy) return;
+
     setUpdatingId(contact.id);
     setError(null);
     setNotice(null);
@@ -624,6 +634,8 @@ function ContactsRoute() {
   };
 
   const copyContactApiText = async (value: string, label: string) => {
+    if (isContactsBusy) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setError(null);
@@ -634,6 +646,8 @@ function ContactsRoute() {
     }
   };
   const downloadContactHandoff = () => {
+    if (isContactsBusy) return;
+
     const blob = new Blob([contactHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -648,7 +662,7 @@ function ContactsRoute() {
   };
 
   const handleExportContacts = () => {
-    if (filteredContacts.length === 0) return;
+    if (filteredContacts.length === 0 || isContactsBusy) return;
 
     const header = [
       'contact_id',
@@ -695,6 +709,8 @@ function ContactsRoute() {
     URL.revokeObjectURL(url);
   };
   const clearContactFilters = () => {
+    if (isContactsBusy) return;
+
     setSearchQuery('');
     setSelectedFormId('all');
     setStatusFilter('all');
@@ -707,6 +723,8 @@ function ContactsRoute() {
     });
   };
   const selectContactsSite = (nextSiteId: string) => {
+    if (isContactsBusy) return;
+
     setSelectedSiteId(nextSiteId);
     setSearchQuery('');
     setSelectedFormId('all');
@@ -725,10 +743,11 @@ function ContactsRoute() {
             id="contacts-active-site"
             aria-label="Active Site"
             value={activeSiteId}
+            disabled={isContactsBusy}
             onChange={(event) => {
               selectContactsSite(event.target.value);
             }}
-            className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
+            className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
           >
             {sites.length === 0 ? (
               <option value="site-demo">Demo site</option>
@@ -738,7 +757,7 @@ function ContactsRoute() {
               </option>
             ))}
           </select>
-          <Button onClick={() => void loadContacts()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+          <Button onClick={() => void loadContacts()} disabled={isContactsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
             Refresh
           </Button>
         </div>
@@ -776,22 +795,23 @@ function ContactsRoute() {
             <Button
               variant="outline"
               onClick={() => void copyContactApiText(contactHandoffText, 'Contact handoff manifest')}
+              disabled={isContactsBusy}
               iconStart={<Copy className="size-4" />}
             >
               Copy manifest
             </Button>
-            <Button variant="outline" onClick={downloadContactHandoff} iconStart={<Download className="size-4" />}>
+            <Button variant="outline" onClick={downloadContactHandoff} disabled={isContactsBusy} iconStart={<Download className="size-4" />}>
               Download JSON
             </Button>
             <Button
               variant="outline"
               onClick={handleExportContacts}
-              disabled={filteredContacts.length === 0}
+              disabled={filteredContacts.length === 0 || isContactsBusy}
               iconStart={<Download className="size-4" />}
             >
               Export CSV
             </Button>
-            <Button onClick={() => void loadContacts()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+            <Button onClick={() => void loadContacts()} disabled={isContactsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh contacts
             </Button>
           </div>
@@ -897,10 +917,11 @@ function ContactsRoute() {
           id="contacts-active-site-inline"
           aria-label="Active contacts site"
           value={activeSiteId}
+          disabled={isContactsBusy}
           onChange={(event) => {
             selectContactsSite(event.target.value);
           }}
-          className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
+          className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
         >
           {sites.length === 0 ? (
             <option value="site-demo">Demo site</option>
@@ -933,12 +954,17 @@ function ContactsRoute() {
               <Button
                 variant="outline"
                 onClick={handleExportContacts}
-                disabled={filteredContacts.length === 0}
+                disabled={filteredContacts.length === 0 || isContactsBusy}
                 iconStart={<Download className="size-4" />}
               >
                 Export CSV
               </Button>
-              <Link to="/forms" search={{ siteId: activeSiteId }}>
+              <Link
+                to="/forms"
+                search={{ siteId: activeSiteId }}
+                aria-disabled={isContactsBusy}
+                className={cn(isContactsBusy && 'pointer-events-none opacity-60')}
+              >
                 <Button variant="outline" iconStart={<Mail className="size-4" />}>
                   Forms
                 </Button>
@@ -1008,12 +1034,13 @@ function ContactsRoute() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button onClick={() => void copyContactApiText(contactsUrl, 'Contacts URL')} iconStart={<Copy className="size-4" />}>
+                  <Button onClick={() => void copyContactApiText(contactsUrl, 'Contacts URL')} disabled={isContactsBusy} iconStart={<Copy className="size-4" />}>
                     Copy contacts
                   </Button>
                   <Button
                     variant="outline"
                     onClick={() => void copyContactApiText(contactHandoffText, 'Contact handoff manifest')}
+                    disabled={isContactsBusy}
                     iconStart={<Copy className="size-4" />}
                   >
                     Copy manifest
@@ -1022,7 +1049,11 @@ function ContactsRoute() {
                     href={contactsUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                    aria-disabled={isContactsBusy}
+                    className={cn(
+                      'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
+                      isContactsBusy && 'pointer-events-none opacity-60',
+                    )}
                   >
                     <ExternalLink className="size-4" />
                     Open endpoint
@@ -1069,24 +1100,28 @@ function ContactsRoute() {
                 type="search"
                 aria-label="Search contacts"
                 value={searchQuery}
+                disabled={isContactsBusy}
                 onChange={(event) => {
+                  if (isContactsBusy) return;
                   const q = event.target.value;
                   setSearchQuery(q);
                   updateContactsRouteSearch({ q: q || undefined });
                 }}
                 placeholder="Search contacts, forms, request IDs..."
-                className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>
             <select
               aria-label="Form filter"
               value={selectedFormId}
+              disabled={isContactsBusy}
               onChange={(event) => {
+                if (isContactsBusy) return;
                 const formId = event.target.value;
                 setSelectedFormId(formId);
                 updateContactsRouteSearch({ formId });
               }}
-              className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
+              className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
               <option value="all">All forms</option>
               {forms.map((form) => (
@@ -1096,12 +1131,14 @@ function ContactsRoute() {
             <select
               aria-label="Lead quality filter"
               value={qualityFilter}
+              disabled={isContactsBusy}
               onChange={(event) => {
+                if (isContactsBusy) return;
                 const quality = event.target.value as ContactQualityFilter;
                 setQualityFilter(quality);
                 updateContactsRouteSearch({ quality });
               }}
-              className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+              className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
               <option value="all">All lead quality</option>
               <option value="missing-email">Missing email</option>
@@ -1117,12 +1154,14 @@ function ContactsRoute() {
                   key={status}
                   type="button"
                   onClick={() => {
+                    if (isContactsBusy) return;
                     setStatusFilter(status);
                     updateContactsRouteSearch({ status });
                   }}
+                  disabled={isContactsBusy}
                   aria-pressed={statusFilter === status}
                   className={cn(
-                    'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-background hover:text-foreground',
+                    'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60',
                     statusFilter === status && 'bg-background text-foreground shadow-sm',
                   )}
                 >
@@ -1131,7 +1170,7 @@ function ContactsRoute() {
               ))}
             </div>
             {hasActiveContactFilters && (
-              <Button variant="outline" onClick={clearContactFilters}>
+              <Button variant="outline" onClick={clearContactFilters} disabled={isContactsBusy}>
                 Clear filters
               </Button>
             )}
@@ -1159,7 +1198,7 @@ function ContactsRoute() {
                 Change the search, form, lifecycle, or lead quality filters to broaden the inbox.
               </div>
               {hasActiveContactFilters && (
-                <Button variant="outline" onClick={clearContactFilters} className="mt-4">
+                <Button variant="outline" onClick={clearContactFilters} disabled={isContactsBusy} className="mt-4">
                   Clear filters
                 </Button>
               )}
@@ -1171,7 +1210,7 @@ function ContactsRoute() {
                   key={contact.id}
                   contact={contact}
                   form={formById.get(contact.formId)}
-                  disabled={updatingId === contact.id}
+                  disabled={isContactsBusy}
                   onStatus={(status) => void handleStatus(contact, status)}
                   onNotes={(notes) => void handleNotes(contact, notes)}
                 />
@@ -1307,9 +1346,13 @@ function ContactCard({
         <textarea
           id={`contact-notes-${contact.id}`}
           value={notesDraft}
-          onChange={(event) => setNotesDraft(event.target.value)}
+          disabled={disabled}
+          onChange={(event) => {
+            if (disabled) return;
+            setNotesDraft(event.target.value);
+          }}
           rows={3}
-          className="mt-2 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+          className="mt-2 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
           placeholder="Follow-up context, qualification notes, or next steps."
         />
         <div className="mt-2 flex justify-end">
