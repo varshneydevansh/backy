@@ -241,8 +241,43 @@ function MediaPage() {
     [selectedAsset?.metadata],
   );
   const mediaAnalytics = useMemo(() => getMediaAnalytics(files), [files]);
-  const displayedFiles = useMemo(() => (
-    files.filter((file) => {
+  const displayedFiles = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+
+    return files.filter((file) => {
+      if (typeFilter !== 'all' && file.type !== typeFilter) {
+        return false;
+      }
+
+      if (visibilityFilter !== 'all' && (file.visibility || 'public') !== visibilityFilter) {
+        return false;
+      }
+
+      if (selectedFolderId === null && file.folderId) {
+        return false;
+      }
+
+      if (typeof selectedFolderId === 'string' && file.folderId !== selectedFolderId) {
+        return false;
+      }
+
+      if (normalizedSearch) {
+        const searchableText = [
+          file.name,
+          file.type,
+          file.altText,
+          file.caption,
+          file.visibility || 'public',
+          ...(file.tags || []),
+          typeof file.metadata?.mimeType === 'string' ? file.metadata.mimeType : '',
+          typeof file.metadata?.fontFamily === 'string' ? file.metadata.fontFamily : '',
+        ].join(' ').toLowerCase();
+
+        if (!searchableText.includes(normalizedSearch)) {
+          return false;
+        }
+      }
+
       if (usageFilter === 'unused') {
         return !hasMediaReferences(file);
       }
@@ -253,8 +288,8 @@ function MediaPage() {
         return getReplacementVersions(file.metadata).length > 0;
       }
       return true;
-    })
-  ), [files, usageFilter]);
+    });
+  }, [files, searchQuery, selectedFolderId, typeFilter, usageFilter, visibilityFilter]);
   const quotaUsagePercent = mediaQuota && mediaQuota.limitBytes > 0
     ? Math.min(100, Math.round((mediaQuota.usedBytes / mediaQuota.limitBytes) * 100))
     : 0;
