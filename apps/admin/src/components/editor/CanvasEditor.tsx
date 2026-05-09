@@ -163,6 +163,7 @@ export interface CanvasEditorProps {
     settings: PageSettings,
     size?: CanvasSize
   ) => void;
+  validateSettings?: (settings: PageSettings) => string | null;
 }
 
 const normalizeTypeToken = (value: string): string => {
@@ -266,6 +267,7 @@ export function CanvasEditor({
   initialSize,
   mediaContext,
   onChange,
+  validateSettings,
 }: CanvasEditorProps) {
   const media = useStore((state) => state.media);
   const setMedia = useStore((state) => state.setMedia);
@@ -1650,9 +1652,18 @@ export function CanvasEditor({
     }
 
     const saveSequence = changeSequenceRef.current;
+    const nextSettings = settingsOverride ?? pageSettings;
+    const validationMessage = validateSettings?.(nextSettings) || null;
+    if (validationMessage) {
+      setHasUnsavedChanges(true);
+      if (!silent) {
+        setEditorNotice(validationMessage);
+      }
+      return;
+    }
+
     setIsSaving(true);
     try {
-      const nextSettings = settingsOverride ?? pageSettings;
       await Promise.resolve(onSave(elements, nextSettings, size));
       if (changeSequenceRef.current === saveSequence) {
         setHasUnsavedChanges(false);
@@ -1667,7 +1678,7 @@ export function CanvasEditor({
     } finally {
       setIsSaving(false);
     }
-  }, [elements, isSaving, onSave, pageSettings, size]);
+  }, [elements, isSaving, onSave, pageSettings, size, validateSettings]);
 
   const handleTogglePublish = useCallback(async () => {
     const nextSettings: PageSettings = {
@@ -2885,6 +2896,7 @@ export function CanvasEditor({
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
           settings={pageSettings}
+          validateSettings={validateSettings}
           onSave={(newSettings) => {
             setPageSettings(newSettings);
             markChanges();

@@ -70,6 +70,16 @@ const PAGE_EDITOR_CONTROL_AREAS = [
   },
 ] as const;
 
+const slugify = (value: string) => (
+  value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+);
+
+const getPagePublicPath = (page: Pick<Page, 'slug' | 'isHomepage'>) => (
+  page.isHomepage || page.slug === 'home' || page.slug === ''
+    ? '/'
+    : `/${slugify(page.slug)}`
+);
+
 function PageEditorRoute() {
   const navigate = useNavigate();
   const { pageId } = Route.useParams();
@@ -276,6 +286,46 @@ function PageEditorRoute() {
   const hasUsableRoute = page.slug.trim().length > 0;
   const hasSeo = Boolean(page.meta?.title || page.title);
   const hasRevisionHistory = revisions.length > 0;
+  const publicPath = getPagePublicPath(page);
+  const selectedSite = sites.find((site) => (site.publicSiteId || site.id) === siteId);
+  const selectedSiteIdentifiers = new Set(
+    [siteId, selectedSite?.id, selectedSite?.publicSiteId].filter(Boolean),
+  );
+  const selectedSitePages = pages.filter((candidate) => selectedSiteIdentifiers.has(candidate.siteId));
+  const getPublicPathForSettings = (settings: PageSettings) => (
+    page.isHomepage || settings.slug === 'home' || settings.slug.trim() === ''
+      ? '/'
+      : `/${slugify(settings.slug || settings.title || 'page')}`
+  );
+  const findRouteConflict = (settings: PageSettings) => {
+    const nextPath = getPublicPathForSettings(settings);
+
+    return selectedSitePages.find((candidate) => candidate.id !== page.id && getPagePublicPath(candidate) === nextPath) || null;
+  };
+  const currentRouteConflict = findRouteConflict(initialSettings);
+  const validatePageSettings = (settings: PageSettings) => {
+    const nextSlug = slugify(settings.slug || settings.title || 'page');
+    const nextPath = getPublicPathForSettings(settings);
+    const conflict = findRouteConflict(settings);
+
+    if (!settings.title.trim()) {
+      return 'Add a page title before saving settings.';
+    }
+
+    if (!settings.slug.trim() && !page.isHomepage) {
+      return 'Add a URL slug before saving settings.';
+    }
+
+    if (nextPath !== '/' && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(nextSlug)) {
+      return 'Use lowercase letters, numbers, and hyphens for the URL slug.';
+    }
+
+    if (conflict) {
+      return `${nextPath} is already used by "${conflict.title}". Choose another slug before saving.`;
+    }
+
+    return null;
+  };
   const editorReadinessChecks = [
     {
       label: 'Page identity',
@@ -286,6 +336,13 @@ function PageEditorRoute() {
       label: 'Route',
       detail: hasUsableRoute ? `/${page.slug}` : 'Add a slug so the frontend can resolve this page.',
       ready: hasUsableRoute,
+    },
+    {
+      label: 'Route availability',
+      detail: currentRouteConflict
+        ? `${publicPath} conflicts with "${currentRouteConflict.title}".`
+        : `${publicPath} is unique across ${selectedSitePages.length} page${selectedSitePages.length === 1 ? '' : 's'} in this site.`,
+      ready: !currentRouteConflict,
     },
     {
       label: 'Canvas content',
@@ -321,7 +378,6 @@ function PageEditorRoute() {
   };
   const adminPageUrl = `${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/pages/${encodeURIComponent(pageId)}`;
   const publicApiBase = getAdminApiBase().replace(/\/api\/admin$/, '/api');
-  const publicPath = page.isHomepage || page.slug === 'home' || page.slug === '' ? '/' : `/${page.slug}`;
   const publicRenderUrl = `${publicApiBase}/sites/${encodeURIComponent(siteId)}/render?path=${encodeURIComponent(publicPath)}`;
   const publicResolveUrl = `${publicApiBase}/sites/${encodeURIComponent(siteId)}/resolve?path=${encodeURIComponent(publicPath)}`;
   const editorHandoff = {
@@ -334,6 +390,17 @@ function PageEditorRoute() {
       status: page.status,
       scheduledAt: page.scheduledAt || null,
       isHomepage: Boolean(page.isHomepage),
+      routeAvailability: currentRouteConflict
+        ? {
+            status: 'conflict',
+            pageId: currentRouteConflict.id,
+            title: currentRouteConflict.title,
+            path: getPagePublicPath(currentRouteConflict),
+          }
+        : {
+            status: 'available',
+            checkedPages: selectedSitePages.length,
+          },
     },
     site: {
       id: siteId,
@@ -394,6 +461,7 @@ function PageEditorRoute() {
       : null,
     guardrails: [
       'Publish is blocked when backend readiness reports blocking errors.',
+      'Page settings save is blocked when the edited route collides with another page in the same site.',
       'Saving records a revision snapshot before editor changes are persisted.',
       'Restoring a revision replaces the canvas with a saved backend snapshot.',
       'Frontend renderers should use public resolve/render endpoints and treat admin endpoints as private.',
@@ -440,6 +508,12 @@ function PageEditorRoute() {
       locale: 'en',
     });
     try {
+      const validationMessage = validatePageSettings(settings);
+      if (validationMessage) {
+        setSaveWarning(validationMessage);
+        throw new Error(validationMessage);
+      }
+
       const savedPage = await updatePageFromApi(siteId, pageId, {
         title: settings.title,
         slug: settings.slug,
@@ -459,6 +533,7 @@ function PageEditorRoute() {
       setSaveWarning(error instanceof Error
         ? `${error.message}. Changes were not persisted.`
         : 'Backend save failed. Changes were not persisted.');
+      throw error;
     }
   };
 
@@ -735,6 +810,7 @@ function PageEditorRoute() {
                 targetId: pageId,
                 targetLabel: page.title,
               }}
+              validateSettings={validatePageSettings}
               className="h-full w-full"
             />
           </EditorWorkspaceFrame>

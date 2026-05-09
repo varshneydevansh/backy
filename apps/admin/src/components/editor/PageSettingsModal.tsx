@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { X, Search, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ContentStatus } from '@/stores/mockStore';
@@ -23,6 +23,7 @@ interface PageSettingsModalProps {
     onClose: () => void;
     settings: PageSettings;
     onSave: (settings: PageSettings) => void;
+    validateSettings?: (settings: PageSettings) => string | null;
 }
 
 const formatJsonLd = (jsonLd: PageSettings['meta']['jsonLd']): string => (
@@ -57,6 +58,7 @@ export function PageSettingsModal({
     onClose,
     settings: initialSettings,
     onSave,
+    validateSettings,
 }: PageSettingsModalProps) {
     const [settings, setSettings] = useState<PageSettings>(initialSettings);
     const [activeTab, setActiveTab] = useState<'general' | 'seo' | 'social'>('general');
@@ -68,6 +70,11 @@ export function PageSettingsModal({
         setJsonLdText(formatJsonLd(initialSettings.meta.jsonLd));
         setValidationError(null);
     }, [initialSettings, isOpen]);
+
+    const settingsValidation = useMemo(
+        () => validateSettings?.(settings) || null,
+        [settings, validateSettings],
+    );
 
     if (!isOpen) return null;
 
@@ -81,6 +88,12 @@ export function PageSettingsModal({
         if (!parsedJsonLd.ok) {
             setValidationError(parsedJsonLd.message);
             setActiveTab('seo');
+            return;
+        }
+
+        if (settingsValidation) {
+            setValidationError(settingsValidation);
+            setActiveTab('general');
             return;
         }
 
@@ -181,6 +194,11 @@ export function PageSettingsModal({
                                     />
                                 </div>
                             </div>
+                            {settingsValidation && (
+                                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                                    {settingsValidation}
+                                </div>
+                            )}
 
                             <div>
                                 <label className="block text-sm font-medium mb-1">Status</label>
@@ -334,7 +352,8 @@ export function PageSettingsModal({
                     </button>
                     <button
                         onClick={handleSave}
-                        className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md"
+                        disabled={Boolean(settingsValidation)}
+                        className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md disabled:opacity-50"
                     >
                         Save Changes
                     </button>
