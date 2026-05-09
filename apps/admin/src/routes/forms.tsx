@@ -39,6 +39,7 @@ export const Route = createFileRoute('/forms')({
 });
 
 type SubmissionStatusFilter = FormSubmissionStatus | 'all';
+type PageTemplateHandoff = 'landing' | 'storefront' | 'contact' | 'registration';
 
 const FORM_CONTROL_AREAS = [
   {
@@ -77,6 +78,7 @@ interface FormTemplateBlueprint {
   id: string;
   title: string;
   description: string;
+  pageTemplate: PageTemplateHandoff;
   audience: FormDefinition['audience'];
   moderationMode: NonNullable<FormDefinition['moderationMode']>;
   successMessage: string;
@@ -90,6 +92,7 @@ const FORM_TEMPLATES: FormTemplateBlueprint[] = [
     id: 'registration',
     title: 'Registration',
     description: 'Account, member, or waitlist signup with identity, phone, role, and consent fields.',
+    pageTemplate: 'registration',
     audience: 'public',
     moderationMode: 'manual',
     successMessage: 'Registration received. Check your inbox for the next step.',
@@ -113,6 +116,7 @@ const FORM_TEMPLATES: FormTemplateBlueprint[] = [
     id: 'contact',
     title: 'Contact',
     description: 'Standard lead capture form for service inquiries and general website contact pages.',
+    pageTemplate: 'contact',
     audience: 'public',
     moderationMode: 'manual',
     successMessage: 'Thanks. We will reply soon.',
@@ -135,6 +139,7 @@ const FORM_TEMPLATES: FormTemplateBlueprint[] = [
     id: 'newsletter',
     title: 'Newsletter',
     description: 'Lightweight subscriber capture with topic preference and consent controls.',
+    pageTemplate: 'landing',
     audience: 'public',
     moderationMode: 'auto-approve',
     successMessage: 'You are subscribed.',
@@ -156,6 +161,7 @@ const FORM_TEMPLATES: FormTemplateBlueprint[] = [
     id: 'product-inquiry',
     title: 'Product inquiry',
     description: 'Commerce support or quote request form that can sit on product detail pages.',
+    pageTemplate: 'storefront',
     audience: 'public',
     moderationMode: 'manual',
     successMessage: 'Inquiry received. We will follow up with details.',
@@ -1002,6 +1008,14 @@ function FormsRoute() {
                     ) : null}
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
+                    <Link
+                      to="/pages/new"
+                      search={{ siteId: activeSiteId, template: template.pageTemplate }}
+                      className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-primary bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                    >
+                      <Sparkles className="size-4" />
+                      Start page
+                    </Link>
                     <Button
                       size="sm"
                       onClick={() => void copyFormApiText(templateText, `${template.title} form template`)}
@@ -1038,11 +1052,12 @@ function FormsRoute() {
           description="Forms appear here when a page or blog design includes a form block for this site."
           action={
             <Link
-              to="/pages"
+              to="/pages/new"
+              search={{ siteId: activeSiteId, template: 'registration' }}
               className="mt-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-primary bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
               <Sparkles className="size-4" />
-              Open Pages
+              Create registration page
             </Link>
           }
         />
@@ -1560,6 +1575,10 @@ function buildTemplateManifest(template: FormTemplateBlueprint) {
       contactShareEmailField: template.contactShare?.emailField,
       contactSharePhoneField: template.contactShare?.phoneField,
       contactShareNotesField: template.contactShare?.notesField,
+    },
+    pageTemplateHandoff: {
+      route: '/pages/new',
+      template: template.pageTemplate,
     },
     samplePayload,
   };
