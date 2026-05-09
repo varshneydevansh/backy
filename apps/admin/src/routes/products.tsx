@@ -48,10 +48,16 @@ interface ProductFormState {
   slug: string;
   sku: string;
   price: string;
+  compareAtPrice: string;
   currency: string;
   inventory: string;
+  productType: 'physical' | 'digital' | 'service';
+  downloadUrl: string;
+  shippingRequired: boolean;
+  weight: string;
   imageUrl: string;
   description: string;
+  seoTitle: string;
   status: ContentStatus;
   featured: boolean;
   taxable: boolean;
@@ -63,12 +69,18 @@ const PRODUCT_FIELDS: CollectionField[] = [
   { key: 'title', label: 'Title', type: 'text', required: true, unique: false, sortOrder: 10 },
   { key: 'sku', label: 'SKU', type: 'text', required: true, unique: true, sortOrder: 20 },
   { key: 'price', label: 'Price', type: 'number', required: true, unique: false, sortOrder: 30 },
-  { key: 'currency', label: 'Currency', type: 'text', required: true, unique: false, sortOrder: 40, defaultValue: 'USD' },
-  { key: 'inventory', label: 'Inventory', type: 'number', required: false, unique: false, sortOrder: 50, defaultValue: 0 },
-  { key: 'imageUrl', label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 60 },
-  { key: 'description', label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 70 },
-  { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 80, defaultValue: false },
-  { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 90, defaultValue: true },
+  { key: 'compareAtPrice', label: 'Compare at price', type: 'number', required: false, unique: false, sortOrder: 40 },
+  { key: 'currency', label: 'Currency', type: 'text', required: true, unique: false, sortOrder: 50, defaultValue: 'USD' },
+  { key: 'inventory', label: 'Inventory', type: 'number', required: false, unique: false, sortOrder: 60, defaultValue: 0 },
+  { key: 'productType', label: 'Product Type', type: 'select', required: true, unique: false, sortOrder: 70, options: ['physical', 'digital', 'service'], defaultValue: 'physical' },
+  { key: 'downloadUrl', label: 'Digital Delivery URL', type: 'url', required: false, unique: false, sortOrder: 80 },
+  { key: 'shippingRequired', label: 'Requires Shipping', type: 'boolean', required: false, unique: false, sortOrder: 90, defaultValue: true },
+  { key: 'weight', label: 'Weight', type: 'number', required: false, unique: false, sortOrder: 100 },
+  { key: 'imageUrl', label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 110 },
+  { key: 'description', label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 120 },
+  { key: 'seoTitle', label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 130 },
+  { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 140, defaultValue: false },
+  { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 150, defaultValue: true },
 ];
 
 const EMPTY_PRODUCT_FORM: ProductFormState = {
@@ -76,10 +88,16 @@ const EMPTY_PRODUCT_FORM: ProductFormState = {
   slug: '',
   sku: '',
   price: '',
+  compareAtPrice: '',
   currency: 'USD',
   inventory: '0',
+  productType: 'physical',
+  downloadUrl: '',
+  shippingRequired: true,
+  weight: '',
   imageUrl: '',
   description: '',
+  seoTitle: '',
   status: 'draft',
   featured: false,
   taxable: true,
@@ -132,6 +150,11 @@ function ProductsRoute() {
     published: products.filter((product) => product.status === 'published').length,
     draft: products.filter((product) => product.status === 'draft').length,
     inventory: products.reduce((sum, product) => sum + toNumber(product.values.inventory), 0),
+    lowStock: products.filter((product) => {
+      const inventory = toNumber(product.values.inventory);
+      return inventory > 0 && inventory <= 5;
+    }).length,
+    digital: products.filter((product) => product.values.productType === 'digital').length,
   }), [products]);
 
   const loadProducts = async () => {
@@ -230,10 +253,16 @@ function ProductsRoute() {
         title: formState.title.trim(),
         sku: formState.sku.trim(),
         price: Number(formState.price || 0),
+        compareAtPrice: formState.compareAtPrice ? Number(formState.compareAtPrice) : null,
         currency: normalizeCurrency(formState.currency),
         inventory: Number(formState.inventory || 0),
+        productType: formState.productType,
+        downloadUrl: formState.downloadUrl.trim(),
+        shippingRequired: formState.shippingRequired,
+        weight: formState.weight ? Number(formState.weight) : null,
         imageUrl: formState.imageUrl.trim(),
         description: formState.description.trim(),
+        seoTitle: formState.seoTitle.trim(),
         featured: formState.featured,
         taxable: formState.taxable,
       },
@@ -329,6 +358,7 @@ function ProductsRoute() {
           </Button>
         </div>
       }
+      className="w-full"
     >
       {error && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -379,11 +409,13 @@ function ProductsRoute() {
         </Panel>
       )}
 
-      <div className="mb-6 grid gap-3 md:grid-cols-4">
+      <div className="mb-6 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Metric label="Products" value={metrics.total} icon={<Package className="size-4" />} />
         <Metric label="Published" value={metrics.published} icon={<CheckCircle2 className="size-4" />} />
         <Metric label="Draft" value={metrics.draft} icon={<Edit3 className="size-4" />} />
         <Metric label="Inventory" value={metrics.inventory} icon={<Boxes className="size-4" />} />
+        <Metric label="Low stock" value={metrics.lowStock} icon={<Archive className="size-4" />} />
+        <Metric label="Digital" value={metrics.digital} icon={<Sparkles className="size-4" />} />
       </div>
 
       {!productCollection ? (
@@ -511,6 +543,17 @@ function ProductsRoute() {
                       className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                     />
                   </Field>
+                  <Field label="Compare at">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formState.compareAtPrice}
+                      onChange={(event) => setFormState((current) => ({ ...current, compareAtPrice: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="Optional"
+                    />
+                  </Field>
                   <Field label="Currency">
                     <input
                       value={formState.currency}
@@ -519,6 +562,8 @@ function ProductsRoute() {
                       className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                     />
                   </Field>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
                   <Field label="Stock">
                     <input
                       type="number"
@@ -528,7 +573,45 @@ function ProductsRoute() {
                       className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                     />
                   </Field>
+                  <Field label="Type">
+                    <select
+                      value={formState.productType}
+                      onChange={(event) => {
+                        const productType = event.target.value as ProductFormState['productType'];
+                        setFormState((current) => ({
+                          ...current,
+                          productType,
+                          shippingRequired: productType === 'physical' ? current.shippingRequired : false,
+                        }));
+                      }}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                    >
+                      <option value="physical">Physical</option>
+                      <option value="digital">Digital</option>
+                      <option value="service">Service</option>
+                    </select>
+                  </Field>
+                  <Field label="Weight">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formState.weight}
+                      onChange={(event) => setFormState((current) => ({ ...current, weight: event.target.value }))}
+                      disabled={!formState.shippingRequired}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:opacity-60"
+                      placeholder="lb"
+                    />
+                  </Field>
                 </div>
+                <Field label="Digital delivery URL">
+                  <input
+                    value={formState.downloadUrl}
+                    onChange={(event) => setFormState((current) => ({ ...current, downloadUrl: event.target.value }))}
+                    className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                    placeholder="https://downloads.example.com/product.zip"
+                  />
+                </Field>
                 <Field label="Image URL">
                   <div className="space-y-3">
                     {formState.imageUrl ? (
@@ -557,6 +640,14 @@ function ProductsRoute() {
                     rows={4}
                     className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm"
                     placeholder="What customers receive, license terms, delivery notes..."
+                  />
+                </Field>
+                <Field label="SEO title">
+                  <input
+                    value={formState.seoTitle}
+                    onChange={(event) => setFormState((current) => ({ ...current, seoTitle: event.target.value }))}
+                    className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                    placeholder={formState.title || 'Product title for search previews'}
                   />
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
@@ -590,6 +681,16 @@ function ProductsRoute() {
                         className="size-4 rounded border-border text-primary"
                       />
                       Taxable
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={formState.shippingRequired}
+                        disabled={formState.productType !== 'physical'}
+                        onChange={(event) => setFormState((current) => ({ ...current, shippingRequired: event.target.checked }))}
+                        className="size-4 rounded border-border text-primary disabled:opacity-60"
+                      />
+                      Ships
                     </label>
                   </div>
                 </div>
@@ -703,9 +804,13 @@ function ProductCard({
 }) {
   const title = String(product.values.title || product.slug);
   const price = toNumber(product.values.price);
+  const compareAtPrice = toNumber(product.values.compareAtPrice);
   const currency = normalizeCurrency(String(product.values.currency || 'USD'));
   const inventory = toNumber(product.values.inventory);
   const imageUrl = String(product.values.imageUrl || '');
+  const productType = String(product.values.productType || 'physical');
+  const shippingRequired = product.values.shippingRequired !== false;
+  const isLowStock = inventory > 0 && inventory <= 5;
 
   return (
     <article className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')}>
@@ -725,6 +830,26 @@ function ProductCard({
             </div>
             <StatusBadge status={product.status} />
           </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium capitalize text-muted-foreground">
+              {productType}
+            </span>
+            {shippingRequired && productType === 'physical' ? (
+              <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                Ships
+              </span>
+            ) : null}
+            {isLowStock ? (
+              <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
+                Low stock
+              </span>
+            ) : null}
+            {product.values.featured ? (
+              <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800">
+                Featured
+              </span>
+            ) : null}
+          </div>
           {product.values.description ? (
             <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
               {String(product.values.description)}
@@ -736,6 +861,9 @@ function ProductCard({
         <div className="rounded bg-muted px-3 py-2">
           <div className="text-xs text-muted-foreground">Price</div>
           <div className="font-semibold">{formatMoney(price, currency)}</div>
+          {compareAtPrice > price ? (
+            <div className="text-xs text-muted-foreground line-through">{formatMoney(compareAtPrice, currency)}</div>
+          ) : null}
         </div>
         <div className="rounded bg-muted px-3 py-2">
           <div className="text-xs text-muted-foreground">Stock</div>
@@ -816,11 +944,21 @@ const productToForm = (product: CollectionRecord): ProductFormState => ({
   slug: product.slug,
   sku: String(product.values.sku || ''),
   price: String(product.values.price ?? ''),
+  compareAtPrice: product.values.compareAtPrice === null || product.values.compareAtPrice === undefined ? '' : String(product.values.compareAtPrice),
   currency: String(product.values.currency || 'USD'),
   inventory: String(product.values.inventory ?? '0'),
+  productType: asProductType(product.values.productType),
+  downloadUrl: String(product.values.downloadUrl || ''),
+  shippingRequired: product.values.shippingRequired !== false,
+  weight: product.values.weight === null || product.values.weight === undefined ? '' : String(product.values.weight),
   imageUrl: String(product.values.imageUrl || ''),
   description: String(product.values.description || ''),
+  seoTitle: String(product.values.seoTitle || ''),
   status: product.status,
   featured: Boolean(product.values.featured),
   taxable: product.values.taxable !== false,
 });
+
+const asProductType = (value: unknown): ProductFormState['productType'] => (
+  value === 'digital' || value === 'service' || value === 'physical' ? value : 'physical'
+);
