@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, Archive, ArrowLeft, CheckCircle2, Copy, Download, ExternalLink, Eye, History, RefreshCw, RotateCcw } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowLeft, CheckCircle2, Copy, Download, ExternalLink, Eye, History, Maximize2, Minimize2, RefreshCw, RotateCcw } from 'lucide-react';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
 import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
@@ -45,7 +45,7 @@ export const Route = createFileRoute('/pages/$pageId/edit')({
 const PAGE_EDITOR_CONTROL_AREAS = [
   {
     title: 'Design canvas',
-    detail: 'Drag, group, layer, bind, and arrange every public page element.',
+    detail: 'Drag, group, layer, bind, arrange, and focus the full design workspace.',
     href: '#page-editor-canvas',
   },
   {
@@ -104,6 +104,7 @@ function PageEditorRoute() {
   const [readinessError, setReadinessError] = useState<string | null>(null);
   const [editorResetVersion, setEditorResetVersion] = useState(0);
   const [pendingRestoreRevision, setPendingRestoreRevision] = useState<ContentRevision | null>(null);
+  const [isWorkspaceFocus, setIsWorkspaceFocus] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -432,6 +433,7 @@ function PageEditorRoute() {
       'Drag and resize elements on the page canvas.',
       'Select unlocked sibling layers with Cmd/Ctrl+A, group them with Cmd/Ctrl+G, and ungroup with Shift+Cmd/Ctrl+G.',
       'Save selected elements as reusable sections from the component library.',
+      'Use page workspace focus to hide page management panels while designing large canvases.',
       'Bind media, forms, and CMS-ready element props through the inspector.',
       'Persist canvas, settings, route, status, metadata, and revision notes through the page update endpoint.',
     ],
@@ -623,6 +625,16 @@ function PageEditorRoute() {
       }
       description="Design the public page, manage publishing, and keep revisions in one workspace."
       className="pb-24"
+      action={
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setIsWorkspaceFocus((current) => !current)}
+          iconStart={isWorkspaceFocus ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+        >
+          {isWorkspaceFocus ? 'Show page panels' : 'Focus canvas'}
+        </Button>
+      }
     >
       {(loadError || saveWarning) && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
@@ -636,6 +648,7 @@ function PageEditorRoute() {
         </div>
       )}
 
+      {!isWorkspaceFocus && (
       <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="page-editor-command-center">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
@@ -774,12 +787,41 @@ function PageEditorRoute() {
           </div>
         </div>
       </section>
+      )}
 
-      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px] 2xl:items-start">
+      {isWorkspaceFocus && (
+        <div className="rounded-lg border border-border bg-card px-4 py-3 shadow-sm" data-testid="page-editor-focus-banner">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-foreground">Canvas focus mode</div>
+              <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                Page management panels are hidden so the editor can use the full workspace. Use the editor Focus button to hide component and inspector panels inside the canvas.
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsWorkspaceFocus(false)}
+              iconStart={<Minimize2 className="size-4" />}
+            >
+              Show panels
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div className={cn(
+        'grid gap-5',
+        !isWorkspaceFocus && '2xl:grid-cols-[minmax(0,1fr)_360px] 2xl:items-start',
+      )}
+      >
         <div id="page-editor-canvas" className="min-w-0 scroll-mt-24">
           <EditorWorkspaceFrame
             title="Page design canvas"
-            description="Compose the public page with components, layers, media, grouping, reusable sections, and data bindings."
+            description={isWorkspaceFocus
+              ? 'Focused page design workspace with the same components, layers, media, grouping, reusable sections, and data bindings.'
+              : 'Compose the public page with components, layers, media, grouping, reusable sections, and data bindings.'}
             meta={
               <>
                 <span className="rounded bg-muted px-2 py-1 tabular-nums">
@@ -794,9 +836,19 @@ function PageEditorRoute() {
                 <span className="rounded bg-muted px-2 py-1">
                   Cmd/Ctrl+A siblings
                 </span>
+                {isWorkspaceFocus && (
+                  <span className="rounded bg-primary/10 px-2 py-1 font-medium text-primary">
+                    Focused
+                  </span>
+                )}
               </>
             }
-            className="relative min-h-[820px] xl:h-[calc(100vh-96px)] xl:min-h-[960px]"
+            className={cn(
+              'relative',
+              isWorkspaceFocus
+                ? 'min-h-[calc(100vh-220px)] xl:h-[calc(100vh-220px)] xl:min-h-[calc(100vh-220px)]'
+                : 'min-h-[820px] xl:h-[calc(100vh-96px)] xl:min-h-[960px]',
+            )}
           >
             <CanvasEditor
               key={`${page.id}:${editorResetVersion}`}
@@ -819,6 +871,7 @@ function PageEditorRoute() {
           </EditorWorkspaceFrame>
         </div>
 
+        {!isWorkspaceFocus && (
         <aside className="grid gap-4 lg:grid-cols-3 2xl:sticky 2xl:top-4 2xl:block 2xl:space-y-4">
           <Panel id="page-editor-publish" className="scroll-mt-24">
             <PanelHeader
@@ -974,6 +1027,7 @@ function PageEditorRoute() {
             </PanelContent>
           </Panel>
         </aside>
+        )}
       </div>
 
       {pendingRestoreRevision && (
