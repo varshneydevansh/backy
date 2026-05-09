@@ -24,7 +24,7 @@ import { PageShell } from '@/components/layout/PageShell';
 import { DataGrid } from '@/components/ui/DataGrid';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/pages')({
@@ -184,6 +184,7 @@ function PagesLayout() {
 
 function PagesListView() {
   const navigate = useNavigate();
+  const routerState = useRouterState();
   const { sites, pages, setPages, deletePage, updatePage } = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingReadiness, setIsLoadingReadiness] = useState(false);
@@ -732,6 +733,20 @@ function PagesListView() {
     columns,
     pageSize: 10
   });
+  useEffect(() => {
+    const requestedSiteId = getSiteSearchParam();
+    if (!requestedSiteId) return;
+
+    const nextSiteId = getSiteSelectionFromSearch(sites);
+    if (nextSiteId === selectedSiteId) return;
+
+    setSelectedSiteId(nextSiteId);
+    setStatusFilter('all');
+    setHealthFilter('all');
+    setSearchQuery('');
+    setCurrentPage(1);
+    setSelectedPageIds(new Set());
+  }, [routerState.location.search, selectedSiteId, sites, setCurrentPage, setSearchQuery]);
   const hasPages = activeSitePages.length > 0;
   const selectedTablePages = data.filter((page) => selectedPageIds.has(page.id));
   const pageHandoff = useMemo(() => ({
@@ -1075,12 +1090,14 @@ function PagesListView() {
             id="pages-active-site"
             value={activeSiteId}
             onChange={(event) => {
-              setSelectedSiteId(event.target.value);
+              const nextSiteId = event.target.value;
+              setSelectedSiteId(nextSiteId);
               setStatusFilter('all');
               setHealthFilter('all');
               setSearchQuery('');
               setCurrentPage(1);
               setSelectedPageIds(new Set());
+              navigate({ to: '/pages', search: { siteId: nextSiteId }, replace: true });
             }}
             className="mt-2 w-full min-w-52 rounded-lg border bg-background px-3 py-2 text-sm"
           >
