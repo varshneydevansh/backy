@@ -529,6 +529,7 @@ function Index() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedSiteId, setSelectedSiteId] = useState(search.siteId || '');
+  const isDashboardBusy = isLoading;
 
   const loadDashboard = useCallback(async () => {
     setIsLoading(true);
@@ -678,6 +679,8 @@ function Index() {
       : undefined
   );
   const selectDashboardSite = (nextSiteId: string) => {
+    if (isDashboardBusy) return;
+
     setSelectedSiteId(nextSiteId);
     navigate({ to: '/', search: { siteId: nextSiteId }, replace: true });
   };
@@ -892,6 +895,8 @@ function Index() {
   ]);
 
   const copyDashboardText = async (value: string, label: string) => {
+    if (isDashboardBusy) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setError(null);
@@ -903,6 +908,8 @@ function Index() {
   };
 
   const downloadFrontendHandoff = () => {
+    if (isDashboardBusy) return;
+
     const blob = new Blob([frontendHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -997,14 +1004,14 @@ function Index() {
         <button
           type="button"
           onClick={() => void loadDashboard()}
-          disabled={isLoading}
+          disabled={isDashboardBusy}
           aria-label="Refresh dashboard data"
           className={cn(
             'inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium',
             'hover:bg-accent transition-colors disabled:cursor-not-allowed disabled:opacity-60'
           )}
         >
-          {isLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+          {isDashboardBusy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
           Refresh
         </button>
       }
@@ -1045,16 +1052,17 @@ function Index() {
               <button
                 type="button"
                 onClick={() => void loadDashboard()}
-                disabled={isLoading}
+                disabled={isDashboardBusy}
                 className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                {isDashboardBusy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                 Refresh data
               </button>
               <button
                 type="button"
                 onClick={() => void copyDashboardText(frontendHandoffText, 'Frontend handoff manifest')}
-                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                disabled={isDashboardBusy}
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Copy className="size-4" />
                 Copy handoff
@@ -1062,7 +1070,8 @@ function Index() {
               <button
                 type="button"
                 onClick={downloadFrontendHandoff}
-                className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+                disabled={isDashboardBusy}
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Download className="size-4" />
                 Download JSON
@@ -1117,7 +1126,14 @@ function Index() {
                 <a
                   key={area.title}
                   href={area.href}
-                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                  aria-disabled={isDashboardBusy}
+                  onClick={(event) => {
+                    if (isDashboardBusy) event.preventDefault();
+                  }}
+                  className={cn(
+                    'rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5',
+                    isDashboardBusy && 'pointer-events-none opacity-60',
+                  )}
                 >
                   <div className="text-sm font-semibold text-foreground">{area.title}</div>
                   <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
@@ -1193,7 +1209,8 @@ function Index() {
             id="dashboard-active-site"
             value={activeSiteId}
             onChange={(event) => selectDashboardSite(event.target.value)}
-            className="min-w-48 rounded-lg border bg-background px-3 py-2 text-sm"
+            disabled={isDashboardBusy}
+            className="min-w-48 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
           >
             {dashboard.sites.length === 0 ? (
               <option value={activeSiteId}>{activeSite?.name || activeSiteId}</option>
@@ -1528,7 +1545,8 @@ function Index() {
                   <button
                     type="button"
                     onClick={() => void copyDashboardText(frontendHandoffText, 'Frontend handoff manifest')}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-accent"
+                    disabled={isDashboardBusy}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Copy className="size-3.5" />
                     Copy JSON
@@ -1536,7 +1554,8 @@ function Index() {
                   <button
                     type="button"
                     onClick={downloadFrontendHandoff}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-accent"
+                    disabled={isDashboardBusy}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Download className="size-3.5" />
                     Download
@@ -1568,7 +1587,8 @@ function Index() {
                       <button
                         type="button"
                         onClick={() => void copyDashboardText(frontendContractUrls[contract.key], `${contract.label} endpoint`)}
-                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        disabled={isDashboardBusy}
+                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                         aria-label={`Copy ${contract.label} endpoint`}
                       >
                         <Copy className="size-3.5" />
@@ -1591,7 +1611,8 @@ function Index() {
                       key={label}
                       type="button"
                       onClick={() => void copyDashboardText(value, `${label} admin endpoint`)}
-                      className="min-w-0 rounded-md border border-border bg-background px-2 py-2 text-left transition-colors hover:bg-accent"
+                      disabled={isDashboardBusy}
+                      className="min-w-0 rounded-md border border-border bg-background px-2 py-2 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <span className="block text-xs font-medium capitalize text-muted-foreground">{label}</span>
                       <span className="mt-1 block truncate font-mono text-[0.68rem] text-foreground">{value}</span>
