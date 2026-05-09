@@ -128,6 +128,7 @@ const PRODUCT_FIELDS: CollectionField[] = [
 
 const PRODUCT_EXPORT_COLUMNS = [
   'product_id',
+  'active_site_id',
   'slug',
   'status',
   'title',
@@ -151,8 +152,47 @@ const PRODUCT_EXPORT_COLUMNS = [
   'featured',
   'seo_title',
   'storefront_path',
+  'list_api_url',
+  'detail_api_url',
+  'public_render_url',
+  'public_resolve_url',
+  'checkout_mode',
+  'frontend_systems',
   'created_at',
   'updated_at',
+] as const;
+
+const PRODUCT_FRONTEND_SYSTEMS = [
+  {
+    key: 'catalog',
+    title: 'Catalog listing',
+    detail: 'Product cards, status filtering, sorting, featured products, pagination, and search-ready catalog responses.',
+  },
+  {
+    key: 'detail',
+    title: 'Product detail',
+    detail: 'Slug routes, pricing, descriptions, images, delivery metadata, SEO titles, and public render/resolve URLs.',
+  },
+  {
+    key: 'inventory',
+    title: 'Inventory controls',
+    detail: 'Stock counts, low-stock thresholds, deny/continue/preorder policy, and digital/service product handling.',
+  },
+  {
+    key: 'checkout',
+    title: 'Checkout handoff',
+    detail: 'Per-product checkout URLs today, with payment session creation called out as the next backend commerce milestone.',
+  },
+  {
+    key: 'merchandising',
+    title: 'Merchandising facets',
+    detail: 'Categories, tags, vendors, featured state, product type, taxable flag, and shipping requirement filters.',
+  },
+  {
+    key: 'media',
+    title: 'Product media',
+    detail: 'Image URLs sourced from Backy media, with future gallery and downloadable/private file support.',
+  },
 ] as const;
 
 const EMPTY_PRODUCT_FORM: ProductFormState = {
@@ -374,6 +414,7 @@ function ProductsRoute() {
         note: 'Backy stores product checkout URLs today. Dedicated payment-session creation is still a commerce backend milestone.',
       },
     },
+    frontendSystems: PRODUCT_FRONTEND_SYSTEMS,
     readiness: {
       ready: productApiReady,
       score: catalogReadiness.score,
@@ -670,7 +711,11 @@ function ProductsRoute() {
     if (filteredProducts.length === 0) return;
 
     const rows = filteredProducts.map((product) => {
-      const exportRecord = productToExportRecord(product);
+      const exportRecord = productToExportRecord(product, {
+        activeSiteId,
+        publicBaseUrl,
+        storefrontApiUrl,
+      });
       return PRODUCT_EXPORT_COLUMNS.map((column) => exportRecord[column]);
     });
     const csv = [PRODUCT_EXPORT_COLUMNS, ...rows]
@@ -881,6 +926,34 @@ function ProductsRoute() {
                   Missing commerce fields: {missingProductFields.join(', ')}. Sync the schema before relying on product APIs.
                 </div>
               )}
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Storefront frontend control contract</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Custom storefronts need these systems to list products, render detail pages, track stock, hand off checkout, and merchandise catalogs from Backy.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    {PRODUCT_FRONTEND_SYSTEMS.length} systems
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {PRODUCT_FRONTEND_SYSTEMS.map((system) => (
+                    <div key={system.key} className="rounded-lg border border-border bg-card p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-foreground">{system.title}</div>
+                          <div className="mt-1 text-xs leading-5 text-muted-foreground">{system.detail}</div>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                          {system.key}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </PanelContent>
         </Panel>
@@ -1653,8 +1726,22 @@ const mergeProductFields = (currentFields: CollectionField[]): CollectionField[]
 
 type ProductExportColumn = typeof PRODUCT_EXPORT_COLUMNS[number];
 
-const productToExportRecord = (product: CollectionRecord): Record<ProductExportColumn, string | number | boolean | null> => ({
+interface ProductExportContext {
+  activeSiteId: string;
+  publicBaseUrl: string;
+  storefrontApiUrl: string;
+}
+
+const productToExportRecord = (
+  product: CollectionRecord,
+  context: ProductExportContext,
+): Record<ProductExportColumn, string | number | boolean | null> => {
+  const storefrontPath = `/products/${product.slug}`;
+  const detailApiUrl = `${context.publicBaseUrl}/api/sites/${encodeURIComponent(context.activeSiteId)}/collections/${PRODUCT_COLLECTION_SLUG}/records?slug=${encodeURIComponent(product.slug)}`;
+
+  return {
   product_id: product.id,
+  active_site_id: context.activeSiteId,
   slug: product.slug,
   status: product.status,
   title: String(product.values.title || product.slug),
@@ -1679,10 +1766,17 @@ const productToExportRecord = (product: CollectionRecord): Record<ProductExportC
   weight: product.values.weight === null || product.values.weight === undefined ? null : toNumber(product.values.weight),
   featured: Boolean(product.values.featured),
   seo_title: String(product.values.seoTitle || ''),
-  storefront_path: `/products/${product.slug}`,
+  storefront_path: storefrontPath,
+  list_api_url: context.storefrontApiUrl,
+  detail_api_url: detailApiUrl,
+  public_render_url: `${context.publicBaseUrl}/api/sites/${encodeURIComponent(context.activeSiteId)}/render?path=${encodeURIComponent(storefrontPath)}`,
+  public_resolve_url: `${context.publicBaseUrl}/api/sites/${encodeURIComponent(context.activeSiteId)}/resolve?path=${encodeURIComponent(storefrontPath)}`,
+  checkout_mode: String(product.values.checkoutUrl || '').trim() ? 'external checkout URL' : 'not configured',
+  frontend_systems: PRODUCT_FRONTEND_SYSTEMS.map((system) => `${system.key}:${system.title}`).join('; '),
   created_at: product.createdAt || '',
   updated_at: product.updatedAt || '',
-});
+  };
+};
 
 const csvEscape = (value: unknown): string => {
   const raw = String(value ?? '').replace(/\r?\n/g, '\\n');
