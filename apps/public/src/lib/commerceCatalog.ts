@@ -29,6 +29,7 @@ export interface CommerceProduct {
   currency: string;
   imageUrl: string;
   galleryImages: string[];
+  variants: CommerceProductVariant[];
   category: string;
   tags: string[];
   vendor: string;
@@ -57,6 +58,16 @@ export interface CommerceProduct {
   };
   updatedAt: string;
   publishedAt: string | null;
+}
+
+export interface CommerceProductVariant {
+  id: string;
+  title: string;
+  sku: string;
+  option: string;
+  price: number | null;
+  inventory: number | null;
+  inStock: boolean;
 }
 
 export interface CommerceCatalogFilters {
@@ -123,6 +134,53 @@ const normalizeUrlList = (value: unknown, limit = 12): string[] => {
     .slice(0, limit);
 };
 
+const parseJsonArray = (value: string): unknown[] => {
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const normalizeVariants = (value: unknown, limit = 50): CommerceProductVariant[] => {
+  const source = typeof value === 'string'
+    ? parseJsonArray(value)
+    : Array.isArray(value)
+      ? value
+      : [];
+
+  return source
+    .map((item, index) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return null;
+      }
+
+      const record = item as Record<string, unknown>;
+      const title = normalizeText(record.title || record.name || record.option);
+      const option = normalizeText(record.option);
+      const sku = normalizeText(record.sku);
+      const price = maybeNumber(record.price);
+      const inventory = maybeNumber(record.inventory);
+
+      if (!title && !option && !sku) {
+        return null;
+      }
+
+      return {
+        id: normalizeText(record.id) || `variant-${index + 1}`,
+        title: title || option || sku,
+        sku,
+        option,
+        price,
+        inventory,
+        inStock: inventory === null || inventory > 0,
+      };
+    })
+    .filter((variant): variant is CommerceProductVariant => Boolean(variant))
+    .slice(0, limit);
+};
+
 const normalizeProductType = (value: unknown): CommerceProduct['productType'] => {
   const productType = normalizeIdentifier(value);
   return productType === 'digital' || productType === 'service' ? productType : 'physical';
@@ -177,6 +235,7 @@ export const productRecordToCommerceProduct = (record: CommerceSourceRecord): Co
     currency: normalizeCurrency(values.currency),
     imageUrl: normalizeText(values.imageUrl),
     galleryImages: normalizeUrlList(values.galleryImages),
+    variants: normalizeVariants(values.variants),
     category: normalizeText(values.category),
     tags: normalizeTags(values.tags),
     vendor: normalizeText(values.vendor),
@@ -224,6 +283,7 @@ export const filterCommerceProducts = (
     product.description,
     product.category,
     product.vendor,
+    product.variants.map((variant) => `${variant.title} ${variant.sku} ${variant.option}`).join(' '),
     product.tags.join(' '),
   ].some((value) => normalizeIdentifier(value).includes(search));
 

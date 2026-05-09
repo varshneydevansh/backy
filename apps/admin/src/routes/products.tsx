@@ -83,6 +83,7 @@ interface ProductFormState {
   title: string;
   slug: string;
   sku: string;
+  variants: string;
   price: string;
   compareAtPrice: string;
   currency: string;
@@ -108,29 +109,47 @@ interface ProductFormState {
 
 const PRODUCT_COLLECTION_SLUG = 'products';
 
+interface ProductVariantFormState {
+  title: string;
+  sku: string;
+  option: string;
+  price: string;
+  inventory: string;
+}
+
+interface ProductVariant {
+  id: string;
+  title: string;
+  sku: string;
+  option: string;
+  price: number | null;
+  inventory: number | null;
+}
+
 const PRODUCT_FIELDS: CollectionField[] = [
   { key: 'title', label: 'Title', type: 'text', required: true, unique: false, sortOrder: 10 },
   { key: 'sku', label: 'SKU', type: 'text', required: true, unique: true, sortOrder: 20 },
   { key: 'price', label: 'Price', type: 'number', required: true, unique: false, sortOrder: 30 },
   { key: 'compareAtPrice', label: 'Compare at price', type: 'number', required: false, unique: false, sortOrder: 40 },
   { key: 'currency', label: 'Currency', type: 'text', required: true, unique: false, sortOrder: 50, defaultValue: 'USD' },
-  { key: 'inventory', label: 'Inventory', type: 'number', required: false, unique: false, sortOrder: 60, defaultValue: 0 },
-  { key: 'lowStockThreshold', label: 'Low Stock Threshold', type: 'number', required: false, unique: false, sortOrder: 70, defaultValue: 5 },
-  { key: 'inventoryPolicy', label: 'Inventory Policy', type: 'select', required: false, unique: false, sortOrder: 80, options: ['deny', 'continue', 'preorder'], defaultValue: 'deny' },
-  { key: 'productType', label: 'Product Type', type: 'select', required: true, unique: false, sortOrder: 90, options: ['physical', 'digital', 'service'], defaultValue: 'physical' },
-  { key: 'downloadUrl', label: 'Digital Delivery URL', type: 'url', required: false, unique: false, sortOrder: 100 },
-  { key: 'checkoutUrl', label: 'Checkout URL', type: 'url', required: false, unique: false, sortOrder: 110 },
-  { key: 'shippingRequired', label: 'Requires Shipping', type: 'boolean', required: false, unique: false, sortOrder: 120, defaultValue: true },
-  { key: 'weight', label: 'Weight', type: 'number', required: false, unique: false, sortOrder: 130 },
-  { key: 'imageUrl', label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 140 },
-  { key: 'galleryImages', label: 'Gallery Images', type: 'json', required: false, unique: false, sortOrder: 150, defaultValue: [] },
-  { key: 'category', label: 'Category', type: 'text', required: false, unique: false, sortOrder: 160 },
-  { key: 'tags', label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 170 },
-  { key: 'vendor', label: 'Vendor', type: 'text', required: false, unique: false, sortOrder: 180 },
-  { key: 'description', label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 190 },
-  { key: 'seoTitle', label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 200 },
-  { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 210, defaultValue: false },
-  { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 220, defaultValue: true },
+  { key: 'variants', label: 'Variants', type: 'json', required: false, unique: false, sortOrder: 60, defaultValue: [] },
+  { key: 'inventory', label: 'Inventory', type: 'number', required: false, unique: false, sortOrder: 70, defaultValue: 0 },
+  { key: 'lowStockThreshold', label: 'Low Stock Threshold', type: 'number', required: false, unique: false, sortOrder: 80, defaultValue: 5 },
+  { key: 'inventoryPolicy', label: 'Inventory Policy', type: 'select', required: false, unique: false, sortOrder: 90, options: ['deny', 'continue', 'preorder'], defaultValue: 'deny' },
+  { key: 'productType', label: 'Product Type', type: 'select', required: true, unique: false, sortOrder: 100, options: ['physical', 'digital', 'service'], defaultValue: 'physical' },
+  { key: 'downloadUrl', label: 'Digital Delivery URL', type: 'url', required: false, unique: false, sortOrder: 110 },
+  { key: 'checkoutUrl', label: 'Checkout URL', type: 'url', required: false, unique: false, sortOrder: 120 },
+  { key: 'shippingRequired', label: 'Requires Shipping', type: 'boolean', required: false, unique: false, sortOrder: 130, defaultValue: true },
+  { key: 'weight', label: 'Weight', type: 'number', required: false, unique: false, sortOrder: 140 },
+  { key: 'imageUrl', label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 150 },
+  { key: 'galleryImages', label: 'Gallery Images', type: 'json', required: false, unique: false, sortOrder: 160, defaultValue: [] },
+  { key: 'category', label: 'Category', type: 'text', required: false, unique: false, sortOrder: 170 },
+  { key: 'tags', label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 180 },
+  { key: 'vendor', label: 'Vendor', type: 'text', required: false, unique: false, sortOrder: 190 },
+  { key: 'description', label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 200 },
+  { key: 'seoTitle', label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 210 },
+  { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 220, defaultValue: false },
+  { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 230, defaultValue: true },
 ];
 
 const PRODUCT_EXPORT_COLUMNS = [
@@ -140,6 +159,8 @@ const PRODUCT_EXPORT_COLUMNS = [
   'status',
   'title',
   'sku',
+  'variants',
+  'variant_count',
   'price',
   'compare_at_price',
   'currency',
@@ -208,6 +229,7 @@ const EMPTY_PRODUCT_FORM: ProductFormState = {
   title: '',
   slug: '',
   sku: '',
+  variants: '',
   price: '',
   compareAtPrice: '',
   currency: 'USD',
@@ -248,6 +270,13 @@ function ProductsRoute() {
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const [mediaPickerTarget, setMediaPickerTarget] = useState<'image' | 'gallery' | 'download'>('image');
   const [galleryImageDraft, setGalleryImageDraft] = useState('');
+  const [variantDraft, setVariantDraft] = useState<ProductVariantFormState>({
+    title: '',
+    sku: '',
+    option: '',
+    price: '',
+    inventory: '',
+  });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingDeleteProduct, setPendingDeleteProduct] = useState<CollectionRecord | null>(null);
@@ -277,6 +306,10 @@ function ProductsRoute() {
   const galleryImageUrls = useMemo(
     () => parseGalleryImages(formState.galleryImages),
     [formState.galleryImages],
+  );
+  const productVariants = useMemo(
+    () => parseProductVariants(formState.variants),
+    [formState.variants],
   );
   const productCategories = useMemo(() => (
     [...new Set(products.map((product) => String(product.values.category || '').trim()).filter(Boolean))]
@@ -357,7 +390,8 @@ function ProductsRoute() {
     const hasSchema = Boolean(productCollection);
     const hasProducts = products.length > 0;
     const hasPublished = metrics.published > 0;
-    const hasInventory = metrics.inventory > 0 || metrics.digital > 0;
+    const hasVariants = products.some((product) => formatProductVariants(product.values.variants).length > 0);
+    const hasInventory = metrics.inventory > 0 || metrics.digital > 0 || hasVariants;
     const hasImages = products.some((product) => Boolean(product.values.imageUrl) || formatGalleryImages(product.values.galleryImages).length > 0);
     const hasPricing = products.some((product) => toNumber(product.values.price) > 0);
     const hasMerchandising = products.some((product) => Boolean(product.values.category) || formatTags(product.values.tags).length > 0 || Boolean(product.values.vendor));
@@ -393,6 +427,11 @@ function ProductsRoute() {
         label: 'Pricing',
         detail: hasPricing ? 'At least one product has storefront pricing.' : 'Add prices before selling products.',
         ready: hasPricing,
+      },
+      {
+        label: 'Variants',
+        detail: hasVariants ? 'Product options are available for storefront selectors.' : 'Add variants for sizes, licenses, colors, tiers, or formats.',
+        ready: hasVariants || products.length === 0,
       },
       {
         label: 'Stock or delivery',
@@ -472,7 +511,7 @@ function ProductsRoute() {
         list: productCollection?.listRoutePattern || '/products',
         detail: productCollection?.routePattern || '/products/:recordSlug',
       },
-      cardFields: ['title', 'slug', 'price', 'compareAtPrice', 'currency', 'imageUrl', 'galleryImages', 'category', 'vendor', 'featured'],
+      cardFields: ['title', 'slug', 'price', 'compareAtPrice', 'currency', 'imageUrl', 'galleryImages', 'variants', 'category', 'vendor', 'featured'],
       detailFields: PRODUCT_FIELDS.map((field) => field.key),
       filterFacets: ['status', 'category', 'tags', 'vendor', 'productType', 'featured', 'inventoryPolicy'],
       checkout: {
@@ -518,6 +557,7 @@ function ProductsRoute() {
       updatedAt: product.updatedAt,
       title: String(product.values.title || product.slug),
       sku: String(product.values.sku || ''),
+      variants: formatProductVariants(product.values.variants),
       price: toNumber(product.values.price),
       compareAtPrice: product.values.compareAtPrice === null || product.values.compareAtPrice === undefined
         ? null
@@ -614,6 +654,14 @@ function ProductsRoute() {
   const resetForm = () => {
     setSelectedProductId(null);
     setFormState(EMPTY_PRODUCT_FORM);
+    setGalleryImageDraft('');
+    setVariantDraft({
+      title: '',
+      sku: '',
+      option: '',
+      price: '',
+      inventory: '',
+    });
   };
 
   const openMediaPicker = (target: 'image' | 'gallery' | 'download') => {
@@ -635,6 +683,45 @@ function ProductsRoute() {
 
   const removeGalleryImageUrl = (url: string) => {
     setGalleryImages(galleryImageUrls.filter((item) => item !== url));
+  };
+
+  const setProductVariants = (variants: ProductVariant[]) => {
+    setFormState((current) => ({ ...current, variants: serializeProductVariants(variants) }));
+  };
+
+  const resetVariantDraft = () => {
+    setVariantDraft({
+      title: '',
+      sku: '',
+      option: '',
+      price: '',
+      inventory: '',
+    });
+  };
+
+  const addProductVariant = () => {
+    const title = variantDraft.title.trim();
+    const sku = variantDraft.sku.trim();
+    const option = variantDraft.option.trim();
+
+    if ((!title && !option) || productVariants.length >= 50) return;
+
+    setProductVariants([
+      ...productVariants,
+      {
+        id: `variant-${Date.now()}`,
+        title: title || option,
+        sku,
+        option,
+        price: variantDraft.price.trim() ? Number(variantDraft.price) : null,
+        inventory: variantDraft.inventory.trim() ? Number(variantDraft.inventory) : null,
+      },
+    ]);
+    resetVariantDraft();
+  };
+
+  const removeProductVariant = (variantId: string) => {
+    setProductVariants(productVariants.filter((variant) => variant.id !== variantId));
   };
 
   const createProductsCollection = async () => {
@@ -715,6 +802,7 @@ function ProductsRoute() {
       values: {
         title: formState.title.trim(),
         sku: formState.sku.trim(),
+        variants: productVariants,
         price: Number(formState.price || 0),
         compareAtPrice: formState.compareAtPrice ? Number(formState.compareAtPrice) : null,
         currency: normalizeCurrency(formState.currency),
@@ -1350,6 +1438,94 @@ function ProductsRoute() {
                     />
                   </Field>
                 </div>
+                <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">Variants</div>
+                      <div className="mt-1 text-xs text-muted-foreground">Options for sizes, licenses, colors, tiers, or file formats.</div>
+                    </div>
+                    <span className="rounded bg-background px-2 py-1 font-mono text-xs text-muted-foreground">
+                      {productVariants.length}/50
+                    </span>
+                  </div>
+
+                  {productVariants.length > 0 ? (
+                    <div className="space-y-2">
+                      {productVariants.map((variant) => (
+                        <div key={variant.id} className="grid gap-2 rounded-lg border border-border bg-background p-2 text-sm md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_90px_90px_auto] md:items-center">
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-foreground">{variant.title}</div>
+                            <div className="truncate font-mono text-xs text-muted-foreground">{variant.sku || 'No SKU'}</div>
+                          </div>
+                          <div className="truncate text-xs text-muted-foreground">{variant.option || 'Default option'}</div>
+                          <div className="font-mono text-xs text-muted-foreground">
+                            {variant.price === null ? 'Base' : formatMoney(variant.price, formState.currency)}
+                          </div>
+                          <div className="font-mono text-xs text-muted-foreground">
+                            {variant.inventory === null ? 'Stock n/a' : `${variant.inventory} stock`}
+                          </div>
+                          <Button size="sm" variant="ghost" onClick={() => removeProductVariant(variant.id)}>
+                            Remove
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border bg-background px-3 py-4 text-center text-sm text-muted-foreground">
+                      Add product options when one catalog item has multiple sellable choices.
+                    </div>
+                  )}
+
+                  <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_110px_110px_auto]">
+                    <input
+                      aria-label="Variant title"
+                      value={variantDraft.title}
+                      onChange={(event) => setVariantDraft((current) => ({ ...current, title: event.target.value }))}
+                      className="rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="Variant name"
+                    />
+                    <input
+                      aria-label="Variant option"
+                      value={variantDraft.option}
+                      onChange={(event) => setVariantDraft((current) => ({ ...current, option: event.target.value }))}
+                      className="rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="Size, tier, color"
+                    />
+                    <input
+                      aria-label="Variant price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={variantDraft.price}
+                      onChange={(event) => setVariantDraft((current) => ({ ...current, price: event.target.value }))}
+                      className="rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="Price"
+                    />
+                    <input
+                      aria-label="Variant stock"
+                      type="number"
+                      min="0"
+                      value={variantDraft.inventory}
+                      onChange={(event) => setVariantDraft((current) => ({ ...current, inventory: event.target.value }))}
+                      className="rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="Stock"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={addProductVariant}
+                      disabled={(!variantDraft.title.trim() && !variantDraft.option.trim()) || productVariants.length >= 50}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                  <input
+                    aria-label="Variant SKU"
+                    value={variantDraft.sku}
+                    onChange={(event) => setVariantDraft((current) => ({ ...current, sku: event.target.value }))}
+                    className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                    placeholder="Optional variant SKU"
+                  />
+                </div>
                 <div className="grid grid-cols-3 gap-3">
                   <Field label="Stock">
                     <input
@@ -1784,6 +1960,7 @@ function ProductCard({
   const lowStockThreshold = Math.max(0, toNumber(product.values.lowStockThreshold || 5));
   const imageUrl = String(product.values.imageUrl || '');
   const galleryImages = formatGalleryImages(product.values.galleryImages);
+  const variants = formatProductVariants(product.values.variants);
   const productType = String(product.values.productType || 'physical');
   const inventoryPolicy = asInventoryPolicy(product.values.inventoryPolicy);
   const category = String(product.values.category || '');
@@ -1832,6 +2009,11 @@ function ProductCard({
             {galleryImages.length > 0 ? (
               <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
                 {galleryImages.length} gallery
+              </span>
+            ) : null}
+            {variants.length > 0 ? (
+              <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                {variants.length} variants
               </span>
             ) : null}
             {category ? (
@@ -1930,6 +2112,21 @@ const toNumber = (value: unknown): number => {
   return Number.isFinite(numberValue) ? numberValue : 0;
 };
 
+const maybeFiniteNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') return null;
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+};
+
+const safeParseJsonArray = (value: string): unknown[] => {
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
 const normalizeCurrency = (value: string): string => {
   const normalized = value.trim().toUpperCase();
   return /^[A-Z]{3}$/.test(normalized) ? normalized : 'USD';
@@ -1961,6 +2158,7 @@ const productToForm = (product: CollectionRecord): ProductFormState => ({
   title: String(product.values.title || ''),
   slug: product.slug,
   sku: String(product.values.sku || ''),
+  variants: serializeProductVariants(formatProductVariants(product.values.variants)),
   price: String(product.values.price ?? ''),
   compareAtPrice: product.values.compareAtPrice === null || product.values.compareAtPrice === undefined ? '' : String(product.values.compareAtPrice),
   currency: String(product.values.currency || 'USD'),
@@ -2029,6 +2227,51 @@ const formatGalleryImages = (value: unknown): string[] => {
   return [];
 };
 
+const normalizeProductVariant = (value: unknown, index: number): ProductVariant | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const title = String(record.title || record.name || record.option || '').trim();
+  const option = String(record.option || '').trim();
+  const sku = String(record.sku || '').trim();
+  const price = maybeFiniteNumber(record.price);
+  const inventory = maybeFiniteNumber(record.inventory);
+
+  if (!title && !option && !sku) {
+    return null;
+  }
+
+  return {
+    id: String(record.id || `variant-${index + 1}`),
+    title: title || option || sku,
+    sku,
+    option,
+    price,
+    inventory,
+  };
+};
+
+const formatProductVariants = (value: unknown): ProductVariant[] => {
+  const source = typeof value === 'string'
+    ? safeParseJsonArray(value)
+    : Array.isArray(value)
+      ? value
+      : [];
+
+  return source
+    .map(normalizeProductVariant)
+    .filter((variant): variant is ProductVariant => Boolean(variant))
+    .slice(0, 50);
+};
+
+const parseProductVariants = (value: string): ProductVariant[] => formatProductVariants(value);
+
+const serializeProductVariants = (variants: ProductVariant[]): string => (
+  JSON.stringify(formatProductVariants(variants))
+);
+
 const getMissingProductFieldKeys = (collection: Collection): string[] => {
   const existingKeys = new Set(collection.fields.map((field) => field.key));
   return PRODUCT_FIELDS
@@ -2070,6 +2313,8 @@ const productToExportRecord = (
   status: product.status,
   title: String(product.values.title || product.slug),
   sku: String(product.values.sku || ''),
+  variants: formatProductVariants(product.values.variants).map((variant) => `${variant.title}${variant.sku ? ` (${variant.sku})` : ''}`).join('; '),
+  variant_count: formatProductVariants(product.values.variants).length,
   price: toNumber(product.values.price),
   compare_at_price: product.values.compareAtPrice === null || product.values.compareAtPrice === undefined
     ? null

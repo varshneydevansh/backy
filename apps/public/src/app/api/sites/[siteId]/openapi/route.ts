@@ -1638,6 +1638,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               currency: { type: 'string' },
               imageUrl: { type: 'string' },
               galleryImages: { type: 'array', items: { type: 'string' } },
+              variants: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  required: ['id', 'title', 'sku', 'option', 'price', 'inventory', 'inStock'],
+                  properties: {
+                    id: { type: 'string' },
+                    title: { type: 'string' },
+                    sku: { type: 'string' },
+                    option: { type: 'string' },
+                    price: { type: ['number', 'null'] },
+                    inventory: { type: ['number', 'null'] },
+                    inStock: { type: 'boolean' },
+                  },
+                },
+              },
               category: { type: 'string' },
               tags: { type: 'array', items: { type: 'string' } },
               vendor: { type: 'string' },

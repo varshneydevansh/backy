@@ -206,6 +206,7 @@ export interface BackyCommerceProduct {
   currency: string;
   imageUrl?: string;
   galleryImages?: string[];
+  variants?: Array<Record<string, unknown>>;
   category?: string;
   tags?: string[];
   vendor?: string;

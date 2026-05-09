@@ -31,6 +31,8 @@ interface RouteParams {
 interface CheckoutItemInput {
   productId?: string;
   slug?: string;
+  variantId?: string;
+  variantSku?: string;
   quantity?: number;
 }
 
@@ -123,7 +125,7 @@ const orderContract = (siteId: string) => ({
     contentType: 'application/json',
     body: {
       customer: { name: 'Jane Customer', email: 'jane@example.com', phone: '+1 555 0100' },
-      items: [{ slug: 'product-slug', quantity: 1 }],
+      items: [{ slug: 'product-slug', variantId: 'optional-variant-id', quantity: 1 }],
       shippingAddress: 'Optional shipping address text',
       billingAddress: 'Optional billing address text',
       paymentProvider: 'manual',
@@ -160,20 +162,42 @@ const validateCheckoutInput = (input: CheckoutOrderInput): string[] => {
   return errors;
 };
 
-const lineItemFromProduct = (product: CommerceProduct, quantity: number) => ({
-  productId: product.id,
-  slug: product.slug,
-  title: product.title,
-  sku: product.sku,
-  quantity,
-  price: product.price,
-  currency: product.currency,
-  lineTotal: moneyValue(product.price * quantity),
-  productType: product.productType,
-  imageUrl: product.imageUrl,
-  galleryImages: product.galleryImages,
-  checkoutUrl: product.checkout.url,
-});
+const selectProductVariant = (product: CommerceProduct, item: CheckoutItemInput) => {
+  const variantId = textValue(item.variantId);
+  const variantSku = textValue(item.variantSku);
+  if (!variantId && !variantSku) return null;
+
+  return product.variants.find((variant) => (
+    (variantId && variant.id === variantId) ||
+    (variantSku && variant.sku === variantSku)
+  )) || null;
+};
+
+const lineItemFromProduct = (product: CommerceProduct, quantity: number, item: CheckoutItemInput) => {
+  const variant = selectProductVariant(product, item);
+  const unitPrice = variant?.price ?? product.price;
+
+  return {
+    productId: product.id,
+    slug: product.slug,
+    title: product.title,
+    sku: variant?.sku || product.sku,
+    variant: variant ? {
+      id: variant.id,
+      title: variant.title,
+      option: variant.option,
+      sku: variant.sku,
+    } : null,
+    quantity,
+    price: unitPrice,
+    currency: product.currency,
+    lineTotal: moneyValue(unitPrice * quantity),
+    productType: product.productType,
+    imageUrl: product.imageUrl,
+    galleryImages: product.galleryImages,
+    checkoutUrl: product.checkout.url,
+  };
+};
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -245,7 +269,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           return errorResponse(409, 'PRODUCT_OUT_OF_STOCK', `${product.title} is out of stock`, requestId, { productId: product.id, slug: product.slug });
         }
 
-        lineItems.push(lineItemFromProduct(product, quantity));
+        const variant = selectProductVariant(product, item);
+        if ((item.variantId || item.variantSku) && !variant) {
+          return errorResponse(404, 'VARIANT_NOT_FOUND', 'Product variant not found', requestId, { item, productId: product.id, slug: product.slug });
+        }
+        if (variant && !variant.inStock) {
+          return errorResponse(409, 'VARIANT_OUT_OF_STOCK', `${variant.title} is out of stock`, requestId, { productId: product.id, slug: product.slug, variantId: variant.id });
+        }
+
+        lineItems.push(lineItemFromProduct(product, quantity, item));
       }
 
       const currency = lineItems[0]?.currency || 'USD';
@@ -353,7 +385,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(409, 'PRODUCT_OUT_OF_STOCK', `${product.title} is out of stock`, requestId, { productId: product.id, slug: product.slug });
       }
 
-      lineItems.push(lineItemFromProduct(product, quantity));
+      const variant = selectProductVariant(product, item);
+      if ((item.variantId || item.variantSku) && !variant) {
+        return errorResponse(404, 'VARIANT_NOT_FOUND', 'Product variant not found', requestId, { item, productId: product.id, slug: product.slug });
+      }
+      if (variant && !variant.inStock) {
+        return errorResponse(409, 'VARIANT_OUT_OF_STOCK', `${variant.title} is out of stock`, requestId, { productId: product.id, slug: product.slug, variantId: variant.id });
+      }
+
+      lineItems.push(lineItemFromProduct(product, quantity, item));
     }
 
     const currency = lineItems[0]?.currency || 'USD';
