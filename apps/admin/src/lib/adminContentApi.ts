@@ -987,6 +987,7 @@ export interface SiteSettingsInput {
     teamId?: string;
     url?: string;
     environment?: string;
+    tokenConfigured?: boolean;
     missing: string[];
   };
 }

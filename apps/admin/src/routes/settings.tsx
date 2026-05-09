@@ -2432,6 +2432,20 @@ const configuredValue = (...values: Array<string | boolean | undefined | null>):
   values.some((value) => (typeof value === 'boolean' ? value : Boolean(value)))
 );
 
+const buildSupabaseStoragePublicBaseUrl = (projectUrl?: string, bucket?: string): string => {
+  const trimmedBucket = bucket?.trim();
+  if (!projectUrl || !trimmedBucket) {
+    return '';
+  }
+
+  try {
+    const url = new URL(projectUrl);
+    return `${url.origin}/storage/v1/object/public/${encodeURIComponent(trimmedBucket)}`;
+  } catch {
+    return '';
+  }
+};
+
 const buildInfrastructureEnvContract = ({
   runtimeDatabase,
   runtimeStorage,
@@ -2537,6 +2551,17 @@ const buildInfrastructureEnvContract = ({
     required: Boolean(vercel?.autoDeploy || vercel?.previewDeployments),
     valueHint: runtimeVercel?.projectId || vercel?.projectId,
     example: 'prj_xxxxxxxxxxxxxxxxxxxx',
+  },
+  {
+    provider: 'vercel',
+    key: 'VERCEL_TOKEN',
+    aliases: ['BACKY_VERCEL_TOKEN'],
+    label: 'Vercel deploy token',
+    description: 'Server-only token for future Vercel deploy, domain, and project orchestration workflows.',
+    configured: Boolean(runtimeVercel?.tokenConfigured),
+    required: Boolean(vercel?.autoDeploy || vercel?.previewDeployments),
+    secret: true,
+    example: '<vercel-api-token>',
   },
   {
     provider: 'vercel',
@@ -2795,11 +2820,29 @@ function InfrastructureSettings({
   };
 
   const useRuntimeSupabase = () => {
-    updateSupabase({
-      projectUrl: runtimeSupabase?.projectUrl || supabase.projectUrl || '',
-      projectRef: runtimeSupabase?.projectRef || supabase.projectRef || '',
-      databaseEnabled: Boolean(runtimeSupabase?.databaseUrlConfigured || supabase.databaseEnabled),
-      storageEnabled: Boolean(runtimeSupabase?.storageBucket || supabase.storageEnabled),
+    const projectUrl = runtimeSupabase?.projectUrl || supabase.projectUrl || '';
+    const projectRef = runtimeSupabase?.projectRef || supabase.projectRef || '';
+    const storageBucket = runtimeSupabase?.storageBucket || storage.bucket || '';
+    const publicBaseUrl = storage.publicBaseUrl || buildSupabaseStoragePublicBaseUrl(projectUrl, storageBucket);
+    const shouldUseSupabaseStorage = Boolean(projectUrl || storageBucket || storage.provider === 'supabase');
+
+    onChange({
+      ...integrations,
+      supabase: {
+        ...supabase,
+        projectUrl,
+        projectRef,
+        databaseEnabled: Boolean(runtimeSupabase?.databaseUrlConfigured || supabase.databaseEnabled),
+        storageEnabled: Boolean(storageBucket || supabase.storageEnabled),
+        authEnabled: Boolean(runtimeSupabase?.anonKeyConfigured || supabase.authEnabled),
+      },
+      storage: {
+        ...storage,
+        provider: shouldUseSupabaseStorage ? 'supabase' : storage.provider,
+        bucket: storageBucket,
+        publicBaseUrl,
+        imageTransformsEnabled: storage.imageTransformsEnabled !== false,
+      },
     });
   };
 
@@ -2889,6 +2932,7 @@ function InfrastructureSettings({
             { label: 'On Vercel', value: runtimeVercel?.onVercel },
             { label: 'Project ID', value: runtimeVercel?.projectId },
             { label: 'Environment', value: runtimeVercel?.environment },
+            { label: 'Deploy token', value: runtimeVercel?.tokenConfigured },
           ]}
         />
       </div>

@@ -143,6 +143,7 @@ const getVercelRuntimeSummary = () => {
   const teamId = envValue(['VERCEL_TEAM_ID', 'BACKY_VERCEL_TEAM_ID']);
   const url = envValue(['VERCEL_URL', 'BACKY_PUBLIC_APP_URL']);
   const env = envValue(['VERCEL_ENV']);
+  const token = envValue(['VERCEL_TOKEN', 'BACKY_VERCEL_TOKEN']);
   const onVercel = process.env.VERCEL === '1' || Boolean(url);
 
   return {
@@ -152,6 +153,7 @@ const getVercelRuntimeSummary = () => {
     teamId,
     url,
     environment: env,
+    tokenConfigured: Boolean(token),
     missing: onVercel || projectId ? [] : ['VERCEL_PROJECT_ID or VERCEL runtime'],
   };
 };
