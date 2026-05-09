@@ -9,6 +9,7 @@ import { createPage, createSite, getAdminApiBase } from '@/lib/adminContentApi';
 import { useStore, type Site } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { cn } from '@/lib/utils';
+import { getCanvasHeightForElements, withPageChrome } from '@/lib/editorTemplateChrome';
 import {
   DEFAULT_CANVAS_SIZE,
   createCanvasElement,
@@ -179,7 +180,7 @@ function NewSitePage() {
       {
         label: 'Starter pages',
         detail: hasStarterPages
-          ? `${selectedBlueprint.pages.length} page${selectedBlueprint.pages.length === 1 ? '' : 's'} will be seeded`
+          ? `${selectedBlueprint.pages.length} page${selectedBlueprint.pages.length === 1 ? '' : 's'} will be seeded with editable header, navigation, and footer`
           : 'Blank workspace starts without pages.',
         ready: true,
       },
@@ -203,7 +204,7 @@ function NewSitePage() {
       checks,
       workflow: [
         { label: 'Create workspace', detail: 'Persist the site identity, slug, status, and optional custom domain.' },
-        { label: 'Seed structure', detail: 'Optionally create starter pages with serialized editable canvas content.' },
+        { label: 'Seed structure', detail: 'Optionally create starter pages with serialized body, header, navigation, and footer content.' },
         { label: 'Open controls', detail: 'Manage readiness, navigation, redirects, SEO, automation, and API handoff.' },
         { label: 'Design and publish', detail: 'Edit seeded pages, connect content systems, and expose the frontend contract.' },
       ],
@@ -230,6 +231,7 @@ function NewSitePage() {
       path: page.isHomepage ? '/' : `/${page.slug}`,
       template: page.template,
       isHomepage: Boolean(page.isHomepage),
+      siteChrome: selectedBlueprint.id === 'blank' ? 'none' : 'editable header, navigation, and footer',
     })),
   }), [
     displaySlug,
@@ -265,7 +267,7 @@ function NewSitePage() {
       path: page.isHomepage ? '/' : `/${page.slug}`,
       template: page.template,
       isHomepage: Boolean(page.isHomepage),
-      content: 'Serialized Backy canvas starter content',
+      content: 'Serialized Backy canvas starter content with editable site chrome',
     })),
     endpointsAfterCreate: {
       siteDetail: `${adminSitesUrl}/{siteId}`,
@@ -283,7 +285,7 @@ function NewSitePage() {
     guardrails: [
       'Backend owns duplicate slug and custom domain validation.',
       'Starter pages are persisted only after the site record is created.',
-      'Seeded pages use serialized canvas content so users can edit them immediately.',
+      'Seeded pages use serialized canvas content with editable header, navigation, body, and footer blocks.',
       'Custom frontends should resolve site/page content through public endpoints and keep admin endpoints private.',
     ],
   }), [
@@ -800,16 +802,19 @@ async function seedStarterPages(
         description: spec.description,
         template: spec.template,
       },
-      content: createStarterPageContent(spec, status),
+      content: createStarterPageContent(spec, status, pageSpecs),
     }));
   }
 
   return createdPages;
 }
 
-function createStarterPageContent(spec: StarterPageSpec, status: Site['status']) {
-  const elements = buildStarterElements(spec);
-  return JSON.parse(serializeCanvasContent(elements, DEFAULT_CANVAS_SIZE, undefined, {
+function createStarterPageContent(spec: StarterPageSpec, status: Site['status'], allPages: StarterPageSpec[]) {
+  const elements = buildStarterElements(spec, allPages);
+  return JSON.parse(serializeCanvasContent(elements, {
+    ...DEFAULT_CANVAS_SIZE,
+    height: getCanvasHeightForElements(elements),
+  }, undefined, {
     documentId: `page_${spec.slug || 'home'}`,
     kind: 'page',
     title: spec.title,
@@ -819,8 +824,11 @@ function createStarterPageContent(spec: StarterPageSpec, status: Site['status'])
   }));
 }
 
-function buildStarterElements(spec: StarterPageSpec): CanvasElement[] {
+function buildStarterElements(spec: StarterPageSpec, allPages: StarterPageSpec[]): CanvasElement[] {
   const palette = getStarterPalette(spec.template);
+  const navItems = allPages.length > 0
+    ? allPages.map((page) => page.title)
+    : ['Home', 'About', 'Contact'];
   const hero = createCanvasElement('section', 0, 0, {
     id: `${spec.slug}-hero-section`,
     width: 1200,
@@ -881,10 +889,15 @@ function buildStarterElements(spec: StarterPageSpec): CanvasElement[] {
       }),
     ];
 
-    return [hero];
+    return withPageChrome([hero], {
+      title: spec.title,
+      variant: `site-${spec.template}-${spec.slug}`,
+      navItems,
+      headerActionLabel: getStarterButtonLabel(spec.template),
+    });
   }
 
-  return [
+  return withPageChrome([
     hero,
     createCanvasElement('section', 0, 520, {
       id: `${spec.slug}-feature-section`,
@@ -912,7 +925,12 @@ function buildStarterElements(spec: StarterPageSpec): CanvasElement[] {
         ],
       })),
     }),
-  ];
+  ], {
+    title: spec.title,
+    variant: `site-${spec.template}-${spec.slug}`,
+    navItems,
+    headerActionLabel: getStarterButtonLabel(spec.template),
+  });
 }
 
 function getStarterPalette(template: string) {
