@@ -643,7 +643,7 @@ export function CanvasEditor({
         updated = true;
         return {
           ...item,
-          children: [...(item.children || []), child],
+          children: [...(item.children || []), { ...child, parentId }],
         };
       }
 
@@ -664,6 +664,55 @@ export function CanvasEditor({
     });
 
     return { elements: next, updated };
+  };
+
+  const insertElementAsSibling = (
+    items: CanvasElement[],
+    targetId: string,
+    sibling: CanvasElement,
+  ): { elements: CanvasElement[]; updated: boolean } => {
+    const walk = (nodes: CanvasElement[], parentId: string | null): { elements: CanvasElement[]; updated: boolean } => {
+      let updated = false;
+
+      const next = nodes.reduce<CanvasElement[]>((acc, item) => {
+        if (item.id === targetId) {
+          const nextSibling: CanvasElement = {
+            ...sibling,
+            ...(parentId ? { parentId } : {}),
+          };
+
+          if (!parentId) {
+            delete nextSibling.parentId;
+          }
+
+          updated = true;
+          acc.push(item, nextSibling);
+          return acc;
+        }
+
+        if (!item.children?.length) {
+          acc.push(item);
+          return acc;
+        }
+
+        const childResult = walk(item.children, item.id);
+        if (!childResult.updated) {
+          acc.push(item);
+          return acc;
+        }
+
+        updated = true;
+        acc.push({
+          ...item,
+          children: childResult.elements,
+        });
+        return acc;
+      }, []);
+
+      return { elements: next, updated };
+    };
+
+    return walk(items, null);
   };
 
   const removeElementById = (
@@ -868,19 +917,34 @@ export function CanvasEditor({
     }
   }, [selectedId, elements]);
 
-  const normalizePastedElement = useCallback(
-    (sourceElement: CanvasElement, x = 20, y = 20): CanvasElement => {
-      const clone = JSON.parse(JSON.stringify(sourceElement)) as CanvasElement;
+  const cloneElementTreeWithFreshIds = useCallback(
+    (sourceElement: CanvasElement, x = 20, y = 20, parentId: string | null = null): CanvasElement => {
       const highestZ = Math.max(walkTreeMaxZ(elements), 0);
+      const cloneNode = (node: CanvasElement, nextParentId: string | null, isRoot = false): CanvasElement => {
+        const clone = JSON.parse(JSON.stringify(node)) as CanvasElement;
+        const nextId = generateId();
+        const nextNode: CanvasElement = {
+          ...clone,
+          id: nextId,
+          type: normalizeElementType(clone.type),
+          ...(nextParentId ? { parentId: nextParentId } : {}),
+          children: clone.children?.map((child) => cloneNode(child, nextId)),
+        };
 
-      return {
-        ...clone,
-        id: generateId(),
-        type: normalizeElementType(clone.type),
-        x: sourceElement.x + x,
-        y: sourceElement.y + y,
-        zIndex: highestZ + 1,
+        if (!nextParentId) {
+          delete nextNode.parentId;
+        }
+
+        if (isRoot) {
+          nextNode.x = sourceElement.x + x;
+          nextNode.y = sourceElement.y + y;
+          nextNode.zIndex = highestZ + 1;
+        }
+
+        return nextNode;
       };
+
+      return cloneNode(sourceElement, parentId, true);
     },
     [elements]
   );
@@ -890,9 +954,9 @@ export function CanvasEditor({
    */
   const handlePaste = useCallback(() => {
     if (clipboardElement) {
-      const newElement = normalizePastedElement(clipboardElement);
       const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
       const canNest = selectedElement && canAcceptNestedDrop(selectedElement.type);
+      const newElement = cloneElementTreeWithFreshIds(clipboardElement, 20, 20, canNest ? selectedElement.id : null);
       const newElements = canNest
         ? insertElementAsChild(elements, selectedElement.id, newElement)
         : { elements: [...elements, newElement], updated: false };
@@ -901,24 +965,19 @@ export function CanvasEditor({
 
       updateElementsWithHistory(nextElements, newElement.id);
     }
-  }, [clipboardElement, elements, normalizePastedElement, selectedId, updateElementsWithHistory]);
+  }, [clipboardElement, cloneElementTreeWithFreshIds, elements, selectedId, updateElementsWithHistory]);
 
   const handleDuplicate = useCallback(() => {
     if (!selectedId) return;
-    const selectedElement = findElementById(elements, selectedId);
-    if (!selectedElement) return;
+    const selectedEntry = findElementEntry(elements, selectedId);
+    if (!selectedEntry) return;
 
-    const duplicate = normalizePastedElement(selectedElement);
-    const canNest = canAcceptNestedDrop(selectedElement.type);
-    const duplicated = canNest
-      ? insertElementAsChild(elements, selectedElement.id, duplicate)
-      : { elements: [...elements, duplicate], updated: false };
-    const nextElements = duplicated.updated || !canNest
-      ? duplicated.elements
-      : [...elements, duplicate];
+    const duplicate = cloneElementTreeWithFreshIds(selectedEntry.element, 20, 20, selectedEntry.parentId);
+    const duplicated = insertElementAsSibling(elements, selectedEntry.element.id, duplicate);
+    if (!duplicated.updated) return;
 
-    updateElementsWithHistory(nextElements, duplicate.id);
-  }, [elements, normalizePastedElement, selectedId, updateElementsWithHistory]);
+    updateElementsWithHistory(duplicated.elements, duplicate.id);
+  }, [cloneElementTreeWithFreshIds, elements, findElementEntry, selectedId, updateElementsWithHistory]);
 
   const handleLayerSelect = useCallback((ids: string[]) => {
     const nextIds = ids.filter((id) => !!findElementById(elements, id));
@@ -989,12 +1048,15 @@ export function CanvasEditor({
   }, [elements, findElementById, updateElementsWithHistory]);
 
   const handleLayerDuplicate = useCallback((elementId: string) => {
-    const selectedElement = findElementById(elements, elementId);
-    if (!selectedElement) return;
+    const selectedEntry = findElementEntry(elements, elementId);
+    if (!selectedEntry) return;
 
-    const duplicate = normalizePastedElement(selectedElement);
-    updateElementsWithHistory([...elements, duplicate], duplicate.id);
-  }, [elements, findElementById, normalizePastedElement, updateElementsWithHistory]);
+    const duplicate = cloneElementTreeWithFreshIds(selectedEntry.element, 20, 20, selectedEntry.parentId);
+    const duplicated = insertElementAsSibling(elements, selectedEntry.element.id, duplicate);
+    if (!duplicated.updated) return;
+
+    updateElementsWithHistory(duplicated.elements, duplicate.id);
+  }, [cloneElementTreeWithFreshIds, elements, findElementEntry, updateElementsWithHistory]);
 
   const handleGroupSelected = useCallback(() => {
     const selectedSet = new Set(selectedIds);
