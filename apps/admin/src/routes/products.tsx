@@ -315,6 +315,7 @@ function ProductsRoute() {
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const isProductsBusy = isLoading || isSaving;
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const [mediaPickerTarget, setMediaPickerTarget] = useState<'image' | 'gallery' | 'download'>('image');
   const [galleryImageDraft, setGalleryImageDraft] = useState('');
@@ -736,6 +737,8 @@ function ProductsRoute() {
   };
 
   const loadProducts = async () => {
+    if (isProductsBusy) return;
+
     setIsLoading(true);
     setError(null);
 
@@ -823,20 +826,22 @@ function ProductsRoute() {
   };
 
   const resetForm = () => {
-    if (isSaving) return;
+    if (isProductsBusy) return;
 
     clearProductEditorState();
     updateProductsRouteSearch({ productId: undefined });
   };
 
   const selectProductForEditing = (productId: string) => {
-    if (isSaving) return;
+    if (isProductsBusy) return;
 
     setSelectedProductId(productId);
     updateProductsRouteSearch({ productId });
   };
 
   const openMediaPicker = (target: 'image' | 'gallery' | 'download') => {
+    if (isProductsBusy) return;
+
     setMediaPickerTarget(target);
     setIsMediaLibraryOpen(true);
   };
@@ -846,6 +851,8 @@ function ProductsRoute() {
   };
 
   const addGalleryImageUrl = (url: string) => {
+    if (isProductsBusy) return;
+
     const normalizedUrl = url.trim();
     if (!normalizedUrl) return;
 
@@ -854,6 +861,8 @@ function ProductsRoute() {
   };
 
   const removeGalleryImageUrl = (url: string) => {
+    if (isProductsBusy) return;
+
     setGalleryImages(galleryImageUrls.filter((item) => item !== url));
   };
 
@@ -872,6 +881,8 @@ function ProductsRoute() {
   };
 
   const addProductVariant = () => {
+    if (isProductsBusy) return;
+
     const title = variantDraft.title.trim();
     const sku = variantDraft.sku.trim();
     const option = variantDraft.option.trim();
@@ -893,11 +904,13 @@ function ProductsRoute() {
   };
 
   const removeProductVariant = (variantId: string) => {
+    if (isProductsBusy) return;
+
     setProductVariants(productVariants.filter((variant) => variant.id !== variantId));
   };
 
   const createProductsCollection = async () => {
-    if (isSaving) return;
+    if (isProductsBusy) return;
 
     setIsSaving(true);
     setError(null);
@@ -931,7 +944,7 @@ function ProductsRoute() {
 
   const syncProductsCollection = async () => {
     if (!productCollection) return;
-    if (isSaving) return;
+    if (isProductsBusy) return;
 
     setIsSaving(true);
     setError(null);
@@ -966,7 +979,7 @@ function ProductsRoute() {
   const saveProduct = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!productCollection) return;
-    if (isSaving) return;
+    if (isProductsBusy) return;
 
     if (!formState.title.trim() || !formState.sku.trim()) {
       setError('Add a product title and SKU before saving.');
@@ -1037,7 +1050,7 @@ function ProductsRoute() {
 
   const changeProductStatus = async (product: CollectionRecord, status: ContentStatus) => {
     if (!productCollection) return;
-    if (isSaving) return;
+    if (isProductsBusy) return;
 
     setIsSaving(true);
     setError(null);
@@ -1063,7 +1076,7 @@ function ProductsRoute() {
 
   const removeProduct = async (product: CollectionRecord) => {
     if (!productCollection) return;
-    if (isSaving) return;
+    if (isProductsBusy) return;
 
     setIsSaving(true);
     setError(null);
@@ -1073,7 +1086,8 @@ function ProductsRoute() {
       await deleteCollectionRecord(activeSiteId, productCollection.id, product.id);
       setProducts((current) => current.filter((item) => item.id !== product.id));
       if (selectedProductId === product.id) {
-        resetForm();
+        clearProductEditorState();
+        updateProductsRouteSearch({ productId: undefined });
       }
       setPendingDeleteProduct(null);
       setNotice('Product deleted.');
@@ -1085,6 +1099,8 @@ function ProductsRoute() {
   };
 
   const copyStorefrontApiUrl = async () => {
+    if (isProductsBusy) return;
+
     try {
       await navigator.clipboard.writeText(storefrontApiUrl);
       setNotice('Storefront products API URL copied.');
@@ -1093,6 +1109,8 @@ function ProductsRoute() {
     }
   };
   const copyProductHandoff = async () => {
+    if (isProductsBusy) return;
+
     try {
       await navigator.clipboard.writeText(productHandoffText);
       setNotice('Product handoff manifest copied.');
@@ -1101,6 +1119,8 @@ function ProductsRoute() {
     }
   };
   const downloadProductHandoff = () => {
+    if (isProductsBusy) return;
+
     const blob = new Blob([productHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -1113,7 +1133,7 @@ function ProductsRoute() {
     setNotice('Product handoff manifest downloaded.');
   };
   const exportProductsCsv = () => {
-    if (filteredProducts.length === 0) return;
+    if (filteredProducts.length === 0 || isProductsBusy) return;
 
     const rows = filteredProducts.map((product) => {
       const exportRecord = productToExportRecord(product, {
@@ -1138,7 +1158,7 @@ function ProductsRoute() {
     setNotice(`${filteredProducts.length} visible product${filteredProducts.length === 1 ? '' : 's'} exported.`);
   };
   const clearCatalogFilters = () => {
-    if (isSaving) return;
+    if (isProductsBusy) return;
 
     setSearchQuery('');
     setStatusFilter('all');
@@ -1156,7 +1176,7 @@ function ProductsRoute() {
     });
   };
   const selectProductsSite = (nextSiteId: string) => {
-    if (isSaving) return;
+    if (isProductsBusy) return;
 
     setSelectedSiteId(nextSiteId);
     clearProductEditorState();
@@ -1178,7 +1198,7 @@ function ProductsRoute() {
             id="products-active-site"
             aria-label="Active Site"
             value={activeSiteId}
-            disabled={isSaving}
+            disabled={isProductsBusy}
             onChange={(event) => {
               selectProductsSite(event.target.value);
             }}
@@ -1192,7 +1212,7 @@ function ProductsRoute() {
               </option>
             ))}
           </select>
-          <Button onClick={() => void loadProducts()} disabled={isLoading || isSaving} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+          <Button onClick={() => void loadProducts()} disabled={isProductsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
             Refresh
           </Button>
         </div>
@@ -1228,33 +1248,37 @@ function ProductsRoute() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => void copyProductHandoff()} iconStart={<Copy className="size-4" />}>
+            <Button variant="outline" onClick={() => void copyProductHandoff()} disabled={isProductsBusy} iconStart={<Copy className="size-4" />}>
               Copy manifest
             </Button>
-            <Button variant="outline" onClick={downloadProductHandoff} iconStart={<Download className="size-4" />}>
+            <Button variant="outline" onClick={downloadProductHandoff} disabled={isProductsBusy} iconStart={<Download className="size-4" />}>
               Download JSON
             </Button>
-            <Button variant="outline" onClick={exportProductsCsv} disabled={filteredProducts.length === 0} iconStart={<Download className="size-4" />}>
+            <Button variant="outline" onClick={exportProductsCsv} disabled={filteredProducts.length === 0 || isProductsBusy} iconStart={<Download className="size-4" />}>
               Export CSV
             </Button>
             <Link
               to="/pages/new"
               search={{ siteId: activeSiteId, template: 'storefront' }}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              aria-disabled={isProductsBusy}
+              className={cn(
+                'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
+                isProductsBusy && 'pointer-events-none opacity-60',
+              )}
             >
               <Sparkles className="size-4" />
               Storefront page
             </Link>
             {!productCollection ? (
-              <Button onClick={() => void createProductsCollection()} disabled={isSaving} iconStart={<Sparkles className="size-4" />}>
+              <Button onClick={() => void createProductsCollection()} disabled={isProductsBusy} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set up products'}
               </Button>
             ) : (
-              <Button onClick={resetForm} disabled={isSaving} iconStart={<Plus className="size-4" />}>
+              <Button onClick={resetForm} disabled={isProductsBusy} iconStart={<Plus className="size-4" />}>
                 New product
               </Button>
             )}
-            <Button onClick={() => void loadProducts()} disabled={isLoading || isSaving} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+            <Button onClick={() => void loadProducts()} disabled={isProductsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh
             </Button>
           </div>
@@ -1321,25 +1345,29 @@ function ProductsRoute() {
                 {!productApiReady && (
                   <Button
                     onClick={() => void syncProductsCollection()}
-                    disabled={isSaving}
+                    disabled={isProductsBusy}
                     iconStart={<Sparkles className="size-4" />}
                   >
                     Sync Schema
                   </Button>
                 )}
-                <Button onClick={() => void copyProductHandoff()} iconStart={<Copy className="size-4" />}>
+                <Button onClick={() => void copyProductHandoff()} disabled={isProductsBusy} iconStart={<Copy className="size-4" />}>
                   Copy manifest
                 </Button>
-                <Button onClick={exportProductsCsv} disabled={filteredProducts.length === 0} iconStart={<Download className="size-4" />}>
+                <Button onClick={exportProductsCsv} disabled={filteredProducts.length === 0 || isProductsBusy} iconStart={<Download className="size-4" />}>
                   Export CSV
                 </Button>
-                <Button onClick={() => void copyStorefrontApiUrl()} iconStart={<Copy className="size-4" />}>
+                <Button onClick={() => void copyStorefrontApiUrl()} disabled={isProductsBusy} iconStart={<Copy className="size-4" />}>
                   Copy URL
                 </Button>
                 <Link
                   to="/pages/new"
                   search={{ siteId: activeSiteId, template: 'storefront' }}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                  aria-disabled={isProductsBusy}
+                  className={cn(
+                    'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
+                    isProductsBusy && 'pointer-events-none opacity-60',
+                  )}
                 >
                   <Sparkles className="size-4" />
                   Storefront page
@@ -1348,7 +1376,11 @@ function ProductsRoute() {
                   href={storefrontApiUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                  aria-disabled={isProductsBusy}
+                  className={cn(
+                    'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
+                    isProductsBusy && 'pointer-events-none opacity-60',
+                  )}
                 >
                   <ExternalLink className="size-4" />
                   Open API
@@ -1432,7 +1464,11 @@ function ProductsRoute() {
                     <Link
                       to="/orders"
                       search={activeSiteSearch}
-                      className="mt-3 inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-background px-3 text-xs font-medium hover:bg-accent"
+                      aria-disabled={isProductsBusy}
+                      className={cn(
+                        'mt-3 inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-background px-3 text-xs font-medium hover:bg-accent',
+                        isProductsBusy && 'pointer-events-none opacity-60',
+                      )}
                     >
                       Open orders
                     </Link>
@@ -1480,7 +1516,7 @@ function ProductsRoute() {
           id="products-active-site-inline"
           aria-label="Active product site"
           value={activeSiteId}
-          disabled={isSaving}
+          disabled={isProductsBusy}
           onChange={(event) => {
             selectProductsSite(event.target.value);
           }}
@@ -1517,13 +1553,17 @@ function ProductsRoute() {
           description="Create a products collection with pricing, SKU, inventory, image, and publishing fields."
           action={
             <div className="mt-2 flex flex-wrap justify-center gap-2">
-              <Button onClick={() => void createProductsCollection()} disabled={isSaving} iconStart={<Sparkles className="size-4" />}>
+              <Button onClick={() => void createProductsCollection()} disabled={isProductsBusy} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set Up Products'}
               </Button>
               <Link
                 to="/pages/new"
                 search={{ siteId: activeSiteId, template: 'storefront' }}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                aria-disabled={isProductsBusy}
+                className={cn(
+                  'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
+                  isProductsBusy && 'pointer-events-none opacity-60',
+                )}
               >
                 <Sparkles className="size-4" />
                 Start storefront page
@@ -1539,7 +1579,7 @@ function ProductsRoute() {
                 title="Catalog"
                 description={`${filteredProducts.length}/${products.length} visible products`}
                 icon={<ShoppingBag className="size-4" />}
-                action={<Button onClick={resetForm} disabled={isSaving} iconStart={<Plus className="size-4" />}>New Product</Button>}
+                action={<Button onClick={resetForm} disabled={isProductsBusy} iconStart={<Plus className="size-4" />}>New Product</Button>}
               />
               <PanelContent>
                 <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -1548,9 +1588,9 @@ function ProductsRoute() {
                     <input
                       aria-label="Search products"
                       value={searchQuery}
-                      disabled={isSaving}
+                      disabled={isProductsBusy}
                       onChange={(event) => {
-                        if (isSaving) return;
+                        if (isProductsBusy) return;
                         const q = event.target.value;
                         setSearchQuery(q);
                         clearProductEditorState();
@@ -1565,9 +1605,9 @@ function ProductsRoute() {
                       <button
                         key={status}
                         type="button"
-                        disabled={isSaving}
+                        disabled={isProductsBusy}
                         onClick={() => {
-                          if (isSaving) return;
+                          if (isProductsBusy) return;
                           setStatusFilter(status);
                           clearProductEditorState();
                           updateProductsRouteSearch({ status, productId: undefined });
@@ -1584,9 +1624,9 @@ function ProductsRoute() {
                   <select
                     aria-label="Product type filter"
                     value={productTypeFilter}
-                    disabled={isSaving}
+                    disabled={isProductsBusy}
                     onChange={(event) => {
-                      if (isSaving) return;
+                      if (isProductsBusy) return;
                       const type = event.target.value as ProductTypeFilter;
                       setProductTypeFilter(type);
                       clearProductEditorState();
@@ -1602,9 +1642,9 @@ function ProductsRoute() {
                   <select
                     aria-label="Product category filter"
                     value={categoryFilter}
-                    disabled={isSaving}
+                    disabled={isProductsBusy}
                     onChange={(event) => {
-                      if (isSaving) return;
+                      if (isProductsBusy) return;
                       const category = event.target.value;
                       setCategoryFilter(category);
                       clearProductEditorState();
@@ -1620,9 +1660,9 @@ function ProductsRoute() {
                   <select
                     aria-label="Product stock filter"
                     value={stockFilter}
-                    disabled={isSaving}
+                    disabled={isProductsBusy}
                     onChange={(event) => {
-                      if (isSaving) return;
+                      if (isProductsBusy) return;
                       const stock = event.target.value as ProductStockFilter;
                       setStockFilter(stock);
                       clearProductEditorState();
@@ -1638,7 +1678,7 @@ function ProductsRoute() {
                     <option value="checkout-missing">No checkout URL</option>
                   </select>
                   {hasActiveCatalogFilters && (
-                    <Button variant="outline" onClick={clearCatalogFilters} disabled={isSaving}>
+                    <Button variant="outline" onClick={clearCatalogFilters} disabled={isProductsBusy}>
                       Clear filters
                     </Button>
                   )}
@@ -1655,7 +1695,7 @@ function ProductsRoute() {
                         : 'Change the search, status, type, category, or stock filters to broaden the catalog.'}
                     </div>
                     {products.length > 0 && hasActiveCatalogFilters && (
-                      <Button variant="outline" onClick={clearCatalogFilters} disabled={isSaving} className="mt-4">
+                      <Button variant="outline" onClick={clearCatalogFilters} disabled={isProductsBusy} className="mt-4">
                         Clear filters
                       </Button>
                     )}
@@ -1671,7 +1711,7 @@ function ProductsRoute() {
                         onPublish={() => void changeProductStatus(product, 'published')}
                         onArchive={() => void changeProductStatus(product, 'archived')}
                         onDelete={() => setPendingDeleteProduct(product)}
-                        disabled={isSaving}
+                        disabled={isProductsBusy}
                       />
                     ))}
                   </div>
@@ -1688,7 +1728,7 @@ function ProductsRoute() {
             />
             <PanelContent>
               <form onSubmit={saveProduct}>
-                <fieldset disabled={isSaving} className={cn('space-y-4', isSaving && 'opacity-70')}>
+                <fieldset disabled={isProductsBusy} className={cn('space-y-4', isProductsBusy && 'opacity-70')}>
                 <Field label="Title">
                   <input
                     value={formState.title}
@@ -2112,8 +2152,8 @@ function ProductsRoute() {
                   </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" onClick={resetForm}>Clear</Button>
-                  <Button type="submit" variant="primary" disabled={isSaving || !formState.title.trim() || !formState.sku.trim() || (formState.status === 'scheduled' && !formState.scheduledAt)} iconStart={<Package className="size-4" />}>
+                  <Button variant="outline" onClick={resetForm} disabled={isProductsBusy}>Clear</Button>
+                  <Button type="submit" variant="primary" disabled={isProductsBusy || !formState.title.trim() || !formState.sku.trim() || (formState.status === 'scheduled' && !formState.scheduledAt)} iconStart={<Package className="size-4" />}>
                     {isSaving ? 'Saving...' : selectedProduct ? 'Save Product' : 'Create Product'}
                   </Button>
                 </div>
@@ -2145,7 +2185,7 @@ function ProductsRoute() {
               <button
                 type="button"
                 onClick={() => setPendingDeleteProduct(null)}
-                disabled={isSaving}
+                disabled={isProductsBusy}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -2153,7 +2193,7 @@ function ProductsRoute() {
               <button
                 type="button"
                 onClick={() => void removeProduct(pendingDeleteProduct)}
-                disabled={isSaving}
+                disabled={isProductsBusy}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSaving ? 'Deleting...' : 'Delete product'}
@@ -2165,8 +2205,14 @@ function ProductsRoute() {
 
       <MediaLibraryModal
         isOpen={isMediaLibraryOpen}
-        onClose={() => setIsMediaLibraryOpen(false)}
+        onClose={() => {
+          if (!isProductsBusy) {
+            setIsMediaLibraryOpen(false);
+          }
+        }}
         onSelect={(asset) => {
+          if (isProductsBusy) return;
+
           const deliveryUrl = asset.url || getPublicMediaFileUrl(asset.id, activeSiteId);
           if (mediaPickerTarget === 'download') {
             setFormState((current) => ({ ...current, downloadUrl: deliveryUrl }));
