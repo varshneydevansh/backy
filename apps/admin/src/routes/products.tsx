@@ -747,7 +747,7 @@ function ProductsRoute() {
 
       if (!collection) {
         setProducts([]);
-        setSelectedProductId(null);
+        clearProductEditorState();
         return;
       }
 
@@ -778,9 +778,7 @@ function ProductsRoute() {
 
     if (siteChanged) {
       setSelectedSiteId(nextSiteId);
-      setFormState(EMPTY_PRODUCT_FORM);
-      setGalleryImageDraft('');
-      setVariantDraft({ title: '', sku: '', option: '', price: '', inventory: '' });
+      clearProductEditorState();
     }
 
     setSelectedProductId(routeSearch.productId || null);
@@ -811,7 +809,7 @@ function ProductsRoute() {
     setFormState(productToForm(selectedProduct));
   }, [selectedProduct]);
 
-  const resetForm = () => {
+  const clearProductEditorState = () => {
     setSelectedProductId(null);
     setFormState(EMPTY_PRODUCT_FORM);
     setGalleryImageDraft('');
@@ -822,6 +820,10 @@ function ProductsRoute() {
       price: '',
       inventory: '',
     });
+  };
+
+  const resetForm = () => {
+    clearProductEditorState();
     updateProductsRouteSearch({ productId: undefined });
   };
 
@@ -1137,20 +1139,19 @@ function ProductsRoute() {
     setProductTypeFilter('all');
     setStockFilter('all');
     setCategoryFilter('all');
+    clearProductEditorState();
     updateProductsRouteSearch({
       status: undefined,
       type: undefined,
       stock: undefined,
       category: undefined,
       q: undefined,
+      productId: undefined,
     });
   };
   const selectProductsSite = (nextSiteId: string) => {
     setSelectedSiteId(nextSiteId);
-    setSelectedProductId(null);
-    setFormState(EMPTY_PRODUCT_FORM);
-    setGalleryImageDraft('');
-    setVariantDraft({ title: '', sku: '', option: '', price: '', inventory: '' });
+    clearProductEditorState();
     setSearchQuery('');
     setStatusFilter('all');
     setProductTypeFilter('all');
@@ -1528,7 +1529,7 @@ function ProductsRoute() {
                 title="Catalog"
                 description={`${filteredProducts.length}/${products.length} visible products`}
                 icon={<ShoppingBag className="size-4" />}
-                action={<Button onClick={resetForm} iconStart={<Plus className="size-4" />}>New Product</Button>}
+                action={<Button onClick={resetForm} disabled={isSaving} iconStart={<Plus className="size-4" />}>New Product</Button>}
               />
               <PanelContent>
                 <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -1540,7 +1541,8 @@ function ProductsRoute() {
                       onChange={(event) => {
                         const q = event.target.value;
                         setSearchQuery(q);
-                        updateProductsRouteSearch({ q: q || undefined });
+                        clearProductEditorState();
+                        updateProductsRouteSearch({ q: q || undefined, productId: undefined });
                       }}
                       placeholder="Search products..."
                       className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm"
@@ -1553,7 +1555,8 @@ function ProductsRoute() {
                         type="button"
                         onClick={() => {
                           setStatusFilter(status);
-                          updateProductsRouteSearch({ status });
+                          clearProductEditorState();
+                          updateProductsRouteSearch({ status, productId: undefined });
                         }}
                         className={cn(
                           'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground hover:bg-background hover:text-foreground',
@@ -1570,7 +1573,8 @@ function ProductsRoute() {
                     onChange={(event) => {
                       const type = event.target.value as ProductTypeFilter;
                       setProductTypeFilter(type);
-                      updateProductsRouteSearch({ type });
+                      clearProductEditorState();
+                      updateProductsRouteSearch({ type, productId: undefined });
                     }}
                     className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
                   >
@@ -1585,7 +1589,8 @@ function ProductsRoute() {
                     onChange={(event) => {
                       const category = event.target.value;
                       setCategoryFilter(category);
-                      updateProductsRouteSearch({ category });
+                      clearProductEditorState();
+                      updateProductsRouteSearch({ category, productId: undefined });
                     }}
                     className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
                   >
@@ -1600,7 +1605,8 @@ function ProductsRoute() {
                     onChange={(event) => {
                       const stock = event.target.value as ProductStockFilter;
                       setStockFilter(stock);
-                      updateProductsRouteSearch({ stock });
+                      clearProductEditorState();
+                      updateProductsRouteSearch({ stock, productId: undefined });
                     }}
                     className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
                   >
