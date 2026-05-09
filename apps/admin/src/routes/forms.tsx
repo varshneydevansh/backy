@@ -73,6 +73,24 @@ function FormsRoute() {
   const selectedFormSubmitUrl = selectedForm
     ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/submissions`
     : '';
+  const selectedFormSamplePayload = useMemo(
+    () => selectedForm ? buildSampleSubmissionPayload(selectedForm) : null,
+    [selectedForm],
+  );
+  const selectedFormSamplePayloadText = useMemo(
+    () => selectedFormSamplePayload ? JSON.stringify(selectedFormSamplePayload, null, 2) : '',
+    [selectedFormSamplePayload],
+  );
+  const selectedFormCurlExample = useMemo(
+    () => selectedForm && selectedFormSubmitUrl && selectedFormSamplePayloadText
+      ? [
+          `curl -X POST ${toSingleQuotedShellString(selectedFormSubmitUrl)}`,
+          "  -H 'content-type: application/json'",
+          `  --data ${toSingleQuotedShellString(selectedFormSamplePayloadText)}`,
+        ].join(' \\\n')
+      : '',
+    [selectedForm, selectedFormSamplePayloadText, selectedFormSubmitUrl],
+  );
   const selectedInbox = selectedForm ? inboxByForm[selectedForm.id] : null;
   const selectedSubmissions = selectedInbox?.submissions || [];
   const filteredSubmissions = useMemo(
@@ -401,6 +419,20 @@ function FormsRoute() {
                         <Button onClick={() => void copyFormApiText(selectedFormDefinitionUrl, 'Form definition URL')} iconStart={<Copy className="size-4" />}>
                           Copy definition
                         </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => void copyFormApiText(selectedFormSamplePayloadText, 'Sample payload')}
+                          iconStart={<Copy className="size-4" />}
+                        >
+                          Copy payload
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => void copyFormApiText(selectedFormCurlExample, 'cURL example')}
+                          iconStart={<Copy className="size-4" />}
+                        >
+                          Copy cURL
+                        </Button>
                         <a
                           href={selectedFormDefinitionUrl}
                           target="_blank"
@@ -415,6 +447,10 @@ function FormsRoute() {
                     <div className="mt-4 grid gap-3 lg:grid-cols-2">
                       <ApiSnippet label="Definition URL" value={selectedFormDefinitionUrl} />
                       <ApiSnippet label="Submit URL" value={selectedFormSubmitUrl} />
+                    </div>
+                    <div className="mt-3 grid gap-3 xl:grid-cols-2">
+                      <ApiSnippet label="Sample submission payload" value={selectedFormSamplePayloadText} />
+                      <ApiSnippet label="cURL submit example" value={selectedFormCurlExample} />
                     </div>
                   </div>
 
@@ -633,6 +669,56 @@ const formatSubmissionValue = (value: unknown): string => {
   if (Array.isArray(value)) return value.map(formatSubmissionValue).join(', ');
   return JSON.stringify(value);
 };
+
+const buildSampleSubmissionPayload = (form: FormDefinition) => ({
+  values: Object.fromEntries(form.fields.map((field) => [field.key, sampleFormFieldValue(field)])),
+  requestId: `web-${form.id}-request`,
+  startedAt: Date.now() - 8000,
+  ...(form.pageId ? { pageId: form.pageId } : {}),
+  ...(form.postId ? { postId: form.postId } : {}),
+  ...(form.contactShare?.enabled ? {
+    contactShareOverride: {
+      enabled: true,
+      nameField: form.contactShare.nameField,
+      emailField: form.contactShare.emailField,
+      phoneField: form.contactShare.phoneField,
+      notesField: form.contactShare.notesField,
+      dedupeByEmail: form.contactShare.dedupeByEmail,
+    },
+  } : {}),
+});
+
+const sampleFormFieldValue = (field: FormDefinition['fields'][number]): unknown => {
+  if (field.defaultValue) return field.defaultValue;
+
+  switch (field.type) {
+    case 'email':
+      return 'ada@example.com';
+    case 'number':
+      return 1;
+    case 'date':
+      return '2026-05-09';
+    case 'tel':
+      return '+1 555 0100';
+    case 'url':
+      return 'https://example.com';
+    case 'select':
+    case 'radio':
+      return field.options?.[0] || 'Option 1';
+    case 'checkbox':
+      return field.required ? true : false;
+    case 'textarea':
+      return field.placeholder || 'Sample message from a custom frontend.';
+    case 'file':
+      return 'media_asset_id_or_signed_upload_reference';
+    default:
+      return field.placeholder || field.label || 'Sample value';
+  }
+};
+
+const toSingleQuotedShellString = (value: string): string => (
+  `'${value.replace(/'/g, "'\\''")}'`
+);
 
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
