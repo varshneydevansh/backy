@@ -16,6 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import { getDefaultMediaSiteId, listMedia, listMediaFolders, uploadMedia, type MediaFolder } from '@/lib/mediaApi';
 import { useStore, type MediaAsset } from '@/stores/mockStore';
+import { parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 
 type AllowedType = 'image' | 'video' | 'audio' | 'file' | 'font' | 'other' | 'any';
 type MediaScopeFilter = 'all' | 'global' | 'page' | 'post';
@@ -139,14 +140,7 @@ export function MediaLibraryModal({
     [allowedTypes, allowedTypesSet]
   );
 
-  const uploadTagList = useMemo(
-    () => uploadTags
-      .split(',')
-      .map((tag) => tag.trim())
-      .filter(Boolean)
-      .slice(0, 10),
-    [uploadTags]
-  );
+  const uploadTagList = useMemo(() => parseTagInput(uploadTags, 10), [uploadTags]);
 
   const uploadFolderLabel = useMemo(() => {
     if (uploadFolderId === 'root') return 'Root library';
@@ -675,15 +669,19 @@ export function MediaLibraryModal({
                     </select>
                   </label>
 
-                  <label className="space-y-1 text-xs font-medium text-muted-foreground">
-                    Default tags
-                    <input
-                      value={uploadTags}
-                      onChange={(event) => setUploadTags(event.target.value)}
-                      className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
-                      placeholder="hero, product, brand"
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
+                      <span>Default tags</span>
+                      <span className="font-mono">{uploadTagList.length}/10</span>
+                    </div>
+                    <TagInput
+                      tags={uploadTagList}
+                      onChange={(tags) => setUploadTags(serializeTagValues(tags, 10))}
+                      placeholder="Add hero, product, brand..."
+                      ariaLabel="Media upload tags"
+                      maxTags={10}
                     />
-                  </label>
+                  </div>
 
                   <div className="rounded-lg border border-border bg-background p-3 text-xs text-muted-foreground">
                     <div className="font-medium text-foreground">Target scope</div>
