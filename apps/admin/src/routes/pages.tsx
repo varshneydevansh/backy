@@ -153,6 +153,17 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
+type PageLibraryFilter =
+  | 'all'
+  | 'ready'
+  | 'needs-attention'
+  | 'blocked'
+  | 'homepage'
+  | 'scheduled'
+  | 'has-canvas'
+  | 'empty-canvas'
+  | 'not-checked';
+
 /**
  * Layout component that decides what to render based on current path:
  * - /pages -> shows PagesListView
@@ -178,7 +189,7 @@ function PagesListView() {
   const [error, setError] = useState<string | null>(null);
   const [selectedSiteId, setSelectedSiteId] = useState(() => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo');
   const [statusFilter, setStatusFilter] = useState<'all' | Page['status']>('all');
-  const [healthFilter, setHealthFilter] = useState<'all' | 'blocked'>('all');
+  const [healthFilter, setHealthFilter] = useState<PageLibraryFilter>('all');
   const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(() => new Set());
   const [bulkAction, setBulkAction] = useState<'publish' | 'archive' | 'delete' | ''>('');
   const [isBulkBusy, setIsBulkBusy] = useState(false);
@@ -205,7 +216,19 @@ function PagesListView() {
   const visiblePages = useMemo(
     () => activeSitePages.filter((page) => {
       const matchesStatus = statusFilter === 'all' || page.status === statusFilter;
-      const matchesHealth = healthFilter === 'all' || readinessMap[page.id]?.statusLabel === healthFilter;
+      const readiness = readinessMap[page.id];
+      const elementCount = readiness?.elementCount || 0;
+      const matchesHealth = (
+        healthFilter === 'all' ||
+        (healthFilter === 'ready' && readiness?.statusLabel === 'ready') ||
+        (healthFilter === 'needs-attention' && readiness?.statusLabel === 'needs-attention') ||
+        (healthFilter === 'blocked' && readiness?.statusLabel === 'blocked') ||
+        (healthFilter === 'homepage' && (page.isHomepage || page.slug === 'home' || page.slug === '')) ||
+        (healthFilter === 'scheduled' && (page.status === 'scheduled' || Boolean(page.scheduledAt))) ||
+        (healthFilter === 'has-canvas' && elementCount > 0) ||
+        (healthFilter === 'empty-canvas' && Boolean(readiness) && elementCount === 0) ||
+        (healthFilter === 'not-checked' && !readiness)
+      );
 
       return matchesStatus && matchesHealth;
     }),
@@ -217,7 +240,11 @@ function PagesListView() {
       published: activeSitePages.filter((page) => page.status === 'published').length,
       draft: activeSitePages.filter((page) => page.status === 'draft').length,
       scheduled: activeSitePages.filter((page) => page.status === 'scheduled').length,
+      ready: activeSitePages.filter((page) => readinessMap[page.id]?.statusLabel === 'ready').length,
+      needsAttention: activeSitePages.filter((page) => readinessMap[page.id]?.statusLabel === 'needs-attention').length,
       blocked: activeSitePages.filter((page) => readinessMap[page.id]?.statusLabel === 'blocked').length,
+      emptyCanvas: activeSitePages.filter((page) => readinessMap[page.id] && (readinessMap[page.id]?.elementCount || 0) === 0).length,
+      unchecked: activeSitePages.filter((page) => !readinessMap[page.id]).length,
     }),
     [activeSitePages, readinessMap],
   );
@@ -756,7 +783,7 @@ function PagesListView() {
     filters: {
       search: searchQuery,
       status: statusFilter,
-      health: healthFilter,
+      library: healthFilter,
       selected: selectedPages.length,
       visible: data.length,
       currentPage,
@@ -823,6 +850,13 @@ function PagesListView() {
     totalPages,
   ]);
   const pageHandoffText = useMemo(() => JSON.stringify(pageHandoff, null, 2), [pageHandoff]);
+
+  const clearPageFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setHealthFilter('all');
+    setCurrentPage(1);
+  };
 
   const downloadPageHandoff = () => {
     const blob = new Blob([pageHandoffText], { type: 'application/json;charset=utf-8' });
@@ -1050,6 +1084,8 @@ function PagesListView() {
               setSelectedSiteId(event.target.value);
               setStatusFilter('all');
               setHealthFilter('all');
+              setSearchQuery('');
+              setCurrentPage(1);
               setSelectedPageIds(new Set());
             }}
             className="mt-2 w-full min-w-52 rounded-lg border bg-background px-3 py-2 text-sm"
@@ -1277,6 +1313,25 @@ function PagesListView() {
             </button>
           ))}
         </div>
+        <select
+          aria-label="Filter pages by library readiness"
+          value={healthFilter}
+          onChange={(event) => {
+            setHealthFilter(event.target.value as PageLibraryFilter);
+            setCurrentPage(1);
+          }}
+          className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+        >
+          <option value="all">All library states</option>
+          <option value="ready">Ready pages</option>
+          <option value="needs-attention">Needs attention</option>
+          <option value="blocked">Blocked pages</option>
+          <option value="homepage">Homepage route</option>
+          <option value="scheduled">Scheduled pages</option>
+          <option value="has-canvas">Has canvas content</option>
+          <option value="empty-canvas">Empty canvas</option>
+          <option value="not-checked">Not checked</option>
+        </select>
         <button
           type="button"
           onClick={() => void refreshPages(activeSiteId)}
@@ -1286,6 +1341,15 @@ function PagesListView() {
         >
           Refresh
         </button>
+        {(searchQuery || statusFilter !== 'all' || healthFilter !== 'all') && (
+          <button
+            type="button"
+            onClick={clearPageFilters}
+            className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       <div id="pages-library" className="scroll-mt-24">
@@ -1312,11 +1376,7 @@ function PagesListView() {
                   {hasPages && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setSearchQuery('');
-                        setStatusFilter('all');
-                        setHealthFilter('all');
-                      }}
+                      onClick={clearPageFilters}
                       className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 font-medium transition-colors hover:bg-accent"
                     >
                       Clear Filters
