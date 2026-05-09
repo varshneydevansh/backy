@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   CheckCircle2,
   CircleSlash,
@@ -30,7 +30,7 @@ import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/comments')({
@@ -143,6 +143,8 @@ interface CommentTargetSummary {
 
 function CommentsRoute() {
   const { sites } = useStore();
+  const navigate = useNavigate();
+  const routerState = useRouterState();
   const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
   const [comments, setComments] = useState<AdminComment[]>([]);
   const [targets, setTargets] = useState<CommentTargetSummary[]>([]);
@@ -163,6 +165,7 @@ function CommentsRoute() {
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const targetByKey = useMemo(() => {
     const map = new Map<string, CommentTargetSummary>();
@@ -457,6 +460,19 @@ function CommentsRoute() {
   }, [selectedSiteId, sites]);
 
   useEffect(() => {
+    const requestedSiteId = getSiteSearchParam();
+    if (!requestedSiteId) return;
+
+    const nextSiteId = getSiteSelectionFromSearch(sites);
+    if (nextSiteId === selectedSiteId) return;
+
+    setSelectedSiteId(nextSiteId);
+    setSelectedIds([]);
+    setModerationReason('');
+    clearCommentFilters();
+  }, [routerState.location.search, selectedSiteId, sites]);
+
+  useEffect(() => {
     void loadComments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSiteId]);
@@ -533,6 +549,13 @@ function CommentsRoute() {
     setTriageFilter('all');
     setSortFilter('newest');
   };
+  const selectCommentsSite = (nextSiteId: string) => {
+    setSelectedSiteId(nextSiteId);
+    setSelectedIds([]);
+    setModerationReason('');
+    clearCommentFilters();
+    navigate({ to: '/comments', search: { siteId: nextSiteId }, replace: true });
+  };
 
   const handleExportComments = () => {
     if (filteredComments.length === 0) return;
@@ -592,11 +615,7 @@ function CommentsRoute() {
             id="comments-active-site"
             aria-label="Active Site"
             value={activeSiteId}
-            onChange={(event) => {
-              setSelectedSiteId(event.target.value);
-              clearCommentFilters();
-              setSelectedIds([]);
-            }}
+            onChange={(event) => selectCommentsSite(event.target.value)}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
           >
             {sites.length === 0 ? (
@@ -735,7 +754,7 @@ function CommentsRoute() {
               <Link
                 key={surface.key}
                 to={surface.route}
-                search={surface.route === '/pages' || surface.route === '/blog' ? { siteId: activeSiteId } : undefined}
+                search={surface.route === '/settings' ? undefined : activeSiteSearch}
                 className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
               >
                 <div className="text-sm font-semibold text-foreground">{surface.title}</div>
@@ -754,11 +773,7 @@ function CommentsRoute() {
           id="comments-active-site-inline"
           aria-label="Active comments site"
           value={activeSiteId}
-          onChange={(event) => {
-            setSelectedSiteId(event.target.value);
-            clearCommentFilters();
-            setSelectedIds([]);
-          }}
+          onChange={(event) => selectCommentsSite(event.target.value)}
           className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
         >
           {sites.length === 0 ? (
