@@ -10,6 +10,7 @@ import {
   Download,
   Edit3,
   ExternalLink,
+  FileText,
   Image as ImageIcon,
   Package,
   Plus,
@@ -39,6 +40,7 @@ import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
+import { getPublicMediaFileUrl } from '@/lib/mediaApi';
 import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/products')({
@@ -239,6 +241,7 @@ function ProductsRoute() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
+  const [mediaPickerTarget, setMediaPickerTarget] = useState<'image' | 'download'>('image');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingDeleteProduct, setPendingDeleteProduct] = useState<CollectionRecord | null>(null);
@@ -600,6 +603,11 @@ function ProductsRoute() {
   const resetForm = () => {
     setSelectedProductId(null);
     setFormState(EMPTY_PRODUCT_FORM);
+  };
+
+  const openMediaPicker = (target: 'image' | 'download') => {
+    setMediaPickerTarget(target);
+    setIsMediaLibraryOpen(true);
   };
 
   const createProductsCollection = async () => {
@@ -1379,12 +1387,18 @@ function ProductsRoute() {
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   <Field label="Digital delivery URL">
-                    <input
-                      value={formState.downloadUrl}
-                      onChange={(event) => setFormState((current) => ({ ...current, downloadUrl: event.target.value }))}
-                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
-                      placeholder="https://downloads.example.com/product.zip"
-                    />
+                    <div className="flex gap-2">
+                      <input
+                        aria-label="Digital delivery URL"
+                        value={formState.downloadUrl}
+                        onChange={(event) => setFormState((current) => ({ ...current, downloadUrl: event.target.value }))}
+                        className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2.5 text-sm"
+                        placeholder="https://downloads.example.com/product.zip"
+                      />
+                      <Button onClick={() => openMediaPicker('download')} iconStart={<FileText className="size-4" />}>
+                        File
+                      </Button>
+                    </div>
                   </Field>
                   <Field label="Checkout URL">
                     <input
@@ -1410,7 +1424,7 @@ function ProductsRoute() {
                         className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2.5 text-sm"
                         placeholder="https://..."
                       />
-                      <Button onClick={() => setIsMediaLibraryOpen(true)} iconStart={<ImageIcon className="size-4" />}>
+                      <Button onClick={() => openMediaPicker('image')} iconStart={<ImageIcon className="size-4" />}>
                         Media
                       </Button>
                     </div>
@@ -1562,15 +1576,24 @@ function ProductsRoute() {
         isOpen={isMediaLibraryOpen}
         onClose={() => setIsMediaLibraryOpen(false)}
         onSelect={(asset) => {
-          setFormState((current) => ({ ...current, imageUrl: asset.url }));
+          const deliveryUrl = asset.url || getPublicMediaFileUrl(asset.id, activeSiteId);
+          if (mediaPickerTarget === 'download') {
+            setFormState((current) => ({ ...current, downloadUrl: deliveryUrl }));
+            setNotice(`Attached ${asset.name} to the digital delivery field.`);
+            return;
+          }
+
+          setFormState((current) => ({ ...current, imageUrl: deliveryUrl }));
           setNotice(`Attached ${asset.name} to the product image field.`);
         }}
-        allowedTypes="image"
-        initialUploadFilter="image"
+        allowedTypes={mediaPickerTarget === 'image' ? 'image' : 'any'}
+        initialUploadFilter={mediaPickerTarget === 'image' ? 'image' : 'file'}
         mediaContext={{
           siteId: activeSiteId,
           scope: 'global',
-          targetLabel: `${activeSite?.name || activeSiteId} product catalog`,
+          targetLabel: mediaPickerTarget === 'download'
+            ? `${activeSite?.name || activeSiteId} digital delivery`
+            : `${activeSite?.name || activeSiteId} product catalog`,
         }}
         allowScopeSwitcher={false}
       />
