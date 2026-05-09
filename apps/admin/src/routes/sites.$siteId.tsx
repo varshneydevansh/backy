@@ -6,6 +6,7 @@ import {
   CheckCircle,
   ChevronDown,
   ChevronUp,
+  Copy,
   MinusCircle,
   CircleSlash,
   CornerDownRight,
@@ -35,6 +36,7 @@ import {
   getSiteRedirects,
   getSiteReadiness,
   getSiteSeoSettings,
+  getAdminApiBase,
   listPages,
   previewSiteRedirects,
   updateSiteRedirects,
@@ -115,6 +117,11 @@ const SITE_WORKSPACE_AREAS = [
     title: 'Automation queues',
     detail: 'Forms, submissions, lead sharing, comments, moderation, exports, and request tracing.',
     href: '#site-automation',
+  },
+  {
+    title: 'Frontend handoff',
+    detail: 'Copy admin/public endpoints, navigation, redirects, SEO, readiness, and automation contract.',
+    href: '#site-handoff',
   },
 ] as const;
 
@@ -450,6 +457,7 @@ function EditSitePage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [siteSettingsError, setSiteSettingsError] = useState<string | null>(null);
+  const [siteWorkspaceNotice, setSiteWorkspaceNotice] = useState<string | null>(null);
   const [readiness, setReadiness] = useState<SiteReadiness | null>(null);
   const [readinessLoading, setReadinessLoading] = useState(false);
   const [readinessError, setReadinessError] = useState<string | null>(null);
@@ -1647,6 +1655,150 @@ function EditSitePage() {
     state.submissionCount,
   ]);
 
+  const publicSiteUrl = `https://${formData.customDomain || site?.customDomain || `${formData.slug || site?.slug || siteId}.backy.app`}`;
+  const adminSiteUrl = `${getAdminApiBase()}/sites/${encodeURIComponent(siteApiId || siteId)}`;
+  const publicApiBase = buildApiUrl('/api');
+  const publicSiteApiUrl = `${publicApiBase}/sites/${encodeURIComponent(siteApiId || siteId)}`;
+  const siteWorkspaceHandoff = useMemo(() => ({
+    generatedAt: new Date().toISOString(),
+    site: {
+      id: site?.id || siteId,
+      apiId: siteApiId || siteId,
+      name: formData.name || site?.name || 'Untitled site',
+      slug: formData.slug || site?.slug || siteId,
+      customDomain: formData.customDomain || site?.customDomain || null,
+      status: formData.status,
+      publicUrl: publicSiteUrl,
+    },
+    endpoints: {
+      adminSite: adminSiteUrl,
+      readiness: `${adminSiteUrl}/readiness`,
+      navigation: `${adminSiteUrl}/navigation`,
+      redirects: `${adminSiteUrl}/redirects`,
+      seo: `${adminSiteUrl}/seo`,
+      pages: `${adminSiteUrl}/pages`,
+      forms: `${publicSiteApiUrl}/forms`,
+      comments: `${publicSiteApiUrl}/comments`,
+      events: `${publicSiteApiUrl}/events`,
+      publicResolve: `${publicSiteApiUrl}/resolve?path=/`,
+      publicRender: `${publicSiteApiUrl}/render?path=/`,
+      publicOpenApi: `${publicSiteApiUrl}/openapi`,
+    },
+    navigation: {
+      primaryItems: navigationState.navigation.primary.length,
+      footerItems: navigationState.navigation.footer?.length || 0,
+      primary: navigationState.navigation.primary,
+      footer: navigationState.navigation.footer || [],
+    },
+    redirects: {
+      ruleCount: redirectState.rules.length,
+      conflicts: redirectState.conflicts.map((conflict) => ({
+        from: conflict.from,
+        kind: conflict.kind,
+        message: conflict.message,
+      })),
+    },
+    seo: {
+      titleTemplate: seoState.seo.titleTemplate,
+      defaultDescription: seoState.seo.defaultDescription,
+      sitemap: seoState.seo.sitemap,
+      robots: seoState.seo.robots,
+      jsonLdCount: seoState.seo.jsonLd?.length || 0,
+    },
+    readiness: {
+      score: siteWorkspaceReadiness.score,
+      checks: siteWorkspaceReadiness.checks,
+      backend: readiness
+        ? {
+          score: readiness.score,
+          statusLabel: readiness.statusLabel,
+          summary: readiness.summary,
+        }
+        : null,
+    },
+    automation: {
+      forms: state.forms.length,
+      submissions: state.submissionCount,
+      contacts: state.contactCount,
+      comments: state.commentCount,
+      selectedFormId: state.selectedFormId || null,
+      filters: {
+        submissions: submissionStatus,
+        contacts: contactStatus,
+        comments: commentStatus,
+        commentSearch,
+        commentRequestId,
+        commentTargetType,
+        commentTargetId,
+      },
+    },
+    guardrails: [
+      'Admin endpoints require authenticated Backy access.',
+      'Public frontends should use resolve/render/OpenAPI endpoints and public interaction endpoints.',
+      'Navigation, redirects, SEO, and readiness must be refreshed before publishing major route changes.',
+      'Forms, contacts, comments, and request events are site-scoped automation queues.',
+    ],
+  }), [
+    adminSiteUrl,
+    commentRequestId,
+    commentSearch,
+    commentStatus,
+    commentTargetId,
+    commentTargetType,
+    contactStatus,
+    formData.customDomain,
+    formData.name,
+    formData.slug,
+    formData.status,
+    navigationState.navigation.footer,
+    navigationState.navigation.primary,
+    publicSiteApiUrl,
+    publicSiteUrl,
+    readiness,
+    redirectState.conflicts,
+    redirectState.rules.length,
+    seoState.seo.defaultDescription,
+    seoState.seo.jsonLd?.length,
+    seoState.seo.robots,
+    seoState.seo.sitemap,
+    seoState.seo.titleTemplate,
+    site?.customDomain,
+    site?.id,
+    site?.name,
+    site?.slug,
+    siteApiId,
+    siteId,
+    siteWorkspaceReadiness.checks,
+    siteWorkspaceReadiness.score,
+    state.commentCount,
+    state.contactCount,
+    state.forms.length,
+    state.selectedFormId,
+    state.submissionCount,
+    submissionStatus,
+  ]);
+  const siteWorkspaceHandoffText = useMemo(() => JSON.stringify(siteWorkspaceHandoff, null, 2), [siteWorkspaceHandoff]);
+
+  const copySiteHandoffText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setSiteSettingsError(null);
+      setSiteWorkspaceNotice(`${label} copied.`);
+    } catch {
+      setSiteWorkspaceNotice(null);
+      setSiteSettingsError(value);
+    }
+  };
+
+  const downloadSiteHandoff = () => {
+    downloadBlob(
+      `${formData.slug || site?.slug || siteId}-backy-site-workspace-handoff.json`,
+      new Blob([siteWorkspaceHandoffText], { type: 'application/json;charset=utf-8' }),
+    );
+    setSiteSettingsError(null);
+    setSiteWorkspaceNotice('Site workspace handoff manifest downloaded.');
+  };
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
@@ -1701,8 +1853,6 @@ function EditSitePage() {
       </PageShell>
     );
   }
-
-  const publicSiteUrl = `https://${formData.customDomain || site.customDomain || `${formData.slug || site.slug}.backy.app`}`;
 
   return (
     <PageShell
@@ -1771,6 +1921,22 @@ function EditSitePage() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void copySiteHandoffText(siteWorkspaceHandoffText, 'Site workspace handoff manifest')}
+                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+              >
+                <Copy className="h-4 w-4" />
+                Copy handoff
+              </button>
+              <button
+                type="button"
+                onClick={downloadSiteHandoff}
+                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+              >
+                <Download className="h-4 w-4" />
+                Download JSON
+              </button>
               <a
                 href="#site-settings"
                 className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
@@ -1789,6 +1955,12 @@ function EditSitePage() {
               </a>
             </div>
           </div>
+
+          {siteWorkspaceNotice && (
+            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              {siteWorkspaceNotice}
+            </div>
+          )}
 
           <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
             <div className="rounded-lg border border-border bg-background p-4">
@@ -1850,7 +2022,7 @@ function EditSitePage() {
                 Refresh readiness
               </button>
             </div>
-            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-7">
               {SITE_WORKSPACE_AREAS.map((area) => (
                 <a
                   key={area.title}
@@ -1861,6 +2033,41 @@ function EditSitePage() {
                   <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
                 </a>
               ))}
+            </div>
+          </div>
+
+          <div id="site-handoff" className="mt-4 rounded-lg border border-border bg-background p-4 scroll-mt-24">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Frontend handoff</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Site-scoped admin and public endpoints plus navigation, redirect, SEO, readiness, and automation context.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void copySiteHandoffText(adminSiteUrl, 'Site admin API URL')}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy API URL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void copySiteHandoffText(siteWorkspaceHandoffText, 'Site workspace handoff manifest')}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy handoff
+                </button>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <SiteHandoffEndpoint label="Admin site" value={adminSiteUrl} />
+              <SiteHandoffEndpoint label="Public render" value={`${publicSiteApiUrl}/render?path=/`} />
+              <SiteHandoffEndpoint label="Navigation" value={`${adminSiteUrl}/navigation`} />
+              <SiteHandoffEndpoint label="OpenAPI" value={`${publicSiteApiUrl}/openapi`} />
             </div>
           </div>
         </section>
@@ -3332,6 +3539,17 @@ function SiteWorkflowStep({ index, label, detail }: { index: number; label: stri
         <div className="text-xs font-semibold text-foreground">{label}</div>
         <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
       </div>
+    </div>
+  );
+}
+
+function SiteHandoffEndpoint({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="mb-1 text-xs font-medium text-muted-foreground">{label}</div>
+      <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-card px-3 py-2 font-mono text-xs text-muted-foreground">
+        {value}
+      </code>
     </div>
   );
 }
