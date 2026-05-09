@@ -332,6 +332,40 @@ const getElementBox = async (client, elementId) => (
   })()`)
 );
 
+const getElementDragStartPoint = async (client, elementId, box) => {
+  const fallback = {
+    x: Math.round(box.x + Math.min(box.width / 2, 90)),
+    y: Math.round(box.y + Math.min(box.height / 2, 30)),
+  };
+  const point = await evaluate(client, `(() => {
+    const node = document.querySelector('[data-element-id="${elementId}"]');
+    if (!node) return null;
+    const rect = node.getBoundingClientRect();
+    const inset = Math.min(14, Math.max(4, Math.min(rect.width, rect.height) / 5));
+    const candidates = [
+      [rect.left + inset, rect.top + inset],
+      [rect.right - inset, rect.top + inset],
+      [rect.left + inset, rect.bottom - inset],
+      [rect.right - inset, rect.bottom - inset],
+      [rect.left + rect.width / 2, rect.top + inset],
+      [rect.left + inset, rect.top + rect.height / 2],
+      [rect.left + rect.width / 2, rect.top + rect.height / 2],
+    ];
+
+    for (const [x, y] of candidates) {
+      const target = document.elementFromPoint(x, y);
+      const host = target instanceof Element ? target.closest('[data-element-id]') : null;
+      if (host?.getAttribute('data-element-id') === '${elementId}') {
+        return { x: Math.round(x), y: Math.round(y) };
+      }
+    }
+
+    return null;
+  })()`);
+
+  return point || fallback;
+};
+
 const scrollElementIntoView = async (client, elementId) => {
   await evaluate(client, `(() => {
     const node = document.querySelector('[data-element-id="${elementId}"]');
@@ -396,6 +430,65 @@ const parseCssPixel = (value) => {
 
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+const getVisualScale = (box, axis) => {
+  const cssSize = parseCssPixel(axis === 'x' ? box.cssWidth : box.cssHeight);
+  const visualSize = axis === 'x' ? box.width : box.height;
+
+  if (!cssSize || !Number.isFinite(cssSize) || !Number.isFinite(visualSize) || visualSize <= 0) {
+    return null;
+  }
+
+  return visualSize / cssSize;
+};
+
+const measureDragDelta = (before, after, expectedScreenDeltaX, expectedScreenDeltaY) => {
+  const cssDeltaX = parseCssPixel(after.left) !== null && parseCssPixel(before.left) !== null
+    ? parseCssPixel(after.left) - parseCssPixel(before.left)
+    : null;
+  const cssDeltaY = parseCssPixel(after.top) !== null && parseCssPixel(before.top) !== null
+    ? parseCssPixel(after.top) - parseCssPixel(before.top)
+    : null;
+  const screenDeltaX = after.x - before.x;
+  const screenDeltaY = after.y - before.y;
+  const scaleX = getVisualScale(before, 'x');
+  const scaleY = getVisualScale(before, 'y');
+  const expectedCanvasDeltaX = scaleX && cssDeltaX !== null
+    ? expectedScreenDeltaX / scaleX
+    : expectedScreenDeltaX;
+  const expectedCanvasDeltaY = scaleY && cssDeltaY !== null
+    ? expectedScreenDeltaY / scaleY
+    : expectedScreenDeltaY;
+
+  return {
+    screen: {
+      x: Math.round(screenDeltaX),
+      y: Math.round(screenDeltaY),
+      expectedX: expectedScreenDeltaX,
+      expectedY: expectedScreenDeltaY,
+    },
+    canvas: {
+      x: Math.round(cssDeltaX ?? screenDeltaX),
+      y: Math.round(cssDeltaY ?? screenDeltaY),
+      expectedX: Math.round(expectedCanvasDeltaX),
+      expectedY: Math.round(expectedCanvasDeltaY),
+    },
+    scale: {
+      x: scaleX,
+      y: scaleY,
+    },
+  };
+};
+
+const assertDragDelta = (delta, label) => {
+  const canvasMatches = Math.abs(delta.canvas.x - delta.canvas.expectedX) <= 18 &&
+    Math.abs(delta.canvas.y - delta.canvas.expectedY) <= 18;
+
+  assert(
+    canvasMatches,
+    `${label}: expected screen ${delta.screen.expectedX},${delta.screen.expectedY} and canvas ${delta.canvas.expectedX},${delta.canvas.expectedY}; got screen ${delta.screen.x},${delta.screen.y}, canvas ${delta.canvas.x},${delta.canvas.y}; scale ${JSON.stringify(delta.scale)}`,
+  );
 };
 
 const findCanvasElement = (elements, elementId) => {
@@ -680,8 +773,9 @@ const dragElement = async (client, elementId, deltaX, deltaY) => {
   const before = await getElementBox(client, elementId);
   assert(before, `Missing draggable element ${elementId}`);
 
-  const startX = Math.round(before.x + Math.min(before.width / 2, 90));
-  const startY = Math.round(before.y + Math.min(before.height / 2, 30));
+  const startPoint = await getElementDragStartPoint(client, elementId, before);
+  const startX = startPoint.x;
+  const startY = startPoint.y;
   const endX = startX + deltaX;
   const endY = startY + deltaY;
   const hitTarget = await evaluate(client, `(() => {
@@ -738,24 +832,17 @@ const dragElement = async (client, elementId, deltaX, deltaY) => {
   const after = await getElementBox(client, elementId);
   assert(after, `Element ${elementId} disappeared after drag`);
 
-  const cssDeltaX = parseCssPixel(after.left) !== null && parseCssPixel(before.left) !== null
-    ? parseCssPixel(after.left) - parseCssPixel(before.left)
-    : null;
-  const cssDeltaY = parseCssPixel(after.top) !== null && parseCssPixel(before.top) !== null
-    ? parseCssPixel(after.top) - parseCssPixel(before.top)
-    : null;
-  const actualDeltaX = Math.round(cssDeltaX ?? (after.x - before.x));
-  const actualDeltaY = Math.round(cssDeltaY ?? (after.y - before.y));
-  assert(
-    Math.abs(actualDeltaX - deltaX) <= 12 && Math.abs(actualDeltaY - deltaY) <= 12,
-    `${elementId} did not drag correctly: expected ${deltaX},${deltaY}; got ${actualDeltaX},${actualDeltaY}; before ${JSON.stringify(before)}; start ${startX},${startY}; hit ${JSON.stringify(hitTarget)}`,
+  const delta = measureDragDelta(before, after, deltaX, deltaY);
+  assertDragDelta(
+    delta,
+    `${elementId} did not drag correctly; before ${JSON.stringify(before)}; start ${startX},${startY}; hit ${JSON.stringify(hitTarget)}`,
   );
 
   return {
     elementId,
     before: { x: Math.round(before.x), y: Math.round(before.y), left: before.left, top: before.top },
     after: { x: Math.round(after.x), y: Math.round(after.y), left: after.left, top: after.top },
-    delta: { x: actualDeltaX, y: actualDeltaY },
+    delta,
   };
 };
 
@@ -1068,14 +1155,16 @@ const testMultiSelectionCanvasDrag = async (client, elementIds) => {
   const before = await readEditorElementState(client, elementIds);
   const drag = await dragSelectionHandle(client, elementIds[0], 50, 30, { selectFirst: false });
   const after = await readEditorElementState(client, elementIds);
+  const expectedCanvasDeltaX = drag.delta?.canvas?.x ?? 50;
+  const expectedCanvasDeltaY = drag.delta?.canvas?.y ?? 30;
 
   for (const elementId of elementIds) {
     const actualDeltaX = after[elementId].x - before[elementId].x;
     const actualDeltaY = after[elementId].y - before[elementId].y;
     assert(
-      Math.abs(actualDeltaX - 50) <= 12 &&
-      Math.abs(actualDeltaY - 30) <= 12,
-      `${elementId} did not move with multi-selection drag: expected 50,30; got ${actualDeltaX},${actualDeltaY}; before ${JSON.stringify(before[elementId])}, after ${JSON.stringify(after[elementId])}`,
+      Math.abs(actualDeltaX - expectedCanvasDeltaX) <= 12 &&
+      Math.abs(actualDeltaY - expectedCanvasDeltaY) <= 12,
+      `${elementId} did not move with multi-selection drag: expected canvas ${expectedCanvasDeltaX},${expectedCanvasDeltaY}; got ${actualDeltaX},${actualDeltaY}; before ${JSON.stringify(before[elementId])}, after ${JSON.stringify(after[elementId])}`,
     );
   }
 
@@ -1175,24 +1264,14 @@ const dragSelectionHandle = async (client, elementId, deltaX, deltaY, options = 
   const after = await getElementBox(client, elementId);
   assert(after, `Element ${elementId} disappeared after move-handle drag`);
 
-  const cssDeltaX = parseCssPixel(after.left) !== null && parseCssPixel(before.left) !== null
-    ? parseCssPixel(after.left) - parseCssPixel(before.left)
-    : null;
-  const cssDeltaY = parseCssPixel(after.top) !== null && parseCssPixel(before.top) !== null
-    ? parseCssPixel(after.top) - parseCssPixel(before.top)
-    : null;
-  const actualDeltaX = Math.round(cssDeltaX ?? (after.x - before.x));
-  const actualDeltaY = Math.round(cssDeltaY ?? (after.y - before.y));
-  assert(
-    Math.abs(actualDeltaX - deltaX) <= 12 && Math.abs(actualDeltaY - deltaY) <= 12,
-    `${elementId} move handle did not drag correctly: expected ${deltaX},${deltaY}; got ${actualDeltaX},${actualDeltaY}`,
-  );
+  const delta = measureDragDelta(before, after, deltaX, deltaY);
+  assertDragDelta(delta, `${elementId} move handle did not drag correctly`);
 
   return {
     elementId,
     before: { x: Math.round(before.x), y: Math.round(before.y), left: before.left, top: before.top },
     after: { x: Math.round(after.x), y: Math.round(after.y), left: after.left, top: after.top },
-    delta: { x: actualDeltaX, y: actualDeltaY },
+    delta,
   };
 };
 
