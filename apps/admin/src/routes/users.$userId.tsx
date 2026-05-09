@@ -69,6 +69,13 @@ const STATUS_OUTCOMES: Record<UserStatus, string> = {
   suspended: 'This user is blocked until an admin changes the account state.',
 };
 
+const LIFECYCLE_ACTIONS: Array<{ status: UserStatus; label: string; detail: string }> = [
+  { status: 'active', label: 'Activate', detail: 'Restore normal workspace access.' },
+  { status: 'invited', label: 'Set invited', detail: 'Return the user to a pending invite state.' },
+  { status: 'inactive', label: 'Mark inactive', detail: 'Keep the record without active access.' },
+  { status: 'suspended', label: 'Suspend', detail: 'Block access until an admin restores it.' },
+];
+
 const USER_DETAIL_CONTROL_AREAS = [
   {
     title: 'Identity',
@@ -283,6 +290,24 @@ function EditUserPage() {
     }
   };
 
+  const handleLifecycleAction = async (status: UserStatus) => {
+    if (status === formData.status) return;
+
+    setIsLoading(true);
+    setNotice(null);
+
+    try {
+      const saved = await updateBackendUser(userId, { status });
+      setUsers(users.map((item) => (item.id === userId ? saved : item)));
+      setFormData((current) => ({ ...current, status: saved.status }));
+      setNotice(`${saved.fullName} is now ${saved.status}.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Backend status update failed.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const resetMailTo = `mailto:${encodeURIComponent(user.email)}?subject=${encodeURIComponent('Reset your Backy access')}&body=${encodeURIComponent(`Hi ${user.fullName},\n\nPlease reset your Backy access before continuing work in the admin workspace.`)}`;
   const updatePayload = {
     fullName: formData.fullName.trim() || user.fullName,
@@ -316,10 +341,20 @@ function EditUserPage() {
         .filter((capability) => capability.roles.includes(formData.role))
         .map((capability) => capability.label),
     },
+    recovery: {
+      resetMailTo,
+      lifecycleActions: LIFECYCLE_ACTIONS.map((action) => ({
+        status: action.status,
+        label: action.label,
+        detail: action.detail,
+        active: action.status === formData.status,
+      })),
+    },
     updatePayload,
     guardrails: [
       'Backend prevents deleting or demoting the final active owner/admin.',
       'Duplicate emails are rejected before persistence.',
+      'Lifecycle quick actions persist only status; use Save changes for identity or role edits.',
       'Suspend or inactivate access before destructive removal when ownership history matters.',
     ],
   };
@@ -667,6 +702,26 @@ function EditUserPage() {
               Email reset instructions
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
+            <div className="mt-4 grid gap-2">
+              {LIFECYCLE_ACTIONS.map((action) => {
+                const active = action.status === formData.status;
+                return (
+                  <button
+                    key={action.status}
+                    type="button"
+                    onClick={() => void handleLifecycleAction(action.status)}
+                    disabled={isLoading || active}
+                    className={cn(
+                      'rounded-lg border px-3 py-2 text-left text-sm transition focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60',
+                      active ? 'border-primary bg-primary/5 text-primary' : 'border-border hover:bg-accent',
+                    )}
+                  >
+                    <span className="block font-medium">{action.label}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{action.detail}</span>
+                  </button>
+                );
+              })}
+            </div>
           </section>
 
           <section id="user-detail-danger" className="rounded-lg border border-red-200 bg-red-50 p-5 scroll-mt-24">
