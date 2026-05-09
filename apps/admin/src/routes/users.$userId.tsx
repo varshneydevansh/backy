@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
+  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
   Clock3,
@@ -63,6 +64,34 @@ const STATUS_OUTCOMES: Record<UserStatus, string> = {
   inactive: 'This user stays in records without active workspace access.',
   suspended: 'This user is blocked until an admin changes the account state.',
 };
+
+const USER_DETAIL_CONTROL_AREAS = [
+  {
+    title: 'Identity',
+    detail: 'Name, email, and persisted account record.',
+    href: '#user-detail-identity',
+  },
+  {
+    title: 'Role and status',
+    detail: 'Access level, lifecycle state, and account outcome.',
+    href: '#user-detail-access',
+  },
+  {
+    title: 'Permissions',
+    detail: 'Capability groups enabled or denied by the selected role.',
+    href: '#user-detail-permissions',
+  },
+  {
+    title: 'API update',
+    detail: 'Payload sent to the user detail endpoint.',
+    href: '#user-detail-api',
+  },
+  {
+    title: 'Danger zone',
+    detail: 'Removal guardrails and destructive access controls.',
+    href: '#user-detail-danger',
+  },
+] as const;
 
 const getInitials = (name: string) => (
   name
@@ -143,6 +172,55 @@ function EditUserPage() {
     [formData.status],
   );
   const canSubmit = formData.fullName.trim().length > 1 && isValidEmail(formData.email);
+  const accessReadiness = useMemo(() => {
+    const enabledCapabilities = ROLE_CAPABILITIES.filter((capability) => capability.roles.includes(formData.role));
+    const isPrivileged = formData.role === 'owner' || formData.role === 'admin';
+    const isBlocked = formData.status === 'inactive' || formData.status === 'suspended';
+    const checks = [
+      {
+        label: 'Account record',
+        detail: user ? `${user.fullName} is loaded from ${notice ? 'local fallback' : 'the users API or store'}.` : 'Load a user before editing access.',
+        ready: Boolean(user),
+      },
+      {
+        label: 'Identity',
+        detail: canSubmit ? 'Name and email are saveable.' : 'Name and valid email are required.',
+        ready: canSubmit,
+      },
+      {
+        label: 'Role scope',
+        detail: `${enabledCapabilities.length} capability group${enabledCapabilities.length === 1 ? '' : 's'} enabled for ${selectedRole.label}.`,
+        ready: enabledCapabilities.length > 0,
+      },
+      {
+        label: 'Lifecycle',
+        detail: STATUS_OUTCOMES[formData.status],
+        ready: !isBlocked,
+      },
+      {
+        label: 'Admin guardrail',
+        detail: isPrivileged ? 'This account can control settings, integrations, and users.' : 'This account cannot manage workspace settings or users.',
+        ready: true,
+      },
+      {
+        label: 'Delete protection',
+        detail: 'Backend prevents removing the last active owner or admin.',
+        ready: true,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      checks,
+      workflow: [
+        { label: 'Review', detail: 'Confirm the person, status, last activity, and current permission scope.' },
+        { label: 'Adjust', detail: 'Change role or lifecycle state without losing content ownership history.' },
+        { label: 'Save', detail: 'Persist the user record through the backend detail endpoint.' },
+        { label: 'Recover', detail: 'Use reset help, suspension, or removal when access needs intervention.' },
+      ],
+    };
+  }, [canSubmit, formData.role, formData.status, notice, selectedRole.label, user]);
 
   if (!user) {
     return (
@@ -218,9 +296,85 @@ function EditUserPage() {
       }
       className="w-full"
     >
-      <form onSubmit={handleSubmit} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="user-detail-command-center">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-semibold text-foreground">User access command center</h2>
+                <span className={cn(
+                  'rounded-full px-2.5 py-1 text-xs font-semibold',
+                  accessReadiness.score >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                )}
+                >
+                  {accessReadiness.score}% ready
+                </span>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Control this collaborator as a full access object: identity, permissions, lifecycle, recovery, API payload, and destructive guardrails.
+              </p>
+            </div>
+            <button
+              type="submit"
+              disabled={isLoading || !canSubmit}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+            >
+              <Save className="h-4 w-4" />
+              {isLoading ? 'Saving...' : 'Save changes'}
+            </button>
+          </div>
+
+          <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <h3 className="text-sm font-semibold">Access readiness</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Checks whether this account can be safely edited, saved, suspended, or removed.</p>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn('h-full rounded-full', accessReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                  style={{ width: `${accessReadiness.score}%` }}
+                />
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {accessReadiness.checks.map((check) => (
+                  <AccessReadinessCheck key={check.label} {...check} />
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Access workflow</h3>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {accessReadiness.workflow.map((step, index) => (
+                  <AccessWorkflowStep key={step.label} index={index + 1} {...step} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold">User control map</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Jump to identity, lifecycle, permissions, API payload, and removal controls.</p>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+              {USER_DETAIL_CONTROL_AREAS.map((area) => (
+                <a
+                  key={area.title}
+                  href={area.href}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                </a>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         <section className="space-y-5">
-          <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
+          <div id="user-detail-identity" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <span className="flex h-14 w-14 items-center justify-center rounded-lg bg-slate-900 text-base font-semibold text-white">
@@ -271,7 +425,7 @@ function EditUserPage() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
+          <div id="user-detail-access" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
                 <Shield className="h-5 w-5" />
@@ -313,7 +467,7 @@ function EditUserPage() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
+          <div id="user-detail-permissions" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-slate-100 p-2 text-slate-700">
                 <KeyRound className="h-5 w-5" />
@@ -375,7 +529,7 @@ function EditUserPage() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+          <section id="user-detail-api" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-primary/10 p-2 text-primary">
                 <Code2 className="h-5 w-5" />
@@ -417,7 +571,7 @@ function EditUserPage() {
             </a>
           </section>
 
-          <section className="rounded-lg border border-red-200 bg-red-50 p-5">
+          <section id="user-detail-danger" className="rounded-lg border border-red-200 bg-red-50 p-5 scroll-mt-24">
             <h2 className="text-sm font-semibold text-red-800">Danger zone</h2>
             <p className="mt-1 text-sm text-red-700">
               Removing a user revokes their admin access. Backy prevents removing the last active owner or admin.
@@ -453,6 +607,7 @@ function EditUserPage() {
             </button>
           </div>
         </aside>
+        </div>
       </form>
 
       {showDeleteConfirm && (
@@ -490,5 +645,37 @@ function EditUserPage() {
         </div>
       )}
     </PageShell>
+  );
+}
+
+function AccessReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="flex items-start gap-2">
+        {ready ? (
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+        ) : (
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+        )}
+        <div>
+          <div className="text-sm font-semibold text-foreground">{label}</div>
+          <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AccessWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex gap-3 rounded-lg border border-border bg-card p-3">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div>
+        <div className="text-sm font-semibold text-foreground">{label}</div>
+        <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
   );
 }

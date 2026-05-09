@@ -4,7 +4,7 @@
 
 import { useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, CheckCircle2, Clock3, Code2, KeyRound, Mail, Shield, UserPlus } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Clock3, Code2, KeyRound, Mail, Shield, UserPlus } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { cn } from '@/lib/utils';
 import { createUser } from '@/lib/adminContentApi';
@@ -31,6 +31,29 @@ const ROLE_CAPABILITIES: Array<{ label: string; roles: UserRole[] }> = [
   { label: 'Own billing, destructive settings, and workspace transfer', roles: ['owner'] },
 ];
 
+const USER_INVITE_CONTROL_AREAS = [
+  {
+    title: 'Identity',
+    detail: 'Name and email that will be persisted to the users API.',
+    href: '#user-invite-identity',
+  },
+  {
+    title: 'Role scope',
+    detail: 'Permission level and exact capabilities unlocked by that role.',
+    href: '#user-invite-role',
+  },
+  {
+    title: 'Access preview',
+    detail: 'Invitation state, delivery limitation, and account summary before submit.',
+    href: '#user-invite-preview',
+  },
+  {
+    title: 'API contract',
+    detail: 'Create-user payload used by frontend, dashboard, and future auth flows.',
+    href: '#user-invite-api',
+  },
+] as const;
+
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
 function NewUserPage() {
@@ -53,6 +76,52 @@ function NewUserPage() {
     [formData.role],
   );
   const canSubmit = formData.fullName.trim().length > 1 && isValidEmail(formData.email);
+  const inviteReadiness = useMemo(() => {
+    const checks = [
+      {
+        label: 'Name',
+        detail: formData.fullName.trim().length > 1 ? 'Ready for the account record.' : 'Enter the collaborator name.',
+        ready: formData.fullName.trim().length > 1,
+      },
+      {
+        label: 'Email',
+        detail: isValidEmail(formData.email) ? 'Valid invite destination.' : 'Use a valid email address.',
+        ready: isValidEmail(formData.email),
+      },
+      {
+        label: 'Role selected',
+        detail: selectedRole.detail,
+        ready: Boolean(formData.role),
+      },
+      {
+        label: 'Permission scope',
+        detail: `${selectedCapabilities.length} capability group${selectedCapabilities.length === 1 ? '' : 's'} will be enabled.`,
+        ready: selectedCapabilities.length > 0,
+      },
+      {
+        label: 'Duplicate guard',
+        detail: `${users.length} existing user${users.length === 1 ? '' : 's'} will be checked by the backend.`,
+        ready: true,
+      },
+      {
+        label: 'Email delivery',
+        detail: 'Auth email delivery is still a future integration pass.',
+        ready: false,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      checks,
+      workflow: [
+        { label: 'Identify', detail: 'Capture the person, email address, and duplicate-safe user record.' },
+        { label: 'Scope', detail: 'Choose the narrowest role that still unlocks the work they need.' },
+        { label: 'Invite', detail: 'Persist an invited user now and connect real email/auth delivery later.' },
+        { label: 'Govern', detail: 'Use the user detail page to activate, suspend, downgrade, or remove access.' },
+      ],
+    };
+  }, [formData.email, formData.fullName, formData.role, selectedCapabilities.length, selectedRole.detail, users.length]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,8 +167,84 @@ function NewUserPage() {
       }
       className="w-full"
     >
-      <form onSubmit={handleSubmit} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="user-invite-command-center">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-semibold text-foreground">Invite command center</h2>
+                <span className={cn(
+                  'rounded-full px-2.5 py-1 text-xs font-semibold',
+                  inviteReadiness.score >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                )}
+                >
+                  {inviteReadiness.score}% ready
+                </span>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Create collaborators with explicit role scope, lifecycle state, and API payload visibility before they touch a site.
+              </p>
+            </div>
+            <button
+              type="submit"
+              disabled={isLoading || !canSubmit}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+            >
+              <UserPlus className="h-4 w-4" />
+              {isLoading ? 'Sending invite...' : 'Send invite'}
+            </button>
+          </div>
+
+          <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <h3 className="text-sm font-semibold">Invite readiness</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Checks identity, permissions, duplicate guardrails, and integration gaps.</p>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn('h-full rounded-full', inviteReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                  style={{ width: `${inviteReadiness.score}%` }}
+                />
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {inviteReadiness.checks.map((check) => (
+                  <AccessReadinessCheck key={check.label} {...check} />
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Access workflow</h3>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {inviteReadiness.workflow.map((step, index) => (
+                  <AccessWorkflowStep key={step.label} index={index + 1} {...step} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold">Invite control map</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Jump to identity, role scope, access preview, and API contract.</p>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {USER_INVITE_CONTROL_AREAS.map((area) => (
+                <a
+                  key={area.title}
+                  href={area.href}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                </a>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <section id="user-invite-identity" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
           <div className="flex items-start gap-3">
             <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
               <UserPlus className="h-5 w-5" />
@@ -147,7 +292,7 @@ function NewUserPage() {
             </label>
           </div>
 
-          <div className="mt-6">
+          <div id="user-invite-role" className="mt-6 scroll-mt-24">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold text-foreground">Role</h3>
@@ -186,7 +331,7 @@ function NewUserPage() {
         </section>
 
         <aside className="space-y-4">
-          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+          <section id="user-invite-preview" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
                 <Shield className="h-5 w-5" />
@@ -244,7 +389,7 @@ function NewUserPage() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+          <section id="user-invite-api" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-primary/10 p-2 text-primary">
                 <Code2 className="h-5 w-5" />
@@ -291,7 +436,40 @@ function NewUserPage() {
             </button>
           </div>
         </aside>
+        </div>
       </form>
     </PageShell>
+  );
+}
+
+function AccessReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="flex items-start gap-2">
+        {ready ? (
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+        ) : (
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+        )}
+        <div>
+          <div className="text-sm font-semibold text-foreground">{label}</div>
+          <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AccessWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex gap-3 rounded-lg border border-border bg-card p-3">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div>
+        <div className="text-sm font-semibold text-foreground">{label}</div>
+        <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
   );
 }
