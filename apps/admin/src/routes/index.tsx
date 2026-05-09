@@ -158,10 +158,13 @@ const issueTone = {
 const frontendContracts = [
   { label: 'Manifest', key: 'manifest', detail: 'Routes, capability flags, schemas' },
   { label: 'Render home', key: 'render', detail: 'Page, post, collection payloads' },
+  { label: 'Navigation', key: 'navigation', detail: 'Primary, footer, and reusable menus' },
   { label: 'Media', key: 'media', detail: 'Public assets, fonts, files' },
   { label: 'Collections', key: 'collections', detail: 'Structured records for custom UI' },
+  { label: 'Products', key: 'products', detail: 'Sellable catalog data for storefronts' },
   { label: 'Forms', key: 'forms', detail: 'Definitions and submission endpoints' },
   { label: 'Comments', key: 'comments', detail: 'Moderation-ready public discussions' },
+  { label: 'SEO', key: 'seo', detail: 'Sitemap, robots, metadata, route index' },
 ];
 
 const DASHBOARD_CONTROL_AREAS = [
@@ -194,6 +197,81 @@ const DASHBOARD_CONTROL_AREAS = [
     title: 'API handoff',
     detail: 'Copy or download the public/admin contract payload for a custom frontend.',
     href: '#dashboard-api',
+  },
+] as const;
+
+const DASHBOARD_MODULES = [
+  {
+    title: 'Sites and pages',
+    status: 'Available',
+    href: '/pages',
+    detail: 'Visual page canvas, page settings, navigation-ready routes, and reusable sections.',
+  },
+  {
+    title: 'Blog and editorial',
+    status: 'Available',
+    href: '/blog',
+    detail: 'Posts, SEO readiness, taxonomy, revisions, previews, and public article design.',
+  },
+  {
+    title: 'Media and files',
+    status: 'Available',
+    href: '/media',
+    detail: 'Images, downloads, fonts, folders, signed URLs, transforms, and references.',
+  },
+  {
+    title: 'Dynamic collections',
+    status: 'Available',
+    href: '/collections',
+    detail: 'Reusable schemas, records, import/export, permissions, and public list/detail APIs.',
+  },
+  {
+    title: 'Forms and contacts',
+    status: 'Available',
+    href: '/forms',
+    detail: 'Contact, registration, lead capture, submission storage, and private contact pipelines.',
+  },
+  {
+    title: 'Commerce',
+    status: 'Available',
+    href: '/products',
+    detail: 'Products, order capture, fulfillment, refunds, checkout handoff, and CSV exports.',
+  },
+  {
+    title: 'Users and roles',
+    status: 'Available',
+    href: '/users',
+    detail: 'Collaborators, role scope, lifecycle controls, invite payloads, and access recovery.',
+  },
+  {
+    title: 'Infrastructure',
+    status: 'Available',
+    href: '/settings',
+    detail: 'Backy-owned settings with Supabase, Vercel, storage, keys, security, and delivery mode.',
+  },
+  {
+    title: 'Memberships',
+    status: 'Next',
+    href: '/settings',
+    detail: 'Frontend login, gated pages, customer profiles, subscription access, and account portals.',
+  },
+  {
+    title: 'Automations',
+    status: 'Next',
+    href: '/settings',
+    detail: 'Form triggers, order workflows, email notifications, webhooks, scheduled publishing, and jobs.',
+  },
+  {
+    title: 'Theme system',
+    status: 'Next',
+    href: '/pages',
+    detail: 'Global tokens, reusable headers/footers, animations, breakpoints, and per-site design presets.',
+  },
+  {
+    title: 'Marketplace',
+    status: 'Next',
+    href: '/collections',
+    detail: 'Plugins, templates, checkout providers, embeds, analytics adapters, and installable modules.',
   },
 ] as const;
 
@@ -550,15 +628,26 @@ function Index() {
   const frontendContractUrls: Record<string, string> = {
     manifest: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/manifest`,
     render: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/render?path=/`,
+    navigation: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/navigation`,
     media: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/media`,
     collections: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections`,
+    products: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/products/records?status=published`,
     forms: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms`,
     comments: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments`,
+    seo: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/seo?format=sitemap`,
   };
   const adminContractUrls = {
     sites: `${adminBaseUrl}/sites`,
     pages: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/pages`,
+    blog: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/blog/posts`,
+    media: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/media`,
     collections: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/collections`,
+    forms: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms`,
+    contacts: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/{formId}/contacts`,
+    comments: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/comments`,
+    products: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/collections/products/records`,
+    orders: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/collections/orders/records`,
+    users: `${adminBaseUrl}/users`,
     settings: `${adminBaseUrl}/settings`,
   };
   const frontendHandoff = useMemo(() => ({
@@ -580,6 +669,12 @@ function Index() {
     },
     publicEndpoints: frontendContractUrls,
     adminEndpoints: adminContractUrls,
+    modules: DASHBOARD_MODULES.map((module) => ({
+      title: module.title,
+      status: module.status,
+      adminPath: module.href,
+      detail: module.detail,
+    })),
     counts: {
       sites: dashboard.sites.length,
       pages: dashboard.pages.length,
@@ -965,6 +1060,49 @@ function Index() {
                   <div className="text-sm font-semibold text-foreground">{area.title}</div>
                   <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
                 </a>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-border bg-background p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Backy module map</h3>
+                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                  The dashboard now names the control surfaces Backy already has and the parity areas still queued for Wix, Webflow, Squarespace, and WordPress-style coverage.
+                </p>
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {DASHBOARD_MODULES.filter((module) => module.status === 'Available').length} available · {DASHBOARD_MODULES.filter((module) => module.status === 'Next').length} next
+              </span>
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {DASHBOARD_MODULES.map((module) => (
+                <Link
+                  key={module.title}
+                  to={module.href}
+                  className="group rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-foreground">{module.title}</div>
+                      <div className="mt-1 text-xs leading-5 text-muted-foreground">{module.detail}</div>
+                    </div>
+                    <span
+                      className={cn(
+                        'shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold',
+                        module.status === 'Available'
+                          ? 'bg-success/10 text-success'
+                          : 'bg-warning/10 text-warning',
+                      )}
+                    >
+                      {module.status}
+                    </span>
+                  </div>
+                  <div className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary">
+                    Open surface <ArrowRight className="size-3" />
+                  </div>
+                </Link>
               ))}
             </div>
           </div>
