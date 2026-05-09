@@ -95,6 +95,7 @@ interface ProductFormState {
   shippingRequired: boolean;
   weight: string;
   imageUrl: string;
+  galleryImages: string;
   category: string;
   tags: string;
   vendor: string;
@@ -122,13 +123,14 @@ const PRODUCT_FIELDS: CollectionField[] = [
   { key: 'shippingRequired', label: 'Requires Shipping', type: 'boolean', required: false, unique: false, sortOrder: 120, defaultValue: true },
   { key: 'weight', label: 'Weight', type: 'number', required: false, unique: false, sortOrder: 130 },
   { key: 'imageUrl', label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 140 },
-  { key: 'category', label: 'Category', type: 'text', required: false, unique: false, sortOrder: 150 },
-  { key: 'tags', label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 160 },
-  { key: 'vendor', label: 'Vendor', type: 'text', required: false, unique: false, sortOrder: 170 },
-  { key: 'description', label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 180 },
-  { key: 'seoTitle', label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 190 },
-  { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 200, defaultValue: false },
-  { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 210, defaultValue: true },
+  { key: 'galleryImages', label: 'Gallery Images', type: 'json', required: false, unique: false, sortOrder: 150, defaultValue: [] },
+  { key: 'category', label: 'Category', type: 'text', required: false, unique: false, sortOrder: 160 },
+  { key: 'tags', label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 170 },
+  { key: 'vendor', label: 'Vendor', type: 'text', required: false, unique: false, sortOrder: 180 },
+  { key: 'description', label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 190 },
+  { key: 'seoTitle', label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 200 },
+  { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 210, defaultValue: false },
+  { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 220, defaultValue: true },
 ];
 
 const PRODUCT_EXPORT_COLUMNS = [
@@ -149,6 +151,8 @@ const PRODUCT_EXPORT_COLUMNS = [
   'tags',
   'vendor',
   'image_url',
+  'gallery_images',
+  'gallery_image_count',
   'download_url',
   'checkout_url',
   'shipping_required',
@@ -216,6 +220,7 @@ const EMPTY_PRODUCT_FORM: ProductFormState = {
   shippingRequired: true,
   weight: '',
   imageUrl: '',
+  galleryImages: '',
   category: '',
   tags: '',
   vendor: '',
@@ -241,7 +246,8 @@ function ProductsRoute() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
-  const [mediaPickerTarget, setMediaPickerTarget] = useState<'image' | 'download'>('image');
+  const [mediaPickerTarget, setMediaPickerTarget] = useState<'image' | 'gallery' | 'download'>('image');
+  const [galleryImageDraft, setGalleryImageDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingDeleteProduct, setPendingDeleteProduct] = useState<CollectionRecord | null>(null);
@@ -267,6 +273,10 @@ function ProductsRoute() {
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId) || null,
     [products, selectedProductId],
+  );
+  const galleryImageUrls = useMemo(
+    () => parseGalleryImages(formState.galleryImages),
+    [formState.galleryImages],
   );
   const productCategories = useMemo(() => (
     [...new Set(products.map((product) => String(product.values.category || '').trim()).filter(Boolean))]
@@ -348,7 +358,7 @@ function ProductsRoute() {
     const hasProducts = products.length > 0;
     const hasPublished = metrics.published > 0;
     const hasInventory = metrics.inventory > 0 || metrics.digital > 0;
-    const hasImages = products.some((product) => Boolean(product.values.imageUrl));
+    const hasImages = products.some((product) => Boolean(product.values.imageUrl) || formatGalleryImages(product.values.galleryImages).length > 0);
     const hasPricing = products.some((product) => toNumber(product.values.price) > 0);
     const hasMerchandising = products.some((product) => Boolean(product.values.category) || formatTags(product.values.tags).length > 0 || Boolean(product.values.vendor));
     const checks = [
@@ -391,7 +401,7 @@ function ProductsRoute() {
       },
       {
         label: 'Product media',
-        detail: hasImages ? 'Product imagery is attached.' : 'Attach media so storefront cards are not text-only.',
+        detail: hasImages ? 'Product imagery or galleries are attached.' : 'Attach media so storefront cards are not text-only.',
         ready: hasImages || products.length === 0,
       },
       {
@@ -462,7 +472,7 @@ function ProductsRoute() {
         list: productCollection?.listRoutePattern || '/products',
         detail: productCollection?.routePattern || '/products/:recordSlug',
       },
-      cardFields: ['title', 'slug', 'price', 'compareAtPrice', 'currency', 'imageUrl', 'category', 'vendor', 'featured'],
+      cardFields: ['title', 'slug', 'price', 'compareAtPrice', 'currency', 'imageUrl', 'galleryImages', 'category', 'vendor', 'featured'],
       detailFields: PRODUCT_FIELDS.map((field) => field.key),
       filterFacets: ['status', 'category', 'tags', 'vendor', 'productType', 'featured', 'inventoryPolicy'],
       checkout: {
@@ -516,6 +526,7 @@ function ProductsRoute() {
       inventory: toNumber(product.values.inventory),
       productType: asProductType(product.values.productType),
       imageUrl: String(product.values.imageUrl || ''),
+      galleryImages: formatGalleryImages(product.values.galleryImages),
       category: String(product.values.category || ''),
       tags: formatTags(product.values.tags),
       vendor: String(product.values.vendor || ''),
@@ -605,9 +616,25 @@ function ProductsRoute() {
     setFormState(EMPTY_PRODUCT_FORM);
   };
 
-  const openMediaPicker = (target: 'image' | 'download') => {
+  const openMediaPicker = (target: 'image' | 'gallery' | 'download') => {
     setMediaPickerTarget(target);
     setIsMediaLibraryOpen(true);
+  };
+
+  const setGalleryImages = (urls: string[]) => {
+    setFormState((current) => ({ ...current, galleryImages: serializeGalleryImages(urls) }));
+  };
+
+  const addGalleryImageUrl = (url: string) => {
+    const normalizedUrl = url.trim();
+    if (!normalizedUrl) return;
+
+    setGalleryImages([...galleryImageUrls, normalizedUrl]);
+    setGalleryImageDraft('');
+  };
+
+  const removeGalleryImageUrl = (url: string) => {
+    setGalleryImages(galleryImageUrls.filter((item) => item !== url));
   };
 
   const createProductsCollection = async () => {
@@ -700,6 +727,7 @@ function ProductsRoute() {
         shippingRequired: formState.shippingRequired,
         weight: formState.weight ? Number(formState.weight) : null,
         imageUrl: formState.imageUrl.trim(),
+        galleryImages: galleryImageUrls,
         category: formState.category.trim(),
         tags: parseTags(formState.tags),
         vendor: formState.vendor.trim(),
@@ -1430,6 +1458,64 @@ function ProductsRoute() {
                     </div>
                   </div>
                 </Field>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
+                    <span>Gallery images</span>
+                    <span className="font-mono">{galleryImageUrls.length}/12</span>
+                  </div>
+                  {galleryImageUrls.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {galleryImageUrls.map((url) => (
+                        <div key={url} className="group relative overflow-hidden rounded-lg border border-border bg-muted">
+                          <img src={url} alt="Product gallery preview" className="h-24 w-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => removeGalleryImageUrl(url)}
+                            className="absolute right-1.5 top-1.5 rounded-md border border-border bg-background/95 px-2 py-1 text-xs font-medium text-muted-foreground opacity-0 shadow-sm transition hover:text-foreground group-hover:opacity-100"
+                            aria-label="Remove gallery image"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-4 text-center text-sm text-muted-foreground">
+                      Add secondary product images for storefront detail pages.
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      aria-label="Gallery image URL"
+                      value={galleryImageDraft}
+                      onChange={(event) => setGalleryImageDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          addGalleryImageUrl(galleryImageDraft);
+                        }
+                      }}
+                      className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="https://..."
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => addGalleryImageUrl(galleryImageDraft)}
+                        disabled={!galleryImageDraft.trim() || galleryImageUrls.length >= 12}
+                      >
+                        Add URL
+                      </Button>
+                      <Button
+                        onClick={() => openMediaPicker('gallery')}
+                        disabled={galleryImageUrls.length >= 12}
+                        iconStart={<ImageIcon className="size-4" />}
+                      >
+                        Media
+                      </Button>
+                    </div>
+                  </div>
+                </div>
                 <div className="grid gap-3 md:grid-cols-3">
                   <Field label="Category">
                     <input
@@ -1583,16 +1669,24 @@ function ProductsRoute() {
             return;
           }
 
+          if (mediaPickerTarget === 'gallery') {
+            addGalleryImageUrl(deliveryUrl);
+            setNotice(`Added ${asset.name} to the product gallery.`);
+            return;
+          }
+
           setFormState((current) => ({ ...current, imageUrl: deliveryUrl }));
           setNotice(`Attached ${asset.name} to the product image field.`);
         }}
-        allowedTypes={mediaPickerTarget === 'image' ? 'image' : 'any'}
-        initialUploadFilter={mediaPickerTarget === 'image' ? 'image' : 'file'}
+        allowedTypes={mediaPickerTarget === 'download' ? 'any' : 'image'}
+        initialUploadFilter={mediaPickerTarget === 'download' ? 'file' : 'image'}
         mediaContext={{
           siteId: activeSiteId,
           scope: 'global',
           targetLabel: mediaPickerTarget === 'download'
             ? `${activeSite?.name || activeSiteId} digital delivery`
+            : mediaPickerTarget === 'gallery'
+              ? `${activeSite?.name || activeSiteId} product gallery`
             : `${activeSite?.name || activeSiteId} product catalog`,
         }}
         allowScopeSwitcher={false}
@@ -1689,6 +1783,7 @@ function ProductCard({
   const inventory = toNumber(product.values.inventory);
   const lowStockThreshold = Math.max(0, toNumber(product.values.lowStockThreshold || 5));
   const imageUrl = String(product.values.imageUrl || '');
+  const galleryImages = formatGalleryImages(product.values.galleryImages);
   const productType = String(product.values.productType || 'physical');
   const inventoryPolicy = asInventoryPolicy(product.values.inventoryPolicy);
   const category = String(product.values.category || '');
@@ -1732,6 +1827,11 @@ function ProductCard({
             {product.values.featured ? (
               <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800">
                 Featured
+              </span>
+            ) : null}
+            {galleryImages.length > 0 ? (
+              <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                {galleryImages.length} gallery
               </span>
             ) : null}
             {category ? (
@@ -1873,6 +1973,7 @@ const productToForm = (product: CollectionRecord): ProductFormState => ({
   shippingRequired: product.values.shippingRequired !== false,
   weight: product.values.weight === null || product.values.weight === undefined ? '' : String(product.values.weight),
   imageUrl: String(product.values.imageUrl || ''),
+  galleryImages: serializeGalleryImages(formatGalleryImages(product.values.galleryImages)),
   category: String(product.values.category || ''),
   tags: formatTags(product.values.tags).join(', '),
   vendor: String(product.values.vendor || ''),
@@ -1901,6 +2002,29 @@ const formatTags = (value: unknown): string[] => {
   }
   if (typeof value === 'string') {
     return parseTags(value);
+  }
+  return [];
+};
+
+const parseGalleryImages = (value: string): string[] => (
+  value
+    .split(/\r?\n|,/g)
+    .map((url) => url.trim())
+    .filter(Boolean)
+    .filter((url, index, urls) => urls.indexOf(url) === index)
+    .slice(0, 12)
+);
+
+const serializeGalleryImages = (urls: string[]): string => (
+  parseGalleryImages(urls.join('\n')).join('\n')
+);
+
+const formatGalleryImages = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return parseGalleryImages(value.map((url) => String(url)).join('\n'));
+  }
+  if (typeof value === 'string') {
+    return parseGalleryImages(value);
   }
   return [];
 };
@@ -1959,6 +2083,8 @@ const productToExportRecord = (
   tags: formatTags(product.values.tags).join('; '),
   vendor: String(product.values.vendor || ''),
   image_url: String(product.values.imageUrl || ''),
+  gallery_images: formatGalleryImages(product.values.galleryImages).join('; '),
+  gallery_image_count: formatGalleryImages(product.values.galleryImages).length,
   download_url: String(product.values.downloadUrl || ''),
   checkout_url: String(product.values.checkoutUrl || ''),
   shipping_required: product.values.shippingRequired !== false,
