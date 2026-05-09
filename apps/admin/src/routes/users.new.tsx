@@ -16,6 +16,7 @@ export const Route = createFileRoute('/users/new')({
 });
 
 type UserRole = User['role'];
+type UserStatus = User['status'];
 
 const ROLE_OPTIONS: Array<{ value: UserRole; label: string; detail: string }> = [
   { value: 'owner', label: 'Owner', detail: 'Controls billing, integrations, team access, publishing, and destructive settings.' },
@@ -30,6 +31,13 @@ const ROLE_CAPABILITIES: Array<{ label: string; roles: UserRole[] }> = [
   { label: 'Publish content and update products or orders', roles: ['owner', 'admin', 'editor'] },
   { label: 'Manage API keys, integrations, settings, and users', roles: ['owner', 'admin'] },
   { label: 'Own billing, destructive settings, and workspace transfer', roles: ['owner'] },
+];
+
+const STATUS_OPTIONS: Array<{ value: UserStatus; label: string; detail: string; risk: 'normal' | 'review' | 'restricted' }> = [
+  { value: 'invited', label: 'Invited', detail: 'Create the user record and wait for auth/email acceptance before access is active.', risk: 'review' },
+  { value: 'active', label: 'Active', detail: 'Grant access immediately after the record is persisted. Use only for already-provisioned accounts.', risk: 'normal' },
+  { value: 'inactive', label: 'Inactive', detail: 'Create a dormant record that cannot work until an admin activates it later.', risk: 'restricted' },
+  { value: 'suspended', label: 'Suspended', detail: 'Create a blocked record for reserved or migrated identities that should not access Backy.', risk: 'restricted' },
 ];
 
 const USER_INVITE_CONTROL_AREAS = [
@@ -67,6 +75,7 @@ function NewUserPage() {
     fullName: '',
     email: '',
     role: 'editor' as UserRole,
+    status: 'invited' as UserStatus,
   });
   const usersListUrl = useMemo(() => `${getAdminApiBase()}/users`, []);
 
@@ -78,7 +87,14 @@ function NewUserPage() {
     () => ROLE_CAPABILITIES.filter((capability) => capability.roles.includes(formData.role)),
     [formData.role],
   );
+  const selectedStatus = useMemo(
+    () => STATUS_OPTIONS.find((status) => status.value === formData.status) || STATUS_OPTIONS[0],
+    [formData.status],
+  );
   const canSubmit = formData.fullName.trim().length > 1 && isValidEmail(formData.email);
+  const submitLabel = formData.status === 'invited'
+    ? (isLoading ? 'Sending invite...' : 'Send invite')
+    : (isLoading ? 'Creating user...' : 'Create user');
   const inviteReadiness = useMemo(() => {
     const checks = [
       {
@@ -107,8 +123,15 @@ function NewUserPage() {
         ready: true,
       },
       {
+        label: 'Lifecycle state',
+        detail: selectedStatus.detail,
+        ready: formData.status !== 'active',
+      },
+      {
         label: 'Email delivery',
-        detail: 'Auth email delivery is still a future integration pass.',
+        detail: formData.status === 'active'
+          ? 'Active users need an already-provisioned auth account.'
+          : 'Auth email delivery is still a future integration pass.',
         ready: false,
       },
     ];
@@ -124,13 +147,13 @@ function NewUserPage() {
         { label: 'Govern', detail: 'Use the user detail page to activate, suspend, downgrade, or remove access.' },
       ],
     };
-  }, [formData.email, formData.fullName, formData.role, selectedCapabilities.length, selectedRole.detail, users.length]);
+  }, [formData.email, formData.fullName, formData.role, formData.status, selectedCapabilities.length, selectedRole.detail, selectedStatus.detail, users.length]);
   const invitePayload = useMemo(() => ({
     fullName: formData.fullName.trim() || 'New collaborator',
     email: formData.email.trim().toLowerCase() || 'person@example.com',
     role: formData.role,
-    status: 'invited' as const,
-  }), [formData.email, formData.fullName, formData.role]);
+    status: formData.status,
+  }), [formData.email, formData.fullName, formData.role, formData.status]);
   const inviteHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     endpoint: {
@@ -147,6 +170,12 @@ function NewUserPage() {
       detail: selectedRole.detail,
       capabilities: selectedCapabilities.map((capability) => capability.label),
     },
+    initialStatus: {
+      value: selectedStatus.value,
+      label: selectedStatus.label,
+      detail: selectedStatus.detail,
+      risk: selectedStatus.risk,
+    },
     payload: invitePayload,
     guardrails: [
       'Backend rejects duplicate emails.',
@@ -158,7 +187,20 @@ function NewUserPage() {
       'Auth-provider accept-invite flow.',
       'Resend and expiry controls.',
     ],
-  }), [invitePayload, inviteReadiness.checks, inviteReadiness.score, selectedCapabilities, selectedRole.detail, selectedRole.label, selectedRole.value, usersListUrl]);
+  }), [
+    invitePayload,
+    inviteReadiness.checks,
+    inviteReadiness.score,
+    selectedCapabilities,
+    selectedRole.detail,
+    selectedRole.label,
+    selectedRole.value,
+    selectedStatus.detail,
+    selectedStatus.label,
+    selectedStatus.risk,
+    selectedStatus.value,
+    usersListUrl,
+  ]);
   const inviteHandoffText = useMemo(() => JSON.stringify(inviteHandoff, null, 2), [inviteHandoff]);
 
   const copyInviteText = async (value: string, label: string) => {
@@ -265,7 +307,7 @@ function NewUserPage() {
                 disabled={isLoading || !canSubmit}
                 iconStart={<UserPlus className="size-4" />}
               >
-                {isLoading ? 'Sending invite...' : 'Send invite'}
+                {submitLabel}
               </Button>
             </div>
           </div>
@@ -409,6 +451,51 @@ function NewUserPage() {
               ))}
             </div>
           </div>
+
+          <div className="mt-6">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Initial status</h3>
+                <p className="text-xs text-muted-foreground">Choose whether the account starts pending, active, dormant, or blocked.</p>
+              </div>
+              <span className={cn(
+                'rounded-md px-2 py-1 text-xs font-semibold',
+                selectedStatus.risk === 'normal'
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : selectedStatus.risk === 'review'
+                    ? 'bg-amber-50 text-amber-700'
+                    : 'bg-slate-100 text-slate-700',
+              )}
+              >
+                {selectedStatus.label}
+              </span>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {STATUS_OPTIONS.map((status) => (
+                <label
+                  key={status.value}
+                  className={cn(
+                    'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition',
+                    formData.status === status.value ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:bg-accent',
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="status"
+                    value={status.value}
+                    checked={formData.status === status.value}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as UserStatus })}
+                    className="mt-1 h-4 w-4 text-primary focus:ring-primary"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold">{status.label}</span>
+                    <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{status.detail}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
         </section>
 
         <aside className="space-y-4">
@@ -425,7 +512,7 @@ function NewUserPage() {
             <dl className="mt-4 space-y-3 text-sm">
               <div>
                 <dt className="text-xs font-medium text-muted-foreground">Invitation state</dt>
-                <dd className="mt-1 font-semibold text-foreground">Invited</dd>
+                <dd className="mt-1 font-semibold text-foreground">{selectedStatus.label}</dd>
               </div>
               <div>
                 <dt className="text-xs font-medium text-muted-foreground">Role</dt>
@@ -433,7 +520,7 @@ function NewUserPage() {
               </div>
               <div>
                 <dt className="text-xs font-medium text-muted-foreground">Email delivery</dt>
-                <dd className="mt-1 text-muted-foreground">The user record is persisted now; real email delivery belongs in the auth/integrations pass.</dd>
+                <dd className="mt-1 text-muted-foreground">{selectedStatus.detail}</dd>
               </div>
             </dl>
           </section>
@@ -519,7 +606,7 @@ function NewUserPage() {
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
             >
               <UserPlus className="h-4 w-4" />
-              {isLoading ? 'Sending invite...' : 'Send invite'}
+              {submitLabel}
             </button>
             <button
               type="button"
