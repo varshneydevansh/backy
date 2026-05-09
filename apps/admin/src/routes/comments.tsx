@@ -55,6 +55,7 @@ function CommentsRoute() {
   const [statusFilter, setStatusFilter] = useState<CommentStatusFilter>('all');
   const [targetTypeFilter, setTargetTypeFilter] = useState<CommentModerationTarget>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [moderationReason, setModerationReason] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [updatingIds, setUpdatingIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +111,10 @@ function CommentsRoute() {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allVisibleSelected = filteredComments.length > 0 && filteredComments.every((comment) => selectedSet.has(comment.id));
   const hasSelection = selectedIds.length > 0;
+  const moderationReasonText = moderationReason.trim();
+  const rejectReason = moderationReasonText || 'Rejected from moderation queue.';
+  const spamReason = moderationReasonText || 'Marked as spam.';
+  const blockReason = moderationReasonText || 'Blocked from moderation queue.';
 
   const loadComments = async () => {
     setIsLoading(true);
@@ -322,10 +327,10 @@ function CommentsRoute() {
               <Button size="sm" variant="outline" disabled={!hasSelection || updatingIds.length > 0} onClick={() => void handleModerate(selectedIds, 'approved')} iconStart={<CheckCircle2 className="size-4" />}>
                 Approve
               </Button>
-              <Button size="sm" variant="outline" disabled={!hasSelection || updatingIds.length > 0} onClick={() => void handleModerate(selectedIds, 'rejected', { rejectionReason: 'Rejected from moderation queue.' })} iconStart={<XCircle className="size-4" />}>
+              <Button size="sm" variant="outline" disabled={!hasSelection || updatingIds.length > 0} onClick={() => void handleModerate(selectedIds, 'rejected', { rejectionReason: rejectReason })} iconStart={<XCircle className="size-4" />}>
                 Reject
               </Button>
-              <Button size="sm" variant="outline" disabled={!hasSelection || updatingIds.length > 0} onClick={() => void handleModerate(selectedIds, 'spam', { rejectionReason: 'Marked as spam.' })} iconStart={<Trash2 className="size-4" />}>
+              <Button size="sm" variant="outline" disabled={!hasSelection || updatingIds.length > 0} onClick={() => void handleModerate(selectedIds, 'spam', { rejectionReason: spamReason })} iconStart={<Trash2 className="size-4" />}>
                 Spam
               </Button>
             </div>
@@ -413,6 +418,47 @@ function CommentsRoute() {
             </div>
           </div>
 
+          <div className="mb-4 rounded-lg border border-border bg-card p-4">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+              <label className="block text-sm font-medium text-foreground">
+                Moderation reason
+                <textarea
+                  value={moderationReason}
+                  onChange={(event) => setModerationReason(event.target.value)}
+                  rows={2}
+                  className="mt-2 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Explain why selected comments are rejected, marked spam, or blocked."
+                />
+              </label>
+              <div className="flex flex-wrap items-end gap-2">
+                {[
+                  'Off-topic or low quality.',
+                  'Promotional spam.',
+                  'Harassment or abuse.',
+                ].map((reason) => (
+                  <Button
+                    key={reason}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setModerationReason(reason)}
+                  >
+                    {reason.replace(/\.$/, '')}
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={!moderationReason}
+                  onClick={() => setModerationReason('')}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+          </div>
+
           {isLoading && comments.length === 0 ? (
             <div className="flex h-64 items-center justify-center">
               <div className="size-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
@@ -448,9 +494,9 @@ function CommentsRoute() {
                       : current.filter((id) => id !== comment.id)
                   ))}
                   onApprove={() => void handleModerate([comment.id], 'approved')}
-                  onReject={() => void handleModerate([comment.id], 'rejected', { rejectionReason: 'Rejected from moderation queue.' })}
-                  onSpam={() => void handleModerate([comment.id], 'spam', { rejectionReason: 'Marked as spam.' })}
-                  onBlock={() => void handleModerate([comment.id], 'blocked', { blockReason: 'Blocked from moderation queue.' })}
+                  onReject={() => void handleModerate([comment.id], 'rejected', { rejectionReason: rejectReason })}
+                  onSpam={() => void handleModerate([comment.id], 'spam', { rejectionReason: spamReason })}
+                  onBlock={() => void handleModerate([comment.id], 'blocked', { blockReason })}
                 />
               ))}
             </div>
