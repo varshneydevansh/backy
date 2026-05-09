@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Globe, History, PenLine, RefreshCw, RotateCcw, Save, Tags, Trash2, UserRound } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Globe, History, Maximize2, Minimize2, PenLine, RefreshCw, RotateCcw, Save, Tags, Trash2, UserRound } from 'lucide-react';
 import {
     archiveBlogPost,
     createBlogPostPreview,
@@ -56,7 +56,7 @@ const BLOG_EDITOR_CONTROL_AREAS = [
     },
     {
         title: 'Design canvas',
-        detail: 'Drag, group, layer, bind, and compose the public article page.',
+        detail: 'Drag, group, layer, bind, focus, and compose the public article page.',
         href: '#blog-editor-canvas',
     },
     {
@@ -108,6 +108,7 @@ function EditBlogPostPage() {
     const [readinessError, setReadinessError] = useState<string | null>(null);
     const [pendingRestoreRevision, setPendingRestoreRevision] = useState<ContentRevision | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [isWorkspaceFocus, setIsWorkspaceFocus] = useState(false);
 
     // Initialize State from Post
     const [title, setTitle] = useState(post?.title || '');
@@ -591,6 +592,7 @@ function EditBlogPostPage() {
         editorCapabilities: [
             'Edit blog metadata, route, status, taxonomy, and SEO summary beside the public canvas.',
             'Drag, resize, select unlocked siblings with Cmd/Ctrl+A, group with Cmd/Ctrl+G, ungroup, layer, save reusable selections, and bind media-ready components.',
+            'Use blog workspace focus to hide editorial and publish panels while designing large article canvases.',
             'Persist serialized canvas content, settings, taxonomy, and revision metadata through the blog update endpoint.',
             'Generate preview links before publishing route changes.',
             'Restore backend revisions when a public article design needs rollback.',
@@ -664,6 +666,16 @@ function EditBlogPostPage() {
                 </div>
             }
             description="Edit the article, its publishing state, and its public design in one workspace."
+            action={
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsWorkspaceFocus((current) => !current)}
+                    iconStart={isWorkspaceFocus ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                >
+                    {isWorkspaceFocus ? 'Show blog panels' : 'Focus canvas'}
+                </Button>
+            }
         >
             <div className="w-full pb-24">
                 {(loadError || saveWarning) && (
@@ -677,6 +689,7 @@ function EditBlogPostPage() {
                     </Notice>
                 )}
 
+                {!isWorkspaceFocus && (
                 <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="blog-editor-command-center">
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div>
@@ -815,9 +828,51 @@ function EditBlogPostPage() {
                         </div>
                     </div>
                 </section>
+                )}
 
-                <form id="blog-editor-form" onSubmit={handleSubmit} className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px] 2xl:items-start">
+                {isWorkspaceFocus && (
+                    <div className="rounded-lg border border-border bg-card px-4 py-3 shadow-sm" data-testid="blog-editor-focus-banner">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <div className="text-sm font-semibold text-foreground">Canvas focus mode</div>
+                                <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                                    Editorial, taxonomy, and publish panels are hidden so the article design canvas can use the full workspace. Save remains available from this bar.
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                    type="submit"
+                                    form="blog-editor-form"
+                                    disabled={isLoading || !canSave}
+                                    size="sm"
+                                    iconStart={<Save className="size-4" />}
+                                >
+                                    {isLoading ? 'Saving...' : submitLabel}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setIsWorkspaceFocus(false)}
+                                    iconStart={<Minimize2 className="size-4" />}
+                                >
+                                    Show panels
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <form
+                    id="blog-editor-form"
+                    onSubmit={handleSubmit}
+                    className={cn(
+                        'grid gap-5',
+                        !isWorkspaceFocus && '2xl:grid-cols-[minmax(0,1fr)_360px] 2xl:items-start',
+                    )}
+                >
                     <div className="min-w-0 space-y-6">
+                        {!isWorkspaceFocus && (
                         <Panel id="blog-editor-draft" className="overflow-hidden scroll-mt-24">
                             <PanelHeader
                                 title="Editorial draft"
@@ -861,11 +916,14 @@ function EditBlogPostPage() {
                                 </div>
                             </PanelContent>
                         </Panel>
+                        )}
 
                         <div id="blog-editor-canvas" className="min-w-0 scroll-mt-24">
                             <EditorWorkspaceFrame
                                 title="Post design canvas"
-                                description="Design the public post page with the same component, layer, media, grouping, and data-binding controls used by pages."
+                                description={isWorkspaceFocus
+                                    ? 'Focused article design workspace with the same component, layer, media, grouping, and data-binding controls used by pages.'
+                                    : 'Design the public post page with the same component, layer, media, grouping, and data-binding controls used by pages.'}
                                 meta={
                                     <>
                                         <span className="rounded bg-muted px-2 py-1 tabular-nums">
@@ -880,9 +938,19 @@ function EditBlogPostPage() {
                                         <span className="rounded bg-muted px-2 py-1">
                                             Cmd/Ctrl+A siblings
                                         </span>
+                                        {isWorkspaceFocus && (
+                                            <span className="rounded bg-primary/10 px-2 py-1 font-medium text-primary">
+                                                Focused
+                                            </span>
+                                        )}
                                     </>
                                 }
-                                className="relative min-h-[820px] xl:h-[calc(100vh-96px)] xl:min-h-[960px]"
+                                className={cn(
+                                    'relative',
+                                    isWorkspaceFocus
+                                        ? 'min-h-[calc(100vh-220px)] xl:h-[calc(100vh-220px)] xl:min-h-[calc(100vh-220px)]'
+                                        : 'min-h-[820px] xl:h-[calc(100vh-96px)] xl:min-h-[960px]',
+                                )}
                             >
                                 <CanvasEditor
                                     mode="blog"
@@ -909,6 +977,7 @@ function EditBlogPostPage() {
                         </div>
                     </div>
 
+                    {!isWorkspaceFocus && (
                     <aside className="grid gap-4 xl:grid-cols-2 2xl:sticky 2xl:top-4 2xl:block 2xl:space-y-4">
                         <Panel id="blog-editor-publish" className="scroll-mt-24">
                             <PanelHeader
@@ -1191,6 +1260,7 @@ function EditBlogPostPage() {
                             </PanelContent>
                         </Panel>
                     </aside>
+                    )}
                 </form>
 
                 {pendingRestoreRevision && (
