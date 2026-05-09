@@ -124,6 +124,44 @@ const USER_CONTROL_AREAS = [
     detail: 'Compare owner, admin, editor, and viewer capabilities before handoff.',
     href: '#users-permissions',
   },
+  {
+    title: 'Membership handoff',
+    detail: 'Public registration forms, member flows, and Supabase auth integration status.',
+    href: '#users-membership',
+  },
+] as const;
+
+const MEMBERSHIP_FLOW_SYSTEMS = [
+  {
+    key: 'registration-form',
+    title: 'Registration forms',
+    status: 'available',
+    detail: 'Public page templates can seed registration forms that submit through Backy Forms.',
+  },
+  {
+    key: 'contacts',
+    title: 'Lead/member contact records',
+    status: 'available',
+    detail: 'Form contact sharing stores registrant identity data for review and export.',
+  },
+  {
+    key: 'collections',
+    title: 'Member profile collection',
+    status: 'available',
+    detail: 'Registration forms can write approved profile data into public-create collections.',
+  },
+  {
+    key: 'supabase-auth',
+    title: 'Supabase Auth adapter',
+    status: 'next',
+    detail: 'Credentials, sessions, password reset, and protected routes remain an integration pass.',
+  },
+  {
+    key: 'member-portal',
+    title: 'Member portal APIs',
+    status: 'next',
+    detail: 'Self-service profile, order history, downloads, and account deletion are not complete yet.',
+  },
 ] as const;
 
 function UsersLayout() {
@@ -147,8 +185,13 @@ function UsersListView() {
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<UserType | null>(null);
   const adminBaseUrl = useMemo(() => getAdminBaseUrl(), []);
+  const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const usersListUrl = `${adminBaseUrl}/users`;
   const userDetailUrl = `${adminBaseUrl}/users/{userId}`;
+  const publicFormsUrl = `${publicBaseUrl}/api/sites/{siteId}/forms`;
+  const publicRegistrationDefinitionUrl = `${publicBaseUrl}/api/sites/{siteId}/forms/{registrationFormId}/definition`;
+  const publicRegistrationSubmitUrl = `${publicBaseUrl}/api/sites/{siteId}/forms/{registrationFormId}/submissions`;
+  const publicContactsUrl = `${publicBaseUrl}/api/sites/{siteId}/forms/{registrationFormId}/contacts`;
 
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
@@ -221,6 +264,11 @@ function UsersListView() {
         label: 'Email delivery',
         detail: 'User records persist now; invite email delivery still belongs to the auth/integrations pass.',
         ready: false,
+      },
+      {
+        label: 'Public registration',
+        detail: 'Registration can be captured through Backy Forms; credentialed member auth is not wired yet.',
+        ready: true,
       },
     ];
     const readyCount = checks.filter((check) => check.ready).length;
@@ -447,6 +495,20 @@ function UsersListView() {
     endpoints: {
       listAndInvite: usersListUrl,
       detailUpdateDelete: userDetailUrl,
+      publicRegistrationForms: publicFormsUrl,
+      publicRegistrationDefinition: publicRegistrationDefinitionUrl,
+      publicRegistrationSubmit: publicRegistrationSubmitUrl,
+      publicRegistrationContacts: publicContactsUrl,
+    },
+    membership: {
+      model: 'Public members are captured through Forms, Contacts, and Collections today; admin users remain private workspace users.',
+      systems: MEMBERSHIP_FLOW_SYSTEMS,
+      frontendFlow: [
+        'Create a registration page from the page starter template.',
+        'Connect the form to Backy Forms contact sharing and optional collection writes.',
+        'Use Supabase Auth settings when credentialed sessions are implemented.',
+        'Use private admin users only for Backy workspace access.',
+      ],
     },
     readiness: {
       score: accessReadiness.score,
@@ -513,6 +575,10 @@ function UsersListView() {
     totalItems,
     totalPages,
     userDetailUrl,
+    publicContactsUrl,
+    publicFormsUrl,
+    publicRegistrationDefinitionUrl,
+    publicRegistrationSubmitUrl,
     users,
     usersListUrl,
   ]);
@@ -642,7 +708,7 @@ function UsersListView() {
         <div className="mt-4 rounded-lg border border-border bg-background p-4">
           <h3 className="text-sm font-semibold">Users control map</h3>
           <p className="mt-1 text-sm text-muted-foreground">Jump to access health, API contracts, directory controls, the people table, and role permissions.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
             {USER_CONTROL_AREAS.map((area) => (
               <a
                 key={area.title}
@@ -770,6 +836,8 @@ function UsersListView() {
               <div className="mt-4 grid gap-3 lg:grid-cols-2">
                 <UserApiSnippet label="List and invite users" value={usersListUrl} />
                 <UserApiSnippet label="Read, update, or remove user" value={userDetailUrl} />
+                <UserApiSnippet label="Public registration forms" value={publicFormsUrl} />
+                <UserApiSnippet label="Registration submit" value={publicRegistrationSubmitUrl} />
               </div>
             </PanelContent>
           </Panel>
@@ -935,6 +1003,44 @@ function UsersListView() {
             </PanelContent>
           </Panel>
 
+          <Panel id="users-membership" className="scroll-mt-24">
+            <PanelHeader
+              title="Membership registration"
+              description="Public registration capture and credentialed auth handoff."
+              icon={<Shield className="size-4" />}
+            />
+            <PanelContent>
+              <div className="space-y-3">
+                {MEMBERSHIP_FLOW_SYSTEMS.map((system) => (
+                  <div key={system.key} className="rounded-lg border border-border bg-background p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold">{system.title}</div>
+                        <div className="mt-1 text-xs leading-5 text-muted-foreground">{system.detail}</div>
+                      </div>
+                      <span className={cn(
+                        'rounded-md px-2 py-1 text-xs font-semibold',
+                        system.status === 'available'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-amber-50 text-amber-700',
+                      )}
+                      >
+                        {system.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <UserApiSnippet label="Forms catalog" value={publicFormsUrl} />
+                <UserApiSnippet label="Registration definition" value={publicRegistrationDefinitionUrl} />
+                <UserApiSnippet label="Registration submit" value={publicRegistrationSubmitUrl} />
+                <UserApiSnippet label="Registration contacts" value={publicContactsUrl} />
+              </div>
+            </PanelContent>
+          </Panel>
+
           <Panel>
             <PanelHeader
               title="Access guardrails"
@@ -1090,6 +1196,22 @@ const getAdminBaseUrl = (): string => {
 
   const base = envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
   return `${base.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api/admin`;
+};
+
+const getPublicBaseUrl = (): string => {
+  const envBase = (
+    getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
+    getEnvValue('VITE_PUBLIC_API_URL') ||
+    getEnvValue('VITE_API_BASE_URL') ||
+    ''
+  ).trim();
+
+  if (!envBase && isLocalAdminHost()) {
+    return 'http://localhost:3001';
+  }
+
+  const base = envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
+  return base.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '');
 };
 
 const csvEscape = (value: unknown): string => {
