@@ -668,6 +668,8 @@ function SettingsPage() {
   }, [loadSettingsAuditLogs]);
 
   const handleSave = async () => {
+    if (isSaving) return;
+
     if (blockingValidationIssues.length > 0) {
       setNotice('Fix settings validation issues before saving.');
       return;
@@ -704,6 +706,8 @@ function SettingsPage() {
   };
 
   const discardUnsavedChanges = () => {
+    if (isSaving) return;
+
     if (!lastSavedSnapshot) {
       return;
     }
@@ -980,6 +984,8 @@ function SettingsPage() {
   const settingsHandoffText = useMemo(() => JSON.stringify(settingsHandoff, null, 2), [settingsHandoff]);
 
   const copySettingsHandoffText = async (value: string, label: string) => {
+    if (isSaving) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setNotice(`${label} copied.`);
@@ -989,6 +995,8 @@ function SettingsPage() {
   };
 
   const downloadSettingsHandoff = () => {
+    if (isSaving) return;
+
     const blob = new Blob([settingsHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -1048,6 +1056,7 @@ function SettingsPage() {
           {hasUnsavedChanges && (
             <Button
               variant="ghost"
+              disabled={isSaving}
               onClick={discardUnsavedChanges}
             >
               Discard changes
@@ -1055,6 +1064,7 @@ function SettingsPage() {
           )}
           <Button
             variant="outline"
+            disabled={isSaving}
             onClick={() => void copySettingsHandoffText(settingsHandoffText, 'Settings handoff manifest')}
             iconStart={<Copy className="size-4" />}
           >
@@ -1062,6 +1072,7 @@ function SettingsPage() {
           </Button>
           <Button
             variant="outline"
+            disabled={isSaving}
             onClick={downloadSettingsHandoff}
             iconStart={<Download className="size-4" />}
           >
@@ -1255,6 +1266,7 @@ function SettingsPage() {
             runtimeSupabase={runtimeSupabase}
             runtimeVercel={runtimeVercel}
             envContract={infrastructureEnvContract}
+            disabled={isSaving}
             onChange={setIntegrations}
           />
         )}
@@ -2425,7 +2437,8 @@ function validateSettingsDraft({
 
 const inputClassName = cn(
   'w-full rounded-lg border border-input bg-background px-3 py-2 text-sm',
-  'focus:outline-none focus:ring-2 focus:ring-ring'
+  'focus:outline-none focus:ring-2 focus:ring-ring',
+  'disabled:cursor-not-allowed disabled:opacity-50',
 );
 
 const configuredValue = (...values: Array<string | boolean | undefined | null>): boolean => (
@@ -2646,10 +2659,12 @@ function RuntimeCard({
 function InfrastructureEnvContractPanel({
   contracts,
   copiedProfile,
+  disabled = false,
   onCopy,
 }: {
   contracts: InfrastructureEnvContract[];
   copiedProfile: string;
+  disabled?: boolean;
   onCopy: (label: string, provider?: InfrastructureEnvProvider) => void;
 }) {
   const configuredCount = contracts.filter((item) => item.configured).length;
@@ -2685,6 +2700,7 @@ function InfrastructureEnvContractPanel({
               type="button"
               size="sm"
               variant="outline"
+              disabled={disabled}
               onClick={() => onCopy(profile.label, profile.provider)}
               iconStart={copiedProfile === profile.label ? <Check className="size-4" /> : <Copy className="size-4" />}
             >
@@ -2764,6 +2780,7 @@ function InfrastructureSettings({
   runtimeSupabase,
   runtimeVercel,
   envContract,
+  disabled = false,
   onChange,
 }: {
   integrations: IntegrationSettings;
@@ -2772,6 +2789,7 @@ function InfrastructureSettings({
   runtimeSupabase?: SiteSettingsInput['runtimeSupabase'];
   runtimeVercel?: SiteSettingsInput['runtimeVercel'];
   envContract: InfrastructureEnvContract[];
+  disabled?: boolean;
   onChange: (next: IntegrationSettings) => void;
 }) {
   const storage: StorageSettings = integrations.storage || {};
@@ -2780,6 +2798,8 @@ function InfrastructureSettings({
   const [copiedEnvProfile, setCopiedEnvProfile] = useState('');
 
   const updateStorage = (next: Partial<StorageSettings>) => {
+    if (disabled) return;
+
     onChange({
       ...integrations,
       storage: {
@@ -2790,6 +2810,8 @@ function InfrastructureSettings({
   };
 
   const updateSupabase = (next: Partial<SupabaseSettings>) => {
+    if (disabled) return;
+
     onChange({
       ...integrations,
       supabase: {
@@ -2800,6 +2822,8 @@ function InfrastructureSettings({
   };
 
   const updateVercel = (next: Partial<VercelSettings>) => {
+    if (disabled) return;
+
     onChange({
       ...integrations,
       vercel: {
@@ -2810,6 +2834,8 @@ function InfrastructureSettings({
   };
 
   const useRuntimeStorage = () => {
+    if (disabled) return;
+
     updateStorage({
       provider: runtimeStorage?.provider || storage.provider || 'local',
       bucket: runtimeStorage?.bucket || storage.bucket || '',
@@ -2820,6 +2846,8 @@ function InfrastructureSettings({
   };
 
   const useRuntimeSupabase = () => {
+    if (disabled) return;
+
     const projectUrl = runtimeSupabase?.projectUrl || supabase.projectUrl || '';
     const projectRef = runtimeSupabase?.projectRef || supabase.projectRef || '';
     const storageBucket = runtimeSupabase?.storageBucket || storage.bucket || '';
@@ -2847,6 +2875,8 @@ function InfrastructureSettings({
   };
 
   const useRuntimeVercel = () => {
+    if (disabled) return;
+
     updateVercel({
       projectId: runtimeVercel?.projectId || vercel.projectId || '',
       productionDomain: runtimeVercel?.url || vercel.productionDomain || '',
@@ -2854,6 +2884,8 @@ function InfrastructureSettings({
   };
 
   const copyEnvTemplate = async (label: string, provider?: InfrastructureEnvProvider) => {
+    if (disabled) return;
+
     const value = formatEnvTemplate(envContract, provider);
     try {
       await navigator.clipboard.writeText(value);
@@ -2943,7 +2975,7 @@ function InfrastructureSettings({
           description="Store the non-secret file-delivery intent that Media, page editors, product downloads, and custom frontends should follow."
           icon={<Database className="size-4" />}
           action={
-            <Button size="sm" onClick={useRuntimeStorage}>
+            <Button size="sm" disabled={disabled} onClick={useRuntimeStorage}>
               Use detected storage
             </Button>
           }
@@ -2978,6 +3010,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Provider</span>
                 <select
                   value={storage.provider || ''}
+                  disabled={disabled}
                   onChange={(event) => updateStorage({ provider: event.target.value })}
                   className={inputClassName}
                 >
@@ -2991,6 +3024,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Bucket</span>
                 <input
                   value={storage.bucket || ''}
+                  disabled={disabled}
                   onChange={(event) => updateStorage({ bucket: event.target.value })}
                   placeholder="media"
                   className={inputClassName}
@@ -3000,6 +3034,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Public base URL</span>
                 <input
                   value={storage.publicBaseUrl || ''}
+                  disabled={disabled}
                   onChange={(event) => updateStorage({ publicBaseUrl: event.target.value })}
                   placeholder="https://project-ref.supabase.co/storage/v1/object/public/media"
                   className={inputClassName}
@@ -3009,6 +3044,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Path prefix</span>
                 <input
                   value={storage.pathPrefix || ''}
+                  disabled={disabled}
                   onChange={(event) => updateStorage({ pathPrefix: event.target.value })}
                   placeholder="sites/{siteId}"
                   className={inputClassName}
@@ -3019,8 +3055,9 @@ function InfrastructureSettings({
                   <input
                     type="checkbox"
                     checked={Boolean(storage.privateFilesEnabled)}
+                    disabled={disabled}
                     onChange={(event) => updateStorage({ privateFilesEnabled: event.target.checked })}
-                    className="size-4 rounded border-input"
+                    className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                   />
                   Private files
                 </label>
@@ -3028,8 +3065,9 @@ function InfrastructureSettings({
                   <input
                     type="checkbox"
                     checked={storage.imageTransformsEnabled !== false}
+                    disabled={disabled}
                     onChange={(event) => updateStorage({ imageTransformsEnabled: event.target.checked })}
-                    className="size-4 rounded border-input"
+                    className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                   />
                   Image transforms
                 </label>
@@ -3053,6 +3091,7 @@ function InfrastructureSettings({
       <InfrastructureEnvContractPanel
         contracts={envContract}
         copiedProfile={copiedEnvProfile}
+        disabled={disabled}
         onCopy={copyEnvTemplate}
       />
 
@@ -3063,7 +3102,7 @@ function InfrastructureSettings({
             description="Use Supabase for Postgres persistence, storage, and auth-ready metadata."
             icon={<Cloud className="size-4" />}
             action={
-              <Button size="sm" onClick={useRuntimeSupabase}>
+              <Button size="sm" disabled={disabled} onClick={useRuntimeSupabase}>
                 Use detected env
               </Button>
             }
@@ -3074,6 +3113,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Project URL</span>
                 <input
                   value={supabase.projectUrl || ''}
+                  disabled={disabled}
                   onChange={(event) => updateSupabase({ projectUrl: event.target.value })}
                   placeholder="https://project-ref.supabase.co"
                   className={inputClassName}
@@ -3083,6 +3123,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Project ref</span>
                 <input
                   value={supabase.projectRef || ''}
+                  disabled={disabled}
                   onChange={(event) => updateSupabase({ projectRef: event.target.value })}
                   placeholder="project-ref"
                   className={inputClassName}
@@ -3098,8 +3139,9 @@ function InfrastructureSettings({
                     <input
                       type="checkbox"
                       checked={Boolean(supabase[key as keyof SupabaseSettings])}
+                      disabled={disabled}
                       onChange={(event) => updateSupabase({ [key]: event.target.checked } as Partial<SupabaseSettings>)}
-                      className="size-4 rounded border-input"
+                      className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                     />
                     {label}
                   </label>
@@ -3120,7 +3162,7 @@ function InfrastructureSettings({
             description="Track deployment ownership for hosted Backy and future deploy workflows."
             icon={<Rocket className="size-4" />}
             action={
-              <Button size="sm" onClick={useRuntimeVercel}>
+              <Button size="sm" disabled={disabled} onClick={useRuntimeVercel}>
                 Use detected env
               </Button>
             }
@@ -3131,6 +3173,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Project ID</span>
                 <input
                   value={vercel.projectId || ''}
+                  disabled={disabled}
                   onChange={(event) => updateVercel({ projectId: event.target.value })}
                   placeholder="prj_..."
                   className={inputClassName}
@@ -3140,6 +3183,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Team slug</span>
                 <input
                   value={vercel.teamSlug || ''}
+                  disabled={disabled}
                   onChange={(event) => updateVercel({ teamSlug: event.target.value })}
                   placeholder="team-or-account"
                   className={inputClassName}
@@ -3149,6 +3193,7 @@ function InfrastructureSettings({
                 <span className="font-medium">Production domain</span>
                 <input
                   value={vercel.productionDomain || ''}
+                  disabled={disabled}
                   onChange={(event) => updateVercel({ productionDomain: event.target.value })}
                   placeholder="backy.example.com"
                   className={inputClassName}
@@ -3159,8 +3204,9 @@ function InfrastructureSettings({
                   <input
                     type="checkbox"
                     checked={Boolean(vercel.autoDeploy)}
+                    disabled={disabled}
                     onChange={(event) => updateVercel({ autoDeploy: event.target.checked })}
-                    className="size-4 rounded border-input"
+                    className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                   />
                   Auto deploy
                 </label>
@@ -3168,8 +3214,9 @@ function InfrastructureSettings({
                   <input
                     type="checkbox"
                     checked={vercel.previewDeployments !== false}
+                    disabled={disabled}
                     onChange={(event) => updateVercel({ previewDeployments: event.target.checked })}
-                    className="size-4 rounded border-input"
+                    className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                   />
                   Preview deploys
                 </label>
