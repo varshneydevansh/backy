@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import {
+  AlertTriangle,
   Archive,
   CheckCircle2,
   Code2,
@@ -102,9 +103,82 @@ function ContactsRoute() {
   const metrics = useMemo(() => ({
     contacts: allContacts.length,
     new: allContacts.filter((contact) => contact.status === 'new').length,
+    contacted: allContacts.filter((contact) => contact.status === 'contacted').length,
     qualified: allContacts.filter((contact) => contact.status === 'qualified').length,
     archived: allContacts.filter((contact) => contact.status === 'archived').length,
   }), [allContacts]);
+  const apiFormReadiness = useMemo(() => {
+    if (!apiForm) {
+      return {
+        score: 0,
+        checks: [],
+        workflow: [],
+      };
+    }
+
+    const formContacts = contactsByForm[apiForm.id]?.contacts || [];
+    const contactShareEnabled = apiForm.contactShare?.enabled === true;
+    const emailField = apiForm.contactShare?.emailField;
+    const phoneField = apiForm.contactShare?.phoneField;
+    const nameField = apiForm.contactShare?.nameField;
+    const identityFields = [
+      nameField ? `name:${nameField}` : null,
+      emailField ? `email:${emailField}` : null,
+      phoneField ? `phone:${phoneField}` : null,
+    ].filter(Boolean);
+    const hasIdentityMap = Boolean(emailField || phoneField);
+    const hasContacts = formContacts.length > 0;
+    const hasLifecycleProgress = formContacts.some((contact) => contact.status !== 'new');
+    const checks = [
+      {
+        label: 'Form source',
+        detail: apiForm.isActive
+          ? 'Active form can feed the contact pipeline.'
+          : 'Inactive forms do not create public leads.',
+        ready: apiForm.isActive,
+      },
+      {
+        label: 'Lead sharing',
+        detail: contactShareEnabled
+          ? 'Submissions can create or update contacts.'
+          : 'Enable contact sharing on the form block to collect leads.',
+        ready: contactShareEnabled,
+      },
+      {
+        label: 'Identity mapping',
+        detail: identityFields.length > 0
+          ? identityFields.join(', ')
+          : 'Map at least email or phone for useful CRM records.',
+        ready: hasIdentityMap,
+      },
+      {
+        label: 'Inbox data',
+        detail: hasContacts
+          ? `${formContacts.length} contacts captured`
+          : 'No contacts captured for this form yet.',
+        ready: hasContacts,
+      },
+      {
+        label: 'Lifecycle',
+        detail: hasLifecycleProgress
+          ? 'At least one lead has moved beyond new.'
+          : 'Use contacted, qualified, and archived to keep the pipeline clean.',
+        ready: hasContacts ? hasLifecycleProgress : true,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      checks,
+      workflow: [
+        { label: 'Capture', detail: contactShareEnabled ? 'Form submissions share lead fields.' : 'Enable contact sharing in the form block.' },
+        { label: 'Dedupe', detail: apiForm.contactShare?.dedupeByEmail ? 'Email dedupe updates existing contacts.' : 'Dedupe is off for this source.' },
+        { label: 'Qualify', detail: 'Move leads through new, contacted, qualified, archived.' },
+        { label: 'Sync', detail: 'Use the contact API for custom CRM dashboards.' },
+      ],
+    };
+  }, [apiForm, contactsByForm]);
 
   const loadContacts = async () => {
     setIsLoading(true);
@@ -298,9 +372,10 @@ function ContactsRoute() {
         </div>
       )}
 
-      <div className="mb-6 grid gap-3 md:grid-cols-4">
+      <div className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <Metric label="Contacts" value={metrics.contacts} icon={<Contact className="size-4" />} />
         <Metric label="New" value={metrics.new} icon={<Mail className="size-4" />} />
+        <Metric label="Contacted" value={metrics.contacted} icon={<Phone className="size-4" />} />
         <Metric label="Qualified" value={metrics.qualified} icon={<UserCheck className="size-4" />} />
         <Metric label="Archived" value={metrics.archived} icon={<Archive className="size-4" />} />
       </div>
@@ -331,6 +406,54 @@ function ContactsRoute() {
         <PanelContent>
           {apiForm && (
             <div className="mb-5 rounded-lg border border-border bg-muted/30 p-4">
+              <div className="mb-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">Contact pipeline readiness</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Checks form source status, lead sharing, identity mapping, captured data, and lifecycle usage.
+                      </p>
+                    </div>
+                    <span className={cn(
+                      'rounded-full px-2.5 py-1 text-xs font-semibold',
+                      apiFormReadiness.score >= 80
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-amber-50 text-amber-700',
+                    )}
+                    >
+                      {apiFormReadiness.score}% ready
+                    </span>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={cn(
+                        'h-full rounded-full',
+                        apiFormReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500',
+                      )}
+                      style={{ width: `${apiFormReadiness.score}%` }}
+                    />
+                  </div>
+                  <div className="mt-4 grid gap-2 md:grid-cols-2">
+                    {apiFormReadiness.checks.map((check) => (
+                      <ContactReadinessCheck key={check.label} {...check} />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="size-4 text-primary" />
+                    <h3 className="text-sm font-semibold">Lead workflow</h3>
+                  </div>
+                  <div className="mt-3 grid gap-2">
+                    {apiFormReadiness.workflow.map((step, index) => (
+                      <ContactWorkflowStep key={step.label} index={index + 1} {...step} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2 text-sm font-semibold">
@@ -471,6 +594,34 @@ function MetaTile({ label, value }: { label: string; value: string }) {
         {label}
       </div>
       <div className="mt-1 truncate text-sm font-semibold capitalize">{value}</div>
+    </div>
+  );
+}
+
+function ContactReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  const Icon = ready ? CheckCircle2 : AlertTriangle;
+
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-card px-3 py-2">
+      <Icon className={cn('mt-0.5 size-4 shrink-0', ready ? 'text-emerald-600' : 'text-amber-600')} />
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function ContactWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
     </div>
   );
 }
@@ -636,6 +787,12 @@ const getEnvValue = (key: string): string => {
   return env[key]?.trim() ?? '';
 };
 
+const isLocalAdminHost = () => {
+  if (typeof window === 'undefined') return false;
+
+  return ['localhost', '127.0.0.1'].includes(window.location.hostname) && window.location.port !== '3001';
+};
+
 const getPublicBaseUrl = (): string => {
   const envBase = (
     getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
@@ -644,7 +801,7 @@ const getPublicBaseUrl = (): string => {
     ''
   ).trim();
 
-  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+  if (!envBase && isLocalAdminHost()) {
     return 'http://localhost:3001';
   }
 
