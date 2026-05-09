@@ -1,5 +1,5 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   AlertTriangle,
   Archive,
@@ -41,7 +41,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 
@@ -287,6 +287,8 @@ const EMPTY_ORDER_FORM: OrderFormState = {
 
 function OrdersRoute() {
   const { sites } = useStore();
+  const navigate = useNavigate();
+  const routerState = useRouterState();
   const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
   const [ordersCollection, setOrdersCollection] = useState<Collection | null>(null);
   const [orders, setOrders] = useState<CollectionRecord[]>([]);
@@ -315,6 +317,7 @@ function OrdersRoute() {
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const adminOrdersApiUrl = ordersCollection
     ? `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/collections/${encodeURIComponent(ordersCollection.id)}/records`
@@ -663,6 +666,30 @@ function OrdersRoute() {
   }, [selectedSiteId, sites]);
 
   useEffect(() => {
+    const requestedSiteId = getSiteSearchParam();
+    if (!requestedSiteId) return;
+
+    const nextSiteId = getSiteSelectionFromSearch(sites);
+    if (nextSiteId === selectedSiteId) return;
+
+    setSelectedSiteId(nextSiteId);
+    setSelectedOrderId(null);
+    setFormState(EMPTY_ORDER_FORM);
+    setItemDraft({
+      title: '',
+      sku: '',
+      variant: '',
+      quantity: '1',
+      price: '',
+    });
+    setSearchQuery('');
+    setFilter('all');
+    setPaymentFilter('all');
+    setFulfillmentFilter('all');
+    setSourceFilter('all');
+  }, [routerState.location.search, selectedSiteId, sites]);
+
+  useEffect(() => {
     void loadOrders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSiteId]);
@@ -967,6 +994,20 @@ function OrdersRoute() {
     setFulfillmentFilter('all');
     setSourceFilter('all');
   };
+  const selectOrdersSite = (nextSiteId: string) => {
+    setSelectedSiteId(nextSiteId);
+    setSelectedOrderId(null);
+    setFormState(EMPTY_ORDER_FORM);
+    setItemDraft({
+      title: '',
+      sku: '',
+      variant: '',
+      quantity: '1',
+      price: '',
+    });
+    clearOrderFilters();
+    navigate({ to: '/orders', search: { siteId: nextSiteId }, replace: true });
+  };
 
   return (
     <PageShell
@@ -978,12 +1019,7 @@ function OrdersRoute() {
             id="orders-active-site"
             aria-label="Active Site"
             value={activeSiteId}
-            onChange={(event) => {
-              setSelectedSiteId(event.target.value);
-              setSelectedOrderId(null);
-              setFormState(EMPTY_ORDER_FORM);
-              clearOrderFilters();
-            }}
+            onChange={(event) => selectOrdersSite(event.target.value)}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
           >
             {sites.length === 0 ? (
@@ -1041,7 +1077,7 @@ function OrdersRoute() {
             </Button>
             <Link
               to="/products"
-              search={{ siteId: activeSiteId }}
+              search={activeSiteSearch}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
             >
               <ShoppingCart className="size-4" />
@@ -1151,7 +1187,7 @@ function OrdersRoute() {
                 </Button>
                 <Link
                   to="/products"
-                  search={{ siteId: activeSiteId }}
+                  search={activeSiteSearch}
                   className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
                 >
                   <ShoppingCart className="size-4" />
@@ -1262,12 +1298,7 @@ function OrdersRoute() {
           id="orders-active-site-inline"
           aria-label="Active order site"
           value={activeSiteId}
-          onChange={(event) => {
-            setSelectedSiteId(event.target.value);
-            setSelectedOrderId(null);
-            setFormState(EMPTY_ORDER_FORM);
-            clearOrderFilters();
-          }}
+          onChange={(event) => selectOrdersSite(event.target.value)}
           className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
         >
           {sites.length === 0 ? (
@@ -1304,7 +1335,7 @@ function OrdersRoute() {
               </Button>
               <Link
                 to="/products"
-                search={{ siteId: activeSiteId }}
+                search={activeSiteSearch}
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
               >
                 <ShoppingCart className="size-4" />
