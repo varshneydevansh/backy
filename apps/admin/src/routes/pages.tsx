@@ -871,71 +871,76 @@ function PagesListView() {
     {
       key: 'actions',
       label: '',
-      render: (page) => (
-        <div className="flex items-center justify-end gap-2">
-          {page.status !== 'published' && (
+      render: (page) => {
+        const readiness = readinessMap[page.id];
+        const publishBlocker = readiness ? getPublishBlocker(readiness) : null;
+
+        return (
+          <div className="flex items-center justify-end gap-2">
+            {page.status !== 'published' && (
+              <button
+                onClick={() => {
+                  void handlePublishPage(page);
+                }}
+                disabled={mutatingPageId === page.id || Boolean(publishBlocker)}
+                title={publishBlocker ? `Resolve before publishing: ${publishBlocker}` : 'Publish page'}
+                className="p-2 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+              </button>
+            )}
+            {page.status !== 'archived' && (
+              <button
+                onClick={() => {
+                  void handleArchivePage(page);
+                }}
+                disabled={mutatingPageId === page.id}
+                title="Archive page"
+                className="p-2 text-muted-foreground hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Archive className="w-4 h-4" />
+              </button>
+            )}
+            {page.status === 'published' && (
+              <a
+                href={publicPageUrl(page)}
+                target="_blank"
+                rel="noreferrer"
+                title="Open published page"
+                className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            )}
             <button
               onClick={() => {
-                void handlePublishPage(page);
+                void handlePreviewPage(page);
               }}
-              disabled={mutatingPageId === page.id}
-              title="Publish page"
-              className="p-2 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={previewingPageId === page.id}
+              title="Preview page"
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <CheckCircle2 className="w-4 h-4" />
+              <Eye className="w-4 h-4" />
             </button>
-          )}
-          {page.status !== 'archived' && (
             <button
-              onClick={() => {
-                void handleArchivePage(page);
-              }}
-              disabled={mutatingPageId === page.id}
-              title="Archive page"
-              className="p-2 text-muted-foreground hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Archive className="w-4 h-4" />
-            </button>
-          )}
-          {page.status === 'published' && (
-            <a
-              href={publicPageUrl(page)}
-              target="_blank"
-              rel="noreferrer"
-              title="Open published page"
+              onClick={() => navigate({ to: '/pages/$pageId/edit', params: { pageId: page.id }, search: { siteId: activeSiteId } })}
+              title="Edit page"
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
             >
-              <ExternalLink className="w-4 h-4" />
-            </a>
-          )}
-          <button
-            onClick={() => {
-              void handlePreviewPage(page);
-            }}
-            disabled={previewingPageId === page.id}
-            title="Preview page"
-            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => navigate({ to: '/pages/$pageId/edit', params: { pageId: page.id }, search: { siteId: activeSiteId } })}
-            title="Edit page"
-            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
-          >
-            <Edit className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => {
-              setPendingDeletePage(page);
-            }}
-            title="Delete page"
-            className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
-      )
+              <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => {
+                setPendingDeletePage(page);
+              }}
+              title="Delete page"
+              className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        );
+      }
     }
   ];
 
@@ -1022,6 +1027,15 @@ function PagesListView() {
   ]);
   const hasPages = activeSitePages.length > 0;
   const selectedTablePages = data.filter((page) => selectedPageIds.has(page.id));
+  const selectedKnownPublishBlockers = useMemo(
+    () => selectedPages
+      .map((page) => {
+        const readiness = readinessMap[page.id];
+        return readiness ? { page, blocker: getPublishBlocker(readiness) } : null;
+      })
+      .filter((result): result is { page: Page; blocker: string } => Boolean(result?.blocker)),
+    [readinessMap, selectedPages],
+  );
   const pageHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     site: {
@@ -1597,7 +1611,10 @@ function PagesListView() {
           <button
             type="button"
             onClick={() => void handleBulkAction()}
-            disabled={!bulkAction || selectedPages.length === 0 || isBulkBusy}
+            disabled={!bulkAction || selectedPages.length === 0 || isBulkBusy || (bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0)}
+            title={bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0
+              ? 'Resolve selected page blockers before publishing.'
+              : 'Apply selected bulk action'}
             className={cn(
               'rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
               bulkAction === 'delete'
@@ -1615,6 +1632,18 @@ function PagesListView() {
             >
               Clear selection
             </button>
+          )}
+          {bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0 && (
+            <div className="flex min-w-0 items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              <span className="min-w-0">
+                {selectedKnownPublishBlockers.length} selected page{selectedKnownPublishBlockers.length === 1 ? ' is' : 's are'} blocked. {selectedKnownPublishBlockers
+                  .slice(0, 2)
+                  .map(({ page, blocker }) => `${page.title}: ${blocker}`)
+                  .join('; ')}
+                {selectedKnownPublishBlockers.length > 2 ? '; ...' : ''}
+              </span>
+            </div>
           )}
         </div>
       )}
