@@ -30,6 +30,7 @@ import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/comments')({
@@ -142,7 +143,7 @@ interface CommentTargetSummary {
 
 function CommentsRoute() {
   const { sites } = useStore();
-  const [selectedSiteId, setSelectedSiteId] = useState(() => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo');
+  const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
   const [comments, setComments] = useState<AdminComment[]>([]);
   const [targets, setTargets] = useState<CommentTargetSummary[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -158,7 +159,7 @@ function CommentsRoute() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const activeSite = useMemo(
-    () => sites.find((site) => (site.publicSiteId || site.id) === selectedSiteId) || sites[0],
+    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
@@ -313,8 +314,8 @@ function CommentsRoute() {
       reportComment: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/{commentId}/report`,
     },
     controlRoutes: {
-      pages: '/pages',
-      blog: '/blog',
+      pages: `/pages?siteId=${encodeURIComponent(activeSiteId)}`,
+      blog: `/blog?siteId=${encodeURIComponent(activeSiteId)}`,
       users: '/users',
       settings: '/settings',
     },
@@ -450,7 +451,7 @@ function CommentsRoute() {
   };
 
   useEffect(() => {
-    if (sites.length > 0 && !sites.some((site) => (site.publicSiteId || site.id) === selectedSiteId)) {
+    if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
       setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
     }
   }, [selectedSiteId, sites]);
@@ -734,6 +735,7 @@ function CommentsRoute() {
               <Link
                 key={surface.key}
                 to={surface.route}
+                search={surface.route === '/pages' || surface.route === '/blog' ? { siteId: activeSiteId } : undefined}
                 className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
               >
                 <div className="text-sm font-semibold text-foreground">{surface.title}</div>
