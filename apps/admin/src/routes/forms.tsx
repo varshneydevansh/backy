@@ -365,6 +365,7 @@ function FormsRoute() {
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const isFormsBusy = isLoading || Boolean(isUpdatingId);
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -851,8 +852,12 @@ function FormsRoute() {
   }, [activeSiteId]);
 
   const handleSubmissionStatus = async (submission: FormSubmission, status: FormSubmissionStatus) => {
+    if (isUpdatingId) return;
+    if (submission.status === status) return;
+
     setIsUpdatingId(submission.id);
     setError(null);
+    setNotice(null);
 
     try {
       const updated = await updateFormSubmission(activeSiteId, submission.formId, submission.id, {
@@ -871,6 +876,7 @@ function FormsRoute() {
           },
         };
       });
+      setNotice(`Submission marked ${status}.`);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'Unable to update submission');
     } finally {
@@ -879,6 +885,7 @@ function FormsRoute() {
   };
 
   const handleExportSubmissions = () => {
+    if (isFormsBusy) return;
     if (!selectedForm) return;
 
     const fieldKeys = selectedForm.fields.map((field) => field.key);
@@ -915,6 +922,8 @@ function FormsRoute() {
   };
 
   const handleExportFormsCatalog = () => {
+    if (isFormsBusy) return;
+
     if (filteredForms.length === 0) {
       setError(hasActiveFormFilters ? 'No forms match the active filters.' : 'No forms are available to export for this site.');
       setNotice(null);
@@ -1000,12 +1009,16 @@ function FormsRoute() {
     setNotice('Forms handoff manifest downloaded.');
   };
   const clearFormFilters = () => {
+    if (isFormsBusy) return;
+
     setFormSearchQuery('');
     setFormSourceFilter('all');
     setFormStateFilter('all');
     setFormDestinationFilter('all');
     setFormReadinessFilter('all');
+    setSelectedFormId(null);
     updateFormsRouteSearch({
+      formId: undefined,
       q: undefined,
       source: undefined,
       state: undefined,
@@ -1014,6 +1027,8 @@ function FormsRoute() {
     });
   };
   const selectFormsSite = (nextSiteId: string) => {
+    if (isFormsBusy) return;
+
     setSelectedSiteId(nextSiteId);
     setFormSearchQuery('');
     setFormSourceFilter('all');
@@ -1026,6 +1041,8 @@ function FormsRoute() {
     navigate({ to: '/forms', search: { siteId: nextSiteId }, replace: true });
   };
   const selectForm = (formId: string) => {
+    if (isFormsBusy) return;
+
     setSelectedFormId(formId);
     updateFormsRouteSearch({ formId });
   };
@@ -1040,10 +1057,11 @@ function FormsRoute() {
             id="forms-active-site"
             aria-label="Active Site"
             value={activeSiteId}
+            disabled={isFormsBusy}
             onChange={(event) => {
               selectFormsSite(event.target.value);
             }}
-            className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
+            className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
           >
             {sites.length === 0 ? (
               <option value="site-demo">Demo site</option>
@@ -1053,7 +1071,7 @@ function FormsRoute() {
               </option>
             ))}
           </select>
-          <Button onClick={() => void loadForms()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+          <Button onClick={() => void loadForms()} disabled={isFormsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
             Refresh
           </Button>
         </div>
@@ -1101,12 +1119,12 @@ function FormsRoute() {
             <Button
               variant="outline"
               onClick={handleExportFormsCatalog}
-              disabled={filteredForms.length === 0}
+              disabled={isFormsBusy || filteredForms.length === 0}
               iconStart={<Download className="size-4" />}
             >
               Export forms CSV
             </Button>
-            <Button onClick={() => void loadForms()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+            <Button onClick={() => void loadForms()} disabled={isFormsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh forms
             </Button>
           </div>
@@ -1199,10 +1217,11 @@ function FormsRoute() {
           id="forms-active-site-inline"
           aria-label="Active forms site"
           value={activeSiteId}
+          disabled={isFormsBusy}
           onChange={(event) => {
             selectFormsSite(event.target.value);
           }}
-          className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
+          className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
         >
           {sites.length === 0 ? (
             <option value="site-demo">Demo site</option>
@@ -1349,25 +1368,31 @@ function FormsRoute() {
                     type="search"
                     aria-label="Search forms"
                     value={formSearchQuery}
+                    disabled={isFormsBusy}
                     onChange={(event) => {
+                      if (isFormsBusy) return;
                       const q = event.target.value;
                       setFormSearchQuery(q);
-                      updateFormsRouteSearch({ q: q || undefined });
+                      setSelectedFormId(null);
+                      updateFormsRouteSearch({ q: q || undefined, formId: undefined });
                     }}
                     placeholder="Search forms, fields, IDs..."
-                    className="min-h-10 w-full rounded-lg border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    className="min-h-10 w-full rounded-lg border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
                   <select
                     aria-label="Form source filter"
                     value={formSourceFilter}
+                    disabled={isFormsBusy}
                     onChange={(event) => {
+                      if (isFormsBusy) return;
                       const source = event.target.value as FormSourceFilter;
                       setFormSourceFilter(source);
-                      updateFormsRouteSearch({ source });
+                      setSelectedFormId(null);
+                      updateFormsRouteSearch({ source, formId: undefined });
                     }}
-                    className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+                    className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="all">All sources</option>
                     <option value="page">Page forms</option>
@@ -1377,12 +1402,15 @@ function FormsRoute() {
                   <select
                     aria-label="Form state filter"
                     value={formStateFilter}
+                    disabled={isFormsBusy}
                     onChange={(event) => {
+                      if (isFormsBusy) return;
                       const state = event.target.value as FormStateFilter;
                       setFormStateFilter(state);
-                      updateFormsRouteSearch({ state });
+                      setSelectedFormId(null);
+                      updateFormsRouteSearch({ state, formId: undefined });
                     }}
-                    className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+                    className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="all">All states</option>
                     <option value="active">Active only</option>
@@ -1391,12 +1419,15 @@ function FormsRoute() {
                   <select
                     aria-label="Form destination filter"
                     value={formDestinationFilter}
+                    disabled={isFormsBusy}
                     onChange={(event) => {
+                      if (isFormsBusy) return;
                       const destination = event.target.value as FormDestinationFilter;
                       setFormDestinationFilter(destination);
-                      updateFormsRouteSearch({ destination });
+                      setSelectedFormId(null);
+                      updateFormsRouteSearch({ destination, formId: undefined });
                     }}
-                    className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+                    className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="all">All destinations</option>
                     <option value="contacts">Routes to contacts</option>
@@ -1406,12 +1437,15 @@ function FormsRoute() {
                   <select
                     aria-label="Form readiness filter"
                     value={formReadinessFilter}
+                    disabled={isFormsBusy}
                     onChange={(event) => {
+                      if (isFormsBusy) return;
                       const readiness = event.target.value as FormReadinessFilter;
                       setFormReadinessFilter(readiness);
-                      updateFormsRouteSearch({ readiness });
+                      setSelectedFormId(null);
+                      updateFormsRouteSearch({ readiness, formId: undefined });
                     }}
-                    className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+                    className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="all">All readiness</option>
                     <option value="ready">Launch ready</option>
@@ -1419,7 +1453,7 @@ function FormsRoute() {
                   </select>
                 </div>
                 {hasActiveFormFilters && (
-                  <Button variant="outline" onClick={clearFormFilters} className="w-full">
+                  <Button variant="outline" onClick={clearFormFilters} disabled={isFormsBusy} className="w-full">
                     Clear form filters
                   </Button>
                 )}
@@ -1433,7 +1467,7 @@ function FormsRoute() {
                       Change the search, source, state, destination, or readiness filters to broaden the form library.
                     </div>
                     {hasActiveFormFilters && (
-                      <Button variant="outline" onClick={clearFormFilters} className="mt-4">
+                      <Button variant="outline" onClick={clearFormFilters} disabled={isFormsBusy} className="mt-4">
                         Clear form filters
                       </Button>
                     )}
@@ -1449,9 +1483,10 @@ function FormsRoute() {
                     <button
                       key={form.id}
                       type="button"
+                      disabled={isFormsBusy}
                       onClick={() => selectForm(form.id)}
                       className={cn(
-                        'rounded-lg border px-3 py-3 text-left transition-colors',
+                        'rounded-lg border px-3 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60',
                         isSelected ? 'border-primary bg-primary/5' : 'border-border bg-background hover:bg-muted',
                       )}
                     >
@@ -1593,6 +1628,7 @@ function FormsRoute() {
                         <Button
                           variant="outline"
                           onClick={handleExportFormsCatalog}
+                          disabled={isFormsBusy || filteredForms.length === 0}
                           iconStart={<Download className="size-4" />}
                         >
                           Export catalog
@@ -1736,19 +1772,21 @@ function FormsRoute() {
                         type="search"
                         aria-label="Search submissions"
                         value={submissionQuery}
+                        disabled={isFormsBusy}
                         onChange={(event) => {
+                          if (isFormsBusy) return;
                           const submissionQ = event.target.value;
                           setSubmissionQuery(submissionQ);
                           updateFormsRouteSearch({ submissionQ: submissionQ || undefined });
                         }}
                         placeholder="Search submissions..."
-                        className="min-h-10 w-full rounded-lg border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                        className="min-h-10 w-full rounded-lg border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                       />
                     </div>
                     <Button
                       variant="outline"
                       onClick={handleExportSubmissions}
-                      disabled={!selectedForm || filteredSubmissions.length === 0}
+                      disabled={isFormsBusy || !selectedForm || filteredSubmissions.length === 0}
                       iconStart={<Download className="size-4" />}
                     >
                       Export CSV
@@ -1759,12 +1797,14 @@ function FormsRoute() {
                         <button
                           key={status}
                           type="button"
+                          disabled={isFormsBusy}
                           onClick={() => {
+                            if (isFormsBusy) return;
                             setStatusFilter(status);
                             updateFormsRouteSearch({ status });
                           }}
                           className={cn(
-                            'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-background hover:text-foreground',
+                            'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60',
                             statusFilter === status && 'bg-background text-foreground shadow-sm',
                           )}
                         >
@@ -1787,7 +1827,7 @@ function FormsRoute() {
                         key={submission.id}
                         submission={submission}
                         fields={selectedForm?.fields || []}
-                        isUpdating={isUpdatingId === submission.id}
+                        isUpdating={Boolean(isUpdatingId)}
                         onStatus={(status) => void handleSubmissionStatus(submission, status)}
                       />
                     ))}
