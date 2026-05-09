@@ -612,6 +612,8 @@ function NewPageRoute() {
     const creationHandoffText = useMemo(() => JSON.stringify(creationHandoff, null, 2), [creationHandoff]);
 
     const copyCreationText = async (value: string, label: string) => {
+        if (isPageCreateBusy) return;
+
         try {
             await navigator.clipboard.writeText(value);
             setError(null);
@@ -623,6 +625,8 @@ function NewPageRoute() {
     };
 
     const downloadCreationHandoff = () => {
+        if (isPageCreateBusy) return;
+
         const blob = new Blob([creationHandoffText], { type: 'application/json;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
@@ -701,7 +705,10 @@ function NewPageRoute() {
             action={
                 <button
                     type="button"
-                    onClick={() => navigate({ to: '/pages', search: { siteId: formData.siteId } })}
+                    onClick={() => {
+                        if (isPageCreateBusy) return;
+                        navigate({ to: '/pages', search: { siteId: formData.siteId } });
+                    }}
                     disabled={isPageCreateBusy}
                     className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -734,7 +741,8 @@ function NewPageRoute() {
                         <button
                             type="button"
                             onClick={() => void copyCreationText(creationHandoffText, 'Page creation handoff manifest')}
-                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+                            disabled={isPageCreateBusy}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             <Copy className="h-4 w-4" />
                             Copy handoff
@@ -742,14 +750,18 @@ function NewPageRoute() {
                         <button
                             type="button"
                             onClick={downloadCreationHandoff}
-                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+                            disabled={isPageCreateBusy}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             <Download className="h-4 w-4" />
                             Download JSON
                         </button>
                         <button
                             type="button"
-                            onClick={() => navigate({ to: '/sites/new' })}
+                            onClick={() => {
+                                if (isPageCreateBusy) return;
+                                navigate({ to: '/sites/new' });
+                            }}
                             disabled={isPageCreateBusy}
                             className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                         >
@@ -813,7 +825,14 @@ function NewPageRoute() {
                             <a
                                 key={area.title}
                                 href={area.href}
-                                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                                aria-disabled={isPageCreateBusy}
+                                onClick={(event) => {
+                                    if (isPageCreateBusy) event.preventDefault();
+                                }}
+                                className={cn(
+                                    'rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5',
+                                    isPageCreateBusy && 'pointer-events-none opacity-60',
+                                )}
                             >
                                 <div className="text-sm font-semibold text-foreground">{area.title}</div>
                                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
@@ -964,11 +983,14 @@ function NewPageRoute() {
                                     </div>
                                     <button
                                         type="button"
-                                        onClick={() => navigate({
-                                            to: '/pages/$pageId/edit',
-                                            params: { pageId: routeConflict.id },
-                                            search: { siteId: formData.siteId },
-                                        })}
+                                        onClick={() => {
+                                            if (isPageCreateBusy) return;
+                                            navigate({
+                                                to: '/pages/$pageId/edit',
+                                                params: { pageId: routeConflict.id },
+                                                search: { siteId: formData.siteId },
+                                            });
+                                        }}
                                         disabled={isPageCreateBusy}
                                         className="inline-flex shrink-0 items-center justify-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
                                     >
@@ -1084,7 +1106,10 @@ function NewPageRoute() {
                         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                             <button
                                 type="button"
-                                onClick={() => navigate({ to: '/pages', search: { siteId: formData.siteId } })}
+                                onClick={() => {
+                                    if (isPageCreateBusy) return;
+                                    navigate({ to: '/pages', search: { siteId: formData.siteId } });
+                                }}
                                 disabled={isPageCreateBusy}
                                 className="rounded-lg border px-6 py-2.5 font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                             >
@@ -1189,7 +1214,8 @@ function NewPageRoute() {
                             <button
                                 type="button"
                                 onClick={() => void copyCreationText(adminPagesUrl, 'Page create API URL')}
-                                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+                                disabled={isPageCreateBusy}
+                                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <Copy className="h-4 w-4" />
                                 Copy URL
@@ -1197,7 +1223,8 @@ function NewPageRoute() {
                             <button
                                 type="button"
                                 onClick={() => void copyCreationText(creationHandoffText, 'Page creation handoff manifest')}
-                                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+                                disabled={isPageCreateBusy}
+                                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <Copy className="h-4 w-4" />
                                 Copy handoff
