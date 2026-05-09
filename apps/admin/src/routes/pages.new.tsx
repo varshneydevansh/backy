@@ -4,8 +4,8 @@
 
 import { useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, FileText, Globe, Home, Layout, Save, Sparkles } from 'lucide-react';
-import { createPage } from '@/lib/adminContentApi';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Home, Layout, Save, Sparkles } from 'lucide-react';
+import { createPage, getAdminApiBase } from '@/lib/adminContentApi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
@@ -107,6 +107,7 @@ function NewPageRoute() {
     const { sites, pages, setPages } = useStore();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [notice, setNotice] = useState<string | null>(null);
     const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
     const requestedSiteId = search.siteId && sites.some((site) => (site.publicSiteId || site.id) === search.siteId)
         ? search.siteId
@@ -131,6 +132,11 @@ function NewPageRoute() {
     const routePreview = formData.isHomepage
         ? '/'
         : `/${slugify(formData.slug || formData.title || 'new-page')}`;
+    const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
+    const adminPagesUrl = useMemo(
+        () => `${getAdminApiBase()}/sites/${encodeURIComponent(formData.siteId || requestedSiteId)}/pages`,
+        [formData.siteId, requestedSiteId],
+    );
     const canSubmit = Boolean(formData.title.trim() && formData.siteId && (!formData.isHomepage || formData.slug.trim() || formData.title.trim()));
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
@@ -197,19 +203,124 @@ function NewPageRoute() {
         selectedSite,
         selectedTemplate.sections.length,
     ]);
+    const createPayloadPreview = useMemo(() => ({
+        title: formData.title.trim() || 'Untitled page',
+        slug: resolvedSlug,
+        siteId: formData.siteId,
+        status: formData.status,
+        scheduledAt: formData.status === 'scheduled' ? formData.scheduledAt : null,
+        template: formData.template,
+        description: formData.description,
+        isHomepage: formData.isHomepage,
+        content: `${selectedTemplate.sections.length} starter block${selectedTemplate.sections.length === 1 ? '' : 's'}`,
+        forms: ['contact', 'registration'].includes(formData.template) ? 'Backy form API seeded' : 'none',
+    }), [
+        formData.description,
+        formData.isHomepage,
+        formData.scheduledAt,
+        formData.siteId,
+        formData.status,
+        formData.template,
+        formData.title,
+        resolvedSlug,
+        selectedTemplate.sections.length,
+    ]);
+    const creationHandoff = useMemo(() => ({
+        generatedAt: new Date().toISOString(),
+        endpoint: {
+            method: 'POST',
+            url: adminPagesUrl,
+        },
+        site: {
+            id: formData.siteId,
+            name: selectedSite?.name || formData.siteId,
+            slug: selectedSite?.slug || formData.siteId,
+        },
+        route: {
+            slug: resolvedSlug,
+            path: routePreview,
+            isHomepage: formData.isHomepage,
+        },
+        readiness: {
+            score: pageCreationReadiness.score,
+            checks: pageCreationReadiness.checks,
+        },
+        template: {
+            id: selectedTemplate.id,
+            name: selectedTemplate.name,
+            sections: selectedTemplate.sections,
+            seedsFormApi: ['contact', 'registration'].includes(formData.template),
+        },
+        canvas: {
+            width: DEFAULT_CANVAS_SIZE.width,
+            height: DEFAULT_CANVAS_SIZE.height,
+            seededBlocks: selectedTemplate.sections.length,
+        },
+        payloadPreview: createPayloadPreview,
+        nextStep: 'Created pages open directly in the visual editor for layout, grouping, media, binding, SEO, and publishing work.',
+        guardrails: [
+            'Backend owns duplicate route and homepage conflict validation.',
+            'Scheduled pages require a publish date before they can be created.',
+            'Contact and registration templates seed editable form blocks that connect to Backy Forms and Contacts.',
+            'The canvas seed is serialized before persistence so the editor never starts from a blank record unless the user intentionally keeps the starter sparse.',
+        ],
+    }), [
+        adminPagesUrl,
+        createPayloadPreview,
+        formData.isHomepage,
+        formData.siteId,
+        formData.template,
+        pageCreationReadiness.checks,
+        pageCreationReadiness.score,
+        resolvedSlug,
+        routePreview,
+        selectedSite?.name,
+        selectedSite?.slug,
+        selectedTemplate.id,
+        selectedTemplate.name,
+        selectedTemplate.sections,
+    ]);
+    const creationHandoffText = useMemo(() => JSON.stringify(creationHandoff, null, 2), [creationHandoff]);
+
+    const copyCreationText = async (value: string, label: string) => {
+        try {
+            await navigator.clipboard.writeText(value);
+            setError(null);
+            setNotice(`${label} copied.`);
+        } catch {
+            setNotice(null);
+            setError(value);
+        }
+    };
+
+    const downloadCreationHandoff = () => {
+        const blob = new Blob([creationHandoffText], { type: 'application/json;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `${resolvedSlug || 'new-page'}-backy-page-create-handoff.json`;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+        setError(null);
+        setNotice('Page creation handoff manifest downloaded.');
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!canSubmit) {
             setError('Add a page title and select a site before creating the page.');
+            setNotice(null);
             return;
         }
 
         setIsLoading(true);
         setError(null);
+        setNotice(null);
 
         const title = formData.title.trim();
-        const slug = formData.isHomepage ? 'home' : slugify(formData.slug || title);
+        const slug = resolvedSlug;
         const content = createInitialPageContent({
             template: formData.template,
             title,
@@ -281,14 +392,32 @@ function NewPageRoute() {
                             Prepare the public route, metadata, template seed, publish state, and editor handoff before creating the page.
                         </p>
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => navigate({ to: '/sites/new' })}
-                        className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
-                    >
-                        <Globe className="h-4 w-4" />
-                        Create site
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => void copyCreationText(creationHandoffText, 'Page creation handoff manifest')}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+                        >
+                            <Copy className="h-4 w-4" />
+                            Copy handoff
+                        </button>
+                        <button
+                            type="button"
+                            onClick={downloadCreationHandoff}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+                        >
+                            <Download className="h-4 w-4" />
+                            Download JSON
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => navigate({ to: '/sites/new' })}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+                        >
+                            <Globe className="h-4 w-4" />
+                            Create site
+                        </button>
+                    </div>
                 </div>
 
                 <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
@@ -359,6 +488,12 @@ function NewPageRoute() {
                 {error && (
                     <div className="xl:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                         {error}. The page was not created because the backend did not persist it.
+                    </div>
+                )}
+
+                {notice && (
+                    <div className="xl:col-span-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                        {notice}
                     </div>
                 )}
 
@@ -652,16 +787,26 @@ function NewPageRoute() {
                             </div>
                         </div>
                         <pre className="mt-4 overflow-x-auto rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-{JSON.stringify({
-    title: formData.title.trim() || 'Untitled page',
-    slug: formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page'),
-    status: formData.status,
-    template: formData.template,
-    isHomepage: formData.isHomepage,
-    content: `${selectedTemplate.sections.length} starter blocks`,
-    forms: ['contact', 'registration'].includes(formData.template) ? 'Backy form API seeded' : 'none',
-}, null, 2)}
+{JSON.stringify(createPayloadPreview, null, 2)}
                         </pre>
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => void copyCreationText(adminPagesUrl, 'Page create API URL')}
+                                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+                            >
+                                <Copy className="h-4 w-4" />
+                                Copy URL
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void copyCreationText(creationHandoffText, 'Page creation handoff manifest')}
+                                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+                            >
+                                <Copy className="h-4 w-4" />
+                                Copy handoff
+                            </button>
+                        </div>
                     </section>
                 </aside>
             </div>
