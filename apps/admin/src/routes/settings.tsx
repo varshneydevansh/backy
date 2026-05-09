@@ -78,6 +78,14 @@ type ApiEndpoint = {
   description: string;
 };
 
+type ResponsibilityArea = {
+  area: string;
+  owner: 'Backy in-house' | 'Supabase connection' | 'Vercel connection';
+  controlSurface: string;
+  runtimeSource: string;
+  frontendImpact: string;
+};
+
 const DELIVERY_OPTIONS: Array<{
   id: DeliveryMode;
   title: string;
@@ -105,18 +113,43 @@ const PUBLIC_API_ENDPOINTS: ApiEndpoint[] = [
   },
   {
     method: 'GET',
-    path: '/sites/:siteId/pages?path=/',
-    description: 'Resolve page content by path (published only).',
+    path: '/sites/:siteId/manifest',
+    description: 'Fetch the frontend discovery manifest: routes, capabilities, schemas, and module endpoints.',
   },
   {
     method: 'GET',
-    path: '/sites/:siteId/blog/posts?status=published',
+    path: '/sites/:siteId/resolve?path=/',
+    description: 'Resolve a public route to its content type, canonical path, and render URL.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/render?path=/',
+    description: 'Fetch the render payload for any published page, blog post, or dynamic collection route.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/pages',
+    description: 'List published pages for navigation, sitemaps, and frontend page indexes.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/navigation',
+    description: 'Read primary/footer navigation structures for custom frontends.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/blog?status=published',
     description: 'List published blog posts.',
   },
   {
     method: 'GET',
-    path: '/sites/:siteId/blog/posts/:slug',
-    description: 'Fetch a single published blog post by slug.',
+    path: '/sites/:siteId/blog/categories',
+    description: 'Fetch blog categories for filters, archive pages, and editorial navigation.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/blog/tags',
+    description: 'Fetch blog tags for filters, topic pages, and custom frontend chips.',
   },
   {
     method: 'GET',
@@ -139,14 +172,19 @@ const PUBLIC_API_ENDPOINTS: ApiEndpoint[] = [
     description: 'Fetch public collection records for listings, catalogs, and structured content.',
   },
   {
-    method: 'POST',
-    path: '/sites/:siteId/forms/:formId/submissions',
-    description: 'Submit form payloads with optional anti-spam metadata.',
+    method: 'GET',
+    path: '/sites/:siteId/reusable-sections',
+    description: 'Read reusable section definitions for shared headers, footers, and repeatable design blocks.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/forms/:formId/definition',
+    description: 'Fetch a cacheable public form definition without submissions or private contacts.',
   },
   {
     method: 'POST',
-    path: '/sites/:siteId/forms/:formId/contacts',
-    description: 'Submit contact-share payloads.',
+    path: '/sites/:siteId/forms/:formId/submissions',
+    description: 'Submit form payloads with optional anti-spam metadata.',
   },
   {
     method: 'GET',
@@ -167,6 +205,21 @@ const PUBLIC_API_ENDPOINTS: ApiEndpoint[] = [
     method: 'POST',
     path: '/sites/:siteId/blog/:postId/comments',
     description: 'Submit a blog post comment.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/comments/report-reasons',
+    description: 'Read the supported report/block reason taxonomy.',
+  },
+  {
+    method: 'POST',
+    path: '/sites/:siteId/comments/:commentId/report',
+    description: 'Report a public comment for moderation.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/seo?format=sitemap',
+    description: 'Fetch generated SEO metadata, sitemap, or robots output.',
   },
   {
     method: 'GET',
@@ -232,6 +285,59 @@ const ADMIN_API_ENDPOINTS: ApiEndpoint[] = [
     description: 'Moderate page and blog comments from a custom admin frontend.',
   },
 ];
+
+const PLATFORM_RESPONSIBILITIES: ResponsibilityArea[] = [
+  {
+    area: 'CMS data and page editor',
+    owner: 'Backy in-house',
+    controlSurface: 'Pages, Blog, Collections, reusable sections, canvas editor',
+    runtimeSource: 'Backy APIs and repository layer',
+    frontendImpact: 'Controls every route, component tree, SEO payload, and render payload a frontend consumes.',
+  },
+  {
+    area: 'Forms, contacts, comments, and users',
+    owner: 'Backy in-house',
+    controlSurface: 'Forms, Contacts, Comments, Users, Notifications',
+    runtimeSource: 'Backy public/admin APIs with audit-ready moderation and exports',
+    frontendImpact: 'Powers registrations, lead capture, comments, team access, and workflow alerts.',
+  },
+  {
+    area: 'Media and file delivery',
+    owner: 'Backy in-house',
+    controlSurface: 'Media library, folders, tags, visibility, transforms, font assets',
+    runtimeSource: 'Configured storage provider with Backy metadata and signed/public delivery APIs',
+    frontendImpact: 'Lets any frontend request images, files, fonts, and responsive transforms from Backy contracts.',
+  },
+  {
+    area: 'Database persistence',
+    owner: 'Supabase connection',
+    controlSurface: 'Infrastructure metadata and runtime env checks',
+    runtimeSource: 'Supabase/Postgres environment variables and repository runtime',
+    frontendImpact: 'Moves Backy data from demo/local runtime into a hosted database without exposing secrets.',
+  },
+  {
+    area: 'Hosting and deploy workflow',
+    owner: 'Vercel connection',
+    controlSurface: 'Infrastructure metadata, domains, preview deploy preference, production URL',
+    runtimeSource: 'Vercel deployment environment and project metadata',
+    frontendImpact: 'Hosts Backy and custom frontends while keeping domains and preview behavior visible in Settings.',
+  },
+];
+
+const PLATFORM_BACKLOG = [
+  {
+    item: 'Commerce API persistence',
+    status: 'admin model exists; public storefront and checkout API routes still need backend persistence',
+  },
+  {
+    item: 'Supabase auth adapter',
+    status: 'metadata and env detection exist; direct auth provider workflow is not finished yet',
+  },
+  {
+    item: 'One-click Vercel deploy orchestration',
+    status: 'project/domain metadata exists; deploy execution should remain a separate connected workflow',
+  },
+] as const;
 
 const SETTINGS_CONTROL_AREAS: Array<{
   tab: SettingsTab;
@@ -591,6 +697,8 @@ function SettingsPage() {
         note: 'Project ownership, domains, and preview-deploy preferences are tracked here; deploy tokens remain environment-managed.',
       },
     },
+    ownershipModel: PLATFORM_RESPONSIBILITIES,
+    backlog: PLATFORM_BACKLOG,
     frontendDefaults: {
       general: generalSettings,
       appearance: appearanceSettings,
@@ -607,6 +715,7 @@ function SettingsPage() {
       'Backy owns CMS data, editor content, API keys, forms, media metadata, and admin workflows.',
       'Supabase and Vercel are external providers connected through runtime env and non-secret metadata.',
       'Custom frontends should use public endpoints and design defaults; admin endpoints must remain private.',
+      'Commerce controls exist in the admin model, but durable storefront checkout APIs are still a separate backend milestone.',
       'Infrastructure runtime cards show detected capability, while form fields store operator-controlled metadata.',
     ],
   }), [
@@ -1632,8 +1741,33 @@ function InfrastructureSettings({
       <div>
         <h3 className="text-lg font-semibold">Infrastructure connections</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Persist non-secret connection metadata here. Real tokens and database URLs stay in environment variables.
+          Backy is the in-house CMS and API control plane. Supabase and Vercel are connected providers: metadata is stored here, while real tokens and database URLs stay in environment variables.
         </p>
+      </div>
+
+      <div className="rounded-lg border border-border bg-background p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h4 className="text-sm font-semibold">Ownership model</h4>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              This separates what Backy controls directly from what is detected or delegated to connected providers.
+            </p>
+          </div>
+          <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            Backy + providers
+          </span>
+        </div>
+        <div className="mt-4 grid gap-3 xl:grid-cols-5">
+          {PLATFORM_RESPONSIBILITIES.map((item) => (
+            <div key={item.area} className="rounded-lg border border-border bg-card p-3">
+              <div className="text-xs font-semibold text-foreground">{item.area}</div>
+              <div className="mt-2 inline-flex rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                {item.owner}
+              </div>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">{item.controlSurface}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
@@ -1804,6 +1938,18 @@ function InfrastructureSettings({
             </div>
           </PanelContent>
         </Panel>
+      </div>
+
+      <div className="rounded-lg border border-border bg-muted/30 p-4">
+        <h4 className="text-sm font-semibold">Backend milestones still visible from Settings</h4>
+        <div className="mt-3 grid gap-2 lg:grid-cols-3">
+          {PLATFORM_BACKLOG.map((item) => (
+            <div key={item.item} className="rounded-lg border border-border bg-background px-3 py-2">
+              <div className="text-xs font-semibold text-foreground">{item.item}</div>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.status}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
