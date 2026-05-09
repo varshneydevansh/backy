@@ -1,5 +1,5 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import {
   AlertTriangle,
   Archive,
@@ -448,6 +448,12 @@ function OrdersRoute() {
       checkoutIntake: publicOrderIntakeUrl,
       publicBlocked: publicOrdersApiUrl,
     },
+    storefrontHandoff: {
+      productsRoute: '/products',
+      storefrontPageRoute: '/pages/new',
+      storefrontPageTemplate: 'storefront',
+      note: 'Orders should be wired after products and a storefront page are ready to send checkout carts into the public commerce order intake endpoint.',
+    },
     security: {
       publicRead: Boolean(ordersCollection?.permissions.publicRead),
       publicCreate: Boolean(ordersCollection?.permissions.publicCreate),
@@ -878,6 +884,21 @@ function OrdersRoute() {
             <Button variant="outline" onClick={exportOrdersCsv} disabled={filteredOrders.length === 0} iconStart={<Download className="size-4" />}>
               Export CSV
             </Button>
+            <Link
+              to="/products"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              <ShoppingCart className="size-4" />
+              Products
+            </Link>
+            <Link
+              to="/pages/new"
+              search={{ siteId: activeSiteId, template: 'storefront' }}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              <Sparkles className="size-4" />
+              Storefront page
+            </Link>
             {!ordersCollection ? (
               <Button onClick={() => void createOrdersCollection()} disabled={isSaving} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set up orders'}
@@ -972,6 +993,21 @@ function OrdersRoute() {
                 <Button onClick={() => void copyOrdersApiUrl(publicOrderIntakeUrl, 'Checkout intake URL')} iconStart={<Copy className="size-4" />}>
                   Copy checkout
                 </Button>
+                <Link
+                  to="/products"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                >
+                  <ShoppingCart className="size-4" />
+                  Products
+                </Link>
+                <Link
+                  to="/pages/new"
+                  search={{ siteId: activeSiteId, template: 'storefront' }}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                >
+                  <Sparkles className="size-4" />
+                  Storefront page
+                </Link>
                 <a
                   href={adminOrdersApiUrl}
                   target="_blank"
@@ -1100,9 +1136,26 @@ function OrdersRoute() {
           title="Orders are not set up"
           description="Create an internal orders collection for payment state, fulfillment, customer, and line item data."
           action={
-            <Button className="mt-2" onClick={() => void createOrdersCollection()} disabled={isSaving} iconStart={<Sparkles className="size-4" />}>
-              {isSaving ? 'Setting up...' : 'Set Up Orders'}
-            </Button>
+            <div className="mt-2 flex flex-wrap justify-center gap-2">
+              <Button onClick={() => void createOrdersCollection()} disabled={isSaving} iconStart={<Sparkles className="size-4" />}>
+                {isSaving ? 'Setting up...' : 'Set Up Orders'}
+              </Button>
+              <Link
+                to="/products"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                <ShoppingCart className="size-4" />
+                Set up products
+              </Link>
+              <Link
+                to="/pages/new"
+                search={{ siteId: activeSiteId, template: 'storefront' }}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                <Sparkles className="size-4" />
+                Start storefront page
+              </Link>
+            </div>
           }
         />
       ) : (
