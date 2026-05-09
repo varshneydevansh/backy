@@ -13,6 +13,7 @@ import {
   Code2,
   Copy,
   Database,
+  Download,
   FileText,
   Globe,
   HardDrive,
@@ -471,6 +472,58 @@ function Index() {
     collections: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/collections`,
     settings: `${adminBaseUrl}/settings`,
   };
+  const frontendHandoff = useMemo(() => ({
+    site: {
+      id: activeSiteId,
+      name: activeSite?.name || activeSiteId,
+      slug: activeSite?.slug,
+      status: activeSite?.status,
+      domain: activeSite?.customDomain || (activeSite?.slug ? `${activeSite.slug}.backy.app` : undefined),
+    },
+    deliveryMode: dashboard.settings?.deliveryMode || 'unknown',
+    health: {
+      backend: backendHealthy ? 'reachable' : 'fallback',
+      storage: storage ? { provider: storage.provider, configured: storage.configured, missing: storage.missing || [] } : null,
+      database: database ? { provider: database.provider, configured: database.configured, missing: database.missing || [] } : null,
+      supabase: supabase ? { configured: supabase.configured, missing: supabase.missing || [] } : null,
+      vercel: vercel ? { configured: vercel.configured, missing: vercel.missing || [] } : null,
+      readiness: { errors: readinessErrors, warnings: readinessWarnings },
+    },
+    publicEndpoints: frontendContractUrls,
+    adminEndpoints: adminContractUrls,
+    counts: {
+      sites: dashboard.sites.length,
+      pages: dashboard.pages.length,
+      posts: dashboard.posts.length,
+      collections: dashboard.collections.length,
+      forms: dashboard.forms.length,
+      media: dashboard.media.length,
+      comments: dashboard.comments,
+      contacts: dashboard.contacts,
+    },
+  }), [
+    activeSite,
+    activeSiteId,
+    adminContractUrls,
+    backendHealthy,
+    dashboard.collections.length,
+    dashboard.comments,
+    dashboard.contacts,
+    dashboard.forms.length,
+    dashboard.media.length,
+    dashboard.pages.length,
+    dashboard.posts.length,
+    dashboard.settings?.deliveryMode,
+    dashboard.sites.length,
+    database,
+    frontendContractUrls,
+    readinessErrors,
+    readinessWarnings,
+    storage,
+    supabase,
+    vercel,
+  ]);
+  const frontendHandoffText = useMemo(() => JSON.stringify(frontendHandoff, null, 2), [frontendHandoff]);
 
   const copyDashboardText = async (value: string, label: string) => {
     try {
@@ -481,6 +534,18 @@ function Index() {
       setNotice(null);
       setError(value);
     }
+  };
+
+  const downloadFrontendHandoff = () => {
+    const blob = new Blob([frontendHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSite?.slug || activeSiteId}-backy-handoff.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   };
 
   const stats = [
@@ -797,9 +862,29 @@ function Index() {
             </section>
 
             <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-              <div className="flex items-center gap-2">
-                <Code2 className="size-4 text-primary" />
-                <h2 className="font-semibold">API control plane</h2>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Code2 className="size-4 text-primary" />
+                  <h2 className="font-semibold">API control plane</h2>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void copyDashboardText(frontendHandoffText, 'Frontend handoff manifest')}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-accent"
+                  >
+                    <Copy className="size-3.5" />
+                    Copy JSON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadFrontendHandoff}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-accent"
+                  >
+                    <Download className="size-3.5" />
+                    Download
+                  </button>
+                </div>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
                 Custom frontends should be able to rebuild the public experience from Backy contracts without touching admin internals.
