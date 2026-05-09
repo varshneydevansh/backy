@@ -717,7 +717,7 @@ function OrdersRoute() {
 
       if (!collection) {
         setOrders([]);
-        setSelectedOrderId(null);
+        clearOrderEditorState();
         return;
       }
 
@@ -748,14 +748,7 @@ function OrdersRoute() {
 
     if (siteChanged) {
       setSelectedSiteId(nextSiteId);
-      setFormState(EMPTY_ORDER_FORM);
-      setItemDraft({
-        title: '',
-        sku: '',
-        variant: '',
-        quantity: '1',
-        price: '',
-      });
+      clearOrderEditorState();
     }
 
     setSelectedOrderId(routeSearch.orderId || null);
@@ -786,12 +779,9 @@ function OrdersRoute() {
     setFormState(orderToForm(selectedOrder));
   }, [selectedOrder]);
 
-  const resetForm = () => {
+  const clearOrderEditorState = (nextFormState: OrderFormState = EMPTY_ORDER_FORM) => {
     setSelectedOrderId(null);
-    setFormState({
-      ...EMPTY_ORDER_FORM,
-      orderNumber: `ORD-${Date.now().toString().slice(-6)}`,
-    });
+    setFormState(nextFormState);
     setItemDraft({
       title: '',
       sku: '',
@@ -799,10 +789,21 @@ function OrdersRoute() {
       quantity: '1',
       price: '',
     });
+  };
+
+  const resetForm = () => {
+    if (isSaving) return;
+
+    clearOrderEditorState({
+      ...EMPTY_ORDER_FORM,
+      orderNumber: `ORD-${Date.now().toString().slice(-6)}`,
+    });
     updateOrdersRouteSearch({ orderId: undefined });
   };
 
   const selectOrderForEditing = (orderId: string) => {
+    if (isSaving) return;
+
     setSelectedOrderId(orderId);
     updateOrdersRouteSearch({ orderId });
   };
@@ -812,6 +813,8 @@ function OrdersRoute() {
   };
 
   const addLineItem = () => {
+    if (isSaving) return;
+
     const title = itemDraft.title.trim();
     if (!title || orderLineItems.length >= 100) return;
 
@@ -843,10 +846,14 @@ function OrdersRoute() {
   };
 
   const removeLineItem = (itemId: string) => {
+    if (isSaving) return;
+
     setLineItems(orderLineItems.filter((item) => item.id !== itemId));
   };
 
   const applyLineItemTotals = () => {
+    if (isSaving) return;
+
     const shippingAmount = Number(formState.shippingAmount || 0);
     const taxAmount = Number(formState.taxAmount || 0);
     const discountAmount = Number(formState.discountAmount || 0);
@@ -860,6 +867,8 @@ function OrdersRoute() {
   };
 
   const createOrdersCollection = async () => {
+    if (isSaving) return;
+
     setIsSaving(true);
     setError(null);
     setNotice(null);
@@ -882,7 +891,10 @@ function OrdersRoute() {
       });
       setOrdersCollection(collection);
       setOrders([]);
-      resetForm();
+      clearOrderEditorState({
+        ...EMPTY_ORDER_FORM,
+        orderNumber: `ORD-${Date.now().toString().slice(-6)}`,
+      });
       setNotice('Orders collection created. You can record the first order now.');
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to set up orders');
@@ -893,6 +905,8 @@ function OrdersRoute() {
 
   const syncOrdersCollection = async () => {
     if (!ordersCollection) return;
+    if (isSaving) return;
+
     setIsSaving(true);
     setError(null);
     setNotice(null);
@@ -926,6 +940,13 @@ function OrdersRoute() {
   const saveOrder = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!ordersCollection) return;
+    if (isSaving) return;
+
+    if (!formState.orderNumber.trim() || !formState.customerName.trim() || !formState.email.trim()) {
+      setError('Add an order number, customer name, and email before saving.');
+      setNotice(null);
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
@@ -986,8 +1007,11 @@ function OrdersRoute() {
 
   const updateOrderWorkflow = async (order: CollectionRecord, updates: Partial<OrderFormState>) => {
     if (!ordersCollection) return;
+    if (isSaving) return;
+
     setIsSaving(true);
     setError(null);
+    setNotice(null);
 
     try {
       const updated = await updateCollectionRecord(activeSiteId, ordersCollection.id, order.id, {
@@ -1001,6 +1025,7 @@ function OrdersRoute() {
       if (selectedOrderId === updated.id) {
         setFormState(orderToForm(updated));
       }
+      setNotice('Order workflow updated.');
     } catch (workflowError) {
       setError(workflowError instanceof Error ? workflowError.message : 'Unable to update order');
     } finally {
@@ -1010,16 +1035,23 @@ function OrdersRoute() {
 
   const removeOrder = async (order: CollectionRecord) => {
     if (!ordersCollection) return;
+    if (isSaving) return;
+
     setIsSaving(true);
     setError(null);
+    setNotice(null);
 
     try {
       await deleteCollectionRecord(activeSiteId, ordersCollection.id, order.id);
       setOrders((current) => current.filter((item) => item.id !== order.id));
       if (selectedOrderId === order.id) {
-        resetForm();
+        clearOrderEditorState({
+          ...EMPTY_ORDER_FORM,
+          orderNumber: `ORD-${Date.now().toString().slice(-6)}`,
+        });
       }
       setPendingDeleteOrder(null);
+      setNotice('Order deleted.');
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete order');
     } finally {
@@ -1082,30 +1114,28 @@ function OrdersRoute() {
     setNotice(`${filteredOrders.length} visible order${filteredOrders.length === 1 ? '' : 's'} exported.`);
   };
   const clearOrderFilters = () => {
+    if (isSaving) return;
+
     setSearchQuery('');
     setFilter('all');
     setPaymentFilter('all');
     setFulfillmentFilter('all');
     setSourceFilter('all');
+    clearOrderEditorState();
     updateOrdersRouteSearch({
       workflow: undefined,
       payment: undefined,
       fulfillment: undefined,
       source: undefined,
       q: undefined,
+      orderId: undefined,
     });
   };
   const selectOrdersSite = (nextSiteId: string) => {
+    if (isSaving) return;
+
     setSelectedSiteId(nextSiteId);
-    setSelectedOrderId(null);
-    setFormState(EMPTY_ORDER_FORM);
-    setItemDraft({
-      title: '',
-      sku: '',
-      variant: '',
-      quantity: '1',
-      price: '',
-    });
+    clearOrderEditorState();
     setSearchQuery('');
     setFilter('all');
     setPaymentFilter('all');
@@ -1124,8 +1154,9 @@ function OrdersRoute() {
             id="orders-active-site"
             aria-label="Active Site"
             value={activeSiteId}
+            disabled={isSaving}
             onChange={(event) => selectOrdersSite(event.target.value)}
-            className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
+            className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
           >
             {sites.length === 0 ? (
               <option value="site-demo">Demo site</option>
@@ -1135,7 +1166,7 @@ function OrdersRoute() {
               </option>
             ))}
           </select>
-          <Button onClick={() => void loadOrders()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+          <Button onClick={() => void loadOrders()} disabled={isLoading || isSaving} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
             Refresh
           </Button>
         </div>
@@ -1201,11 +1232,11 @@ function OrdersRoute() {
                 {isSaving ? 'Setting up...' : 'Set up orders'}
               </Button>
             ) : (
-              <Button onClick={resetForm} iconStart={<Plus className="size-4" />}>
+              <Button onClick={resetForm} disabled={isSaving} iconStart={<Plus className="size-4" />}>
                 New order
               </Button>
             )}
-            <Button onClick={() => void loadOrders()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+            <Button onClick={() => void loadOrders()} disabled={isLoading || isSaving} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh
             </Button>
           </div>
@@ -1403,8 +1434,9 @@ function OrdersRoute() {
           id="orders-active-site-inline"
           aria-label="Active order site"
           value={activeSiteId}
+          disabled={isSaving}
           onChange={(event) => selectOrdersSite(event.target.value)}
-          className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
+          className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
         >
           {sites.length === 0 ? (
             <option value="site-demo">Demo site</option>
@@ -1464,7 +1496,7 @@ function OrdersRoute() {
               title="Order Queue"
               description={`${filteredOrders.length}/${orders.length} visible orders`}
               icon={<ClipboardCheck className="size-4" />}
-              action={<Button onClick={resetForm} iconStart={<Plus className="size-4" />}>New Order</Button>}
+              action={<Button onClick={resetForm} disabled={isSaving} iconStart={<Plus className="size-4" />}>New Order</Button>}
             />
             <PanelContent>
               <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -1473,13 +1505,16 @@ function OrdersRoute() {
                   <input
                     aria-label="Search orders"
                     value={searchQuery}
+                    disabled={isSaving}
                     onChange={(event) => {
+                      if (isSaving) return;
                       const q = event.target.value;
                       setSearchQuery(q);
-                      updateOrdersRouteSearch({ q: q || undefined });
+                      clearOrderEditorState();
+                      updateOrdersRouteSearch({ q: q || undefined, orderId: undefined });
                     }}
                     placeholder="Search orders..."
-                    className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm"
+                    className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </div>
                 <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-muted p-1">
@@ -1487,12 +1522,15 @@ function OrdersRoute() {
                     <button
                       key={status}
                       type="button"
+                      disabled={isSaving}
                       onClick={() => {
+                        if (isSaving) return;
                         setFilter(status);
-                        updateOrdersRouteSearch({ workflow: status });
+                        clearOrderEditorState();
+                        updateOrdersRouteSearch({ workflow: status, orderId: undefined });
                       }}
                       className={cn(
-                        'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground hover:bg-background hover:text-foreground',
+                        'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60',
                         filter === status && 'bg-background text-foreground shadow-sm',
                       )}
                     >
@@ -1503,12 +1541,15 @@ function OrdersRoute() {
                 <select
                   aria-label="Payment status filter"
                   value={paymentFilter}
+                  disabled={isSaving}
                   onChange={(event) => {
+                    if (isSaving) return;
                     const payment = event.target.value as PaymentStatusFilter;
                     setPaymentFilter(payment);
-                    updateOrdersRouteSearch({ payment });
+                    clearOrderEditorState();
+                    updateOrdersRouteSearch({ payment, orderId: undefined });
                   }}
-                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <option value="all">All payments</option>
                   <option value="pending">Pending payment</option>
@@ -1519,12 +1560,15 @@ function OrdersRoute() {
                 <select
                   aria-label="Fulfillment status filter"
                   value={fulfillmentFilter}
+                  disabled={isSaving}
                   onChange={(event) => {
+                    if (isSaving) return;
                     const fulfillment = event.target.value as FulfillmentStatusFilter;
                     setFulfillmentFilter(fulfillment);
-                    updateOrdersRouteSearch({ fulfillment });
+                    clearOrderEditorState();
+                    updateOrdersRouteSearch({ fulfillment, orderId: undefined });
                   }}
-                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <option value="all">All fulfillment</option>
                   <option value="unfulfilled">Unfulfilled</option>
@@ -1535,12 +1579,15 @@ function OrdersRoute() {
                 <select
                   aria-label="Order source filter"
                   value={sourceFilter}
+                  disabled={isSaving}
                   onChange={(event) => {
+                    if (isSaving) return;
                     const source = event.target.value as OrderSourceFilter;
                     setSourceFilter(source);
-                    updateOrdersRouteSearch({ source });
+                    clearOrderEditorState();
+                    updateOrdersRouteSearch({ source, orderId: undefined });
                   }}
-                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <option value="all">All sources</option>
                   <option value="web">Web</option>
@@ -1550,7 +1597,7 @@ function OrdersRoute() {
                   <option value="pos">POS</option>
                 </select>
                 {hasActiveOrderFilters && (
-                  <Button variant="outline" onClick={clearOrderFilters}>
+                  <Button variant="outline" onClick={clearOrderFilters} disabled={isSaving}>
                     Clear filters
                   </Button>
                 )}
@@ -1567,7 +1614,7 @@ function OrdersRoute() {
                       : 'Change the search, workflow, payment, fulfillment, or source filters to broaden the queue.'}
                   </div>
                   {orders.length > 0 && hasActiveOrderFilters && (
-                    <Button variant="outline" onClick={clearOrderFilters} className="mt-4">
+                    <Button variant="outline" onClick={clearOrderFilters} disabled={isSaving} className="mt-4">
                       Clear filters
                     </Button>
                   )}
@@ -1599,7 +1646,8 @@ function OrdersRoute() {
               icon={<Receipt className="size-4" />}
             />
             <PanelContent>
-              <form onSubmit={saveOrder} className="space-y-4">
+              <form onSubmit={saveOrder}>
+                <fieldset disabled={isSaving} className={cn('space-y-4', isSaving && 'opacity-70')}>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Order number">
                     <input
@@ -2014,6 +2062,7 @@ function OrdersRoute() {
                     {isSaving ? 'Saving...' : selectedOrder ? 'Save Order' : 'Create Order'}
                   </Button>
                 </div>
+                </fieldset>
               </form>
             </PanelContent>
           </Panel>
@@ -2043,7 +2092,8 @@ function OrdersRoute() {
               <button
                 type="button"
                 onClick={() => setPendingDeleteOrder(null)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                disabled={isSaving}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -2051,9 +2101,9 @@ function OrdersRoute() {
                 type="button"
                 onClick={() => void removeOrder(pendingDeleteOrder)}
                 disabled={isSaving}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Delete order
+                {isSaving ? 'Deleting...' : 'Delete order'}
               </button>
             </div>
           </div>
@@ -2258,7 +2308,7 @@ function OrderCard({
         </div>
       )}
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={onEdit} iconStart={<Receipt className="size-4" />}>Edit</Button>
+        <Button size="sm" onClick={onEdit} disabled={disabled} iconStart={<Receipt className="size-4" />}>Edit</Button>
         <Button size="sm" variant="outline" onClick={onPaid} disabled={disabled || paymentStatus === 'paid'} iconStart={<CreditCard className="size-4" />}>Mark Paid</Button>
         <Button size="sm" variant="outline" onClick={onFulfilled} disabled={disabled || fulfillmentStatus === 'fulfilled'} iconStart={<PackageCheck className="size-4" />}>Fulfill</Button>
         <Button size="sm" variant="outline" onClick={onCancelled} disabled={disabled || orderStatus === 'cancelled'} iconStart={<Archive className="size-4" />}>Cancel</Button>
