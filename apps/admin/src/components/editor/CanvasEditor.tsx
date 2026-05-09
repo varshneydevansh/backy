@@ -27,6 +27,8 @@ import {
   SlidersHorizontal,
   Scissors,
   Monitor,
+  PanelLeft,
+  PanelRight,
   Tablet,
   Smartphone,
   RefreshCw,
@@ -345,6 +347,8 @@ export function CanvasEditor({
   const [breakpoint, setBreakpoint] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [rightPanel, setRightPanel] = useState<'properties' | 'layers'>('properties');
   const [isPreview, setIsPreview] = useState(false);
+  const [showComponentPanel, setShowComponentPanel] = useState(true);
+  const [showInspectorPanel, setShowInspectorPanel] = useState(true);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showReloadConfirm, setShowReloadConfirm] = useState(false);
@@ -2173,6 +2177,23 @@ export function CanvasEditor({
 
             <button
               type="button"
+              onClick={() => setShowComponentPanel((current) => !current)}
+              className={cn(
+                'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium',
+                showComponentPanel
+                  ? 'bg-white text-slate-950 shadow-sm'
+                  : 'hover:bg-slate-100'
+              )}
+              title={showComponentPanel ? 'Hide components panel' : 'Show components panel'}
+              aria-label={showComponentPanel ? 'Hide components panel' : 'Show components panel'}
+              aria-pressed={showComponentPanel}
+            >
+              <PanelLeft className="w-4 h-4" />
+              Components
+            </button>
+
+            <button
+              type="button"
               onClick={() => setRightPanel(rightPanel === 'layers' ? 'properties' : 'layers')}
               className={cn(
                 'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium',
@@ -2185,6 +2206,23 @@ export function CanvasEditor({
             >
               <Layers className="w-4 h-4" />
               Layers
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowInspectorPanel((current) => !current)}
+              className={cn(
+                'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium',
+                showInspectorPanel
+                  ? 'bg-white text-slate-950 shadow-sm'
+                  : 'hover:bg-slate-100'
+              )}
+              title={showInspectorPanel ? 'Hide inspector panel' : 'Show inspector panel'}
+              aria-label={showInspectorPanel ? 'Hide inspector panel' : 'Show inspector panel'}
+              aria-pressed={showInspectorPanel}
+            >
+              <PanelRight className="w-4 h-4" />
+              Inspector
             </button>
 
             <div className="w-px h-6 bg-slate-200 mx-1" />
@@ -2280,7 +2318,7 @@ export function CanvasEditor({
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Sidebar - Component Library */}
-          {!isPreview && (
+          {!isPreview && showComponentPanel && (
             <ComponentLibrary
               onDragStart={handleDragStart}
               onAddItem={handleAddLibraryItem}
@@ -2464,7 +2502,7 @@ export function CanvasEditor({
           </div>
 
           {/* Right Sidebar - Inspector */}
-          {!isPreview && (
+          {!isPreview && showInspectorPanel && (
             <aside
               className="flex h-full min-h-0 w-[clamp(18rem,20vw,24rem)] min-w-[18rem] max-w-[24rem] shrink-0 flex-col border-l border-slate-200 bg-white"
               data-testid="editor-inspector"
