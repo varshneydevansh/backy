@@ -253,7 +253,7 @@ function UsersListView() {
   const publicFormsUrl = `${publicBaseUrl}/api/sites/${encodedMembershipSiteId}/forms`;
   const publicRegistrationDefinitionUrl = `${publicBaseUrl}/api/sites/${encodedMembershipSiteId}/forms/{registrationFormId}/definition`;
   const publicRegistrationSubmitUrl = `${publicBaseUrl}/api/sites/${encodedMembershipSiteId}/forms/{registrationFormId}/submissions`;
-  const publicContactsUrl = `${publicBaseUrl}/api/sites/${encodedMembershipSiteId}/forms/{registrationFormId}/contacts`;
+  const publicContactsUrl = `${adminBaseUrl}/sites/${encodedMembershipSiteId}/forms/{registrationFormId}/contacts`;
 
   const loadUsers = useCallback(async () => {
     setIsLoading(true);

@@ -37,31 +37,38 @@ import {
   getSiteReadiness,
   getSiteSeoSettings,
   getAdminApiBase,
+  getFormWithSubmissions,
   listPages,
+  listForms as listFormsFromApi,
+  listFormContacts,
   previewSiteRedirects,
   updateSiteRedirects,
   updateSiteNavigation,
   updateSiteSeoSettings,
+  updateContact,
+  updateFormSubmission,
   updateSite as updateSiteFromApi,
 } from '@/lib/adminContentApi';
 import type {
   AdminSiteRedirectConflict,
   AdminSiteSeoPreview,
   AdminSiteSeoSettings,
+  AdminContact,
+  FormDefinition,
+  FormSubmission,
   SiteReadiness,
 } from '@/lib/adminContentApi';
 import type { Page } from '@/stores/mockStore';
 import type {
   Comment,
-  Contact,
-  FormDefinition,
-  FormSubmission,
   CommentReportReason,
   SiteNavigationConfig,
   SiteNavigationConfigItem,
   SiteNavigationLayoutConfig,
   SiteRedirectRule,
 } from '@backy-cms/core';
+
+type Contact = AdminContact;
 
 interface SiteFormManagementState {
   forms: FormDefinition[];
@@ -893,13 +900,7 @@ function EditSitePage() {
     if (!site || !siteApiId) return;
     setState((prev) => ({ ...prev, workflowLoading: true, errorMessage: null }));
     try {
-      const response = await fetch(buildApiUrl(`/api/sites/${siteApiId}/forms`));
-      if (!response.ok) {
-        throw new Error('Unable to load form definitions.');
-      }
-
-      const payload = await response.json();
-      const forms = Array.isArray(payload.forms) ? (payload.forms as FormDefinition[]) : [];
+      const forms = await listFormsFromApi(siteApiId);
       const firstFormId = forms[0]?.id || '';
       setState((prev) => ({
         ...prev,
@@ -919,29 +920,14 @@ function EditSitePage() {
     if (!siteApiId || !formId) return;
     setState((prev) => ({ ...prev, submissionLoading: true, errorMessage: null }));
     try {
-      const searchParams = new URLSearchParams();
-      if (submissionStatus !== 'all') searchParams.set('status', submissionStatus);
       const requestId = normalizeRequestIdInput(commentRequestId);
-      if (requestId) {
-        searchParams.set('requestId', requestId);
-      }
-      const query = searchParams.toString();
-
-      const response = await fetch(
-        buildApiUrl(
-          `/api/sites/${siteApiId}/forms/${formId}/submissions${query ? `?${query}` : ''}`,
-        ),
-      );
-      if (!response.ok) {
-        throw new Error('Unable to load form submissions.');
-      }
-
-      const payload = await response.json();
-      const submissions = Array.isArray(payload?.submissions?.data)
-        ? (payload.submissions.data as FormSubmission[])
-        : [];
-      const submissionCount = typeof payload?.submissions?.pagination?.total === 'number'
-        ? payload.submissions.pagination.total
+      const detail = await getFormWithSubmissions(siteApiId, formId, {
+        ...(submissionStatus !== 'all' ? { status: submissionStatus } : {}),
+        ...(requestId ? { requestId } : {}),
+      });
+      const submissions = detail.submissions.data || [];
+      const submissionCount = typeof detail.submissions.pagination?.total === 'number'
+        ? detail.submissions.pagination.total
         : submissions.length;
 
       setState((prev) => ({
@@ -962,26 +948,13 @@ function EditSitePage() {
     if (!siteApiId || !formId) return;
     setState((prev) => ({ ...prev, contactLoading: true, errorMessage: null }));
     try {
-      const searchParams = new URLSearchParams();
-      if (contactStatus !== 'all') searchParams.set('status', contactStatus);
       const requestId = normalizeRequestIdInput(commentRequestId);
-      if (requestId) {
-        searchParams.set('requestId', requestId);
-      }
-      const query = searchParams.toString();
-
-      const response = await fetch(
-        buildApiUrl(
-          `/api/sites/${siteApiId}/forms/${formId}/contacts${query ? `?${query}` : ''}`,
-        ),
-      );
-      if (!response.ok) {
-        throw new Error('Unable to load contacts.');
-      }
-
-      const payload = await response.json();
-      const contacts = Array.isArray(payload?.contacts) ? (payload.contacts as Contact[]) : [];
-      const contactCount = typeof payload?.count === 'number' ? payload.count : contacts.length;
+      const result = await listFormContacts(siteApiId, formId, {
+        ...(contactStatus !== 'all' ? { status: contactStatus } : {}),
+        ...(requestId ? { requestId } : {}),
+      });
+      const contacts = result.contacts;
+      const contactCount = result.count;
 
       setState((prev) => ({
         ...prev,
@@ -1099,23 +1072,11 @@ function EditSitePage() {
     if (!siteApiId || !state.selectedFormId) return;
     setActionBusyId(submission.id);
     try {
-      const response = await fetch(
-        buildApiUrl(
-          `/api/sites/${siteApiId}/forms/${state.selectedFormId}/submissions/${submission.id}`,
-        ),
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            status,
-            reviewedBy: 'admin',
-            adminNotes: `Updated to ${status} from admin console`,
-          }),
-        },
-      );
-      if (!response.ok) {
-        throw new Error('Unable to update submission status.');
-      }
+      await updateFormSubmission(siteApiId, state.selectedFormId, submission.id, {
+        status,
+        reviewedBy: 'admin',
+        adminNotes: `Updated to ${status} from admin console`,
+      });
       await Promise.all([loadSubmissions(state.selectedFormId), loadContacts(state.selectedFormId)]);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to update submission status.';
@@ -1129,19 +1090,7 @@ function EditSitePage() {
     if (!siteApiId || !state.selectedFormId) return;
     setActionBusyId(contact.id);
     try {
-      const response = await fetch(
-        buildApiUrl(
-          `/api/sites/${siteApiId}/forms/${state.selectedFormId}/contacts/${contact.id}`,
-        ),
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status }),
-        },
-      );
-      if (!response.ok) {
-        throw new Error('Unable to update contact status.');
-      }
+      await updateContact(siteApiId, state.selectedFormId, contact.id, { status });
       await loadContacts(state.selectedFormId);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to update contact status.';
@@ -1156,19 +1105,7 @@ function EditSitePage() {
     const notes = contactNoteDrafts[contact.id] ?? '';
     setActionBusyId(`contact-notes:${contact.id}`);
     try {
-      const response = await fetch(
-        buildApiUrl(
-          `/api/sites/${siteApiId}/forms/${state.selectedFormId}/contacts/${contact.id}`,
-        ),
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ notes: notes.trim() || null }),
-        },
-      );
-      if (!response.ok) {
-        throw new Error('Unable to save contact notes.');
-      }
+      await updateContact(siteApiId, state.selectedFormId, contact.id, { notes: notes.trim() || null });
       await loadContacts(state.selectedFormId);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to save contact notes.';
@@ -1234,32 +1171,17 @@ function EditSitePage() {
     let offset = 0;
 
     try {
-      const baseQuery = new URLSearchParams({
-        limit: `${limit}`,
-      });
-      if (submissionStatus !== 'all') baseQuery.set('status', submissionStatus);
-      if (requestId) baseQuery.set('requestId', requestId);
-
       let hasMore = true;
       while (hasMore) {
-        const query = new URLSearchParams(baseQuery);
-        query.set('offset', `${offset}`);
-
-        const response = await fetch(
-          buildApiUrl(
-            `/api/sites/${siteApiId}/forms/${state.selectedFormId}/submissions?${query.toString()}`,
-          ),
-        );
-        if (!response.ok) {
-          throw new Error('Unable to load submissions for export.');
-        }
-
-        const payload = await response.json();
-        const submissions = Array.isArray(payload?.submissions?.data)
-          ? (payload.submissions.data as FormSubmission[])
-          : [];
-        const count = typeof payload?.submissions?.pagination?.total === 'number'
-          ? payload.submissions.pagination.total
+        const detail = await getFormWithSubmissions(siteApiId, state.selectedFormId, {
+          limit,
+          offset,
+          ...(submissionStatus !== 'all' ? { status: submissionStatus } : {}),
+          ...(requestId ? { requestId } : {}),
+        });
+        const submissions = detail.submissions.data || [];
+        const count = typeof detail.submissions.pagination?.total === 'number'
+          ? detail.submissions.pagination.total
           : submissions.length;
 
         allSubmissions.push(...submissions);
@@ -1307,29 +1229,16 @@ function EditSitePage() {
     let offset = 0;
 
     try {
-      const baseQuery = new URLSearchParams({
-        limit: `${limit}`,
-      });
-      if (contactStatus !== 'all') baseQuery.set('status', contactStatus);
-      if (requestId) baseQuery.set('requestId', requestId);
-
       let hasMore = true;
       while (hasMore) {
-        const query = new URLSearchParams(baseQuery);
-        query.set('offset', `${offset}`);
-
-        const response = await fetch(
-          buildApiUrl(
-            `/api/sites/${siteApiId}/forms/${state.selectedFormId}/contacts?${query.toString()}`,
-          ),
-        );
-        if (!response.ok) {
-          throw new Error('Unable to load contacts for export.');
-        }
-
-        const payload = await response.json();
-        const contacts = Array.isArray(payload?.contacts) ? (payload.contacts as Contact[]) : [];
-        const count = typeof payload?.count === 'number' ? payload.count : contacts.length;
+        const result = await listFormContacts(siteApiId, state.selectedFormId, {
+          limit,
+          offset,
+          ...(contactStatus !== 'all' ? { status: contactStatus } : {}),
+          ...(requestId ? { requestId } : {}),
+        });
+        const contacts = result.contacts;
+        const count = result.count;
 
         allContacts.push(...contacts);
         hasMore = offset + contacts.length < count;

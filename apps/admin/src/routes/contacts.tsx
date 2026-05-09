@@ -20,6 +20,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 import {
+  getAdminApiBase,
   listFormContacts,
   listForms,
   updateContact,
@@ -166,17 +167,17 @@ function ContactsRoute() {
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
   const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
-  const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
+  const adminBaseUrl = useMemo(() => getAdminApiBase(), []);
   const formById = useMemo(() => new Map(forms.map((form) => [form.id, form])), [forms]);
   const apiForm = useMemo(
     () => selectedFormId === 'all' ? null : forms.find((form) => form.id === selectedFormId) || null,
     [forms, selectedFormId],
   );
   const contactsUrl = apiForm
-    ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts?limit=100`
+    ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts?limit=100`
     : '';
   const contactUpdateUrl = apiForm
-    ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts/{contactId}`
+    ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts/{contactId}`
     : '';
   const allContacts = useMemo(
     () => Object.values(contactsByForm).flatMap((inbox) => inbox.contacts),
@@ -375,8 +376,8 @@ function ContactsRoute() {
       formContacts: forms.map((form) => ({
         formId: form.id,
         label: form.title || form.name || form.id,
-        list: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts?limit=100`,
-        update: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/{contactId}`,
+        list: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts?limit=100`,
+        update: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/{contactId}`,
       })),
     },
     controlRoutes: {
@@ -470,7 +471,7 @@ function ContactsRoute() {
     filteredContacts.length,
     forms,
     metrics,
-    publicBaseUrl,
+    adminBaseUrl,
     qualityFilter,
     searchQuery,
     selectedFormId,
@@ -1396,35 +1397,6 @@ const formatContactSourceValue = (value: unknown): string => {
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (Array.isArray(value)) return value.map(formatContactSourceValue).filter(Boolean).join(', ');
   return JSON.stringify(value);
-};
-
-const getEnvValue = (key: string): string => {
-  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
-  return env[key]?.trim() ?? '';
-};
-
-const isLocalAdminHost = () => {
-  if (typeof window === 'undefined') return false;
-
-  return ['localhost', '127.0.0.1'].includes(window.location.hostname) && window.location.port !== '3001';
-};
-
-const getPublicBaseUrl = (): string => {
-  const envBase = (
-    getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
-    getEnvValue('VITE_PUBLIC_API_URL') ||
-    getEnvValue('VITE_API_BASE_URL') ||
-    ''
-  ).trim();
-
-  if (!envBase && isLocalAdminHost()) {
-    return 'http://localhost:3001';
-  }
-
-  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
-    .replace(/\/api\/admin$/, '')
-    .replace(/\/api$/, '')
-    .replace(/\/$/, '');
 };
 
 const csvEscape = (value: unknown): string => {

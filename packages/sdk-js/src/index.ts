@@ -847,7 +847,7 @@ export class BackyClient {
 
   formSubmissions(formId: string, options: BackyListOptions & { status?: string } = {}): Promise<BackyEnvelope<{ form: BackyFormDefinition; submissions: { data?: BackyFormSubmission[]; [key: string]: unknown }; pagination?: BackyPagination }>> {
     const { requestId, ...query } = options;
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions`, {
+    return this.request(`/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions`, {
       query,
       requestId,
     });
@@ -862,11 +862,11 @@ export class BackyClient {
   }
 
   formSubmission(formId: string, submissionId: string): Promise<BackyEnvelope<{ submission: BackyFormSubmission }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}`);
+    return this.request(`/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}`);
   }
 
   updateFormSubmission(formId: string, submissionId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<{ submission: BackyFormSubmission }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}`, {
+    return this.request(`/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}`, {
       method: 'PATCH',
       body: updates,
     });
@@ -874,14 +874,14 @@ export class BackyClient {
 
   formContacts(formId: string, options: BackyListOptions & { status?: string } = {}): Promise<BackyEnvelope<{ form: BackyFormDefinition; contacts: BackyContact[]; pagination?: BackyPagination }>> {
     const { requestId, ...query } = options;
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts`, {
+    return this.request(`/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts`, {
       query,
       requestId,
     });
   }
 
   updateFormContact(formId: string, contactId: string, updates: Record<string, unknown>): Promise<BackyEnvelope<{ contact: BackyContact }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/${encodeURIComponent(contactId)}`, {
+    return this.request(`/api/admin/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/${encodeURIComponent(contactId)}`, {
       method: 'PATCH',
       body: updates,
     });

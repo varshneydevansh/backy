@@ -438,88 +438,13 @@ async function notifyContactWebhook(params: {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const responseRequestId = request.headers.get('x-request-id') || makeRequestId();
-
-  try {
-    const { siteId, formId } = await params;
-    if (!shouldUseDemoStoreFallback()) {
-      const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
-      if (!site || !site.isPublished) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
-      }
-
-      const form = await repositories.forms.getById(site.id, formId);
-      if (!form || !form.isActive) {
-        return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', responseRequestId);
-      }
-
-      const { searchParams } = new URL(request.url);
-      const status = parseStatus(searchParams.get('status'));
-      const requestId = parseRequestId(searchParams.get('requestId'));
-      const limit = parseLimit(searchParams.get('limit'));
-      const offset = parseOffset(searchParams.get('offset'));
-      const result = await repositories.forms.listSubmissions({
-        siteId: site.id,
-        formId: form.id,
-        status: status === 'all' ? undefined : status,
-        requestId,
-        limit,
-        offset,
-      });
-      const submissions = {
-        data: result.items,
-        pagination: result.pagination,
-      };
-
-      return privateResponse({
-        success: true,
-        requestId: responseRequestId,
-        data: {
-          form,
-          submissions,
-        },
-        form,
-        submissions,
-      }, responseRequestId);
-    }
-
-    const site = getSiteByIdOrSlug(siteId);
-    if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
-    }
-
-    const form = getFormById(site.id, formId);
-    if (!form) {
-      return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', responseRequestId);
-    }
-
-    const { searchParams } = new URL(request.url);
-    const status = parseStatus(searchParams.get('status'));
-    const requestId = parseRequestId(searchParams.get('requestId'));
-    const limit = parseLimit(searchParams.get('limit'));
-    const offset = parseOffset(searchParams.get('offset'));
-
-    const result = listFormSubmissions(form.id, {
-      status: status === 'all' ? undefined : status,
-      requestId,
-      limit,
-      offset,
-    });
-
-    return privateResponse({
-      success: true,
-      requestId: responseRequestId,
-      data: {
-        form,
-        submissions: result,
-      },
-      form: form,
-      submissions: result,
-    }, responseRequestId);
-  } catch (error) {
-    console.error('API Error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', responseRequestId);
-  }
+  await params;
+  return errorResponse(
+    405,
+    'ADMIN_ENDPOINT_REQUIRED',
+    'Submission inbox reads are private. Use /api/admin/sites/:siteId/forms/:formId/submissions.',
+    responseRequestId,
+  );
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {

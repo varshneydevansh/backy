@@ -18,6 +18,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import {
+  getAdminApiBase,
   getFormWithSubmissions,
   listForms,
   updateFormSubmission,
@@ -372,6 +373,7 @@ function FormsRoute() {
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
   const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
+  const adminBaseUrl = useMemo(() => getAdminApiBase(), []);
   const selectedForm = useMemo(
     () => forms.find((form) => form.id === selectedFormId) || forms[0] || null,
     [forms, selectedFormId],
@@ -596,7 +598,7 @@ function FormsRoute() {
   }, [forms.length, metrics.active, metrics.pending, metrics.spam, selectedForm, selectedFormReadiness]);
   const formsListUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms`;
   const selectedFormContactsUrl = selectedForm
-    ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/contacts?limit=100`
+    ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/contacts?limit=100`
     : '';
   const formsHandoff = useMemo(() => ({
     site: {
@@ -611,7 +613,7 @@ function FormsRoute() {
       selectedDefinition: selectedFormDefinitionUrl,
       selectedSubmit: selectedFormSubmitUrl,
       selectedAdminInbox: selectedForm
-        ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/submissions?limit=100`
+        ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/submissions?limit=100`
         : '',
       selectedContacts: selectedFormContactsUrl,
     },
@@ -709,6 +711,7 @@ function FormsRoute() {
     activeSite?.slug,
     activeSite?.status,
     activeSiteId,
+    adminBaseUrl,
     filteredForms,
     formDestinationFilter,
     formCommandReadiness.checks,
@@ -923,7 +926,7 @@ function FormsRoute() {
       const source = getFormSource(form);
       const definitionUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/definition`;
       const submitUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/submissions`;
-      const contactsUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts?limit=100`;
+      const contactsUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts?limit=100`;
 
       return [
         form.id,

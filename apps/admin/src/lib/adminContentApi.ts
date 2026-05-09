@@ -1,4 +1,4 @@
-import type { BlogPost, Page, Site, User } from '@/stores/mockStore';
+import { useStore, type BlogPost, type Page, type Site, type User } from '@/stores/mockStore';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
 import type {
   Comment,
@@ -1465,7 +1465,9 @@ const getPublicApiBase = (): string => (
 
 const getAdminApiKey = (): string => (
   getEnvValue('VITE_BACKY_ADMIN_API_KEY') ||
-  getEnvValue('VITE_ADMIN_API_KEY')
+  getEnvValue('VITE_ADMIN_API_KEY') ||
+  useStore.getState().settings.apiKeys.adminApiKey ||
+  ''
 );
 
 const adminFetch: typeof globalThis.fetch = (input, init = {}) => {
@@ -2517,7 +2519,7 @@ export async function listForms(
   if (filters.pageId) query.set('pageId', filters.pageId);
   if (filters.postId) query.set('postId', filters.postId);
 
-  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/forms${query.toString() ? `?${query}` : ''}`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms${query.toString() ? `?${query}` : ''}`);
   const payload = await readJson<ApiListFormsResponse>(response);
   const forms = payload.data?.forms || payload.forms;
 
@@ -2539,7 +2541,7 @@ export async function getFormWithSubmissions(
   if (filters.limit) query.set('limit', String(filters.limit));
   if (filters.offset) query.set('offset', String(filters.offset));
 
-  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/forms/${formId}/submissions${query.toString() ? `?${query}` : ''}`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/submissions${query.toString() ? `?${query}` : ''}`);
   const payload = await readJson<ApiFormDetailResponse>(response);
   const form = payload.data?.form || payload.form;
   const submissions = payload.data?.submissions || payload.submissions;
@@ -2560,7 +2562,7 @@ export async function updateFormSubmission(
   submissionId: string,
   input: { status: FormSubmissionStatus; reviewedBy?: string | null; adminNotes?: string | null },
 ): Promise<FormSubmission> {
-  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/forms/${formId}/submissions/${submissionId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/submissions/${submissionId}`, {
     method: 'PATCH',
     headers: {
       'content-type': 'application/json',
@@ -2588,7 +2590,7 @@ export async function listFormContacts(
   if (filters.status && filters.status !== 'all') query.set('status', filters.status);
   if (filters.requestId) query.set('requestId', filters.requestId);
 
-  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/forms/${formId}/contacts?${query.toString()}`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/contacts?${query.toString()}`);
   const payload = await readJson<ApiListContactsResponse>(response);
   const contacts = payload.data?.contacts || payload.contacts;
   const count = payload.data?.count ?? payload.count ?? contacts?.length ?? 0;
@@ -2616,7 +2618,7 @@ export async function updateContact(
   contactId: string,
   input: { status?: ContactStatus; notes?: string | null },
 ): Promise<AdminContact> {
-  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/forms/${formId}/contacts/${contactId}`, {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/contacts/${contactId}`, {
     method: 'PATCH',
     headers: {
       'content-type': 'application/json',
