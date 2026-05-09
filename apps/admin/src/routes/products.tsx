@@ -82,11 +82,17 @@ interface ProductFormState {
   compareAtPrice: string;
   currency: string;
   inventory: string;
+  lowStockThreshold: string;
+  inventoryPolicy: 'deny' | 'continue' | 'preorder';
   productType: 'physical' | 'digital' | 'service';
   downloadUrl: string;
+  checkoutUrl: string;
   shippingRequired: boolean;
   weight: string;
   imageUrl: string;
+  category: string;
+  tags: string;
+  vendor: string;
   description: string;
   seoTitle: string;
   status: ContentStatus;
@@ -103,15 +109,21 @@ const PRODUCT_FIELDS: CollectionField[] = [
   { key: 'compareAtPrice', label: 'Compare at price', type: 'number', required: false, unique: false, sortOrder: 40 },
   { key: 'currency', label: 'Currency', type: 'text', required: true, unique: false, sortOrder: 50, defaultValue: 'USD' },
   { key: 'inventory', label: 'Inventory', type: 'number', required: false, unique: false, sortOrder: 60, defaultValue: 0 },
-  { key: 'productType', label: 'Product Type', type: 'select', required: true, unique: false, sortOrder: 70, options: ['physical', 'digital', 'service'], defaultValue: 'physical' },
-  { key: 'downloadUrl', label: 'Digital Delivery URL', type: 'url', required: false, unique: false, sortOrder: 80 },
-  { key: 'shippingRequired', label: 'Requires Shipping', type: 'boolean', required: false, unique: false, sortOrder: 90, defaultValue: true },
-  { key: 'weight', label: 'Weight', type: 'number', required: false, unique: false, sortOrder: 100 },
-  { key: 'imageUrl', label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 110 },
-  { key: 'description', label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 120 },
-  { key: 'seoTitle', label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 130 },
-  { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 140, defaultValue: false },
-  { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 150, defaultValue: true },
+  { key: 'lowStockThreshold', label: 'Low Stock Threshold', type: 'number', required: false, unique: false, sortOrder: 70, defaultValue: 5 },
+  { key: 'inventoryPolicy', label: 'Inventory Policy', type: 'select', required: false, unique: false, sortOrder: 80, options: ['deny', 'continue', 'preorder'], defaultValue: 'deny' },
+  { key: 'productType', label: 'Product Type', type: 'select', required: true, unique: false, sortOrder: 90, options: ['physical', 'digital', 'service'], defaultValue: 'physical' },
+  { key: 'downloadUrl', label: 'Digital Delivery URL', type: 'url', required: false, unique: false, sortOrder: 100 },
+  { key: 'checkoutUrl', label: 'Checkout URL', type: 'url', required: false, unique: false, sortOrder: 110 },
+  { key: 'shippingRequired', label: 'Requires Shipping', type: 'boolean', required: false, unique: false, sortOrder: 120, defaultValue: true },
+  { key: 'weight', label: 'Weight', type: 'number', required: false, unique: false, sortOrder: 130 },
+  { key: 'imageUrl', label: 'Image URL', type: 'url', required: false, unique: false, sortOrder: 140 },
+  { key: 'category', label: 'Category', type: 'text', required: false, unique: false, sortOrder: 150 },
+  { key: 'tags', label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 160 },
+  { key: 'vendor', label: 'Vendor', type: 'text', required: false, unique: false, sortOrder: 170 },
+  { key: 'description', label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 180 },
+  { key: 'seoTitle', label: 'SEO Title', type: 'text', required: false, unique: false, sortOrder: 190 },
+  { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 200, defaultValue: false },
+  { key: 'taxable', label: 'Taxable', type: 'boolean', required: false, unique: false, sortOrder: 210, defaultValue: true },
 ];
 
 const EMPTY_PRODUCT_FORM: ProductFormState = {
@@ -122,11 +134,17 @@ const EMPTY_PRODUCT_FORM: ProductFormState = {
   compareAtPrice: '',
   currency: 'USD',
   inventory: '0',
+  lowStockThreshold: '5',
+  inventoryPolicy: 'deny',
   productType: 'physical',
   downloadUrl: '',
+  checkoutUrl: '',
   shippingRequired: true,
   weight: '',
   imageUrl: '',
+  category: '',
+  tags: '',
+  vendor: '',
   description: '',
   seoTitle: '',
   status: 'draft',
@@ -179,6 +197,9 @@ function ProductsRoute() {
         product.slug,
         values.title,
         values.sku,
+        values.category,
+        values.vendor,
+        formatTags(values.tags).join(' '),
         values.description,
       ].some((value) => String(value || '').toLowerCase().includes(normalizedSearch));
 
@@ -192,9 +213,11 @@ function ProductsRoute() {
     inventory: products.reduce((sum, product) => sum + toNumber(product.values.inventory), 0),
     lowStock: products.filter((product) => {
       const inventory = toNumber(product.values.inventory);
-      return inventory > 0 && inventory <= 5;
+      const threshold = Math.max(0, toNumber(product.values.lowStockThreshold || 5));
+      return inventory > 0 && inventory <= threshold;
     }).length,
     digital: products.filter((product) => product.values.productType === 'digital').length,
+    categories: new Set(products.map((product) => String(product.values.category || '').trim()).filter(Boolean)).size,
   }), [products]);
   const catalogReadiness = useMemo(() => {
     const hasSchema = Boolean(productCollection);
@@ -203,6 +226,7 @@ function ProductsRoute() {
     const hasInventory = metrics.inventory > 0 || metrics.digital > 0;
     const hasImages = products.some((product) => Boolean(product.values.imageUrl));
     const hasPricing = products.some((product) => toNumber(product.values.price) > 0);
+    const hasMerchandising = products.some((product) => Boolean(product.values.category) || formatTags(product.values.tags).length > 0 || Boolean(product.values.vendor));
     const checks = [
       {
         label: 'Catalog schema',
@@ -245,6 +269,11 @@ function ProductsRoute() {
         label: 'Product media',
         detail: hasImages ? 'Product imagery is attached.' : 'Attach media so storefront cards are not text-only.',
         ready: hasImages || products.length === 0,
+      },
+      {
+        label: 'Merchandising',
+        detail: hasMerchandising ? 'Category, tags, or vendor metadata is available.' : 'Add category, tags, or vendor data for storefront filtering.',
+        ready: hasMerchandising || products.length === 0,
       },
     ];
     const readyCount = checks.filter((check) => check.ready).length;
@@ -322,13 +351,19 @@ function ProductsRoute() {
       inventory: toNumber(product.values.inventory),
       productType: asProductType(product.values.productType),
       imageUrl: String(product.values.imageUrl || ''),
+      category: String(product.values.category || ''),
+      tags: formatTags(product.values.tags),
+      vendor: String(product.values.vendor || ''),
       description: String(product.values.description || ''),
       seoTitle: String(product.values.seoTitle || ''),
       featured: Boolean(product.values.featured),
       taxable: product.values.taxable !== false,
       shippingRequired: product.values.shippingRequired !== false,
+      lowStockThreshold: toNumber(product.values.lowStockThreshold || 5),
+      inventoryPolicy: asInventoryPolicy(product.values.inventoryPolicy),
       weight: product.values.weight === null || product.values.weight === undefined ? null : toNumber(product.values.weight),
       downloadUrl: String(product.values.downloadUrl || ''),
+      checkoutUrl: String(product.values.checkoutUrl || ''),
       storefrontPath: `/products/${product.slug}`,
     })),
   }), [
@@ -479,11 +514,17 @@ function ProductsRoute() {
         compareAtPrice: formState.compareAtPrice ? Number(formState.compareAtPrice) : null,
         currency: normalizeCurrency(formState.currency),
         inventory: Number(formState.inventory || 0),
+        lowStockThreshold: Number(formState.lowStockThreshold || 5),
+        inventoryPolicy: formState.inventoryPolicy,
         productType: formState.productType,
         downloadUrl: formState.downloadUrl.trim(),
+        checkoutUrl: formState.checkoutUrl.trim(),
         shippingRequired: formState.shippingRequired,
         weight: formState.weight ? Number(formState.weight) : null,
         imageUrl: formState.imageUrl.trim(),
+        category: formState.category.trim(),
+        tags: parseTags(formState.tags),
+        vendor: formState.vendor.trim(),
         description: formState.description.trim(),
         seoTitle: formState.seoTitle.trim(),
         featured: formState.featured,
@@ -791,12 +832,13 @@ function ProductsRoute() {
         </span>
       </div>
 
-      <div id="products-metrics" className="mb-6 grid gap-3 scroll-mt-24 md:grid-cols-3 xl:grid-cols-6">
+      <div id="products-metrics" className="mb-6 grid gap-3 scroll-mt-24 md:grid-cols-3 xl:grid-cols-7">
         <Metric label="Products" value={metrics.total} icon={<Package className="size-4" />} />
         <Metric label="Published" value={metrics.published} icon={<CheckCircle2 className="size-4" />} />
         <Metric label="Draft" value={metrics.draft} icon={<Edit3 className="size-4" />} />
         <Metric label="Inventory" value={metrics.inventory} icon={<Boxes className="size-4" />} />
         <Metric label="Low stock" value={metrics.lowStock} icon={<Archive className="size-4" />} />
+        <Metric label="Categories" value={metrics.categories} icon={<ShoppingBag className="size-4" />} />
         <Metric label="Digital" value={metrics.digital} icon={<Sparkles className="size-4" />} />
       </div>
 
@@ -955,6 +997,28 @@ function ProductsRoute() {
                       className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                     />
                   </Field>
+                  <Field label="Low stock at">
+                    <input
+                      type="number"
+                      min="0"
+                      value={formState.lowStockThreshold}
+                      onChange={(event) => setFormState((current) => ({ ...current, lowStockThreshold: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                    />
+                  </Field>
+                  <Field label="Inventory policy">
+                    <select
+                      value={formState.inventoryPolicy}
+                      onChange={(event) => setFormState((current) => ({ ...current, inventoryPolicy: asInventoryPolicy(event.target.value) }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                    >
+                      <option value="deny">Stop at zero</option>
+                      <option value="continue">Continue selling</option>
+                      <option value="preorder">Preorder</option>
+                    </select>
+                  </Field>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
                   <Field label="Type">
                     <select
                       value={formState.productType}
@@ -986,14 +1050,24 @@ function ProductsRoute() {
                     />
                   </Field>
                 </div>
-                <Field label="Digital delivery URL">
-                  <input
-                    value={formState.downloadUrl}
-                    onChange={(event) => setFormState((current) => ({ ...current, downloadUrl: event.target.value }))}
-                    className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
-                    placeholder="https://downloads.example.com/product.zip"
-                  />
-                </Field>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Field label="Digital delivery URL">
+                    <input
+                      value={formState.downloadUrl}
+                      onChange={(event) => setFormState((current) => ({ ...current, downloadUrl: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="https://downloads.example.com/product.zip"
+                    />
+                  </Field>
+                  <Field label="Checkout URL">
+                    <input
+                      value={formState.checkoutUrl}
+                      onChange={(event) => setFormState((current) => ({ ...current, checkoutUrl: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="Stripe, Lemon Squeezy, or custom checkout"
+                    />
+                  </Field>
+                </div>
                 <Field label="Image URL">
                   <div className="space-y-3">
                     {formState.imageUrl ? (
@@ -1015,6 +1089,32 @@ function ProductsRoute() {
                     </div>
                   </div>
                 </Field>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <Field label="Category">
+                    <input
+                      value={formState.category}
+                      onChange={(event) => setFormState((current) => ({ ...current, category: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="Templates"
+                    />
+                  </Field>
+                  <Field label="Tags">
+                    <input
+                      value={formState.tags}
+                      onChange={(event) => setFormState((current) => ({ ...current, tags: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="premium, landing-page"
+                    />
+                  </Field>
+                  <Field label="Vendor">
+                    <input
+                      value={formState.vendor}
+                      onChange={(event) => setFormState((current) => ({ ...current, vendor: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="Backy"
+                    />
+                  </Field>
+                </div>
                 <Field label="Description">
                   <textarea
                     value={formState.description}
@@ -1232,10 +1332,15 @@ function ProductCard({
   const compareAtPrice = toNumber(product.values.compareAtPrice);
   const currency = normalizeCurrency(String(product.values.currency || 'USD'));
   const inventory = toNumber(product.values.inventory);
+  const lowStockThreshold = Math.max(0, toNumber(product.values.lowStockThreshold || 5));
   const imageUrl = String(product.values.imageUrl || '');
   const productType = String(product.values.productType || 'physical');
+  const inventoryPolicy = asInventoryPolicy(product.values.inventoryPolicy);
+  const category = String(product.values.category || '');
+  const vendor = String(product.values.vendor || '');
+  const tags = formatTags(product.values.tags).slice(0, 3);
   const shippingRequired = product.values.shippingRequired !== false;
-  const isLowStock = inventory > 0 && inventory <= 5;
+  const isLowStock = inventory > 0 && inventory <= lowStockThreshold;
 
   return (
     <article className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')}>
@@ -1274,7 +1379,31 @@ function ProductCard({
                 Featured
               </span>
             ) : null}
+            {category ? (
+              <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                {category}
+              </span>
+            ) : null}
+            {inventoryPolicy !== 'deny' ? (
+              <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-800">
+                {inventoryPolicy === 'preorder' ? 'Preorder' : 'Continue selling'}
+              </span>
+            ) : null}
           </div>
+          {(vendor || tags.length > 0) ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {vendor ? (
+                <span className="rounded bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+                  Vendor: {vendor}
+                </span>
+              ) : null}
+              {tags.map((tag) => (
+                <span key={tag} className="rounded bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : null}
           {product.values.description ? (
             <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
               {String(product.values.description)}
@@ -1381,11 +1510,17 @@ const productToForm = (product: CollectionRecord): ProductFormState => ({
   compareAtPrice: product.values.compareAtPrice === null || product.values.compareAtPrice === undefined ? '' : String(product.values.compareAtPrice),
   currency: String(product.values.currency || 'USD'),
   inventory: String(product.values.inventory ?? '0'),
+  lowStockThreshold: String(product.values.lowStockThreshold ?? '5'),
+  inventoryPolicy: asInventoryPolicy(product.values.inventoryPolicy),
   productType: asProductType(product.values.productType),
   downloadUrl: String(product.values.downloadUrl || ''),
+  checkoutUrl: String(product.values.checkoutUrl || ''),
   shippingRequired: product.values.shippingRequired !== false,
   weight: product.values.weight === null || product.values.weight === undefined ? '' : String(product.values.weight),
   imageUrl: String(product.values.imageUrl || ''),
+  category: String(product.values.category || ''),
+  tags: formatTags(product.values.tags).join(', '),
+  vendor: String(product.values.vendor || ''),
   description: String(product.values.description || ''),
   seoTitle: String(product.values.seoTitle || ''),
   status: product.status,
@@ -1396,6 +1531,28 @@ const productToForm = (product: CollectionRecord): ProductFormState => ({
 const asProductType = (value: unknown): ProductFormState['productType'] => (
   value === 'digital' || value === 'service' || value === 'physical' ? value : 'physical'
 );
+
+const asInventoryPolicy = (value: unknown): ProductFormState['inventoryPolicy'] => (
+  value === 'continue' || value === 'preorder' || value === 'deny' ? value : 'deny'
+);
+
+const parseTags = (value: string): string[] => (
+  value
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .slice(0, 20)
+);
+
+const formatTags = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.map((tag) => String(tag).trim()).filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return parseTags(value);
+  }
+  return [];
+};
 
 const getMissingProductFieldKeys = (collection: Collection): string[] => {
   const existingKeys = new Set(collection.fields.map((field) => field.key));
