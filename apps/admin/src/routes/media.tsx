@@ -3,7 +3,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
-import { createFileRoute, Link, useNavigate, useRouterState } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, CheckCircle2, CheckSquare, Code2, Copy, Download, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Music, Save, Trash2, Type, Upload, Video, X } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -39,11 +39,66 @@ import {
   type MediaFolder,
   type SignedMediaUrl,
 } from '@/lib/mediaApi';
-import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatBytes } from '@/lib/utils';
 import { useStore, type MediaAsset } from '@/stores/mockStore';
 
+type MediaTypeFilter = 'all' | MediaAsset['type'];
+type MediaVisibilityFilter = 'all' | 'public' | 'private';
+type MediaUsageFilter = 'all' | 'unused' | 'referenced' | 'replaced';
+
+interface MediaSearch {
+  siteId?: string;
+  assetId?: string;
+  folderId?: string;
+  q?: string;
+  type?: MediaTypeFilter;
+  visibility?: MediaVisibilityFilter;
+  usage?: MediaUsageFilter;
+}
+
+const MEDIA_TYPE_FILTERS: MediaTypeFilter[] = ['all', 'image', 'video', 'audio', 'file', 'font', 'other'];
+const MEDIA_VISIBILITY_FILTERS: MediaVisibilityFilter[] = ['all', 'public', 'private'];
+const MEDIA_USAGE_FILTERS: MediaUsageFilter[] = ['all', 'unused', 'referenced', 'replaced'];
+
+const isMediaTypeFilter = (value: unknown): value is MediaTypeFilter => (
+  typeof value === 'string' && MEDIA_TYPE_FILTERS.includes(value as MediaTypeFilter)
+);
+
+const isMediaVisibilityFilter = (value: unknown): value is MediaVisibilityFilter => (
+  typeof value === 'string' && MEDIA_VISIBILITY_FILTERS.includes(value as MediaVisibilityFilter)
+);
+
+const isMediaUsageFilter = (value: unknown): value is MediaUsageFilter => (
+  typeof value === 'string' && MEDIA_USAGE_FILTERS.includes(value as MediaUsageFilter)
+);
+
+const normalizedSearchString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const folderSelectionFromRoute = (folderId?: string): string | null | undefined => {
+  if (!folderId) return undefined;
+  return folderId === 'root' ? null : folderId;
+};
+
+const folderSelectionToRoute = (folderId: string | null | undefined): string | undefined => {
+  if (folderId === null) return 'root';
+  return typeof folderId === 'string' ? folderId : undefined;
+};
+
 export const Route = createFileRoute('/media')({
+  validateSearch: (search: Record<string, unknown>): MediaSearch => ({
+    siteId: normalizedSearchString(search.siteId),
+    assetId: normalizedSearchString(search.assetId),
+    folderId: normalizedSearchString(search.folderId),
+    q: normalizedSearchString(search.q),
+    type: isMediaTypeFilter(search.type) ? search.type : undefined,
+    visibility: isMediaVisibilityFilter(search.visibility) ? search.visibility : undefined,
+    usage: isMediaUsageFilter(search.usage) ? search.usage : undefined,
+  }),
   component: MediaPage,
 });
 
@@ -141,7 +196,7 @@ interface MediaUploadSummary {
 
 function MediaPage() {
   const navigate = useNavigate();
-  const routerState = useRouterState();
+  const routeSearch = Route.useSearch();
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -177,15 +232,15 @@ function MediaPage() {
   const [pendingDeleteAsset, setPendingDeleteAsset] = useState<MediaAsset | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [pendingDeleteFolder, setPendingDeleteFolder] = useState<MediaFolder | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'all' | MediaAsset['type']>('all');
-  const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'public' | 'private'>('all');
-  const [usageFilter, setUsageFilter] = useState<'all' | 'unused' | 'referenced' | 'replaced'>('all');
+  const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
+  const [typeFilter, setTypeFilter] = useState<MediaTypeFilter>(routeSearch.type || 'all');
+  const [visibilityFilter, setVisibilityFilter] = useState<MediaVisibilityFilter>(routeSearch.visibility || 'all');
+  const [usageFilter, setUsageFilter] = useState<MediaUsageFilter>(routeSearch.usage || 'all');
   const [folders, setFolders] = useState<MediaFolder[]>([]);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState('');
   const [isUpdatingFolder, setIsUpdatingFolder] = useState(false);
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null | undefined>(undefined);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null | undefined>(() => folderSelectionFromRoute(routeSearch.folderId));
   const [uploadVisibility, setUploadVisibility] = useState<'public' | 'private'>('public');
   const [uploadFolderId, setUploadFolderId] = useState<'current' | 'root' | string>('current');
   const [uploadTags, setUploadTags] = useState('');
@@ -214,7 +269,7 @@ function MediaPage() {
   const setPages = useStore((state) => state.setPages);
   const setPosts = useStore((state) => state.setPosts);
   const deleteMedia = useStore((state) => state.deleteMedia);
-  const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites, getDefaultMediaSiteId()));
+  const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites, getDefaultMediaSiteId()));
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
@@ -230,6 +285,33 @@ function MediaPage() {
   const adminMediaUploadUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media`;
   const adminMediaFoldersUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media/folders`;
   const adminMediaFolderUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media/folders/{folderId}`;
+  const mediaRouteSearch = useMemo<MediaSearch>(() => ({
+    siteId,
+    ...(selectedAsset ? { assetId: selectedAsset.id } : {}),
+    ...(folderSelectionToRoute(selectedFolderId) ? { folderId: folderSelectionToRoute(selectedFolderId) } : {}),
+    ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
+    ...(typeFilter !== 'all' ? { type: typeFilter } : {}),
+    ...(visibilityFilter !== 'all' ? { visibility: visibilityFilter } : {}),
+    ...(usageFilter !== 'all' ? { usage: usageFilter } : {}),
+  }), [searchQuery, selectedAsset, selectedFolderId, siteId, typeFilter, usageFilter, visibilityFilter]);
+
+  const updateMediaRouteSearch = (next: MediaSearch) => {
+    const merged: MediaSearch = {
+      ...mediaRouteSearch,
+      ...next,
+    };
+    const normalized: MediaSearch = {
+      siteId: merged.siteId || siteId,
+      ...(merged.assetId ? { assetId: merged.assetId } : {}),
+      ...(merged.folderId ? { folderId: merged.folderId } : {}),
+      ...(merged.q?.trim() ? { q: merged.q.trim() } : {}),
+      ...(merged.type && merged.type !== 'all' ? { type: merged.type } : {}),
+      ...(merged.visibility && merged.visibility !== 'all' ? { visibility: merged.visibility } : {}),
+      ...(merged.usage && merged.usage !== 'all' ? { usage: merged.usage } : {}),
+    };
+
+    navigate({ to: '/media', search: normalized, replace: true });
+  };
 
   useEffect(() => {
     if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
@@ -249,15 +331,36 @@ function MediaPage() {
   }, []);
 
   useEffect(() => {
-    const requestedSiteId = getSiteSearchParam();
-    if (!requestedSiteId) return;
+    const nextSiteId = routeSearch.siteId
+      ? getSiteSelectionFromSearch(sites, getDefaultMediaSiteId())
+      : selectedSiteId;
+    const siteChanged = nextSiteId !== selectedSiteId;
 
-    const nextSiteId = getSiteSelectionFromSearch(sites, getDefaultMediaSiteId());
-    if (nextSiteId === selectedSiteId) return;
+    if (siteChanged) {
+      setSelectedSiteId(nextSiteId);
+      resetMediaWorkspaceState();
+    }
 
-    setSelectedSiteId(nextSiteId);
-    resetMediaWorkspaceState();
-  }, [resetMediaWorkspaceState, routerState.location.search, selectedSiteId, sites]);
+    setSearchQuery(routeSearch.q || '');
+    setTypeFilter(routeSearch.type || 'all');
+    setVisibilityFilter(routeSearch.visibility || 'all');
+    setUsageFilter(routeSearch.usage || 'all');
+    setSelectedFolderId(folderSelectionFromRoute(routeSearch.folderId));
+    if (!routeSearch.assetId) {
+      setSelectedAsset(null);
+    }
+  }, [
+    resetMediaWorkspaceState,
+    routeSearch.assetId,
+    routeSearch.folderId,
+    routeSearch.q,
+    routeSearch.siteId,
+    routeSearch.type,
+    routeSearch.usage,
+    routeSearch.visibility,
+    selectedSiteId,
+    sites,
+  ]);
 
   const getAssetDeliveryUrl = useCallback(
     (asset: MediaAsset) => getPublicMediaFileUrl(asset.id, siteId),
@@ -741,6 +844,7 @@ function MediaPage() {
 
   const openMetadataEditor = (asset: MediaAsset) => {
     setSelectedAsset(asset);
+    updateMediaRouteSearch({ assetId: asset.id });
     setAssetDeliveryError(null);
     setAssetReferenceError(null);
     setSignedUrl(null);
@@ -769,6 +873,18 @@ function MediaPage() {
       visibility: asset.visibility || 'public',
     });
   };
+
+  useEffect(() => {
+    if (!routeSearch.assetId || selectedAsset?.id === routeSearch.assetId) {
+      return;
+    }
+
+    const routedAsset = files.find((asset) => asset.id === routeSearch.assetId);
+    if (routedAsset) {
+      openMetadataEditor(routedAsset);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, routeSearch.assetId, selectedAsset?.id]);
 
   useEffect(() => {
     setAssetDeliveryError(null);
@@ -901,6 +1017,7 @@ function MediaPage() {
         setMedia([...uploaded, ...files.filter((file) => !uploaded.some((item) => item.id === file.id))]);
         if (uploadFolderId !== 'current') {
           setSelectedFolderId(uploadTargetFolderId);
+          updateMediaRouteSearch({ folderId: folderSelectionToRoute(uploadTargetFolderId) });
         }
         setBulkNotice(`${uploaded.length} file${uploaded.length === 1 ? '' : 's'} uploaded to ${targetFolderLabel}.`);
         void loadLibrary();
@@ -941,6 +1058,7 @@ function MediaPage() {
       deleteMedia(file.id);
       if (selectedAsset?.id === file.id) {
         setSelectedAsset(null);
+        updateMediaRouteSearch({ assetId: undefined });
       }
       setPendingDeleteAsset(null);
     } catch (deleteError) {
@@ -1064,6 +1182,7 @@ function MediaPage() {
       setMedia(files.filter((file) => !deletedIdSet.has(file.id)));
       if (selectedAsset && deletedIdSet.has(selectedAsset.id)) {
         setSelectedAsset(null);
+        updateMediaRouteSearch({ assetId: undefined });
       }
       void loadLibrary();
     }
@@ -1216,6 +1335,7 @@ function MediaPage() {
       const folder = await createMediaFolder(name, siteId);
       setFolders((current) => [...current, folder].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)));
       setSelectedFolderId(folder.id);
+      updateMediaRouteSearch({ folderId: folder.id });
       setEditingFolderId(null);
       setEditingFolderName('');
       setNewFolderName('');
@@ -1283,6 +1403,7 @@ function MediaPage() {
       setMedia(files.map((file) => file.folderId === folderId ? { ...file, folderId: null } : file));
       if (selectedFolderId === folderId) {
         setSelectedFolderId(undefined);
+        updateMediaRouteSearch({ folderId: undefined });
       }
       if (editingFolderId === folderId) {
         cancelEditingFolder();
@@ -1929,7 +2050,10 @@ function MediaPage() {
               <button
                 key={metric.label}
                 type="button"
-                onClick={() => setUsageFilter(metric.filter)}
+                onClick={() => {
+                  setUsageFilter(metric.filter);
+                  updateMediaRouteSearch({ usage: metric.filter });
+                }}
                 className="rounded-lg border border-border bg-muted/30 p-4 text-left transition-colors hover:bg-muted"
               >
                 <div className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">{metric.label}</div>
@@ -1956,7 +2080,11 @@ function MediaPage() {
                     <button
                       key={option.value}
                       type="button"
-                      onClick={() => setUsageFilter(option.value as typeof usageFilter)}
+                      onClick={() => {
+                        const usage = option.value as MediaUsageFilter;
+                        setUsageFilter(usage);
+                        updateMediaRouteSearch({ usage });
+                      }}
                       className={cn(
                         'rounded-lg border px-3 py-1.5 text-xs font-medium',
                         usageFilter === option.value
@@ -1974,7 +2102,10 @@ function MediaPage() {
                   <button
                     key={row.type}
                     type="button"
-                    onClick={() => setTypeFilter(row.type)}
+                    onClick={() => {
+                      setTypeFilter(row.type);
+                      updateMediaRouteSearch({ type: row.type });
+                    }}
                     className="grid grid-cols-[90px_minmax(0,1fr)_90px] items-center gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-muted"
                   >
                     <span className="text-xs font-medium capitalize text-muted-foreground">{row.type}</span>
@@ -2044,14 +2175,22 @@ function MediaPage() {
         <input
           type="text"
           value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
+          onChange={(event) => {
+            const q = event.target.value;
+            setSearchQuery(q);
+            updateMediaRouteSearch({ q: q || undefined });
+          }}
           className="rounded-lg border bg-background px-4 py-2.5"
           placeholder="Search filenames, captions, alt text, or tags"
           aria-label="Search media"
         />
         <select
           value={typeFilter}
-          onChange={(event) => setTypeFilter(event.target.value as 'all' | MediaAsset['type'])}
+          onChange={(event) => {
+            const type = event.target.value as MediaTypeFilter;
+            setTypeFilter(type);
+            updateMediaRouteSearch({ type });
+          }}
           className="rounded-lg border bg-background px-4 py-2.5"
           aria-label="Media type filter"
         >
@@ -2065,7 +2204,11 @@ function MediaPage() {
         </select>
         <select
           value={visibilityFilter}
-          onChange={(event) => setVisibilityFilter(event.target.value as 'all' | 'public' | 'private')}
+          onChange={(event) => {
+            const visibility = event.target.value as MediaVisibilityFilter;
+            setVisibilityFilter(visibility);
+            updateMediaRouteSearch({ visibility });
+          }}
           className="rounded-lg border bg-background px-4 py-2.5"
           aria-label="Media visibility filter"
         >
@@ -2112,7 +2255,10 @@ function MediaPage() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => setSelectedFolderId(undefined)}
+            onClick={() => {
+              setSelectedFolderId(undefined);
+              updateMediaRouteSearch({ folderId: undefined });
+            }}
             className={cn(
               'rounded-lg border px-3 py-2 text-sm',
               selectedFolderId === undefined ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
@@ -2122,7 +2268,10 @@ function MediaPage() {
           </button>
           <button
             type="button"
-            onClick={() => setSelectedFolderId(null)}
+            onClick={() => {
+              setSelectedFolderId(null);
+              updateMediaRouteSearch({ folderId: 'root' });
+            }}
             className={cn(
               'rounded-lg border px-3 py-2 text-sm',
               selectedFolderId === null ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
@@ -2178,7 +2327,10 @@ function MediaPage() {
                 <>
                   <button
                     type="button"
-                    onClick={() => setSelectedFolderId(folder.id)}
+                    onClick={() => {
+                      setSelectedFolderId(folder.id);
+                      updateMediaRouteSearch({ folderId: folder.id });
+                    }}
                     className={cn(
                       'px-3 py-2 text-sm',
                       selectedFolderId === folder.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
@@ -2564,7 +2716,10 @@ function MediaPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedAsset(null)}
+                onClick={() => {
+                  setSelectedAsset(null);
+                  updateMediaRouteSearch({ assetId: undefined });
+                }}
                 className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
                 aria-label="Close media details"
               >
