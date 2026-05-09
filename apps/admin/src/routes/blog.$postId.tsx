@@ -150,6 +150,15 @@ function EditBlogPostPage() {
     const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(post?.categoryIds || []);
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>(post?.tagIds || []);
 
+    const clearEditorFeedback = () => {
+        setSaveWarning((current) => current ? null : current);
+        setWorkflowNotice((current) => current ? null : current);
+        setPreviewUrl((current) => current ? null : current);
+        setPreviewExpiresAt((current) => current ? null : current);
+        setPostReadiness((current) => current ? null : current);
+        setReadinessError((current) => current ? null : current);
+    };
+
     useEffect(() => {
         let cancelled = false;
         const localFallbackPost = storePost;
@@ -410,6 +419,7 @@ function EditBlogPostPage() {
         selectedIds: string[],
         setSelectedIds: Dispatch<SetStateAction<string[]>>,
     ) => {
+        clearEditorFeedback();
         setSelectedIds(
             selectedIds.includes(id)
                 ? selectedIds.filter((selectedId) => selectedId !== id)
@@ -943,7 +953,10 @@ function EditBlogPostPage() {
                                     <input
                                         type="text"
                                         value={title}
-                                        onChange={(e) => setTitle(e.target.value)}
+                                        onChange={(e) => {
+                                            clearEditorFeedback();
+                                            setTitle(e.target.value);
+                                        }}
                                         placeholder="Untitled post"
                                         disabled={editorBusy}
                                         className="w-full rounded-lg border-0 bg-transparent px-0 text-4xl font-semibold tracking-normal placeholder:text-muted-foreground/45 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
@@ -955,7 +968,10 @@ function EditBlogPostPage() {
                                     <input
                                         type="text"
                                         value={slug}
-                                        onChange={(e) => setSlug(e.target.value)}
+                                        onChange={(e) => {
+                                            clearEditorFeedback();
+                                            setSlug(e.target.value);
+                                        }}
                                         disabled={editorBusy}
                                         className="min-w-48 flex-1 border-0 bg-transparent p-0 font-mono text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
                                         placeholder="post-slug"
@@ -966,7 +982,10 @@ function EditBlogPostPage() {
                                     <label className="text-xs font-medium text-muted-foreground">Excerpt</label>
                                     <textarea
                                         value={excerpt}
-                                        onChange={(e) => setExcerpt(e.target.value)}
+                                        onChange={(e) => {
+                                            clearEditorFeedback();
+                                            setExcerpt(e.target.value);
+                                        }}
                                         rows={3}
                                         disabled={editorBusy}
                                         className="w-full resize-none rounded-lg border bg-background px-4 py-3 text-sm leading-6 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
@@ -1020,6 +1039,7 @@ function EditBlogPostPage() {
                                     onSave={() => { }}
                                     onChange={(elements, _settings, size) => {
                                         if (editorBusy) return;
+                                        clearEditorFeedback();
                                         setCanvasElements(elements);
                                         if (size) setCanvasSize(size);
                                     }}
@@ -1060,6 +1080,7 @@ function EditBlogPostPage() {
                                             key={nextStatus}
                                             type="button"
                                             onClick={() => {
+                                                clearEditorFeedback();
                                                 setStatus(nextStatus);
                                                 if (nextStatus !== 'scheduled') {
                                                     setScheduledAt(null);
@@ -1084,7 +1105,10 @@ function EditBlogPostPage() {
                                         <input
                                             type="datetime-local"
                                             value={toDateTimeLocalValue(scheduledAt)}
-                                            onChange={(e) => setScheduledAt(fromDateTimeLocalValue(e.target.value))}
+                                            onChange={(e) => {
+                                                clearEditorFeedback();
+                                                setScheduledAt(fromDateTimeLocalValue(e.target.value));
+                                            }}
                                             disabled={editorBusy}
                                             className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                             required
@@ -1257,7 +1281,10 @@ function EditBlogPostPage() {
                             <PanelContent className="space-y-2">
                                 <select
                                     value={selectedAuthorId}
-                                    onChange={(event) => setSelectedAuthorId(event.target.value)}
+                                    onChange={(event) => {
+                                        clearEditorFeedback();
+                                        setSelectedAuthorId(event.target.value);
+                                    }}
                                     disabled={editorBusy}
                                     className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                 >
