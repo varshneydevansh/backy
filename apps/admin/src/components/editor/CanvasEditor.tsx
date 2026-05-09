@@ -379,6 +379,7 @@ export function CanvasEditor({
   );
   const [canvasScale, setCanvasScale] = useState(1);
   const [canvasZoom, setCanvasZoom] = useState(1);
+  const [isCanvasAutoFit, setIsCanvasAutoFit] = useState(true);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
   const activeCanvasScale = isPreview ? canvasScale : canvasZoom;
   const scaledCanvasWidth = Math.max(1, Math.round(size.width * activeCanvasScale));
@@ -401,10 +402,12 @@ export function CanvasEditor({
   }, []);
 
   const handleZoomIn = useCallback(() => {
+    setIsCanvasAutoFit(false);
     setCanvasZoom((current) => clampCanvasZoom(Number((current + 0.1).toFixed(2))));
   }, [clampCanvasZoom]);
 
   const handleZoomOut = useCallback(() => {
+    setIsCanvasAutoFit(false);
     setCanvasZoom((current) => clampCanvasZoom(Number((current - 0.1).toFixed(2))));
   }, [clampCanvasZoom]);
 
@@ -413,7 +416,7 @@ export function CanvasEditor({
     setHasUnsavedChanges(true);
   }, []);
 
-  const handleFitCanvas = useCallback(() => {
+  const applyFitCanvas = useCallback(() => {
     const container = canvasViewportRef.current;
     if (!container) {
       setCanvasZoom(1);
@@ -425,6 +428,11 @@ export function CanvasEditor({
     const nextScale = Math.min(1.5, availableWidth / size.width, availableHeight / size.height);
     setCanvasZoom(clampCanvasZoom(Number(nextScale.toFixed(2))));
   }, [clampCanvasZoom, size.height, size.width]);
+
+  const handleFitCanvas = useCallback(() => {
+    setIsCanvasAutoFit(true);
+    applyFitCanvas();
+  }, [applyFitCanvas]);
 
   const handleToggleCanvasFocus = useCallback(() => {
     setIsCanvasFocusMode((current) => !current);
@@ -1903,6 +1911,45 @@ export function CanvasEditor({
   }, [isPreview, size.width, size.height]);
 
   useEffect(() => {
+    if (!isCanvasAutoFit || isPreview) {
+      return;
+    }
+
+    const container = canvasViewportRef.current;
+    if (!container) {
+      return;
+    }
+
+    let frame = window.requestAnimationFrame(() => {
+      applyFitCanvas();
+    });
+
+    const scheduleFit = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        applyFitCanvas();
+      });
+    };
+
+    const resizeObserver = new ResizeObserver(scheduleFit);
+    resizeObserver.observe(container);
+    window.addEventListener('resize', scheduleFit);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', scheduleFit);
+    };
+  }, [
+    applyFitCanvas,
+    isCanvasAutoFit,
+    isCanvasFocusMode,
+    isPreview,
+    showComponentPanel,
+    showInspectorPanel,
+  ]);
+
+  useEffect(() => {
     if (!isCanvasFocusMode) {
       return;
     }
@@ -2517,6 +2564,11 @@ export function CanvasEditor({
                   <ZoomOut className="h-4 w-4" />
                 </button>
                 <span className="min-w-12 text-center tabular-nums">{zoomPercent}%</span>
+                {isCanvasAutoFit && (
+                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                    Auto
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={handleZoomIn}
