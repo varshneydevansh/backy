@@ -45,7 +45,22 @@ import {
   serializeCanvasContent,
 } from '@/components/editor/editorCatalog';
 
+interface BlogEditorSearch {
+    siteId?: string;
+    focus?: 'canvas';
+}
+
+const normalizedSearchString = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+};
+
 export const Route = createFileRoute('/blog/$postId')({
+    validateSearch: (search: Record<string, unknown>): BlogEditorSearch => ({
+        siteId: normalizedSearchString(search.siteId),
+        focus: search.focus === 'canvas' ? 'canvas' : undefined,
+    }),
     component: EditBlogPostPage,
 });
 
@@ -85,11 +100,15 @@ const BLOG_EDITOR_CONTROL_AREAS = [
 function EditBlogPostPage() {
     const navigate = useNavigate();
     const { postId } = Route.useParams();
+    const routeSearch = Route.useSearch();
     const { sites, posts, updatePost, deletePost } = useStore();
     const storePost = posts.find((p) => p.id === postId);
     const storePostId = storePost?.id;
     const storePostSiteId = storePost?.siteId;
-    const fallbackSiteId = getSiteSelectionFromSearch(sites);
+    const requestedSite = routeSearch.siteId
+        ? sites.find((site) => siteMatchesIdentifier(site, routeSearch.siteId || ''))
+        : undefined;
+    const fallbackSiteId = requestedSite?.publicSiteId || requestedSite?.id || routeSearch.siteId || getSiteSelectionFromSearch(sites);
     const activeSite = useMemo(
         () => (
             storePostSiteId
@@ -119,7 +138,7 @@ function EditBlogPostPage() {
     const [readinessError, setReadinessError] = useState<string | null>(null);
     const [pendingRestoreRevision, setPendingRestoreRevision] = useState<ContentRevision | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [isWorkspaceFocus, setIsWorkspaceFocus] = useState(false);
+    const [isWorkspaceFocus, setIsWorkspaceFocus] = useState(routeSearch.focus === 'canvas');
 
     // Initialize State from Post
     const [title, setTitle] = useState(post?.title || '');
@@ -269,6 +288,10 @@ function EditBlogPostPage() {
 
       void loadPostReadiness();
     }, [loadPostReadiness, post]);
+
+    useEffect(() => {
+        setIsWorkspaceFocus(routeSearch.focus === 'canvas');
+    }, [routeSearch.focus]);
 
     useEffect(() => {
         if (!post) {
@@ -469,6 +492,19 @@ function EditBlogPostPage() {
         setShowDeleteConfirm(false);
         deletePost(postId);
         navigate({ to: '/blog', search: { siteId: activeSiteId } });
+    };
+
+    const setWorkspaceFocusRoute = (focused: boolean) => {
+        setIsWorkspaceFocus(focused);
+        navigate({
+            to: '/blog/$postId',
+            params: { postId },
+            search: {
+                siteId: activeSiteId,
+                ...(focused ? { focus: 'canvas' as const } : {}),
+            },
+            replace: true,
+        });
     };
 
     const readinessFindings = postReadiness?.checks.filter((check) => check.status !== 'pass') || [];
@@ -681,7 +717,7 @@ function EditBlogPostPage() {
                 <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setIsWorkspaceFocus((current) => !current)}
+                    onClick={() => setWorkspaceFocusRoute(!isWorkspaceFocus)}
                     iconStart={isWorkspaceFocus ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
                 >
                     {isWorkspaceFocus ? 'Show blog panels' : 'Focus canvas'}
@@ -864,7 +900,7 @@ function EditBlogPostPage() {
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => setIsWorkspaceFocus(false)}
+                                    onClick={() => setWorkspaceFocusRoute(false)}
                                     iconStart={<Minimize2 className="size-4" />}
                                 >
                                     Show panels
