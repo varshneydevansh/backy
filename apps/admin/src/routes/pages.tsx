@@ -483,13 +483,13 @@ function PagesListView() {
   };
 
   const downloadPagesCsv = () => {
-    if (data.length === 0) {
+    if (filteredPages.length === 0) {
       setError('No pages are available to export with the current controls.');
       setNotice(null);
       return;
     }
 
-    const rows = data.map((page) => {
+    const rows = filteredPages.map((page) => {
       const pageSiteId = page.siteId || activeSiteId;
       const pagePath = pagePublicPath(page);
       const encodedSiteId = encodeURIComponent(pageSiteId);
@@ -958,7 +958,8 @@ function PagesListView() {
     currentPage,
     setCurrentPage,
     totalPages,
-    totalItems
+    totalItems,
+    filteredData: filteredPages,
   } = useDataTable({
     data: visiblePages,
     columns,
@@ -1077,7 +1078,7 @@ function PagesListView() {
     export: {
       format: 'csv',
       columns: PAGE_EXPORT_COLUMNS,
-      filteredRows: data.length,
+      filteredRows: filteredPages.length,
     },
     builderSystems: PAGE_BUILDER_SYSTEMS,
     readiness: {
@@ -1095,7 +1096,7 @@ function PagesListView() {
       totalPages,
       totalItems,
     },
-    pages: data.map((page) => ({
+    pages: filteredPages.map((page) => ({
       id: page.id,
       title: page.title,
       slug: page.slug,
@@ -1142,6 +1143,7 @@ function PagesListView() {
     pageDesignReadiness.score,
     pageDesignReadiness.workflow,
     pageMetrics,
+    filteredPages,
     publicPageBySlugUrl,
     publicPagesUrl,
     publicRenderUrl,
@@ -1250,7 +1252,7 @@ function PagesListView() {
             <button
               type="button"
               onClick={downloadPagesCsv}
-              disabled={data.length === 0}
+              disabled={filteredPages.length === 0}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="size-4" />
@@ -1485,7 +1487,7 @@ function PagesListView() {
             <button
               type="button"
               onClick={downloadPagesCsv}
-              disabled={data.length === 0}
+              disabled={filteredPages.length === 0}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Export filtered pages CSV"
             >

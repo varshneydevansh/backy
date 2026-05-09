@@ -88,6 +88,7 @@ export function useDataTable<T>({
         currentPage,
         setCurrentPage,
         totalPages,
-        totalItems: filteredData.length
+        totalItems: filteredData.length,
+        filteredData: sortedData
     };
 }
