@@ -3,11 +3,17 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import {
   Archive,
   CheckCircle2,
+  Code2,
   Contact,
+  Copy,
+  Download,
+  ExternalLink,
+  Filter,
   Mail,
   Phone,
   RefreshCw,
   Search,
+  ShieldCheck,
   UserCheck,
 } from 'lucide-react';
 import {
@@ -56,7 +62,18 @@ function ContactsRoute() {
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const formById = useMemo(() => new Map(forms.map((form) => [form.id, form])), [forms]);
+  const apiForm = useMemo(
+    () => forms.find((form) => form.id === selectedFormId) || forms[0] || null,
+    [forms, selectedFormId],
+  );
+  const contactsUrl = apiForm
+    ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts?limit=100`
+    : '';
+  const contactUpdateUrl = apiForm
+    ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts/{contactId}`
+    : '';
   const allContacts = useMemo(
     () => Object.values(contactsByForm).flatMap((inbox) => inbox.contacts),
     [contactsByForm],
@@ -158,6 +175,63 @@ function ContactsRoute() {
     }
   };
 
+  const copyContactApiText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setError(null);
+      setNotice(`${label} copied.`);
+    } catch {
+      setNotice(null);
+      setError(value);
+    }
+  };
+
+  const handleExportContacts = () => {
+    if (filteredContacts.length === 0) return;
+
+    const header = [
+      'contact_id',
+      'form_id',
+      'form_name',
+      'status',
+      'name',
+      'email',
+      'phone',
+      'notes',
+      'created_at',
+      'updated_at',
+      'request_id',
+    ];
+    const rows = filteredContacts.map((contact) => {
+      const form = formById.get(contact.formId);
+      return [
+        contact.id,
+        contact.formId,
+        form?.title || form?.name || '',
+        contact.status,
+        contact.name || '',
+        contact.email || '',
+        contact.phone || '',
+        contact.notes || '',
+        contact.createdAt || '',
+        contact.updatedAt || '',
+        contact.requestId || '',
+      ];
+    });
+    const csv = [header, ...rows]
+      .map((row) => row.map(csvEscape).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSiteId}-contacts.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <PageShell
       title="Contacts"
@@ -165,6 +239,8 @@ function ContactsRoute() {
       action={
         <div className="flex flex-wrap items-center gap-2">
           <select
+            id="contacts-active-site"
+            aria-label="Active Site"
             value={activeSiteId}
             onChange={(event) => setSelectedSiteId(event.target.value)}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
@@ -207,25 +283,79 @@ function ContactsRoute() {
           description={`${filteredContacts.length}/${allContacts.length} visible contacts`}
           icon={<Contact className="size-4" />}
           action={
-            <Link to="/forms">
-              <Button variant="outline" iconStart={<Mail className="size-4" />}>
-                Forms
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={handleExportContacts}
+                disabled={filteredContacts.length === 0}
+                iconStart={<Download className="size-4" />}
+              >
+                Export CSV
               </Button>
-            </Link>
+              <Link to="/forms">
+                <Button variant="outline" iconStart={<Mail className="size-4" />}>
+                  Forms
+                </Button>
+              </Link>
+            </div>
           }
         />
         <PanelContent>
+          {apiForm && (
+            <div className="mb-5 rounded-lg border border-border bg-muted/30 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    <Code2 className="size-4" />
+                    Contact pipeline API
+                  </div>
+                  <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                    Use this private endpoint to list lead records created by a form and the update endpoint to sync status changes from a custom dashboard.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button onClick={() => void copyContactApiText(contactsUrl, 'Contacts URL')} iconStart={<Copy className="size-4" />}>
+                    Copy contacts
+                  </Button>
+                  <a
+                    href={contactsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                  >
+                    <ExternalLink className="size-4" />
+                    Open endpoint
+                  </a>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <MetaTile label="API form" value={apiForm.title || apiForm.name || apiForm.id} />
+                <MetaTile label="Lead share" value={apiForm.contactShare?.enabled ? 'enabled' : 'off'} />
+                <MetaTile label="Visibility" value="private" />
+              </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                <ApiSnippet label="List contacts" value={contactsUrl} />
+                <ApiSnippet label="Update contact" value={contactUpdateUrl} />
+              </div>
+            </div>
+          )}
+
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <div className="relative min-w-64 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <input
+                type="search"
+                aria-label="Search contacts"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search contacts, forms, request IDs..."
-                className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm"
+                className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <select
+              aria-label="Form filter"
               value={selectedFormId}
               onChange={(event) => setSelectedFormId(event.target.value)}
               className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
@@ -236,13 +366,15 @@ function ContactsRoute() {
               ))}
             </select>
             <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-muted p-1">
+              <Filter className="ml-2 size-4 text-muted-foreground" />
               {(['all', 'new', 'contacted', 'qualified', 'archived'] as const).map((status) => (
                 <button
                   key={status}
                   type="button"
                   onClick={() => setStatusFilter(status)}
+                  aria-pressed={statusFilter === status}
                   className={cn(
-                    'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground hover:bg-background hover:text-foreground',
+                    'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-background hover:text-foreground',
                     statusFilter === status && 'bg-background text-foreground shadow-sm',
                   )}
                 >
@@ -298,6 +430,29 @@ function Metric({ label, value, icon }: { label: string; value: number; icon: Re
         <span className="text-muted-foreground">{icon}</span>
       </div>
       <div className="mt-1 font-mono text-2xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function MetaTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-background px-3 py-3">
+      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <ShieldCheck className="size-3.5" />
+        {label}
+      </div>
+      <div className="mt-1 truncate text-sm font-semibold capitalize">{value}</div>
+    </div>
+  );
+}
+
+function ApiSnippet({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="mb-1 text-xs font-medium text-muted-foreground">{label}</div>
+      <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+        {value}
+      </code>
     </div>
   );
 }
@@ -363,10 +518,45 @@ function ContactCard({
       ) : null}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={() => onStatus('contacted')} disabled={disabled || contact.status === 'contacted'} iconStart={<Mail className="size-4" />}>Contacted</Button>
-        <Button size="sm" variant="outline" onClick={() => onStatus('qualified')} disabled={disabled || contact.status === 'qualified'} iconStart={<CheckCircle2 className="size-4" />}>Qualified</Button>
-        <Button size="sm" variant="outline" onClick={() => onStatus('new')} disabled={disabled || contact.status === 'new'} iconStart={<Contact className="size-4" />}>New</Button>
-        <Button size="sm" variant="danger" onClick={() => onStatus('archived')} disabled={disabled || contact.status === 'archived'} iconStart={<Archive className="size-4" />}>Archive</Button>
+        <Button
+          size="sm"
+          onClick={() => onStatus('contacted')}
+          disabled={disabled || contact.status === 'contacted'}
+          iconStart={<Mail className="size-4" />}
+          aria-label={`Mark ${contact.name || contact.email || contact.id} as contacted`}
+        >
+          Contacted
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => onStatus('qualified')}
+          disabled={disabled || contact.status === 'qualified'}
+          iconStart={<CheckCircle2 className="size-4" />}
+          aria-label={`Mark ${contact.name || contact.email || contact.id} as qualified`}
+        >
+          Qualified
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => onStatus('new')}
+          disabled={disabled || contact.status === 'new'}
+          iconStart={<Contact className="size-4" />}
+          aria-label={`Mark ${contact.name || contact.email || contact.id} as new`}
+        >
+          New
+        </Button>
+        <Button
+          size="sm"
+          variant="danger"
+          onClick={() => onStatus('archived')}
+          disabled={disabled || contact.status === 'archived'}
+          iconStart={<Archive className="size-4" />}
+          aria-label={`Archive ${contact.name || contact.email || contact.id}`}
+        >
+          Archive
+        </Button>
       </div>
     </article>
   );
@@ -378,3 +568,31 @@ function statusType(status: ContactStatus) {
   if (status === 'contacted') return 'info';
   return 'neutral';
 }
+
+const getEnvValue = (key: string): string => {
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+  return env[key]?.trim() ?? '';
+};
+
+const getPublicBaseUrl = (): string => {
+  const envBase = (
+    getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
+    getEnvValue('VITE_PUBLIC_API_URL') ||
+    getEnvValue('VITE_API_BASE_URL') ||
+    ''
+  ).trim();
+
+  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+    return 'http://localhost:3001';
+  }
+
+  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+    .replace(/\/api\/admin$/, '')
+    .replace(/\/api$/, '')
+    .replace(/\/$/, '');
+};
+
+const csvEscape = (value: unknown): string => {
+  const raw = String(value ?? '').replace(/\r?\n/g, '\\n');
+  return `"${raw.replace(/"/g, '""')}"`;
+};
