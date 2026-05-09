@@ -386,6 +386,7 @@ function BlogListView() {
         return next;
       });
       setPendingDeletePost(null);
+      setNotice(`${post.title} deleted.`);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete post');
     } finally {
@@ -411,17 +412,21 @@ function BlogListView() {
       if (bulkAction === 'publish') {
         const updatedPosts = await Promise.all(selectedPosts.map((post) => publishBlogPost(activeSiteId, post.id)));
         updatedPosts.forEach((post) => updatePost(post.id, post));
+        setNotice(`${updatedPosts.length} post${updatedPosts.length === 1 ? '' : 's'} published.`);
       }
 
       if (bulkAction === 'archive') {
         const updatedPosts = await Promise.all(selectedPosts.map((post) => archiveBlogPost(activeSiteId, post.id)));
         updatedPosts.forEach((post) => updatePost(post.id, post));
+        setNotice(`${updatedPosts.length} post${updatedPosts.length === 1 ? '' : 's'} archived.`);
       }
 
       if (bulkAction === 'delete') {
         await Promise.all(selectedPosts.map((post) => deleteBlogPost(activeSiteId, post.id)));
+        const deletedCount = selectedPosts.length;
         selectedPosts.forEach((post) => deletePost(post.id));
         setPendingBulkDelete(false);
+        setNotice(`${deletedCount} post${deletedCount === 1 ? '' : 's'} deleted.`);
       }
 
       setSelectedPostIds(new Set());
