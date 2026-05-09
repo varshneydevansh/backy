@@ -19,6 +19,7 @@ import type { CanvasElement } from '@/types/editor';
 
 interface NewPageSearch {
     siteId?: string;
+    template?: PageTemplate;
 }
 
 type PageTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'about' | 'contact' | 'registration';
@@ -108,9 +109,14 @@ const slugify = (value: string) => (
     value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 );
 
+const isPageTemplate = (value: unknown): value is PageTemplate => (
+    typeof value === 'string' && TEMPLATE_OPTIONS.some((template) => template.id === value)
+);
+
 export const Route = createFileRoute('/pages/new')({
     validateSearch: (search: Record<string, unknown>): NewPageSearch => ({
         siteId: typeof search.siteId === 'string' ? search.siteId : undefined,
+        template: isPageTemplate(search.template) ? search.template : undefined,
     }),
     component: NewPageRoute,
 });
@@ -132,7 +138,7 @@ function NewPageRoute() {
         title: '',
         slug: '',
         siteId: requestedSiteId,
-        template: 'blank' as PageTemplate,
+        template: search.template || 'blank' as PageTemplate,
         status: 'draft' as 'draft' | 'published' | 'scheduled',
         scheduledAt: null as string | null,
         isHomepage: false,

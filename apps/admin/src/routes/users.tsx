@@ -505,6 +505,7 @@ function UsersListView() {
       systems: MEMBERSHIP_FLOW_SYSTEMS,
       frontendFlow: [
         'Create a registration page from the page starter template.',
+        'Use the Membership registration panel to open page creation with the registration template selected.',
         'Connect the form to Backy Forms contact sharing and optional collection writes.',
         'Use Supabase Auth settings when credentialed sessions are implemented.',
         'Use private admin users only for Backy workspace access.',
@@ -1008,8 +1009,22 @@ function UsersListView() {
               title="Membership registration"
               description="Public registration capture and credentialed auth handoff."
               icon={<Shield className="size-4" />}
+              action={
+                <Link
+                  to="/pages/new"
+                  search={{ template: 'registration' }}
+                  className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <Plus className="size-4" />
+                  Create page
+                </Link>
+              }
             />
             <PanelContent>
+              <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                Start from the registration template, then edit the canvas form fields and publish it like any other page.
+              </div>
+
               <div className="space-y-3">
                 {MEMBERSHIP_FLOW_SYSTEMS.map((system) => (
                   <div key={system.key} className="rounded-lg border border-border bg-background p-3">
