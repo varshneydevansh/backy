@@ -39,7 +39,22 @@ import {
   serializeCanvasContent,
 } from '@/components/editor/editorCatalog';
 
+interface PageEditorSearch {
+  siteId?: string;
+  focus?: 'canvas';
+}
+
+const normalizedSearchString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+};
+
 export const Route = createFileRoute('/pages/$pageId/edit')({
+  validateSearch: (search: Record<string, unknown>): PageEditorSearch => ({
+    siteId: normalizedSearchString(search.siteId),
+    focus: search.focus === 'canvas' ? 'canvas' : undefined,
+  }),
   component: PageEditorRoute,
 });
 
@@ -84,11 +99,15 @@ const getPagePublicPath = (page: Pick<Page, 'slug' | 'isHomepage'>) => (
 function PageEditorRoute() {
   const navigate = useNavigate();
   const { pageId } = Route.useParams();
+  const routeSearch = Route.useSearch();
   const { sites, pages, updatePage } = useStore();
   const storePage = pages.find((candidate) => candidate.id === pageId);
   const storePageId = storePage?.id;
   const storePageSiteId = storePage?.siteId;
-  const requestedSiteId = getSiteSelectionFromSearch(sites);
+  const requestedSite = routeSearch.siteId
+    ? sites.find((site) => siteMatchesIdentifier(site, routeSearch.siteId || ''))
+    : undefined;
+  const requestedSiteId = requestedSite?.publicSiteId || requestedSite?.id || routeSearch.siteId || getSiteSelectionFromSearch(sites);
   const storePageSite = storePageSiteId
     ? sites.find((site) => siteMatchesIdentifier(site, storePageSiteId))
     : undefined;
@@ -109,7 +128,7 @@ function PageEditorRoute() {
   const [readinessError, setReadinessError] = useState<string | null>(null);
   const [editorResetVersion, setEditorResetVersion] = useState(0);
   const [pendingRestoreRevision, setPendingRestoreRevision] = useState<ContentRevision | null>(null);
-  const [isWorkspaceFocus, setIsWorkspaceFocus] = useState(false);
+  const [isWorkspaceFocus, setIsWorkspaceFocus] = useState(routeSearch.focus === 'canvas');
 
   useEffect(() => {
     let cancelled = false;
@@ -204,6 +223,10 @@ function PageEditorRoute() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page?.id, siteId]);
+
+  useEffect(() => {
+    setIsWorkspaceFocus(routeSearch.focus === 'canvas');
+  }, [routeSearch.focus]);
 
   // Load Elements
   const { elements: initialElements, canvasSize: initialCanvasSize } = useMemo(
@@ -548,6 +571,19 @@ function PageEditorRoute() {
     navigate({ to: '/pages', search: { siteId } });
   };
 
+  const setWorkspaceFocusRoute = (focused: boolean) => {
+    setIsWorkspaceFocus(focused);
+    navigate({
+      to: '/pages/$pageId/edit',
+      params: { pageId },
+      search: {
+        siteId,
+        ...(focused ? { focus: 'canvas' as const } : {}),
+      },
+      replace: true,
+    });
+  };
+
   const applyWorkflow = async (action: 'publish' | 'archive') => {
     setIsWorkflowBusy(true);
     setSaveWarning(null);
@@ -634,7 +670,7 @@ function PageEditorRoute() {
         <Button
           type="button"
           variant="outline"
-          onClick={() => setIsWorkspaceFocus((current) => !current)}
+          onClick={() => setWorkspaceFocusRoute(!isWorkspaceFocus)}
           iconStart={isWorkspaceFocus ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
         >
           {isWorkspaceFocus ? 'Show page panels' : 'Focus canvas'}
@@ -808,7 +844,7 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setIsWorkspaceFocus(false)}
+              onClick={() => setWorkspaceFocusRoute(false)}
               iconStart={<Minimize2 className="size-4" />}
             >
               Show panels
