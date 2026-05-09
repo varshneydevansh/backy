@@ -311,7 +311,7 @@ function OrdersRoute() {
   const [pendingDeleteOrder, setPendingDeleteOrder] = useState<CollectionRecord | null>(null);
 
   const activeSite = useMemo(
-    () => sites.find((site) => (site.publicSiteId || site.id) === selectedSiteId) || sites[0],
+    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';

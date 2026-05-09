@@ -38,6 +38,7 @@ import {
 } from '@/lib/adminContentApi';
 import { PageShell } from '@/components/layout/PageShell';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { useStore } from '@/stores/mockStore';
 import { formatDate } from '@/lib/utils';
 
@@ -534,7 +535,7 @@ function CollectionsPage() {
       recordId: params.get('recordId') || '',
     };
   }, []);
-  const [selectedSiteId, setSelectedSiteId] = useState('');
+  const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
   const [collections, setCollections] = useState<Collection[]>([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [records, setRecords] = useState<CollectionRecord[]>([]);
@@ -585,7 +586,7 @@ function CollectionsPage() {
   const shortcutRecordAppliedRef = useRef(false);
 
   const activeSite = useMemo(
-    () => sites.find((site) => (site.publicSiteId || site.id) === selectedSiteId) || sites[0],
+    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || 'site-demo';
@@ -949,15 +950,10 @@ function CollectionsPage() {
   };
 
   useEffect(() => {
-    if (!selectedSiteId && sites[0]) {
-      const shortcutSite = sites.find((site) => (
-        site.publicSiteId === shortcutParams.siteId ||
-        site.id === shortcutParams.siteId ||
-        site.slug === shortcutParams.siteId
-      ));
-      setSelectedSiteId(shortcutSite?.publicSiteId || shortcutSite?.id || sites[0].publicSiteId || sites[0].id);
+    if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
+      setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
     }
-  }, [selectedSiteId, shortcutParams.siteId, sites]);
+  }, [selectedSiteId, sites]);
 
   const resetCollectionForm = () => {
     setSelectedCollectionId(null);

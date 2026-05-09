@@ -182,7 +182,7 @@ function BlogListView() {
   const [pendingDeletePost, setPendingDeletePost] = useState<BlogPost | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const activeSite = useMemo(
-    () => sites.find((site) => (site.publicSiteId || site.id) === selectedSiteId) || sites[0],
+    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
   );
   const activeSiteId = useMemo(

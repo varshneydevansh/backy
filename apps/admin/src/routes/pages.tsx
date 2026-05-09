@@ -200,7 +200,7 @@ function PagesListView() {
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const activeSite = useMemo(
-    () => sites.find((site) => (site.publicSiteId || site.id) === selectedSiteId) || sites[0],
+    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
   );
   const activeSiteId = useMemo(
