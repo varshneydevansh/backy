@@ -368,6 +368,7 @@ export function CanvasEditor({
   const [isCanvasFocusMode, setIsCanvasFocusMode] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const isCanvasMutationDisabled = isSaving || isPreview;
   const [showReloadConfirm, setShowReloadConfirm] = useState(false);
   const autosaveTimeoutRef = useRef<number | null>(null);
   const changeSequenceRef = useRef(0);
@@ -926,6 +927,10 @@ export function CanvasEditor({
     selectedSnapshot: string | null = selectedId,
     selectedIdsSnapshot: string[] = selectedIds,
   ) => {
+    if (isCanvasMutationDisabled) {
+      return;
+    }
+
     let didUpdate = false;
 
     setElements((currentElements) => {
@@ -945,7 +950,7 @@ export function CanvasEditor({
     if (didUpdate) {
       markChanges();
     }
-  }, [addToHistory, markChanges, selectedId, selectedIds]);
+  }, [addToHistory, isCanvasMutationDisabled, markChanges, selectedId, selectedIds]);
 
   /**
    * Copy
@@ -2113,6 +2118,10 @@ export function CanvasEditor({
         return;
       }
 
+      if (isSaving) {
+        return;
+      }
+
       if (isPreview) {
         if ((e.ctrlKey || e.metaKey) && key === 's') {
           e.preventDefault();
@@ -2385,8 +2394,9 @@ export function CanvasEditor({
               <button
                 type="button"
                 onClick={() => handleBreakpointChange('desktop')}
+                disabled={isSaving}
                 className={cn(
-                  'p-2 rounded-md transition-colors',
+                  'p-2 rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                   breakpoint === 'desktop'
                     ? 'bg-white text-slate-950 shadow-sm'
                     : 'text-slate-500 hover:bg-white/70'
@@ -2399,8 +2409,9 @@ export function CanvasEditor({
               <button
                 type="button"
                 onClick={() => handleBreakpointChange('tablet')}
+                disabled={isSaving}
                 className={cn(
-                  'p-2 rounded-md transition-colors',
+                  'p-2 rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                   breakpoint === 'tablet'
                     ? 'bg-white text-slate-950 shadow-sm'
                     : 'text-slate-500 hover:bg-white/70'
@@ -2413,8 +2424,9 @@ export function CanvasEditor({
               <button
                 type="button"
                 onClick={() => handleBreakpointChange('mobile')}
+                disabled={isSaving}
                 className={cn(
-                  'p-2 rounded-md transition-colors',
+                  'p-2 rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                   breakpoint === 'mobile'
                     ? 'bg-white text-slate-950 shadow-sm'
                     : 'text-slate-500 hover:bg-white/70'
@@ -2429,7 +2441,8 @@ export function CanvasEditor({
               <select
                 value={activeCanvasPresetId}
                 onChange={(event) => handleCanvasPresetChange(event.target.value)}
-                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 outline-none focus:border-sky-400"
+                disabled={isSaving}
+                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 outline-none focus:border-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Canvas size preset"
               >
                 <option value="custom">Custom</option>
@@ -2446,7 +2459,8 @@ export function CanvasEditor({
                 step={10}
                 value={size.width}
                 onChange={(event) => handleCanvasDimensionInput('width', event.target.value)}
-                className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right tabular-nums text-slate-700 outline-none focus:border-sky-400"
+                disabled={isSaving}
+                className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right tabular-nums text-slate-700 outline-none focus:border-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Canvas width"
               />
               <span className="text-slate-400">x</span>
@@ -2457,7 +2471,8 @@ export function CanvasEditor({
                 step={10}
                 value={size.height}
                 onChange={(event) => handleCanvasDimensionInput('height', event.target.value)}
-                className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right tabular-nums text-slate-700 outline-none focus:border-sky-400"
+                disabled={isSaving}
+                className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right tabular-nums text-slate-700 outline-none focus:border-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Canvas height"
               />
             </div>
@@ -2469,7 +2484,7 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={handleUndo}
-              disabled={historyIndex <= 0}
+              disabled={isCanvasMutationDisabled || historyIndex <= 0}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title="Undo (Cmd/Ctrl+Z)"
               aria-label="Undo"
@@ -2479,7 +2494,7 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={handleRedo}
-              disabled={historyIndex >= history.length - 1}
+              disabled={isCanvasMutationDisabled || historyIndex >= history.length - 1}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title="Redo (Cmd/Ctrl+Shift+Z)"
               aria-label="Redo"
@@ -2491,7 +2506,7 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={handleCopy}
-              disabled={!selectedId}
+              disabled={isCanvasMutationDisabled || !selectedId}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title="Copy selected layer (Cmd/Ctrl+C)"
               aria-label="Copy"
@@ -2501,7 +2516,7 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={handleCut}
-              disabled={!selectedId}
+              disabled={isCanvasMutationDisabled || !selectedId}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title="Cut selected layer (Cmd/Ctrl+X)"
               aria-label="Cut"
@@ -2511,7 +2526,7 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={handlePaste}
-              disabled={clipboardElements.length === 0}
+              disabled={isCanvasMutationDisabled || clipboardElements.length === 0}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title="Paste layer (Cmd/Ctrl+V)"
               aria-label="Paste"
@@ -2521,7 +2536,7 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={handleDuplicate}
-              disabled={!selectedId}
+              disabled={isCanvasMutationDisabled || !selectedId}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title="Duplicate selected layer (Cmd/Ctrl+D)"
               aria-label="Duplicate"
@@ -2531,7 +2546,7 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={handleSelectSiblingScope}
-              disabled={selectableSiblingIds.length < 2}
+              disabled={isCanvasMutationDisabled || selectableSiblingIds.length < 2}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title="Select all sibling layers (Cmd/Ctrl+A)"
               aria-label="Select all sibling layers"
@@ -2542,7 +2557,7 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={handleGroupSelected}
-              disabled={!canGroupSelected}
+              disabled={isCanvasMutationDisabled || !canGroupSelected}
               className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title="Group selected layers (Cmd/Ctrl+G)"
               aria-label="Group selected layers"
@@ -2554,7 +2569,7 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={handleUngroupSelected}
-              disabled={!canUngroupSelected}
+              disabled={isCanvasMutationDisabled || !canUngroupSelected}
               className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title="Ungroup selected element (Shift+Cmd/Ctrl+G)"
               aria-label="Ungroup selected element"
@@ -2570,7 +2585,7 @@ export function CanvasEditor({
               <button
                 type="button"
                 onClick={() => alignSelectedElement('left')}
-                disabled={!canAlignSelected}
+                disabled={isCanvasMutationDisabled || !canAlignSelected}
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Align left"
                 aria-label="Align left"
@@ -2580,7 +2595,7 @@ export function CanvasEditor({
               <button
                 type="button"
                 onClick={() => alignSelectedElement('center')}
-                disabled={!canAlignSelected}
+                disabled={isCanvasMutationDisabled || !canAlignSelected}
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Align horizontal center"
                 aria-label="Align horizontal center"
@@ -2590,7 +2605,7 @@ export function CanvasEditor({
               <button
                 type="button"
                 onClick={() => alignSelectedElement('right')}
-                disabled={!canAlignSelected}
+                disabled={isCanvasMutationDisabled || !canAlignSelected}
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Align right"
                 aria-label="Align right"
@@ -2600,7 +2615,7 @@ export function CanvasEditor({
               <button
                 type="button"
                 onClick={() => alignSelectedElement('top')}
-                disabled={!canAlignSelected}
+                disabled={isCanvasMutationDisabled || !canAlignSelected}
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Align top"
                 aria-label="Align top"
@@ -2610,7 +2625,7 @@ export function CanvasEditor({
               <button
                 type="button"
                 onClick={() => alignSelectedElement('middle')}
-                disabled={!canAlignSelected}
+                disabled={isCanvasMutationDisabled || !canAlignSelected}
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Align vertical center"
                 aria-label="Align vertical center"
@@ -2620,7 +2635,7 @@ export function CanvasEditor({
               <button
                 type="button"
                 onClick={() => alignSelectedElement('bottom')}
-                disabled={!canAlignSelected}
+                disabled={isCanvasMutationDisabled || !canAlignSelected}
                 className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Align bottom"
                 aria-label="Align bottom"
@@ -2632,7 +2647,7 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={deleteElement}
-              disabled={!selectedId}
+              disabled={isCanvasMutationDisabled || !selectedId}
               className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               title="Delete (Delete)"
               aria-label="Delete"
@@ -2715,8 +2730,9 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={() => setIsPreview(!isPreview)}
+              disabled={isSaving}
               className={cn(
-                'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm',
+                'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm disabled:cursor-not-allowed disabled:opacity-60',
                 isPreview
                   ? 'bg-slate-950 text-white'
                   : 'hover:bg-slate-100'
@@ -2731,7 +2747,8 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={() => setIsSettingsOpen(true)}
-              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100"
+              disabled={isSaving}
+              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
               title="Page settings"
                 aria-label="Page settings"
               >
@@ -2743,7 +2760,8 @@ export function CanvasEditor({
             <button
               type="button"
               onClick={handleReload}
-              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100"
+              disabled={isSaving}
+              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
               title="Reload page from last saved state"
               aria-label="Reload page"
             >
