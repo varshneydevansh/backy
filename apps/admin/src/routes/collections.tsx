@@ -1,6 +1,8 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import {
+  AlertTriangle,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Code2,
@@ -11,6 +13,7 @@ import {
   Plus,
   RefreshCw,
   Save,
+  ShieldCheck,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -91,13 +94,22 @@ const createEmptyField = (sortOrder: number): CollectionField => ({
   helpText: null,
 });
 
+const RELATION_FIELD_TYPES: CollectionFieldType[] = ['reference', 'multiReference'];
+const MEDIA_FIELD_TYPES: CollectionFieldType[] = ['image', 'video', 'file'];
+
+const isLocalAdminHost = () => {
+  if (typeof window === 'undefined') return false;
+
+  return ['localhost', '127.0.0.1'].includes(window.location.hostname) && window.location.port !== '3001';
+};
+
 const getPublicBaseUrl = () => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
   const envBase = env.VITE_BACKY_PUBLIC_API_BASE_URL || env.VITE_PUBLIC_API_URL || env.VITE_API_BASE_URL || '';
   if (envBase) {
     return envBase.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '');
   }
-  if (typeof window !== 'undefined' && window.location.port === '5173') {
+  if (isLocalAdminHost()) {
     return 'http://localhost:3001';
   }
   return typeof window !== 'undefined' ? window.location.origin : '';
@@ -117,7 +129,7 @@ const getAdminBaseUrl = () => {
   if (envBase) {
     return `${envBase.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api/admin`;
   }
-  if (typeof window !== 'undefined' && window.location.port === '5173') {
+  if (isLocalAdminHost()) {
     return 'http://localhost:3001/api/admin';
   }
   return typeof window !== 'undefined'
@@ -154,6 +166,17 @@ const buildCollectionRecordRoutePath = (collection: Collection, recordSlug: stri
     .map((segment) => {
       if (segment === ':collectionSlug') return encodeURIComponent(collection.slug);
       if (segment === ':recordSlug') return encodeURIComponent(recordSlug);
+      return segment;
+    })
+    .join('/') || '/'
+);
+
+const buildCollectionRecordRouteTemplate = (collection: Collection) => (
+  normalizeCollectionRoutePattern(collection.routePattern, collection.slug)
+    .split('/')
+    .map((segment) => {
+      if (segment === ':collectionSlug') return collection.slug;
+      if (segment === ':recordSlug') return '{recordSlug}';
       return segment;
     })
     .join('/') || '/'
@@ -334,6 +357,89 @@ function CollectionsPage() {
   const activeCollectionIsPublic = activeCollection?.status === 'published' && activeCollection.permissions?.publicRead === true;
   const recordsCopyUrl = activeCollectionIsPublic ? publicRecordsUrl : adminRecordsUrl;
   const recordsCopyLabel = activeCollectionIsPublic ? 'Public records URL' : 'Admin records URL';
+  const activeSchemaFields = activeCollection?.fields.length
+    ? activeCollection.fields
+    : collectionForm.fields.filter((field) => field.key.trim() && field.label.trim());
+  const activeListRoutePath = activeCollection
+    ? buildCollectionListRoutePath(activeCollection)
+    : normalizeCollectionListRoutePattern(collectionForm.listRoutePattern, collectionForm.slug || 'collection');
+  const activeItemRoutePath = activeCollection
+    ? buildCollectionRecordRouteTemplate(activeCollection)
+    : normalizeCollectionRoutePattern(collectionForm.routePattern, collectionForm.slug || 'collection');
+  const fieldHealth = useMemo(() => {
+    const required = activeSchemaFields.filter((field) => field.required).length;
+    const unique = activeSchemaFields.filter((field) => field.unique).length;
+    const relational = activeSchemaFields.filter((field) => RELATION_FIELD_TYPES.includes(field.type)).length;
+    const media = activeSchemaFields.filter((field) => MEDIA_FIELD_TYPES.includes(field.type)).length;
+    const missingReferenceTargets = activeSchemaFields.filter((field) => (
+      RELATION_FIELD_TYPES.includes(field.type) && !field.referenceCollectionId
+    )).length;
+    const missingSelectOptions = activeSchemaFields.filter((field) => (
+      (field.type === 'select' || field.type === 'tags') && (!field.options || field.options.length === 0)
+    )).length;
+
+    return {
+      required,
+      unique,
+      relational,
+      media,
+      missingReferenceTargets,
+      missingSelectOptions,
+    };
+  }, [activeSchemaFields]);
+  const collectionReadiness = useMemo(() => {
+    const checks = [
+      {
+        label: 'Fields',
+        detail: activeSchemaFields.length > 0
+          ? `${activeSchemaFields.length} reusable fields`
+          : 'Add fields before using this collection on a frontend.',
+        ready: activeSchemaFields.length > 0,
+      },
+      {
+        label: 'Routes',
+        detail: activeListRoutePath && activeItemRoutePath
+          ? `${activeListRoutePath} and ${activeItemRoutePath}`
+          : 'List and item route patterns are required.',
+        ready: Boolean(activeListRoutePath && activeItemRoutePath),
+      },
+      {
+        label: 'Public delivery',
+        detail: activeCollectionIsPublic
+          ? 'Published collection is available to public frontend APIs.'
+          : 'Enable published status and public read when this should be consumed by public pages.',
+        ready: activeCollectionIsPublic,
+      },
+      {
+        label: 'Field integrity',
+        detail: fieldHealth.missingReferenceTargets || fieldHealth.missingSelectOptions
+          ? `${fieldHealth.missingReferenceTargets + fieldHealth.missingSelectOptions} field setup issue${fieldHealth.missingReferenceTargets + fieldHealth.missingSelectOptions === 1 ? '' : 's'}`
+          : 'References and option fields are configured.',
+        ready: fieldHealth.missingReferenceTargets === 0 && fieldHealth.missingSelectOptions === 0,
+      },
+      {
+        label: 'Visitor writes',
+        detail: collectionForm.permissions.publicCreate
+          ? 'Public create is enabled; submissions are stored as draft records.'
+          : 'Visitor create is off; admin API controls writes.',
+        ready: !collectionForm.permissions.publicCreate || activeSchemaFields.length > 0,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      checks,
+      score: Math.round((readyCount / checks.length) * 100),
+    };
+  }, [
+    activeCollectionIsPublic,
+    activeItemRoutePath,
+    activeListRoutePath,
+    activeSchemaFields.length,
+    collectionForm.permissions.publicCreate,
+    fieldHealth.missingReferenceTargets,
+    fieldHealth.missingSelectOptions,
+  ]);
   const collectionMetrics = useMemo(() => {
     const published = collections.filter((collection) => collection.status === 'published').length;
     const fields = collections.reduce((total, collection) => total + collection.fields.length, 0);
@@ -895,6 +1001,60 @@ function CollectionsPage() {
             <CollectionApiStat label="Fields" value={`${activeCollection?.fields.length || collectionForm.fields.length}`} />
           </div>
 
+          <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Frontend readiness</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Checks the schema, routes, public delivery, field integrity, and visitor-write posture.
+                  </p>
+                </div>
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                  collectionReadiness.score >= 80
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'bg-amber-50 text-amber-700'
+                }`}
+                >
+                  {collectionReadiness.score}% ready
+                </span>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full rounded-full ${
+                    collectionReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500'
+                  }`}
+                  style={{ width: `${collectionReadiness.score}%` }}
+                />
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2">
+                {collectionReadiness.checks.map((check) => (
+                  <CollectionReadinessCheck key={check.label} {...check} />
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Frontend wiring</h3>
+              </div>
+              <div className="mt-3 space-y-3">
+                <CollectionRoutePreview label="List page" value={activeListRoutePath} />
+                <CollectionRoutePreview label="Item page" value={activeItemRoutePath} />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <CollectionApiStat label="Required" value={`${fieldHealth.required}`} />
+                <CollectionApiStat label="Unique" value={`${fieldHealth.unique}`} />
+                <CollectionApiStat label="Relations" value={`${fieldHealth.relational}`} />
+                <CollectionApiStat label="Media" value={`${fieldHealth.media}`} />
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                These field groups are what the visual page/editor layer can bind into lists, detail pages, forms, and commerce-like catalog surfaces.
+              </p>
+            </div>
+          </div>
+
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             <CollectionApiSnippet label="Public collections" value={publicCollectionsUrl} />
             <CollectionApiSnippet label="Public records" value={publicRecordsUrl} />
@@ -927,7 +1087,7 @@ function CollectionsPage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-        <section className="rounded-lg border border-border bg-card">
+        <section className="self-start rounded-lg border border-border bg-card">
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">Collection library</h2>
           </div>
@@ -955,6 +1115,9 @@ function CollectionsPage() {
                 </div>
                 <div className="mt-2 text-xs text-muted-foreground">
                   {collection.fields.length} fields
+                  {' '}
+                  {'/ '}
+                  {collection.permissions.publicRead ? 'public API' : 'admin only'}
                 </div>
               </button>
             ))}
@@ -1063,35 +1226,46 @@ function CollectionsPage() {
                   <option value="archived">Archived</option>
                 </select>
               </label>
-              <div className="space-y-2 pt-6 text-sm">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
+              <div className="space-y-2 pt-1 text-sm lg:col-span-3">
+                <span className="font-medium">Delivery permissions</span>
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  <PermissionSwitch
+                    label="Public read"
+                    description="Frontend pages can list and render records."
                     checked={collectionForm.permissions.publicRead}
-                    onChange={(event) => setCollectionForm((prev) => ({
+                    onChange={(checked) => setCollectionForm((prev) => ({
                       ...prev,
                       permissions: {
                         ...prev.permissions,
-                        publicRead: event.target.checked,
+                        publicRead: checked,
                       },
                     }))}
                   />
-                  Public read
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
+                  <PermissionSwitch
+                    label="Visitor create"
+                    description="Public POST creates draft records."
                     checked={collectionForm.permissions.publicCreate}
-                    onChange={(event) => setCollectionForm((prev) => ({
+                    onChange={(checked) => setCollectionForm((prev) => ({
                       ...prev,
                       permissions: {
                         ...prev.permissions,
-                        publicCreate: event.target.checked,
+                        publicCreate: checked,
                       },
                     }))}
                   />
-                  Visitor create
-                </label>
+                  <PermissionSwitch
+                    label="Visitor update"
+                    description="Planned after public auth scopes."
+                    checked={collectionForm.permissions.publicUpdate}
+                    disabled
+                  />
+                  <PermissionSwitch
+                    label="Visitor delete"
+                    description="Planned after public auth scopes."
+                    checked={collectionForm.permissions.publicDelete}
+                    disabled
+                  />
+                </div>
               </div>
               <label className="space-y-1 text-sm lg:col-span-4">
                 <span className="font-medium">Description</span>
@@ -1779,6 +1953,29 @@ function CollectionApiStat({ label, value }: { label: string; value: string }) {
   );
 }
 
+function CollectionReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  const Icon = ready ? CheckCircle2 : AlertTriangle;
+
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-card px-3 py-2">
+      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${ready ? 'text-emerald-600' : 'text-amber-600'}`} />
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function CollectionRoutePreview({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 px-3 py-2">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <code className="mt-1 block truncate font-mono text-xs text-foreground">{value || 'Not configured'}</code>
+    </div>
+  );
+}
+
 function CollectionApiSnippet({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -1787,5 +1984,39 @@ function CollectionApiSnippet({ label, value }: { label: string; value: string }
         {value}
       </code>
     </div>
+  );
+}
+
+function PermissionSwitch({
+  label,
+  description,
+  checked,
+  disabled = false,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange?: (checked: boolean) => void;
+}) {
+  return (
+    <label
+      className={`flex min-h-24 items-start gap-3 rounded-lg border border-border bg-background p-3 ${
+        disabled ? 'cursor-not-allowed opacity-65' : 'cursor-pointer hover:bg-muted/40'
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange?.(event.target.checked)}
+        className="mt-1"
+      />
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-foreground">{label}</span>
+        <span className="mt-1 block text-xs leading-5 text-muted-foreground">{description}</span>
+      </span>
+    </label>
   );
 }

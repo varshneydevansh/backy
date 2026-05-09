@@ -112,6 +112,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     if (path.startsWith('/sites')) return 'Sites';
     if (path.startsWith('/pages')) return 'Pages';
     if (path.startsWith('/blog')) return 'Blog';
+    if (path.startsWith('/collections')) return 'Collections';
+    if (path.startsWith('/forms')) return 'Forms';
     if (path.startsWith('/media')) return 'Media';
     if (path.startsWith('/products')) return 'Products';
     if (path.startsWith('/orders')) return 'Orders';
