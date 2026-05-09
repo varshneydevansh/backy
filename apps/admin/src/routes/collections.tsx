@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { createFileRoute, Link, useNavigate, useRouterState } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -38,15 +38,66 @@ import {
 } from '@/lib/adminContentApi';
 import { PageShell } from '@/components/layout/PageShell';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { useStore } from '@/stores/mockStore';
 import { formatDate } from '@/lib/utils';
 
+const DEFAULT_RECORD_PAGE_SIZE = 25;
+const RECORD_PAGE_SIZES = [25, 50, 100] as const;
+type RecordStatusFilter = CollectionRecord['status'] | '';
+
+interface CollectionsSearch {
+  siteId?: string;
+  collectionId?: string;
+  recordId?: string;
+  search?: string;
+  status?: RecordStatusFilter;
+  fieldKey?: string;
+  fieldValue?: string;
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
+
+const RECORD_STATUS_FILTERS: RecordStatusFilter[] = ['', 'published', 'draft', 'scheduled', 'archived'];
+
+const isRecordStatusFilter = (value: unknown): value is RecordStatusFilter => (
+  typeof value === 'string' && RECORD_STATUS_FILTERS.includes(value as RecordStatusFilter)
+);
+
+const normalizedSearchString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const normalizedPositiveInteger = (value: unknown): number | undefined => {
+  const parsed = typeof value === 'string' || typeof value === 'number' ? Number(value) : NaN;
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : undefined;
+};
+
+const normalizedRecordPageSize = (value: unknown): number | undefined => {
+  const parsed = normalizedPositiveInteger(value);
+  return parsed && RECORD_PAGE_SIZES.includes(parsed as (typeof RECORD_PAGE_SIZES)[number]) ? parsed : undefined;
+};
+
 export const Route = createFileRoute('/collections')({
+  validateSearch: (search: Record<string, unknown>): CollectionsSearch => ({
+    siteId: normalizedSearchString(search.siteId),
+    collectionId: normalizedSearchString(search.collectionId),
+    recordId: normalizedSearchString(search.recordId),
+    search: normalizedSearchString(search.search),
+    status: isRecordStatusFilter(search.status) ? search.status : undefined,
+    fieldKey: normalizedSearchString(search.fieldKey),
+    fieldValue: normalizedSearchString(search.fieldValue),
+    sortBy: normalizedSearchString(search.sortBy),
+    sortDirection: search.sortDirection === 'asc' || search.sortDirection === 'desc' ? search.sortDirection : undefined,
+    limit: normalizedRecordPageSize(search.limit),
+    offset: normalizedPositiveInteger(search.offset),
+  }),
   component: CollectionsPage,
 });
-
-const DEFAULT_RECORD_PAGE_SIZE = 25;
 
 const FIELD_TYPES: CollectionFieldType[] = [
   'text',
@@ -519,29 +570,15 @@ const formatValidationDetails = (details: unknown): string[] => {
     .filter(Boolean);
 };
 
-type RecordStatusFilter = CollectionRecord['status'] | '';
-
 function CollectionsPage() {
   const { sites } = useStore();
   const navigate = useNavigate();
-  const routerState = useRouterState();
-  const shortcutParams = useMemo(() => {
-    if (typeof window === 'undefined') {
-      return { siteId: '', collectionId: '', recordId: '' };
-    }
-
-    const params = new URLSearchParams(window.location.search);
-    return {
-      siteId: params.get('siteId') || '',
-      collectionId: params.get('collectionId') || '',
-      recordId: params.get('recordId') || '',
-    };
-  }, []);
-  const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
+  const routeSearch = Route.useSearch();
+  const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
   const [collections, setCollections] = useState<Collection[]>([]);
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(routeSearch.collectionId || null);
   const [records, setRecords] = useState<CollectionRecord[]>([]);
-  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(routeSearch.recordId || null);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   const [collectionForm, setCollectionForm] = useState({
     name: '',
@@ -559,17 +596,17 @@ function CollectionsPage() {
     values: {} as Record<string, string>,
   });
   const [recordFilters, setRecordFilters] = useState({
-    search: '',
-    status: '' as RecordStatusFilter,
-    fieldKey: '',
-    fieldValue: '',
-    sortBy: 'updatedAt',
-    sortDirection: 'desc' as 'asc' | 'desc',
+    search: routeSearch.search || '',
+    status: (routeSearch.status || '') as RecordStatusFilter,
+    fieldKey: routeSearch.fieldKey || '',
+    fieldValue: routeSearch.fieldValue || '',
+    sortBy: routeSearch.sortBy || 'updatedAt',
+    sortDirection: (routeSearch.sortDirection || 'desc') as 'asc' | 'desc',
   });
   const [recordPagination, setRecordPagination] = useState({
     total: 0,
-    limit: DEFAULT_RECORD_PAGE_SIZE,
-    offset: 0,
+    limit: routeSearch.limit || DEFAULT_RECORD_PAGE_SIZE,
+    offset: routeSearch.offset || 0,
     hasMore: false,
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -585,7 +622,6 @@ function CollectionsPage() {
   const [pendingRecordDelete, setPendingRecordDelete] = useState<CollectionRecord | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
-  const shortcutRecordAppliedRef = useRef(false);
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -873,10 +909,67 @@ function CollectionsPage() {
     selectedRecordIds,
   ]);
   const collectionHandoffText = useMemo(() => JSON.stringify(collectionHandoff, null, 2), [collectionHandoff]);
+  const collectionsRouteSearch = useMemo<CollectionsSearch>(() => ({
+    siteId: activeSiteId,
+    ...(selectedCollectionId ? { collectionId: selectedCollectionId } : {}),
+    ...(selectedRecordId ? { recordId: selectedRecordId } : {}),
+    ...(recordFilters.search.trim() ? { search: recordFilters.search.trim() } : {}),
+    ...(recordFilters.status ? { status: recordFilters.status } : {}),
+    ...(recordFilters.fieldKey ? { fieldKey: recordFilters.fieldKey } : {}),
+    ...(recordFilters.fieldValue.trim() ? { fieldValue: recordFilters.fieldValue.trim() } : {}),
+    ...(recordFilters.sortBy !== 'updatedAt' ? { sortBy: recordFilters.sortBy } : {}),
+    ...(recordFilters.sortDirection !== 'desc' ? { sortDirection: recordFilters.sortDirection } : {}),
+    ...(recordPagination.limit !== DEFAULT_RECORD_PAGE_SIZE ? { limit: recordPagination.limit } : {}),
+    ...(recordPagination.offset > 0 ? { offset: recordPagination.offset } : {}),
+  }), [
+    activeSiteId,
+    recordFilters.fieldKey,
+    recordFilters.fieldValue,
+    recordFilters.search,
+    recordFilters.sortBy,
+    recordFilters.sortDirection,
+    recordFilters.status,
+    recordPagination.limit,
+    recordPagination.offset,
+    selectedCollectionId,
+    selectedRecordId,
+  ]);
+
+  const updateCollectionsRouteSearch = (next: CollectionsSearch) => {
+    const merged: CollectionsSearch = {
+      ...collectionsRouteSearch,
+      ...next,
+    };
+    const normalized: CollectionsSearch = {
+      siteId: merged.siteId || activeSiteId,
+      ...(merged.collectionId ? { collectionId: merged.collectionId } : {}),
+      ...(merged.recordId ? { recordId: merged.recordId } : {}),
+      ...(merged.search?.trim() ? { search: merged.search.trim() } : {}),
+      ...(merged.status ? { status: merged.status } : {}),
+      ...(merged.fieldKey ? { fieldKey: merged.fieldKey } : {}),
+      ...(merged.fieldValue?.trim() ? { fieldValue: merged.fieldValue.trim() } : {}),
+      ...(merged.sortBy && merged.sortBy !== 'updatedAt' ? { sortBy: merged.sortBy } : {}),
+      ...(merged.sortDirection && merged.sortDirection !== 'desc' ? { sortDirection: merged.sortDirection } : {}),
+      ...(merged.limit && merged.limit !== DEFAULT_RECORD_PAGE_SIZE ? { limit: merged.limit } : {}),
+      ...(merged.offset && merged.offset > 0 ? { offset: merged.offset } : {}),
+    };
+
+    navigate({ to: '/collections', search: normalized, replace: true });
+  };
 
   const updateRecordFilters = (updates: Partial<typeof recordFilters>) => {
-    setRecordFilters((prev) => ({ ...prev, ...updates }));
+    const nextFilters = { ...recordFilters, ...updates };
+    setRecordFilters(nextFilters);
     setRecordPagination((prev) => ({ ...prev, offset: 0 }));
+    updateCollectionsRouteSearch({
+      search: nextFilters.search || undefined,
+      status: nextFilters.status || undefined,
+      fieldKey: nextFilters.fieldKey || undefined,
+      fieldValue: nextFilters.fieldValue || undefined,
+      sortBy: nextFilters.sortBy,
+      sortDirection: nextFilters.sortDirection,
+      offset: undefined,
+    });
   };
 
   const toggleRecordSelection = (recordId: string, selected: boolean) => {
@@ -991,7 +1084,6 @@ function CollectionsPage() {
   };
 
   const resetCollectionsWorkspace = () => {
-    shortcutRecordAppliedRef.current = false;
     setCollections([]);
     resetCollectionForm();
     setError(null);
@@ -1006,15 +1098,47 @@ function CollectionsPage() {
   };
 
   useEffect(() => {
-    const requestedSiteId = getSiteSearchParam();
-    if (!requestedSiteId) return;
+    const nextSiteId = routeSearch.siteId
+      ? getSiteSelectionFromSearch(sites, routeSearch.siteId)
+      : selectedSiteId;
+    const siteChanged = nextSiteId !== selectedSiteId;
 
-    const nextSiteId = getSiteSelectionFromSearch(sites);
-    if (nextSiteId === selectedSiteId) return;
+    if (siteChanged) {
+      setSelectedSiteId(nextSiteId);
+      resetCollectionsWorkspace();
+    }
 
-    setSelectedSiteId(nextSiteId);
-    resetCollectionsWorkspace();
-  }, [routerState.location.search, selectedSiteId, sites]);
+    setSelectedCollectionId(routeSearch.collectionId || null);
+    setSelectedRecordId(routeSearch.recordId || null);
+    setSelectedRecordIds([]);
+    setRecordFilters({
+      search: routeSearch.search || '',
+      status: routeSearch.status || '',
+      fieldKey: routeSearch.fieldKey || '',
+      fieldValue: routeSearch.fieldValue || '',
+      sortBy: routeSearch.sortBy || 'updatedAt',
+      sortDirection: routeSearch.sortDirection || 'desc',
+    });
+    setRecordPagination((prev) => ({
+      ...prev,
+      limit: routeSearch.limit || DEFAULT_RECORD_PAGE_SIZE,
+      offset: routeSearch.offset || 0,
+    }));
+  }, [
+    routeSearch.collectionId,
+    routeSearch.fieldKey,
+    routeSearch.fieldValue,
+    routeSearch.limit,
+    routeSearch.offset,
+    routeSearch.recordId,
+    routeSearch.search,
+    routeSearch.siteId,
+    routeSearch.sortBy,
+    routeSearch.sortDirection,
+    routeSearch.status,
+    selectedSiteId,
+    sites,
+  ]);
 
   const applyCollectionTemplate = (template: CollectionTemplate) => {
     setSelectedCollectionId(null);
@@ -1054,18 +1178,18 @@ function CollectionsPage() {
     });
   };
 
-  const selectCollection = (collection: Collection) => {
+  const selectCollection = (collection: Collection, preserveRouteState = false) => {
     setSelectedCollectionId(collection.id);
-    setSelectedRecordId(null);
+    setSelectedRecordId(preserveRouteState ? routeSearch.recordId || null : null);
     setSelectedRecordIds([]);
     setRecordFilters((prev) => ({
       ...prev,
-      fieldKey: '',
-      fieldValue: '',
+      fieldKey: preserveRouteState ? prev.fieldKey : '',
+      fieldValue: preserveRouteState ? prev.fieldValue : '',
     }));
     setRecordPagination((prev) => ({
       ...prev,
-      offset: 0,
+      offset: preserveRouteState ? prev.offset : 0,
     }));
     setCollectionForm({
       name: collection.name,
@@ -1078,6 +1202,13 @@ function CollectionsPage() {
       fields: collection.fields.length > 0 ? collection.fields : [createEmptyField(10)],
     });
     setRecordForm({ slug: '', status: 'published', values: {} });
+    updateCollectionsRouteSearch({
+      collectionId: collection.id,
+      recordId: preserveRouteState ? routeSearch.recordId : undefined,
+      fieldKey: preserveRouteState ? recordFilters.fieldKey || undefined : undefined,
+      fieldValue: preserveRouteState ? recordFilters.fieldValue || undefined : undefined,
+      offset: preserveRouteState ? recordPagination.offset || undefined : undefined,
+    });
   };
 
   const loadCollections = async () => {
@@ -1090,13 +1221,13 @@ function CollectionsPage() {
       setCollections(backendCollections);
       const nextSelected = backendCollections.find((collection) => collection.id === selectedCollectionId)
         || backendCollections.find((collection) => (
-          collection.id === shortcutParams.collectionId ||
-          collection.slug === shortcutParams.collectionId
+          collection.id === routeSearch.collectionId ||
+          collection.slug === routeSearch.collectionId
         ))
         || backendCollections[0]
         || null;
       if (nextSelected) {
-        selectCollection(nextSelected);
+        selectCollection(nextSelected, Boolean(routeSearch.collectionId));
       } else {
         resetCollectionForm();
       }
@@ -1124,14 +1255,13 @@ function CollectionsPage() {
       });
       setRecords(result.records);
       setSelectedRecordIds((prev) => prev.filter((id) => result.records.some((record) => record.id === id)));
-      if (!shortcutRecordAppliedRef.current && shortcutParams.recordId) {
+      if (routeSearch.recordId) {
         const shortcutRecord = result.records.find((record) => (
-          record.id === shortcutParams.recordId ||
-          record.slug === shortcutParams.recordId
+          record.id === routeSearch.recordId ||
+          record.slug === routeSearch.recordId
         ));
         if (shortcutRecord) {
           setSelectedRecordId(shortcutRecord.id);
-          shortcutRecordAppliedRef.current = true;
         }
       }
       setRecordPagination(result.pagination);
@@ -1296,6 +1426,7 @@ function CollectionsPage() {
           : [saved, ...prev];
       });
       setSelectedRecordId(saved.id);
+      updateCollectionsRouteSearch({ recordId: saved.id });
       if (activeCollection) {
         void loadRecords(activeCollection.id);
       }
@@ -1319,6 +1450,7 @@ function CollectionsPage() {
       setRecords((prev) => prev.filter((item) => item.id !== record.id));
       if (selectedRecordId === record.id) {
         setSelectedRecordId(null);
+        updateCollectionsRouteSearch({ recordId: undefined });
       }
       setPendingRecordDelete(null);
       void loadRecords(activeCollection.id);
@@ -1365,6 +1497,7 @@ function CollectionsPage() {
       setRecords((prev) => prev.filter((record) => !deletedIds.includes(record.id)));
       if (selectedRecordId && deletedIds.includes(selectedRecordId)) {
         setSelectedRecordId(null);
+        updateCollectionsRouteSearch({ recordId: undefined });
       }
       setSelectedRecordIds([]);
       setPendingBulkDelete(false);
@@ -2211,6 +2344,7 @@ function CollectionsPage() {
                     onClick={() => {
                       setSelectedRecordId(null);
                       setRecordForm({ slug: '', status: 'published', values: {} });
+                      updateCollectionsRouteSearch({ recordId: undefined });
                     }}
                     className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
                   >
@@ -2391,7 +2525,10 @@ function CollectionsPage() {
                             <td className="px-4 py-3">
                               <button
                                 type="button"
-                                onClick={() => setSelectedRecordId(record.id)}
+                                onClick={() => {
+                                  setSelectedRecordId(record.id);
+                                  updateCollectionsRouteSearch({ recordId: record.id });
+                                }}
                                 className="font-medium text-foreground hover:text-primary"
                               >
                                 {record.slug}
@@ -2433,11 +2570,15 @@ function CollectionsPage() {
                         Rows
                         <select
                           value={recordPagination.limit}
-                          onChange={(event) => setRecordPagination((prev) => ({
-                            ...prev,
-                            limit: Number(event.target.value),
-                            offset: 0,
-                          }))}
+                          onChange={(event) => {
+                            const limit = Number(event.target.value);
+                            setRecordPagination((prev) => ({
+                              ...prev,
+                              limit,
+                              offset: 0,
+                            }));
+                            updateCollectionsRouteSearch({ limit, offset: undefined });
+                          }}
                           className="rounded-lg border bg-background px-2 py-1 text-foreground"
                         >
                           <option value={25}>25</option>
@@ -2450,10 +2591,14 @@ function CollectionsPage() {
                       </span>
                       <button
                         type="button"
-                        onClick={() => setRecordPagination((prev) => ({
-                          ...prev,
-                          offset: Math.max(0, prev.offset - prev.limit),
-                        }))}
+                        onClick={() => {
+                          const offset = Math.max(0, recordPagination.offset - recordPagination.limit);
+                          setRecordPagination((prev) => ({
+                            ...prev,
+                            offset,
+                          }));
+                          updateCollectionsRouteSearch({ offset: offset || undefined });
+                        }}
                         disabled={recordPagination.offset === 0 || isRecordsLoading}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted disabled:opacity-40"
                         aria-label="Previous records page"
@@ -2462,10 +2607,14 @@ function CollectionsPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setRecordPagination((prev) => ({
-                          ...prev,
-                          offset: prev.offset + prev.limit,
-                        }))}
+                        onClick={() => {
+                          const offset = recordPagination.offset + recordPagination.limit;
+                          setRecordPagination((prev) => ({
+                            ...prev,
+                            offset,
+                          }));
+                          updateCollectionsRouteSearch({ offset });
+                        }}
                         disabled={!recordPagination.hasMore || isRecordsLoading}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted disabled:opacity-40"
                         aria-label="Next records page"
