@@ -107,6 +107,11 @@ const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
 ];
 
 type CanvasAlignment = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
+type EditorHistoryEntry = {
+  elements: CanvasElement[];
+  selectedId: string | null;
+  selectedIds: string[];
+};
 
 const RULER_SIZE = 28;
 const RULER_MAJOR_STEP = 100;
@@ -363,11 +368,12 @@ export function CanvasEditor({
   const pendingTransformRef = useRef<{
     elements: CanvasElement[];
     selectedId: string | null;
+    selectedIds: string[];
   } | null>(null);
 
   // Undo/Redo State
-  const [history, setHistory] = useState<Array<{ elements: CanvasElement[]; selectedId: string | null }>>([
-    { elements: initialElements, selectedId: null },
+  const [history, setHistory] = useState<EditorHistoryEntry[]>([
+    { elements: initialElements, selectedId: null, selectedIds: [] },
   ]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const historyIndexRef = useRef(0);
@@ -813,13 +819,51 @@ export function CanvasEditor({
   /**
    * Add current state to history
    */
-  const addToHistory = useCallback((newElements: CanvasElement[], selectedSnapshot: string | null = selectedId) => {
+  const resolveSelectionSnapshot = useCallback((
+    targetElements: CanvasElement[],
+    selectedSnapshot: string | null,
+    selectedIdsSnapshot: string[],
+  ) => {
+    const validIds = Array.from(new Set(selectedIdsSnapshot))
+      .filter((id) => !!findElementById(targetElements, id));
+    const validSelectedId = selectedSnapshot && findElementById(targetElements, selectedSnapshot)
+      ? selectedSnapshot
+      : validIds[0] ?? null;
+    const nextSelectedIds = validSelectedId && !validIds.includes(validSelectedId)
+      ? [validSelectedId, ...validIds]
+      : validIds;
+
+    return {
+      selectedId: validSelectedId,
+      selectedIds: nextSelectedIds,
+    };
+  }, [findElementById]);
+
+  const applyHistoryEntry = useCallback((targetState: EditorHistoryEntry) => {
+    const nextSelection = resolveSelectionSnapshot(
+      targetState.elements,
+      targetState.selectedId,
+      targetState.selectedIds,
+    );
+
+    setElements(targetState.elements);
+    setSelectedIds(nextSelection.selectedIds);
+    setSelectedId(nextSelection.selectedId);
+  }, [resolveSelectionSnapshot]);
+
+  const addToHistory = useCallback((
+    newElements: CanvasElement[],
+    selectedSnapshot: string | null = selectedId,
+    selectedIdsSnapshot: string[] = selectedIds,
+  ) => {
+    const nextSelection = resolveSelectionSnapshot(newElements, selectedSnapshot, selectedIdsSnapshot);
     setHistory((prevHistory) => {
       const baseIndex = Math.max(0, Math.min(historyIndexRef.current, prevHistory.length - 1));
       const nextHistory = prevHistory.slice(0, baseIndex + 1);
       nextHistory.push({
         elements: newElements,
-        selectedId: selectedSnapshot,
+        selectedId: nextSelection.selectedId,
+        selectedIds: nextSelection.selectedIds,
       });
 
       // Limit history size to 50
@@ -832,7 +876,7 @@ export function CanvasEditor({
       historyIndexRef.current = nextIndex;
       return nextHistory;
     });
-  }, [selectedId]);
+  }, [resolveSelectionSnapshot, selectedId, selectedIds]);
 
   /**
    * Undo
@@ -843,15 +887,10 @@ export function CanvasEditor({
       const targetState = history[newIndex];
       setHistoryIndex(newIndex);
       historyIndexRef.current = newIndex;
-      setElements(targetState.elements);
-      setSelectedId(
-        targetState.selectedId && findElementById(targetState.elements, targetState.selectedId)
-          ? targetState.selectedId
-          : null
-      );
+      applyHistoryEntry(targetState);
       markChanges();
     }
-  }, [findElementById, history, historyIndex, markChanges]);
+  }, [applyHistoryEntry, history, historyIndex, markChanges]);
 
   /**
    * Redo
@@ -862,15 +901,10 @@ export function CanvasEditor({
       const targetState = history[newIndex];
       setHistoryIndex(newIndex);
       historyIndexRef.current = newIndex;
-      setElements(targetState.elements);
-      setSelectedId(
-        targetState.selectedId && findElementById(targetState.elements, targetState.selectedId)
-          ? targetState.selectedId
-          : null
-      );
+      applyHistoryEntry(targetState);
       markChanges();
     }
-  }, [findElementById, history, historyIndex, markChanges]);
+  }, [applyHistoryEntry, history, historyIndex, markChanges]);
 
   /**
    * Wrapper for updating elements with history
@@ -880,6 +914,7 @@ export function CanvasEditor({
       | CanvasElement[]
       | ((current: CanvasElement[]) => CanvasElement[]),
     selectedSnapshot: string | null = selectedId,
+    selectedIdsSnapshot: string[] = selectedIds,
   ) => {
     let didUpdate = false;
 
@@ -893,14 +928,14 @@ export function CanvasEditor({
       }
 
       didUpdate = true;
-      addToHistory(nextElements, selectedSnapshot);
+      addToHistory(nextElements, selectedSnapshot, selectedIdsSnapshot);
       return nextElements;
     });
 
     if (didUpdate) {
       markChanges();
     }
-  }, [addToHistory, markChanges, selectedId]);
+  }, [addToHistory, markChanges, selectedId, selectedIds]);
 
   /**
    * Copy
@@ -997,9 +1032,10 @@ export function CanvasEditor({
       }
 
       const firstPastedId = pastedElements[0]?.id ?? null;
-      setSelectedIds(pastedElements.map((element) => element.id));
+      const pastedIds = pastedElements.map((element) => element.id);
+      setSelectedIds(pastedIds);
       setSelectedId(firstPastedId);
-      updateElementsWithHistory(nextElements, firstPastedId);
+      updateElementsWithHistory(nextElements, firstPastedId, pastedIds);
     }
   }, [clipboardElements, cloneElementTreeWithFreshIds, elements, findElementById, selectedId, updateElementsWithHistory]);
 
@@ -1022,7 +1058,7 @@ export function CanvasEditor({
 
     setSelectedIds(duplicatedIds);
     setSelectedId(duplicatedIds[0] ?? null);
-    updateElementsWithHistory(nextElements, duplicatedIds[0] ?? null);
+    updateElementsWithHistory(nextElements, duplicatedIds[0] ?? null, duplicatedIds);
   }, [cloneElementTreeWithFreshIds, elements, getSelectedSiblingEntries, updateElementsWithHistory]);
 
   const handleLayerSelect = useCallback((ids: string[]) => {
@@ -1234,7 +1270,7 @@ export function CanvasEditor({
       });
     };
 
-    updateElementsWithHistory((currentElements) => updateParentChildren(currentElements), groupId);
+    updateElementsWithHistory((currentElements) => updateParentChildren(currentElements), groupId, [groupId]);
     setSelectedIds([groupId]);
     setSelectedId(groupId);
     setRightPanel('properties');
@@ -1303,7 +1339,7 @@ export function CanvasEditor({
     };
 
     const nextSelectedId = expandedIds[0] ?? null;
-    updateElementsWithHistory((currentElements) => updateParentChildren(currentElements), nextSelectedId);
+    updateElementsWithHistory((currentElements) => updateParentChildren(currentElements), nextSelectedId, expandedIds);
     setSelectedIds(nextSelectedId ? [nextSelectedId] : []);
     setSelectedId(nextSelectedId);
     setRightPanel('layers');
@@ -1390,6 +1426,7 @@ export function CanvasEditor({
       pendingTransformRef.current = {
         elements: newElements,
         selectedId: options.selectedId ?? selectedId,
+        selectedIds,
       };
       setElements(newElements);
       markChanges();
@@ -1404,15 +1441,16 @@ export function CanvasEditor({
       }
 
       const selectedSnapshot = pendingTransform.selectedId;
+      const selectedIdsSnapshot = pendingTransform.selectedIds;
       setElements(pendingTransform.elements);
-      addToHistory(pendingTransform.elements, selectedSnapshot);
+      addToHistory(pendingTransform.elements, selectedSnapshot, selectedIdsSnapshot);
       markChanges();
       return;
     }
 
     pendingTransformRef.current = null;
     updateElementsWithHistory(newElements);
-  }, [addToHistory, markChanges, selectedId, updateElementsWithHistory]);
+  }, [addToHistory, markChanges, selectedId, selectedIds, updateElementsWithHistory]);
 
   /**
    * Handle element update from property panel
@@ -1898,7 +1936,7 @@ export function CanvasEditor({
 
     setSelectedIds(parentSelection ? [parentSelection] : []);
     setSelectedId(parentSelection);
-    updateElementsWithHistory(nextElements, parentSelection);
+    updateElementsWithHistory(nextElements, parentSelection, parentSelection ? [parentSelection] : []);
   }, [elements, getSelectedSiblingEntries, updateElementsWithHistory]);
 
   const handleCut = useCallback(() => {
@@ -1923,7 +1961,7 @@ export function CanvasEditor({
 
     setSelectedIds(parentSelection ? [parentSelection] : []);
     setSelectedId(parentSelection);
-    updateElementsWithHistory(nextElements, parentSelection);
+    updateElementsWithHistory(nextElements, parentSelection, parentSelection ? [parentSelection] : []);
   }, [elements, getSelectedSiblingEntries, updateElementsWithHistory]);
 
   /**
@@ -1995,7 +2033,7 @@ export function CanvasEditor({
     setBreakpoint('desktop');
     setSelectedId(null);
     setClipboardElements([]);
-    setHistory([{ elements: nextElements, selectedId: null }]);
+    setHistory([{ elements: nextElements, selectedId: null, selectedIds: [] }]);
     setHistoryIndex(0);
     setHasUnsavedChanges(false);
     changeSequenceRef.current += 1;
