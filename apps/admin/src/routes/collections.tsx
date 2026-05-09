@@ -103,6 +103,122 @@ const COLLECTION_CONTROL_AREAS = [
   },
 ] as const;
 
+interface CollectionTemplate {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  useCase: string;
+  permissions: CollectionPermissions;
+  fields: CollectionField[];
+}
+
+const COLLECTION_TEMPLATES: CollectionTemplate[] = [
+  {
+    id: 'directory',
+    name: 'Directory',
+    slug: 'directory',
+    description: 'Reusable listing records for vendors, members, locations, resources, or agencies.',
+    useCase: 'Public directory pages with filters, detail pages, contact links, and map/search metadata.',
+    permissions: DEFAULT_PERMISSIONS,
+    fields: [
+      { key: 'title', label: 'Title', type: 'text', required: true, unique: false, sortOrder: 10 },
+      { key: 'category', label: 'Category', type: 'select', required: true, unique: false, sortOrder: 20, options: ['Featured', 'Service', 'Resource', 'Partner'] },
+      { key: 'summary', label: 'Summary', type: 'richText', required: false, unique: false, sortOrder: 30 },
+      { key: 'image', label: 'Image', type: 'image', required: false, unique: false, sortOrder: 40 },
+      { key: 'website', label: 'Website', type: 'url', required: false, unique: false, sortOrder: 50 },
+      { key: 'email', label: 'Email', type: 'email', required: false, unique: false, sortOrder: 60 },
+      { key: 'phone', label: 'Phone', type: 'phone', required: false, unique: false, sortOrder: 70 },
+      { key: 'tags', label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 80, options: ['featured', 'local', 'premium'] },
+    ],
+  },
+  {
+    id: 'portfolio',
+    name: 'Portfolio',
+    slug: 'portfolio',
+    description: 'Case studies, work samples, galleries, and project detail pages.',
+    useCase: 'Design portfolio grids, client work pages, and featured project modules.',
+    permissions: DEFAULT_PERMISSIONS,
+    fields: [
+      { key: 'title', label: 'Project title', type: 'text', required: true, unique: false, sortOrder: 10 },
+      { key: 'client', label: 'Client', type: 'text', required: false, unique: false, sortOrder: 20 },
+      { key: 'role', label: 'Role', type: 'text', required: false, unique: false, sortOrder: 30 },
+      { key: 'cover_image', label: 'Cover image', type: 'image', required: false, unique: false, sortOrder: 40 },
+      { key: 'gallery', label: 'Gallery files', type: 'file', required: false, unique: false, sortOrder: 50 },
+      { key: 'summary', label: 'Summary', type: 'richText', required: false, unique: false, sortOrder: 60 },
+      { key: 'project_url', label: 'Project URL', type: 'url', required: false, unique: false, sortOrder: 70 },
+      { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 80, defaultValue: false },
+    ],
+  },
+  {
+    id: 'events',
+    name: 'Events',
+    slug: 'events',
+    description: 'Events, webinars, launches, workshops, and scheduled listings.',
+    useCase: 'Public event calendars with date filters, venue details, registration links, and archive pages.',
+    permissions: DEFAULT_PERMISSIONS,
+    fields: [
+      { key: 'title', label: 'Event title', type: 'text', required: true, unique: false, sortOrder: 10 },
+      { key: 'starts_at', label: 'Starts at', type: 'datetime', required: true, unique: false, sortOrder: 20 },
+      { key: 'ends_at', label: 'Ends at', type: 'datetime', required: false, unique: false, sortOrder: 30 },
+      { key: 'venue', label: 'Venue', type: 'text', required: false, unique: false, sortOrder: 40 },
+      { key: 'event_type', label: 'Event type', type: 'select', required: false, unique: false, sortOrder: 50, options: ['Online', 'In person', 'Hybrid'] },
+      { key: 'description', label: 'Description', type: 'richText', required: false, unique: false, sortOrder: 60 },
+      { key: 'registration_url', label: 'Registration URL', type: 'url', required: false, unique: false, sortOrder: 70 },
+      { key: 'hero_image', label: 'Hero image', type: 'image', required: false, unique: false, sortOrder: 80 },
+    ],
+  },
+  {
+    id: 'testimonials',
+    name: 'Testimonials',
+    slug: 'testimonials',
+    description: 'Quotes, reviews, customer stories, and social proof blocks.',
+    useCase: 'Reusable testimonial sliders, proof sections, review grids, and landing-page trust modules.',
+    permissions: DEFAULT_PERMISSIONS,
+    fields: [
+      { key: 'quote', label: 'Quote', type: 'richText', required: true, unique: false, sortOrder: 10 },
+      { key: 'person_name', label: 'Person name', type: 'text', required: true, unique: false, sortOrder: 20 },
+      { key: 'role', label: 'Role', type: 'text', required: false, unique: false, sortOrder: 30 },
+      { key: 'company', label: 'Company', type: 'text', required: false, unique: false, sortOrder: 40 },
+      { key: 'avatar', label: 'Avatar', type: 'image', required: false, unique: false, sortOrder: 50 },
+      { key: 'rating', label: 'Rating', type: 'number', required: false, unique: false, sortOrder: 60, defaultValue: 5 },
+      { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 70, defaultValue: true },
+    ],
+  },
+  {
+    id: 'team',
+    name: 'Team',
+    slug: 'team',
+    description: 'People profiles for staff, creators, authors, partners, or contributors.',
+    useCase: 'Team pages, author indexes, contributor cards, and people detail pages.',
+    permissions: DEFAULT_PERMISSIONS,
+    fields: [
+      { key: 'name', label: 'Name', type: 'text', required: true, unique: false, sortOrder: 10 },
+      { key: 'role', label: 'Role', type: 'text', required: false, unique: false, sortOrder: 20 },
+      { key: 'bio', label: 'Bio', type: 'richText', required: false, unique: false, sortOrder: 30 },
+      { key: 'avatar', label: 'Avatar', type: 'image', required: false, unique: false, sortOrder: 40 },
+      { key: 'email', label: 'Email', type: 'email', required: false, unique: false, sortOrder: 50 },
+      { key: 'links', label: 'Links JSON', type: 'json', required: false, unique: false, sortOrder: 60 },
+      { key: 'department', label: 'Department', type: 'select', required: false, unique: false, sortOrder: 70, options: ['Leadership', 'Design', 'Engineering', 'Support'] },
+    ],
+  },
+  {
+    id: 'faqs',
+    name: 'FAQs',
+    slug: 'faqs',
+    description: 'Question-and-answer records for help centers, product pages, and SEO sections.',
+    useCase: 'FAQ accordions, knowledge-base groups, support pages, and schema-ready content blocks.',
+    permissions: DEFAULT_PERMISSIONS,
+    fields: [
+      { key: 'question', label: 'Question', type: 'text', required: true, unique: true, sortOrder: 10 },
+      { key: 'answer', label: 'Answer', type: 'richText', required: true, unique: false, sortOrder: 20 },
+      { key: 'group', label: 'Group', type: 'select', required: false, unique: false, sortOrder: 30, options: ['General', 'Pricing', 'Support', 'Account'] },
+      { key: 'sort_order', label: 'Sort order', type: 'number', required: false, unique: false, sortOrder: 40, defaultValue: 10 },
+      { key: 'featured', label: 'Featured', type: 'boolean', required: false, unique: false, sortOrder: 50, defaultValue: false },
+    ],
+  },
+];
+
 const normalizeSlug = (value: string, fallback: string) => {
   const slug = value
     .trim()
@@ -256,6 +372,14 @@ const parseFieldOptions = (value: string) => (
     .split(/[\n,]/)
     .map((option) => option.trim())
     .filter(Boolean)
+);
+
+const cloneTemplateFields = (fields: CollectionField[]) => (
+  fields.map((field, index) => ({
+    ...field,
+    options: field.options ? [...field.options] : undefined,
+    sortOrder: (index + 1) * 10,
+  }))
 );
 
 const formatValidationDetails = (details: unknown): string[] => {
@@ -514,6 +638,24 @@ function CollectionsPage() {
       adminImport: adminImportUrl,
       adminBulk: adminBulkUrl,
     },
+    templates: COLLECTION_TEMPLATES.map((template) => ({
+      id: template.id,
+      name: template.name,
+      slug: template.slug,
+      description: template.description,
+      useCase: template.useCase,
+      permissions: template.permissions,
+      fields: template.fields.map((field) => ({
+        key: field.key,
+        label: field.label,
+        type: field.type,
+        required: field.required,
+        unique: field.unique,
+        options: field.options,
+        defaultValue: field.defaultValue,
+        sortOrder: field.sortOrder,
+      })),
+    })),
     readiness: {
       score: collectionReadiness.score,
       checks: collectionReadiness.checks,
@@ -702,6 +844,44 @@ function CollectionsPage() {
       fields: [createEmptyField(10)],
     });
     setRecordForm({ slug: '', status: 'published', values: {} });
+  };
+
+  const applyCollectionTemplate = (template: CollectionTemplate) => {
+    setSelectedCollectionId(null);
+    setSelectedRecordId(null);
+    setSelectedRecordIds([]);
+    setRecords([]);
+    setRecordFilters({
+      search: '',
+      status: '',
+      fieldKey: '',
+      fieldValue: '',
+      sortBy: 'updatedAt',
+      sortDirection: 'desc',
+    });
+    setRecordPagination({
+      total: 0,
+      limit: DEFAULT_RECORD_PAGE_SIZE,
+      offset: 0,
+      hasMore: false,
+    });
+    setCollectionForm({
+      name: template.name,
+      slug: template.slug,
+      listRoutePattern: defaultCollectionListRoutePattern(template.slug),
+      routePattern: defaultCollectionRoutePattern(template.slug),
+      description: template.description,
+      status: 'published',
+      permissions: { ...template.permissions },
+      fields: cloneTemplateFields(template.fields),
+    });
+    setRecordForm({ slug: '', status: 'published', values: {} });
+    setError(null);
+    setValidationDetails([]);
+    setNotice(`${template.name} template loaded. Review fields, then save the schema.`);
+    window.requestAnimationFrame(() => {
+      document.getElementById('collections-schema')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    });
   };
 
   const selectCollection = (collection: Collection) => {
@@ -1238,6 +1418,51 @@ function CollectionsPage() {
               </a>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="mb-5 rounded-lg border border-border bg-card p-4" data-testid="collections-templates">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold">Collection templates</h2>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Start common dynamic data models without building every field from scratch. Templates load into the schema builder and still require saving.
+            </p>
+          </div>
+          <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            {COLLECTION_TEMPLATES.length} starters
+          </span>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {COLLECTION_TEMPLATES.map((template) => (
+            <article key={template.id} className="rounded-lg border border-border bg-background p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">{template.name}</h3>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{template.useCase}</p>
+                </div>
+                <span className="shrink-0 rounded-md bg-muted px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                  /{template.slug}
+                </span>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span className="rounded-md border border-border px-2 py-1">{template.fields.length} fields</span>
+                <span className="rounded-md border border-border px-2 py-1">
+                  {template.permissions.publicRead ? 'public read' : 'admin only'}
+                </span>
+                {template.fields.some((field) => MEDIA_FIELD_TYPES.includes(field.type)) && (
+                  <span className="rounded-md border border-border px-2 py-1">media-ready</span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => applyCollectionTemplate(template)}
+                className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+              >
+                Use template
+              </button>
+            </article>
+          ))}
         </div>
       </section>
 
