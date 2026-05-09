@@ -367,6 +367,14 @@ function NewPageRoute() {
         && !routeConflict
         && (!formData.isHomepage || formData.slug.trim() || formData.title.trim()),
     );
+    const submitBlockerMessage = useMemo(() => {
+        if (isLoading || canSubmit) return null;
+        if (!selectedSite) return 'Select a target site before creating this page.';
+        if (!formData.title.trim()) return 'Add a page title so Backy can create a named page and editor document.';
+        if (routeConflict) return `The ${routePreview} route is already used by "${routeConflict.title}".`;
+        if (!hasSchedule) return 'Choose a publish date before creating a scheduled page.';
+        return 'Review the required page basics before creating this page.';
+    }, [canSubmit, formData.title, hasSchedule, isLoading, routeConflict, routePreview, selectedSite]);
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
         const hasStarterCanvas = selectedTemplate.sections.length > 0;
@@ -890,10 +898,25 @@ function NewPageRoute() {
 
                         {routeConflict && (
                             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="page-route-conflict">
-                                <div className="font-semibold">Route already exists</div>
-                                <p className="mt-1">
-                                    {routePreview} is already used by {routeConflict.title}. Choose a different slug, unset homepage, or edit the existing page.
-                                </p>
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <div className="font-semibold">Route already exists</div>
+                                        <p className="mt-1">
+                                            {routePreview} is already used by {routeConflict.title}. Choose a different slug, unset homepage, or edit the existing page.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate({
+                                            to: '/pages/$pageId/edit',
+                                            params: { pageId: routeConflict.id },
+                                            search: { siteId: formData.siteId },
+                                        })}
+                                        className="inline-flex shrink-0 items-center justify-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 transition hover:bg-amber-100"
+                                    >
+                                        Open existing page
+                                    </button>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -986,26 +1009,39 @@ function NewPageRoute() {
                         </div>
                     </div>
 
-                    <div className="flex justify-end gap-3">
-                        <button
-                            type="button"
-                            onClick={() => navigate({ to: '/pages', search: { siteId: formData.siteId } })}
-                            className="rounded-lg border px-6 py-2.5 font-medium transition hover:bg-accent"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={isLoading || !canSubmit}
-                            className={cn(
-                                'flex items-center gap-2 rounded-lg px-6 py-2.5',
-                                'bg-primary text-primary-foreground font-medium',
-                                'hover:bg-primary/90 disabled:opacity-50 shadow-md'
-                            )}
-                        >
-                            <Save className="w-4 h-4" />
-                            {isLoading ? 'Creating...' : 'Create Page'}
-                        </button>
+                    <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+                        {submitBlockerMessage && (
+                            <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                <div>
+                                    <div className="font-semibold">Create is blocked</div>
+                                    <div className="mt-0.5">{submitBlockerMessage}</div>
+                                </div>
+                            </div>
+                        )}
+                        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                            <button
+                                type="button"
+                                onClick={() => navigate({ to: '/pages', search: { siteId: formData.siteId } })}
+                                className="rounded-lg border px-6 py-2.5 font-medium transition hover:bg-accent"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isLoading || !canSubmit}
+                                title={submitBlockerMessage || 'Create page and open the visual editor'}
+                                aria-disabled={isLoading || !canSubmit}
+                                className={cn(
+                                    'flex items-center justify-center gap-2 rounded-lg px-6 py-2.5',
+                                    'bg-primary text-primary-foreground font-medium',
+                                    'shadow-md hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50'
+                                )}
+                            >
+                                <Save className="w-4 h-4" />
+                                {isLoading ? 'Creating...' : 'Create Page'}
+                            </button>
+                        </div>
                     </div>
                 </form>
 
