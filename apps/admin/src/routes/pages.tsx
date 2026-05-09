@@ -478,6 +478,8 @@ function PagesListView() {
   };
 
   const copyPageApiText = async (value: string, label: string) => {
+    if (isPageLibraryBusy) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setError(null);
@@ -583,6 +585,8 @@ function PagesListView() {
 
   const refreshPages = useMemo(
     () => async (siteId: string) => {
+      if (isPageLibraryBusy) return;
+
       setIsLoading(true);
       setIsLoadingReadiness(true);
       setError(null);
@@ -602,7 +606,7 @@ function PagesListView() {
         setIsLoadingReadiness(false);
       }
     },
-    [setPages],
+    [isPageLibraryBusy, setPages],
   );
 
   useEffect(() => {
@@ -647,7 +651,7 @@ function PagesListView() {
   );
 
   const handlePreviewPage = async (page: Page) => {
-    if (isPageMutationBusy) return;
+    if (isPageLibraryBusy) return;
 
     setPreviewingPageId(page.id);
     setError(null);
@@ -663,7 +667,7 @@ function PagesListView() {
   };
 
   const handlePublishPage = async (page: Page) => {
-    if (isPageMutationBusy) return;
+    if (isPageLibraryBusy) return;
 
     setMutatingPageId(page.id);
     setError(null);
@@ -690,7 +694,7 @@ function PagesListView() {
   };
 
   const handleArchivePage = async (page: Page) => {
-    if (isPageMutationBusy) return;
+    if (isPageLibraryBusy) return;
 
     setMutatingPageId(page.id);
     setError(null);
@@ -708,7 +712,7 @@ function PagesListView() {
   };
 
   const handleDeletePage = async (page: Page) => {
-    if (isPageMutationBusy) return;
+    if (isPageLibraryBusy) return;
 
     setMutatingPageId(page.id);
     setError(null);
@@ -737,7 +741,7 @@ function PagesListView() {
   };
 
   const handleBulkAction = async () => {
-    if (isPageMutationBusy) {
+    if (isPageLibraryBusy) {
       return;
     }
 
@@ -1196,6 +1200,8 @@ function PagesListView() {
   };
 
   const downloadPageHandoff = () => {
+    if (isPageLibraryBusy) return;
+
     const blob = new Blob([pageHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -1216,7 +1222,11 @@ function PagesListView() {
         <Link
           to="/pages/new"
           search={createPageSearch}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
+          aria-disabled={isPageLibraryBusy}
+          className={cn(
+            'inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors',
+            isPageLibraryBusy && 'pointer-events-none opacity-60',
+          )}
           aria-label="Create new page for active site"
           data-testid="pages-header-create"
         >
@@ -1265,7 +1275,8 @@ function PagesListView() {
             <button
               type="button"
               onClick={() => void copyPageApiText(pageHandoffText, 'Pages handoff manifest')}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              disabled={isPageLibraryBusy}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Copy className="size-4" />
               Copy handoff
@@ -1273,7 +1284,8 @@ function PagesListView() {
             <button
               type="button"
               onClick={downloadPageHandoff}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              disabled={isPageLibraryBusy}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="size-4" />
               Download JSON
@@ -1299,7 +1311,11 @@ function PagesListView() {
             <Link
               to="/pages/new"
               search={createPageSearch}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+              aria-disabled={isPageLibraryBusy}
+              className={cn(
+                'inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90',
+                isPageLibraryBusy && 'pointer-events-none opacity-60',
+              )}
               data-testid="pages-command-create"
             >
               <Plus className="size-4" />
@@ -1348,7 +1364,14 @@ function PagesListView() {
               <a
                 key={area.title}
                 href={area.href}
-                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                aria-disabled={isPageLibraryBusy}
+                onClick={(event) => {
+                  if (isPageLibraryBusy) event.preventDefault();
+                }}
+                className={cn(
+                  'rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5',
+                  isPageLibraryBusy && 'pointer-events-none opacity-60',
+                )}
               >
                 <div className="text-sm font-semibold text-foreground">{area.title}</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
@@ -1381,7 +1404,11 @@ function PagesListView() {
                   key={shortcut.key}
                   to="/pages/new"
                   search={getCreatePageSearch(shortcut.key)}
-                  className="group min-h-32 rounded-lg border border-border bg-card p-3 text-left transition hover:border-primary/50 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring"
+                  aria-disabled={isPageLibraryBusy}
+                  className={cn(
+                    'group min-h-32 rounded-lg border border-border bg-card p-3 text-left transition hover:border-primary/50 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring',
+                    isPageLibraryBusy && 'pointer-events-none opacity-60',
+                  )}
                   data-testid={`pages-create-${shortcut.key}`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -1421,7 +1448,11 @@ function PagesListView() {
                 key={surface.key}
                 to={surface.route}
                 search={surface.route === '/settings' ? undefined : { siteId: activeSiteId }}
-                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                aria-disabled={isPageLibraryBusy}
+                className={cn(
+                  'rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5',
+                  isPageLibraryBusy && 'pointer-events-none opacity-60',
+                )}
               >
                 <div className="text-sm font-semibold text-foreground">{surface.title}</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
@@ -1501,7 +1532,8 @@ function PagesListView() {
             <button
               type="button"
               onClick={() => void copyPageApiText(publicPagesUrl, 'Pages API URL')}
-              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+              disabled={isPageLibraryBusy}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Copy pages API URL"
             >
               <Copy className="h-4 w-4" />
@@ -1510,7 +1542,8 @@ function PagesListView() {
             <button
               type="button"
               onClick={() => void copyPageApiText(pageHandoffText, 'Pages handoff manifest')}
-              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+              disabled={isPageLibraryBusy}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Copy pages handoff manifest"
             >
               <Copy className="h-4 w-4" />
@@ -1837,7 +1870,11 @@ function PagesListView() {
                     to="/pages/new"
                     search={createPageSearch}
                     data-testid="pages-empty-create"
-                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                    aria-disabled={isPageLibraryBusy}
+                    className={cn(
+                      'inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90',
+                      isPageLibraryBusy && 'pointer-events-none opacity-60',
+                    )}
                     aria-label={hasPages ? 'Create page after clearing filters' : 'Create first page for active site'}
                   >
                     <Plus className="w-4 h-4" />
@@ -1853,7 +1890,11 @@ function PagesListView() {
                             key={shortcut.key}
                             to="/pages/new"
                             search={getCreatePageSearch(shortcut.key)}
-                            className="rounded-lg border border-border bg-background px-3 py-3 text-left transition hover:border-primary/50 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring"
+                            aria-disabled={isPageLibraryBusy}
+                            className={cn(
+                              'rounded-lg border border-border bg-background px-3 py-3 text-left transition hover:border-primary/50 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring',
+                              isPageLibraryBusy && 'pointer-events-none opacity-60',
+                            )}
                             data-testid={`pages-empty-create-${shortcut.key}`}
                             aria-label={`Create ${shortcut.title.toLowerCase()} for active site`}
                           >
@@ -1897,7 +1938,7 @@ function PagesListView() {
               <button
                 type="button"
                 onClick={() => setPendingDeletePage(null)}
-                disabled={mutatingPageId === pendingDeletePage.id}
+                disabled={isPageLibraryBusy}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -1905,7 +1946,7 @@ function PagesListView() {
               <button
                 type="button"
                 onClick={() => void handleDeletePage(pendingDeletePage)}
-                disabled={mutatingPageId === pendingDeletePage.id}
+                disabled={isPageLibraryBusy}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {mutatingPageId === pendingDeletePage.id ? 'Deleting...' : 'Delete page'}
@@ -1935,7 +1976,7 @@ function PagesListView() {
               <button
                 type="button"
                 onClick={() => setPendingBulkDelete(false)}
-                disabled={isBulkBusy}
+                disabled={isPageLibraryBusy}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -1943,7 +1984,7 @@ function PagesListView() {
               <button
                 type="button"
                 onClick={() => void handleBulkAction()}
-                disabled={isBulkBusy}
+                disabled={isPageLibraryBusy}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isBulkBusy ? 'Deleting...' : 'Delete pages'}
