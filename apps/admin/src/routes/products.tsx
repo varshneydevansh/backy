@@ -108,6 +108,7 @@ interface ProductFormState {
 }
 
 const PRODUCT_COLLECTION_SLUG = 'products';
+const ORDERS_COLLECTION_SLUG = 'orders';
 
 interface ProductVariantFormState {
   title: string;
@@ -257,6 +258,7 @@ function ProductsRoute() {
   const { sites } = useStore();
   const [selectedSiteId, setSelectedSiteId] = useState(() => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo');
   const [productCollection, setProductCollection] = useState<Collection | null>(null);
+  const [ordersCollection, setOrdersCollection] = useState<Collection | null>(null);
   const [products, setProducts] = useState<CollectionRecord[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [formState, setFormState] = useState<ProductFormState>(EMPTY_PRODUCT_FORM);
@@ -289,6 +291,8 @@ function ProductsRoute() {
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const commerceCatalogUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/catalog?limit=24&sortBy=title`;
   const commerceProductDetailUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/catalog?slug={productSlug}`;
+  const commerceOrderContractUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/orders`;
+  const commerceOrderCreateUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/orders`;
   const storefrontApiUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${PRODUCT_COLLECTION_SLUG}/records?limit=24&sortBy=title`;
   const storefrontProductDetailUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${PRODUCT_COLLECTION_SLUG}/records?slug={productSlug}`;
   const missingProductFields = useMemo(() => (
@@ -298,6 +302,12 @@ function ProductsRoute() {
     productCollection?.status === 'published' &&
     productCollection.permissions.publicRead &&
     missingProductFields.length === 0,
+  );
+  const orderIntakeReady = Boolean(
+    productApiReady &&
+    ordersCollection?.status === 'published' &&
+    !ordersCollection.permissions.publicRead &&
+    !ordersCollection.permissions.publicCreate,
   );
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId) || null,
@@ -395,6 +405,7 @@ function ProductsRoute() {
     const hasImages = products.some((product) => Boolean(product.values.imageUrl) || formatGalleryImages(product.values.galleryImages).length > 0);
     const hasPricing = products.some((product) => toNumber(product.values.price) > 0);
     const hasMerchandising = products.some((product) => Boolean(product.values.category) || formatTags(product.values.tags).length > 0 || Boolean(product.values.vendor));
+    const hasCheckoutUrls = products.some((product) => Boolean(String(product.values.checkoutUrl || '').trim()));
     const checks = [
       {
         label: 'Catalog schema',
@@ -414,6 +425,15 @@ function ProductsRoute() {
         ready: productApiReady,
       },
       {
+        label: 'Order intake',
+        detail: orderIntakeReady
+          ? 'Checkout posts can create private Backy orders.'
+          : ordersCollection
+            ? 'Orders collection must be published and private for public checkout intake.'
+            : 'Set up the private orders queue before using checkout intake.',
+        ready: orderIntakeReady,
+      },
+      {
         label: 'Product inventory',
         detail: hasProducts ? `${products.length} product${products.length === 1 ? '' : 's'} in the catalog.` : 'Create the first sellable product.',
         ready: hasProducts,
@@ -427,6 +447,11 @@ function ProductsRoute() {
         label: 'Pricing',
         detail: hasPricing ? 'At least one product has storefront pricing.' : 'Add prices before selling products.',
         ready: hasPricing,
+      },
+      {
+        label: 'Checkout handoff',
+        detail: hasCheckoutUrls ? 'Products include checkout URLs for external checkout.' : 'Add checkout URLs or wire the order-intake contract.',
+        ready: hasCheckoutUrls || orderIntakeReady,
       },
       {
         label: 'Variants',
@@ -458,6 +483,7 @@ function ProductsRoute() {
         { label: 'Setup', detail: 'Create or sync the products schema with pricing, SKU, stock, image, SEO, and delivery fields.' },
         { label: 'Merchandise', detail: 'Add product data, attach media, set featured/taxable/shipping controls, and write descriptions.' },
         { label: 'Publish', detail: 'Publish catalog records and expose public read APIs for custom storefront pages.' },
+        { label: 'Sell', detail: 'Keep products public and orders private, then use the commerce order-intake contract for checkout carts.' },
         { label: 'Operate', detail: 'Track inventory, low stock, digital products, drafts, and archived products from one catalog view.' },
       ],
     };
@@ -466,6 +492,8 @@ function ProductsRoute() {
     metrics.inventory,
     metrics.published,
     missingProductFields.length,
+    orderIntakeReady,
+    ordersCollection,
     productApiReady,
     productCollection,
     products,
@@ -502,8 +530,24 @@ function ProductsRoute() {
     endpoints: {
       commerceCatalog: commerceCatalogUrl,
       commerceProductBySlug: commerceProductDetailUrl,
+      commerceOrderContract: commerceOrderContractUrl,
+      commerceOrderCreate: commerceOrderCreateUrl,
       list: storefrontApiUrl,
       bySlug: storefrontProductDetailUrl,
+    },
+    orderIntake: {
+      ready: orderIntakeReady,
+      endpoint: commerceOrderContractUrl,
+      method: 'POST',
+      ordersCollection: ordersCollection
+        ? {
+            id: ordersCollection.id,
+            slug: ordersCollection.slug,
+            status: ordersCollection.status,
+            permissions: ordersCollection.permissions,
+          }
+        : null,
+      requirement: 'The products collection must be public, while the orders collection must stay published and private.',
     },
     storefrontContract: {
       collectionSlug: PRODUCT_COLLECTION_SLUG,
@@ -515,9 +559,12 @@ function ProductsRoute() {
       detailFields: PRODUCT_FIELDS.map((field) => field.key),
       filterFacets: ['status', 'category', 'tags', 'vendor', 'productType', 'featured', 'inventoryPolicy'],
       checkout: {
-        mode: 'per-product checkoutUrl',
+        mode: orderIntakeReady ? 'Backy order intake or per-product checkoutUrl' : 'per-product checkoutUrl',
         configuredProducts: products.filter((product) => Boolean(String(product.values.checkoutUrl || '').trim())).length,
-        note: 'Backy stores product checkout URLs today. Dedicated payment-session creation is still a commerce backend milestone.',
+        orderIntakeReady,
+        note: orderIntakeReady
+          ? 'Custom frontends can post cart/customer data to Backy order intake, then keep payment-provider settlement as the next commerce milestone.'
+          : 'Backy stores product checkout URLs today. Dedicated payment-session creation is still a commerce backend milestone.',
       },
       normalizedApi: {
         schemaVersion: 'backy.commerce-catalog.v1',
@@ -592,9 +639,13 @@ function ProductsRoute() {
     categoryFilter,
     commerceCatalogUrl,
     commerceProductDetailUrl,
+    commerceOrderContractUrl,
+    commerceOrderCreateUrl,
     filteredProducts.length,
     metrics,
     missingProductFields,
+    orderIntakeReady,
+    ordersCollection,
     productApiReady,
     productTypeFilter,
     productCollection,
@@ -614,6 +665,7 @@ function ProductsRoute() {
     try {
       const collections = await listCollections(activeSiteId);
       const collection = collections.find((item) => item.slug === PRODUCT_COLLECTION_SLUG) || null;
+      setOrdersCollection(collections.find((item) => item.slug === ORDERS_COLLECTION_SLUG) || null);
       setProductCollection(collection);
 
       if (!collection) {
@@ -1139,6 +1191,8 @@ function ProductsRoute() {
                 <ProductApiSnippet label="Product by slug" value={storefrontProductDetailUrl} />
                 <ProductApiSnippet label="Commerce catalog" value={commerceCatalogUrl} />
                 <ProductApiSnippet label="Commerce product by slug" value={commerceProductDetailUrl} />
+                <ProductApiSnippet label="Order intake contract" value={commerceOrderContractUrl} />
+                <ProductApiSnippet label="Create order POST" value={commerceOrderCreateUrl} />
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span
@@ -1152,12 +1206,66 @@ function ProductsRoute() {
                 <StatusBadge status={productCollection.status} />
                 <span>{productCollection.permissions.publicRead ? 'Public read enabled' : 'Public read disabled'}</span>
                 <span>{products.filter((product) => product.status === 'published').length} published records</span>
+                <span>{orderIntakeReady ? 'Order intake ready' : 'Order intake needs private orders'}</span>
               </div>
               {missingProductFields.length > 0 && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   Missing commerce fields: {missingProductFields.join(', ')}. Sync the schema before relying on product APIs.
                 </div>
               )}
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Checkout and order intake</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Custom storefronts can either follow product checkout URLs or post carts to Backy, where orders stay private for admin fulfillment.
+                    </p>
+                  </div>
+                  <span className={cn(
+                    'rounded-full px-2.5 py-1 text-xs font-semibold',
+                    orderIntakeReady ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                  )}
+                  >
+                    {orderIntakeReady ? 'Ready' : 'Needs orders queue'}
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.7fr)]">
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <div className="grid gap-2 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Products collection</span>
+                        <span className={cn('rounded-md px-2 py-1 text-xs font-medium', productApiReady ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning')}>
+                          {productApiReady ? 'Public and synced' : 'Needs sync'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Orders collection</span>
+                        <span className={cn('rounded-md px-2 py-1 text-xs font-medium', ordersCollection ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning')}>
+                          {ordersCollection ? ordersCollection.status : 'Missing'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Order privacy</span>
+                        <span className={cn('rounded-md px-2 py-1 text-xs font-medium', orderIntakeReady ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning')}>
+                          {ordersCollection && !ordersCollection.permissions.publicRead && !ordersCollection.permissions.publicCreate ? 'Private' : 'Review'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <div className="text-xs font-semibold text-foreground">Next commerce milestone</div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Backy can capture order records. Payment-provider sessions, tax/shipping quotes, discounts, refunds, and webhook settlement remain the deeper commerce backend work.
+                    </p>
+                    <Link
+                      to="/orders"
+                      className="mt-3 inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-background px-3 text-xs font-medium hover:bg-accent"
+                    >
+                      Open orders
+                    </Link>
+                  </div>
+                </div>
+              </div>
               <div className="rounded-lg border border-border bg-background p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
