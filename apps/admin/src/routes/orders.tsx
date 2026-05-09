@@ -948,6 +948,18 @@ function OrdersRoute() {
       return;
     }
 
+    if (Number(formState.total || 0) <= 0) {
+      setError('Add a positive order total before saving.');
+      setNotice(null);
+      return;
+    }
+
+    if (!formState.items.trim()) {
+      setError('Add at least one line item or raw item payload before saving.');
+      setNotice(null);
+      return;
+    }
+
     setIsSaving(true);
     setError(null);
     setNotice(null);
