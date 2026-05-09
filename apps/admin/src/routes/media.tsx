@@ -77,6 +77,29 @@ const MEDIA_CONTROL_AREAS = [
   },
 ] as const;
 
+const MEDIA_USAGE_SURFACES = [
+  {
+    title: 'Page editor',
+    detail: 'Use uploaded images, files, icons, and fonts while designing pages on the canvas.',
+    route: '/pages',
+  },
+  {
+    title: 'Blog editor',
+    detail: 'Attach covers, inline media, downloads, and author assets to editorial posts.',
+    route: '/blog',
+  },
+  {
+    title: 'Products',
+    detail: 'Use product imagery, digital downloads, manuals, and storefront media from one library.',
+    route: '/products',
+  },
+  {
+    title: 'Storage settings',
+    detail: 'Review local, S3, or Supabase storage runtime before relying on production uploads.',
+    route: '/settings',
+  },
+] as const;
+
 const MEDIA_EXPORT_COLUMNS = [
   'asset_id',
   'name',
@@ -421,6 +444,10 @@ function MediaPage() {
       transform: publicMediaTransformUrl,
       adminUpload: adminMediaUploadUrl,
     },
+    controlRoutes: Object.fromEntries(MEDIA_USAGE_SURFACES.map((surface) => [
+      surface.title,
+      surface.route,
+    ])),
     export: {
       csvIncludesDeliveryUrls: true,
       csvIncludesFolderAssignments: true,
@@ -1139,7 +1166,7 @@ function MediaPage() {
   return (
     <PageShell
       title="Media Library"
-      description="Manage images and files."
+      description="Upload, organize, protect, transform, and deliver every image, font, document, audio, video, and file used across Backy sites."
       action={
         <div className="relative">
           <input
@@ -1280,6 +1307,32 @@ function MediaPage() {
                 <div className="text-sm font-semibold text-foreground">{area.title}</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
               </a>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Connected media workflows</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Route assets from the central library into editors, storefronts, downloads, and storage configuration.
+              </p>
+            </div>
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              {MEDIA_USAGE_SURFACES.length} surfaces
+            </span>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            {MEDIA_USAGE_SURFACES.map((surface) => (
+              <Link
+                key={surface.title}
+                to={surface.route}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{surface.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
+              </Link>
             ))}
           </div>
         </div>
