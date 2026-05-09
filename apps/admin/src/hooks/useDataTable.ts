@@ -64,11 +64,12 @@ export function useDataTable<T>({
     }, [filteredData, sortConfig]);
 
     // 3. Paginate
-    const totalPages = Math.ceil(sortedData.length / pageSize);
+    const totalPages = Math.max(1, Math.ceil(sortedData.length / pageSize));
+    const visibleCurrentPage = Math.min(Math.max(currentPage, 1), totalPages);
     const paginatedData = useMemo(() => {
-        const start = (currentPage - 1) * pageSize;
+        const start = (visibleCurrentPage - 1) * pageSize;
         return sortedData.slice(start, start + pageSize);
-    }, [sortedData, currentPage, pageSize]);
+    }, [sortedData, visibleCurrentPage, pageSize]);
 
     // Actions
     const handleSort = (key: keyof T) => {
@@ -85,7 +86,7 @@ export function useDataTable<T>({
         sortConfig,
         setSortConfig,
         handleSort,
-        currentPage,
+        currentPage: visibleCurrentPage,
         setCurrentPage,
         totalPages,
         totalItems: filteredData.length,
