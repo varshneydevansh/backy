@@ -690,6 +690,7 @@ function PagesListView() {
   };
 
   const handleDeletePage = async (page: Page) => {
+    setMutatingPageId(page.id);
     setError(null);
     setNotice(null);
 
@@ -710,6 +711,8 @@ function PagesListView() {
       setNotice(`${page.title} deleted.`);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete page');
+    } finally {
+      setMutatingPageId(null);
     }
   };
 
@@ -933,8 +936,9 @@ function PagesListView() {
               onClick={() => {
                 setPendingDeletePage(page);
               }}
+              disabled={mutatingPageId === page.id}
               title="Delete page"
-              className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -1823,16 +1827,18 @@ function PagesListView() {
               <button
                 type="button"
                 onClick={() => setPendingDeletePage(null)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                disabled={mutatingPageId === pendingDeletePage.id}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void handleDeletePage(pendingDeletePage)}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+                disabled={mutatingPageId === pendingDeletePage.id}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Delete page
+                {mutatingPageId === pendingDeletePage.id ? 'Deleting...' : 'Delete page'}
               </button>
             </div>
           </div>
