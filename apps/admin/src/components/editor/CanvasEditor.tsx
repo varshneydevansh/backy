@@ -20,6 +20,7 @@ import {
   AlignVerticalJustifyEnd,
   AlignVerticalJustifyStart,
   ArrowLeft,
+  CheckSquare,
   ClipboardPaste,
   Copy,
   Save,
@@ -1170,6 +1171,17 @@ export function CanvasEditor({
     [elements, findElementEntry, selectedIds],
   );
   const selectedParentId = selectedEntries[0]?.parentId ?? null;
+  const selectableSiblingIds = useMemo(() => {
+    const selectedEntry = selectedId ? findElementEntry(elements, selectedId) : null;
+    const parentId = selectedEntry?.parentId ?? null;
+    const siblings = parentId
+      ? findElementEntry(elements, parentId)?.element.children || []
+      : elements;
+
+    return siblings
+      .filter((item) => item.visible !== false && !item.locked)
+      .map((item) => item.id);
+  }, [elements, findElementEntry, selectedId]);
   const canGroupSelected = selectedEntries.length > 1
     && selectedEntries.every((entry) => entry.parentId === selectedParentId && !entry.element.locked);
   const canUngroupSelected = selectedEntries.length === 1
@@ -1209,6 +1221,16 @@ export function CanvasEditor({
       return nextIds;
     });
   }, [elements, findElementById]);
+
+  const handleSelectSiblingScope = useCallback(() => {
+    if (selectableSiblingIds.length === 0) {
+      return;
+    }
+
+    setSelectedIds(selectableSiblingIds);
+    setSelectedId(selectableSiblingIds[0] || null);
+    setRightPanel('layers');
+  }, [selectableSiblingIds]);
 
   /**
    * Handle elements change
@@ -1763,6 +1785,13 @@ export function CanvasEditor({
         return;
       }
 
+      // Ctrl+A / Cmd+A (Select all unlocked siblings in the active canvas scope)
+      if ((e.ctrlKey || e.metaKey) && key === 'a') {
+        e.preventDefault();
+        handleSelectSiblingScope();
+        return;
+      }
+
       if (e.key.startsWith('Arrow')) {
         const step = e.shiftKey ? 10 : 1;
         const deltaByKey: Record<string, [number, number]> = {
@@ -1856,6 +1885,7 @@ export function CanvasEditor({
     handleDuplicate,
     handleGroupSelected,
     handleUngroupSelected,
+    handleSelectSiblingScope,
     nudgeSelectedElement,
     isPreview,
     isSaving,
@@ -2160,6 +2190,17 @@ export function CanvasEditor({
               aria-label="Duplicate"
             >
               <Copy className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleSelectSiblingScope}
+              disabled={selectableSiblingIds.length < 2}
+              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Select all sibling layers (Cmd/Ctrl+A)"
+              aria-label="Select all sibling layers"
+              data-testid="editor-select-sibling-layers"
+            >
+              <CheckSquare className="h-4 w-4" />
             </button>
             <button
               type="button"
