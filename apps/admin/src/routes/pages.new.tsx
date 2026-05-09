@@ -654,7 +654,8 @@ function NewPageRoute() {
                 <button
                     type="button"
                     onClick={() => navigate({ to: '/pages', search: { siteId: formData.siteId } })}
-                    className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+                    disabled={isLoading}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
                     <ArrowLeft className="h-4 w-4" />
                     Pages
@@ -701,7 +702,8 @@ function NewPageRoute() {
                         <button
                             type="button"
                             onClick={() => navigate({ to: '/sites/new' })}
-                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+                            disabled={isLoading}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             <Globe className="h-4 w-4" />
                             Create site
@@ -1023,7 +1025,8 @@ function NewPageRoute() {
                             <button
                                 type="button"
                                 onClick={() => navigate({ to: '/pages', search: { siteId: formData.siteId } })}
-                                className="rounded-lg border px-6 py-2.5 font-medium transition hover:bg-accent"
+                                disabled={isLoading}
+                                className="rounded-lg border px-6 py-2.5 font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 Cancel
                             </button>
