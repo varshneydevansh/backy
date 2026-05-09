@@ -2308,7 +2308,7 @@ export function CanvasEditor({
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleCanvasDrop}
           >
-            <div className="flex min-h-full justify-center">
+            <div className="flex min-h-full min-w-max justify-center">
               <div
                 className="relative mx-auto"
                 style={{
@@ -2466,7 +2466,7 @@ export function CanvasEditor({
           {/* Right Sidebar - Inspector */}
           {!isPreview && (
             <aside
-              className="flex h-full min-h-0 w-[clamp(18rem,24vw,30rem)] min-w-[18rem] max-w-[30rem] shrink-0 flex-col border-l border-slate-200 bg-white"
+              className="flex h-full min-h-0 w-[clamp(18rem,20vw,24rem)] min-w-[18rem] max-w-[24rem] shrink-0 flex-col border-l border-slate-200 bg-white"
               data-testid="editor-inspector"
             >
               <div className="border-b border-slate-200 p-3">

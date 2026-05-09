@@ -332,6 +332,43 @@ const getElementBox = async (client, elementId) => (
   })()`)
 );
 
+const scrollElementIntoView = async (client, elementId) => {
+  await evaluate(client, `(() => {
+    const node = document.querySelector('[data-element-id="${elementId}"]');
+    if (!node) return;
+
+    let scroller = node.parentElement;
+    while (scroller) {
+      const style = window.getComputedStyle(scroller);
+      const canScrollX = scroller.scrollWidth > scroller.clientWidth && /(auto|scroll)/.test(style.overflowX);
+      const canScrollY = scroller.scrollHeight > scroller.clientHeight && /(auto|scroll)/.test(style.overflowY);
+      if (canScrollX || canScrollY) {
+        break;
+      }
+      scroller = scroller.parentElement;
+    }
+
+    if (!scroller) return;
+
+    const margin = 160;
+    const nodeRect = node.getBoundingClientRect();
+    const scrollerRect = scroller.getBoundingClientRect();
+
+    if (nodeRect.left < scrollerRect.left + margin) {
+      scroller.scrollLeft -= (scrollerRect.left + margin) - nodeRect.left;
+    } else if (nodeRect.right > scrollerRect.right - margin) {
+      scroller.scrollLeft += nodeRect.right - (scrollerRect.right - margin);
+    }
+
+    if (nodeRect.top < scrollerRect.top + margin) {
+      scroller.scrollTop -= (scrollerRect.top + margin) - nodeRect.top;
+    } else if (nodeRect.bottom > scrollerRect.bottom - margin) {
+      scroller.scrollTop += nodeRect.bottom - (scrollerRect.bottom - margin);
+    }
+  })()`);
+  await sleep(120);
+};
+
 const parseCssPixel = (value) => {
   if (typeof value !== 'string') {
     return null;
@@ -619,6 +656,7 @@ const waitForPersistedCanvasState = async (pageId, expectedState) => {
 };
 
 const dragElement = async (client, elementId, deltaX, deltaY) => {
+  await scrollElementIntoView(client, elementId);
   const before = await getElementBox(client, elementId);
   assert(before, `Missing draggable element ${elementId}`);
 
@@ -1023,6 +1061,7 @@ const testMultiSelectionCanvasDrag = async (client, elementIds) => {
 };
 
 const dragSelectionHandle = async (client, elementId, deltaX, deltaY, options = {}) => {
+  await scrollElementIntoView(client, elementId);
   if (options.selectFirst !== false) {
     await selectElement(client, elementId);
   }
@@ -1131,6 +1170,7 @@ const dragEditingMoveHandle = async (client, elementId, deltaX, deltaY) => {
 };
 
 const resizeElement = async (client, elementId, deltaX, deltaY) => {
+  await scrollElementIntoView(client, elementId);
   const selectionBox = await getElementBox(client, elementId);
   assert(selectionBox, `Missing element ${elementId}`);
   await client.send('Input.dispatchMouseEvent', {

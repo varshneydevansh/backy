@@ -8,8 +8,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, Archive, CheckCircle2, ExternalLink, Eye, History, RefreshCw, RotateCcw } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowLeft, CheckCircle2, ExternalLink, Eye, History, RefreshCw, RotateCcw } from 'lucide-react';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
+import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
 import { PageSettings } from '@/components/editor/PageSettingsModal';
 import {
@@ -27,6 +28,8 @@ import {
 import { useStore, type Page } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Button } from '@/components/ui/Button';
+import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import {
   createCanvasElement,
   normalizeSavedCanvasContent,
@@ -343,64 +346,151 @@ function PageEditorRoute() {
   };
 
   return (
-    <div className="relative min-h-screen">
+    <PageShell
+      title={
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="rounded-lg border border-border bg-background p-2 transition-colors hover:bg-accent"
+            aria-label="Back to pages"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <span>Edit Page</span>
+        </div>
+      }
+      description="Design the public page, manage publishing, and keep revisions in one workspace."
+      className="pb-24"
+    >
       {(loadError || saveWarning) && (
-        <div className="absolute left-1/2 top-3 z-[70] w-[min(720px,calc(100%-2rem))] -translate-x-1/2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
           {saveWarning || `${loadError} Using the local page copy.`}
         </div>
       )}
 
-      <details
-        className="absolute top-16 z-[70] w-[min(360px,calc(100%-2rem))] rounded-lg border border-border bg-background/95 p-2 text-sm shadow-lg backdrop-blur"
-        style={{ right: 'calc(clamp(18rem, 24vw, 30rem) + 1rem)' }}
-        data-testid="page-workflow-panel"
-      >
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-md px-2 py-1.5 [&::-webkit-details-marker]:hidden">
-          <div className="flex items-center gap-2 font-medium">
-            <History className="h-4 w-4" />
-            <span>Workflow</span>
-          </div>
-          <StatusBadge status={page.status} />
-        </summary>
-
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            disabled={isPreviewBusy}
-            onClick={() => void generatePreview()}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-800 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Eye className="h-4 w-4" />
-            Preview
-          </button>
-          <button
-            type="button"
-            disabled={isWorkflowBusy || page.status === 'published' || isReadinessBlocked}
-            onClick={() => void applyWorkflow('publish')}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-green-800 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <CheckCircle2 className="h-4 w-4" />
-            Publish
-          </button>
-          <button
-            type="button"
-            disabled={isWorkflowBusy || page.status === 'archived'}
-            onClick={() => void applyWorkflow('archive')}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Archive className="h-4 w-4" />
-            Archive
-          </button>
+      {workflowNotice && (
+        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 shadow-sm">
+          {workflowNotice}
         </div>
+      )}
 
-        <div className="mt-3 rounded-md border border-border px-3 py-2" data-testid="page-readiness-panel">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Page readiness
+      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_320px]">
+        <EditorWorkspaceFrame
+          title="Page design canvas"
+          description="Compose the public page with components, layers, media, grouping, reusable sections, and data bindings."
+          meta={
+            <>
+              <span className="rounded bg-muted px-2 py-1 tabular-nums">
+                {initialCanvasSize.width} x {initialCanvasSize.height}px
+              </span>
+              <span className="rounded bg-muted px-2 py-1">
+                {(initialElements.length || fallbackElements.length)} root layer{(initialElements.length || fallbackElements.length) === 1 ? '' : 's'}
+              </span>
+              <span className="rounded bg-muted px-2 py-1">
+                Cmd/Ctrl+G grouping
+              </span>
+            </>
+          }
+          className="relative min-h-[760px] xl:h-[calc(100vh-168px)] xl:min-h-[860px]"
+        >
+          <CanvasEditor
+            key={`${page.id}:${editorResetVersion}`}
+            mode="page"
+            initialElements={initialElements.length ? initialElements : fallbackElements}
+            initialSize={initialCanvasSize}
+            initialSettings={initialSettings}
+            onSave={handleSave}
+            onBack={handleBack}
+            hideNavigation={true}
+            mediaContext={{
+              siteId,
+              scope: 'page',
+              targetId: pageId,
+              targetLabel: page.title,
+            }}
+            className="h-full w-full"
+          />
+        </EditorWorkspaceFrame>
+
+        <aside className="grid gap-4 lg:grid-cols-3 2xl:grid-cols-1">
+          <Panel>
+            <PanelHeader
+              title="Publish"
+              description={page.slug ? `/${page.slug}` : 'Public page'}
+              icon={<History className="size-4" />}
+              action={<StatusBadge status={page.status} />}
+            />
+            <PanelContent className="space-y-4">
+              <div className="grid gap-2">
+                <Button
+                  onClick={() => void generatePreview()}
+                  disabled={isPreviewBusy}
+                  variant="outline"
+                  iconStart={<Eye className="size-4" />}
+                  className="w-full"
+                >
+                  Preview
+                </Button>
+                <Button
+                  onClick={() => void applyWorkflow('publish')}
+                  disabled={isWorkflowBusy || page.status === 'published' || isReadinessBlocked}
+                  variant="primary"
+                  iconStart={<CheckCircle2 className="size-4" />}
+                  className="w-full"
+                  title={isReadinessBlocked ? 'Resolve page readiness errors before publishing' : 'Publish page'}
+                >
+                  Publish
+                </Button>
+                <Button
+                  onClick={() => void applyWorkflow('archive')}
+                  disabled={isWorkflowBusy || page.status === 'archived'}
+                  variant="outline"
+                  iconStart={<Archive className="size-4" />}
+                  className="w-full"
+                >
+                  Archive
+                </Button>
               </div>
-              <div className="mt-1 flex items-center gap-2">
-                <span
+
+              {previewUrl && (
+                <a
+                  href={previewUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex max-w-full items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <span className="truncate">
+                    Preview expires {previewExpiresAt ? new Date(previewExpiresAt).toLocaleTimeString() : 'soon'}
+                  </span>
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                </a>
+              )}
+            </PanelContent>
+          </Panel>
+
+          <Panel>
+            <PanelHeader
+              title="Readiness"
+              description={pageReadiness
+                ? `${pageReadiness.elementCount} elements · ${pageReadiness.canvasSize.width}x${pageReadiness.canvasSize.height}`
+                : 'Publishing checks'}
+              icon={<CheckCircle2 className="size-4" />}
+              action={
+                <button
+                  type="button"
+                  onClick={() => void loadPageReadiness()}
+                  disabled={readinessLoading}
+                  className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                  title="Refresh page readiness"
+                >
+                  <RefreshCw className={readinessLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+                </button>
+              }
+            />
+            <PanelContent className="space-y-3">
+              <div className="rounded-lg border border-border bg-background px-3 py-2">
+                <div
                   className={
                     pageReadiness?.statusLabel === 'ready'
                       ? 'text-sm font-semibold text-green-700'
@@ -414,121 +504,71 @@ function PageEditorRoute() {
                     : pageReadiness
                       ? `${pageReadiness.score}% ${pageReadiness.statusLabel.replace('-', ' ')}`
                       : 'Not checked'}
-                </span>
-                {pageReadiness && (
-                  <span className="text-xs text-muted-foreground">
-                    {pageReadiness.elementCount} elements · {pageReadiness.canvasSize.width}x{pageReadiness.canvasSize.height}
-                  </span>
-                )}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => void loadPageReadiness()}
-              disabled={readinessLoading}
-              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
-              title="Refresh page readiness"
-            >
-              <RefreshCw className={readinessLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-            </button>
-          </div>
-
-          {readinessError && (
-            <div className="mt-2 text-xs text-amber-700">{readinessError}</div>
-          )}
-
-          {pageReadinessFindings.length > 0 ? (
-            <div className="mt-2 space-y-1.5">
-              {pageReadinessFindings.map((check) => (
-                <div
-                  key={check.id}
-                  className={
-                    check.severity === 'error'
-                      ? 'flex items-start gap-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-800'
-                      : 'flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800'
-                  }
-                >
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <span>{check.message}</span>
                 </div>
-              ))}
-            </div>
-          ) : pageReadiness ? (
-            <div className="mt-2 flex items-center gap-2 text-xs font-medium text-green-700">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Ready for publishing checks.
-            </div>
-          ) : null}
-        </div>
+                {readinessError && <div className="mt-1 text-xs text-amber-700">{readinessError}</div>}
+              </div>
 
-        {workflowNotice && (
-          <div className="mt-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800">
-            {workflowNotice}
-          </div>
-        )}
-
-        {previewUrl && (
-          <a
-            href={previewUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <span className="min-w-0 truncate">
-              Preview expires {previewExpiresAt ? new Date(previewExpiresAt).toLocaleTimeString() : 'soon'}
-            </span>
-            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-          </a>
-        )}
-
-        <div className="mt-3 space-y-2">
-          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Recent revisions</div>
-          {revisions.length === 0 ? (
-            <div className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-              No saved revisions yet.
-            </div>
-          ) : (
-            revisions.slice(0, 4).map((revision) => (
-              <div key={revision.id} className="rounded-md border border-border px-3 py-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{revision.note || 'Revision snapshot'}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(revision.createdAt).toLocaleString()} · {revision.snapshotStatus}
+              {pageReadinessFindings.length > 0 ? (
+                <div className="grid gap-2">
+                  {pageReadinessFindings.map((check) => (
+                    <div
+                      key={check.id}
+                      className={
+                        check.severity === 'error'
+                          ? 'flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800'
+                          : 'flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800'
+                      }
+                    >
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>{check.message}</span>
                     </div>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={isWorkflowBusy}
-                    onClick={() => setPendingRestoreRevision(revision)}
-                    className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
-                    title="Restore revision"
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                  </button>
+                  ))}
                 </div>
-              </div>
-            ))
-          )}
-        </div>
-      </details>
+              ) : pageReadiness ? (
+                <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-medium text-green-700">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Ready for publishing checks.
+                </div>
+              ) : null}
+            </PanelContent>
+          </Panel>
 
-      <CanvasEditor
-        key={`${page.id}:${editorResetVersion}`}
-        mode="page"
-        initialElements={initialElements.length ? initialElements : fallbackElements}
-        initialSize={initialCanvasSize}
-        initialSettings={initialSettings}
-        onSave={handleSave}
-        onBack={handleBack}
-        mediaContext={{
-          siteId,
-          scope: 'page',
-          targetId: pageId,
-          targetLabel: page.title,
-        }}
-        className="h-[calc(100vh-6rem)] min-h-[760px] w-full overflow-hidden rounded-lg border border-border shadow-sm"
-      />
+          <Panel>
+            <PanelHeader title="Revisions" icon={<RotateCcw className="size-4" />} />
+            <PanelContent>
+              {revisions.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+                  No saved revisions yet.
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {revisions.slice(0, 6).map((revision) => (
+                    <div key={revision.id} className="rounded-lg border border-border px-3 py-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">{revision.note || 'Revision snapshot'}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {new Date(revision.createdAt).toLocaleString()} · {revision.snapshotStatus}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={isWorkflowBusy}
+                          onClick={() => setPendingRestoreRevision(revision)}
+                          className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                          title="Restore revision"
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </PanelContent>
+          </Panel>
+        </aside>
+      </div>
 
       {pendingRestoreRevision && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
@@ -572,6 +612,6 @@ function PageEditorRoute() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
