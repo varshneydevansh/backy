@@ -195,33 +195,40 @@ function PagesListView() {
     () => activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo',
     [activeSite, selectedSiteId],
   );
+  const activeSitePages = useMemo(() => {
+    const siteIdentifiers = new Set(
+      [activeSiteId, activeSite?.id, activeSite?.publicSiteId].filter(Boolean),
+    );
+
+    return pages.filter((page) => siteIdentifiers.has(page.siteId));
+  }, [activeSite?.id, activeSite?.publicSiteId, activeSiteId, pages]);
   const visiblePages = useMemo(
-    () => pages.filter((page) => {
+    () => activeSitePages.filter((page) => {
       const matchesStatus = statusFilter === 'all' || page.status === statusFilter;
       const matchesHealth = healthFilter === 'all' || readinessMap[page.id]?.statusLabel === healthFilter;
 
       return matchesStatus && matchesHealth;
     }),
-    [healthFilter, pages, readinessMap, statusFilter],
+    [activeSitePages, healthFilter, readinessMap, statusFilter],
   );
   const pageMetrics = useMemo(
     () => ({
-      total: pages.length,
-      published: pages.filter((page) => page.status === 'published').length,
-      draft: pages.filter((page) => page.status === 'draft').length,
-      scheduled: pages.filter((page) => page.status === 'scheduled').length,
-      blocked: pages.filter((page) => readinessMap[page.id]?.statusLabel === 'blocked').length,
+      total: activeSitePages.length,
+      published: activeSitePages.filter((page) => page.status === 'published').length,
+      draft: activeSitePages.filter((page) => page.status === 'draft').length,
+      scheduled: activeSitePages.filter((page) => page.status === 'scheduled').length,
+      blocked: activeSitePages.filter((page) => readinessMap[page.id]?.statusLabel === 'blocked').length,
     }),
-    [pages, readinessMap],
+    [activeSitePages, readinessMap],
   );
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const adminBaseUrl = useMemo(() => getAdminBaseUrl(), []);
   const siteSlug = activeSite?.slug || activeSiteId;
   const selectedPages = useMemo(
-    () => pages.filter((page) => selectedPageIds.has(page.id)),
-    [pages, selectedPageIds],
+    () => activeSitePages.filter((page) => selectedPageIds.has(page.id)),
+    [activeSitePages, selectedPageIds],
   );
-  const apiPage = selectedPages[0] || pages.find((page) => page.status === 'published') || pages[0] || null;
+  const apiPage = selectedPages[0] || activeSitePages.find((page) => page.status === 'published') || activeSitePages[0] || null;
   const apiPageSegment = apiPage?.id ? encodeURIComponent(apiPage.id) : '{pageId}';
   const apiPageSlug = apiPage?.slug ? encodeURIComponent(apiPage.slug) : '{pageSlug}';
   const apiPagePath = apiPage ? pagePublicPath(apiPage) : '/{pageSlug}';
@@ -235,19 +242,19 @@ function PagesListView() {
   const adminPagePreviewUrl = `${adminPageDetailUrl}/preview`;
   const createPageSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const pageDesignReadiness = useMemo(() => {
-    const checkedPages = pages.filter((page) => readinessMap[page.id]);
-    const readyPages = pages.filter((page) => readinessMap[page.id]?.statusLabel === 'ready');
+    const checkedPages = activeSitePages.filter((page) => readinessMap[page.id]);
+    const readyPages = activeSitePages.filter((page) => readinessMap[page.id]?.statusLabel === 'ready');
     const totalElements = checkedPages.reduce((total, page) => total + (readinessMap[page.id]?.elementCount || 0), 0);
-    const hasHomepage = pages.some((page) => page.isHomepage || page.slug === 'home' || page.slug === '');
-    const hasPublishedPage = pages.some((page) => page.status === 'published');
+    const hasHomepage = activeSitePages.some((page) => page.isHomepage || page.slug === 'home' || page.slug === '');
+    const hasPublishedPage = activeSitePages.some((page) => page.status === 'published');
     const hasCanvasContent = totalElements > 0;
     const checks = [
       {
         label: 'Page library',
-        detail: pages.length > 0
-          ? `${pages.length} page${pages.length === 1 ? '' : 's'} in this site`
+        detail: activeSitePages.length > 0
+          ? `${activeSitePages.length} page${activeSitePages.length === 1 ? '' : 's'} in this site`
           : 'Create the first page for this site.',
-        ready: pages.length > 0,
+        ready: activeSitePages.length > 0,
       },
       {
         label: 'Homepage route',
@@ -270,10 +277,10 @@ function PagesListView() {
       },
       {
         label: 'Readiness checks',
-        detail: checkedPages.length === pages.length && pages.length > 0
-          ? `${readyPages.length}/${pages.length} pages are ready`
-          : `${checkedPages.length}/${pages.length} pages checked`,
-        ready: pages.length > 0 && checkedPages.length === pages.length,
+        detail: checkedPages.length === activeSitePages.length && activeSitePages.length > 0
+          ? `${readyPages.length}/${activeSitePages.length} pages are ready`
+          : `${checkedPages.length}/${activeSitePages.length} pages checked`,
+        ready: activeSitePages.length > 0 && checkedPages.length === activeSitePages.length,
       },
       {
         label: 'Publish blockers',
@@ -297,7 +304,7 @@ function PagesListView() {
         { label: 'Deliver', detail: 'Use public page, resolve, and render APIs for any custom frontend.' },
       ],
     };
-  }, [pageMetrics.blocked, pageMetrics.published, pages, readinessMap]);
+  }, [activeSitePages, pageMetrics.blocked, pageMetrics.published, readinessMap]);
 
   const setPageStatusFilter = (status: 'all' | Page['status']) => {
     setStatusFilter(status);
@@ -703,7 +710,7 @@ function PagesListView() {
     columns,
     pageSize: 10
   });
-  const hasPages = pages.length > 0;
+  const hasPages = activeSitePages.length > 0;
   const selectedTablePages = data.filter((page) => selectedPageIds.has(page.id));
   const pageHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
@@ -750,7 +757,7 @@ function PagesListView() {
       search: searchQuery,
       status: statusFilter,
       health: healthFilter,
-      selected: selectedPageIds.size,
+      selected: selectedPages.length,
       visible: data.length,
       currentPage,
       totalPages,
@@ -809,7 +816,7 @@ function PagesListView() {
     publicResolveUrl,
     readinessMap,
     searchQuery,
-    selectedPageIds.size,
+    selectedPages.length,
     siteSlug,
     statusFilter,
     totalItems,
@@ -1043,6 +1050,7 @@ function PagesListView() {
               setSelectedSiteId(event.target.value);
               setStatusFilter('all');
               setHealthFilter('all');
+              setSelectedPageIds(new Set());
             }}
             className="mt-2 w-full min-w-52 rounded-lg border bg-background px-3 py-2 text-sm"
           >
@@ -1199,7 +1207,7 @@ function PagesListView() {
 
       {hasPages && (
         <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
-          <span className="text-sm font-medium">{selectedPageIds.size} selected</span>
+          <span className="text-sm font-medium">{selectedPages.length} selected</span>
           <button
             type="button"
             onClick={() => setPageSelection(data, selectedTablePages.length !== data.length)}
