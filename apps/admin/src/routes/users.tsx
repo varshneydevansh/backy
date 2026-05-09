@@ -44,6 +44,7 @@ import {
   listUsers,
   updateUser as updateBackendUser,
 } from '@/lib/adminContentApi';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { useStore, type User as UserType } from '@/stores/mockStore';
 
 export const Route = createFileRoute('/users')({
@@ -230,7 +231,7 @@ function UsersLayout() {
 
 function UsersListView() {
   const navigate = useNavigate();
-  const { users, setUsers } = useStore();
+  const { sites, users, setUsers } = useStore();
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
@@ -240,12 +241,19 @@ function UsersListView() {
   const [pendingDelete, setPendingDelete] = useState<UserType | null>(null);
   const adminBaseUrl = useMemo(() => getAdminBaseUrl(), []);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
+  const selectedMembershipSiteId = useMemo(() => getSiteSelectionFromSearch(sites), [sites]);
+  const membershipSite = useMemo(
+    () => sites.find((site) => siteMatchesIdentifier(site, selectedMembershipSiteId)) || sites[0],
+    [selectedMembershipSiteId, sites],
+  );
+  const membershipSiteId = membershipSite?.publicSiteId || membershipSite?.id || selectedMembershipSiteId || 'site-demo';
+  const encodedMembershipSiteId = encodeURIComponent(membershipSiteId);
   const usersListUrl = `${adminBaseUrl}/users`;
   const userDetailUrl = `${adminBaseUrl}/users/{userId}`;
-  const publicFormsUrl = `${publicBaseUrl}/api/sites/{siteId}/forms`;
-  const publicRegistrationDefinitionUrl = `${publicBaseUrl}/api/sites/{siteId}/forms/{registrationFormId}/definition`;
-  const publicRegistrationSubmitUrl = `${publicBaseUrl}/api/sites/{siteId}/forms/{registrationFormId}/submissions`;
-  const publicContactsUrl = `${publicBaseUrl}/api/sites/{siteId}/forms/{registrationFormId}/contacts`;
+  const publicFormsUrl = `${publicBaseUrl}/api/sites/${encodedMembershipSiteId}/forms`;
+  const publicRegistrationDefinitionUrl = `${publicBaseUrl}/api/sites/${encodedMembershipSiteId}/forms/{registrationFormId}/definition`;
+  const publicRegistrationSubmitUrl = `${publicBaseUrl}/api/sites/${encodedMembershipSiteId}/forms/{registrationFormId}/submissions`;
+  const publicContactsUrl = `${publicBaseUrl}/api/sites/${encodedMembershipSiteId}/forms/{registrationFormId}/contacts`;
 
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
@@ -556,6 +564,17 @@ function UsersListView() {
     initialSort: { key: 'fullName', direction: 'asc' },
     pageSize: 10,
   });
+  const membershipStepSearch = useCallback((to: (typeof MEMBERSHIP_HANDOFF_STEPS)[number]['to']) => {
+    if (to === '/pages/new') {
+      return { siteId: membershipSiteId, template: 'registration' };
+    }
+
+    if (to === '/forms' || to === '/contacts') {
+      return { siteId: membershipSiteId };
+    }
+
+    return undefined;
+  }, [membershipSiteId]);
   const userHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     endpoints: {
@@ -568,9 +587,15 @@ function UsersListView() {
     },
     membership: {
       model: 'Public members are captured through Forms, Contacts, and Collections today; admin users remain private workspace users.',
+      site: {
+        id: membershipSiteId,
+        name: membershipSite?.name || membershipSiteId,
+        slug: membershipSite?.slug || null,
+      },
       routes: {
-        registrationPage: '/pages/new?template=registration',
-        forms: '/forms',
+        registrationPage: `/pages/new?siteId=${encodedMembershipSiteId}&template=registration`,
+        forms: `/forms?siteId=${encodedMembershipSiteId}`,
+        contacts: `/contacts?siteId=${encodedMembershipSiteId}`,
         authAndInfrastructureSettings: '/settings',
       },
       systems: MEMBERSHIP_FLOW_SYSTEMS,
@@ -644,6 +669,10 @@ function UsersListView() {
     accessReadiness.score,
     currentPage,
     data,
+    encodedMembershipSiteId,
+    membershipSite?.name,
+    membershipSite?.slug,
+    membershipSiteId,
     reviewFilter,
     roleFilter,
     searchQuery,
@@ -1109,13 +1138,13 @@ function UsersListView() {
           <Panel id="users-membership" className="scroll-mt-24">
             <PanelHeader
               title="Membership registration"
-              description="Public registration capture and credentialed auth handoff."
+              description={`Public registration capture and credentialed auth handoff for ${membershipSite?.name || membershipSiteId}.`}
               icon={<Shield className="size-4" />}
               action={
                 <div className="flex flex-wrap items-center gap-2">
                   <Link
                     to="/pages/new"
-                    search={{ template: 'registration' }}
+                    search={{ siteId: membershipSiteId, template: 'registration' }}
                     className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     <Plus className="size-4" />
@@ -1123,6 +1152,7 @@ function UsersListView() {
                   </Link>
                   <Link
                     to="/forms"
+                    search={{ siteId: membershipSiteId }}
                     className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 text-sm font-semibold transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     <ClipboardList className="size-4" />
@@ -1157,7 +1187,7 @@ function UsersListView() {
                 </div>
                 <div className="mt-3 grid gap-2">
                   {MEMBERSHIP_HANDOFF_STEPS.map((step) => (
-                    <MembershipStepCard key={step.step} step={step} />
+                    <MembershipStepCard key={step.step} step={step} search={membershipStepSearch(step.to)} />
                   ))}
                 </div>
               </div>
@@ -1321,7 +1351,13 @@ function UserApiSnippet({ label, value }: { label: string; value: string }) {
   );
 }
 
-function MembershipStepCard({ step }: { step: (typeof MEMBERSHIP_HANDOFF_STEPS)[number] }) {
+function MembershipStepCard({
+  step,
+  search,
+}: {
+  step: (typeof MEMBERSHIP_HANDOFF_STEPS)[number];
+  search?: { siteId: string; template?: string };
+}) {
   const available = step.status === 'available';
 
   return (
@@ -1350,7 +1386,7 @@ function MembershipStepCard({ step }: { step: (typeof MEMBERSHIP_HANDOFF_STEPS)[
           </div>
           <Link
             to={step.to}
-            search={step.to === '/pages/new' ? { template: 'registration' } : undefined}
+            search={search}
             className="mt-3 inline-flex min-h-8 items-center justify-center rounded-lg border border-border bg-background px-3 text-xs font-medium transition hover:bg-accent"
           >
             {step.label}
