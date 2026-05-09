@@ -8,6 +8,7 @@ import {
   Code2,
   Copy,
   CreditCard,
+  Download,
   Clock3,
   ExternalLink,
   PackageCheck,
@@ -310,6 +311,104 @@ function OrdersRoute() {
     ordersApiReady,
     ordersCollection,
   ]);
+  const orderHandoff = useMemo(() => ({
+    site: {
+      id: activeSiteId,
+      name: activeSite?.name || activeSiteId,
+      slug: activeSite?.slug,
+      status: activeSite?.status,
+    },
+    generatedAt: new Date().toISOString(),
+    collection: ordersCollection
+      ? {
+          id: ordersCollection.id,
+          name: ordersCollection.name,
+          slug: ordersCollection.slug,
+          status: ordersCollection.status,
+          permissions: ordersCollection.permissions,
+          listRoutePattern: ordersCollection.listRoutePattern,
+          routePattern: ordersCollection.routePattern,
+          missingFields: missingOrderFields,
+          fields: mergeOrderFields(ordersCollection.fields).map((field) => ({
+            key: field.key,
+            label: field.label,
+            type: field.type,
+            required: field.required,
+            unique: field.unique,
+            options: field.options,
+            defaultValue: field.defaultValue,
+          })),
+        }
+      : null,
+    endpoints: {
+      adminListCreate: adminOrdersApiUrl,
+      adminDetailUpdate: adminOrderDetailApiUrl,
+      publicBlocked: publicOrdersApiUrl,
+    },
+    security: {
+      publicRead: Boolean(ordersCollection?.permissions.publicRead),
+      publicCreate: Boolean(ordersCollection?.permissions.publicCreate),
+      publicUpdate: Boolean(ordersCollection?.permissions.publicUpdate),
+      publicDelete: Boolean(ordersCollection?.permissions.publicDelete),
+      adminOnly: ordersApiReady,
+    },
+    readiness: {
+      ready: ordersApiReady,
+      score: orderReadiness.score,
+      checks: orderReadiness.checks,
+    },
+    metrics,
+    workflowStates: {
+      order: ['open', 'paid', 'fulfilled', 'cancelled', 'refunded'],
+      payment: ['pending', 'paid', 'failed', 'refunded'],
+      fulfillment: ['unfulfilled', 'processing', 'fulfilled', 'cancelled'],
+    },
+    orders: orders.map((order) => ({
+      id: order.id,
+      slug: order.slug,
+      status: order.status,
+      updatedAt: order.updatedAt,
+      orderNumber: String(readOrderValue(order.values, 'ordernumber', order.slug)),
+      customerName: String(readOrderValue(order.values, 'customername', '')),
+      email: String(order.values.email || ''),
+      phone: String(readOrderValue(order.values, 'phone', '')),
+      total: toNumber(order.values.total),
+      currency: normalizeCurrency(String(order.values.currency || 'USD')),
+      items: String(order.values.items || ''),
+      orderStatus: asOrderStatus(readOrderValue(order.values, 'orderstatus', undefined)),
+      paymentStatus: asPaymentStatus(readOrderValue(order.values, 'paymentstatus', undefined)),
+      paymentProvider: String(readOrderValue(order.values, 'paymentprovider', '')),
+      paymentReference: String(readOrderValue(order.values, 'paymentreference', '')),
+      paidAt: String(readOrderValue(order.values, 'paidat', '') || ''),
+      fulfillmentStatus: asFulfillmentStatus(readOrderValue(order.values, 'fulfillmentstatus', undefined)),
+      fulfillmentCarrier: String(readOrderValue(order.values, 'fulfillmentcarrier', '')),
+      trackingNumber: String(readOrderValue(order.values, 'trackingnumber', '')),
+      trackingUrl: String(readOrderValue(order.values, 'trackingurl', '')),
+      fulfilledAt: String(readOrderValue(order.values, 'fulfilledat', '') || ''),
+      refundAmount: readOrderValue(order.values, 'refundamount', null) === null || readOrderValue(order.values, 'refundamount', undefined) === undefined
+        ? null
+        : toNumber(readOrderValue(order.values, 'refundamount', 0)),
+      hasShippingAddress: Boolean(readOrderValue(order.values, 'shippingaddress', '')),
+      hasBillingAddress: Boolean(readOrderValue(order.values, 'billingaddress', '')),
+      hasPrivateNotes: Boolean(order.values.notes),
+    })),
+  }), [
+    activeSite?.name,
+    activeSite?.slug,
+    activeSite?.status,
+    activeSiteId,
+    adminOrderDetailApiUrl,
+    adminOrdersApiUrl,
+    metrics,
+    missingOrderFields,
+    orderReadiness.checks,
+    orderReadiness.score,
+    orders,
+    ordersApiReady,
+    ordersCollection,
+    publicOrdersApiUrl,
+  ]);
+  const orderHandoffText = useMemo(() => JSON.stringify(orderHandoff, null, 2), [orderHandoff]);
 
   const loadOrders = async () => {
     setIsLoading(true);
@@ -531,6 +630,26 @@ function OrdersRoute() {
       setNotice(value);
     }
   };
+  const copyOrderHandoff = async () => {
+    try {
+      await navigator.clipboard.writeText(orderHandoffText);
+      setNotice('Order handoff manifest copied.');
+    } catch {
+      setNotice(orderHandoffText);
+    }
+  };
+  const downloadOrderHandoff = () => {
+    const blob = new Blob([orderHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSite?.slug || activeSiteId}-backy-orders-handoff.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice('Order handoff manifest downloaded.');
+  };
 
   return (
     <PageShell
@@ -589,6 +708,12 @@ function OrdersRoute() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => void copyOrderHandoff()} iconStart={<Copy className="size-4" />}>
+              Copy manifest
+            </Button>
+            <Button variant="outline" onClick={downloadOrderHandoff} iconStart={<Download className="size-4" />}>
+              Download JSON
+            </Button>
             {!ordersCollection ? (
               <Button onClick={() => void createOrdersCollection()} disabled={isSaving} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set up orders'}
@@ -671,6 +796,9 @@ function OrdersRoute() {
                     Sync Schema
                   </Button>
                 )}
+                <Button onClick={() => void copyOrderHandoff()} iconStart={<Copy className="size-4" />}>
+                  Copy manifest
+                </Button>
                 <Button onClick={() => void copyOrdersApiUrl(adminOrdersApiUrl, 'Internal orders API URL')} iconStart={<Copy className="size-4" />}>
                   Copy admin API
                 </Button>
