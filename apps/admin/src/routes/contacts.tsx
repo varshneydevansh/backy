@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   Archive,
@@ -722,6 +722,44 @@ function ContactsRoute() {
       q: undefined,
     });
   };
+  const openFormsWorkspace = () => {
+    if (isContactsBusy) return;
+
+    navigate({ to: '/forms', search: activeSiteSearch });
+  };
+  const openUsersWorkspace = () => {
+    if (isContactsBusy) return;
+
+    navigate({ to: '/users', search: activeSiteSearch });
+  };
+  const openLeadInfrastructureSettings = () => {
+    if (isContactsBusy) return;
+
+    navigate({ to: '/settings', search: { tab: 'infrastructure' } });
+  };
+  const openLeadCapturePage = (template: 'contact' | 'registration') => {
+    if (isContactsBusy) return;
+
+    navigate({ to: '/pages/new', search: { siteId: activeSiteId, template } });
+  };
+  const openContactWorkflowSurface = (surface: typeof CONTACT_WORKFLOW_SURFACES[number]) => {
+    if (surface.route === '/pages/new') {
+      openLeadCapturePage(surface.template);
+      return;
+    }
+
+    if (surface.route === '/forms') {
+      openFormsWorkspace();
+      return;
+    }
+
+    if (surface.route === '/users') {
+      openUsersWorkspace();
+      return;
+    }
+
+    openLeadInfrastructureSettings();
+  };
   const selectContactsSite = (nextSiteId: string) => {
     if (isContactsBusy) return;
 
@@ -883,27 +921,16 @@ function ContactsRoute() {
           </div>
           <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
             {CONTACT_WORKFLOW_SURFACES.map((surface) => (
-              surface.route === '/pages/new' ? (
-                <Link
-                  key={surface.key}
-                  to="/pages/new"
-                  search={{ siteId: activeSiteId, template: surface.template }}
-                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
-                >
-                  <div className="text-sm font-semibold text-foreground">{surface.title}</div>
-                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
-                </Link>
-              ) : (
-                <Link
-                  key={surface.key}
-                  to={surface.route}
-                  search={surface.route === '/forms' || surface.route === '/users' ? activeSiteSearch : undefined}
-                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
-                >
-                  <div className="text-sm font-semibold text-foreground">{surface.title}</div>
-                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
-                </Link>
-              )
+              <button
+                key={surface.key}
+                type="button"
+                onClick={() => openContactWorkflowSurface(surface)}
+                disabled={isContactsBusy}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <div className="text-sm font-semibold text-foreground">{surface.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
+              </button>
             ))}
           </div>
         </div>
@@ -959,16 +986,9 @@ function ContactsRoute() {
               >
                 Export CSV
               </Button>
-              <Link
-                to="/forms"
-                search={{ siteId: activeSiteId }}
-                aria-disabled={isContactsBusy}
-                className={cn(isContactsBusy && 'pointer-events-none opacity-60')}
-              >
-                <Button variant="outline" iconStart={<Mail className="size-4" />}>
-                  Forms
-                </Button>
-              </Link>
+              <Button variant="outline" onClick={openFormsWorkspace} disabled={isContactsBusy} iconStart={<Mail className="size-4" />}>
+                Forms
+              </Button>
             </div>
           }
         />
@@ -1084,11 +1104,9 @@ function ContactsRoute() {
                     Select one source form to expose its contact list and update endpoints. The all-forms view is an admin aggregate.
                   </p>
                 </div>
-                <Link to="/forms" search={{ siteId: activeSiteId }}>
-                  <Button variant="outline" iconStart={<Mail className="size-4" />}>
-                    Configure forms
-                  </Button>
-                </Link>
+                <Button variant="outline" onClick={openFormsWorkspace} disabled={isContactsBusy} iconStart={<Mail className="size-4" />}>
+                  Configure forms
+                </Button>
               </div>
             </div>
           )}
@@ -1186,9 +1204,9 @@ function ContactsRoute() {
               title="No contacts yet"
               description="Contacts appear when forms share lead information into the contact pipeline."
               action={
-                <Link to="/forms" search={{ siteId: activeSiteId }}>
-                  <Button className="mt-2" iconStart={<Mail className="size-4" />}>Review Forms</Button>
-                </Link>
+                <Button onClick={openFormsWorkspace} disabled={isContactsBusy} className="mt-2" iconStart={<Mail className="size-4" />}>
+                  Review Forms
+                </Button>
               }
             />
           ) : filteredContacts.length === 0 ? (
