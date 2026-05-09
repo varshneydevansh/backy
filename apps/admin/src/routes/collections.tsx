@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -38,7 +38,7 @@ import {
 } from '@/lib/adminContentApi';
 import { PageShell } from '@/components/layout/PageShell';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { useStore } from '@/stores/mockStore';
 import { formatDate } from '@/lib/utils';
 
@@ -523,6 +523,8 @@ type RecordStatusFilter = CollectionRecord['status'] | '';
 
 function CollectionsPage() {
   const { sites } = useStore();
+  const navigate = useNavigate();
+  const routerState = useRouterState();
   const shortcutParams = useMemo(() => {
     if (typeof window === 'undefined') {
       return { siteId: '', collectionId: '', recordId: '' };
@@ -589,7 +591,8 @@ function CollectionsPage() {
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
   );
-  const activeSiteId = activeSite?.publicSiteId || activeSite?.id || 'site-demo';
+  const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const activeSiteSlug = activeSite?.slug || activeSiteId;
   const activeCollection = useMemo(
     () => collections.find((collection) => collection.id === selectedCollectionId) || null,
@@ -748,10 +751,10 @@ function CollectionsPage() {
       adminBulk: adminBulkUrl,
     },
     controlRoutes: {
-      pages: '/pages',
-      media: '/media',
-      products: '/products',
-      forms: '/forms',
+      pages: `/pages?siteId=${encodeURIComponent(activeSiteId)}`,
+      media: `/media?siteId=${encodeURIComponent(activeSiteId)}`,
+      products: `/products?siteId=${encodeURIComponent(activeSiteId)}`,
+      forms: `/forms?siteId=${encodeURIComponent(activeSiteId)}`,
       sites: '/sites',
       settings: '/settings',
     },
@@ -986,6 +989,32 @@ function CollectionsPage() {
     });
     setRecordForm({ slug: '', status: 'published', values: {} });
   };
+
+  const resetCollectionsWorkspace = () => {
+    shortcutRecordAppliedRef.current = false;
+    setCollections([]);
+    resetCollectionForm();
+    setError(null);
+    setValidationDetails([]);
+    setNotice(null);
+  };
+
+  const selectCollectionsSite = (nextSiteId: string) => {
+    setSelectedSiteId(nextSiteId);
+    resetCollectionsWorkspace();
+    navigate({ to: '/collections', search: { siteId: nextSiteId }, replace: true });
+  };
+
+  useEffect(() => {
+    const requestedSiteId = getSiteSearchParam();
+    if (!requestedSiteId) return;
+
+    const nextSiteId = getSiteSelectionFromSearch(sites);
+    if (nextSiteId === selectedSiteId) return;
+
+    setSelectedSiteId(nextSiteId);
+    resetCollectionsWorkspace();
+  }, [routerState.location.search, selectedSiteId, sites]);
 
   const applyCollectionTemplate = (template: CollectionTemplate) => {
     setSelectedCollectionId(null);
@@ -1590,6 +1619,7 @@ function CollectionsPage() {
               <Link
                 key={surface.key}
                 to={surface.route}
+                search={['/pages', '/media', '/products', '/forms'].includes(surface.route) ? activeSiteSearch : undefined}
                 className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
               >
                 <div className="text-sm font-semibold text-foreground">{surface.title}</div>
@@ -1803,7 +1833,7 @@ function CollectionsPage() {
         <select
           id="collection-site"
           value={activeSiteId}
-          onChange={(event) => setSelectedSiteId(event.target.value)}
+          onChange={(event) => selectCollectionsSite(event.target.value)}
           className="rounded-lg border bg-background px-3 py-2 text-sm"
         >
           {sites.map((site) => (
