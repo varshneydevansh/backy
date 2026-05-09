@@ -367,7 +367,7 @@ function EditBlogPostPage() {
             return;
         }
 
-        if (editorBusy) return;
+        if (editorActionBusy) return;
 
         setIsLoading(true);
         setSaveWarning(null);
@@ -438,7 +438,7 @@ function EditBlogPostPage() {
     };
 
     const applyWorkflow = async (action: 'publish' | 'archive') => {
-        if (editorBusy || (action === 'publish' && (readinessLoading || readinessBlocked || status === 'published')) || (action === 'archive' && status === 'archived')) {
+        if (editorActionBusy || (action === 'publish' && (readinessBlocked || status === 'published')) || (action === 'archive' && status === 'archived')) {
             return;
         }
 
@@ -469,7 +469,7 @@ function EditBlogPostPage() {
     };
 
     const generatePreview = async () => {
-        if (editorBusy || isPreviewBusy) return;
+        if (editorActionBusy) return;
 
         setIsPreviewBusy(true);
         setSaveWarning(null);
@@ -487,8 +487,14 @@ function EditBlogPostPage() {
         }
     };
 
+    const refreshPostReadiness = async () => {
+        if (editorActionBusy) return;
+
+        await loadPostReadiness();
+    };
+
     const restoreRevision = async (revision: ContentRevision) => {
-        if (editorBusy) return;
+        if (editorActionBusy) return;
 
         setIsWorkflowBusy(true);
         setSaveWarning(null);
@@ -508,7 +514,7 @@ function EditBlogPostPage() {
     };
 
     const handleDelete = async () => {
-        if (editorBusy) return;
+        if (editorActionBusy) return;
 
         setIsWorkflowBusy(true);
         setSaveWarning(null);
@@ -558,7 +564,8 @@ function EditBlogPostPage() {
     ];
     const localReadyCount = localReadinessChecks.filter((check) => check.complete).length;
     const canSave = title.trim().length > 0 && slug.trim().length > 0 && (status !== 'scheduled' || Boolean(scheduledAt));
-    const editorBusy = isLoading || isWorkflowBusy;
+    const editorBusy = isLoadingPost || isLoading || isWorkflowBusy;
+    const editorActionBusy = editorBusy || isPreviewBusy || readinessLoading;
     const submitLabel = status === 'published' ? 'Save published post' : status === 'scheduled' ? 'Schedule changes' : status === 'archived' ? 'Save archived post' : 'Save draft';
     const backendReadinessDetail = postReadiness
         ? `${postReadiness.score}% ${postReadiness.statusLabel.replace('-', ' ')}.`
@@ -712,6 +719,8 @@ function EditBlogPostPage() {
     const editorHandoffText = JSON.stringify(editorHandoff, null, 2);
 
     const copyEditorHandoffText = async (value: string, label: string) => {
+        if (editorActionBusy) return;
+
         try {
             await navigator.clipboard.writeText(value);
             setSaveWarning(null);
@@ -723,6 +732,8 @@ function EditBlogPostPage() {
     };
 
     const downloadEditorHandoff = () => {
+        if (editorActionBusy) return;
+
         const blob = new Blob([editorHandoffText], { type: 'application/json;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
@@ -799,6 +810,7 @@ function EditBlogPostPage() {
                                 type="button"
                                 variant="outline"
                                 onClick={() => void copyEditorHandoffText(editorHandoffText, 'Blog editor handoff manifest')}
+                                disabled={editorActionBusy}
                                 iconStart={<Copy className="size-4" />}
                             >
                                 Copy handoff
@@ -807,6 +819,7 @@ function EditBlogPostPage() {
                                 type="button"
                                 variant="outline"
                                 onClick={downloadEditorHandoff}
+                                disabled={editorActionBusy}
                                 iconStart={<Download className="size-4" />}
                             >
                                 Download JSON
@@ -814,7 +827,7 @@ function EditBlogPostPage() {
                             <Button
                                 type="submit"
                                 form="blog-editor-form"
-                                disabled={editorBusy || !canSave}
+                                disabled={editorActionBusy || !canSave}
                                 variant="primary"
                                 iconStart={<Save className="size-4" />}
                             >
@@ -824,7 +837,7 @@ function EditBlogPostPage() {
                                 type="button"
                                 variant="outline"
                                 onClick={() => void generatePreview()}
-                                disabled={editorBusy || isPreviewBusy}
+                                disabled={editorActionBusy}
                                 iconStart={<Eye className="size-4" />}
                             >
                                 Preview
@@ -832,8 +845,8 @@ function EditBlogPostPage() {
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() => void loadPostReadiness()}
-                                disabled={editorBusy || readinessLoading}
+                                onClick={() => void refreshPostReadiness()}
+                                disabled={editorActionBusy}
                                 iconStart={<RefreshCw className={cn('size-4', readinessLoading && 'animate-spin')} />}
                             >
                                 Refresh readiness
@@ -899,6 +912,7 @@ function EditBlogPostPage() {
                                 type="button"
                                 variant="outline"
                                 onClick={() => void copyEditorHandoffText(adminBlogPostUrl, 'Blog editor API URL')}
+                                disabled={editorActionBusy}
                                 iconStart={<Copy className="size-4" />}
                             >
                                 Copy API URL
@@ -907,6 +921,7 @@ function EditBlogPostPage() {
                                 type="button"
                                 variant="outline"
                                 onClick={() => void copyEditorHandoffText(editorHandoffText, 'Blog editor handoff manifest')}
+                                disabled={editorActionBusy}
                                 iconStart={<Copy className="size-4" />}
                             >
                                 Copy handoff
@@ -929,7 +944,7 @@ function EditBlogPostPage() {
                                 <Button
                                     type="submit"
                                     form="blog-editor-form"
-                                    disabled={editorBusy || !canSave}
+                                    disabled={editorActionBusy || !canSave}
                                     size="sm"
                                     iconStart={<Save className="size-4" />}
                                 >
@@ -1158,8 +1173,8 @@ function EditBlogPostPage() {
                                             </div>
                                             <button
                                                 type="button"
-                                                onClick={() => void loadPostReadiness()}
-                                                disabled={editorBusy || readinessLoading}
+                                                onClick={() => void refreshPostReadiness()}
+                                                disabled={editorActionBusy}
                                                 className="rounded-lg border border-current/20 p-1.5 hover:bg-white/40 disabled:cursor-not-allowed disabled:opacity-50"
                                                 title="Refresh readiness"
                                             >
@@ -1181,13 +1196,13 @@ function EditBlogPostPage() {
                                 )}
 
                                 <div className="grid gap-2">
-                                    <Button type="submit" disabled={editorBusy || !canSave} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
+                                    <Button type="submit" disabled={editorActionBusy || !canSave} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
                                         {isLoading ? 'Saving...' : submitLabel}
                                     </Button>
                                     <div className="grid grid-cols-2 gap-2">
                                         <Button
                                             onClick={() => void generatePreview()}
-                                            disabled={editorBusy || isPreviewBusy}
+                                            disabled={editorActionBusy}
                                             variant="outline"
                                             iconStart={<Eye className="size-4" />}
                                         >
@@ -1195,7 +1210,7 @@ function EditBlogPostPage() {
                                         </Button>
                                         <Button
                                             onClick={() => void applyWorkflow('publish')}
-                                            disabled={editorBusy || readinessLoading || readinessBlocked || status === 'published'}
+                                            disabled={editorActionBusy || readinessBlocked || status === 'published'}
                                             variant="secondary"
                                             iconStart={<CheckCircle2 className="size-4" />}
                                             title={readinessBlocked ? 'Resolve post readiness errors before publishing' : 'Publish post'}
@@ -1206,7 +1221,7 @@ function EditBlogPostPage() {
                                     <div className="grid grid-cols-2 gap-2">
                                         <Button
                                             onClick={() => void applyWorkflow('archive')}
-                                            disabled={editorBusy || status === 'archived'}
+                                            disabled={editorActionBusy || status === 'archived'}
                                             variant="outline"
                                             iconStart={<Archive className="size-4" />}
                                         >
@@ -1216,7 +1231,7 @@ function EditBlogPostPage() {
                                             Discard
                                         </Button>
                                     </div>
-                                    <Button onClick={() => setShowDeleteConfirm(true)} disabled={editorBusy} variant="danger" iconStart={<Trash2 className="size-4" />} className="w-full">
+                                    <Button onClick={() => setShowDeleteConfirm(true)} disabled={editorActionBusy} variant="danger" iconStart={<Trash2 className="size-4" />} className="w-full">
                                         Delete post
                                     </Button>
                                 </div>
@@ -1277,6 +1292,7 @@ function EditBlogPostPage() {
                                     <Button
                                         type="button"
                                         onClick={() => void copyEditorHandoffText(publicRenderUrl, 'Blog public render URL')}
+                                        disabled={editorActionBusy}
                                         variant="outline"
                                         iconStart={<Copy className="size-4" />}
                                         className="w-full"
@@ -1286,6 +1302,7 @@ function EditBlogPostPage() {
                                     <Button
                                         type="button"
                                         onClick={() => void copyEditorHandoffText(editorHandoffText, 'Blog editor handoff manifest')}
+                                        disabled={editorActionBusy}
                                         variant="outline"
                                         iconStart={<Copy className="size-4" />}
                                         className="w-full"
@@ -1365,7 +1382,7 @@ function EditBlogPostPage() {
                                                     </div>
                                                     <button
                                                         type="button"
-                                                        disabled={editorBusy}
+                                                        disabled={editorActionBusy}
                                                         onClick={() => setPendingRestoreRevision(revision)}
                                                         className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                                                         title="Restore revision"
@@ -1409,7 +1426,7 @@ function EditBlogPostPage() {
                                 <button
                                     type="button"
                                     onClick={() => setPendingRestoreRevision(null)}
-                                    disabled={isWorkflowBusy}
+                                    disabled={editorActionBusy}
                                     className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     Cancel
@@ -1417,7 +1434,7 @@ function EditBlogPostPage() {
                                 <button
                                     type="button"
                                     onClick={() => void restoreRevision(pendingRestoreRevision)}
-                                    disabled={isWorkflowBusy}
+                                    disabled={editorActionBusy}
                                     className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     {isWorkflowBusy ? 'Restoring...' : 'Restore revision'}
@@ -1448,7 +1465,7 @@ function EditBlogPostPage() {
                                 <button
                                     type="button"
                                     onClick={() => setShowDeleteConfirm(false)}
-                                    disabled={isWorkflowBusy}
+                                    disabled={editorActionBusy}
                                     className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     Cancel
@@ -1456,7 +1473,7 @@ function EditBlogPostPage() {
                                 <button
                                     type="button"
                                     onClick={() => void handleDelete()}
-                                    disabled={isWorkflowBusy}
+                                    disabled={editorActionBusy}
                                     className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     {isWorkflowBusy ? 'Deleting...' : 'Delete post'}
