@@ -359,6 +359,16 @@ function EditBlogPostPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!canSave) {
+            setSaveWarning(status === 'scheduled' && !scheduledAt
+                ? 'Choose a publish date before scheduling changes.'
+                : 'Add a title and URL slug before saving.');
+            setWorkflowNotice(null);
+            return;
+        }
+
+        if (editorBusy) return;
+
         setIsLoading(true);
         setSaveWarning(null);
 
