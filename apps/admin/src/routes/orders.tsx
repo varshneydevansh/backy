@@ -7,15 +7,18 @@ import {
   Code2,
   Copy,
   CreditCard,
+  Clock3,
   ExternalLink,
   PackageCheck,
   Plus,
   Receipt,
   RefreshCw,
+  RotateCcw,
   Search,
   ShieldCheck,
   Sparkles,
   Trash2,
+  Truck,
 } from 'lucide-react';
 import {
   createCollection,
@@ -35,6 +38,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { cn, formatDate } from '@/lib/utils';
+import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 
 export const Route = createFileRoute('/orders')({
   component: OrdersRoute,
@@ -49,13 +53,24 @@ interface OrderFormState {
   orderNumber: string;
   customerName: string;
   email: string;
+  phone: string;
   total: string;
   currency: string;
   items: string;
   orderStatus: OrderWorkflowStatus;
   paymentStatus: PaymentStatus;
+  paymentProvider: string;
+  paymentReference: string;
+  paidAt: string;
   fulfillmentStatus: FulfillmentStatus;
+  fulfillmentCarrier: string;
+  trackingNumber: string;
+  trackingUrl: string;
+  fulfilledAt: string;
   shippingAddress: string;
+  billingAddress: string;
+  refundAmount: string;
+  refundReason: string;
   notes: string;
   recordStatus: ContentStatus;
 }
@@ -66,27 +81,49 @@ const ORDER_FIELDS: CollectionField[] = [
   { key: 'ordernumber', label: 'Order Number', type: 'text', required: true, unique: true, sortOrder: 10 },
   { key: 'customername', label: 'Customer Name', type: 'text', required: true, unique: false, sortOrder: 20 },
   { key: 'email', label: 'Email', type: 'email', required: true, unique: false, sortOrder: 30 },
-  { key: 'total', label: 'Total', type: 'number', required: true, unique: false, sortOrder: 40 },
-  { key: 'currency', label: 'Currency', type: 'text', required: true, unique: false, sortOrder: 50, defaultValue: 'USD' },
-  { key: 'items', label: 'Items', type: 'richText', required: true, unique: false, sortOrder: 60 },
-  { key: 'orderstatus', label: 'Order Status', type: 'select', required: true, unique: false, sortOrder: 70, options: ['open', 'paid', 'fulfilled', 'cancelled', 'refunded'], defaultValue: 'open' },
-  { key: 'paymentstatus', label: 'Payment Status', type: 'select', required: true, unique: false, sortOrder: 80, options: ['pending', 'paid', 'failed', 'refunded'], defaultValue: 'pending' },
-  { key: 'fulfillmentstatus', label: 'Fulfillment Status', type: 'select', required: true, unique: false, sortOrder: 90, options: ['unfulfilled', 'processing', 'fulfilled', 'cancelled'], defaultValue: 'unfulfilled' },
-  { key: 'shippingaddress', label: 'Shipping Address', type: 'richText', required: false, unique: false, sortOrder: 100 },
-  { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 110 },
+  { key: 'phone', label: 'Phone', type: 'text', required: false, unique: false, sortOrder: 40 },
+  { key: 'total', label: 'Total', type: 'number', required: true, unique: false, sortOrder: 50 },
+  { key: 'currency', label: 'Currency', type: 'text', required: true, unique: false, sortOrder: 60, defaultValue: 'USD' },
+  { key: 'items', label: 'Items', type: 'richText', required: true, unique: false, sortOrder: 70 },
+  { key: 'orderstatus', label: 'Order Status', type: 'select', required: true, unique: false, sortOrder: 80, options: ['open', 'paid', 'fulfilled', 'cancelled', 'refunded'], defaultValue: 'open' },
+  { key: 'paymentstatus', label: 'Payment Status', type: 'select', required: true, unique: false, sortOrder: 90, options: ['pending', 'paid', 'failed', 'refunded'], defaultValue: 'pending' },
+  { key: 'paymentprovider', label: 'Payment Provider', type: 'text', required: false, unique: false, sortOrder: 100 },
+  { key: 'paymentreference', label: 'Payment Reference', type: 'text', required: false, unique: false, sortOrder: 110 },
+  { key: 'paidat', label: 'Paid At', type: 'date', required: false, unique: false, sortOrder: 120 },
+  { key: 'fulfillmentstatus', label: 'Fulfillment Status', type: 'select', required: true, unique: false, sortOrder: 130, options: ['unfulfilled', 'processing', 'fulfilled', 'cancelled'], defaultValue: 'unfulfilled' },
+  { key: 'fulfillmentcarrier', label: 'Fulfillment Carrier', type: 'text', required: false, unique: false, sortOrder: 140 },
+  { key: 'trackingnumber', label: 'Tracking Number', type: 'text', required: false, unique: false, sortOrder: 150 },
+  { key: 'trackingurl', label: 'Tracking URL', type: 'url', required: false, unique: false, sortOrder: 160 },
+  { key: 'fulfilledat', label: 'Fulfilled At', type: 'date', required: false, unique: false, sortOrder: 170 },
+  { key: 'shippingaddress', label: 'Shipping Address', type: 'richText', required: false, unique: false, sortOrder: 180 },
+  { key: 'billingaddress', label: 'Billing Address', type: 'richText', required: false, unique: false, sortOrder: 190 },
+  { key: 'refundamount', label: 'Refund Amount', type: 'number', required: false, unique: false, sortOrder: 200 },
+  { key: 'refundreason', label: 'Refund Reason', type: 'richText', required: false, unique: false, sortOrder: 210 },
+  { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 220 },
 ];
 
 const EMPTY_ORDER_FORM: OrderFormState = {
   orderNumber: '',
   customerName: '',
   email: '',
+  phone: '',
   total: '',
   currency: 'USD',
   items: '',
   orderStatus: 'open',
   paymentStatus: 'pending',
+  paymentProvider: '',
+  paymentReference: '',
+  paidAt: '',
   fulfillmentStatus: 'unfulfilled',
+  fulfillmentCarrier: '',
+  trackingNumber: '',
+  trackingUrl: '',
+  fulfilledAt: '',
   shippingAddress: '',
+  billingAddress: '',
+  refundAmount: '',
+  refundReason: '',
   notes: '',
   recordStatus: 'published',
 };
@@ -135,6 +172,9 @@ function OrdersRoute() {
         readOrderValue(values, 'ordernumber', ''),
         readOrderValue(values, 'customername', ''),
         values.email,
+        readOrderValue(values, 'phone', ''),
+        readOrderValue(values, 'paymentreference', ''),
+        readOrderValue(values, 'trackingnumber', ''),
         values.items,
       ].some((value) => String(value || '').toLowerCase().includes(normalizedSearch));
 
@@ -147,10 +187,12 @@ function OrdersRoute() {
       .filter((order) => String(readOrderValue(order.values, 'paymentstatus', '')) === 'paid')
       .reduce((sum, order) => sum + toNumber(order.values.total), 0),
     paid: orders.filter((order) => String(readOrderValue(order.values, 'paymentstatus', '')) === 'paid').length,
+    refunded: orders.filter((order) => String(readOrderValue(order.values, 'paymentstatus', '')) === 'refunded').length,
     needsFulfillment: orders.filter((order) => (
       String(readOrderValue(order.values, 'paymentstatus', '')) === 'paid'
       && String(readOrderValue(order.values, 'fulfillmentstatus', '')) !== 'fulfilled'
     )).length,
+    processing: orders.filter((order) => String(readOrderValue(order.values, 'fulfillmentstatus', '')) === 'processing').length,
   }), [orders]);
 
   const loadOrders = async () => {
@@ -253,13 +295,24 @@ function OrdersRoute() {
         ordernumber: orderNumber,
         customername: formState.customerName.trim(),
         email: formState.email.trim(),
+        phone: formState.phone.trim(),
         total: Number(formState.total || 0),
         currency: normalizeCurrency(formState.currency),
         items: formState.items.trim(),
         orderstatus: formState.orderStatus,
         paymentstatus: formState.paymentStatus,
+        paymentprovider: formState.paymentProvider.trim(),
+        paymentreference: formState.paymentReference.trim(),
+        paidat: formState.paidAt || null,
         fulfillmentstatus: formState.fulfillmentStatus,
+        fulfillmentcarrier: formState.fulfillmentCarrier.trim(),
+        trackingnumber: formState.trackingNumber.trim(),
+        trackingurl: formState.trackingUrl.trim(),
+        fulfilledat: formState.fulfilledAt || null,
         shippingaddress: formState.shippingAddress.trim(),
+        billingaddress: formState.billingAddress.trim(),
+        refundamount: formState.refundAmount ? Number(formState.refundAmount) : null,
+        refundreason: formState.refundReason.trim(),
         notes: formState.notes.trim(),
       },
     };
@@ -357,6 +410,7 @@ function OrdersRoute() {
           </Button>
         </div>
       }
+      className="w-full"
     >
       {error && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -426,11 +480,13 @@ function OrdersRoute() {
         </Panel>
       )}
 
-      <div className="mb-6 grid gap-3 md:grid-cols-4">
+      <div className="mb-6 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Metric label="Orders" value={metrics.orders} icon={<Receipt className="size-4" />} />
         <Metric label="Paid Revenue" value={formatMoney(metrics.revenue, 'USD')} icon={<CreditCard className="size-4" />} />
         <Metric label="Paid" value={metrics.paid} icon={<CheckCircle2 className="size-4" />} />
         <Metric label="To Fulfill" value={metrics.needsFulfillment} icon={<PackageCheck className="size-4" />} />
+        <Metric label="Processing" value={metrics.processing} icon={<Truck className="size-4" />} />
+        <Metric label="Refunded" value={metrics.refunded} icon={<RotateCcw className="size-4" />} />
       </div>
 
       {!ordersCollection ? (
@@ -495,8 +551,8 @@ function OrdersRoute() {
                       selected={order.id === selectedOrderId}
                       disabled={isSaving}
                       onEdit={() => setSelectedOrderId(order.id)}
-                      onPaid={() => void updateOrderWorkflow(order, { orderStatus: 'paid', paymentStatus: 'paid' })}
-                      onFulfilled={() => void updateOrderWorkflow(order, { orderStatus: 'fulfilled', fulfillmentStatus: 'fulfilled' })}
+                      onPaid={() => void updateOrderWorkflow(order, { orderStatus: 'paid', paymentStatus: 'paid', paidAt: new Date().toISOString() })}
+                      onFulfilled={() => void updateOrderWorkflow(order, { orderStatus: 'fulfilled', fulfillmentStatus: 'fulfilled', fulfilledAt: new Date().toISOString() })}
                       onCancelled={() => void updateOrderWorkflow(order, { orderStatus: 'cancelled', fulfillmentStatus: 'cancelled' })}
                       onDelete={() => setPendingDeleteOrder(order)}
                     />
@@ -556,6 +612,14 @@ function OrdersRoute() {
                     placeholder="jane@example.com"
                   />
                 </Field>
+                <Field label="Phone">
+                  <input
+                    value={formState.phone}
+                    onChange={(event) => setFormState((current) => ({ ...current, phone: event.target.value }))}
+                    className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                    placeholder="+1 312 555 0194"
+                  />
+                </Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Total">
                     <input
@@ -573,6 +637,32 @@ function OrdersRoute() {
                       value={formState.currency}
                       onChange={(event) => setFormState((current) => ({ ...current, currency: event.target.value.toUpperCase().slice(0, 3) }))}
                       required
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                    />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <Field label="Provider">
+                    <input
+                      value={formState.paymentProvider}
+                      onChange={(event) => setFormState((current) => ({ ...current, paymentProvider: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="stripe"
+                    />
+                  </Field>
+                  <Field label="Payment ref">
+                    <input
+                      value={formState.paymentReference}
+                      onChange={(event) => setFormState((current) => ({ ...current, paymentReference: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="pi_..."
+                    />
+                  </Field>
+                  <Field label="Paid at">
+                    <input
+                      type="datetime-local"
+                      value={toDateTimeLocalValue(formState.paidAt)}
+                      onChange={(event) => setFormState((current) => ({ ...current, paidAt: fromDateTimeLocalValue(event.target.value) || '' }))}
                       className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                     />
                   </Field>
@@ -619,6 +709,42 @@ function OrdersRoute() {
                     </select>
                   </Field>
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Carrier">
+                    <input
+                      value={formState.fulfillmentCarrier}
+                      onChange={(event) => setFormState((current) => ({ ...current, fulfillmentCarrier: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="UPS, FedEx, digital"
+                    />
+                  </Field>
+                  <Field label="Tracking number">
+                    <input
+                      value={formState.trackingNumber}
+                      onChange={(event) => setFormState((current) => ({ ...current, trackingNumber: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="1Z..."
+                    />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Tracking URL">
+                    <input
+                      value={formState.trackingUrl}
+                      onChange={(event) => setFormState((current) => ({ ...current, trackingUrl: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="https://carrier.example/track"
+                    />
+                  </Field>
+                  <Field label="Fulfilled at">
+                    <input
+                      type="datetime-local"
+                      value={toDateTimeLocalValue(formState.fulfilledAt)}
+                      onChange={(event) => setFormState((current) => ({ ...current, fulfilledAt: fromDateTimeLocalValue(event.target.value) || '' }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                    />
+                  </Field>
+                </div>
                 <Field label="Items">
                   <textarea
                     value={formState.items}
@@ -638,6 +764,15 @@ function OrdersRoute() {
                     placeholder="Delivery or billing address"
                   />
                 </Field>
+                <Field label="Billing address">
+                  <textarea
+                    value={formState.billingAddress}
+                    onChange={(event) => setFormState((current) => ({ ...current, billingAddress: event.target.value }))}
+                    rows={3}
+                    className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm"
+                    placeholder="Billing address or tax location"
+                  />
+                </Field>
                 <Field label="Notes">
                   <textarea
                     value={formState.notes}
@@ -647,6 +782,27 @@ function OrdersRoute() {
                     placeholder="Private fulfillment notes..."
                   />
                 </Field>
+                <div className="grid grid-cols-[160px_minmax(0,1fr)] gap-3">
+                  <Field label="Refund amount">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formState.refundAmount}
+                      onChange={(event) => setFormState((current) => ({ ...current, refundAmount: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="0.00"
+                    />
+                  </Field>
+                  <Field label="Refund reason">
+                    <input
+                      value={formState.refundReason}
+                      onChange={(event) => setFormState((current) => ({ ...current, refundReason: event.target.value }))}
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      placeholder="Optional private refund note"
+                    />
+                  </Field>
+                </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="outline" onClick={resetForm}>Clear</Button>
                   <Button type="submit" variant="primary" disabled={isSaving || !formState.orderNumber.trim() || !formState.customerName.trim() || !formState.email.trim()} iconStart={<Receipt className="size-4" />}>
@@ -748,6 +904,12 @@ function OrderCard({
   const paymentStatus = String(readOrderValue(values, 'paymentstatus', 'pending'));
   const fulfillmentStatus = String(readOrderValue(values, 'fulfillmentstatus', 'unfulfilled'));
   const orderStatus = String(readOrderValue(values, 'orderstatus', 'open'));
+  const trackingNumber = String(readOrderValue(values, 'trackingnumber', ''));
+  const trackingUrl = String(readOrderValue(values, 'trackingurl', ''));
+  const paymentReference = String(readOrderValue(values, 'paymentreference', ''));
+  const paidAt = String(readOrderValue(values, 'paidat', ''));
+  const fulfilledAt = String(readOrderValue(values, 'fulfilledat', ''));
+  const refundAmount = toNumber(readOrderValue(values, 'refundamount', 0));
 
   return (
     <article className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')}>
@@ -759,6 +921,23 @@ function OrderCard({
           </div>
           <div className="mt-1 text-sm text-muted-foreground">
             {String(readOrderValue(values, 'customername', 'Unknown customer'))} · {String(values.email || 'No email')}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {paymentReference ? (
+              <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                Ref {paymentReference}
+              </span>
+            ) : null}
+            {trackingNumber ? (
+              <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                Track {trackingNumber}
+              </span>
+            ) : null}
+            {refundAmount > 0 ? (
+              <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
+                Refund {formatMoney(refundAmount, currency)}
+              </span>
+            ) : null}
           </div>
         </div>
         <div className="text-right">
@@ -776,6 +955,33 @@ function OrderCard({
           {String(values.items)}
         </p>
       ) : null}
+      {(paidAt || fulfilledAt || trackingUrl) && (
+        <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+          {paidAt ? (
+            <div className="rounded border border-border bg-muted/40 px-2 py-1.5">
+              <Clock3 className="mr-1 inline size-3.5" />
+              Paid {formatWorkflowDate(paidAt)}
+            </div>
+          ) : null}
+          {fulfilledAt ? (
+            <div className="rounded border border-border bg-muted/40 px-2 py-1.5">
+              <PackageCheck className="mr-1 inline size-3.5" />
+              Fulfilled {formatWorkflowDate(fulfilledAt)}
+            </div>
+          ) : null}
+          {trackingUrl ? (
+            <a
+              href={trackingUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded border border-border bg-muted/40 px-2 py-1.5 hover:bg-muted hover:text-foreground"
+            >
+              <ExternalLink className="mr-1 inline size-3.5" />
+              Tracking link
+            </a>
+          ) : null}
+        </div>
+      )}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={onEdit} iconStart={<Receipt className="size-4" />}>Edit</Button>
         <Button size="sm" variant="outline" onClick={onPaid} disabled={disabled || paymentStatus === 'paid'} iconStart={<CreditCard className="size-4" />}>Mark Paid</Button>
@@ -882,28 +1088,65 @@ const camelizeOrderKey = (key: string): string => {
   if (key === 'customername') return 'customerName';
   if (key === 'orderstatus') return 'orderStatus';
   if (key === 'paymentstatus') return 'paymentStatus';
+  if (key === 'paymentprovider') return 'paymentProvider';
+  if (key === 'paymentreference') return 'paymentReference';
+  if (key === 'paidat') return 'paidAt';
   if (key === 'fulfillmentstatus') return 'fulfillmentStatus';
+  if (key === 'fulfillmentcarrier') return 'fulfillmentCarrier';
+  if (key === 'trackingnumber') return 'trackingNumber';
+  if (key === 'trackingurl') return 'trackingUrl';
+  if (key === 'fulfilledat') return 'fulfilledAt';
   if (key === 'shippingaddress') return 'shippingAddress';
+  if (key === 'billingaddress') return 'billingAddress';
+  if (key === 'refundamount') return 'refundAmount';
+  if (key === 'refundreason') return 'refundReason';
   return key;
 };
 
 const toOrderValueUpdates = (updates: Partial<OrderFormState>): Record<string, unknown> => ({
   ...(updates.orderStatus ? { orderstatus: updates.orderStatus } : {}),
   ...(updates.paymentStatus ? { paymentstatus: updates.paymentStatus } : {}),
+  ...(updates.paymentProvider !== undefined ? { paymentprovider: updates.paymentProvider } : {}),
+  ...(updates.paymentReference !== undefined ? { paymentreference: updates.paymentReference } : {}),
+  ...(updates.paidAt !== undefined ? { paidat: updates.paidAt || null } : {}),
   ...(updates.fulfillmentStatus ? { fulfillmentstatus: updates.fulfillmentStatus } : {}),
+  ...(updates.fulfillmentCarrier !== undefined ? { fulfillmentcarrier: updates.fulfillmentCarrier } : {}),
+  ...(updates.trackingNumber !== undefined ? { trackingnumber: updates.trackingNumber } : {}),
+  ...(updates.trackingUrl !== undefined ? { trackingurl: updates.trackingUrl } : {}),
+  ...(updates.fulfilledAt !== undefined ? { fulfilledat: updates.fulfilledAt || null } : {}),
+  ...(updates.refundAmount !== undefined ? { refundamount: updates.refundAmount ? Number(updates.refundAmount) : null } : {}),
+  ...(updates.refundReason !== undefined ? { refundreason: updates.refundReason } : {}),
 });
 
 const orderToForm = (order: CollectionRecord): OrderFormState => ({
   orderNumber: String(readOrderValue(order.values, 'ordernumber', '')),
   customerName: String(readOrderValue(order.values, 'customername', '')),
   email: String(order.values.email || ''),
+  phone: String(readOrderValue(order.values, 'phone', '')),
   total: String(order.values.total ?? ''),
   currency: String(order.values.currency || 'USD'),
   items: String(order.values.items || ''),
   orderStatus: asOrderStatus(readOrderValue(order.values, 'orderstatus', undefined)),
   paymentStatus: asPaymentStatus(readOrderValue(order.values, 'paymentstatus', undefined)),
+  paymentProvider: String(readOrderValue(order.values, 'paymentprovider', '')),
+  paymentReference: String(readOrderValue(order.values, 'paymentreference', '')),
+  paidAt: String(readOrderValue(order.values, 'paidat', '') || ''),
   fulfillmentStatus: asFulfillmentStatus(readOrderValue(order.values, 'fulfillmentstatus', undefined)),
+  fulfillmentCarrier: String(readOrderValue(order.values, 'fulfillmentcarrier', '')),
+  trackingNumber: String(readOrderValue(order.values, 'trackingnumber', '')),
+  trackingUrl: String(readOrderValue(order.values, 'trackingurl', '')),
+  fulfilledAt: String(readOrderValue(order.values, 'fulfilledat', '') || ''),
   shippingAddress: String(readOrderValue(order.values, 'shippingaddress', '')),
+  billingAddress: String(readOrderValue(order.values, 'billingaddress', '')),
+  refundAmount: readOrderValue(order.values, 'refundamount', null) === null || readOrderValue(order.values, 'refundamount', undefined) === undefined
+    ? ''
+    : String(readOrderValue(order.values, 'refundamount', '')),
+  refundReason: String(readOrderValue(order.values, 'refundreason', '')),
   notes: String(order.values.notes || ''),
   recordStatus: order.status,
 });
+
+const formatWorkflowDate = (value: string): string => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+};
