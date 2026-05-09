@@ -108,9 +108,59 @@ function CommentsRoute() {
     approved: comments.filter((comment) => comment.status === 'approved').length,
     flagged: comments.filter((comment) => (comment.reportCount || 0) > 0 || comment.status === 'spam' || comment.status === 'blocked').length,
   }), [comments]);
+  const hasSelection = selectedIds.length > 0;
+  const moderationReadiness = useMemo(() => {
+    const reviewComplete = metrics.pending === 0;
+    const safetyClean = metrics.flagged === 0;
+    const checks = [
+      {
+        label: 'Active site',
+        detail: activeSite ? `${activeSite.name} is selected for moderation.` : 'Select a site before reviewing comments.',
+        ready: Boolean(activeSite),
+      },
+      {
+        label: 'Target index',
+        detail: targets.length > 0
+          ? `${targets.length} page/post target${targets.length === 1 ? '' : 's'} available`
+          : 'Create pages or blog posts before enabling public comments.',
+        ready: targets.length > 0,
+      },
+      {
+        label: 'Review queue',
+        detail: reviewComplete ? 'No pending comments need approval.' : `${metrics.pending} pending comment${metrics.pending === 1 ? '' : 's'} need review`,
+        ready: reviewComplete,
+      },
+      {
+        label: 'Safety flags',
+        detail: safetyClean ? 'No spam, blocked, or reported comments in this view.' : `${metrics.flagged} flagged comment${metrics.flagged === 1 ? '' : 's'} need cleanup`,
+        ready: safetyClean,
+      },
+      {
+        label: 'Bulk controls',
+        detail: hasSelection ? `${selectedIds.length} selected for moderation.` : 'Approve, reject, spam, block, and export actions are available.',
+        ready: true,
+      },
+      {
+        label: 'API contract',
+        detail: 'List, bulk update, and single-comment endpoints are visible for custom admin/frontends.',
+        ready: true,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      checks,
+      workflow: [
+        { label: 'Capture', detail: 'Frontend pages and posts submit public comments into the site queue.' },
+        { label: 'Classify', detail: 'Filter by status, target type, author, content, reports, or request id.' },
+        { label: 'Moderate', detail: 'Approve, reject, mark spam, block, and record the reason in bulk or per comment.' },
+        { label: 'Serve', detail: 'Only approved comments should reach public frontend comment feeds.' },
+      ],
+    };
+  }, [activeSite, hasSelection, metrics.flagged, metrics.pending, selectedIds.length, targets.length]);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allVisibleSelected = filteredComments.length > 0 && filteredComments.every((comment) => selectedSet.has(comment.id));
-  const hasSelection = selectedIds.length > 0;
   const moderationReasonText = moderationReason.trim();
   const rejectReason = moderationReasonText || 'Rejected from moderation queue.';
   const spamReason = moderationReasonText || 'Marked as spam.';
@@ -307,6 +357,63 @@ function CommentsRoute() {
         <Metric label="Approved" value={metrics.approved} icon={<CheckCircle2 className="size-4" />} />
         <Metric label="Flagged" value={metrics.flagged} icon={<Flag className="size-4" />} />
       </div>
+
+      <Panel>
+        <PanelHeader
+          title="Discussion readiness"
+          description="Checks whether public comments are mapped, moderated, safe, and ready for frontend delivery."
+          icon={<ShieldAlert className="size-4" />}
+        />
+        <PanelContent>
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Moderation operating state</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Keeps discussion quality visible before comments are exposed through public page and blog APIs.
+                  </p>
+                </div>
+                <span className={cn(
+                  'rounded-full px-2.5 py-1 text-xs font-semibold',
+                  moderationReadiness.score >= 80
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'bg-amber-50 text-amber-700',
+                )}
+                >
+                  {moderationReadiness.score}% ready
+                </span>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn(
+                    'h-full rounded-full',
+                    moderationReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500',
+                  )}
+                  style={{ width: `${moderationReadiness.score}%` }}
+                />
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2">
+                {moderationReadiness.checks.map((check) => (
+                  <ModerationCheck key={check.label} {...check} />
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Comment workflow</h3>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {moderationReadiness.workflow.map((step, index) => (
+                  <ModerationWorkflowStep key={step.label} index={index + 1} {...step} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </PanelContent>
+      </Panel>
 
       <Panel>
         <PanelHeader
@@ -535,6 +642,34 @@ function ApiSnippet({ label, value }: { label: string; value: string }) {
       <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
         {value}
       </code>
+    </div>
+  );
+}
+
+function ModerationCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  const Icon = ready ? CheckCircle2 : ShieldAlert;
+
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-card px-3 py-2">
+      <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', ready ? 'text-emerald-600' : 'text-amber-600')} />
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function ModerationWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
     </div>
   );
 }
