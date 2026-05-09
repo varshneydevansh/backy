@@ -21,18 +21,22 @@ interface UseDataTableProps<T> {
     data: T[];
     columns: Column<T>[];
     initialSort?: { key: keyof T; direction: 'asc' | 'desc' };
+    initialSearch?: string;
+    initialPage?: number;
     pageSize?: number;
 }
 
 export function useDataTable<T>({
     data,
     initialSort = { key: 'createdAt' as keyof T, direction: 'desc' },
+    initialSearch = '',
+    initialPage = 1,
     pageSize = 10
 }: UseDataTableProps<T>) {
     // State
-    const [searchQuery, setSearchQuery] = useState('');
+    const [searchQuery, setSearchQuery] = useState(initialSearch);
     const [sortConfig, setSortConfig] = useState(initialSort);
-    const [currentPage, setCurrentPage] = useState(1);
+    const [currentPage, setCurrentPage] = useState(initialPage);
 
     // 1. Filter
     const filteredData = useMemo(() => {
@@ -79,6 +83,7 @@ export function useDataTable<T>({
         searchQuery,
         setSearchQuery,
         sortConfig,
+        setSortConfig,
         handleSort,
         currentPage,
         setCurrentPage,

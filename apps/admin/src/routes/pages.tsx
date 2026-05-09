@@ -24,10 +24,85 @@ import { PageShell } from '@/components/layout/PageShell';
 import { DataGrid } from '@/components/ui/DataGrid';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 
+type PageStatusFilter = 'all' | Page['status'];
+
+type PageLibraryFilter =
+  | 'all'
+  | 'ready'
+  | 'needs-attention'
+  | 'blocked'
+  | 'homepage'
+  | 'scheduled'
+  | 'has-canvas'
+  | 'empty-canvas'
+  | 'not-checked';
+
+type PageSortKey = keyof Pick<Page, 'title' | 'status' | 'lastUpdated'>;
+
+interface PagesSearch {
+  siteId?: string;
+  q?: string;
+  status?: PageStatusFilter;
+  health?: PageLibraryFilter;
+  page?: number;
+  sortBy?: PageSortKey;
+  sortDirection?: 'asc' | 'desc';
+}
+
+const PAGE_STATUS_FILTERS: PageStatusFilter[] = ['all', 'draft', 'published', 'scheduled', 'archived'];
+const PAGE_HEALTH_FILTERS: PageLibraryFilter[] = [
+  'all',
+  'ready',
+  'needs-attention',
+  'blocked',
+  'homepage',
+  'scheduled',
+  'has-canvas',
+  'empty-canvas',
+  'not-checked',
+];
+const PAGE_SORT_KEYS: PageSortKey[] = ['title', 'status', 'lastUpdated'];
+
+const normalizedSearchString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const normalizedSearchPage = (value: unknown): number | undefined => {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isInteger(numeric) && numeric > 0 ? numeric : undefined;
+};
+
+const isPageStatusFilter = (value: unknown): value is PageStatusFilter => (
+  typeof value === 'string' && PAGE_STATUS_FILTERS.includes(value as PageStatusFilter)
+);
+
+const isPageLibraryFilter = (value: unknown): value is PageLibraryFilter => (
+  typeof value === 'string' && PAGE_HEALTH_FILTERS.includes(value as PageLibraryFilter)
+);
+
+const isPageSortKey = (value: unknown): value is PageSortKey => (
+  typeof value === 'string' && PAGE_SORT_KEYS.includes(value as PageSortKey)
+);
+
+const isSortDirection = (value: unknown): value is 'asc' | 'desc' => (
+  value === 'asc' || value === 'desc'
+);
+
 export const Route = createFileRoute('/pages')({
+  validateSearch: (search: Record<string, unknown>): PagesSearch => ({
+    siteId: normalizedSearchString(search.siteId),
+    q: normalizedSearchString(search.q),
+    status: isPageStatusFilter(search.status) ? search.status : undefined,
+    health: isPageLibraryFilter(search.health) ? search.health : undefined,
+    page: normalizedSearchPage(search.page),
+    sortBy: isPageSortKey(search.sortBy) ? search.sortBy : undefined,
+    sortDirection: isSortDirection(search.sortDirection) ? search.sortDirection : undefined,
+  }),
   component: PagesLayout,
 });
 
@@ -154,17 +229,6 @@ const PAGE_EXPORT_COLUMNS = [
   'builder_systems',
 ] as const;
 
-type PageLibraryFilter =
-  | 'all'
-  | 'ready'
-  | 'needs-attention'
-  | 'blocked'
-  | 'homepage'
-  | 'scheduled'
-  | 'has-canvas'
-  | 'empty-canvas'
-  | 'not-checked';
-
 type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'contact' | 'registration';
 
 const PAGE_CREATION_SHORTCUTS: Array<{
@@ -237,14 +301,14 @@ function PagesLayout() {
 
 function PagesListView() {
   const navigate = useNavigate();
-  const routerState = useRouterState();
+  const routeSearch = Route.useSearch();
   const { sites, pages, setPages, deletePage, updatePage } = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingReadiness, setIsLoadingReadiness] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
-  const [statusFilter, setStatusFilter] = useState<'all' | Page['status']>('all');
-  const [healthFilter, setHealthFilter] = useState<PageLibraryFilter>('all');
+  const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
+  const [statusFilter, setStatusFilter] = useState<PageStatusFilter>(routeSearch.status || 'all');
+  const [healthFilter, setHealthFilter] = useState<PageLibraryFilter>(routeSearch.health || 'all');
   const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(() => new Set());
   const [bulkAction, setBulkAction] = useState<'publish' | 'archive' | 'delete' | ''>('');
   const [isBulkBusy, setIsBulkBusy] = useState(false);
@@ -394,14 +458,18 @@ function PagesListView() {
     };
   }, [activeSitePages, pageMetrics.blocked, pageMetrics.published, readinessMap]);
 
-  const setPageStatusFilter = (status: 'all' | Page['status']) => {
+  const setPageStatusFilter = (status: PageStatusFilter) => {
     setStatusFilter(status);
     setHealthFilter('all');
+    setCurrentPage(1);
+    updatePagesRouteSearch({ status, health: 'all', page: undefined });
   };
 
   const showBlockedPages = () => {
     setStatusFilter('all');
     setHealthFilter('blocked');
+    setCurrentPage(1);
+    updatePagesRouteSearch({ status: 'all', health: 'blocked', page: undefined });
   };
 
   const copyPageApiText = async (value: string, label: string) => {
@@ -782,6 +850,7 @@ function PagesListView() {
     searchQuery,
     setSearchQuery,
     sortConfig,
+    setSortConfig,
     handleSort,
     currentPage,
     setCurrentPage,
@@ -790,22 +859,73 @@ function PagesListView() {
   } = useDataTable({
     data: visiblePages,
     columns,
+    initialSearch: routeSearch.q || '',
+    initialPage: routeSearch.page || 1,
+    initialSort: {
+      key: routeSearch.sortBy || 'lastUpdated',
+      direction: routeSearch.sortDirection || 'desc',
+    },
     pageSize: 10
   });
+  const pagesRouteSearch = useMemo<PagesSearch>(() => ({
+    siteId: activeSiteId,
+    ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
+    ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+    ...(healthFilter !== 'all' ? { health: healthFilter } : {}),
+    ...(currentPage > 1 ? { page: currentPage } : {}),
+    ...(sortConfig.key !== 'lastUpdated' ? { sortBy: sortConfig.key as PageSortKey } : {}),
+    ...(sortConfig.direction !== 'desc' ? { sortDirection: sortConfig.direction } : {}),
+  }), [activeSiteId, currentPage, healthFilter, searchQuery, sortConfig.direction, sortConfig.key, statusFilter]);
+  const updatePagesRouteSearch = (next: PagesSearch) => {
+    const merged: PagesSearch = {
+      ...pagesRouteSearch,
+      ...next,
+    };
+    const normalized: PagesSearch = {
+      siteId: merged.siteId || activeSiteId,
+      ...(merged.q?.trim() ? { q: merged.q.trim() } : {}),
+      ...(merged.status && merged.status !== 'all' ? { status: merged.status } : {}),
+      ...(merged.health && merged.health !== 'all' ? { health: merged.health } : {}),
+      ...(merged.page && merged.page > 1 ? { page: merged.page } : {}),
+      ...(merged.sortBy && merged.sortBy !== 'lastUpdated' ? { sortBy: merged.sortBy } : {}),
+      ...(merged.sortDirection && merged.sortDirection !== 'desc' ? { sortDirection: merged.sortDirection } : {}),
+    };
+
+    navigate({ to: '/pages', search: normalized, replace: true });
+  };
   useEffect(() => {
-    const requestedSiteId = getSiteSearchParam();
-    if (!requestedSiteId) return;
+    const nextSiteId = routeSearch.siteId
+      ? getSiteSelectionFromSearch(sites)
+      : selectedSiteId;
+    const siteChanged = nextSiteId !== selectedSiteId;
 
-    const nextSiteId = getSiteSelectionFromSearch(sites);
-    if (nextSiteId === selectedSiteId) return;
+    if (siteChanged) {
+      setSelectedSiteId(nextSiteId);
+      setSelectedPageIds(new Set());
+    }
 
-    setSelectedSiteId(nextSiteId);
-    setStatusFilter('all');
-    setHealthFilter('all');
-    setSearchQuery('');
-    setCurrentPage(1);
-    setSelectedPageIds(new Set());
-  }, [routerState.location.search, selectedSiteId, sites, setCurrentPage, setSearchQuery]);
+    setStatusFilter(routeSearch.status || 'all');
+    setHealthFilter(routeSearch.health || 'all');
+    setSearchQuery(routeSearch.q || '');
+    setCurrentPage(routeSearch.page || 1);
+    setSortConfig({
+      key: routeSearch.sortBy || 'lastUpdated',
+      direction: routeSearch.sortDirection || 'desc',
+    });
+  }, [
+    routeSearch.health,
+    routeSearch.page,
+    routeSearch.q,
+    routeSearch.siteId,
+    routeSearch.sortBy,
+    routeSearch.sortDirection,
+    routeSearch.status,
+    selectedSiteId,
+    setCurrentPage,
+    setSearchQuery,
+    setSortConfig,
+    sites,
+  ]);
   const hasPages = activeSitePages.length > 0;
   const selectedTablePages = data.filter((page) => selectedPageIds.has(page.id));
   const pageHandoff = useMemo(() => ({
@@ -925,6 +1045,7 @@ function PagesListView() {
     setStatusFilter('all');
     setHealthFilter('all');
     setCurrentPage(1);
+    updatePagesRouteSearch({ q: undefined, status: 'all', health: 'all', page: undefined });
   };
 
   const downloadPageHandoff = () => {
@@ -1407,7 +1528,12 @@ function PagesListView() {
             type="text"
             placeholder="Search pages..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(event) => {
+              const q = event.target.value;
+              setSearchQuery(q);
+              setCurrentPage(1);
+              updatePagesRouteSearch({ q: q || undefined, page: undefined });
+            }}
             className="w-full pl-4 pr-4 py-2 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
@@ -1431,8 +1557,10 @@ function PagesListView() {
           aria-label="Filter pages by library readiness"
           value={healthFilter}
           onChange={(event) => {
-            setHealthFilter(event.target.value as PageLibraryFilter);
+            const health = event.target.value as PageLibraryFilter;
+            setHealthFilter(health);
             setCurrentPage(1);
+            updatePagesRouteSearch({ health, page: undefined });
           }}
           className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
         >
@@ -1471,10 +1599,19 @@ function PagesListView() {
           columns={columns}
           data={data}
           sortConfig={sortConfig}
-          onSort={handleSort}
+          onSort={(key) => {
+            const sortBy = key as PageSortKey;
+            const sortDirection = sortConfig.key === key && sortConfig.direction === 'asc' ? 'desc' : 'asc';
+            handleSort(key);
+            setCurrentPage(1);
+            updatePagesRouteSearch({ sortBy, sortDirection, page: undefined });
+          }}
           currentPage={currentPage}
           totalPages={totalPages}
-          onPageChange={setCurrentPage}
+          onPageChange={(page) => {
+            setCurrentPage(page);
+            updatePagesRouteSearch({ page });
+          }}
           totalItems={totalItems}
           emptyState={
             <EmptyState
