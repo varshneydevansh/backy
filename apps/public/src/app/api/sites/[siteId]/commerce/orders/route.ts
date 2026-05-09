@@ -12,12 +12,14 @@ import {
   isCommerceSourceRecord,
   productRecordToCommerceProduct,
   type CommerceProduct,
+  type CommerceSourceRecord,
 } from '@/lib/commerceCatalog';
 import {
   createAdminCollectionRecord,
   getCollectionByIdOrSlug,
   getCollectionRecordByIdOrSlug,
   getSiteByIdOrSlug,
+  updateAdminCollectionRecord,
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -199,6 +201,109 @@ const lineItemFromProduct = (product: CommerceProduct, quantity: number, item: C
   };
 };
 
+const parseVariantSource = (value: unknown): unknown[] => {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+};
+
+const reserveInventoryForCheckoutItem = (
+  record: CommerceSourceRecord,
+  product: CommerceProduct,
+  item: CheckoutItemInput,
+  quantity: number,
+): { values: Record<string, unknown> | null; error?: { code: string; message: string; details: Record<string, unknown> } } => {
+  if (product.productType !== 'physical') {
+    return { values: null };
+  }
+
+  const variant = selectProductVariant(product, item);
+  if (variant) {
+    if (variant.inventory === null) {
+      return { values: null };
+    }
+
+    const variantInventory = variant.inventory;
+
+    if (product.inventory.policy === 'deny' && quantity > variantInventory) {
+      return {
+        values: null,
+        error: {
+          code: 'VARIANT_INSUFFICIENT_STOCK',
+          message: `${variant.title} has only ${variantInventory} available`,
+          details: {
+            productId: product.id,
+            slug: product.slug,
+            variantId: variant.id,
+            requested: quantity,
+            available: variantInventory,
+          },
+        },
+      };
+    }
+
+    const variantSource = parseVariantSource(record.values.variants);
+    const nextVariants = variantSource.map((source, index) => {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) {
+        return source;
+      }
+
+      const candidate = source as Record<string, unknown>;
+      const candidateId = textValue(candidate.id) || `variant-${index + 1}`;
+      const candidateSku = textValue(candidate.sku);
+      const isMatch = candidateId === variant.id || (candidateSku && candidateSku === variant.sku);
+
+      return isMatch
+        ? {
+            ...candidate,
+            inventory: Math.max(0, variantInventory - quantity),
+          }
+        : candidate;
+    });
+
+    return {
+      values: {
+        ...record.values,
+        variants: nextVariants,
+      },
+    };
+  }
+
+  if (product.inventory.policy === 'deny' && quantity > product.inventory.quantity) {
+    return {
+      values: null,
+      error: {
+        code: 'PRODUCT_INSUFFICIENT_STOCK',
+        message: `${product.title} has only ${product.inventory.quantity} available`,
+        details: {
+          productId: product.id,
+          slug: product.slug,
+          requested: quantity,
+          available: product.inventory.quantity,
+        },
+      },
+    };
+  }
+
+  return {
+    values: {
+      ...record.values,
+      inventory: Math.max(0, product.inventory.quantity - quantity),
+    },
+  };
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const { siteId } = await params;
@@ -254,6 +359,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const lineItems = [];
+      const inventoryReservations = new Map<string, { record: CommerceSourceRecord; values: Record<string, unknown> }>();
       for (const item of input.items || []) {
         const quantity = Math.max(1, Math.floor(Number(item.quantity || 1)));
         const record = textValue(item.productId)
@@ -264,7 +370,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           return errorResponse(404, 'PRODUCT_NOT_FOUND', 'Product not found', requestId, { item });
         }
 
-        const product = productRecordToCommerceProduct(record);
+        const reservedRecord = inventoryReservations.get(record.id);
+        const workingRecord: CommerceSourceRecord = reservedRecord
+          ? { ...record, values: reservedRecord.values }
+          : record;
+        const product = productRecordToCommerceProduct(workingRecord);
         if (!product.inventory.inStock) {
           return errorResponse(409, 'PRODUCT_OUT_OF_STOCK', `${product.title} is out of stock`, requestId, { productId: product.id, slug: product.slug });
         }
@@ -275,6 +385,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }
         if (variant && !variant.inStock) {
           return errorResponse(409, 'VARIANT_OUT_OF_STOCK', `${variant.title} is out of stock`, requestId, { productId: product.id, slug: product.slug, variantId: variant.id });
+        }
+
+        const reservation = reserveInventoryForCheckoutItem(workingRecord, product, item, quantity);
+        if (reservation.error) {
+          return errorResponse(409, reservation.error.code, reservation.error.message, requestId, reservation.error.details);
+        }
+        if (reservation.values) {
+          inventoryReservations.set(record.id, { record: workingRecord, values: reservation.values });
         }
 
         lineItems.push(lineItemFromProduct(product, quantity, item));
@@ -314,6 +432,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         billingaddress: input.billingAddress || '',
         notes: input.notes || '',
       };
+
+      for (const reservation of inventoryReservations.values()) {
+        await repositories.collections.updateRecord(site.id, productsCollection.id, reservation.record.id, {
+          status: reservation.record.status,
+          values: toJsonRecord(reservation.values),
+        });
+      }
+
       const order = (await repositories.collections.createRecord({
         siteId: site.id,
         collectionId: ordersCollection.id,
@@ -368,6 +494,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const lineItems = [];
+    const inventoryReservations = new Map<string, { record: CommerceSourceRecord; values: Record<string, unknown> }>();
     for (const item of input.items || []) {
       const quantity = Math.max(1, Math.floor(Number(item.quantity || 1)));
       const record = getCollectionRecordByIdOrSlug(
@@ -380,7 +507,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'PRODUCT_NOT_FOUND', 'Product not found', requestId, { item });
       }
 
-      const product = productRecordToCommerceProduct(record);
+      const reservedRecord = inventoryReservations.get(record.id);
+      const workingRecord: CommerceSourceRecord = reservedRecord
+        ? { ...record, values: reservedRecord.values }
+        : record;
+      const product = productRecordToCommerceProduct(workingRecord);
       if (!product.inventory.inStock) {
         return errorResponse(409, 'PRODUCT_OUT_OF_STOCK', `${product.title} is out of stock`, requestId, { productId: product.id, slug: product.slug });
       }
@@ -393,12 +524,28 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(409, 'VARIANT_OUT_OF_STOCK', `${variant.title} is out of stock`, requestId, { productId: product.id, slug: product.slug, variantId: variant.id });
       }
 
+      const reservation = reserveInventoryForCheckoutItem(workingRecord, product, item, quantity);
+      if (reservation.error) {
+        return errorResponse(409, reservation.error.code, reservation.error.message, requestId, reservation.error.details);
+      }
+      if (reservation.values) {
+        inventoryReservations.set(record.id, { record: workingRecord, values: reservation.values });
+      }
+
       lineItems.push(lineItemFromProduct(product, quantity, item));
     }
 
     const currency = lineItems[0]?.currency || 'USD';
     const subtotal = moneyValue(lineItems.reduce((sum, item) => sum + item.lineTotal, 0));
     const orderNumber = buildOrderNumber();
+
+    for (const reservation of inventoryReservations.values()) {
+      updateAdminCollectionRecord(site.id, productsCollection.id, reservation.record.id, {
+        status: reservation.record.status,
+        values: reservation.values,
+      });
+    }
+
     const order = createAdminCollectionRecord(site.id, ordersCollection.id, {
       slug: orderNumber.toLowerCase(),
       status: 'published',
