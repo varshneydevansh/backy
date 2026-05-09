@@ -3,6 +3,8 @@ import { createFileRoute } from '@tanstack/react-router';
 import {
   ChevronLeft,
   ChevronRight,
+  Code2,
+  Copy,
   Database,
   Download,
   ExternalLink,
@@ -99,6 +101,28 @@ const getPublicBaseUrl = () => {
     return 'http://localhost:3001';
   }
   return typeof window !== 'undefined' ? window.location.origin : '';
+};
+
+const getAdminBaseUrl = () => {
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+  const envBase = (
+    env.VITE_BACKY_ADMIN_API_BASE_URL ||
+    env.VITE_ADMIN_API_URL ||
+    env.VITE_BACKY_PUBLIC_API_BASE_URL ||
+    env.VITE_PUBLIC_API_URL ||
+    env.VITE_API_BASE_URL ||
+    ''
+  ).trim();
+
+  if (envBase) {
+    return `${envBase.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api/admin`;
+  }
+  if (typeof window !== 'undefined' && window.location.port === '5173') {
+    return 'http://localhost:3001/api/admin';
+  }
+  return typeof window !== 'undefined'
+    ? `${window.location.origin.replace(/\/$/, '')}/api/admin`
+    : '';
 };
 
 const defaultCollectionListRoutePattern = (collectionSlug: string) => `/${collectionSlug || 'collection'}`;
@@ -298,6 +322,18 @@ function CollectionsPage() {
   const recordRangeEnd = Math.min(recordPagination.total, recordPagination.offset + records.length);
   const selectedRecordsOnPage = records.filter((record) => selectedRecordIds.includes(record.id));
   const allRecordsOnPageSelected = records.length > 0 && selectedRecordsOnPage.length === records.length;
+  const adminBaseUrl = getAdminBaseUrl();
+  const apiCollectionSegment = activeCollection?.id ? encodeURIComponent(activeCollection.id) : '{collectionId}';
+  const publicCollectionsUrl = `${dynamicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections`;
+  const publicRecordsUrl = `${dynamicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${apiCollectionSegment}/records?limit=100`;
+  const publicRecordBySlugUrl = `${dynamicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${apiCollectionSegment}/records?slug={recordSlug}`;
+  const adminCollectionsUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/collections`;
+  const adminRecordsUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/collections/${apiCollectionSegment}/records`;
+  const adminImportUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/collections/${apiCollectionSegment}/records/import?upsert=true`;
+  const adminBulkUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/collections/${apiCollectionSegment}/records/bulk`;
+  const activeCollectionIsPublic = activeCollection?.status === 'published' && activeCollection.permissions?.publicRead === true;
+  const recordsCopyUrl = activeCollectionIsPublic ? publicRecordsUrl : adminRecordsUrl;
+  const recordsCopyLabel = activeCollectionIsPublic ? 'Public records URL' : 'Admin records URL';
   const collectionMetrics = useMemo(() => {
     const published = collections.filter((collection) => collection.status === 'published').length;
     const fields = collections.reduce((total, collection) => total + collection.fields.length, 0);
@@ -337,6 +373,17 @@ function CollectionsPage() {
     setValidationDetails(apiError instanceof AdminContentApiError
       ? formatValidationDetails(apiError.details)
       : []);
+  };
+
+  const copyCollectionApiText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setError(null);
+      setNotice(`${label} copied.`);
+    } catch {
+      setNotice(null);
+      setError(value);
+    }
   };
 
   useEffect(() => {
@@ -773,6 +820,7 @@ function CollectionsPage() {
             type="button"
             onClick={() => void loadCollections()}
             className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            aria-label="Refresh collections"
           >
             <RefreshCw className="h-4 w-4" />
             Refresh
@@ -781,6 +829,7 @@ function CollectionsPage() {
             type="button"
             onClick={resetCollectionForm}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            aria-label="Create new collection"
           >
             <Plus className="h-4 w-4" />
             New collection
@@ -816,6 +865,47 @@ function CollectionsPage() {
           </div>
         ))}
       </div>
+
+      <section className="mb-5 rounded-lg border border-border bg-card">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Code2 className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">Collection API contract</h2>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Public endpoints for storefronts plus private admin endpoints for schema, records, import, and bulk workflows.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void copyCollectionApiText(recordsCopyUrl, recordsCopyLabel)}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            aria-label={`Copy ${activeCollectionIsPublic ? 'public' : 'admin'} records URL`}
+          >
+            <Copy className="h-4 w-4" />
+            {activeCollectionIsPublic ? 'Copy public records' : 'Copy admin records'}
+          </button>
+        </div>
+        <div className="p-4">
+          <div className="grid gap-3 md:grid-cols-4">
+            <CollectionApiStat label="Active collection" value={activeCollection?.name || 'No collection'} />
+            <CollectionApiStat label="Public read" value={activeCollection?.permissions?.publicRead ? 'enabled' : 'off'} />
+            <CollectionApiStat label="Visitor create" value={activeCollection?.permissions?.publicCreate ? 'enabled' : 'off'} />
+            <CollectionApiStat label="Fields" value={`${activeCollection?.fields.length || collectionForm.fields.length}`} />
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            <CollectionApiSnippet label="Public collections" value={publicCollectionsUrl} />
+            <CollectionApiSnippet label="Public records" value={publicRecordsUrl} />
+            <CollectionApiSnippet label="Public record by slug" value={publicRecordBySlugUrl} />
+            <CollectionApiSnippet label="Admin collections" value={adminCollectionsUrl} />
+            <CollectionApiSnippet label="Admin records" value={adminRecordsUrl} />
+            <CollectionApiSnippet label="CSV import" value={adminImportUrl} />
+            <CollectionApiSnippet label="Bulk records" value={adminBulkUrl} />
+          </div>
+        </div>
+      </section>
 
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <label className="text-sm font-medium text-muted-foreground" htmlFor="collection-site">
@@ -1162,12 +1252,14 @@ function CollectionsPage() {
                     accept=".csv,text/csv"
                     className="hidden"
                     onChange={(event) => void handleImportRecords(event)}
+                    aria-label="Import collection records CSV"
                   />
                   <button
                     type="button"
                     onClick={() => importInputRef.current?.click()}
                     disabled={isImportingRecords}
                     className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
+                    aria-label="Import collection records CSV"
                   >
                     <Upload className="h-4 w-4" />
                     {isImportingRecords ? 'Importing...' : 'Import CSV'}
@@ -1675,5 +1767,25 @@ function CollectionsPage() {
         </div>
       )}
     </PageShell>
+  );
+}
+
+function CollectionApiStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 px-3 py-3">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="mt-1 truncate text-sm font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function CollectionApiSnippet({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="mb-1 text-xs font-medium text-muted-foreground">{label}</div>
+      <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+        {value}
+      </code>
+    </div>
   );
 }
