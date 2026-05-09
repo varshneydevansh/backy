@@ -1815,12 +1815,93 @@ function CanvasElementComponent({
           </button>
         );
 
+      case 'nav': {
+        const navItems = Array.isArray(p.navItems)
+          ? p.navItems
+            .map((item, index) => {
+              if (typeof item === 'string') {
+                return { label: item, href: `#${item.toLowerCase().replace(/[^a-z0-9]+/g, '-') || index}` };
+              }
+
+              if (item && typeof item === 'object') {
+                const record = item as Record<string, unknown>;
+                const label = String(record.label || record.title || record.name || `Item ${index + 1}`);
+                return { label, href: String(record.href || record.url || '#') };
+              }
+
+              return null;
+            })
+            .filter(Boolean) as Array<{ label: string; href: string }>
+          : [];
+        const isVertical = p.navDirection === 'vertical';
+
+        return (
+          <nav
+            {...containerDropHandlers}
+            aria-label={typeof p.ariaLabel === 'string' ? p.ariaLabel : 'Page navigation'}
+            style={{
+              ...sharedStyle,
+              width: '100%',
+              height: '100%',
+              backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? 'transparent',
+              borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 0),
+              border: sharedStyle.border ?? 'none',
+              position: 'relative',
+              display: 'flex',
+              alignItems: isVertical ? 'stretch' : (p.alignItems as string) || 'center',
+              justifyContent: (p.justifyContent as string) || (isVertical ? 'flex-start' : 'center'),
+              flexDirection: isVertical ? 'column' : 'row',
+              gap: toCssLength(p.gap ?? 18),
+              padding: toCssLength(p.padding ?? 0),
+            }}
+          >
+            {childElements.length > 0 ? renderChildren() : (
+              navItems.length > 0 ? navItems.map((item) => (
+                <a
+                  key={`${item.label}-${item.href}`}
+                  href={isPreview ? item.href : undefined}
+                  onClick={(event) => {
+                    if (!isPreview) event.preventDefault();
+                  }}
+                  style={{
+                    color: p.color ?? sharedStyle.color ?? '#111827',
+                    fontSize: p.fontSize ?? sharedStyle.fontSize ?? 14,
+                    fontWeight: p.fontWeight || sharedStyle.fontWeight || '600',
+                    textDecoration: 'none',
+                    lineHeight: 1.2,
+                    pointerEvents: isPreview ? 'auto' : 'none',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {item.label}
+                </a>
+              )) : (
+                !isPreview && (
+                  <div style={{
+                    width: '100%',
+                    height: '100%',
+                    border: sharedStyle.border ?? '1px dashed #d1d5db',
+                    borderRadius: 4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#9ca3af',
+                    fontSize: 12,
+                  }}>
+                    Add navigation items
+                  </div>
+                )
+              )
+            )}
+          </nav>
+        );
+      }
+
       case 'box':
       case 'container':
       case 'section':
       case 'header':
       case 'footer':
-      case 'nav':
         return (
           <div
             {...containerDropHandlers}

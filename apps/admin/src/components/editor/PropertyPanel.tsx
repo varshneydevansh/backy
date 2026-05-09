@@ -104,6 +104,48 @@ const parseFieldMapInput = (value: string): Record<string, string> => (
     }, {})
 );
 
+const formatNavigationItems = (value: unknown): string => {
+  if (!Array.isArray(value)) {
+    return '';
+  }
+
+  return value
+    .map((item) => {
+      if (typeof item === 'string') {
+        return item;
+      }
+
+      if (item && typeof item === 'object') {
+        const record = item as Record<string, unknown>;
+        const label = String(record.label || record.title || record.name || '').trim();
+        const href = String(record.href || record.url || '').trim();
+        return href ? `${label}: ${href}` : label;
+      }
+
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n');
+};
+
+const parseNavigationItems = (value: string): Array<string | { label: string; href: string }> => (
+  value
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [label, ...hrefParts] = entry.split(':');
+      const href = hrefParts.join(':').trim();
+      const normalizedLabel = label.trim();
+
+      if (normalizedLabel && href) {
+        return { label: normalizedLabel, href };
+      }
+
+      return entry;
+    })
+);
+
 const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
   const normalized = typeof value === 'string' ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
 
@@ -580,6 +622,7 @@ function ContentProperties({
   const hasVideoContent = normalizedType === 'video';
   const hasLinkContent = normalizedType === 'link';
   const hasButtonContent = normalizedType === 'button';
+  const hasNavContent = normalizedType === 'nav';
   const hasInputContent = normalizedType === 'input';
   const hasFormFieldContent = ['input', 'textarea', 'select', 'checkbox', 'radio'].includes(normalizedType);
   const hasFormContent = normalizedType === 'form';
@@ -844,6 +887,78 @@ function ContentProperties({
                 placeholder="https://example.com"
               />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Navigation Properties */}
+      {hasNavContent && (
+        <div className="space-y-3">
+          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+            Each line becomes a menu item. Use <span className="font-mono">Label: /path</span> when a frontend route is known.
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Navigation items
+            </label>
+            <textarea
+              value={formatNavigationItems(element.props.navItems)}
+              onChange={(e) => onChange({ navItems: parseNavigationItems(e.target.value) })}
+              rows={5}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background resize-none',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder={'Home: /\nShop: /shop\nContact: /contact'}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Direction
+              </label>
+              <select
+                value={element.props.navDirection || 'horizontal'}
+                onChange={(e) => onChange({ navDirection: e.target.value })}
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+              >
+                <option value="horizontal">Horizontal</option>
+                <option value="vertical">Vertical</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Gap
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={toNumber(element.props.gap, 18)}
+                onChange={(e) => onChange({ gap: e.target.value === '' ? 0 : Number(e.target.value) })}
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Accessibility label
+            </label>
+            <input
+              type="text"
+              value={element.props.ariaLabel || ''}
+              onChange={(e) => onChange({ ariaLabel: e.target.value })}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Primary navigation"
+            />
           </div>
         </div>
       )}
