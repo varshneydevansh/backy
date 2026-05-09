@@ -47,6 +47,34 @@ export const Route = createFileRoute('/blog/$postId')({
     component: EditBlogPostPage,
 });
 
+const BLOG_EDITOR_CONTROL_AREAS = [
+    {
+        title: 'Editorial draft',
+        detail: 'Control title, slug, excerpt, list copy, and SEO summary.',
+        href: '#blog-editor-draft',
+    },
+    {
+        title: 'Design canvas',
+        detail: 'Drag, group, layer, bind, and compose the public article page.',
+        href: '#blog-editor-canvas',
+    },
+    {
+        title: 'Publish controls',
+        detail: 'Preview, save, publish, schedule, archive, discard, and delete.',
+        href: '#blog-editor-publish',
+    },
+    {
+        title: 'Taxonomy',
+        detail: 'Assign author, categories, and tags for lists, feeds, and frontend filters.',
+        href: '#blog-editor-taxonomy',
+    },
+    {
+        title: 'Revisions',
+        detail: 'Restore saved post snapshots when the article design needs rollback.',
+        href: '#blog-editor-revisions',
+    },
+] as const;
+
 function EditBlogPostPage() {
     const navigate = useNavigate();
     const { postId } = Route.useParams();
@@ -444,6 +472,57 @@ function EditBlogPostPage() {
     const localReadyCount = localReadinessChecks.filter((check) => check.complete).length;
     const canSave = title.trim().length > 0 && slug.trim().length > 0 && (status !== 'scheduled' || Boolean(scheduledAt));
     const submitLabel = status === 'published' ? 'Save published post' : status === 'scheduled' ? 'Schedule changes' : status === 'archived' ? 'Save archived post' : 'Save draft';
+    const backendReadinessDetail = postReadiness
+        ? `${postReadiness.score}% ${postReadiness.statusLabel.replace('-', ' ')}.`
+        : readinessError || 'Run readiness before publishing.';
+    const blogEditorChecks = [
+        {
+            label: 'Title',
+            detail: title.trim() ? 'Article title is ready for frontend handoff.' : 'Add a title before saving.',
+            ready: title.trim().length > 0,
+        },
+        {
+            label: 'Route',
+            detail: slug.trim() ? `/blog/${slug}` : 'Add a slug so public frontends can resolve the post.',
+            ready: slug.trim().length > 0,
+        },
+        {
+            label: 'Excerpt',
+            detail: excerpt.trim().length >= 24 ? `${excerpt.length} characters for feeds and SEO.` : 'Add a stronger summary for blog lists and previews.',
+            ready: excerpt.trim().length >= 24,
+        },
+        {
+            label: 'Canvas content',
+            detail: canvasElements.length > 0 ? `${canvasElements.length} root layer${canvasElements.length === 1 ? '' : 's'} ready.` : 'Add article layout elements.',
+            ready: canvasElements.length > 0,
+        },
+        {
+            label: 'Schedule',
+            detail: status === 'scheduled' ? scheduledAt ? 'Scheduled publish time is set.' : 'Choose a publish time.' : `${status} workflow selected.`,
+            ready: status !== 'scheduled' || Boolean(scheduledAt),
+        },
+        {
+            label: 'Backend readiness',
+            detail: backendReadinessDetail,
+            ready: Boolean(postReadiness) && !readinessBlocked,
+        },
+        {
+            label: 'Revision safety',
+            detail: revisions.length > 0 ? `${revisions.length} saved revision${revisions.length === 1 ? '' : 's'}.` : 'Save once to create a restore point.',
+            ready: revisions.length > 0,
+        },
+    ];
+    const blogEditorReadyCount = blogEditorChecks.filter((check) => check.ready).length;
+    const blogEditorReadiness = {
+        score: Math.round((blogEditorReadyCount / blogEditorChecks.length) * 100),
+        checks: blogEditorChecks,
+        workflow: [
+            { label: 'Write', detail: 'Set title, slug, excerpt, author, categories, and tags.' },
+            { label: 'Design', detail: 'Compose the public article page with the shared visual editor.' },
+            { label: 'Validate', detail: 'Refresh readiness for route, SEO, canvas, and publishing blockers.' },
+            { label: 'Ship', detail: 'Preview, save, publish, schedule, or archive without leaving the editor.' },
+        ],
+    };
 
     return (
         <PageShell
@@ -469,9 +548,114 @@ function EditBlogPostPage() {
                     </Notice>
                 )}
 
-                <form onSubmit={handleSubmit} className="grid gap-5">
+                <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="blog-editor-command-center">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                        <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h2 className="text-base font-semibold text-foreground">Blog editor command center</h2>
+                                <span className={cn(
+                                    'rounded-full px-2.5 py-1 text-xs font-semibold',
+                                    blogEditorReadiness.score >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                                )}
+                                >
+                                    {blogEditorReadiness.score}% ready
+                                </span>
+                                <StatusBadge status={status} />
+                            </div>
+                            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                                Control the article draft, canvas design, taxonomy, publishing workflow, readiness blockers, preview links, and revision rollback from one workspace.
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                                type="submit"
+                                form="blog-editor-form"
+                                disabled={isLoading || !canSave}
+                                variant="primary"
+                                iconStart={<Save className="size-4" />}
+                            >
+                                {isLoading ? 'Saving...' : submitLabel}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => void generatePreview()}
+                                disabled={isPreviewBusy}
+                                iconStart={<Eye className="size-4" />}
+                            >
+                                Preview
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => void loadPostReadiness()}
+                                disabled={readinessLoading}
+                                iconStart={<RefreshCw className={cn('size-4', readinessLoading && 'animate-spin')} />}
+                            >
+                                Refresh readiness
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+                        <div className="rounded-lg border border-border bg-background p-4">
+                            <h3 className="text-sm font-semibold">Post readiness</h3>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                Checks title, route, excerpt, canvas content, schedule state, backend readiness, and restore safety.
+                            </p>
+                            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                                <div
+                                    className={cn('h-full rounded-full', blogEditorReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                                    style={{ width: `${blogEditorReadiness.score}%` }}
+                                />
+                            </div>
+                            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                                {blogEditorReadiness.checks.map((check) => (
+                                    <BlogEditorReadinessCheck key={check.label} {...check} />
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="rounded-lg border border-border bg-background p-4">
+                            <div className="flex items-center gap-2">
+                                <PenLine className="size-4 text-primary" />
+                                <h3 className="text-sm font-semibold">Article workflow</h3>
+                            </div>
+                            <div className="mt-3 grid gap-2">
+                                {blogEditorReadiness.workflow.map((step, index) => (
+                                    <BlogEditorWorkflowStep key={step.label} index={index + 1} {...step} />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 rounded-lg border border-border bg-background p-4">
+                        <h3 className="text-sm font-semibold">Blog editor control map</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">Jump to draft fields, the canvas, publish controls, taxonomy, and revisions.</p>
+                        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+                            {BLOG_EDITOR_CONTROL_AREAS.map((area) => (
+                                <a
+                                    key={area.title}
+                                    href={area.href}
+                                    className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                                >
+                                    <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                                    <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                                </a>
+                            ))}
+                        </div>
+                        <div className="mt-4 grid gap-3 md:grid-cols-4">
+                            <BlogEditorMetaTile label="Route" value={slug ? `/blog/${slug}` : 'No slug'} />
+                            <BlogEditorMetaTile label="Canvas" value={`${canvasSize.width} x ${canvasSize.height}px`} />
+                            <BlogEditorMetaTile label="Elements" value={`${canvasElements.length}`} />
+                            <BlogEditorMetaTile label="Status" value={status} />
+                        </div>
+                    </div>
+                </section>
+
+                <form id="blog-editor-form" onSubmit={handleSubmit} className="grid gap-5">
                     <div className="min-w-0 space-y-6">
-                        <Panel className="overflow-hidden">
+                        <Panel id="blog-editor-draft" className="overflow-hidden scroll-mt-24">
                             <PanelHeader
                                 title="Editorial draft"
                                 description="Title, canonical URL, and list/SEO summary."
@@ -515,50 +699,52 @@ function EditBlogPostPage() {
                             </PanelContent>
                         </Panel>
 
-                        <EditorWorkspaceFrame
-                            title="Post design canvas"
-                            description="Design the public post page with the same component, layer, media, grouping, and data-binding controls used by pages."
-                            meta={
-                                <>
-                                    <span className="rounded bg-muted px-2 py-1 tabular-nums">
-                                        {canvasSize.width} x {canvasSize.height}px
-                                    </span>
-                                    <span className="rounded bg-muted px-2 py-1">
-                                        {canvasElements.length} root layer{canvasElements.length === 1 ? '' : 's'}
-                                    </span>
-                                    <span className="rounded bg-muted px-2 py-1">
-                                        Cmd/Ctrl+G grouping
-                                    </span>
-                                </>
-                            }
-                            className="relative min-h-[760px] xl:h-[calc(100vh-168px)] xl:min-h-[860px]"
-                        >
-                            <CanvasEditor
-                                mode="blog"
-                                initialElements={initialElements}
-                                initialSettings={dummySettings}
-                                initialSize={canvasSize}
-                                onSave={() => { }}
-                                onChange={(elements, _settings, size) => {
-                                    setCanvasElements(elements);
-                                    if (size) setCanvasSize(size);
-                                }}
-                                className="h-full w-full"
-                                hideNavigation={true}
-                                hideSettings={true}
-                                hideSave={true}
-                                mediaContext={{
-                                  siteId: activeSiteId,
-                                  scope: 'post',
-                                  targetId: postId,
-                                  targetLabel: post.title,
-                                }}
-                            />
-                        </EditorWorkspaceFrame>
+                        <div id="blog-editor-canvas" className="min-w-0 scroll-mt-24">
+                            <EditorWorkspaceFrame
+                                title="Post design canvas"
+                                description="Design the public post page with the same component, layer, media, grouping, and data-binding controls used by pages."
+                                meta={
+                                    <>
+                                        <span className="rounded bg-muted px-2 py-1 tabular-nums">
+                                            {canvasSize.width} x {canvasSize.height}px
+                                        </span>
+                                        <span className="rounded bg-muted px-2 py-1">
+                                            {canvasElements.length} root layer{canvasElements.length === 1 ? '' : 's'}
+                                        </span>
+                                        <span className="rounded bg-muted px-2 py-1">
+                                            Cmd/Ctrl+G grouping
+                                        </span>
+                                    </>
+                                }
+                                className="relative min-h-[780px] xl:h-[calc(100vh-132px)] xl:min-h-[900px]"
+                            >
+                                <CanvasEditor
+                                    mode="blog"
+                                    initialElements={initialElements}
+                                    initialSettings={dummySettings}
+                                    initialSize={canvasSize}
+                                    onSave={() => { }}
+                                    onChange={(elements, _settings, size) => {
+                                        setCanvasElements(elements);
+                                        if (size) setCanvasSize(size);
+                                    }}
+                                    className="h-full w-full"
+                                    hideNavigation={true}
+                                    hideSettings={true}
+                                    hideSave={true}
+                                    mediaContext={{
+                                      siteId: activeSiteId,
+                                      scope: 'post',
+                                      targetId: postId,
+                                      targetLabel: post.title,
+                                    }}
+                                />
+                            </EditorWorkspaceFrame>
+                        </div>
                     </div>
 
                     <aside className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-4">
-                        <Panel>
+                        <Panel id="blog-editor-publish" className="scroll-mt-24">
                             <PanelHeader
                                 title="Publish"
                                 description={selectedSite ? selectedSite.name : activeSiteId}
@@ -702,7 +888,7 @@ function EditBlogPostPage() {
                             </PanelContent>
                         </Panel>
 
-                        <Panel>
+                        <Panel id="blog-editor-taxonomy" className="scroll-mt-24">
                             <PanelHeader title="Author" icon={<UserRound className="size-4" />} />
                             <PanelContent className="space-y-2">
                                 <select
@@ -725,7 +911,7 @@ function EditBlogPostPage() {
                             </PanelContent>
                         </Panel>
 
-                        <Panel>
+                        <Panel className="scroll-mt-24">
                             <PanelHeader title="Taxonomy" icon={<Tags className="size-4" />} />
                             <PanelContent className="space-y-5">
                                 <TaxonomyPicker
@@ -745,7 +931,7 @@ function EditBlogPostPage() {
                             </PanelContent>
                         </Panel>
 
-                        <Panel>
+                        <Panel id="blog-editor-revisions" className="scroll-mt-24">
                             <PanelHeader title="Revisions" icon={<History className="size-4" />} />
                             <PanelContent>
                                 {revisions.length === 0 ? (
@@ -864,6 +1050,43 @@ function EditBlogPostPage() {
                 )}
             </div>
         </PageShell>
+    );
+}
+
+function BlogEditorMetaTile({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="rounded-lg border border-border bg-card px-3 py-3">
+            <div className="text-xs font-medium text-muted-foreground">{label}</div>
+            <div className="mt-1 truncate text-sm font-semibold">{value}</div>
+        </div>
+    );
+}
+
+function BlogEditorReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+    const Icon = ready ? CheckCircle2 : AlertTriangle;
+
+    return (
+        <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-card px-3 py-2">
+            <Icon className={cn('mt-0.5 size-4 shrink-0', ready ? 'text-emerald-600' : 'text-amber-600')} />
+            <div className="min-w-0">
+                <div className="text-xs font-semibold text-foreground">{label}</div>
+                <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+            </div>
+        </div>
+    );
+}
+
+function BlogEditorWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+    return (
+        <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-xs font-semibold text-primary">
+                {index}
+            </span>
+            <div className="min-w-0">
+                <div className="text-xs font-semibold text-foreground">{label}</div>
+                <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+            </div>
+        </div>
     );
 }
 
