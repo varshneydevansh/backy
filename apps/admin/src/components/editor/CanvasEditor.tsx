@@ -1164,19 +1164,34 @@ export function CanvasEditor({
     if (!result.updated) return;
 
     const parentSelection = result.removedParentId || null;
-    setSelectedId((current) => (current === elementId ? parentSelection : current));
-    updateElementsWithHistory(result.elements, parentSelection);
-  }, [elements, findElementById, updateElementsWithHistory]);
+    const remainingSelectedIds = selectedIds.filter((id) => (
+      id !== elementId && !!findElementById(result.elements, id)
+    ));
+    const nextSelectedId = selectedId === elementId
+      ? remainingSelectedIds[0] ?? parentSelection
+      : selectedId && findElementById(result.elements, selectedId)
+        ? selectedId
+        : remainingSelectedIds[0] ?? parentSelection;
+    const nextSelectedIds = nextSelectedId
+      ? Array.from(new Set([nextSelectedId, ...remainingSelectedIds]))
+      : [];
+
+    setSelectedId(nextSelectedId);
+    setSelectedIds(nextSelectedIds);
+    updateElementsWithHistory(result.elements, nextSelectedId, nextSelectedIds);
+  }, [elements, findElementById, selectedId, selectedIds, updateElementsWithHistory]);
 
   const handleLayerDuplicate = useCallback((elementId: string) => {
     const selectedEntry = findElementEntry(elements, elementId);
-    if (!selectedEntry) return;
+    if (!selectedEntry || selectedEntry.element.locked) return;
 
     const duplicate = cloneElementTreeWithFreshIds(selectedEntry.element, 20, 20, selectedEntry.parentId);
     const duplicated = insertElementAsSibling(elements, selectedEntry.element.id, duplicate);
     if (!duplicated.updated) return;
 
-    updateElementsWithHistory(duplicated.elements, duplicate.id);
+    setSelectedId(duplicate.id);
+    setSelectedIds([duplicate.id]);
+    updateElementsWithHistory(duplicated.elements, duplicate.id, [duplicate.id]);
   }, [cloneElementTreeWithFreshIds, elements, findElementEntry, updateElementsWithHistory]);
 
   const handleGroupSelected = useCallback(() => {

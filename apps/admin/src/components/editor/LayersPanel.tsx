@@ -269,16 +269,20 @@ function LayerItem({
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
+                        if (isLocked) {
+                            return;
+                        }
                         onDuplicate(element.id);
                     }}
+                    disabled={isLocked}
                     style={{
                         padding: '4px',
                         border: 'none',
                         background: 'none',
-                        cursor: 'pointer',
-                        color: '#6b7280',
+                        cursor: isLocked ? 'not-allowed' : 'pointer',
+                        color: isLocked ? '#cbd5e1' : '#6b7280',
                     }}
-                    title="Duplicate"
+                    title={isLocked ? 'Unlock to duplicate' : 'Duplicate'}
                 >
                     <CopyIcon />
                 </button>
@@ -286,16 +290,20 @@ function LayerItem({
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
+                        if (isLocked) {
+                            return;
+                        }
                         onDelete(element.id);
                     }}
+                    disabled={isLocked}
                     style={{
                         padding: '4px',
                         border: 'none',
                         background: 'none',
-                        cursor: 'pointer',
-                        color: '#ef4444',
+                        cursor: isLocked ? 'not-allowed' : 'pointer',
+                        color: isLocked ? '#cbd5e1' : '#ef4444',
                     }}
-                    title="Delete"
+                    title={isLocked ? 'Unlock to delete' : 'Delete'}
                 >
                     <TrashIcon />
                 </button>
