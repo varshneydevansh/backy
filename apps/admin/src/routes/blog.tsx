@@ -27,7 +27,7 @@ import { PageShell } from '@/components/layout/PageShell';
 import { DataGrid } from '@/components/ui/DataGrid';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/blog')({
@@ -163,6 +163,7 @@ function BlogLayout() {
 
 function BlogListView() {
   const navigate = useNavigate();
+  const routerState = useRouterState();
   const { sites, posts, setPosts, deletePost, updatePost } = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -193,30 +194,37 @@ function BlogListView() {
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const adminBaseUrl = useMemo(() => getAdminApiBase(), []);
   const createPostSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
+  const siteScopedPosts = useMemo(() => {
+    const siteIdentifiers = new Set(
+      [activeSiteId, activeSite?.id, activeSite?.publicSiteId].filter(Boolean),
+    );
+
+    return posts.filter((post) => !post.siteId || siteIdentifiers.has(post.siteId));
+  }, [activeSite?.id, activeSite?.publicSiteId, activeSiteId, posts]);
   const visiblePosts = useMemo(
-    () => posts.filter((post) => (
+    () => siteScopedPosts.filter((post) => (
       (statusFilter === 'all' || post.status === statusFilter) &&
       (!selectedCategoryId || post.categoryIds?.includes(selectedCategoryId)) &&
       (!selectedTagId || post.tagIds?.includes(selectedTagId)) &&
       (!selectedAuthorId || post.author === selectedAuthorId)
     )),
-    [posts, selectedAuthorId, selectedCategoryId, selectedTagId, statusFilter],
+    [selectedAuthorId, selectedCategoryId, selectedTagId, siteScopedPosts, statusFilter],
   );
   const postMetrics = useMemo(
     () => ({
-      total: posts.length,
-      published: posts.filter((post) => post.status === 'published').length,
-      draft: posts.filter((post) => post.status === 'draft').length,
-      scheduled: posts.filter((post) => post.status === 'scheduled').length,
-      archived: posts.filter((post) => post.status === 'archived').length,
+      total: siteScopedPosts.length,
+      published: siteScopedPosts.filter((post) => post.status === 'published').length,
+      draft: siteScopedPosts.filter((post) => post.status === 'draft').length,
+      scheduled: siteScopedPosts.filter((post) => post.status === 'scheduled').length,
+      archived: siteScopedPosts.filter((post) => post.status === 'archived').length,
     }),
-    [posts],
+    [siteScopedPosts],
   );
   const selectedPosts = useMemo(
-    () => posts.filter((post) => selectedPostIds.has(post.id)),
-    [posts, selectedPostIds],
+    () => siteScopedPosts.filter((post) => selectedPostIds.has(post.id)),
+    [selectedPostIds, siteScopedPosts],
   );
-  const handoffPost = selectedPosts[0] || posts.find((post) => post.status === 'published') || posts[0] || null;
+  const handoffPost = selectedPosts[0] || siteScopedPosts.find((post) => post.status === 'published') || siteScopedPosts[0] || null;
   const handoffPostSegment = handoffPost?.id ? encodeURIComponent(handoffPost.id) : '{postId}';
   const handoffPostSlug = handoffPost?.slug ? encodeURIComponent(handoffPost.slug) : '{postSlug}';
   const publicBlogUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/blog`;
@@ -552,14 +560,41 @@ function BlogListView() {
     columns,
     pageSize: 10
   });
+  const getBlogSurfaceSearch = (surface: (typeof BLOG_WORKFLOW_SURFACES)[number]) => {
+    if (surface.route === '/pages/new') {
+      return { siteId: activeSiteId, template: surface.template };
+    }
+
+    if (surface.route === '/media' || surface.route === '/comments' || surface.route === '/users') {
+      return { siteId: activeSiteId };
+    }
+
+    return undefined;
+  };
+  useEffect(() => {
+    const requestedSiteId = getSiteSearchParam();
+    if (!requestedSiteId) return;
+
+    const nextSiteId = getSiteSelectionFromSearch(sites);
+    if (nextSiteId === selectedSiteId) return;
+
+    setSelectedSiteId(nextSiteId);
+    setStatusFilter('all');
+    setSelectedCategoryId('');
+    setSelectedTagId('');
+    setSelectedAuthorId('');
+    setSearchQuery('');
+    setCurrentPage(1);
+    setSelectedPostIds(new Set());
+  }, [routerState.location.search, selectedSiteId, sites, setCurrentPage, setSearchQuery]);
   const selectedCurrentRows = data.filter((post) => selectedPostIds.has(post.id));
-  const hasPosts = posts.length > 0;
+  const hasPosts = siteScopedPosts.length > 0;
   const editorialReadiness = useMemo(() => {
     const hasSite = Boolean(activeSite || activeSiteId);
     const hasPublished = postMetrics.published > 0;
     const hasDraftPipeline = postMetrics.draft > 0 || postMetrics.scheduled > 0;
-    const hasTaxonomy = categories.length > 0 || tags.length > 0 || posts.some((post) => (post.categoryIds?.length || 0) > 0 || (post.tagIds?.length || 0) > 0);
-    const hasAuthors = authors.length > 0 || posts.some((post) => Boolean(post.author));
+    const hasTaxonomy = categories.length > 0 || tags.length > 0 || siteScopedPosts.some((post) => (post.categoryIds?.length || 0) > 0 || (post.tagIds?.length || 0) > 0);
+    const hasAuthors = authors.length > 0 || siteScopedPosts.some((post) => Boolean(post.author));
     const hasBulkSelection = selectedPostIds.size > 0;
     const checks = [
       {
@@ -625,8 +660,8 @@ function BlogListView() {
     postMetrics.published,
     postMetrics.scheduled,
     postMetrics.total,
-    posts,
     selectedPostIds.size,
+    siteScopedPosts,
     siteSlug,
     tags.length,
   ]);
@@ -649,9 +684,9 @@ function BlogListView() {
     },
     controlRoutes: {
       blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
-      media: '/media',
-      comments: '/comments',
-      users: '/users',
+      media: `/media?siteId=${encodeURIComponent(activeSiteId)}`,
+      comments: `/comments?siteId=${encodeURIComponent(activeSiteId)}`,
+      users: `/users?siteId=${encodeURIComponent(activeSiteId)}`,
       settings: '/settings',
     },
     export: {
@@ -998,6 +1033,7 @@ function BlogListView() {
                 <Link
                   key={surface.key}
                   to={surface.route}
+                  search={getBlogSurfaceSearch(surface)}
                   className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
                 >
                   <div className="text-sm font-semibold text-foreground">{surface.title}</div>
@@ -1037,12 +1073,14 @@ function BlogListView() {
           <select
             value={activeSiteId}
             onChange={(event) => {
-              setSelectedSiteId(event.target.value);
+              const nextSiteId = event.target.value;
+              setSelectedSiteId(nextSiteId);
               setStatusFilter('all');
               setSelectedCategoryId('');
               setSelectedTagId('');
               setSelectedAuthorId('');
               setSelectedPostIds(new Set());
+              navigate({ to: '/blog', search: { siteId: nextSiteId }, replace: true });
             }}
             className="mt-2 w-full min-w-52 rounded-lg border bg-background px-3 py-2 text-sm"
           >

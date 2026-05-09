@@ -12,6 +12,7 @@
  */
 
 import { Link, useLocation } from '@tanstack/react-router';
+import { useMemo } from 'react';
 import {
   LayoutDashboard,
   FileText,
@@ -106,6 +107,20 @@ const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
+const SITE_SCOPED_NAV_ROUTES = new Set([
+  '/',
+  '/pages',
+  '/blog',
+  '/media',
+  '/collections',
+  '/products',
+  '/orders',
+  '/forms',
+  '/contacts',
+  '/comments',
+  '/users',
+]);
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -120,6 +135,15 @@ const NAV_SECTIONS: NavSection[] = [
  */
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const location = useLocation();
+  const activeSiteSearch = useMemo(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const siteId = new URLSearchParams(window.location.search).get('siteId')?.trim();
+    return siteId ? { siteId } : undefined;
+  }, [location.search]);
+  const getNavSearch = (to: string) => (
+    activeSiteSearch && SITE_SCOPED_NAV_ROUTES.has(to) ? activeSiteSearch : undefined
+  );
 
   return (
     <aside
@@ -130,7 +154,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     >
       {/* Logo Area */}
       <div className="h-16 flex items-center justify-center border-b border-border px-4">
-        <Link to="/" className="flex items-center gap-3">
+        <Link to="/" search={getNavSearch('/')} className="flex items-center gap-3">
           {/* Logo Icon */}
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center flex-shrink-0">
             <span className="text-white font-bold text-sm">B</span>
@@ -164,6 +188,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   <Link
                     key={item.to}
                     to={item.to}
+                    search={getNavSearch(item.to)}
                     className={cn(
                       'flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
                       'hover:bg-accent hover:text-accent-foreground',
