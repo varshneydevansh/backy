@@ -988,28 +988,67 @@ export function CanvasEditor({
     }
   }, [elements, findElementById]);
 
-  const handleLayerReorder = useCallback((fromIndex: number, toIndex: number) => {
+  const handleLayerReorder = useCallback((fromId: string, toId: string) => {
     updateElementsWithHistory((currentElements) => {
+      const fromEntry = findElementEntry(currentElements, fromId);
+      const toEntry = findElementEntry(currentElements, toId);
+
       if (
-        fromIndex === toIndex ||
-        fromIndex < 0 ||
-        toIndex < 0 ||
-        fromIndex >= currentElements.length ||
-        toIndex >= currentElements.length
+        !fromEntry ||
+        !toEntry ||
+        fromId === toId ||
+        fromEntry.parentId !== toEntry.parentId ||
+        fromEntry.element.locked ||
+        toEntry.element.locked
       ) {
         return currentElements;
       }
 
-      const next = [...currentElements];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
+      const reorderSiblings = (siblings: CanvasElement[]): CanvasElement[] => {
+        const fromIndex = siblings.findIndex((element) => element.id === fromId);
+        const toIndex = siblings.findIndex((element) => element.id === toId);
 
-      return next.map((element, index) => ({
-        ...element,
-        zIndex: index + 1,
-      }));
+        if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+          return siblings;
+        }
+
+        const next = [...siblings];
+        const [moved] = next.splice(fromIndex, 1);
+        next.splice(toIndex, 0, moved);
+
+        return next.map((element, index) => ({
+          ...element,
+          zIndex: index + 1,
+        }));
+      };
+
+      if (fromEntry.parentId === null) {
+        return reorderSiblings(currentElements);
+      }
+
+      const updateParentChildren = (nodes: CanvasElement[]): CanvasElement[] => (
+        nodes.map((element) => {
+          if (element.id === fromEntry.parentId) {
+            return {
+              ...element,
+              children: reorderSiblings(element.children || []),
+            };
+          }
+
+          if (!element.children?.length) {
+            return element;
+          }
+
+          return {
+            ...element,
+            children: updateParentChildren(element.children),
+          };
+        })
+      );
+
+      return updateParentChildren(currentElements);
     }, selectedId);
-  }, [selectedId, updateElementsWithHistory]);
+  }, [findElementEntry, selectedId, updateElementsWithHistory]);
 
   const handleLayerVisibilityToggle = useCallback((elementId: string) => {
     updateElementsWithHistory((currentElements) => {

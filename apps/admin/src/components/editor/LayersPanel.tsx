@@ -21,7 +21,7 @@ interface LayersPanelProps {
     elements: CanvasElement[];
     selectedIds: string[];
     onSelect: (ids: string[]) => void;
-    onReorder: (fromIndex: number, toIndex: number) => void;
+    onReorder: (fromId: string, toId: string) => void;
     onVisibilityToggle: (id: string) => void;
     onLockToggle: (id: string) => void;
     onDelete: (id: string) => void;
@@ -32,14 +32,13 @@ interface LayersPanelProps {
 
 interface LayerItemProps {
     element: CanvasElement;
-    index: number;
     isSelected: boolean;
     isHidden: boolean;
     isLocked: boolean;
     canReorder: boolean;
     onSelect: (id: string, multiSelect: boolean) => void;
-    onDragStart: (index: number) => void;
-    onDragOver: (index: number) => void;
+    onDragStart: (id: string) => void;
+    onDragOver: (id: string) => void;
     onDragEnd: () => void;
     onVisibilityToggle: (id: string) => void;
     onLockToggle: (id: string) => void;
@@ -131,7 +130,6 @@ const ELEMENT_ICONS: Record<string, string> = {
 
 function LayerItem({
     element,
-    index,
     isSelected,
     isHidden,
     isLocked,
@@ -157,7 +155,7 @@ function LayerItem({
             return;
         }
         e.dataTransfer.effectAllowed = 'move';
-        onDragStart(index);
+        onDragStart(element.id);
     };
 
     return (
@@ -187,7 +185,7 @@ function LayerItem({
                     return;
                 }
                 e.preventDefault();
-                onDragOver(index);
+                onDragOver(element.id);
             }}
             onDragEnd={onDragEnd}
         >
@@ -322,7 +320,7 @@ export function LayersPanel({
     embedded = false,
     hideHeader = false,
 }: LayersPanelProps) {
-    const [dragFromIndex, setDragFromIndex] = useState<number | null>(null);
+    const [dragFromId, setDragFromId] = useState<string | null>(null);
 
     const handleSelect = useCallback(
         (id: string, multiSelect: boolean) => {
@@ -339,22 +337,22 @@ export function LayersPanel({
         [selectedIds, onSelect]
     );
 
-    const handleDragStart = useCallback((index: number) => {
-        setDragFromIndex(index);
+    const handleDragStart = useCallback((id: string) => {
+        setDragFromId(id);
     }, []);
 
     const handleDragOver = useCallback(
-        (toIndex: number) => {
-            if (dragFromIndex !== null && dragFromIndex !== toIndex) {
-                onReorder(dragFromIndex, toIndex);
-                setDragFromIndex(toIndex);
+        (toId: string) => {
+            if (dragFromId !== null && dragFromId !== toId) {
+                onReorder(dragFromId, toId);
+                setDragFromId(toId);
             }
         },
-        [dragFromIndex, onReorder]
+        [dragFromId, onReorder]
     );
 
     const handleDragEnd = useCallback(() => {
-        setDragFromIndex(null);
+        setDragFromId(null);
     }, []);
 
     const handleVisibilityToggle = useCallback((id: string) => {
@@ -366,17 +364,15 @@ export function LayersPanel({
     }, [onLockToggle]);
 
     const renderLayerItems = (items: CanvasElement[], depth = 0) => (
-        [...items].reverse().map((element, reversedIndex) => {
-            const actualIndex = depth === 0 ? items.length - 1 - reversedIndex : reversedIndex;
+        [...items].reverse().map((element) => {
             return (
                 <React.Fragment key={element.id}>
                     <LayerItem
                         element={element}
-                        index={actualIndex}
                         isSelected={selectedIds.includes(element.id)}
                         isHidden={element.visible === false}
                         isLocked={element.locked === true}
-                        canReorder={depth === 0}
+                        canReorder={element.locked !== true}
                         onSelect={handleSelect}
                         onDragStart={handleDragStart}
                         onDragOver={handleDragOver}
