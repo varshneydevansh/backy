@@ -865,10 +865,6 @@ function PagesListView() {
     setError(null);
     setNotice('Pages handoff manifest downloaded.');
   };
-  const goToCreatePage = () => {
-    navigate({ to: '/pages/new', search: createPageSearch });
-  };
-
   return (
     <PageShell
       title="Pages"
@@ -1379,16 +1375,16 @@ function PagesListView() {
                       Clear Filters
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={goToCreatePage}
+                  <Link
+                    to="/pages/new"
+                    search={createPageSearch}
                     data-testid="pages-empty-create"
                     className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                     aria-label={hasPages ? 'Create page after clearing filters' : 'Create first page for active site'}
                   >
                     <Plus className="w-4 h-4" />
                     {hasPages ? 'Create Page' : 'Create First Page'}
-                  </button>
+                  </Link>
                 </div>
               }
             />
