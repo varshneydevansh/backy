@@ -85,6 +85,7 @@ function NewUserPage() {
     role: 'editor' as UserRole,
     status: 'invited' as UserStatus,
   });
+  const isInviteBusy = isLoading;
   const usersListUrl = useMemo(() => `${getAdminApiBase()}/users`, []);
   const usersRouteSearch = useMemo(
     () => (search.siteId ? { siteId: search.siteId } : undefined),
@@ -218,6 +219,8 @@ function NewUserPage() {
   const inviteHandoffText = useMemo(() => JSON.stringify(inviteHandoff, null, 2), [inviteHandoff]);
 
   const copyInviteText = async (value: string, label: string) => {
+    if (isInviteBusy) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setNoticeMessage(`${label} copied.`);
@@ -227,6 +230,8 @@ function NewUserPage() {
   };
 
   const downloadInviteHandoff = () => {
+    if (isInviteBusy) return;
+
     const blob = new Blob([inviteHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -241,6 +246,7 @@ function NewUserPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isInviteBusy) return;
 
     if (!canSubmit) {
       setErrorMessage('Enter a full name and a valid email address before sending the invite.');
@@ -271,8 +277,13 @@ function NewUserPage() {
       action={
         <button
           type="button"
-          onClick={() => navigate({ to: '/users', search: usersRouteSearch })}
-          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+          onClick={() => {
+            if (!isInviteBusy) {
+              navigate({ to: '/users', search: usersRouteSearch });
+            }
+          }}
+          disabled={isInviteBusy}
+          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to users
@@ -303,6 +314,7 @@ function NewUserPage() {
                 type="button"
                 variant="outline"
                 onClick={() => void copyInviteText(inviteHandoffText, 'Invite handoff manifest')}
+                disabled={isInviteBusy}
                 iconStart={<Copy className="size-4" />}
               >
                 Copy manifest
@@ -311,6 +323,7 @@ function NewUserPage() {
                 type="button"
                 variant="outline"
                 onClick={downloadInviteHandoff}
+                disabled={isInviteBusy}
                 iconStart={<Download className="size-4" />}
               >
                 Download JSON
@@ -318,7 +331,7 @@ function NewUserPage() {
               <Button
                 type="submit"
                 variant="primary"
-                disabled={isLoading || !canSubmit}
+                disabled={isInviteBusy || !canSubmit}
                 iconStart={<UserPlus className="size-4" />}
               >
                 {submitLabel}
@@ -406,9 +419,13 @@ function NewUserPage() {
               <input
                 type="text"
                 value={formData.fullName}
-                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                disabled={isInviteBusy}
+                onChange={(e) => {
+                  if (isInviteBusy) return;
+                  setFormData({ ...formData, fullName: e.target.value });
+                }}
                 placeholder="Maya Chen"
-                className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+                className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 required
               />
             </label>
@@ -420,9 +437,13 @@ function NewUserPage() {
                 <input
                   type="email"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  disabled={isInviteBusy}
+                  onChange={(e) => {
+                    if (isInviteBusy) return;
+                    setFormData({ ...formData, email: e.target.value });
+                  }}
                   placeholder="maya@example.com"
-                  className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+                  className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                   required
                 />
               </div>
@@ -447,6 +468,7 @@ function NewUserPage() {
                   className={cn(
                     'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition',
                     formData.role === role.value ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:bg-accent',
+                    isInviteBusy && 'cursor-not-allowed opacity-60',
                   )}
                 >
                   <input
@@ -454,8 +476,12 @@ function NewUserPage() {
                     name="role"
                     value={role.value}
                     checked={formData.role === role.value}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
-                    className="mt-1 h-4 w-4 text-primary focus:ring-primary"
+                    disabled={isInviteBusy}
+                    onChange={(e) => {
+                      if (isInviteBusy) return;
+                      setFormData({ ...formData, role: e.target.value as UserRole });
+                    }}
+                    className="mt-1 h-4 w-4 text-primary focus:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
                   />
                   <span>
                     <span className="block text-sm font-semibold">{role.label}</span>
@@ -492,6 +518,7 @@ function NewUserPage() {
                   className={cn(
                     'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition',
                     formData.status === status.value ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:bg-accent',
+                    isInviteBusy && 'cursor-not-allowed opacity-60',
                   )}
                 >
                   <input
@@ -499,8 +526,12 @@ function NewUserPage() {
                     name="status"
                     value={status.value}
                     checked={formData.status === status.value}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value as UserStatus })}
-                    className="mt-1 h-4 w-4 text-primary focus:ring-primary"
+                    disabled={isInviteBusy}
+                    onChange={(e) => {
+                      if (isInviteBusy) return;
+                      setFormData({ ...formData, status: e.target.value as UserStatus });
+                    }}
+                    className="mt-1 h-4 w-4 text-primary focus:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
                   />
                   <span>
                     <span className="block text-sm font-semibold">{status.label}</span>
@@ -586,6 +617,7 @@ function NewUserPage() {
                 type="button"
                 variant="outline"
                 onClick={() => void copyInviteText(usersListUrl, 'Invite API URL')}
+                disabled={isInviteBusy}
                 iconStart={<Copy className="size-4" />}
               >
                 Copy URL
@@ -594,6 +626,7 @@ function NewUserPage() {
                 type="button"
                 variant="outline"
                 onClick={() => void copyInviteText(inviteHandoffText, 'Invite handoff manifest')}
+                disabled={isInviteBusy}
                 iconStart={<Copy className="size-4" />}
               >
                 Copy manifest
@@ -616,16 +649,21 @@ function NewUserPage() {
           <div className="flex flex-col gap-2">
             <button
               type="submit"
-              disabled={isLoading || !canSubmit}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              disabled={isInviteBusy || !canSubmit}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             >
               <UserPlus className="h-4 w-4" />
               {submitLabel}
             </button>
             <button
               type="button"
-              onClick={() => navigate({ to: '/users', search: usersRouteSearch })}
-              className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition hover:bg-accent"
+              onClick={() => {
+                if (!isInviteBusy) {
+                  navigate({ to: '/users', search: usersRouteSearch });
+                }
+              }}
+              disabled={isInviteBusy}
+              className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               Cancel
             </button>
