@@ -139,6 +139,13 @@ const orderContract = (siteId: string) => ({
     recordStatus: 'published',
     paymentStatus: 'pending',
     fulfillmentStatus: 'unfulfilled',
+    reservesInventory: true,
+  },
+  inventoryReservation: {
+    appliesTo: 'physical products and variants with finite stock',
+    policy: 'deny rejects carts that request more than available inventory; continue and preorder keep accepting orders while stock floors at zero',
+    variants: 'variantId or variantSku reserves the matched variant inventory when that variant has an inventory value',
+    errors: ['PRODUCT_OUT_OF_STOCK', 'VARIANT_OUT_OF_STOCK', 'PRODUCT_INSUFFICIENT_STOCK', 'VARIANT_INSUFFICIENT_STOCK'],
   },
   relatedEndpoints: {
     catalog: `/api/sites/${siteId}/commerce/catalog`,

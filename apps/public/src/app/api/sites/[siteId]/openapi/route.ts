@@ -1701,6 +1701,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   properties: {
                     productId: { type: 'string' },
                     slug: { type: 'string' },
+                    variantId: { type: 'string' },
+                    variantSku: { type: 'string' },
                     quantity: { type: 'integer', minimum: 1 },
                   },
                 },
@@ -1715,11 +1717,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           },
           CommerceOrderContractEnvelope: envelopeSchema({
             type: 'object',
-            required: ['schemaVersion', 'accepts', 'creates', 'relatedEndpoints'],
+            required: ['schemaVersion', 'accepts', 'creates', 'inventoryReservation', 'relatedEndpoints'],
             properties: {
               schemaVersion: { type: 'string', const: 'backy.commerce-orders.v1' },
               accepts: { type: 'object', additionalProperties: true },
               creates: { type: 'object', additionalProperties: true },
+              inventoryReservation: { type: 'object', additionalProperties: true },
               relatedEndpoints: { type: 'object', additionalProperties: true },
             },
           }),

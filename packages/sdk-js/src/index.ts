@@ -283,6 +283,7 @@ export interface BackyCommerceOrderContract {
   schemaVersion: 'backy.commerce-orders.v1';
   accepts: Record<string, unknown>;
   creates: Record<string, unknown>;
+  inventoryReservation?: Record<string, unknown>;
   relatedEndpoints: Record<string, string>;
 }
 

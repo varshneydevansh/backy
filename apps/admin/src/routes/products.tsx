@@ -606,8 +606,9 @@ function ProductsRoute() {
         mode: orderIntakeReady ? 'Backy order intake or per-product checkoutUrl' : 'per-product checkoutUrl',
         configuredProducts: products.filter((product) => Boolean(String(product.values.checkoutUrl || '').trim())).length,
         orderIntakeReady,
+        reservesInventory: orderIntakeReady,
         note: orderIntakeReady
-          ? 'Custom frontends can post cart/customer data to Backy order intake, then keep payment-provider settlement as the next commerce milestone.'
+          ? 'Custom frontends can post cart/customer data to Backy order intake. Physical product and variant stock is reserved while payment-provider settlement remains the next commerce milestone.'
           : 'Backy stores product checkout URLs today. Dedicated payment-session creation is still a commerce backend milestone.',
       },
       normalizedApi: {

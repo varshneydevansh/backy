@@ -568,6 +568,9 @@ function OrdersRoute() {
       storefrontPageRoute: '/pages/new',
       storefrontPageTemplate: 'storefront',
       note: 'Orders should be wired after products and a storefront page are ready to send checkout carts into the public commerce order intake endpoint.',
+      inventoryReservation: ordersApiReady
+        ? 'Physical product and variant inventory is reserved when checkout intake creates an order.'
+        : 'Inventory reservation is available after the private orders collection is synced and the product catalog is public.',
     },
     security: {
       publicRead: Boolean(ordersCollection?.permissions.publicRead),
