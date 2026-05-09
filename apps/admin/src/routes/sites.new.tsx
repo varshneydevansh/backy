@@ -140,6 +140,7 @@ function NewSitePage() {
     status: 'draft' as Site['status'],
     blueprint: 'business' as SiteBlueprint,
   });
+  const isCreateBusy = isLoading;
 
   const selectedStatus = useMemo(
     () => STATUS_OPTIONS.find((status) => status.value === formData.status) || STATUS_OPTIONS[0],
@@ -308,6 +309,8 @@ function NewSitePage() {
   const creationHandoffText = useMemo(() => JSON.stringify(creationHandoff, null, 2), [creationHandoff]);
 
   const copyCreationText = async (value: string, label: string) => {
+    if (isCreateBusy) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setError(null);
@@ -319,6 +322,8 @@ function NewSitePage() {
   };
 
   const downloadCreationHandoff = () => {
+    if (isCreateBusy) return;
+
     const blob = new Blob([creationHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -334,6 +339,8 @@ function NewSitePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isCreateBusy) return;
 
     if (!canSubmit) {
       setError('Add a site name, use a valid URL slug, and check the custom domain format.');
@@ -379,8 +386,13 @@ function NewSitePage() {
       action={
         <button
           type="button"
-          onClick={() => navigate({ to: '/sites' })}
-          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+          onClick={() => {
+            if (!isCreateBusy) {
+              void navigate({ to: '/sites' });
+            }
+          }}
+          disabled={isCreateBusy}
+          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
           <ArrowLeft className="h-4 w-4" />
           Sites
@@ -411,7 +423,8 @@ function NewSitePage() {
             <button
               type="button"
               onClick={() => void copyCreationText(creationHandoffText, 'Site creation handoff manifest')}
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+              disabled={isCreateBusy}
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Copy className="h-4 w-4" />
               Copy handoff
@@ -419,15 +432,21 @@ function NewSitePage() {
             <button
               type="button"
               onClick={downloadCreationHandoff}
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+              disabled={isCreateBusy}
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Download className="h-4 w-4" />
               Download JSON
             </button>
             <button
               type="button"
-              onClick={() => navigate({ to: '/pages', search: existingPagesSearch })}
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+              onClick={() => {
+                if (!isCreateBusy) {
+                  void navigate({ to: '/pages', search: existingPagesSearch });
+                }
+              }}
+              disabled={isCreateBusy}
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
               <FileText className="h-4 w-4" />
               Existing pages
@@ -530,13 +549,18 @@ function NewSitePage() {
               <input
                 type="text"
                 value={formData.name}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  name: e.target.value,
-                  slug: slugEdited ? formData.slug : slugify(e.target.value),
-                })}
+                disabled={isCreateBusy}
+                onChange={(e) => {
+                  if (isCreateBusy) return;
+
+                  setFormData({
+                    ...formData,
+                    name: e.target.value,
+                    slug: slugEdited ? formData.slug : slugify(e.target.value),
+                  });
+                }}
                 placeholder="Northstar Studio"
-                className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+                className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 required
               />
             </label>
@@ -545,8 +569,13 @@ function NewSitePage() {
               <span className="text-sm font-medium">Status</span>
               <select
                 value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as Site['status'] })}
-                className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+                disabled={isCreateBusy}
+                onChange={(e) => {
+                  if (isCreateBusy) return;
+
+                  setFormData({ ...formData, status: e.target.value as Site['status'] });
+                }}
+                className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {STATUS_OPTIONS.map((status) => (
                   <option key={status.value} value={status.value}>{status.label}</option>
@@ -564,12 +593,15 @@ function NewSitePage() {
                 <input
                   type="text"
                   value={displaySlug}
+                  disabled={isCreateBusy}
                   onChange={(e) => {
+                    if (isCreateBusy) return;
+
                     setSlugEdited(true);
                     setFormData({ ...formData, slug: slugify(e.target.value) });
                   }}
                   placeholder="northstar-studio"
-                  className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm outline-none"
+                  className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
                   required
                 />
               </div>
@@ -585,10 +617,19 @@ function NewSitePage() {
                 <input
                   type="text"
                   value={formData.customDomain}
-                  onChange={(e) => setFormData({ ...formData, customDomain: e.target.value })}
-                  onBlur={(e) => setFormData({ ...formData, customDomain: normalizeDomain(e.target.value) })}
+                  disabled={isCreateBusy}
+                  onChange={(e) => {
+                    if (isCreateBusy) return;
+
+                    setFormData({ ...formData, customDomain: e.target.value });
+                  }}
+                  onBlur={(e) => {
+                    if (isCreateBusy) return;
+
+                    setFormData({ ...formData, customDomain: normalizeDomain(e.target.value) });
+                  }}
                   placeholder="example.com"
-                  className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+                  className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </div>
               {!isValidDomain(normalizedDomain) && (
@@ -601,10 +642,15 @@ function NewSitePage() {
             <span className="text-sm font-medium">Description</span>
             <textarea
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              disabled={isCreateBusy}
+              onChange={(e) => {
+                if (isCreateBusy) return;
+
+                setFormData({ ...formData, description: e.target.value });
+              }}
               placeholder="Portfolio, product catalog, blog, booking site, or client workspace."
               rows={4}
-              className="mt-2 w-full resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+              className="mt-2 w-full resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             />
           </label>
 
@@ -623,6 +669,7 @@ function NewSitePage() {
                   className={cn(
                     'cursor-pointer rounded-lg border p-4 transition hover:border-primary/50',
                     formData.blueprint === blueprint.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border bg-background',
+                    isCreateBusy && 'cursor-not-allowed opacity-60',
                   )}
                 >
                   <input
@@ -630,7 +677,12 @@ function NewSitePage() {
                     name="site-blueprint"
                     value={blueprint.id}
                     checked={formData.blueprint === blueprint.id}
-                    onChange={(event) => setFormData({ ...formData, blueprint: event.target.value as SiteBlueprint })}
+                    disabled={isCreateBusy}
+                    onChange={(event) => {
+                      if (isCreateBusy) return;
+
+                      setFormData({ ...formData, blueprint: event.target.value as SiteBlueprint });
+                    }}
                     className="sr-only"
                   />
                   <span className="block font-semibold text-foreground">{blueprint.name}</span>
@@ -714,7 +766,8 @@ function NewSitePage() {
               <button
                 type="button"
                 onClick={() => void copyCreationText(adminSitesUrl, 'Site create API URL')}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+                disabled={isCreateBusy}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Copy className="h-4 w-4" />
                 Copy URL
@@ -722,7 +775,8 @@ function NewSitePage() {
               <button
                 type="button"
                 onClick={() => void copyCreationText(creationHandoffText, 'Site creation handoff manifest')}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+                disabled={isCreateBusy}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Copy className="h-4 w-4" />
                 Copy handoff
@@ -736,7 +790,7 @@ function NewSitePage() {
               disabled={isLoading || !canSubmit}
               className={cn(
                 'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-ring',
-                'bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50',
+                'bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50',
               )}
             >
               <Save className="h-4 w-4" />
@@ -744,8 +798,13 @@ function NewSitePage() {
             </button>
             <button
               type="button"
-              onClick={() => navigate({ to: '/sites' })}
-              className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition hover:bg-accent"
+              onClick={() => {
+                if (!isCreateBusy) {
+                  void navigate({ to: '/sites' });
+                }
+              }}
+              disabled={isCreateBusy}
+              className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
               Cancel
             </button>
