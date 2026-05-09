@@ -711,11 +711,17 @@ function SettingsPage() {
 
       {/* Tabs */}
       <div id="settings-tabs" className="scroll-mt-24">
-        <SegmentedTabs items={TABS} value={activeTab} onChange={setActiveTab} />
+        <SegmentedTabs
+          items={TABS}
+          value={activeTab}
+          onChange={setActiveTab}
+          ariaLabel="Settings sections"
+          getPanelId={() => 'settings-tab-content'}
+        />
       </div>
 
       {/* Tab Content */}
-      <Panel id="settings-tab-content" className="scroll-mt-24">
+      <Panel id="settings-tab-content" className="scroll-mt-24" role="tabpanel">
         <PanelContent className="pt-5">
         {activeTab === 'general' && (
           <GeneralSettings value={generalSettings} onChange={updateGeneralSettings} />
