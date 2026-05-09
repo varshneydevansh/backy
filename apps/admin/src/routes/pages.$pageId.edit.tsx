@@ -559,7 +559,7 @@ function PageEditorRoute() {
         </div>
       </section>
 
-      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-5">
         <div id="page-editor-canvas" className="min-w-0 scroll-mt-24">
           <EditorWorkspaceFrame
             title="Page design canvas"
@@ -577,7 +577,7 @@ function PageEditorRoute() {
                 </span>
               </>
             }
-            className="relative min-h-[780px] xl:h-[calc(100vh-132px)] xl:min-h-[900px]"
+            className="relative min-h-[820px] xl:h-[calc(100vh-96px)] xl:min-h-[960px]"
           >
             <CanvasEditor
               key={`${page.id}:${editorResetVersion}`}
@@ -599,7 +599,7 @@ function PageEditorRoute() {
           </EditorWorkspaceFrame>
         </div>
 
-        <aside className="grid gap-4 lg:grid-cols-3 2xl:grid-cols-1">
+        <aside className="grid gap-4 lg:grid-cols-3">
           <Panel id="page-editor-publish" className="scroll-mt-24">
             <PanelHeader
               title="Publish"
