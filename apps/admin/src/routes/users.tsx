@@ -239,6 +239,8 @@ function UsersListView() {
   const [reviewFilter, setReviewFilter] = useState<UserReviewFilter>('all');
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<UserType | null>(null);
+  const isUserMutationBusy = updatingUserId !== null;
+  const isUsersBusy = isLoading || isUserMutationBusy;
   const adminBaseUrl = useMemo(() => getAdminBaseUrl(), []);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const selectedMembershipSiteId = useMemo(() => getSiteSelectionFromSearch(sites), [sites]);
@@ -368,6 +370,8 @@ function UsersListView() {
   ), [reviewFilter, roleFilter, statusFilter, users]);
 
   const handlePatchUser = async (user: UserType, updates: Partial<Pick<UserType, 'role' | 'status'>>) => {
+    if (isUsersBusy) return;
+
     setUpdatingUserId(user.id);
     setNotice(null);
 
@@ -383,7 +387,7 @@ function UsersListView() {
   };
 
   const handleDeleteUser = async () => {
-    if (!pendingDelete) return;
+    if (!pendingDelete || isUserMutationBusy) return;
 
     setUpdatingUserId(pendingDelete.id);
     setNotice(null);
@@ -400,6 +404,8 @@ function UsersListView() {
   };
 
   const copyUserApiText = async (value: string, label: string) => {
+    if (isUsersBusy) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setNotice(`${label} copied.`);
@@ -409,7 +415,7 @@ function UsersListView() {
   };
 
   const handleExportUsers = () => {
-    if (data.length === 0) return;
+    if (data.length === 0 || isUsersBusy) return;
 
     const header = [
       'user_id',
@@ -449,8 +455,13 @@ function UsersListView() {
       render: (user) => (
         <button
           type="button"
-          onClick={() => navigate({ to: '/users/$userId', params: { userId: user.id } })}
-          className="group flex min-w-[240px] items-center gap-3 text-left"
+          onClick={() => {
+            if (!isUsersBusy) {
+              void navigate({ to: '/users/$userId', params: { userId: user.id } });
+            }
+          }}
+          disabled={isUsersBusy}
+          className="group flex min-w-[240px] items-center gap-3 text-left disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-sm font-semibold text-white shadow-sm">
             {getInitials(user.fullName)}
@@ -480,7 +491,7 @@ function UsersListView() {
           </span>
           <select
             value={user.role}
-            disabled={updatingUserId === user.id}
+            disabled={isUsersBusy}
             onChange={(event) => void handlePatchUser(user, { role: event.target.value as UserRole })}
             className="block w-36 rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none transition focus:ring-2 focus:ring-ring disabled:opacity-50"
             aria-label={`Change role for ${user.fullName}`}
@@ -501,7 +512,7 @@ function UsersListView() {
           <StatusBadge status={user.status} />
           <select
             value={user.status}
-            disabled={updatingUserId === user.id}
+            disabled={isUsersBusy}
             onChange={(event) => void handlePatchUser(user, { status: event.target.value as UserStatus })}
             className="block w-36 rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none transition focus:ring-2 focus:ring-ring disabled:opacity-50"
             aria-label={`Change status for ${user.fullName}`}
@@ -528,17 +539,26 @@ function UsersListView() {
         <div className="flex items-center justify-end gap-2">
           <button
             type="button"
-            onClick={() => navigate({ to: '/users/$userId', params: { userId: user.id } })}
-            className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            onClick={() => {
+              if (!isUsersBusy) {
+                void navigate({ to: '/users/$userId', params: { userId: user.id } });
+              }
+            }}
+            disabled={isUsersBusy}
+            className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={`Edit ${user.fullName}`}
           >
             <Edit className="h-4 w-4" />
           </button>
           <button
             type="button"
-            onClick={() => setPendingDelete(user)}
-            disabled={updatingUserId === user.id}
-            className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-200 disabled:opacity-50"
+            onClick={() => {
+              if (!isUsersBusy) {
+                setPendingDelete(user);
+              }
+            }}
+            disabled={isUsersBusy}
+            className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-200 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={`Remove ${user.fullName}`}
           >
             <Trash2 className="h-4 w-4" />
@@ -689,6 +709,8 @@ function UsersListView() {
   ]);
   const userHandoffText = useMemo(() => JSON.stringify(userHandoff, null, 2), [userHandoff]);
   const downloadUserHandoff = () => {
+    if (isUsersBusy) return;
+
     const blob = new Blob([userHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -702,6 +724,8 @@ function UsersListView() {
   };
 
   const clearUserFilters = () => {
+    if (isUsersBusy) return;
+
     setSearchQuery('');
     setRoleFilter('all');
     setStatusFilter('all');
@@ -719,7 +743,11 @@ function UsersListView() {
         <Link
           to="/users/new"
           search={{ siteId: membershipSiteId }}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
+          aria-disabled={isUsersBusy}
+          className={cn(
+            'inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring',
+            isUsersBusy && 'pointer-events-none opacity-60',
+          )}
         >
           <Send className="h-4 w-4" />
           Invite user
@@ -748,6 +776,7 @@ function UsersListView() {
             <Button
               type="button"
               variant="outline"
+              disabled={isUsersBusy}
               onClick={() => void copyUserApiText(userHandoffText, 'Users handoff manifest')}
               iconStart={<Copy className="size-4" />}
             >
@@ -756,6 +785,7 @@ function UsersListView() {
             <Button
               type="button"
               variant="outline"
+              disabled={isUsersBusy}
               onClick={downloadUserHandoff}
               iconStart={<Download className="size-4" />}
             >
@@ -764,7 +794,7 @@ function UsersListView() {
             <Button
               type="button"
               variant="outline"
-              disabled={data.length === 0}
+              disabled={data.length === 0 || isUsersBusy}
               onClick={handleExportUsers}
               iconStart={<Download className="size-4" />}
             >
@@ -774,12 +804,17 @@ function UsersListView() {
               type="button"
               variant="outline"
               onClick={() => void loadUsers()}
-              disabled={isLoading}
+              disabled={isUsersBusy}
               iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}
             >
               Refresh users
             </Button>
-            <Link to="/users/new" search={{ siteId: membershipSiteId }}>
+            <Link
+              to="/users/new"
+              search={{ siteId: membershipSiteId }}
+              aria-disabled={isUsersBusy}
+              className={cn(isUsersBusy && 'pointer-events-none opacity-60')}
+            >
               <Button iconStart={<Send className="size-4" />}>
                 Invite user
               </Button>
@@ -866,7 +901,7 @@ function UsersListView() {
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={data.length === 0}
+                    disabled={data.length === 0 || isUsersBusy}
                     onClick={handleExportUsers}
                     iconStart={<Download className="size-4" />}
                   >
@@ -875,6 +910,7 @@ function UsersListView() {
                   <Button
                     type="button"
                     variant="outline"
+                    disabled={isUsersBusy}
                     onClick={() => void copyUserApiText(usersListUrl, 'Users API URL')}
                     iconStart={<Copy className="size-4" />}
                   >
@@ -883,6 +919,7 @@ function UsersListView() {
                   <Button
                     type="button"
                     variant="outline"
+                    disabled={isUsersBusy}
                     onClick={() => void copyUserApiText(userHandoffText, 'Users handoff manifest')}
                     iconStart={<Copy className="size-4" />}
                   >
@@ -964,12 +1001,15 @@ function UsersListView() {
                   type="search"
                   placeholder="Search name, email, role, or status..."
                   value={searchQuery}
+                  disabled={isUsersBusy}
                   onChange={(event) => {
+                    if (isUsersBusy) return;
+
                     setSearchQuery(event.target.value);
                     setCurrentPage(1);
                   }}
                   aria-label="Search users"
-                  className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+                  className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </div>
 
@@ -978,11 +1018,14 @@ function UsersListView() {
                   <Filter className="h-4 w-4" />
                   <select
                     value={roleFilter}
+                    disabled={isUsersBusy}
                     onChange={(event) => {
+                      if (isUsersBusy) return;
+
                       setRoleFilter(event.target.value as 'all' | UserRole);
                       setCurrentPage(1);
                     }}
-                    className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring"
+                    className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label="Filter users by role"
                   >
                     <option value="all">All roles</option>
@@ -994,11 +1037,14 @@ function UsersListView() {
 
                 <select
                   value={reviewFilter}
+                  disabled={isUsersBusy}
                   onChange={(event) => {
+                    if (isUsersBusy) return;
+
                     setReviewFilter(event.target.value as UserReviewFilter);
                     setCurrentPage(1);
                   }}
-                  className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+                  className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label="Filter users by access review"
                 >
                   <option value="all">All access reviews</option>
@@ -1012,11 +1058,14 @@ function UsersListView() {
 
                 <select
                   value={statusFilter}
+                  disabled={isUsersBusy}
                   onChange={(event) => {
+                    if (isUsersBusy) return;
+
                     setStatusFilter(event.target.value as 'all' | UserStatus);
                     setCurrentPage(1);
                   }}
-                  className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+                  className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label="Filter users by status"
                 >
                   <option value="all">All statuses</option>
@@ -1028,7 +1077,7 @@ function UsersListView() {
                 <button
                   type="button"
                   onClick={() => void loadUsers()}
-                  disabled={isLoading}
+                  disabled={isUsersBusy}
                   className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
                   aria-label="Refresh users"
                 >
@@ -1037,7 +1086,7 @@ function UsersListView() {
                 </button>
 
                 {hasActiveFilters && (
-                  <Button type="button" variant="outline" onClick={clearUserFilters}>
+                  <Button type="button" variant="outline" disabled={isUsersBusy} onClick={clearUserFilters}>
                     Clear filters
                   </Button>
                 )}
@@ -1057,11 +1106,19 @@ function UsersListView() {
               data={data}
               loading={isLoading}
               sortConfig={sortConfig}
-              onSort={handleSort}
+              onSort={(key) => {
+                if (!isUsersBusy) {
+                  handleSort(key);
+                }
+              }}
               currentPage={currentPage}
               totalPages={totalPages}
               pageSize={10}
-              onPageChange={setCurrentPage}
+              onPageChange={(page) => {
+                if (!isUsersBusy) {
+                  setCurrentPage(page);
+                }
+              }}
               totalItems={totalItems}
               emptyState={
                 <EmptyState
@@ -1073,7 +1130,8 @@ function UsersListView() {
                       <button
                         type="button"
                         onClick={clearUserFilters}
-                        className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+                        disabled={isUsersBusy}
+                        className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Clear filters
                       </button>
@@ -1081,7 +1139,11 @@ function UsersListView() {
                       <Link
                         to="/users/new"
                         search={{ siteId: membershipSiteId }}
-                        className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+                        aria-disabled={isUsersBusy}
+                        className={cn(
+                          'mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90',
+                          isUsersBusy && 'pointer-events-none opacity-60',
+                        )}
                       >
                         <Plus className="h-4 w-4" />
                         Invite user
@@ -1285,18 +1347,23 @@ function UsersListView() {
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setPendingDelete(null)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+                onClick={() => {
+                  if (!isUserMutationBusy) {
+                    setPendingDelete(null);
+                  }
+                }}
+                disabled={isUserMutationBusy}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void handleDeleteUser()}
-                disabled={updatingUserId === pendingDelete.id}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+                disabled={isUserMutationBusy}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Remove user
+                {isUserMutationBusy ? 'Removing...' : 'Remove user'}
               </button>
             </div>
           </div>
