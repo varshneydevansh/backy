@@ -177,6 +177,68 @@ const FORM_TEMPLATES: FormTemplateBlueprint[] = [
   },
 ];
 
+const FORM_FRONTEND_SYSTEMS = [
+  {
+    key: 'definition',
+    title: 'Dynamic form definition',
+    detail: 'Frontend renderers fetch field labels, types, validation, options, defaults, and active state.',
+  },
+  {
+    key: 'submission',
+    title: 'Submission pipeline',
+    detail: 'Public apps POST values, request IDs, timing metadata, source page/post IDs, and consent fields.',
+  },
+  {
+    key: 'spam',
+    title: 'Spam protection',
+    detail: 'Honeypot, captcha readiness, moderation mode, spam queue, and reviewer status controls.',
+  },
+  {
+    key: 'contacts',
+    title: 'Lead routing',
+    detail: 'Contact sharing maps name, email, phone, notes, dedupe rules, and follow-up workflows.',
+  },
+  {
+    key: 'collections',
+    title: 'Collection writes',
+    detail: 'Structured submissions can write records into custom collections for directories, events, or registrations.',
+  },
+  {
+    key: 'files',
+    title: 'File uploads',
+    detail: 'File fields hand off media asset IDs or signed upload references for private/public storage flows.',
+  },
+] as const;
+
+const FORM_EXPORT_COLUMNS = [
+  'form_id',
+  'active_site_id',
+  'name',
+  'title',
+  'description',
+  'is_active',
+  'audience',
+  'source',
+  'page_id',
+  'post_id',
+  'field_count',
+  'required_field_count',
+  'field_keys',
+  'field_types',
+  'moderation_mode',
+  'honeypot',
+  'captcha',
+  'contact_share',
+  'collection_target',
+  'submission_total',
+  'submission_pending',
+  'submission_spam',
+  'definition_url',
+  'submit_url',
+  'contacts_url',
+  'frontend_systems',
+] as const;
+
 interface FormInbox {
   form: FormDefinition;
   submissions: FormSubmission[];
@@ -406,6 +468,12 @@ function FormsRoute() {
       score: formCommandReadiness.score,
       checks: formCommandReadiness.checks,
     },
+    export: {
+      format: 'csv',
+      columns: FORM_EXPORT_COLUMNS,
+      filteredRows: forms.length,
+    },
+    frontendSystems: FORM_FRONTEND_SYSTEMS,
     metrics,
     templates: FORM_TEMPLATES.map((template) => buildTemplateManifest(template)),
     selectedForm: selectedForm ? {
@@ -602,6 +670,65 @@ function FormsRoute() {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportFormsCatalog = () => {
+    if (forms.length === 0) {
+      setError('No forms are available to export for this site.');
+      setNotice(null);
+      return;
+    }
+
+    const rows = forms.map((form) => {
+      const inbox = inboxByForm[form.id];
+      const source = form.pageId ? 'page' : form.postId ? 'blog' : 'embedded';
+      const definitionUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/definition`;
+      const submitUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/submissions`;
+      const contactsUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts?limit=100`;
+
+      return [
+        form.id,
+        activeSiteId,
+        form.name,
+        form.title,
+        form.description || '',
+        form.isActive,
+        form.audience,
+        source,
+        form.pageId || '',
+        form.postId || '',
+        form.fields.length,
+        form.fields.filter((field) => field.required).length,
+        form.fields.map((field) => field.key).join('; '),
+        form.fields.map((field) => `${field.key}:${field.type}`).join('; '),
+        form.moderationMode,
+        Boolean(form.enableHoneypot),
+        Boolean(form.enableCaptcha),
+        Boolean(form.contactShare?.enabled),
+        form.collectionTarget?.enabled ? form.collectionTarget.collectionId : '',
+        inbox?.total || 0,
+        inbox?.submissions.filter((submission) => submission.status === 'pending').length || 0,
+        inbox?.submissions.filter((submission) => submission.status === 'spam').length || 0,
+        definitionUrl,
+        submitUrl,
+        contactsUrl,
+        FORM_FRONTEND_SYSTEMS.map((system) => `${system.key}:${system.title}`).join('; '),
+      ];
+    });
+    const csv = [FORM_EXPORT_COLUMNS, ...rows]
+      .map((row) => row.map(csvEscape).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSite?.slug || activeSiteId}-backy-forms-catalog.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setNotice('Forms catalog CSV exported.');
+  };
+
   const copyFormApiText = async (value: string, label: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -695,6 +822,14 @@ function FormsRoute() {
             <Button variant="outline" onClick={downloadFormsHandoff} iconStart={<Download className="size-4" />}>
               Download JSON
             </Button>
+            <Button
+              variant="outline"
+              onClick={handleExportFormsCatalog}
+              disabled={forms.length === 0}
+              iconStart={<Download className="size-4" />}
+            >
+              Export forms CSV
+            </Button>
             <Button onClick={() => void loadForms()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh forms
             </Button>
@@ -746,6 +881,35 @@ function FormsRoute() {
                 <div className="text-sm font-semibold text-foreground">{area.title}</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
               </a>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Form frontend control contract</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Custom frontends need these systems to render registration, contact, newsletter, product inquiry, and file-upload forms from Backy.
+              </p>
+            </div>
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              {FORM_FRONTEND_SYSTEMS.length} systems
+            </span>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {FORM_FRONTEND_SYSTEMS.map((system) => (
+              <div key={system.key} className="rounded-lg border border-border bg-card p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-foreground">{system.title}</div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">{system.detail}</div>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                    {system.key}
+                  </span>
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -1027,6 +1191,13 @@ function FormsRoute() {
                           iconStart={<Copy className="size-4" />}
                         >
                           Copy manifest
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={handleExportFormsCatalog}
+                          iconStart={<Download className="size-4" />}
+                        >
+                          Export catalog
                         </Button>
                         <Button
                           variant="outline"
