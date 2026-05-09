@@ -6,7 +6,7 @@
  * - At /pages/new or /pages/:id/edit: renders child via <Outlet />
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
 import { AlertTriangle, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Filter, Plus, Layout, Edit, Trash2, Home, RefreshCw } from 'lucide-react';
 import {
@@ -353,12 +353,6 @@ function PagesListView() {
       setError(value);
     }
   };
-
-  const openNewPage = useCallback(() => {
-    setError(null);
-    setNotice(null);
-    void navigate({ to: '/pages/new', search: createPageSearch });
-  }, [createPageSearch, navigate]);
 
   const downloadPagesCsv = () => {
     if (data.length === 0) {
@@ -1382,16 +1376,16 @@ function PagesListView() {
                       Clear Filters
                     </button>
                   )}
-                  <button
-                    type="button"
+                  <Link
+                    to="/pages/new"
+                    search={createPageSearch}
                     data-testid="pages-empty-create"
-                    onClick={openNewPage}
                     className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                     aria-label={hasPages ? 'Create page after clearing filters' : 'Create first page for active site'}
                   >
                     <Plus className="w-4 h-4" />
                     Create Page
-                  </button>
+                  </Link>
                 </div>
               }
             />
