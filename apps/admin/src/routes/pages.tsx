@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { Code2, Copy, ExternalLink, Eye, Filter, Plus, Layout, Edit, Trash2, Home } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Code2, Copy, ExternalLink, Eye, Filter, Plus, Layout, Edit, Trash2, Home } from 'lucide-react';
 import {
   archivePage,
   createPagePreview,
@@ -110,6 +110,70 @@ function PagesListView() {
   const adminPageDetailUrl = `${adminPagesUrl}/${apiPageSegment}`;
   const adminPageReadinessUrl = `${adminPageDetailUrl}/readiness`;
   const adminPagePreviewUrl = `${adminPageDetailUrl}/preview`;
+  const pageDesignReadiness = useMemo(() => {
+    const checkedPages = pages.filter((page) => readinessMap[page.id]);
+    const readyPages = pages.filter((page) => readinessMap[page.id]?.statusLabel === 'ready');
+    const totalElements = checkedPages.reduce((total, page) => total + (readinessMap[page.id]?.elementCount || 0), 0);
+    const hasHomepage = pages.some((page) => page.isHomepage || page.slug === 'home' || page.slug === '');
+    const hasPublishedPage = pages.some((page) => page.status === 'published');
+    const hasCanvasContent = totalElements > 0;
+    const checks = [
+      {
+        label: 'Page library',
+        detail: pages.length > 0
+          ? `${pages.length} page${pages.length === 1 ? '' : 's'} in this site`
+          : 'Create the first page for this site.',
+        ready: pages.length > 0,
+      },
+      {
+        label: 'Homepage route',
+        detail: hasHomepage ? 'A homepage route exists.' : 'Mark one page as homepage or create /home.',
+        ready: hasHomepage,
+      },
+      {
+        label: 'Visual canvas',
+        detail: hasCanvasContent
+          ? `${totalElements} editor element${totalElements === 1 ? '' : 's'} detected`
+          : 'Add canvas elements before publishing a real frontend.',
+        ready: hasCanvasContent,
+      },
+      {
+        label: 'Public delivery',
+        detail: hasPublishedPage
+          ? `${pageMetrics.published} published page${pageMetrics.published === 1 ? '' : 's'}`
+          : 'Publish at least one page for public render APIs.',
+        ready: hasPublishedPage,
+      },
+      {
+        label: 'Readiness checks',
+        detail: checkedPages.length === pages.length && pages.length > 0
+          ? `${readyPages.length}/${pages.length} pages are ready`
+          : `${checkedPages.length}/${pages.length} pages checked`,
+        ready: pages.length > 0 && checkedPages.length === pages.length,
+      },
+      {
+        label: 'Publish blockers',
+        detail: pageMetrics.blocked === 0
+          ? 'No blocked pages in the current readiness result.'
+          : `${pageMetrics.blocked} page${pageMetrics.blocked === 1 ? '' : 's'} blocked`,
+        ready: pageMetrics.blocked === 0,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      readyCount,
+      total: checks.length,
+      checks,
+      workflow: [
+        { label: 'Create', detail: 'Start from New Page or the empty-state action for the active site.' },
+        { label: 'Design', detail: 'Open the visual editor and build reusable sections, headers, footers, and page content.' },
+        { label: 'Check', detail: 'Run readiness to catch missing SEO, empty canvas, route, or publishing issues.' },
+        { label: 'Deliver', detail: 'Use public page, resolve, and render APIs for any custom frontend.' },
+      ],
+    };
+  }, [pageMetrics.blocked, pageMetrics.published, pages, readinessMap]);
 
   const openCreatePage = () => {
     navigate({ to: '/pages/new', search: { siteId: activeSiteId } });
@@ -575,6 +639,54 @@ function PagesListView() {
             <PageApiStat label="Blocked" value={`${pageMetrics.blocked}`} />
           </div>
 
+          <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Page design readiness</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Checks whether this site has pages, a homepage, visual canvas content, public delivery, readiness coverage, and no publish blockers.
+                  </p>
+                </div>
+                <span className={cn(
+                  'rounded-full px-2.5 py-1 text-xs font-semibold',
+                  pageDesignReadiness.score >= 80
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'bg-amber-50 text-amber-700',
+                )}
+                >
+                  {pageDesignReadiness.score}% ready
+                </span>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn(
+                    'h-full rounded-full',
+                    pageDesignReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500',
+                  )}
+                  style={{ width: `${pageDesignReadiness.score}%` }}
+                />
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2">
+                {pageDesignReadiness.checks.map((check) => (
+                  <PageReadinessCheck key={check.label} {...check} />
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-center gap-2">
+                <Code2 className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Editor to frontend workflow</h3>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {pageDesignReadiness.workflow.map((step, index) => (
+                  <PageWorkflowStep key={step.label} index={index + 1} {...step} />
+                ))}
+              </div>
+            </div>
+          </div>
+
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             <PageApiSnippet label="Public pages" value={publicPagesUrl} />
             <PageApiSnippet label="Public page by slug" value={publicPageBySlugUrl} />
@@ -802,6 +914,34 @@ function PageApiStat({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-border bg-muted/30 px-3 py-3">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="mt-1 truncate text-sm font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function PageReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  const Icon = ready ? CheckCircle2 : AlertTriangle;
+
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-card px-3 py-2">
+      <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', ready ? 'text-emerald-600' : 'text-amber-600')} />
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function PageWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
     </div>
   );
 }
