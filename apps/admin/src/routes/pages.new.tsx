@@ -7,7 +7,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Home, Layout, Save, Sparkles } from 'lucide-react';
 import { createPage, getAdminApiBase } from '@/lib/adminContentApi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
-import { useStore } from '@/stores/mockStore';
+import { useStore, type Page } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { cn } from '@/lib/utils';
 import { getCanvasHeightForElements, withPageChrome } from '@/lib/editorTemplateChrome';
@@ -144,6 +144,12 @@ const slugify = (value: string) => (
     value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 );
 
+const getPagePublicPath = (page: Pick<Page, 'slug' | 'isHomepage'>) => (
+    page.isHomepage || page.slug === 'home' || page.slug === ''
+        ? '/'
+        : `/${slugify(page.slug)}`
+);
+
 const templateNavigationItems: Record<PageTemplate, string[]> = {
     blank: ['Home', 'About', 'Contact'],
     landing: ['Home', 'Features', 'Contact'],
@@ -195,18 +201,37 @@ function NewPageRoute() {
         () => TEMPLATE_OPTIONS.find((template) => template.id === formData.template) || TEMPLATE_OPTIONS[0],
         [formData.template],
     );
+    const selectedSiteIdentifiers = useMemo(
+        () => [formData.siteId, selectedSite?.id, selectedSite?.publicSiteId].filter((value): value is string => Boolean(value)),
+        [formData.siteId, selectedSite?.id, selectedSite?.publicSiteId],
+    );
+    const selectedSitePages = useMemo(() => {
+        const identifiers = new Set(selectedSiteIdentifiers);
+
+        return pages.filter((page) => identifiers.has(page.siteId));
+    }, [pages, selectedSiteIdentifiers]);
     const routePreview = formData.isHomepage
         ? '/'
         : `/${slugify(formData.slug || formData.title || 'new-page')}`;
     const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
+    const routeConflict = useMemo(
+        () => selectedSitePages.find((page) => getPagePublicPath(page) === routePreview) || null,
+        [routePreview, selectedSitePages],
+    );
+    const hasSchedule = formData.status !== 'scheduled' || Boolean(formData.scheduledAt);
     const adminPagesUrl = useMemo(
         () => `${getAdminApiBase()}/sites/${encodeURIComponent(formData.siteId || requestedSiteId)}/pages`,
         [formData.siteId, requestedSiteId],
     );
-    const canSubmit = Boolean(formData.title.trim() && formData.siteId && (!formData.isHomepage || formData.slug.trim() || formData.title.trim()));
+    const canSubmit = Boolean(
+        formData.title.trim()
+        && formData.siteId
+        && hasSchedule
+        && !routeConflict
+        && (!formData.isHomepage || formData.slug.trim() || formData.title.trim()),
+    );
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
-        const hasSchedule = formData.status !== 'scheduled' || Boolean(formData.scheduledAt);
         const hasStarterCanvas = selectedTemplate.sections.length > 0;
         const seedsSiteChrome = formData.template !== 'blank';
         const checks = [
@@ -224,6 +249,13 @@ function NewPageRoute() {
                 label: 'Route shape',
                 detail: formData.isHomepage ? 'This page will resolve as the homepage.' : `Public path will be /${resolvedSlug}.`,
                 ready: Boolean(resolvedSlug && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(resolvedSlug)),
+            },
+            {
+                label: 'Route availability',
+                detail: routeConflict
+                    ? `${routePreview} is already used by "${routeConflict.title}". Choose another slug or edit that page.`
+                    : `${routePreview} is available in the current ${selectedSite?.name || 'site'} page library.`,
+                ready: !routeConflict,
             },
             {
                 label: 'SEO summary',
@@ -268,6 +300,9 @@ function NewPageRoute() {
         formData.status,
         formData.template,
         formData.title,
+        hasSchedule,
+        routeConflict,
+        routePreview,
         selectedSite,
         selectedTemplate.sections.length,
     ]);
@@ -280,6 +315,9 @@ function NewPageRoute() {
         template: formData.template,
         description: formData.description,
         isHomepage: formData.isHomepage,
+        routeAvailability: routeConflict
+            ? { status: 'conflict', pageId: routeConflict.id, title: routeConflict.title, path: getPagePublicPath(routeConflict) }
+            : { status: 'available', checkedPages: selectedSitePages.length },
         content: `${selectedTemplate.sections.length + (formData.template === 'blank' ? 0 : 2)} starter block${selectedTemplate.sections.length === 1 ? '' : 's'}`,
         siteChrome: formData.template === 'blank' ? 'available from component library' : 'editable header, navigation, and footer seeded',
         forms: ['contact', 'registration'].includes(formData.template) ? 'Backy form API seeded' : 'none',
@@ -296,7 +334,9 @@ function NewPageRoute() {
         formData.status,
         formData.template,
         formData.title,
+        routeConflict,
         resolvedSlug,
+        selectedSitePages.length,
         selectedTemplate.sections.length,
     ]);
     const creationHandoff = useMemo(() => ({
@@ -314,6 +354,17 @@ function NewPageRoute() {
             slug: resolvedSlug,
             path: routePreview,
             isHomepage: formData.isHomepage,
+            availability: routeConflict
+                ? {
+                    status: 'conflict',
+                    pageId: routeConflict.id,
+                    title: routeConflict.title,
+                    path: getPagePublicPath(routeConflict),
+                }
+                : {
+                    status: 'available',
+                    checkedPages: selectedSitePages.length,
+                },
         },
         readiness: {
             score: pageCreationReadiness.score,
@@ -340,7 +391,7 @@ function NewPageRoute() {
         payloadPreview: createPayloadPreview,
         nextStep: 'Created pages open directly in the visual editor for layout, grouping, media, binding, SEO, and publishing work.',
         guardrails: [
-            'Backend owns duplicate route and homepage conflict validation.',
+            'The creator blocks route and homepage collisions visible in the current page library; the backend remains final validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact and registration templates seed editable form blocks that connect to Backy Forms and Contacts.',
             'Storefront and blog index templates seed dynamic data placeholders for products and posts.',
@@ -358,7 +409,9 @@ function NewPageRoute() {
         pageCreationReadiness.checks,
         pageCreationReadiness.score,
         resolvedSlug,
+        routeConflict,
         routePreview,
+        selectedSitePages.length,
         selectedSite?.name,
         selectedSite?.slug,
         selectedTemplate.id,
@@ -395,7 +448,13 @@ function NewPageRoute() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!canSubmit) {
-            setError('Add a page title and select a site before creating the page.');
+            if (routeConflict) {
+                setError(`Route ${routePreview} is already used by "${routeConflict.title}". Choose another slug or edit that page first`);
+            } else if (!hasSchedule) {
+                setError('Choose a publish date before creating a scheduled page');
+            } else {
+                setError('Add a page title and select a site before creating the page.');
+            }
             setNotice(null);
             return;
         }
@@ -689,10 +748,19 @@ function NewPageRoute() {
                                     Set as homepage route
                                 </span>
                                 <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                                    Creates the page as `/` for the selected site. Existing homepage conflicts are still handled by the backend.
+                                    Creates the page as `/` for the selected site. Backy checks the current page library before create.
                                 </span>
                             </span>
                         </label>
+
+                        {routeConflict && (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="page-route-conflict">
+                                <div className="font-semibold">Route already exists</div>
+                                <p className="mt-1">
+                                    {routePreview} is already used by {routeConflict.title}. Choose a different slug, unset homepage, or edit the existing page.
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                     <div id="page-design" className="space-y-5 rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
@@ -824,6 +892,11 @@ function NewPageRoute() {
                         <div className="mt-4 rounded-lg border border-border bg-background px-3 py-3 font-mono text-sm">
                             {selectedSite?.slug || selectedSite?.name || 'site'}{routePreview}
                         </div>
+                        {routeConflict && (
+                            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                                Conflicts with {routeConflict.title}. This create action is blocked until the route is available.
+                            </div>
+                        )}
                         <dl className="mt-4 space-y-3 text-sm">
                             <div>
                                 <dt className="text-xs font-medium text-muted-foreground">Template</dt>
@@ -836,6 +909,12 @@ function NewPageRoute() {
                             <div>
                                 <dt className="text-xs font-medium text-muted-foreground">Status</dt>
                                 <dd className="mt-1 capitalize text-foreground">{formData.status}</dd>
+                            </div>
+                            <div>
+                                <dt className="text-xs font-medium text-muted-foreground">Availability</dt>
+                                <dd className={cn('mt-1 font-medium', routeConflict ? 'text-amber-700' : 'text-emerald-700')}>
+                                    {routeConflict ? 'Route conflict' : `${selectedSitePages.length} existing page${selectedSitePages.length === 1 ? '' : 's'} checked`}
+                                </dd>
                             </div>
                         </dl>
                     </section>
