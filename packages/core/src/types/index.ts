@@ -331,6 +331,69 @@ export interface SiteNavigationConfig {
 
   /** Footer navigation menu */
   footer?: SiteNavigationConfigItem[];
+
+  /** Header and footer presentation controls for hosted and custom frontends */
+  layout?: SiteNavigationLayoutConfig;
+}
+
+/**
+ * Site-level header and footer presentation controls.
+ *
+ * These settings let Backy own global frontend chrome while keeping the
+ * consuming frontend free to render it in its own component system.
+ */
+export interface SiteNavigationLayoutConfig {
+  /** Header behavior and visible utilities */
+  header?: SiteNavigationHeaderConfig;
+
+  /** Footer structure and opt-in content regions */
+  footer?: SiteNavigationFooterConfig;
+}
+
+export interface SiteNavigationHeaderConfig {
+  /** Header composition pattern */
+  variant?: 'minimal' | 'centered' | 'split' | 'commerce';
+
+  /** Header scroll behavior */
+  position?: 'static' | 'sticky' | 'transparent';
+
+  /** Header content width */
+  width?: 'contained' | 'full';
+
+  /** Whether the site name/logo slot is shown */
+  showBrand?: boolean;
+
+  /** Whether a search affordance is shown */
+  showSearch?: boolean;
+
+  /** Whether account/member actions are shown */
+  showAccount?: boolean;
+
+  /** Whether cart/checkout actions are shown */
+  showCart?: boolean;
+
+  /** Optional primary header call to action label */
+  ctaLabel?: string;
+
+  /** Optional primary header call to action URL or route */
+  ctaHref?: string;
+}
+
+export interface SiteNavigationFooterConfig {
+  /** Footer composition pattern */
+  variant?: 'simple' | 'columns' | 'mega';
+
+  /** Footer content width */
+  width?: 'contained' | 'full';
+
+  /** Whether social links should be rendered by the frontend */
+  showSocial?: boolean;
+
+  /** Whether a newsletter/signup area should be rendered */
+  showNewsletter?: boolean;
+
+  /** Optional short footer note */
+  note?: string;
 }
 
 /**

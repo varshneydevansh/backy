@@ -1,6 +1,15 @@
 import type { BlogPost, Page, Site, User } from '@/stores/mockStore';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
-import type { Comment, CommentStatus, CommentTargetType, Contact, SiteNavigationConfig, SiteRedirectRule, SiteSettings } from '@backy-cms/core';
+import type {
+  Comment,
+  CommentStatus,
+  CommentTargetType,
+  Contact,
+  SiteNavigationConfig,
+  SiteNavigationLayoutConfig,
+  SiteRedirectRule,
+  SiteSettings,
+} from '@backy-cms/core';
 
 type AdminSiteStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 
@@ -56,6 +65,7 @@ export interface AdminSiteNavigation {
   resolved: {
     primary: AdminNavigationResolvedItem[];
     footer: AdminNavigationResolvedItem[];
+    layout: SiteNavigationLayoutConfig;
   };
 }
 

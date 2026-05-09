@@ -1,4 +1,4 @@
-import type { SiteSettings } from '@backy-cms/core';
+import type { SiteNavigationLayoutConfig, SiteSettings } from '@backy-cms/core';
 
 export type SiteNavigationConfig = SiteSettings['navigation'];
 export type SiteNavigationConfigItem = SiteSettings['navigation']['primary'][number];
@@ -28,6 +28,12 @@ export interface PublicNavigationItem {
   status?: string;
   isHomepage?: boolean;
   children: PublicNavigationItem[];
+}
+
+export interface PublicSiteNavigation {
+  primary: PublicNavigationItem[];
+  footer: PublicNavigationItem[];
+  layout: SiteNavigationLayoutConfig;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -179,6 +185,66 @@ const normalizeConfiguredMenu = (
     : []
 );
 
+const HEADER_VARIANTS = new Set(['minimal', 'centered', 'split', 'commerce']);
+const HEADER_POSITIONS = new Set(['static', 'sticky', 'transparent']);
+const HEADER_WIDTHS = new Set(['contained', 'full']);
+const FOOTER_VARIANTS = new Set(['simple', 'columns', 'mega']);
+
+const DEFAULT_NAVIGATION_LAYOUT: SiteNavigationLayoutConfig = {
+  header: {
+    variant: 'minimal',
+    position: 'sticky',
+    width: 'contained',
+    showBrand: true,
+    showSearch: false,
+    showAccount: false,
+    showCart: false,
+  },
+  footer: {
+    variant: 'columns',
+    width: 'contained',
+    showSocial: true,
+    showNewsletter: false,
+  },
+};
+
+const enumValue = <T extends string>(value: unknown, allowed: Set<string>, fallback: T): T => (
+  typeof value === 'string' && allowed.has(value) ? value as T : fallback
+);
+
+const booleanValue = (value: unknown, fallback: boolean): boolean => (
+  typeof value === 'boolean' ? value : fallback
+);
+
+export function normalizeNavigationLayout(input: unknown, current: SiteNavigationLayoutConfig = DEFAULT_NAVIGATION_LAYOUT): SiteNavigationLayoutConfig {
+  const source = isRecord(input) ? input : {};
+  const sourceHeader = isRecord(source.header) ? source.header : {};
+  const sourceFooter = isRecord(source.footer) ? source.footer : {};
+  const currentHeader = current.header || DEFAULT_NAVIGATION_LAYOUT.header || {};
+  const currentFooter = current.footer || DEFAULT_NAVIGATION_LAYOUT.footer || {};
+
+  return {
+    header: {
+      variant: enumValue(sourceHeader.variant, HEADER_VARIANTS, currentHeader.variant || 'minimal'),
+      position: enumValue(sourceHeader.position, HEADER_POSITIONS, currentHeader.position || 'sticky'),
+      width: enumValue(sourceHeader.width, HEADER_WIDTHS, currentHeader.width || 'contained'),
+      showBrand: booleanValue(sourceHeader.showBrand, currentHeader.showBrand !== false),
+      showSearch: booleanValue(sourceHeader.showSearch, Boolean(currentHeader.showSearch)),
+      showAccount: booleanValue(sourceHeader.showAccount, Boolean(currentHeader.showAccount)),
+      showCart: booleanValue(sourceHeader.showCart, Boolean(currentHeader.showCart)),
+      ctaLabel: toText(sourceHeader.ctaLabel) || currentHeader.ctaLabel,
+      ctaHref: toText(sourceHeader.ctaHref) || currentHeader.ctaHref,
+    },
+    footer: {
+      variant: enumValue(sourceFooter.variant, FOOTER_VARIANTS, currentFooter.variant || 'columns'),
+      width: enumValue(sourceFooter.width, HEADER_WIDTHS, currentFooter.width || 'contained'),
+      showSocial: booleanValue(sourceFooter.showSocial, currentFooter.showSocial !== false),
+      showNewsletter: booleanValue(sourceFooter.showNewsletter, Boolean(currentFooter.showNewsletter)),
+      note: toText(sourceFooter.note) || currentFooter.note,
+    },
+  };
+}
+
 export function normalizeNavigationConfig(
   input: unknown,
   current: SiteNavigationConfig = { primary: [], footer: [] },
@@ -214,13 +280,16 @@ export function normalizeNavigationConfig(
   return {
     primary: input.primary === undefined ? current.primary : normalizeItems(input.primary),
     footer: input.footer === undefined ? current.footer || [] : normalizeItems(input.footer),
+    layout: input.layout === undefined
+      ? normalizeNavigationLayout(current.layout)
+      : normalizeNavigationLayout(input.layout, current.layout),
   };
 }
 
 export function buildSiteNavigation(
   settings: Pick<SiteSettings, 'navigation'> | undefined | null,
   pages: NavigationPage[],
-): { primary: PublicNavigationItem[]; footer: PublicNavigationItem[] } {
+): PublicSiteNavigation {
   const pagesById = new Map(pages.map((page) => [page.id, page]));
   const configuredPrimary = normalizeConfiguredMenu(settings?.navigation?.primary, pagesById);
   const configuredFooter = normalizeConfiguredMenu(settings?.navigation?.footer, pagesById);
@@ -228,5 +297,6 @@ export function buildSiteNavigation(
   return {
     primary: configuredPrimary.length > 0 ? configuredPrimary : fallbackNavigationFromPages(pages),
     footer: configuredFooter,
+    layout: normalizeNavigationLayout(settings?.navigation?.layout),
   };
 }

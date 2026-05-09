@@ -59,6 +59,7 @@ import type {
   CommentReportReason,
   SiteNavigationConfig,
   SiteNavigationConfigItem,
+  SiteNavigationLayoutConfig,
   SiteRedirectRule,
 } from '@backy-cms/core';
 
@@ -168,7 +169,61 @@ const DEFAULT_COMMENT_REPORT_REASONS: CommentReportReason[] = [
 const EMPTY_NAVIGATION: SiteNavigationConfig = {
   primary: [],
   footer: [],
+  layout: {
+    header: {
+      variant: 'minimal',
+      position: 'sticky',
+      width: 'contained',
+      showBrand: true,
+      showSearch: false,
+      showAccount: false,
+      showCart: false,
+    },
+    footer: {
+      variant: 'columns',
+      width: 'contained',
+      showSocial: true,
+      showNewsletter: false,
+    },
+  },
 };
+
+const NAVIGATION_HEADER_VARIANTS = [
+  { value: 'minimal', label: 'Minimal', detail: 'Brand, links, and optional CTA in a clean row.' },
+  { value: 'centered', label: 'Centered', detail: 'Balanced nav with centered brand for editorial sites.' },
+  { value: 'split', label: 'Split', detail: 'Left and right menu groups around brand placement.' },
+  { value: 'commerce', label: 'Commerce', detail: 'Store-ready header with account, search, and cart slots.' },
+] as const;
+
+const NAVIGATION_HEADER_POSITIONS = [
+  { value: 'static', label: 'Static' },
+  { value: 'sticky', label: 'Sticky' },
+  { value: 'transparent', label: 'Transparent' },
+] as const;
+
+const NAVIGATION_WIDTH_OPTIONS = [
+  { value: 'contained', label: 'Contained' },
+  { value: 'full', label: 'Full width' },
+] as const;
+
+const NAVIGATION_FOOTER_VARIANTS = [
+  { value: 'simple', label: 'Simple', detail: 'Compact footer for small sites.' },
+  { value: 'columns', label: 'Columns', detail: 'Structured footer with grouped links.' },
+  { value: 'mega', label: 'Mega', detail: 'Large footer with newsletter and multi-column content.' },
+] as const;
+
+const normalizeNavigationLayoutState = (
+  layout?: SiteNavigationLayoutConfig,
+): SiteNavigationLayoutConfig => ({
+  header: {
+    ...EMPTY_NAVIGATION.layout?.header,
+    ...layout?.header,
+  },
+  footer: {
+    ...EMPTY_NAVIGATION.layout?.footer,
+    ...layout?.footer,
+  },
+});
 
 const EMPTY_SEO_SETTINGS: AdminSiteSeoSettings = {
   titleTemplate: '%s | {siteName}',
@@ -547,6 +602,7 @@ function EditSitePage() {
         navigation: {
           primary: siteNavigation.settings.primary || [],
           footer: siteNavigation.settings.footer || [],
+          layout: normalizeNavigationLayoutState(siteNavigation.settings.layout || siteNavigation.resolved.layout),
         },
         pages,
         loading: false,
@@ -571,6 +627,28 @@ function EditSitePage() {
       navigation: {
         ...prev.navigation,
         [menu]: updater(prev.navigation[menu] || []),
+      },
+    }));
+  };
+
+  const updateNavigationLayout = (
+    section: keyof SiteNavigationLayoutConfig,
+    updates: Partial<NonNullable<SiteNavigationLayoutConfig[typeof section]>>,
+  ) => {
+    setNavigationState((prev) => ({
+      ...prev,
+      notice: null,
+      navigation: {
+        ...prev.navigation,
+        layout: {
+          ...normalizeNavigationLayoutState(prev.navigation.layout),
+          [section]: {
+            ...(section === 'header'
+              ? normalizeNavigationLayoutState(prev.navigation.layout).header
+              : normalizeNavigationLayoutState(prev.navigation.layout).footer),
+            ...updates,
+          },
+        },
       },
     }));
   };
@@ -620,6 +698,7 @@ function EditSitePage() {
         navigation: {
           primary: siteNavigation.settings.primary || [],
           footer: siteNavigation.settings.footer || [],
+          layout: normalizeNavigationLayoutState(siteNavigation.settings.layout || siteNavigation.resolved.layout),
         },
         saving: false,
         notice: 'Navigation saved and available to public/front-end contracts.',
@@ -1562,8 +1641,10 @@ function EditSitePage() {
       ...(navigationState.navigation.primary || []),
       ...(navigationState.navigation.footer || []),
     ];
+    const navigationLayout = normalizeNavigationLayoutState(navigationState.navigation.layout);
     const readyByBackend = readiness?.statusLabel === 'ready';
     const hasNavigation = navigationItems.length > 0;
+    const hasGlobalLayout = Boolean(navigationLayout.header?.variant && navigationLayout.footer?.variant);
     const redirectsClean = redirectState.conflicts.length === 0;
     const hasSeoDefaults = Boolean(
       seoState.seo.titleTemplate ||
@@ -1590,6 +1671,13 @@ function EditSitePage() {
           ? `${navigationItems.length} menu item${navigationItems.length === 1 ? '' : 's'} configured`
           : 'Add primary or footer menu links for frontend navigation.',
         ready: hasNavigation,
+      },
+      {
+        label: 'Global layout chrome',
+        detail: hasGlobalLayout
+          ? `${navigationLayout.header?.variant} header and ${navigationLayout.footer?.variant} footer controls are exposed.`
+          : 'Choose header and footer behavior for site-wide frontend chrome.',
+        ready: hasGlobalLayout,
       },
       {
         label: 'Route hygiene',
@@ -1636,6 +1724,7 @@ function EditSitePage() {
     formData.customDomain,
     formData.slug,
     navigationState.navigation.footer,
+    navigationState.navigation.layout,
     navigationState.navigation.primary,
     readiness,
     readinessSummary?.errors,
@@ -1689,6 +1778,7 @@ function EditSitePage() {
       footerItems: navigationState.navigation.footer?.length || 0,
       primary: navigationState.navigation.primary,
       footer: navigationState.navigation.footer || [],
+      layout: normalizeNavigationLayoutState(navigationState.navigation.layout),
     },
     redirects: {
       ruleCount: redirectState.rules.length,
@@ -2283,6 +2373,14 @@ function EditSitePage() {
               {navigationState.notice}
             </div>
           )}
+
+          <div className="mt-5">
+            <NavigationLayoutEditor
+              layout={normalizeNavigationLayoutState(navigationState.navigation.layout)}
+              loading={navigationState.loading}
+              onUpdate={updateNavigationLayout}
+            />
+          </div>
 
           <div className="mt-5 grid gap-5 xl:grid-cols-2">
             <NavigationMenuEditor
@@ -3566,6 +3664,270 @@ interface NavigationMenuEditorProps {
   onUpdateItem: (menu: NavigationMenuKey, itemId: string, updates: Partial<SiteNavigationConfigItem>) => void;
   onRemoveItem: (menu: NavigationMenuKey, itemId: string) => void;
   onMoveRootItem: (menu: NavigationMenuKey, itemId: string, direction: -1 | 1) => void;
+}
+
+interface NavigationLayoutEditorProps {
+  layout: SiteNavigationLayoutConfig;
+  loading: boolean;
+  onUpdate: (
+    section: keyof SiteNavigationLayoutConfig,
+    updates: Partial<NonNullable<SiteNavigationLayoutConfig[keyof SiteNavigationLayoutConfig]>>,
+  ) => void;
+}
+
+function NavigationLayoutEditor({ layout, loading, onUpdate }: NavigationLayoutEditorProps) {
+  const header = layout.header || EMPTY_NAVIGATION.layout?.header || {};
+  const footer = layout.footer || EMPTY_NAVIGATION.layout?.footer || {};
+
+  return (
+    <div className="rounded-lg border border-border bg-background p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold">Global header and footer controls</h3>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+            Defines the reusable site chrome that hosted pages and custom frontends can render around every page, blog post, product, and form.
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+          Public contract: <span className="font-medium text-foreground">navigation.layout</span>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.72fr)]">
+        <div className="grid gap-3 lg:grid-cols-2">
+          <div className="rounded-lg border border-border bg-card p-3">
+            <div className="flex items-center gap-2">
+              <Menu className="h-4 w-4 text-primary" />
+              <h4 className="text-sm font-semibold">Header</h4>
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <label className="text-xs font-medium text-muted-foreground">
+                Variant
+                <select
+                  value={header.variant || 'minimal'}
+                  disabled={loading}
+                  onChange={(event) => onUpdate('header', { variant: event.target.value as NonNullable<typeof header.variant> })}
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground"
+                >
+                  {NAVIGATION_HEADER_VARIANTS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-medium text-muted-foreground">
+                Position
+                <select
+                  value={header.position || 'sticky'}
+                  disabled={loading}
+                  onChange={(event) => onUpdate('header', { position: event.target.value as NonNullable<typeof header.position> })}
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground"
+                >
+                  {NAVIGATION_HEADER_POSITIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-medium text-muted-foreground">
+                Width
+                <select
+                  value={header.width || 'contained'}
+                  disabled={loading}
+                  onChange={(event) => onUpdate('header', { width: event.target.value as NonNullable<typeof header.width> })}
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground"
+                >
+                  {NAVIGATION_WIDTH_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <NavigationToggle
+                label="Brand slot"
+                checked={header.showBrand !== false}
+                disabled={loading}
+                onChange={(checked) => onUpdate('header', { showBrand: checked })}
+              />
+              <NavigationToggle
+                label="Search"
+                checked={Boolean(header.showSearch)}
+                disabled={loading}
+                onChange={(checked) => onUpdate('header', { showSearch: checked })}
+              />
+              <NavigationToggle
+                label="Account"
+                checked={Boolean(header.showAccount)}
+                disabled={loading}
+                onChange={(checked) => onUpdate('header', { showAccount: checked })}
+              />
+              <NavigationToggle
+                label="Cart"
+                checked={Boolean(header.showCart)}
+                disabled={loading}
+                onChange={(checked) => onUpdate('header', { showCart: checked })}
+              />
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="text-xs font-medium text-muted-foreground">
+                CTA label
+                <input
+                  value={header.ctaLabel || ''}
+                  disabled={loading}
+                  onChange={(event) => onUpdate('header', { ctaLabel: event.target.value })}
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground"
+                  placeholder="Start project"
+                />
+              </label>
+              <label className="text-xs font-medium text-muted-foreground">
+                CTA href
+                <input
+                  value={header.ctaHref || ''}
+                  disabled={loading}
+                  onChange={(event) => onUpdate('header', { ctaHref: event.target.value })}
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground"
+                  placeholder="/contact"
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-card p-3">
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-primary" />
+              <h4 className="text-sm font-semibold">Footer</h4>
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="text-xs font-medium text-muted-foreground">
+                Variant
+                <select
+                  value={footer.variant || 'columns'}
+                  disabled={loading}
+                  onChange={(event) => onUpdate('footer', { variant: event.target.value as NonNullable<typeof footer.variant> })}
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground"
+                >
+                  {NAVIGATION_FOOTER_VARIANTS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-medium text-muted-foreground">
+                Width
+                <select
+                  value={footer.width || 'contained'}
+                  disabled={loading}
+                  onChange={(event) => onUpdate('footer', { width: event.target.value as NonNullable<typeof footer.width> })}
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground"
+                >
+                  {NAVIGATION_WIDTH_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <NavigationToggle
+                label="Social links"
+                checked={footer.showSocial !== false}
+                disabled={loading}
+                onChange={(checked) => onUpdate('footer', { showSocial: checked })}
+              />
+              <NavigationToggle
+                label="Newsletter"
+                checked={Boolean(footer.showNewsletter)}
+                disabled={loading}
+                onChange={(checked) => onUpdate('footer', { showNewsletter: checked })}
+              />
+            </div>
+            <label className="mt-3 block text-xs font-medium text-muted-foreground">
+              Footer note
+              <textarea
+                value={footer.note || ''}
+                disabled={loading}
+                onChange={(event) => onUpdate('footer', { note: event.target.value })}
+                rows={3}
+                className="mt-1 w-full resize-none rounded-md border bg-background px-2 py-2 text-sm text-foreground"
+                placeholder="Short brand, legal, or support note."
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border bg-card p-3">
+          <h4 className="text-sm font-semibold">Frontend chrome preview</h4>
+          <div className="mt-3 rounded-lg border border-border bg-background p-3">
+            <div className={cn(
+              'rounded-md border px-3 py-2',
+              header.width === 'full' ? 'border-primary/30 bg-primary/5' : 'border-border bg-card',
+            )}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold">{header.showBrand === false ? 'No brand' : 'Brand'}</span>
+                <span className="text-xs text-muted-foreground">{header.variant || 'minimal'} / {header.position || 'sticky'}</span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {['Search', 'Account', 'Cart'].map((label) => {
+                  const enabled = label === 'Search'
+                    ? header.showSearch
+                    : label === 'Account'
+                      ? header.showAccount
+                      : header.showCart;
+                  return enabled ? (
+                    <span key={label} className="rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                      {label}
+                    </span>
+                  ) : null;
+                })}
+                {header.ctaLabel ? (
+                  <span className="rounded-md bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground">
+                    {header.ctaLabel}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <div className="my-3 h-24 rounded-md border border-dashed border-border bg-muted/30" />
+            <div className={cn(
+              'rounded-md border px-3 py-2',
+              footer.width === 'full' ? 'border-primary/30 bg-primary/5' : 'border-border bg-card',
+            )}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold">Footer</span>
+                <span className="text-xs text-muted-foreground">{footer.variant || 'columns'}</span>
+              </div>
+              <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                {footer.note || 'Footer menu, social links, newsletter, and support links render here.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NavigationToggle({
+  label,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  disabled: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2 text-sm">
+      <span className="font-medium text-foreground">{label}</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-4 w-4 rounded border-border text-primary focus:ring-ring"
+      />
+    </label>
+  );
 }
 
 function NavigationMenuEditor({

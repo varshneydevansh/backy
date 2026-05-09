@@ -79,6 +79,23 @@ export const DEFAULT_SITE_SETTINGS = {
   navigation: {
     primary: [],
     footer: [],
+    layout: {
+      header: {
+        variant: 'minimal',
+        position: 'sticky',
+        width: 'contained',
+        showBrand: true,
+        showSearch: false,
+        showAccount: false,
+        showCart: false,
+      },
+      footer: {
+        variant: 'columns',
+        width: 'contained',
+        showSocial: true,
+        showNewsletter: false,
+      },
+    },
   },
 } as const;
 
