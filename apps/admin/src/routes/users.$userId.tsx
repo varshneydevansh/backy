@@ -184,6 +184,17 @@ function EditUserPage() {
     [formData.status],
   );
   const canSubmit = formData.fullName.trim().length > 1 && isValidEmail(formData.email);
+  const pendingChanges = useMemo(() => {
+    if (!user) return [];
+
+    return [
+      formData.fullName.trim() !== user.fullName ? 'name' : null,
+      formData.email.trim().toLowerCase() !== user.email.toLowerCase() ? 'email' : null,
+      formData.role !== user.role ? 'role' : null,
+      formData.status !== user.status ? 'status' : null,
+    ].filter((change): change is string => Boolean(change));
+  }, [formData.email, formData.fullName, formData.role, formData.status, user]);
+  const hasUnsavedChanges = pendingChanges.length > 0;
   const accessReadiness = useMemo(() => {
     const enabledCapabilities = ROLE_CAPABILITIES.filter((capability) => capability.roles.includes(formData.role));
     const isPrivileged = formData.role === 'owner' || formData.role === 'admin';
@@ -219,6 +230,13 @@ function EditUserPage() {
         detail: 'Backend prevents removing the last active owner or admin.',
         ready: true,
       },
+      {
+        label: 'Pending changes',
+        detail: hasUnsavedChanges
+          ? `${pendingChanges.length} field${pendingChanges.length === 1 ? '' : 's'} ready to save: ${pendingChanges.join(', ')}.`
+          : 'No unsaved edits in this account form.',
+        ready: true,
+      },
     ];
     const readyCount = checks.filter((check) => check.ready).length;
 
@@ -232,7 +250,7 @@ function EditUserPage() {
         { label: 'Recover', detail: 'Use reset help, suspension, or removal when access needs intervention.' },
       ],
     };
-  }, [canSubmit, formData.role, formData.status, notice, selectedRole.label, user]);
+  }, [canSubmit, formData.role, formData.status, hasUnsavedChanges, notice, pendingChanges, selectedRole.label, user]);
 
   if (!user) {
     return (
@@ -254,6 +272,11 @@ function EditUserPage() {
 
     if (!canSubmit) {
       setNotice('Enter a full name and a valid email address before saving.');
+      return;
+    }
+
+    if (!hasUnsavedChanges) {
+      setNotice('No account changes to save.');
       return;
     }
 
@@ -308,6 +331,16 @@ function EditUserPage() {
     }
   };
 
+  const resetForm = () => {
+    setFormData({
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+    });
+    setNotice('Unsaved account edits were reset.');
+  };
+
   const resetMailTo = `mailto:${encodeURIComponent(user.email)}?subject=${encodeURIComponent('Reset your Backy access')}&body=${encodeURIComponent(`Hi ${user.fullName},\n\nPlease reset your Backy access before continuing work in the admin workspace.`)}`;
   const updatePayload = {
     fullName: formData.fullName.trim() || user.fullName,
@@ -340,6 +373,8 @@ function EditUserPage() {
       enabledCapabilities: ROLE_CAPABILITIES
         .filter((capability) => capability.roles.includes(formData.role))
         .map((capability) => capability.label),
+      pendingChanges,
+      hasUnsavedChanges,
     },
     recovery: {
       resetMailTo,
@@ -433,10 +468,19 @@ function EditUserPage() {
               >
                 Download JSON
               </Button>
+              {hasUnsavedChanges && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={resetForm}
+                >
+                  Reset changes
+                </Button>
+              )}
               <Button
                 type="submit"
                 variant="primary"
-                disabled={isLoading || !canSubmit}
+                disabled={isLoading || !canSubmit || !hasUnsavedChanges}
                 iconStart={<Save className="size-4" />}
               >
                 {isLoading ? 'Saving...' : 'Save changes'}
@@ -634,6 +678,12 @@ function EditUserPage() {
                 <dt className="text-xs font-medium text-muted-foreground">Last activity</dt>
                 <dd className="mt-1 text-foreground">{user.lastActive}</dd>
               </div>
+              <div>
+                <dt className="text-xs font-medium text-muted-foreground">Pending changes</dt>
+                <dd className="mt-1 text-foreground">
+                  {hasUnsavedChanges ? pendingChanges.join(', ') : 'None'}
+                </dd>
+              </div>
             </dl>
           </section>
 
@@ -680,6 +730,11 @@ function EditUserPage() {
             <pre className="mt-4 overflow-x-auto rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
 {JSON.stringify(updatePayload, null, 2)}
             </pre>
+            <div className="mt-3 rounded-lg border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+              {hasUnsavedChanges
+                ? `Save will persist ${pendingChanges.join(', ')}.`
+                : 'No API update will be sent until this form changes.'}
+            </div>
           </section>
 
           <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
@@ -742,7 +797,7 @@ function EditUserPage() {
           <div className="flex flex-col gap-2">
             <button
               type="submit"
-              disabled={isLoading || !canSubmit}
+              disabled={isLoading || !canSubmit || !hasUnsavedChanges}
               className={cn(
                 'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-ring',
                 'bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50',
@@ -758,6 +813,15 @@ function EditUserPage() {
             >
               Cancel
             </button>
+            {hasUnsavedChanges && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition hover:bg-accent"
+              >
+                Reset changes
+              </button>
+            )}
           </div>
         </aside>
         </div>
