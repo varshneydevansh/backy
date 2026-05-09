@@ -88,6 +88,8 @@ type SearchResult =
   | { id: string; type: 'Form'; title: string; detail: string; action: { route: 'forms' } }
   | { id: string; type: 'Comment'; title: string; detail: string; action: { route: 'comments' } }
   | { id: string; type: 'Contact'; title: string; detail: string; action: { route: 'contacts' } }
+  | { id: string; type: 'Product'; title: string; detail: string; action: { route: 'product'; productId: string } }
+  | { id: string; type: 'Order'; title: string; detail: string; action: { route: 'order'; orderId: string } }
   | { id: string; type: 'User'; title: string; detail: string; action: { route: 'user'; userId: string } }
   | { id: string; type: 'Tool'; title: string; detail: string; action: { route: 'static'; to: StaticToolRoute } };
 
@@ -588,16 +590,31 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     setSearchError(null);
 
     try {
-      const [loadedSites, pages, posts, forms, comments] = await Promise.all([
+      const [loadedSites, pages, posts, forms, comments, collections] = await Promise.all([
         listSites().catch(() => []),
         listPages(activeSiteId).catch(() => []),
         listBlogPosts(activeSiteId).catch(() => []),
         listForms(activeSiteId).catch(() => []),
         listComments(activeSiteId, { status: 'all', limit: 20, sort: 'newest' }).then((result) => result.comments).catch(() => []),
+        listCollections(activeSiteId).catch(() => []),
       ]);
+      const productsCollection = collections.find((collection) => collection.slug === 'products');
+      const ordersCollection = collections.find((collection) => collection.slug === 'orders');
       const contactGroups = await Promise.all(
         forms.map((form) => listFormContacts(activeSiteId, form.id, { limit: 20 }).then((result) => result.contacts).catch(() => [])),
       );
+      const [productRecords, orderRecords] = await Promise.all([
+        productsCollection
+          ? listCollectionRecords(activeSiteId, productsCollection.id, { limit: 20, sortBy: 'updatedAt', sortDirection: 'desc' })
+            .then((result) => result.records)
+            .catch(() => [])
+          : Promise.resolve([]),
+        ordersCollection
+          ? listCollectionRecords(activeSiteId, ordersCollection.id, { limit: 20, sortBy: 'updatedAt', sortDirection: 'desc' })
+            .then((result) => result.records)
+            .catch(() => [])
+          : Promise.resolve([]),
+      ]);
 
       setSearchIndex([
         ...loadedSites.map((site) => ({
@@ -642,6 +659,42 @@ export function Header({ onSidebarToggle }: HeaderProps) {
           detail: contact.email || contact.notes || contact.status,
           action: { route: 'contacts' as const },
         })),
+        ...productRecords.map((product) => {
+          const title = String(readRecordValue(product.values, 'title', product.slug) || product.slug);
+          const sku = String(readRecordValue(product.values, 'sku', '') || '').trim();
+          const price = readRecordValue(product.values, 'price', '');
+          const currency = String(readRecordValue(product.values, 'currency', 'USD') || 'USD');
+
+          return {
+            id: `product:${product.id}`,
+            type: 'Product' as const,
+            title,
+            detail: [
+              sku ? `SKU ${sku}` : null,
+              price !== '' ? `${currency} ${price}` : null,
+              product.status,
+            ].filter(Boolean).join(' - '),
+            action: { route: 'product' as const, productId: product.id },
+          };
+        }),
+        ...orderRecords.map((order) => {
+          const orderNumber = String(readRecordValue(order.values, 'ordernumber', order.slug) || order.slug);
+          const customer = String(readRecordValue(order.values, 'customername', '') || '').trim();
+          const payment = String(readRecordValue(order.values, 'paymentstatus', '') || '').trim();
+          const fulfillment = String(readRecordValue(order.values, 'fulfillmentstatus', '') || '').trim();
+
+          return {
+            id: `order:${order.id}`,
+            type: 'Order' as const,
+            title: orderNumber,
+            detail: [
+              customer || 'Customer',
+              payment || 'payment unknown',
+              fulfillment || 'fulfillment unknown',
+            ].join(' - '),
+            action: { route: 'order' as const, orderId: order.id },
+          };
+        }),
         ...storeUsers.map((member) => ({
           id: `user:${member.id}`,
           type: 'User' as const,
@@ -708,6 +761,14 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     }
     if (result.action.route === 'contacts') {
       navigate({ to: '/contacts', search: activeSiteSearch });
+      return;
+    }
+    if (result.action.route === 'product') {
+      navigate({ to: '/products', search: { siteId: activeSiteId, productId: result.action.productId } });
+      return;
+    }
+    if (result.action.route === 'order') {
+      navigate({ to: '/orders', search: { siteId: activeSiteId, orderId: result.action.orderId } });
       return;
     }
     if (result.action.route === 'user') {
