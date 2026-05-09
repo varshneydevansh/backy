@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { CheckSquare, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Save, Trash2, Type, Upload, X } from 'lucide-react';
+import { CheckSquare, Code2, Copy, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Save, Trash2, Type, Upload, X } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
@@ -108,6 +108,12 @@ function MediaPage() {
   const setPosts = useStore((state) => state.setPosts);
   const deleteMedia = useStore((state) => state.deleteMedia);
   const siteId = getDefaultMediaSiteId();
+  const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
+  const publicMediaListUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media?limit=100`;
+  const publicMediaDetailUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/{mediaId}`;
+  const publicMediaFileUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/{mediaId}/file`;
+  const publicMediaTransformUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/{mediaId}/transform?width=1200&quality=75`;
+  const adminMediaUploadUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media`;
 
   const publicFileUrl = useMemo(
     () => selectedAsset ? getPublicMediaFileUrl(selectedAsset.id, siteId) : '',
@@ -785,6 +791,17 @@ function MediaPage() {
     }
   };
 
+  const copyMediaApiText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setError(null);
+      setBulkNotice(`${label} copied.`);
+    } catch {
+      setBulkNotice(null);
+      setError(value);
+    }
+  };
+
   const referencedPages = selectedAsset
     ? (selectedAsset.targetPageIds || []).map((pageId) => ({
         id: pageId,
@@ -809,6 +826,7 @@ function MediaPage() {
             id="header-upload"
             className="hidden"
             multiple
+            aria-label="Upload media files"
             onChange={(e) => {
               void handleFileUpload(e.target.files);
               e.currentTarget.value = '';
@@ -847,6 +865,7 @@ function MediaPage() {
           type="file"
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
           multiple
+          aria-label="Upload media files"
           disabled={isUploading}
           onChange={(e) => {
             void handleFileUpload(e.target.files);
@@ -881,6 +900,40 @@ function MediaPage() {
           Loading media library...
         </div>
       ) : null}
+
+      <Panel className="mb-6">
+        <PanelHeader
+          title="Frontend media API"
+          description="Public delivery endpoints and private upload contract for custom frontends, editors, and storefronts."
+          icon={<Code2 className="size-4" />}
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void copyMediaApiText(publicMediaListUrl, 'Media list URL')}
+              iconStart={<Copy className="size-4" />}
+            >
+              Copy list
+            </Button>
+          }
+        />
+        <PanelContent>
+          <div className="grid gap-3 md:grid-cols-4">
+            <MediaApiStat label="Visible assets" value={`${displayedFiles.length}`} />
+            <MediaApiStat label="Public assets" value={`${mediaAnalytics.publicAssets}`} />
+            <MediaApiStat label="Private assets" value={`${mediaAnalytics.privateAssets}`} />
+            <MediaApiStat label="Storage" value={runtimeStorage?.configured ? 'configured' : 'needs config'} />
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            <MediaApiSnippet label="Public media list" value={publicMediaListUrl} />
+            <MediaApiSnippet label="Public media detail" value={publicMediaDetailUrl} />
+            <MediaApiSnippet label="File delivery" value={publicMediaFileUrl} />
+            <MediaApiSnippet label="Image transform" value={publicMediaTransformUrl} />
+            <MediaApiSnippet label="Admin upload" value={adminMediaUploadUrl} />
+          </div>
+        </PanelContent>
+      </Panel>
 
       <Panel className="mb-6">
         <PanelHeader
@@ -1154,11 +1207,13 @@ function MediaPage() {
           onChange={(event) => setSearchQuery(event.target.value)}
           className="rounded-lg border bg-background px-4 py-2.5"
           placeholder="Search filenames, captions, alt text, or tags"
+          aria-label="Search media"
         />
         <select
           value={typeFilter}
           onChange={(event) => setTypeFilter(event.target.value as 'all' | MediaAsset['type'])}
           className="rounded-lg border bg-background px-4 py-2.5"
+          aria-label="Media type filter"
         >
           <option value="all">All types</option>
           <option value="image">Images</option>
@@ -1170,6 +1225,7 @@ function MediaPage() {
           value={visibilityFilter}
           onChange={(event) => setVisibilityFilter(event.target.value as 'all' | 'public' | 'private')}
           className="rounded-lg border bg-background px-4 py-2.5"
+          aria-label="Media visibility filter"
         >
           <option value="all">All visibility</option>
           <option value="public">Public</option>
@@ -1196,12 +1252,14 @@ function MediaPage() {
               }}
               className="w-full max-w-xs rounded-lg border bg-background px-3 py-2 text-sm"
               placeholder="New folder name"
+              aria-label="New folder name"
             />
             <button
               type="button"
               disabled={isCreatingFolder || !newFolderName.trim()}
               onClick={() => void handleCreateFolder()}
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+              aria-label="Create media folder"
             >
               <FolderPlus className="h-4 w-4" />
               Add
@@ -1247,6 +1305,7 @@ function MediaPage() {
                 onClick={() => setPendingDeleteFolder(folder)}
                 className="border-l border-border px-2 text-muted-foreground hover:bg-red-50 hover:text-red-600"
                 title="Delete folder"
+                aria-label={`Delete folder ${folder.name}`}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -1478,6 +1537,7 @@ function MediaPage() {
                     className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100"
                     onClick={() => openMetadataEditor(file)}
                     title="Edit metadata"
+                    aria-label={`Edit metadata for ${file.name}`}
                   >
                     <Edit3 className="w-4 h-4" />
                   </button>
@@ -1485,6 +1545,7 @@ function MediaPage() {
                     className="p-2 bg-white rounded-lg text-red-600 hover:bg-red-50"
                     onClick={() => setPendingDeleteAsset(file)}
                     title="Delete media"
+                    aria-label={`Delete ${file.name}`}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -1535,6 +1596,7 @@ function MediaPage() {
                 type="button"
                 onClick={() => setSelectedAsset(null)}
                 className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Close media details"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -2494,6 +2556,49 @@ function MediaPage() {
     </PageShell>
   );
 }
+
+function MediaApiStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 px-3 py-3">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="mt-1 truncate font-mono text-sm font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function MediaApiSnippet({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="mb-1 text-xs font-medium text-muted-foreground">{label}</div>
+      <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+        {value}
+      </code>
+    </div>
+  );
+}
+
+const getEnvValue = (key: string): string => {
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+  return env[key]?.trim() ?? '';
+};
+
+const getPublicBaseUrl = (): string => {
+  const envBase = (
+    getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
+    getEnvValue('VITE_PUBLIC_API_URL') ||
+    getEnvValue('VITE_API_BASE_URL') ||
+    ''
+  ).trim();
+
+  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+    return 'http://localhost:3001';
+  }
+
+  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+    .replace(/\/api\/admin$/, '')
+    .replace(/\/api$/, '')
+    .replace(/\/$/, '');
+};
 
 type MediaAnalytics = {
   totalAssets: number;
