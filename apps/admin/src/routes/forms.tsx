@@ -40,6 +40,10 @@ export const Route = createFileRoute('/forms')({
 
 type SubmissionStatusFilter = FormSubmissionStatus | 'all';
 type PageTemplateHandoff = 'landing' | 'storefront' | 'contact' | 'registration';
+type FormSourceFilter = 'all' | 'page' | 'blog' | 'embedded';
+type FormStateFilter = 'all' | 'active' | 'inactive';
+type FormDestinationFilter = 'all' | 'contacts' | 'collections' | 'inbox-only';
+type FormReadinessFilter = 'all' | 'ready' | 'needs-work';
 
 const FORM_CONTROL_AREAS = [
   {
@@ -291,6 +295,11 @@ function FormsRoute() {
   const [forms, setForms] = useState<FormDefinition[]>([]);
   const [inboxByForm, setInboxByForm] = useState<Record<string, FormInbox>>({});
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
+  const [formSearchQuery, setFormSearchQuery] = useState('');
+  const [formSourceFilter, setFormSourceFilter] = useState<FormSourceFilter>('all');
+  const [formStateFilter, setFormStateFilter] = useState<FormStateFilter>('all');
+  const [formDestinationFilter, setFormDestinationFilter] = useState<FormDestinationFilter>('all');
+  const [formReadinessFilter, setFormReadinessFilter] = useState<FormReadinessFilter>('all');
   const [statusFilter, setStatusFilter] = useState<SubmissionStatusFilter>('all');
   const [submissionQuery, setSubmissionQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -342,11 +351,9 @@ function FormsRoute() {
     }
 
     const hasFields = selectedForm.fields.length > 0;
-    const hasRequiredIdentity = selectedForm.fields.some((field) => (
-      ['email', 'tel'].includes(field.type) || ['email', 'phone'].includes(field.key)
-    ));
-    const hasSpamGuard = Boolean(selectedForm.enableHoneypot || selectedForm.enableCaptcha);
-    const hasDestination = Boolean(selectedForm.contactShare?.enabled || selectedForm.collectionTarget?.enabled);
+    const hasRequiredIdentity = formHasRequiredIdentity(selectedForm);
+    const hasSpamGuard = formHasSpamGuard(selectedForm);
+    const hasDestination = formHasDestination(selectedForm);
     const checks = [
       {
         label: 'Public definition',
@@ -407,6 +414,51 @@ function FormsRoute() {
       ],
     };
   }, [selectedForm]);
+  const filteredForms = useMemo(() => {
+    const normalizedSearch = formSearchQuery.trim().toLowerCase();
+
+    return forms.filter((form) => {
+      const source = getFormSource(form);
+      if (formSourceFilter !== 'all' && source !== formSourceFilter) return false;
+
+      if (formStateFilter === 'active' && !form.isActive) return false;
+      if (formStateFilter === 'inactive' && form.isActive) return false;
+
+      const sharesContacts = Boolean(form.contactShare?.enabled);
+      const writesCollection = Boolean(form.collectionTarget?.enabled);
+      if (formDestinationFilter === 'contacts' && !sharesContacts) return false;
+      if (formDestinationFilter === 'collections' && !writesCollection) return false;
+      if (formDestinationFilter === 'inbox-only' && (sharesContacts || writesCollection)) return false;
+
+      const readinessScore = getFormLaunchReadinessScore(form);
+      if (formReadinessFilter === 'ready' && readinessScore < 80) return false;
+      if (formReadinessFilter === 'needs-work' && readinessScore >= 80) return false;
+
+      if (!normalizedSearch) return true;
+
+      const searchable = [
+        form.id,
+        form.name,
+        form.title,
+        form.description,
+        form.audience,
+        form.moderationMode,
+        source,
+        form.pageId,
+        form.postId,
+        ...form.fields.flatMap((field) => [field.key, field.label, field.type, field.placeholder, field.helpText]),
+      ].filter(Boolean).join(' ').toLowerCase();
+
+      return searchable.includes(normalizedSearch);
+    });
+  }, [formDestinationFilter, formReadinessFilter, formSearchQuery, formSourceFilter, formStateFilter, forms]);
+  const hasActiveFormFilters = Boolean(
+    formSearchQuery.trim() ||
+    formSourceFilter !== 'all' ||
+    formStateFilter !== 'all' ||
+    formDestinationFilter !== 'all' ||
+    formReadinessFilter !== 'all',
+  );
   const selectedInbox = selectedForm ? inboxByForm[selectedForm.id] : null;
   const selectedSubmissions = selectedInbox?.submissions || [];
   const filteredSubmissions = useMemo(
@@ -511,7 +563,16 @@ function FormsRoute() {
     export: {
       format: 'csv',
       columns: FORM_EXPORT_COLUMNS,
-      filteredRows: forms.length,
+      filteredRows: filteredForms.length,
+    },
+    filters: {
+      query: formSearchQuery.trim(),
+      source: formSourceFilter,
+      state: formStateFilter,
+      destination: formDestinationFilter,
+      readiness: formReadinessFilter,
+      visible: filteredForms.length,
+      total: forms.length,
     },
     frontendSystems: FORM_FRONTEND_SYSTEMS,
     metrics,
@@ -544,8 +605,9 @@ function FormsRoute() {
       samplePayload: selectedFormSamplePayload,
       curl: selectedFormCurlExample,
     } : null,
-    forms: forms.map((form) => {
+    forms: filteredForms.map((form) => {
       const inbox = inboxByForm[form.id];
+      const source = getFormSource(form);
       return {
         id: form.id,
         name: form.name,
@@ -553,9 +615,10 @@ function FormsRoute() {
         description: form.description,
         isActive: form.isActive,
         audience: form.audience,
-        source: form.pageId ? 'page' : form.postId ? 'blog' : 'embedded',
+        source,
         pageId: form.pageId,
         postId: form.postId,
+        readinessScore: getFormLaunchReadinessScore(form),
         fieldCount: form.fields.length,
         requiredFieldCount: form.fields.filter((field) => field.required).length,
         moderationMode: form.moderationMode,
@@ -587,8 +650,14 @@ function FormsRoute() {
     activeSite?.slug,
     activeSite?.status,
     activeSiteId,
+    filteredForms,
+    formDestinationFilter,
     formCommandReadiness.checks,
     formCommandReadiness.score,
+    formReadinessFilter,
+    formSearchQuery,
+    formSourceFilter,
+    formStateFilter,
     forms,
     formsListUrl,
     inboxByForm,
@@ -711,15 +780,15 @@ function FormsRoute() {
   };
 
   const handleExportFormsCatalog = () => {
-    if (forms.length === 0) {
-      setError('No forms are available to export for this site.');
+    if (filteredForms.length === 0) {
+      setError(hasActiveFormFilters ? 'No forms match the active filters.' : 'No forms are available to export for this site.');
       setNotice(null);
       return;
     }
 
-    const rows = forms.map((form) => {
+    const rows = filteredForms.map((form) => {
       const inbox = inboxByForm[form.id];
-      const source = form.pageId ? 'page' : form.postId ? 'blog' : 'embedded';
+      const source = getFormSource(form);
       const definitionUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/definition`;
       const submitUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/submissions`;
       const contactsUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts?limit=100`;
@@ -766,7 +835,7 @@ function FormsRoute() {
     anchor.remove();
     URL.revokeObjectURL(url);
     setError(null);
-    setNotice('Forms catalog CSV exported.');
+    setNotice(`Forms catalog CSV exported with ${filteredForms.length} visible form${filteredForms.length === 1 ? '' : 's'}.`);
   };
 
   const copyFormApiText = async (value: string, label: string) => {
@@ -795,6 +864,13 @@ function FormsRoute() {
     setError(null);
     setNotice('Forms handoff manifest downloaded.');
   };
+  const clearFormFilters = () => {
+    setFormSearchQuery('');
+    setFormSourceFilter('all');
+    setFormStateFilter('all');
+    setFormDestinationFilter('all');
+    setFormReadinessFilter('all');
+  };
 
   return (
     <PageShell
@@ -806,7 +882,12 @@ function FormsRoute() {
             id="forms-active-site"
             aria-label="Active Site"
             value={activeSiteId}
-            onChange={(event) => setSelectedSiteId(event.target.value)}
+            onChange={(event) => {
+              setSelectedSiteId(event.target.value);
+              clearFormFilters();
+              setSubmissionQuery('');
+              setStatusFilter('all');
+            }}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
           >
             {sites.length === 0 ? (
@@ -865,7 +946,7 @@ function FormsRoute() {
             <Button
               variant="outline"
               onClick={handleExportFormsCatalog}
-              disabled={forms.length === 0}
+              disabled={filteredForms.length === 0}
               iconStart={<Download className="size-4" />}
             >
               Export forms CSV
@@ -963,7 +1044,12 @@ function FormsRoute() {
           id="forms-active-site-inline"
           aria-label="Active forms site"
           value={activeSiteId}
-          onChange={(event) => setSelectedSiteId(event.target.value)}
+          onChange={(event) => {
+            setSelectedSiteId(event.target.value);
+            clearFormFilters();
+            setSubmissionQuery('');
+            setStatusFilter('all');
+          }}
           className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
         >
           {sites.length === 0 ? (
@@ -1100,40 +1186,129 @@ function FormsRoute() {
           <Panel id="forms-library" className="self-start overflow-hidden scroll-mt-24">
             <PanelHeader
               title="Form library"
-              description={`${forms.length} form${forms.length === 1 ? '' : 's'} on ${activeSite?.name || activeSiteId}`}
+              description={`${filteredForms.length}/${forms.length} visible form${forms.length === 1 ? '' : 's'} on ${activeSite?.name || activeSiteId}`}
               icon={<ClipboardList className="size-4" />}
             />
-            <PanelContent className="grid gap-2">
-              {forms.map((form) => {
-                const inbox = inboxByForm[form.id];
-                const isSelected = form.id === selectedForm?.id;
-                const pending = inbox?.submissions.filter((submission) => submission.status === 'pending').length || 0;
-
-                return (
-                  <button
-                    key={form.id}
-                    type="button"
-                    onClick={() => setSelectedFormId(form.id)}
-                    className={cn(
-                      'rounded-lg border px-3 py-3 text-left transition-colors',
-                      isSelected ? 'border-primary bg-primary/5' : 'border-border bg-background hover:bg-muted',
-                    )}
+            <PanelContent>
+              <div className="grid gap-2">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="search"
+                    aria-label="Search forms"
+                    value={formSearchQuery}
+                    onChange={(event) => setFormSearchQuery(event.target.value)}
+                    placeholder="Search forms, fields, IDs..."
+                    className="min-h-10 w-full rounded-lg border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                  <select
+                    aria-label="Form source filter"
+                    value={formSourceFilter}
+                    onChange={(event) => setFormSourceFilter(event.target.value as FormSourceFilter)}
+                    className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="truncate font-medium">{form.title || form.name}</div>
-                        <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{form.id}</div>
+                    <option value="all">All sources</option>
+                    <option value="page">Page forms</option>
+                    <option value="blog">Blog forms</option>
+                    <option value="embedded">Embedded forms</option>
+                  </select>
+                  <select
+                    aria-label="Form state filter"
+                    value={formStateFilter}
+                    onChange={(event) => setFormStateFilter(event.target.value as FormStateFilter)}
+                    className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="all">All states</option>
+                    <option value="active">Active only</option>
+                    <option value="inactive">Inactive only</option>
+                  </select>
+                  <select
+                    aria-label="Form destination filter"
+                    value={formDestinationFilter}
+                    onChange={(event) => setFormDestinationFilter(event.target.value as FormDestinationFilter)}
+                    className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="all">All destinations</option>
+                    <option value="contacts">Routes to contacts</option>
+                    <option value="collections">Writes collections</option>
+                    <option value="inbox-only">Inbox only</option>
+                  </select>
+                  <select
+                    aria-label="Form readiness filter"
+                    value={formReadinessFilter}
+                    onChange={(event) => setFormReadinessFilter(event.target.value as FormReadinessFilter)}
+                    className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="all">All readiness</option>
+                    <option value="ready">Launch ready</option>
+                    <option value="needs-work">Needs work</option>
+                  </select>
+                </div>
+                {hasActiveFormFilters && (
+                  <Button variant="outline" onClick={clearFormFilters} className="w-full">
+                    Clear form filters
+                  </Button>
+                )}
+              </div>
+
+              <div className="mt-4 grid gap-2">
+                {filteredForms.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
+                    <div className="text-sm font-medium text-foreground">No forms match this library view</div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      Change the search, source, state, destination, or readiness filters to broaden the form library.
+                    </div>
+                    {hasActiveFormFilters && (
+                      <Button variant="outline" onClick={clearFormFilters} className="mt-4">
+                        Clear form filters
+                      </Button>
+                    )}
+                  </div>
+                ) : filteredForms.map((form) => {
+                  const inbox = inboxByForm[form.id];
+                  const isSelected = form.id === selectedForm?.id;
+                  const pending = inbox?.submissions.filter((submission) => submission.status === 'pending').length || 0;
+                  const source = getFormSource(form);
+                  const readinessScore = getFormLaunchReadinessScore(form);
+
+                  return (
+                    <button
+                      key={form.id}
+                      type="button"
+                      onClick={() => setSelectedFormId(form.id)}
+                      className={cn(
+                        'rounded-lg border px-3 py-3 text-left transition-colors',
+                        isSelected ? 'border-primary bg-primary/5' : 'border-border bg-background hover:bg-muted',
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{form.title || form.name}</div>
+                          <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{form.id}</div>
+                        </div>
+                        <StatusBadge status={form.isActive ? 'active' : 'inactive'} />
                       </div>
-                      <StatusBadge status={form.isActive ? 'active' : 'inactive'} />
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <span className="rounded bg-muted px-2 py-1">{form.fields.length} fields</span>
-                      <span className="rounded bg-muted px-2 py-1">{inbox?.total || 0} submissions</span>
-                      {pending > 0 && <span className="rounded bg-warning/10 px-2 py-1 text-warning">{pending} pending</span>}
-                    </div>
-                  </button>
-                );
-              })}
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span className="rounded bg-muted px-2 py-1 capitalize">{source}</span>
+                        <span className="rounded bg-muted px-2 py-1">{form.fields.length} fields</span>
+                        <span className="rounded bg-muted px-2 py-1">{inbox?.total || 0} submissions</span>
+                        <span className={cn(
+                          'rounded px-2 py-1',
+                          readinessScore >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                        )}
+                        >
+                          {readinessScore}% ready
+                        </span>
+                        {form.contactShare?.enabled && <span className="rounded bg-primary/10 px-2 py-1 text-primary">contacts</span>}
+                        {form.collectionTarget?.enabled && <span className="rounded bg-success/10 px-2 py-1 text-success">collection</span>}
+                        {pending > 0 && <span className="rounded bg-warning/10 px-2 py-1 text-warning">{pending} pending</span>}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </PanelContent>
           </Panel>
 
@@ -1518,6 +1693,40 @@ function SubmissionCard({
     </article>
   );
 }
+
+const getFormSource = (form: FormDefinition): Exclude<FormSourceFilter, 'all'> => {
+  if (form.pageId) return 'page';
+  if (form.postId) return 'blog';
+  return 'embedded';
+};
+
+const formHasRequiredIdentity = (form: FormDefinition): boolean => (
+  form.fields.some((field) => (
+    ['email', 'tel'].includes(field.type) || ['email', 'phone'].includes(field.key)
+  ))
+);
+
+const formHasSpamGuard = (form: FormDefinition): boolean => (
+  Boolean(form.enableHoneypot || form.enableCaptcha)
+);
+
+const formHasDestination = (form: FormDefinition): boolean => (
+  Boolean(form.contactShare?.enabled || form.collectionTarget?.enabled)
+);
+
+const getFormLaunchReadinessScore = (form: FormDefinition): number => {
+  const checks = [
+    form.isActive,
+    form.fields.length > 0,
+    formHasRequiredIdentity(form),
+    formHasSpamGuard(form),
+    formHasDestination(form),
+    true,
+  ];
+  const readyCount = checks.filter(Boolean).length;
+
+  return Math.round((readyCount / checks.length) * 100);
+};
 
 const formatSubmissionValue = (value: unknown): string => {
   if (value === null || value === undefined || value === '') return 'Empty';
