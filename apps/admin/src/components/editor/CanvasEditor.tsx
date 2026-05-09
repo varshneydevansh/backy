@@ -1648,7 +1648,7 @@ export function CanvasEditor({
    */
   const handleSaveWrapper = useCallback(async (settingsOverride?: PageSettings, silent = false) => {
     if (isSaving) {
-      return;
+      return false;
     }
 
     const saveSequence = changeSequenceRef.current;
@@ -1659,7 +1659,7 @@ export function CanvasEditor({
       if (!silent) {
         setEditorNotice(validationMessage);
       }
-      return;
+      return false;
     }
 
     setIsSaving(true);
@@ -1668,6 +1668,7 @@ export function CanvasEditor({
       if (changeSequenceRef.current === saveSequence) {
         setHasUnsavedChanges(false);
       }
+      return true;
     } catch {
       setHasUnsavedChanges(true);
       if (!silent) {
@@ -1675,10 +1676,21 @@ export function CanvasEditor({
       } else {
         console.error('Auto-save failed');
       }
+      return false;
     } finally {
       setIsSaving(false);
     }
   }, [elements, isSaving, onSave, pageSettings, size, validateSettings]);
+
+  const handleSettingsSave = useCallback(async (newSettings: PageSettings) => {
+    setPageSettings(newSettings);
+    markChanges();
+
+    const saved = await handleSaveWrapper(newSettings, false);
+    if (!saved) {
+      throw new Error('Unable to save page settings. Changes were not persisted.');
+    }
+  }, [handleSaveWrapper, markChanges]);
 
   const handleTogglePublish = useCallback(async () => {
     const nextSettings: PageSettings = {
@@ -2898,10 +2910,7 @@ export function CanvasEditor({
           settings={pageSettings}
           validateSettings={validateSettings}
           mediaContext={mediaContext}
-          onSave={(newSettings) => {
-            setPageSettings(newSettings);
-            markChanges();
-          }}
+          onSave={handleSettingsSave}
         />
       </div>
     </ActiveEditorProvider>

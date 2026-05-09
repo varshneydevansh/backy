@@ -23,7 +23,7 @@ interface PageSettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
     settings: PageSettings;
-    onSave: (settings: PageSettings) => void;
+    onSave: (settings: PageSettings) => Promise<void> | void;
     validateSettings?: (settings: PageSettings) => string | null;
     mediaContext?: MediaContext;
 }
@@ -76,6 +76,7 @@ export function PageSettingsModal({
     const [validationError, setValidationError] = useState<string | null>(null);
     const [jsonLdText, setJsonLdText] = useState(() => formatJsonLd(initialSettings.meta.jsonLd));
     const [keywordDraft, setKeywordDraft] = useState('');
+    const [isSavingSettings, setIsSavingSettings] = useState(false);
     const [isSocialImagePickerOpen, setIsSocialImagePickerOpen] = useState(false);
 
     useEffect(() => {
@@ -83,6 +84,7 @@ export function PageSettingsModal({
         setJsonLdText(formatJsonLd(initialSettings.meta.jsonLd));
         setKeywordDraft('');
         setValidationError(null);
+        setIsSavingSettings(false);
     }, [initialSettings, isOpen]);
 
     const keywords = useMemo(
@@ -96,7 +98,11 @@ export function PageSettingsModal({
 
     if (!isOpen) return null;
 
-    const handleSave = () => {
+    const handleSave = async () => {
+        if (isSavingSettings) {
+            return;
+        }
+
         if (settings.status === 'scheduled' && !settings.scheduledAt) {
             setValidationError('Choose a publish date before scheduling this page.');
             return;
@@ -115,15 +121,24 @@ export function PageSettingsModal({
             return;
         }
 
-        onSave({
-            ...settings,
-            meta: {
-                ...settings.meta,
-                keywords,
-                jsonLd: parsedJsonLd.value,
-            },
-        });
-        onClose();
+        setIsSavingSettings(true);
+        setValidationError(null);
+
+        try {
+            await Promise.resolve(onSave({
+                ...settings,
+                meta: {
+                    ...settings.meta,
+                    keywords,
+                    jsonLd: parsedJsonLd.value,
+                },
+            }));
+            onClose();
+        } catch (error) {
+            setValidationError(error instanceof Error ? error.message : 'Unable to save page settings.');
+        } finally {
+            setIsSavingSettings(false);
+        }
     };
 
     const updateKeywords = (nextKeywords: string[]) => {
@@ -479,10 +494,10 @@ export function PageSettingsModal({
                     </button>
                     <button
                         onClick={handleSave}
-                        disabled={Boolean(settingsValidation)}
+                        disabled={Boolean(settingsValidation) || isSavingSettings}
                         className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md disabled:opacity-50"
                     >
-                        Save Changes
+                        {isSavingSettings ? 'Saving...' : 'Save Changes'}
                     </button>
                 </div>
             </div>
