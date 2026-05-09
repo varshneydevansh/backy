@@ -1,5 +1,5 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   AlertTriangle,
   Archive,
@@ -41,7 +41,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
 import { getPublicMediaFileUrl } from '@/lib/mediaApi';
-import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/products')({
@@ -256,6 +256,8 @@ const EMPTY_PRODUCT_FORM: ProductFormState = {
 };
 
 function ProductsRoute() {
+  const navigate = useNavigate();
+  const routerState = useRouterState();
   const { sites } = useStore();
   const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
   const [productCollection, setProductCollection] = useState<Collection | null>(null);
@@ -289,6 +291,7 @@ function ProductsRoute() {
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const commerceCatalogUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/catalog?limit=24&sortBy=title`;
   const commerceProductDetailUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/catalog?slug={productSlug}`;
@@ -695,6 +698,25 @@ function ProductsRoute() {
   }, [selectedSiteId, sites]);
 
   useEffect(() => {
+    const requestedSiteId = getSiteSearchParam();
+    if (!requestedSiteId) return;
+
+    const nextSiteId = getSiteSelectionFromSearch(sites);
+    if (nextSiteId === selectedSiteId) return;
+
+    setSelectedSiteId(nextSiteId);
+    setSelectedProductId(null);
+    setFormState(EMPTY_PRODUCT_FORM);
+    setGalleryImageDraft('');
+    setVariantDraft({ title: '', sku: '', option: '', price: '', inventory: '' });
+    setSearchQuery('');
+    setStatusFilter('all');
+    setProductTypeFilter('all');
+    setStockFilter('all');
+    setCategoryFilter('all');
+  }, [routerState.location.search, selectedSiteId, sites]);
+
+  useEffect(() => {
     void loadProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSiteId]);
@@ -994,6 +1016,15 @@ function ProductsRoute() {
     setStockFilter('all');
     setCategoryFilter('all');
   };
+  const selectProductsSite = (nextSiteId: string) => {
+    setSelectedSiteId(nextSiteId);
+    setSelectedProductId(null);
+    setFormState(EMPTY_PRODUCT_FORM);
+    setGalleryImageDraft('');
+    setVariantDraft({ title: '', sku: '', option: '', price: '', inventory: '' });
+    clearCatalogFilters();
+    navigate({ to: '/products', search: { siteId: nextSiteId }, replace: true });
+  };
 
   return (
     <PageShell
@@ -1006,10 +1037,7 @@ function ProductsRoute() {
             aria-label="Active Site"
             value={activeSiteId}
             onChange={(event) => {
-              setSelectedSiteId(event.target.value);
-              setSelectedProductId(null);
-              setFormState(EMPTY_PRODUCT_FORM);
-              clearCatalogFilters();
+              selectProductsSite(event.target.value);
             }}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
           >
@@ -1260,7 +1288,7 @@ function ProductsRoute() {
                     </p>
                     <Link
                       to="/orders"
-                      search={{ siteId: activeSiteId }}
+                      search={activeSiteSearch}
                       className="mt-3 inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-background px-3 text-xs font-medium hover:bg-accent"
                     >
                       Open orders
@@ -1310,10 +1338,7 @@ function ProductsRoute() {
           aria-label="Active product site"
           value={activeSiteId}
           onChange={(event) => {
-            setSelectedSiteId(event.target.value);
-            setSelectedProductId(null);
-            setFormState(EMPTY_PRODUCT_FORM);
-            clearCatalogFilters();
+            selectProductsSite(event.target.value);
           }}
           className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
         >
