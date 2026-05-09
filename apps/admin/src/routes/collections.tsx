@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -1114,6 +1114,36 @@ function CollectionsPage() {
     resetCollectionsWorkspace();
     navigate({ to: '/collections', search: { siteId: nextSiteId }, replace: true });
   };
+  const openCollectionWorkflowSurface = (surface: typeof COLLECTION_WORKFLOW_SURFACES[number]) => {
+    if (isCollectionsBusy) return;
+
+    if (surface.route === '/pages') {
+      navigate({ to: '/pages', search: activeSiteSearch });
+      return;
+    }
+
+    if (surface.route === '/media') {
+      navigate({ to: '/media', search: activeSiteSearch });
+      return;
+    }
+
+    if (surface.route === '/products') {
+      navigate({ to: '/products', search: activeSiteSearch });
+      return;
+    }
+
+    if (surface.route === '/forms') {
+      navigate({ to: '/forms', search: activeSiteSearch });
+      return;
+    }
+
+    if (surface.route === '/sites') {
+      navigate({ to: '/sites' });
+      return;
+    }
+
+    navigate({ to: '/settings', search: { tab: 'infrastructure' } });
+  };
 
   useEffect(() => {
     const nextSiteId = routeSearch.siteId
@@ -1800,19 +1830,16 @@ function CollectionsPage() {
           </div>
           <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
             {COLLECTION_WORKFLOW_SURFACES.map((surface) => (
-              <Link
+              <button
                 key={surface.key}
-                to={surface.route}
-                search={['/pages', '/media', '/products', '/forms'].includes(surface.route) ? activeSiteSearch : undefined}
-                aria-disabled={isCollectionsBusy}
-                className={cn(
-                  'rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5',
-                  isCollectionsBusy && 'pointer-events-none opacity-60',
-                )}
+                type="button"
+                onClick={() => openCollectionWorkflowSurface(surface)}
+                disabled={isCollectionsBusy}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <div className="text-sm font-semibold text-foreground">{surface.title}</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
-              </Link>
+              </button>
             ))}
           </div>
         </div>
