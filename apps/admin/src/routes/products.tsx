@@ -4,7 +4,11 @@ import {
   Archive,
   Boxes,
   CheckCircle2,
+  Code2,
+  Copy,
   Edit3,
+  ExternalLink,
+  Image as ImageIcon,
   Package,
   Plus,
   RefreshCw,
@@ -30,6 +34,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
 import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/products')({
@@ -91,6 +96,7 @@ function ProductsRoute() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingDeleteProduct, setPendingDeleteProduct] = useState<CollectionRecord | null>(null);
@@ -100,6 +106,8 @@ function ProductsRoute() {
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
+  const storefrontApiUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${PRODUCT_COLLECTION_SLUG}/records?limit=24&sortBy=title`;
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId) || null,
     [products, selectedProductId],
@@ -286,6 +294,15 @@ function ProductsRoute() {
     }
   };
 
+  const copyStorefrontApiUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(storefrontApiUrl);
+      setNotice('Storefront products API URL copied.');
+    } catch {
+      setNotice(storefrontApiUrl);
+    }
+  };
+
   return (
     <PageShell
       title="Products"
@@ -293,6 +310,8 @@ function ProductsRoute() {
       action={
         <div className="flex flex-wrap items-center gap-2">
           <select
+            id="products-active-site"
+            aria-label="Active Site"
             value={activeSiteId}
             onChange={(event) => setSelectedSiteId(event.target.value)}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
@@ -320,6 +339,44 @@ function ProductsRoute() {
         <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
           {notice}
         </div>
+      )}
+
+      {productCollection && (
+        <Panel className="mb-6">
+          <PanelHeader
+            title="Storefront API"
+            description="Use this endpoint from any frontend to list published products."
+            icon={<Code2 className="size-4" />}
+            action={
+              <div className="flex flex-wrap items-center gap-2">
+                <Button onClick={() => void copyStorefrontApiUrl()} iconStart={<Copy className="size-4" />}>
+                  Copy URL
+                </Button>
+                <a
+                  href={storefrontApiUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                >
+                  <ExternalLink className="size-4" />
+                  Open API
+                </a>
+              </div>
+            }
+          />
+          <PanelContent>
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+              <code className="min-w-0 overflow-x-auto rounded-lg border border-border bg-muted px-3 py-2 font-mono text-xs text-muted-foreground">
+                {storefrontApiUrl}
+              </code>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <StatusBadge status={productCollection.status} />
+                <span>{productCollection.permissions.publicRead ? 'Public read enabled' : 'Public read disabled'}</span>
+                <span>{products.filter((product) => product.status === 'published').length} published records</span>
+              </div>
+            </div>
+          </PanelContent>
+        </Panel>
       )}
 
       <div className="mb-6 grid gap-3 md:grid-cols-4">
@@ -473,12 +530,25 @@ function ProductsRoute() {
                   </Field>
                 </div>
                 <Field label="Image URL">
-                  <input
-                    value={formState.imageUrl}
-                    onChange={(event) => setFormState((current) => ({ ...current, imageUrl: event.target.value }))}
-                    className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
-                    placeholder="https://..."
-                  />
+                  <div className="space-y-3">
+                    {formState.imageUrl ? (
+                      <div className="overflow-hidden rounded-lg border border-border bg-muted">
+                        <img src={formState.imageUrl} alt="Product preview" className="h-36 w-full object-cover" />
+                      </div>
+                    ) : null}
+                    <div className="flex gap-2">
+                      <input
+                        aria-label="Image URL"
+                        value={formState.imageUrl}
+                        onChange={(event) => setFormState((current) => ({ ...current, imageUrl: event.target.value }))}
+                        className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2.5 text-sm"
+                        placeholder="https://..."
+                      />
+                      <Button onClick={() => setIsMediaLibraryOpen(true)} iconStart={<ImageIcon className="size-4" />}>
+                        Media
+                      </Button>
+                    </div>
+                  </div>
                 </Field>
                 <Field label="Description">
                   <textarea
@@ -492,6 +562,7 @@ function ProductsRoute() {
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Status">
                     <select
+                      aria-label="Status"
                       value={formState.status}
                       onChange={(event) => setFormState((current) => ({ ...current, status: event.target.value as ContentStatus }))}
                       className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
@@ -571,6 +642,23 @@ function ProductsRoute() {
           </div>
         </div>
       )}
+
+      <MediaLibraryModal
+        isOpen={isMediaLibraryOpen}
+        onClose={() => setIsMediaLibraryOpen(false)}
+        onSelect={(asset) => {
+          setFormState((current) => ({ ...current, imageUrl: asset.url }));
+          setNotice(`Attached ${asset.name} to the product image field.`);
+        }}
+        allowedTypes="image"
+        initialUploadFilter="image"
+        mediaContext={{
+          siteId: activeSiteId,
+          scope: 'global',
+          targetLabel: `${activeSite?.name || activeSiteId} product catalog`,
+        }}
+        allowScopeSwitcher={false}
+      />
     </PageShell>
   );
 }
@@ -624,7 +712,7 @@ function ProductCard({
       <div className="flex items-start gap-3">
         <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted">
           {imageUrl ? (
-            <img src={imageUrl} alt="" className="size-full object-cover" loading="lazy" />
+            <img src={imageUrl} alt={title} className="size-full object-cover" loading="lazy" />
           ) : (
             <Package className="size-5 text-muted-foreground" />
           )}
@@ -667,6 +755,29 @@ function ProductCard({
     </article>
   );
 }
+
+const getEnvValue = (key: string): string => {
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+  return env[key]?.trim() ?? '';
+};
+
+const getPublicBaseUrl = (): string => {
+  const envBase = (
+    getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
+    getEnvValue('VITE_PUBLIC_API_URL') ||
+    getEnvValue('VITE_API_BASE_URL') ||
+    ''
+  ).trim();
+
+  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+    return 'http://localhost:3001';
+  }
+
+  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+    .replace(/\/api\/admin$/, '')
+    .replace(/\/api$/, '')
+    .replace(/\/$/, '');
+};
 
 const toNumber = (value: unknown): number => {
   const numberValue = Number(value);

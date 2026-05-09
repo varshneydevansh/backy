@@ -281,7 +281,7 @@ export function MediaLibraryModal({
               </p>
             ) : null}
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-muted rounded-full" type="button">
+          <button onClick={onClose} className="p-1 hover:bg-muted rounded-full" type="button" aria-label="Close media library">
             <X className="w-5 h-5" />
           </button>
         </div>
