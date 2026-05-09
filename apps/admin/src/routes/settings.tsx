@@ -115,6 +115,26 @@ const PUBLIC_API_ENDPOINTS: ApiEndpoint[] = [
     description: 'Fetch a single published blog post by slug.',
   },
   {
+    method: 'GET',
+    path: '/sites/:siteId/media?type=image',
+    description: 'List public media assets for custom frontends and design systems.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/media/:mediaId/file',
+    description: 'Deliver a media file; private files require a signed URL.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/collections',
+    description: 'List public dynamic collections that can drive repeatable frontend sections.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/collections/:collectionId/records?status=published',
+    description: 'Fetch public collection records for listings, catalogs, and structured content.',
+  },
+  {
     method: 'POST',
     path: '/sites/:siteId/forms/:formId/submissions',
     description: 'Submit form payloads with optional anti-spam metadata.',
@@ -144,6 +164,11 @@ const PUBLIC_API_ENDPOINTS: ApiEndpoint[] = [
     path: '/sites/:siteId/blog/:postId/comments',
     description: 'Submit a blog post comment.',
   },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/openapi',
+    description: 'Download the generated OpenAPI contract for this site.',
+  },
 ];
 
 const ADMIN_API_ENDPOINTS: ApiEndpoint[] = [
@@ -169,8 +194,38 @@ const ADMIN_API_ENDPOINTS: ApiEndpoint[] = [
   },
   {
     method: 'GET',
+    path: '/sites/:siteId/blog/posts',
+    description: 'List and manage blog posts for the active site.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/media',
+    description: 'List media assets, folders, metadata, bindings, and delivery state.',
+  },
+  {
+    method: 'POST',
+    path: '/sites/:siteId/media',
+    description: 'Upload a media asset for pages, blog posts, products, or custom frontends.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/collections',
+    description: 'Manage collection schemas used for catalogs, listings, and dynamic pages.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/collections/:collectionId/records',
+    description: 'List records for products, directories, portfolios, and any custom object type.',
+  },
+  {
+    method: 'GET',
     path: '/sites/:siteId/forms',
     description: 'List forms and review submissions.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/comments?status=pending',
+    description: 'Moderate page and blog comments from a custom admin frontend.',
   },
 ];
 
@@ -181,12 +236,25 @@ function getEnvValue(key: string): string {
   return env[key]?.trim() ?? '';
 }
 
+function isLocalAdminDevHost(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
+    && window.location.port !== '3001';
+}
+
+function getLocalBackendOrigin(): string {
+  return isLocalAdminDevHost() ? 'http://localhost:3001' : 'http://localhost:3000';
+}
+
 function getApiBase(kind: 'public' | 'admin'): string {
   const publicFallback =
     getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
     getEnvValue('VITE_PUBLIC_API_URL') ||
     getEnvValue('VITE_API_BASE_URL') ||
-    (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+    getLocalBackendOrigin();
   const adminFallback =
     getEnvValue('VITE_BACKY_ADMIN_API_BASE_URL') ||
     getEnvValue('VITE_ADMIN_API_URL') ||
