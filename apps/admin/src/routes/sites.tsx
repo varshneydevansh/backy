@@ -112,6 +112,95 @@ const SITE_LIST_CONTROL_AREAS = [
   },
 ] as const;
 
+const SITE_FEATURE_SYSTEMS = [
+  {
+    key: 'pages',
+    title: 'Pages and navigation',
+    adminPath: '/pages',
+    publicSurface: 'Routes, layouts, reusable headers, footers, and navigation menus.',
+    endpoint: '/sites/{siteId}/manifest',
+    readiness: 'Needs at least one page and a homepage route.',
+  },
+  {
+    key: 'blog',
+    title: 'Blog and editorial',
+    adminPath: '/blog',
+    publicSurface: 'Posts, categories, tags, SEO previews, and public article templates.',
+    endpoint: '/sites/{siteId}/blog/posts',
+    readiness: 'Needs publishable posts, taxonomy, and article page design.',
+  },
+  {
+    key: 'commerce',
+    title: 'Products and orders',
+    adminPath: '/products',
+    publicSurface: 'Catalog listings, product detail data, checkout, orders, refunds, and fulfillment.',
+    endpoint: '/sites/{siteId}/commerce/catalog',
+    readiness: 'Needs sellable products, pricing, checkout provider, and order tracking.',
+  },
+  {
+    key: 'forms',
+    title: 'Forms and leads',
+    adminPath: '/forms',
+    publicSurface: 'Registration, contact, newsletter, quote, event, and custom form submissions.',
+    endpoint: '/sites/{siteId}/forms',
+    readiness: 'Needs form definitions, validation, storage, and spam controls.',
+  },
+  {
+    key: 'media',
+    title: 'Media and files',
+    adminPath: '/media',
+    publicSurface: 'Images, documents, downloads, fonts, video metadata, and private file rules.',
+    endpoint: '/sites/{siteId}/media',
+    readiness: 'Needs asset visibility, transforms, alt text, and storage provider setup.',
+  },
+  {
+    key: 'collections',
+    title: 'Collections and custom data',
+    adminPath: '/collections',
+    publicSurface: 'Reusable structured records for directories, portfolios, events, FAQs, and teams.',
+    endpoint: '/sites/{siteId}/collections',
+    readiness: 'Needs schemas, records, list/detail routes, and filtering contracts.',
+  },
+  {
+    key: 'users',
+    title: 'Users and auth',
+    adminPath: '/users',
+    publicSurface: 'Members, staff roles, invites, protected routes, and registration workflows.',
+    endpoint: '/sites/{siteId}/auth',
+    readiness: 'Needs auth provider mode, roles, invitation policy, and protected content rules.',
+  },
+  {
+    key: 'delivery',
+    title: 'Delivery and integrations',
+    adminPath: '/settings',
+    publicSurface: 'Supabase, Vercel, API keys, domains, redirects, SEO defaults, and preview delivery.',
+    endpoint: '/sites/{siteId}/openapi',
+    readiness: 'Needs environment variables, hosting mode, domain routing, and API contracts.',
+  },
+] as const;
+
+const SITE_EXPORT_COLUMNS = [
+  'site_id',
+  'public_site_id',
+  'name',
+  'slug',
+  'description',
+  'custom_domain',
+  'status',
+  'page_count',
+  'last_updated',
+  'preview_url',
+  'frontend_manifest_url',
+  'openapi_url',
+  'render_home_url',
+  'admin_site_detail_url',
+  'admin_edit_url',
+  'delivery_mode',
+  'feature_systems',
+  'public_surfaces',
+  'required_next_controls',
+] as const;
+
 const getDisplayDomain = (site: Site) => site.customDomain || `${site.slug}.backy.app`;
 
 const getPublicPreviewHref = (site: Site) => {
@@ -156,6 +245,73 @@ const getApiBaseUrl = (kind: 'public' | 'admin'): string => {
 const csvEscape = (value: unknown): string => {
   const raw = String(value ?? '').replace(/\r?\n/g, '\\n');
   return `"${raw.replace(/"/g, '""')}"`;
+};
+
+const getSiteApiId = (site: Site) => site.publicSiteId || site.id;
+
+const getSiteEndpointMap = (site: Site, publicApiBase: string, adminApiBase: string) => {
+  const siteApiId = encodeURIComponent(getSiteApiId(site));
+
+  return {
+    public: {
+      manifest: `${publicApiBase}/sites/${siteApiId}/manifest`,
+      openApi: `${publicApiBase}/sites/${siteApiId}/openapi`,
+      renderHome: `${publicApiBase}/sites/${siteApiId}/render?path=/`,
+      renderPath: `${publicApiBase}/sites/${siteApiId}/render?path={path}`,
+      navigation: `${publicApiBase}/sites/${siteApiId}/navigation`,
+      redirects: `${publicApiBase}/sites/${siteApiId}/redirects`,
+      seo: `${publicApiBase}/sites/${siteApiId}/seo`,
+    },
+    admin: {
+      sites: `${adminApiBase}/sites`,
+      detail: `${adminApiBase}/sites/${siteApiId}`,
+      navigation: `${adminApiBase}/sites/${siteApiId}/navigation`,
+      redirects: `${adminApiBase}/sites/${siteApiId}/redirects`,
+      seo: `${adminApiBase}/sites/${siteApiId}/seo`,
+    },
+  };
+};
+
+const buildSiteFrontendContract = (site: Site, publicApiBase: string, adminApiBase: string) => {
+  const endpoints = getSiteEndpointMap(site, publicApiBase, adminApiBase);
+
+  return {
+    contract: 'backy.site.frontend.v1',
+    site: {
+      id: site.id,
+      publicSiteId: site.publicSiteId || null,
+      name: site.name,
+      slug: site.slug,
+      description: site.description,
+      customDomain: site.customDomain,
+      status: site.status,
+      pageCount: site.pageCount || 0,
+      lastUpdated: site.lastUpdated,
+      previewUrl: getPublicPreviewHref(site),
+    },
+    endpoints,
+    delivery: {
+      hosting: 'Vercel-ready custom frontend or Backy managed preview',
+      database: 'Backy-owned content APIs with Supabase connectivity planned in Settings',
+      storage: 'Backy media library, public/private visibility, responsive transforms, and file exports',
+      ownership: 'Backy remains the backend control plane; the frontend consumes published contracts.',
+    },
+    featureSystems: SITE_FEATURE_SYSTEMS.map((system) => ({
+      key: system.key,
+      title: system.title,
+      adminPath: system.adminPath,
+      publicSurface: system.publicSurface,
+      endpoint: `${publicApiBase}${system.endpoint.replace('{siteId}', encodeURIComponent(getSiteApiId(site)))}`,
+      readiness: system.readiness,
+    })),
+    requiredNextControls: [
+      'Per-site theme tokens, animations, and component variants',
+      'Domain verification and Vercel deploy orchestration',
+      'Supabase auth/database adapter settings',
+      'Commerce checkout provider and tax/shipping rules',
+      'Public registration and member account flows',
+    ],
+  };
 };
 
 function SitesLayout() {
@@ -232,6 +388,9 @@ function SitesListView() {
   const publicManifestUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/manifest`;
   const publicOpenApiUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/openapi`;
   const publicRenderUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/render?path=/`;
+  const selectedFrontendContract = useMemo(() => (
+    selectedApiSite ? buildSiteFrontendContract(selectedApiSite, publicApiBase, adminApiBase) : null
+  ), [adminApiBase, publicApiBase, selectedApiSite]);
   const siteLaunchReadiness = useMemo(() => {
     const published = sites.filter((site) => site.status === 'published').length;
     const draft = sites.filter((site) => site.status === 'draft').length;
@@ -325,6 +484,15 @@ function SitesListView() {
     } catch {
       setNotice(value);
     }
+  };
+
+  const copySelectedFrontendContract = async () => {
+    if (!selectedFrontendContract) {
+      setNotice('Create a site before copying a frontend contract.');
+      return;
+    }
+
+    await copySiteApiText(JSON.stringify(selectedFrontendContract, null, 2), 'Frontend contract');
   };
 
   const columns: Column<Site>[] = [
@@ -442,29 +610,32 @@ function SitesListView() {
   const handleExportSites = () => {
     if (data.length === 0) return;
 
-    const header = [
-      'site_id',
-      'public_site_id',
-      'name',
-      'slug',
-      'custom_domain',
-      'status',
-      'page_count',
-      'last_updated',
-      'preview_url',
-    ];
-    const rows = data.map((site) => [
-      site.id,
-      site.publicSiteId || '',
-      site.name,
-      site.slug,
-      site.customDomain || '',
-      site.status,
-      site.pageCount || 0,
-      site.lastUpdated || '',
-      getPublicPreviewHref(site),
-    ]);
-    const csv = [header, ...rows]
+    const rows = data.map((site) => {
+      const contract = buildSiteFrontendContract(site, publicApiBase, adminApiBase);
+
+      return [
+        site.id,
+        site.publicSiteId || '',
+        site.name,
+        site.slug,
+        site.description || '',
+        site.customDomain || '',
+        site.status,
+        site.pageCount || 0,
+        site.lastUpdated || '',
+        getPublicPreviewHref(site),
+        contract.endpoints.public.manifest,
+        contract.endpoints.public.openApi,
+        contract.endpoints.public.renderHome,
+        contract.endpoints.admin.detail,
+        `${typeof window !== 'undefined' ? window.location.origin : ''}/sites/${site.id}`,
+        contract.delivery.hosting,
+        contract.featureSystems.map((system) => `${system.key}:${system.adminPath}`).join('; '),
+        contract.featureSystems.map((system) => system.publicSurface).join(' | '),
+        contract.requiredNextControls.join(' | '),
+      ];
+    });
+    const csv = [SITE_EXPORT_COLUMNS, ...rows]
       .map((row) => row.map(csvEscape).join(','))
       .join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -621,6 +792,15 @@ function SitesListView() {
               >
                 Copy manifest
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!selectedFrontendContract}
+                onClick={() => void copySelectedFrontendContract()}
+                iconStart={<Code2 className="size-4" />}
+              >
+                Copy contract
+              </Button>
             </div>
           }
         />
@@ -716,6 +896,68 @@ function SitesListView() {
             <SiteApiSnippet label="Render by path" value={publicRenderUrl} />
             <SiteApiSnippet label="Admin sites" value={adminSitesUrl} />
             <SiteApiSnippet label="Admin site detail" value={adminSiteDetailUrl} />
+          </div>
+
+          <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Website feature contract</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Every public frontend should be able to discover these systems from Backy, then render whatever design the builder or custom app needs.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!selectedFrontendContract}
+                  onClick={() => void copySelectedFrontendContract()}
+                  iconStart={<Copy className="size-3.5" />}
+                >
+                  Copy JSON
+                </Button>
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2">
+                {SITE_FEATURE_SYSTEMS.map((system) => (
+                  <Link
+                    key={system.key}
+                    to={system.adminPath}
+                    className="rounded-lg border border-border bg-card p-3 transition hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-foreground">{system.title}</div>
+                        <div className="mt-1 text-xs leading-5 text-muted-foreground">{system.publicSurface}</div>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                        {system.key}
+                      </span>
+                    </div>
+                    <div className="mt-3 rounded-md bg-muted/50 px-2.5 py-2 font-mono text-[11px] text-muted-foreground">
+                      {system.endpoint}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <h3 className="text-sm font-semibold">What Backy still needs here</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                These are not external products replacing Backy. They are the missing controls Backy must own before it can feel like Wix, Webflow, WordPress, or Squarespace.
+              </p>
+              <div className="mt-4 grid gap-2">
+                {(selectedFrontendContract?.requiredNextControls || [
+                  'Create a site to generate the next control checklist.',
+                ]).map((control) => (
+                  <div key={control} className="flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                    <span className="text-xs leading-5 text-muted-foreground">{control}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </PanelContent>
       </Panel>
