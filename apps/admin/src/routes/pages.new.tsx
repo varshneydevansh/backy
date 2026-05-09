@@ -9,6 +9,7 @@ import { createPage, getAdminApiBase } from '@/lib/adminContentApi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore, type Page } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
+import { siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn } from '@/lib/utils';
 import { getCanvasHeightForElements, withPageChrome } from '@/lib/editorTemplateChrome';
 import {
@@ -180,9 +181,10 @@ function NewPageRoute() {
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
-    const requestedSiteId = search.siteId && sites.some((site) => (site.publicSiteId || site.id) === search.siteId)
-        ? search.siteId
-        : defaultSiteId;
+    const requestedSite = search.siteId
+        ? sites.find((site) => siteMatchesIdentifier(site, search.siteId || ''))
+        : undefined;
+    const requestedSiteId = requestedSite?.publicSiteId || requestedSite?.id || defaultSiteId;
     const templateDefaults = search.template ? TEMPLATE_DEFAULTS[search.template] : TEMPLATE_DEFAULTS.blank;
 
     // Default to first site if available
@@ -196,7 +198,7 @@ function NewPageRoute() {
         isHomepage: false,
         description: templateDefaults.description,
     });
-    const selectedSite = sites.find((site) => (site.publicSiteId || site.id) === formData.siteId);
+    const selectedSite = sites.find((site) => siteMatchesIdentifier(site, formData.siteId));
     const selectedTemplate = useMemo(
         () => TEMPLATE_OPTIONS.find((template) => template.id === formData.template) || TEMPLATE_OPTIONS[0],
         [formData.template],
@@ -217,8 +219,8 @@ function NewPageRoute() {
         });
     };
     const selectedSiteIdentifiers = useMemo(
-        () => [formData.siteId, selectedSite?.id, selectedSite?.publicSiteId].filter((value): value is string => Boolean(value)),
-        [formData.siteId, selectedSite?.id, selectedSite?.publicSiteId],
+        () => [formData.siteId, selectedSite?.id, selectedSite?.publicSiteId, selectedSite?.slug].filter((value): value is string => Boolean(value)),
+        [formData.siteId, selectedSite?.id, selectedSite?.publicSiteId, selectedSite?.slug],
     );
     const selectedSitePages = useMemo(() => {
         const identifiers = new Set(selectedSiteIdentifiers);
@@ -523,7 +525,7 @@ function NewPageRoute() {
             action={
                 <button
                     type="button"
-                    onClick={() => navigate({ to: '/pages' })}
+                    onClick={() => navigate({ to: '/pages', search: { siteId: formData.siteId } })}
                     className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                     <ArrowLeft className="h-4 w-4" />
@@ -871,7 +873,7 @@ function NewPageRoute() {
                     <div className="flex justify-end gap-3">
                         <button
                             type="button"
-                            onClick={() => navigate({ to: '/pages' })}
+                            onClick={() => navigate({ to: '/pages', search: { siteId: formData.siteId } })}
                             className="rounded-lg border px-6 py-2.5 font-medium transition hover:bg-accent"
                         >
                             Cancel

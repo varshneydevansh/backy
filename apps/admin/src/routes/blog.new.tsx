@@ -24,6 +24,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
+import { siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn } from '@/lib/utils';
 import { getCanvasHeightForElements, withPageChrome } from '@/lib/editorTemplateChrome';
 import type { CanvasElement } from '@/types/editor';
@@ -170,9 +171,10 @@ function NewBlogPostPage() {
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
-    const requestedSiteId = search.siteId && sites.some((site) => (site.publicSiteId || site.id) === search.siteId)
-        ? search.siteId
-        : defaultSiteId;
+    const requestedSite = search.siteId
+        ? sites.find((site) => siteMatchesIdentifier(site, search.siteId || ''))
+        : undefined;
+    const requestedSiteId = requestedSite?.publicSiteId || requestedSite?.id || defaultSiteId;
     const [activeSiteId, setActiveSiteId] = useState(requestedSiteId);
 
     // Form State
@@ -223,7 +225,7 @@ function NewBlogPostPage() {
     }, [activeSiteId, selectedAuthorId, user?.id]);
 
     useEffect(() => {
-        if (sites.length > 0 && !sites.some((site) => (site.publicSiteId || site.id) === activeSiteId)) {
+        if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, activeSiteId))) {
             setActiveSiteId(sites[0].publicSiteId || sites[0].id);
         }
     }, [activeSiteId, sites]);
@@ -251,7 +253,7 @@ function NewBlogPostPage() {
     const [canvasSize, setCanvasSize] = useState<CanvasSize>(initialCanvasSize);
     const slugValue = slug || slugify(title);
     const selectedAuthor = authors.find((author) => author.id === selectedAuthorId);
-    const selectedSite = sites.find((site) => (site.publicSiteId || site.id) === activeSiteId);
+    const selectedSite = sites.find((site) => siteMatchesIdentifier(site, activeSiteId));
     const adminBlogUrl = useMemo(
         () => `${getAdminApiBase()}/sites/${encodeURIComponent(activeSiteId)}/blog`,
         [activeSiteId],
@@ -447,7 +449,7 @@ function NewBlogPostPage() {
         try {
             const created = await createBlogPost(activeSiteId, input);
             setPosts([created, ...posts.filter((post) => post.id !== created.id)]);
-            navigate({ to: '/blog' });
+            navigate({ to: '/blog', search: { siteId: activeSiteId } });
         } catch (createError) {
             setError(createError instanceof Error ? createError.message : 'Unable to create post');
         } finally {
@@ -459,7 +461,7 @@ function NewBlogPostPage() {
         <PageShell
             title={
                 <div className="flex items-center gap-4">
-                    <button onClick={() => navigate({ to: '/blog' })} className="p-2 rounded-lg hover:bg-accent border border-border bg-background">
+                    <button onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })} className="p-2 rounded-lg hover:bg-accent border border-border bg-background">
                         <ArrowLeft className="w-5 h-5" />
                     </button>
                     <span>New Blog Post</span>
@@ -733,7 +735,7 @@ function NewBlogPostPage() {
                                     <Button type="submit" disabled={isLoading || !canSubmit} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
                                         {isLoading ? 'Saving...' : submitLabel}
                                     </Button>
-                                    <Button onClick={() => navigate({ to: '/blog' })} variant="outline" className="w-full">
+                                    <Button type="button" onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })} variant="outline" className="w-full">
                                         Discard
                                     </Button>
                                 </div>
