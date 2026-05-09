@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { AlertTriangle, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Filter, Plus, Layout, Edit, Trash2, Home, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Filter, Plus, Layout, Edit, Trash2, Home, RefreshCw, Sparkles, ShoppingBag, Newspaper, Mail, UserPlus } from 'lucide-react';
 import {
   archivePage,
   createPagePreview,
@@ -165,6 +165,59 @@ type PageLibraryFilter =
   | 'empty-canvas'
   | 'not-checked';
 
+type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'contact' | 'registration';
+
+const PAGE_CREATION_SHORTCUTS: Array<{
+  key: PageCreationTemplate;
+  title: string;
+  detail: string;
+  badge: string;
+  icon: typeof Layout;
+}> = [
+  {
+    key: 'blank',
+    title: 'Blank canvas',
+    detail: 'Open a clean editor surface for custom layouts, reusable sections, and page chrome.',
+    badge: 'Design freely',
+    icon: Layout,
+  },
+  {
+    key: 'landing',
+    title: 'Landing page',
+    detail: 'Seed a polished hero, proof section, feature area, and conversion path.',
+    badge: 'Site starter',
+    icon: Sparkles,
+  },
+  {
+    key: 'storefront',
+    title: 'Storefront',
+    detail: 'Create editable product sections that can bind to Backy commerce data.',
+    badge: 'Products',
+    icon: ShoppingBag,
+  },
+  {
+    key: 'blog-index',
+    title: 'Blog index',
+    detail: 'Build a public article hub connected to posts, categories, and editorial routes.',
+    badge: 'Editorial',
+    icon: Newspaper,
+  },
+  {
+    key: 'contact',
+    title: 'Contact form',
+    detail: 'Start with a form page wired for submissions, contacts, and frontend API handoff.',
+    badge: 'Forms',
+    icon: Mail,
+  },
+  {
+    key: 'registration',
+    title: 'Registration',
+    detail: 'Create the member signup surface before full auth and membership wiring lands.',
+    badge: 'Members',
+    icon: UserPlus,
+  },
+];
+
 /**
  * Layout component that decides what to render based on current path:
  * - /pages -> shows PagesListView
@@ -270,6 +323,12 @@ function PagesListView() {
   const adminPageReadinessUrl = `${adminPageDetailUrl}/readiness`;
   const adminPagePreviewUrl = `${adminPageDetailUrl}/preview`;
   const createPageSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
+  const navigateToNewPage = (template: PageCreationTemplate = 'blank') => {
+    navigate({
+      to: '/pages/new',
+      search: template === 'blank' ? createPageSearch : { ...createPageSearch, template },
+    });
+  };
   const pageDesignReadiness = useMemo(() => {
     const checkedPages = activeSitePages.filter((page) => readinessMap[page.id]);
     const readyPages = activeSitePages.filter((page) => readinessMap[page.id]?.statusLabel === 'ready');
@@ -1034,6 +1093,49 @@ function PagesListView() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
+                <Plus className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold">Create a page for this site</h3>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Every starter opens the same visual editor, keeps the active site context, and seeds the canvas only when that helps the user move faster.
+              </p>
+            </div>
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              {activeSite?.name || activeSiteId}
+            </span>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {PAGE_CREATION_SHORTCUTS.map((shortcut) => {
+              const ShortcutIcon = shortcut.icon;
+
+              return (
+                <button
+                  key={shortcut.key}
+                  type="button"
+                  onClick={() => navigateToNewPage(shortcut.key)}
+                  className="group min-h-32 rounded-lg border border-border bg-card p-3 text-left transition hover:border-primary/50 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring"
+                  data-testid={`pages-create-${shortcut.key}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
+                      <ShortcutIcon className="size-4" />
+                    </span>
+                    <span className="rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                      {shortcut.badge}
+                    </span>
+                  </div>
+                  <div className="mt-3 text-sm font-semibold text-foreground">{shortcut.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{shortcut.detail}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
                 <Layout className="size-4 text-primary" />
                 <h3 className="text-sm font-semibold">Connected page workflows</h3>
               </div>
@@ -1050,6 +1152,7 @@ function PagesListView() {
               <Link
                 key={surface.key}
                 to={surface.route}
+                search={surface.route === '/settings' ? undefined : { siteId: activeSiteId }}
                 className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
               >
                 <div className="text-sm font-semibold text-foreground">{surface.title}</div>
@@ -1393,16 +1496,16 @@ function PagesListView() {
                       Clear Filters
                     </button>
                   )}
-                  <Link
-                    to="/pages/new"
-                    search={createPageSearch}
+                  <button
+                    type="button"
+                    onClick={() => navigateToNewPage('blank')}
                     data-testid="pages-empty-create"
                     className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                     aria-label={hasPages ? 'Create page after clearing filters' : 'Create first page for active site'}
                   >
                     <Plus className="w-4 h-4" />
                     {hasPages ? 'Create Page' : 'Create First Page'}
-                  </Link>
+                  </button>
                 </div>
               }
             />
