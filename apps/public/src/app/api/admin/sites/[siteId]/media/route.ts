@@ -363,6 +363,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const scope = parseScope(formData.get('scope'));
     const visibility = parseVisibility(formData.get('visibility'));
     const scopeTargetId = toStringValue(formData.get('scopeTargetId'));
+    const folderId = toStringValue(formData.get('folderId'));
     const extension = extname(originalName).toLowerCase();
     const safeName = safePathSegment(extension ? originalName.slice(0, -extension.length) : originalName);
     const storedFilename = `${Date.now().toString(36)}-${safeName}${extension}`;
@@ -424,6 +425,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       altText: toStringValue(formData.get('altText')),
       caption: toStringValue(formData.get('caption')),
       uploadedBy: toStringValue(formData.get('uploadedBy')) || 'admin',
+      folderId,
       scope,
       scopeTargetId,
       visibility,
@@ -437,7 +439,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           size: mediaInput.sizeBytes,
           type: mediaInput.type,
           url: mediaInput.url,
-          folderId: null,
+          folderId: mediaInput.folderId,
           altText: mediaInput.altText,
           caption: mediaInput.caption,
           visibility: mediaInput.visibility,

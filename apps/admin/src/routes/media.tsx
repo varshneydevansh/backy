@@ -84,6 +84,9 @@ function MediaPage() {
   const [usageFilter, setUsageFilter] = useState<'all' | 'unused' | 'referenced' | 'replaced'>('all');
   const [folders, setFolders] = useState<MediaFolder[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null | undefined>(undefined);
+  const [uploadVisibility, setUploadVisibility] = useState<'public' | 'private'>('public');
+  const [uploadFolderId, setUploadFolderId] = useState<'current' | 'root' | string>('current');
+  const [uploadTags, setUploadTags] = useState('');
   const [newFolderName, setNewFolderName] = useState('');
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MediaAsset | null>(null);
@@ -114,6 +117,18 @@ function MediaPage() {
   const publicMediaFileUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/{mediaId}/file`;
   const publicMediaTransformUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/{mediaId}/transform?width=1200&quality=75`;
   const adminMediaUploadUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media`;
+  const uploadTargetFolderId = uploadFolderId === 'current'
+    ? selectedFolderId === undefined ? null : selectedFolderId
+    : uploadFolderId === 'root' ? null : uploadFolderId;
+  const uploadTargetFolderLabel = uploadTargetFolderId
+    ? folders.find((folder) => folder.id === uploadTargetFolderId)?.name || 'Selected folder'
+    : 'Root';
+  const uploadTagList = useMemo(() => (
+    uploadTags
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+  ), [uploadTags]);
 
   const publicFileUrl = useMemo(
     () => selectedAsset ? getPublicMediaFileUrl(selectedAsset.id, siteId) : '',
@@ -470,7 +485,9 @@ function MediaPage() {
     const results = await Promise.allSettled(uploadFiles.map((file) => uploadMedia(file, {
         siteId,
         scope: 'global',
-        visibility: 'public',
+        folderId: uploadTargetFolderId,
+        visibility: uploadVisibility,
+        tags: uploadTagList,
       })));
     const uploaded = results
       .filter((result): result is PromiseFulfilledResult<MediaAsset> => result.status === 'fulfilled')
@@ -480,6 +497,9 @@ function MediaPage() {
     try {
       if (uploaded.length) {
         setMedia([...uploaded, ...files.filter((file) => !uploaded.some((item) => item.id === file.id))]);
+        if (uploadFolderId !== 'current') {
+          setSelectedFolderId(uploadTargetFolderId);
+        }
         void loadLibrary();
       }
 
@@ -845,42 +865,120 @@ function MediaPage() {
         </div>
       }
     >
-      {/* Drop Zone */}
-      <div
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={(e) => {
-          e.preventDefault();
-          setIsDragging(false);
-          void handleFileUpload(e.dataTransfer.files);
-        }}
-        className={cn(
-          "mb-8 border-2 border-dashed rounded-xl p-8 text-center transition-all relative",
-          isDragging
-            ? "border-primary bg-primary/5 scale-[1.01]"
-            : "border-border hover:border-primary/50"
-        )}
-      >
-        <input
-          type="file"
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          multiple
-          aria-label="Upload media files"
-          disabled={isUploading}
-          onChange={(e) => {
-            void handleFileUpload(e.target.files);
-            e.currentTarget.value = '';
+      <div className="mb-8 grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDragging(false);
+            void handleFileUpload(e.dataTransfer.files);
           }}
-        />
-        <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4 pointer-events-none">
-          <Upload className="w-6 h-6 text-primary" />
+          className={cn(
+            "relative min-h-[260px] rounded-xl border-2 border-dashed p-8 text-center transition-all",
+            isDragging
+              ? "border-primary bg-primary/5 scale-[1.01]"
+              : "border-border hover:border-primary/50"
+          )}
+        >
+          <input
+            type="file"
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            multiple
+            aria-label="Upload media files"
+            disabled={isUploading}
+            onChange={(e) => {
+              void handleFileUpload(e.target.files);
+              e.currentTarget.value = '';
+            }}
+          />
+          <div className="pointer-events-none mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+            <Upload className="h-6 w-6 text-primary" />
+          </div>
+          <h3 className="pointer-events-none mb-1 font-semibold">
+            {isUploading ? 'Uploading files' : 'Upload files'}
+          </h3>
+          <p className="pointer-events-none mx-auto max-w-xl text-sm text-muted-foreground">
+            Images, videos, documents, and fonts will upload as {uploadVisibility} assets into {uploadTargetFolderLabel}.
+          </p>
+          {uploadTagList.length > 0 && (
+            <div className="pointer-events-none mt-4 flex flex-wrap justify-center gap-2">
+              {uploadTagList.map((tag) => (
+                <span key={tag} className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
-        <h3 className="font-semibold mb-1 pointer-events-none">
-          {isUploading ? 'Uploading files' : 'Upload files'}
-        </h3>
-        <p className="text-sm text-muted-foreground pointer-events-none">
-          Images, videos, documents, and fonts are stored in the site media library.
-        </p>
+
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="mb-4 flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Folder className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-foreground">Upload defaults</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                New assets inherit these organization and delivery settings.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3">
+            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+              Visibility
+              <select
+                value={uploadVisibility}
+                onChange={(event) => setUploadVisibility(event.target.value === 'private' ? 'private' : 'public')}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                aria-label="Upload visibility"
+              >
+                <option value="public">Public delivery</option>
+                <option value="private">Private signed delivery</option>
+              </select>
+            </label>
+
+            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+              Destination
+              <select
+                value={uploadFolderId}
+                onChange={(event) => setUploadFolderId(event.target.value)}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                aria-label="Upload folder"
+              >
+                <option value="current">Current folder filter</option>
+                <option value="root">Root</option>
+                {folders.map((folder) => (
+                  <option key={folder.id} value={folder.id}>{folder.name}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+              Default tags
+              <input
+                type="text"
+                value={uploadTags}
+                onChange={(event) => setUploadTags(event.target.value)}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                placeholder="hero, product, brand"
+                aria-label="Upload tags"
+              />
+            </label>
+
+            <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
+              <div className="rounded-lg border border-border bg-muted/40 px-3 py-2">
+                <div className="text-muted-foreground">Folder</div>
+                <div className="mt-1 truncate font-medium text-foreground">{uploadTargetFolderLabel}</div>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/40 px-3 py-2">
+                <div className="text-muted-foreground">Visibility</div>
+                <div className="mt-1 font-medium capitalize text-foreground">{uploadVisibility}</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {error && (

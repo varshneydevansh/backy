@@ -149,6 +149,7 @@ export interface MediaUploadOptions {
   siteId?: string;
   scope?: MediaScope;
   scopeTargetId?: string | null;
+  folderId?: string | null;
   visibility?: MediaVisibility;
   tags?: string[];
   metadata?: Record<string, unknown>;
@@ -434,6 +435,7 @@ export async function uploadMedia(file: File, options: MediaUploadOptions = {}):
   formData.set('visibility', options.visibility || 'public');
 
   if (options.scopeTargetId) formData.set('scopeTargetId', options.scopeTargetId);
+  if (options.folderId !== undefined) formData.set('folderId', options.folderId || '');
   if (options.tags?.length) formData.set('tags', options.tags.join(','));
   if (options.altText) formData.set('altText', options.altText);
   if (options.caption) formData.set('caption', options.caption);
