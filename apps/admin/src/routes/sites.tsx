@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   AlertTriangle,
+  CheckCircle2,
   Code2,
   Copy,
   Download,
@@ -19,10 +20,12 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Server,
   Trash2,
 } from 'lucide-react';
 import {
   deleteSite as deleteSiteFromApi,
+  listPages,
   listSites,
   updateSite as updateSiteFromApi,
 } from '@/lib/adminContentApi';
@@ -47,6 +50,39 @@ const STATUS_OPTIONS: Array<{ value: Site['status']; label: string }> = [
   { value: 'draft', label: 'Draft' },
   { value: 'archived', label: 'Archived' },
 ];
+
+const SITE_CONTROL_AREAS = [
+  {
+    title: 'Pages and navigation',
+    detail: 'Build routes, reusable headers, footers, and page sections.',
+    href: '/pages',
+  },
+  {
+    title: 'Blog and editorial',
+    detail: 'Publish posts, taxonomy, SEO, revisions, and public article pages.',
+    href: '/blog',
+  },
+  {
+    title: 'Products and orders',
+    detail: 'Prepare sellable objects, catalog data, order flow, and frontend listings.',
+    href: '/products',
+  },
+  {
+    title: 'Forms and leads',
+    detail: 'Capture registrations, contact requests, submissions, and CRM pipeline data.',
+    href: '/forms',
+  },
+  {
+    title: 'Media and files',
+    detail: 'Host public or private files for pages, products, downloads, and APIs.',
+    href: '/media',
+  },
+  {
+    title: 'Delivery settings',
+    detail: 'Control API keys, Supabase/Vercel readiness, security, and hosting mode.',
+    href: '/settings',
+  },
+] as const;
 
 const getDisplayDomain = (site: Site) => site.customDomain || `${site.slug}.backy.app`;
 
@@ -122,7 +158,17 @@ function SitesListView() {
 
     try {
       const backendSites = await listSites();
-      setSites(backendSites);
+      const sitesWithPageCounts = await Promise.all(
+        backendSites.map(async (site) => {
+          try {
+            const pages = await listPages(site.publicSiteId || site.id);
+            return { ...site, pageCount: pages.length };
+          } catch {
+            return site;
+          }
+        }),
+      );
+      setSites(sitesWithPageCounts);
     } catch (loadError) {
       setNotice(loadError instanceof Error ? loadError.message : 'Unable to load sites');
     } finally {
@@ -158,6 +204,59 @@ function SitesListView() {
   const publicManifestUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/manifest`;
   const publicOpenApiUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/openapi`;
   const publicRenderUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/render?path=/`;
+  const siteLaunchReadiness = useMemo(() => {
+    const published = sites.filter((site) => site.status === 'published').length;
+    const draft = sites.filter((site) => site.status === 'draft').length;
+    const archived = sites.filter((site) => site.status === 'archived').length;
+    const pageTotal = sites.reduce((total, site) => total + (site.pageCount || 0), 0);
+    const customDomains = sites.filter((site) => site.customDomain).length;
+    const checks = [
+      {
+        label: 'Workspace inventory',
+        detail: sites.length > 0 ? `${sites.length} site${sites.length === 1 ? '' : 's'} under management` : 'Create a site before adding content.',
+        ready: sites.length > 0,
+      },
+      {
+        label: 'Published frontend',
+        detail: published > 0 ? `${published} public site${published === 1 ? '' : 's'}` : 'Publish at least one site for public delivery.',
+        ready: published > 0,
+      },
+      {
+        label: 'Page foundation',
+        detail: pageTotal > 0 ? `${pageTotal} page${pageTotal === 1 ? '' : 's'} connected to sites` : 'Add pages so each frontend has routes to render.',
+        ready: pageTotal > 0,
+      },
+      {
+        label: 'Domain routing',
+        detail: customDomains > 0 ? `${customDomains} custom domain${customDomains === 1 ? '' : 's'} configured` : 'Backy preview domains are available until custom domains are added.',
+        ready: sites.length > 0,
+      },
+      {
+        label: 'API handoff',
+        detail: selectedApiSite ? `Manifest, OpenAPI, and render URLs are scoped to ${selectedApiSite.name}.` : 'Create a site to generate frontend API URLs.',
+        ready: Boolean(selectedApiSite),
+      },
+      {
+        label: 'Publishing hygiene',
+        detail: archived > 0 || draft > 0
+          ? `${draft} draft, ${archived} archived, ${published} published`
+          : 'Every site has an explicit public state.',
+        ready: sites.length > 0,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      checks,
+      workflow: [
+        { label: 'Create the site shell', detail: 'Name, slug, description, status, and preview domain.' },
+        { label: 'Attach content systems', detail: 'Pages, blog, products, forms, contacts, media, and collections.' },
+        { label: 'Configure delivery', detail: 'Domains, API base URLs, Supabase, Vercel, keys, SEO, and security.' },
+        { label: 'Publish and iterate', detail: 'Preview, export contracts, ship public APIs, then refine per-site design.' },
+      ],
+    };
+  }, [selectedApiSite, sites]);
 
   const handleStatusChange = async (site: Site, status: Site['status']) => {
     setUpdatingSiteId(site.id);
@@ -364,7 +463,7 @@ function SitesListView() {
           New site
         </Link>
       }
-      className="mx-auto max-w-7xl"
+      className="w-full"
     >
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => (
@@ -416,6 +515,84 @@ function SitesListView() {
             <SiteApiStat label="Published" value={`${sites.filter((site) => site.status === 'published').length}`} />
             <SiteApiStat label="Draft" value={`${sites.filter((site) => site.status === 'draft').length}`} />
             <SiteApiStat label="Custom domains" value={`${sites.filter((site) => site.customDomain).length}`} />
+          </div>
+
+          <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Site launch readiness</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Tracks whether Backy has the site, pages, public state, routing, and API contract needed for a custom frontend.
+                  </p>
+                </div>
+                <span className={cn(
+                  'rounded-full px-2.5 py-1 text-xs font-semibold',
+                  siteLaunchReadiness.score >= 80
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'bg-amber-50 text-amber-700',
+                )}
+                >
+                  {siteLaunchReadiness.score}% ready
+                </span>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn(
+                    'h-full rounded-full',
+                    siteLaunchReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500',
+                  )}
+                  style={{ width: `${siteLaunchReadiness.score}%` }}
+                />
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2">
+                {siteLaunchReadiness.checks.map((check) => (
+                  <SiteLaunchCheck key={check.label} {...check} />
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Website operating workflow</h3>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {siteLaunchReadiness.workflow.map((step, index) => (
+                  <SiteWorkflowStep key={step.label} index={index + 1} {...step} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-border bg-background p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Frontend control map</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  The site workspace should own every frontend system a Wix-style build needs: structure, content, commerce, leads, files, and delivery.
+                </p>
+              </div>
+              <Link
+                to="/settings"
+                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+              >
+                <Server className="h-4 w-4" />
+                Delivery setup
+              </Link>
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {SITE_CONTROL_AREAS.map((area) => (
+                <Link
+                  key={area.title}
+                  to={area.href}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                </Link>
+              ))}
+            </div>
           </div>
 
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -572,6 +749,34 @@ function SiteApiStat({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-border bg-muted/30 px-3 py-3">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="mt-1 truncate text-sm font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function SiteLaunchCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  const Icon = ready ? CheckCircle2 : AlertTriangle;
+
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-card px-3 py-2">
+      <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', ready ? 'text-emerald-600' : 'text-amber-600')} />
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function SiteWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
     </div>
   );
 }
