@@ -486,7 +486,12 @@ function NewBlogPostPage() {
         <PageShell
             title={
                 <div className="flex items-center gap-4">
-                    <button onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })} className="p-2 rounded-lg hover:bg-accent border border-border bg-background">
+                    <button
+                        type="button"
+                        onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })}
+                        disabled={isLoading}
+                        className="rounded-lg border border-border bg-background p-2 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                    >
                         <ArrowLeft className="w-5 h-5" />
                     </button>
                     <span>New Blog Post</span>
@@ -619,7 +624,8 @@ function NewBlogPostPage() {
                                     }
                                 }}
                                 placeholder="Untitled post"
-                                className="w-full rounded-lg border-0 bg-transparent px-0 text-4xl font-semibold tracking-normal placeholder:text-muted-foreground/45 focus:outline-none focus:ring-0"
+                                disabled={isLoading}
+                                className="w-full rounded-lg border-0 bg-transparent px-0 text-4xl font-semibold tracking-normal placeholder:text-muted-foreground/45 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
                                 autoFocus
                             />
                         </div>
@@ -631,7 +637,8 @@ function NewBlogPostPage() {
                                 type="text"
                                 value={slug}
                                 onChange={(e) => setSlug(e.target.value)}
-                                className="min-w-48 flex-1 border-0 bg-transparent p-0 font-mono text-foreground focus:outline-none focus:ring-0"
+                                disabled={isLoading}
+                                className="min-w-48 flex-1 border-0 bg-transparent p-0 font-mono text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
                                 placeholder="post-slug"
                             />
                         </div>
@@ -643,7 +650,8 @@ function NewBlogPostPage() {
                                 value={excerpt}
                                 onChange={(e) => setExcerpt(e.target.value)}
                                 rows={3}
-                                className="w-full resize-none rounded-lg border bg-background px-4 py-3 text-sm leading-6 focus:outline-none focus:ring-2 focus:ring-ring"
+                                disabled={isLoading}
+                                className="w-full resize-none rounded-lg border bg-background px-4 py-3 text-sm leading-6 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                 placeholder="Write the summary that appears in blog lists, feeds, and SEO previews."
                             />
                             <div className="text-xs text-muted-foreground">{excerpt.length} characters</div>
@@ -683,6 +691,7 @@ function NewBlogPostPage() {
                                     initialSize={canvasSize}
                                     onSave={() => { }}
                                     onChange={(elements, _settings, size) => {
+                                        if (isLoading) return;
                                         setCanvasElements(elements);
                                         if (size) setCanvasSize(size);
                                     }}
@@ -691,6 +700,13 @@ function NewBlogPostPage() {
                                     hideSettings={true}
                                     hideSave={true}
                                 />
+                                {isLoading && (
+                                    <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/75 backdrop-blur-sm">
+                                        <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm font-medium text-foreground shadow-sm">
+                                            Saving post design...
+                                        </div>
+                                    </div>
+                                )}
                             </EditorWorkspaceFrame>
                         </div>
                     </div>
@@ -714,8 +730,9 @@ function NewBlogPostPage() {
                                                     setScheduledAt(null);
                                                 }
                                             }}
+                                            disabled={isLoading}
                                             className={cn(
-                                                'rounded-md px-3 py-2 text-xs font-medium capitalize transition-colors',
+                                                'rounded-md px-3 py-2 text-xs font-medium capitalize transition-colors disabled:cursor-not-allowed disabled:opacity-60',
                                                 status === nextStatus
                                                     ? 'bg-background text-foreground shadow-sm'
                                                     : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
@@ -733,7 +750,8 @@ function NewBlogPostPage() {
                                             type="datetime-local"
                                             value={toDateTimeLocalValue(scheduledAt)}
                                             onChange={(e) => setScheduledAt(fromDateTimeLocalValue(e.target.value))}
-                                            className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                                            disabled={isLoading}
+                                            className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                             required
                                         />
                                     </div>
@@ -760,7 +778,7 @@ function NewBlogPostPage() {
                                     <Button type="submit" disabled={isLoading || !canSubmit} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
                                         {isLoading ? 'Saving...' : submitLabel}
                                     </Button>
-                                    <Button type="button" onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })} variant="outline" className="w-full">
+                                    <Button type="button" onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })} disabled={isLoading} variant="outline" className="w-full">
                                         Discard
                                     </Button>
                                 </div>
@@ -776,7 +794,8 @@ function NewBlogPostPage() {
                                         id="blog-create-active-site"
                                         value={activeSiteId}
                                         onChange={(event) => selectBlogSite(event.target.value)}
-                                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                                        disabled={isLoading}
+                                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                         {sites.length === 0 ? (
                                             <option value="site-demo">Demo site</option>
@@ -794,7 +813,8 @@ function NewBlogPostPage() {
                                         <select
                                             value={selectedAuthorId}
                                             onChange={(event) => setSelectedAuthorId(event.target.value)}
-                                            className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm"
+                                            disabled={isLoading}
+                                            className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                         >
                                             {authors.length === 0 ? (
                                                 <option value={selectedAuthorId}>{user?.fullName || 'Admin'}</option>
@@ -821,6 +841,7 @@ function NewBlogPostPage() {
                                     items={categories}
                                     selectedIds={selectedCategoryIds}
                                     onToggle={(id) => toggleSelection(id, selectedCategoryIds, setSelectedCategoryIds)}
+                                    disabled={isLoading}
                                 />
                                 <TaxonomyPicker
                                     title="Tags"
@@ -828,6 +849,7 @@ function NewBlogPostPage() {
                                     items={tags}
                                     selectedIds={selectedTagIds}
                                     onToggle={(id) => toggleSelection(id, selectedTagIds, setSelectedTagIds)}
+                                    disabled={isLoading}
                                 />
                             </PanelContent>
                         </Panel>
@@ -937,9 +959,10 @@ interface TaxonomyPickerProps {
     items: Array<BlogCategory | BlogTag>;
     selectedIds: string[];
     onToggle: (id: string) => void;
+    disabled?: boolean;
 }
 
-function TaxonomyPicker({ title, emptyLabel, items, selectedIds, onToggle }: TaxonomyPickerProps) {
+function TaxonomyPicker({ title, emptyLabel, items, selectedIds, onToggle, disabled = false }: TaxonomyPickerProps) {
     return (
         <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
@@ -956,8 +979,9 @@ function TaxonomyPicker({ title, emptyLabel, items, selectedIds, onToggle }: Tax
                             key={item.id}
                             type="button"
                             onClick={() => onToggle(item.id)}
+                            disabled={disabled}
                             className={cn(
-                                'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+                                'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
                                 selected
                                     ? 'border-primary bg-primary text-primary-foreground'
                                     : 'border-border bg-muted text-muted-foreground hover:bg-accent hover:text-foreground',
