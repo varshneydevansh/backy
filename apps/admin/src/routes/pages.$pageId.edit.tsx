@@ -718,6 +718,18 @@ function PageEditorRoute() {
         </div>
       )}
 
+      {editorHasUnsavedChanges && (
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <div>
+            <div className="font-semibold">Unsaved canvas changes</div>
+            <div className="mt-1 text-xs leading-5">
+              Save from the editor toolbar before using page-panel preview, publish, archive, or revision restore actions.
+            </div>
+          </div>
+        </div>
+      )}
+
       {!isWorkspaceFocus && (
       <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="page-editor-command-center">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -956,6 +968,13 @@ function PageEditorRoute() {
               action={<StatusBadge status={page.status} />}
             />
             <PanelContent className="space-y-4">
+              {editorHasUnsavedChanges && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>Save the canvas from the editor toolbar before using these page-panel workflows.</span>
+                </div>
+              )}
+
               <div className="grid gap-2">
                 <Button
                   onClick={() => void generatePreview()}
@@ -1071,7 +1090,14 @@ function PageEditorRoute() {
 
           <Panel id="page-editor-revisions" className="scroll-mt-24">
             <PanelHeader title="Revisions" icon={<RotateCcw className="size-4" />} />
-            <PanelContent>
+            <PanelContent className="space-y-3">
+              {editorHasUnsavedChanges && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>Save the current canvas before restoring a saved revision.</span>
+                </div>
+              )}
+
               {revisions.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
                   No saved revisions yet.
