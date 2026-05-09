@@ -75,6 +75,34 @@ const DEFAULT_PERMISSIONS: CollectionPermissions = {
   publicDelete: false,
 };
 
+const COLLECTION_CONTROL_AREAS = [
+  {
+    title: 'Site scope',
+    detail: 'Choose which website owns these schemas and records.',
+    href: '#collections-site',
+  },
+  {
+    title: 'API contract',
+    detail: 'Public and admin URLs for lists, records, import, export, and bulk updates.',
+    href: '#collections-api',
+  },
+  {
+    title: 'Library',
+    detail: 'Switch between reusable schemas for products, directories, content, and custom data.',
+    href: '#collections-library',
+  },
+  {
+    title: 'Schema builder',
+    detail: 'Fields, routes, permissions, status, references, media fields, and validation.',
+    href: '#collections-schema',
+  },
+  {
+    title: 'Records',
+    detail: 'Create, filter, import, export, publish, archive, and delete collection records.',
+    href: '#collections-records',
+  },
+] as const;
+
 const normalizeSlug = (value: string, fallback: string) => {
   const slug = value
     .trim()
@@ -451,6 +479,24 @@ function CollectionsPage() {
       { label: 'Selected', value: selectedRecordIds.length, detail: 'Ready for bulk actions' },
     ];
   }, [activeCollection?.name, collections, recordPagination.total, selectedRecordIds.length]);
+  const collectionWorkflow = useMemo(() => ([
+    {
+      label: 'Model',
+      detail: 'Create the reusable schema, routes, fields, references, media bindings, and public write posture.',
+    },
+    {
+      label: 'Populate',
+      detail: 'Add records manually or import CSV data with validation feedback and slug normalization.',
+    },
+    {
+      label: 'Operate',
+      detail: 'Filter records, bulk publish/archive/delete, export CSV, and keep the dataset clean.',
+    },
+    {
+      label: 'Expose',
+      detail: 'Use public read APIs and route templates to power lists, detail pages, catalogs, and forms.',
+    },
+  ]), []);
 
   const updateRecordFilters = (updates: Partial<typeof recordFilters>) => {
     setRecordFilters((prev) => ({ ...prev, ...updates }));
@@ -962,6 +1008,100 @@ function CollectionsPage() {
         </div>
       )}
 
+      <section className="mb-5 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="collections-command-center">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">Collections command center</h2>
+              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                collectionReadiness.score >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+              }`}
+              >
+                {collectionReadiness.score}% ready
+              </span>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Control reusable structured data for custom frontends: schemas, records, permissions, imports, exports, routes, and public API delivery.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void loadCollections()}
+              disabled={isLoading}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={resetCollectionForm}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" />
+              New collection
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Collection readiness</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Checks the active schema, public routes, field integrity, permissions, and visitor-write posture.
+                </p>
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {activeCollection?.name || 'Draft schema'}
+              </span>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={`h-full rounded-full ${collectionReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                style={{ width: `${collectionReadiness.score}%` }}
+              />
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {collectionReadiness.checks.map((check) => (
+                <CollectionReadinessCheck key={check.label} {...check} />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex items-center gap-2">
+              <Database className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold">Data workflow</h3>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {collectionWorkflow.map((step, index) => (
+                <CollectionWorkflowStep key={step.label} index={index + 1} {...step} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <h3 className="text-sm font-semibold">Collections control map</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, API delivery, schema library, builder, and record operations.</p>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {COLLECTION_CONTROL_AREAS.map((area) => (
+              <a
+                key={area.title}
+                href={area.href}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {collectionMetrics.map((metric) => (
           <div key={metric.label} className="rounded-lg border border-border bg-card p-4 shadow-sm">
@@ -972,7 +1112,7 @@ function CollectionsPage() {
         ))}
       </div>
 
-      <section className="mb-5 rounded-lg border border-border bg-card">
+      <section id="collections-api" className="mb-5 rounded-lg border border-border bg-card scroll-mt-24">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
           <div>
             <div className="flex items-center gap-2">
@@ -1067,7 +1207,7 @@ function CollectionsPage() {
         </div>
       </section>
 
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div id="collections-site" className="mb-5 flex flex-wrap items-center gap-3 scroll-mt-24">
         <label className="text-sm font-medium text-muted-foreground" htmlFor="collection-site">
           Site
         </label>
@@ -1087,7 +1227,7 @@ function CollectionsPage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-        <section className="self-start rounded-lg border border-border bg-card">
+        <section id="collections-library" className="self-start rounded-lg border border-border bg-card scroll-mt-24">
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-sm font-semibold">Collection library</h2>
           </div>
@@ -1125,7 +1265,7 @@ function CollectionsPage() {
         </section>
 
         <div className="space-y-6">
-          <form onSubmit={handleCollectionSubmit} className="rounded-lg border border-border bg-card">
+          <form id="collections-schema" onSubmit={handleCollectionSubmit} className="rounded-lg border border-border bg-card scroll-mt-24">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <h2 className="text-sm font-semibold">Schema builder</h2>
               <div className="flex items-center gap-2">
@@ -1401,7 +1541,7 @@ function CollectionsPage() {
           </form>
 
           {activeCollection && (
-            <section className="rounded-lg border border-border bg-card">
+            <section id="collections-records" className="rounded-lg border border-border bg-card scroll-mt-24">
               <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <div>
                   <h2 className="text-sm font-semibold">Records</h2>
@@ -1972,6 +2112,20 @@ function CollectionRoutePreview({ label, value }: { label: string; value: string
     <div className="rounded-lg border border-border bg-muted/30 px-3 py-2">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <code className="mt-1 block truncate font-mono text-xs text-foreground">{value || 'Not configured'}</code>
+    </div>
+  );
+}
+
+function CollectionWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex gap-3 rounded-lg border border-border bg-card p-3">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div>
+        <div className="text-sm font-semibold text-foreground">{label}</div>
+        <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
     </div>
   );
 }
