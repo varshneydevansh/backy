@@ -7,17 +7,23 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   AlertTriangle,
+  Check,
   CheckCircle2,
   Code2,
   Copy,
   Download,
   Edit,
   Filter,
+  KeyRound,
+  LockKeyhole,
   Mail,
+  Minus,
   Plus,
   RefreshCw,
   Search,
+  Send,
   Shield,
+  SlidersHorizontal,
   Trash2,
   User,
   Users,
@@ -58,6 +64,21 @@ const STATUS_OPTIONS: Array<{ value: UserStatus; label: string }> = [
   { value: 'inactive', label: 'Inactive' },
   { value: 'suspended', label: 'Suspended' },
 ];
+
+const ROLE_CAPABILITIES: Array<{ label: string; roles: UserRole[] }> = [
+  { label: 'View dashboards, sites, content, and reports', roles: ['owner', 'admin', 'editor', 'viewer'] },
+  { label: 'Create and edit pages, blog posts, forms, and media', roles: ['owner', 'admin', 'editor'] },
+  { label: 'Publish content and update commerce records', roles: ['owner', 'admin', 'editor'] },
+  { label: 'Manage users, settings, integrations, and API keys', roles: ['owner', 'admin'] },
+  { label: 'Own billing, destructive settings, and workspace transfer', roles: ['owner'] },
+];
+
+const ROLE_ACCESS_SUMMARY: Record<UserRole, string> = {
+  owner: 'Full workspace authority',
+  admin: 'Operational admin authority',
+  editor: 'Content and commerce production',
+  viewer: 'Read-only review access',
+};
 
 const getInitials = (name: string) => (
   name
@@ -349,11 +370,11 @@ function UsersListView() {
           to="/users/new"
           className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
         >
-          <Plus className="h-4 w-4" />
+          <Send className="h-4 w-4" />
           Invite user
         </Link>
       }
-      className="mx-auto max-w-7xl"
+      className="w-full"
     >
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => (
@@ -372,161 +393,250 @@ function UsersListView() {
         ))}
       </div>
 
-      <Panel>
-        <PanelHeader
-          title="User access API"
-          description="Private admin endpoints for listing users, inviting collaborators, and updating account roles or status."
-          icon={<Code2 className="size-4" />}
-          action={
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={data.length === 0}
-                onClick={handleExportUsers}
-                iconStart={<Download className="size-4" />}
-              >
-                Export CSV
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void copyUserApiText(usersListUrl, 'Users API URL')}
-                iconStart={<Copy className="size-4" />}
-              >
-                Copy API
-              </Button>
-            </div>
-          }
-        />
-        <PanelContent>
-          <div className="grid gap-3 md:grid-cols-4">
-            <UserApiStat label="Visible users" value={`${data.length}`} />
-            <UserApiStat label="Total users" value={`${users.length}`} />
-            <UserApiStat label="Admin authority" value={`${users.filter((user) => user.role === 'owner' || user.role === 'admin').length}`} />
-            <UserApiStat label="Invites pending" value={`${users.filter((user) => user.status === 'invited').length}`} />
-          </div>
-
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            <UserApiSnippet label="List and invite users" value={usersListUrl} />
-            <UserApiSnippet label="Read, update, or remove user" value={userDetailUrl} />
-          </div>
-        </PanelContent>
-      </Panel>
-
-      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="relative min-w-0 flex-1 lg:max-w-md">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="search"
-              placeholder="Search name, email, role, or status..."
-              value={searchQuery}
-              onChange={(event) => {
-                setSearchQuery(event.target.value);
-                setCurrentPage(1);
-              }}
-              aria-label="Search users"
-              className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="min-w-0 space-y-6">
+          <Panel>
+            <PanelHeader
+              title="User access API"
+              description="Private admin endpoints for listing users, inviting collaborators, and updating account roles or status."
+              icon={<Code2 className="size-4" />}
+              action={
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={data.length === 0}
+                    onClick={handleExportUsers}
+                    iconStart={<Download className="size-4" />}
+                  >
+                    Export CSV
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void copyUserApiText(usersListUrl, 'Users API URL')}
+                    iconStart={<Copy className="size-4" />}
+                  >
+                    Copy API
+                  </Button>
+                </div>
+              }
             />
-          </div>
+            <PanelContent>
+              <div className="grid gap-3 md:grid-cols-4">
+                <UserApiStat label="Visible users" value={`${data.length}`} />
+                <UserApiStat label="Total users" value={`${users.length}`} />
+                <UserApiStat label="Admin authority" value={`${users.filter((user) => user.role === 'owner' || user.role === 'admin').length}`} />
+                <UserApiStat label="Invites pending" value={`${users.filter((user) => user.status === 'invited').length}`} />
+              </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-              <Filter className="h-4 w-4" />
-              <select
-                value={roleFilter}
-                onChange={(event) => {
-                  setRoleFilter(event.target.value as 'all' | UserRole);
-                  setCurrentPage(1);
-                }}
-                className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring"
-                aria-label="Filter users by role"
-              >
-                <option value="all">All roles</option>
-                {ROLE_OPTIONS.map((role) => (
-                  <option key={role.value} value={role.value}>{role.label}</option>
-                ))}
-              </select>
-            </label>
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                <UserApiSnippet label="List and invite users" value={usersListUrl} />
+                <UserApiSnippet label="Read, update, or remove user" value={userDetailUrl} />
+              </div>
+            </PanelContent>
+          </Panel>
 
-            <select
-              value={statusFilter}
-              onChange={(event) => {
-                setStatusFilter(event.target.value as 'all' | UserStatus);
-                setCurrentPage(1);
-              }}
-              className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring"
-              aria-label="Filter users by status"
-            >
-              <option value="all">All statuses</option>
-              {STATUS_OPTIONS.map((status) => (
-                <option key={status.value} value={status.value}>{status.label}</option>
-              ))}
-            </select>
-
-            <button
-              type="button"
-              onClick={() => void loadUsers()}
-              disabled={isLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-              aria-label="Refresh users"
-            >
-              <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
-              Refresh
-            </button>
-          </div>
-        </div>
-
-        {notice && (
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            {notice}
-          </div>
-        )}
-      </div>
-
-      <DataGrid
-        columns={columns}
-        data={data}
-        loading={isLoading}
-        sortConfig={sortConfig}
-        onSort={handleSort}
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={setCurrentPage}
-        totalItems={totalItems}
-        emptyState={
-          <EmptyState
-            icon={hasActiveFilters ? Search : User}
-            title={hasActiveFilters ? 'No users match those controls' : 'No users found'}
-            description={hasActiveFilters ? 'Clear the search or filters to see the full access list.' : 'Invite people before you hand off content, commerce, or publishing work.'}
-            action={
-              hasActiveFilters ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setRoleFilter('all');
-                    setStatusFilter('all');
+          <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="relative min-w-0 flex-1 lg:max-w-xl">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="search"
+                  placeholder="Search name, email, role, or status..."
+                  value={searchQuery}
+                  onChange={(event) => {
+                    setSearchQuery(event.target.value);
                     setCurrentPage(1);
                   }}
-                  className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+                  aria-label="Search users"
+                  className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                  <Filter className="h-4 w-4" />
+                  <select
+                    value={roleFilter}
+                    onChange={(event) => {
+                      setRoleFilter(event.target.value as 'all' | UserRole);
+                      setCurrentPage(1);
+                    }}
+                    className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring"
+                    aria-label="Filter users by role"
+                  >
+                    <option value="all">All roles</option>
+                    {ROLE_OPTIONS.map((role) => (
+                      <option key={role.value} value={role.value}>{role.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <select
+                  value={statusFilter}
+                  onChange={(event) => {
+                    setStatusFilter(event.target.value as 'all' | UserStatus);
+                    setCurrentPage(1);
+                  }}
+                  className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+                  aria-label="Filter users by status"
                 >
-                  Clear filters
+                  <option value="all">All statuses</option>
+                  {STATUS_OPTIONS.map((status) => (
+                    <option key={status.value} value={status.value}>{status.label}</option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => void loadUsers()}
+                  disabled={isLoading}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                  aria-label="Refresh users"
+                >
+                  <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
+                  Refresh
                 </button>
-              ) : (
-                <Link
-                  to="/users/new"
-                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
-                >
-                  <Plus className="h-4 w-4" />
-                  Invite user
-                </Link>
-              )
+              </div>
+            </div>
+
+            {notice && (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {notice}
+              </div>
+            )}
+          </div>
+
+          <DataGrid
+            columns={columns}
+            data={data}
+            loading={isLoading}
+            sortConfig={sortConfig}
+            onSort={handleSort}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            totalItems={totalItems}
+            emptyState={
+              <EmptyState
+                icon={hasActiveFilters ? Search : User}
+                title={hasActiveFilters ? 'No users match those controls' : 'No users found'}
+                description={hasActiveFilters ? 'Clear the search or filters to see the full access list.' : 'Invite people before you hand off content, commerce, or publishing work.'}
+                action={
+                  hasActiveFilters ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setRoleFilter('all');
+                        setStatusFilter('all');
+                        setCurrentPage(1);
+                      }}
+                      className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+                    >
+                      Clear filters
+                    </button>
+                  ) : (
+                    <Link
+                      to="/users/new"
+                      className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Invite user
+                    </Link>
+                  )
+                }
+              />
             }
           />
-        }
-      />
+        </div>
+
+        <aside className="space-y-4">
+          <Panel>
+            <PanelHeader
+              title="Role permissions"
+              description="What each role unlocks across Backy."
+              icon={<KeyRound className="size-4" />}
+            />
+            <PanelContent>
+              <div className="space-y-3">
+                {ROLE_OPTIONS.map((role) => (
+                  <div key={role.value} className="rounded-lg border border-border bg-background p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold">{role.label}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">{ROLE_ACCESS_SUMMARY[role.value]}</div>
+                      </div>
+                      <span className={cn('rounded-md border px-2 py-1 text-xs font-semibold', roleBadgeClass[role.value])}>
+                        {users.filter((user) => user.role === role.value).length}
+                      </span>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {ROLE_CAPABILITIES.map((capability) => {
+                        const allowed = capability.roles.includes(role.value);
+                        return (
+                          <div key={capability.label} className="flex items-start gap-2 text-xs">
+                            <span className={cn(
+                              'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border',
+                              allowed ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-border bg-muted text-muted-foreground',
+                            )}>
+                              {allowed ? <Check className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
+                            </span>
+                            <span className={allowed ? 'text-foreground' : 'text-muted-foreground'}>
+                              {capability.label}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </PanelContent>
+          </Panel>
+
+          <Panel>
+            <PanelHeader
+              title="Access guardrails"
+              description="The API protects core workspace ownership."
+              icon={<LockKeyhole className="size-4" />}
+            />
+            <PanelContent>
+              <div className="space-y-3 text-sm">
+                <div className="rounded-lg border border-border bg-background p-3">
+                  <div className="font-semibold">Last admin protection</div>
+                  <p className="mt-1 text-muted-foreground">Backy blocks deleting or demoting the final active owner/admin.</p>
+                </div>
+                <div className="rounded-lg border border-border bg-background p-3">
+                  <div className="font-semibold">Duplicate email protection</div>
+                  <p className="mt-1 text-muted-foreground">Invites and edits reject emails already attached to another user.</p>
+                </div>
+                <div className="rounded-lg border border-border bg-background p-3">
+                  <div className="font-semibold">Operational filters</div>
+                  <p className="mt-1 text-muted-foreground">Search, role, status, refresh, and CSV export all work against the current API result.</p>
+                </div>
+              </div>
+            </PanelContent>
+          </Panel>
+
+          <Panel>
+            <PanelHeader
+              title="Next controls"
+              description="Backlog for parity with bigger site builders."
+              icon={<SlidersHorizontal className="size-4" />}
+            />
+            <PanelContent>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li>Per-site role overrides</li>
+                <li>Permission groups for products, orders, and media folders</li>
+                <li>Real email invite delivery and password reset events</li>
+                <li>Activity log drill-down by user</li>
+              </ul>
+            </PanelContent>
+          </Panel>
+        </aside>
+      </div>
 
       {pendingDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">

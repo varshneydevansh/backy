@@ -76,8 +76,8 @@ export function MainLayout({ children }: MainLayoutProps) {
         />
 
         {/* Page Content */}
-        <main className={cn('flex-1 overflow-auto', isEditorWorkspace ? 'bg-muted/40 p-3 lg:p-4' : 'p-6')}>
-          <div className={cn(isEditorWorkspace ? 'w-full min-w-0' : 'max-w-7xl mx-auto')}>
+        <main className={cn('flex-1 overflow-auto', isEditorWorkspace ? 'bg-muted/40 p-3 lg:p-4' : 'p-5 lg:p-6')}>
+          <div className={cn(isEditorWorkspace ? 'w-full min-w-0' : 'mx-auto w-full max-w-[1680px]')}>
             {children}
           </div>
         </main>

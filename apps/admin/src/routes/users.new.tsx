@@ -4,7 +4,7 @@
 
 import { useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, CheckCircle2, Mail, Shield, UserPlus } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock3, Code2, KeyRound, Mail, Shield, UserPlus } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { cn } from '@/lib/utils';
 import { createUser } from '@/lib/adminContentApi';
@@ -23,6 +23,14 @@ const ROLE_OPTIONS: Array<{ value: UserRole; label: string; detail: string }> = 
   { value: 'viewer', label: 'Viewer', detail: 'Reviews the workspace without changing content or settings.' },
 ];
 
+const ROLE_CAPABILITIES: Array<{ label: string; roles: UserRole[] }> = [
+  { label: 'View dashboard data, sites, pages, reports, and submissions', roles: ['owner', 'admin', 'editor', 'viewer'] },
+  { label: 'Create and update pages, posts, forms, collections, and media', roles: ['owner', 'admin', 'editor'] },
+  { label: 'Publish content and update products or orders', roles: ['owner', 'admin', 'editor'] },
+  { label: 'Manage API keys, integrations, settings, and users', roles: ['owner', 'admin'] },
+  { label: 'Own billing, destructive settings, and workspace transfer', roles: ['owner'] },
+];
+
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
 function NewUserPage() {
@@ -38,6 +46,10 @@ function NewUserPage() {
 
   const selectedRole = useMemo(
     () => ROLE_OPTIONS.find((role) => role.value === formData.role) || ROLE_OPTIONS[2],
+    [formData.role],
+  );
+  const selectedCapabilities = useMemo(
+    () => ROLE_CAPABILITIES.filter((capability) => capability.roles.includes(formData.role)),
     [formData.role],
   );
   const canSubmit = formData.fullName.trim().length > 1 && isValidEmail(formData.email);
@@ -81,12 +93,12 @@ function NewUserPage() {
           className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <ArrowLeft className="h-4 w-4" />
-          Users
+          Back to users
         </button>
       }
-      className="mx-auto max-w-5xl"
+      className="w-full"
     >
-      <form onSubmit={handleSubmit} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <form onSubmit={handleSubmit} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
           <div className="flex items-start gap-3">
             <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
@@ -146,7 +158,7 @@ function NewUserPage() {
               </span>
             </div>
 
-            <div className="grid gap-3">
+            <div className="grid gap-3 md:grid-cols-2">
               {ROLE_OPTIONS.map((role) => (
                 <label
                   key={role.value}
@@ -175,9 +187,14 @@ function NewUserPage() {
 
         <aside className="space-y-4">
           <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Shield className="h-4 w-4 text-teal-700" />
-              Access preview
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
+                <Shield className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Access preview</h2>
+                <p className="mt-1 text-sm text-muted-foreground">This is the account Backy will create through the users API.</p>
+              </div>
             </div>
             <dl className="mt-4 space-y-3 text-sm">
               <div>
@@ -190,9 +207,61 @@ function NewUserPage() {
               </div>
               <div>
                 <dt className="text-xs font-medium text-muted-foreground">Email delivery</dt>
-                <dd className="mt-1 text-muted-foreground">Stored now. Real email sending belongs in the auth/integrations pass.</dd>
+                <dd className="mt-1 text-muted-foreground">The user record is persisted now; real email delivery belongs in the auth/integrations pass.</dd>
               </div>
             </dl>
+          </section>
+
+          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-slate-100 p-2 text-slate-700">
+                <KeyRound className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">{selectedRole.label} can</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{selectedRole.detail}</p>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              {selectedCapabilities.map((capability) => (
+                <div key={capability.label} className="flex items-start gap-2 rounded-lg border border-border bg-background p-3 text-sm">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                  <span>{capability.label}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
+                <Clock3 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Invitation lifecycle</h2>
+                <p className="mt-1 text-sm text-muted-foreground">New users start as invited, then can be activated, suspended, or removed from their profile.</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-primary/10 p-2 text-primary">
+                <Code2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">API body</h2>
+                <p className="mt-1 text-sm text-muted-foreground">The submit action sends this structure to the backend.</p>
+              </div>
+            </div>
+            <pre className="mt-4 overflow-x-auto rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+{JSON.stringify({
+  fullName: formData.fullName.trim() || 'New collaborator',
+  email: formData.email.trim().toLowerCase() || 'person@example.com',
+  role: formData.role,
+  status: 'invited',
+}, null, 2)}
+            </pre>
           </section>
 
           <section className="rounded-lg border border-border bg-card p-5 shadow-sm">

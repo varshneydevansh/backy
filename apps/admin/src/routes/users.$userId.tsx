@@ -6,7 +6,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   ArrowLeft,
+  CheckCircle2,
+  Clock3,
+  Code2,
   ExternalLink,
+  KeyRound,
   Mail,
   Save,
   Shield,
@@ -44,6 +48,21 @@ const STATUS_OPTIONS: Array<{ value: UserStatus; label: string; detail: string }
   { value: 'inactive', label: 'Inactive', detail: 'Kept for records without active access.' },
   { value: 'suspended', label: 'Suspended', detail: 'Blocked until an admin restores access.' },
 ];
+
+const ROLE_CAPABILITIES: Array<{ label: string; roles: UserRole[] }> = [
+  { label: 'View dashboards, sites, content, submissions, and reports', roles: ['owner', 'admin', 'editor', 'viewer'] },
+  { label: 'Create and edit pages, posts, forms, collections, and media', roles: ['owner', 'admin', 'editor'] },
+  { label: 'Publish content and update products or orders', roles: ['owner', 'admin', 'editor'] },
+  { label: 'Manage users, settings, integrations, and API keys', roles: ['owner', 'admin'] },
+  { label: 'Own billing, destructive settings, and workspace transfer', roles: ['owner'] },
+];
+
+const STATUS_OUTCOMES: Record<UserStatus, string> = {
+  active: 'This user can sign in after auth accepts their credentials.',
+  invited: 'This user is saved as pending and can be activated from this page.',
+  inactive: 'This user stays in records without active workspace access.',
+  suspended: 'This user is blocked until an admin changes the account state.',
+};
 
 const getInitials = (name: string) => (
   name
@@ -197,9 +216,9 @@ function EditUserPage() {
           Users
         </button>
       }
-      className="mx-auto max-w-6xl"
+      className="w-full"
     >
-      <form onSubmit={handleSubmit} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <form onSubmit={handleSubmit} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         <section className="space-y-5">
           <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -293,6 +312,36 @@ function EditUserPage() {
               </label>
             </div>
           </div>
+
+          <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-slate-100 p-2 text-slate-700">
+                <KeyRound className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-base font-semibold text-foreground">Permission preview</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Use this before saving to understand what the selected role unlocks.</p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              {ROLE_CAPABILITIES.map((capability) => {
+                const allowed = capability.roles.includes(formData.role);
+                return (
+                  <div
+                    key={capability.label}
+                    className={cn(
+                      'flex items-start gap-3 rounded-lg border p-3 text-sm',
+                      allowed ? 'border-emerald-200 bg-emerald-50/50 text-emerald-950' : 'border-border bg-muted/30 text-muted-foreground',
+                    )}
+                  >
+                    <CheckCircle2 className={cn('mt-0.5 h-4 w-4 shrink-0', allowed ? 'text-emerald-600' : 'text-muted-foreground')} />
+                    <span>{capability.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </section>
 
         <aside className="space-y-4">
@@ -312,6 +361,38 @@ function EditUserPage() {
                 <dd className="mt-1 text-foreground">{user.lastActive}</dd>
               </div>
             </dl>
+          </section>
+
+          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
+                <Clock3 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Status outcome</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{STATUS_OUTCOMES[formData.status]}</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-primary/10 p-2 text-primary">
+                <Code2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">API update</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Save sends this payload to the user detail endpoint.</p>
+              </div>
+            </div>
+            <pre className="mt-4 overflow-x-auto rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+{JSON.stringify({
+  fullName: formData.fullName.trim() || user.fullName,
+  email: formData.email.trim().toLowerCase() || user.email,
+  role: formData.role,
+  status: formData.status,
+}, null, 2)}
+            </pre>
           </section>
 
           <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
