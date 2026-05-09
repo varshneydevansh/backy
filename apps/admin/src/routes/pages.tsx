@@ -1865,7 +1865,8 @@ function PagesListView() {
               <button
                 type="button"
                 onClick={() => setPendingBulkDelete(false)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                disabled={isBulkBusy}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -1873,9 +1874,9 @@ function PagesListView() {
                 type="button"
                 onClick={() => void handleBulkAction()}
                 disabled={isBulkBusy}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Delete pages
+                {isBulkBusy ? 'Deleting...' : 'Delete pages'}
               </button>
             </div>
           </div>
