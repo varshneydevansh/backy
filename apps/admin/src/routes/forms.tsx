@@ -777,6 +777,8 @@ function FormsRoute() {
   };
 
   const loadForms = async () => {
+    if (isFormsBusy) return;
+
     setIsLoading(true);
     setError(null);
     setNotice(null);
@@ -852,7 +854,7 @@ function FormsRoute() {
   }, [activeSiteId]);
 
   const handleSubmissionStatus = async (submission: FormSubmission, status: FormSubmissionStatus) => {
-    if (isUpdatingId) return;
+    if (isFormsBusy) return;
     if (submission.status === status) return;
 
     setIsUpdatingId(submission.id);
@@ -985,6 +987,8 @@ function FormsRoute() {
   };
 
   const copyFormApiText = async (value: string, label: string) => {
+    if (isFormsBusy) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setError(null);
@@ -998,6 +1002,8 @@ function FormsRoute() {
     setNotice(`${label} copied.`);
   };
   const downloadFormsHandoff = () => {
+    if (isFormsBusy) return;
+
     const blob = new Blob([formsHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -1117,11 +1123,12 @@ function FormsRoute() {
             <Button
               variant="outline"
               onClick={() => void copyFormApiText(formsHandoffText, 'Forms handoff manifest')}
+              disabled={isFormsBusy}
               iconStart={<Copy className="size-4" />}
             >
               Copy manifest
             </Button>
-            <Button variant="outline" onClick={downloadFormsHandoff} iconStart={<Download className="size-4" />}>
+            <Button variant="outline" onClick={downloadFormsHandoff} disabled={isFormsBusy} iconStart={<Download className="size-4" />}>
               Download JSON
             </Button>
             <Button
@@ -1310,7 +1317,11 @@ function FormsRoute() {
                     <Link
                       to="/pages/new"
                       search={{ siteId: activeSiteId, template: template.pageTemplate }}
-                      className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-primary bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                      aria-disabled={isFormsBusy}
+                      className={cn(
+                        'inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-primary bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90',
+                        isFormsBusy && 'pointer-events-none opacity-60',
+                      )}
                     >
                       <Sparkles className="size-4" />
                       Start page
@@ -1318,6 +1329,7 @@ function FormsRoute() {
                     <Button
                       size="sm"
                       onClick={() => void copyFormApiText(templateText, `${template.title} form template`)}
+                      disabled={isFormsBusy}
                       iconStart={<Copy className="size-4" />}
                     >
                       Copy schema
@@ -1326,6 +1338,7 @@ function FormsRoute() {
                       size="sm"
                       variant="outline"
                       onClick={() => void copyFormApiText(payloadText, `${template.title} sample payload`)}
+                      disabled={isFormsBusy}
                       iconStart={<Copy className="size-4" />}
                     >
                       Payload
@@ -1541,7 +1554,11 @@ function FormsRoute() {
                           to="/pages/$pageId/edit"
                           params={{ pageId: selectedForm.pageId }}
                           search={activeSiteSearch}
-                          className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+                          aria-disabled={isFormsBusy}
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted',
+                            isFormsBusy && 'pointer-events-none opacity-60',
+                          )}
                         >
                           <ExternalLink className="size-4" />
                           Page
@@ -1552,7 +1569,11 @@ function FormsRoute() {
                           to="/blog/$postId"
                           params={{ postId: selectedForm.postId }}
                           search={activeSiteSearch}
-                          className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+                          aria-disabled={isFormsBusy}
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted',
+                            isFormsBusy && 'pointer-events-none opacity-60',
+                          )}
                         >
                           <ExternalLink className="size-4" />
                           Blog
@@ -1623,12 +1644,13 @@ function FormsRoute() {
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <Button onClick={() => void copyFormApiText(selectedFormDefinitionUrl, 'Form definition URL')} iconStart={<Copy className="size-4" />}>
+                        <Button onClick={() => void copyFormApiText(selectedFormDefinitionUrl, 'Form definition URL')} disabled={isFormsBusy} iconStart={<Copy className="size-4" />}>
                           Copy definition
                         </Button>
                         <Button
                           variant="outline"
                           onClick={() => void copyFormApiText(formsHandoffText, 'Forms handoff manifest')}
+                          disabled={isFormsBusy}
                           iconStart={<Copy className="size-4" />}
                         >
                           Copy manifest
@@ -1644,6 +1666,7 @@ function FormsRoute() {
                         <Button
                           variant="outline"
                           onClick={() => void copyFormApiText(selectedFormSamplePayloadText, 'Sample payload')}
+                          disabled={isFormsBusy}
                           iconStart={<Copy className="size-4" />}
                         >
                           Copy payload
@@ -1651,6 +1674,7 @@ function FormsRoute() {
                         <Button
                           variant="outline"
                           onClick={() => void copyFormApiText(selectedFormCurlExample, 'cURL example')}
+                          disabled={isFormsBusy}
                           iconStart={<Copy className="size-4" />}
                         >
                           Copy cURL
@@ -1659,7 +1683,14 @@ function FormsRoute() {
                           href={selectedFormDefinitionUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                          aria-disabled={isFormsBusy}
+                          onClick={(event) => {
+                            if (isFormsBusy) event.preventDefault();
+                          }}
+                          className={cn(
+                            'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
+                            isFormsBusy && 'pointer-events-none opacity-60',
+                          )}
                         >
                           <ExternalLink className="size-4" />
                           Open definition
@@ -1835,7 +1866,7 @@ function FormsRoute() {
                         key={submission.id}
                         submission={submission}
                         fields={selectedForm?.fields || []}
-                        isUpdating={Boolean(isUpdatingId)}
+                        isUpdating={isFormsBusy}
                         onStatus={(status) => void handleSubmissionStatus(submission, status)}
                       />
                     ))}
