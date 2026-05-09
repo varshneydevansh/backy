@@ -10,6 +10,7 @@ import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { cn } from '@/lib/utils';
+import { getCanvasHeightForElements, withPageChrome } from '@/lib/editorTemplateChrome';
 import {
     DEFAULT_CANVAS_SIZE,
     createCanvasElement,
@@ -143,9 +144,6 @@ const slugify = (value: string) => (
     value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 );
 
-const PAGE_CHROME_HEADER_HEIGHT = 88;
-const PAGE_CHROME_FOOTER_HEIGHT = 168;
-
 const templateNavigationItems: Record<PageTemplate, string[]> = {
     blank: ['Home', 'About', 'Contact'],
     landing: ['Home', 'Features', 'Contact'],
@@ -155,109 +153,6 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     contact: ['Home', 'About', 'Contact'],
     registration: ['Home', 'Register', 'Contact'],
 };
-
-const cloneCanvasElement = (element: CanvasElement): CanvasElement => ({
-    ...element,
-    props: { ...element.props },
-    dataBindings: element.dataBindings ? element.dataBindings.map((binding) => ({ ...binding })) : undefined,
-    children: element.children?.map(cloneCanvasElement),
-});
-
-const shiftCanvasElement = (element: CanvasElement, offsetY: number): CanvasElement => ({
-    ...cloneCanvasElement(element),
-    y: element.y + offsetY,
-});
-
-const getTemplateBottom = (elements: CanvasElement[]) => (
-    elements.reduce((bottom, element) => Math.max(bottom, element.y + element.height), 0)
-);
-
-function withPageChrome(elements: CanvasElement[], input: { title: string; template: PageTemplate }): CanvasElement[] {
-    const shiftedElements = elements.map((element) => shiftCanvasElement(element, PAGE_CHROME_HEADER_HEIGHT));
-    const footerY = Math.max(getTemplateBottom(shiftedElements) + 56, DEFAULT_CANVAS_SIZE.height - PAGE_CHROME_FOOTER_HEIGHT);
-    const navItems = templateNavigationItems[input.template];
-    const brandLabel = input.title || 'Backy site';
-
-    return [
-        createCanvasElement('header', 0, 0, {
-            id: `${input.template}-site-header`,
-            width: DEFAULT_CANVAS_SIZE.width,
-            height: PAGE_CHROME_HEADER_HEIGHT,
-            props: {
-                backgroundColor: '#ffffff',
-                borderColor: '#e5e7eb',
-                borderWidth: 1,
-                borderStyle: 'solid',
-                padding: 0,
-            },
-            children: [
-                createCanvasElement('text', 72, 30, {
-                    id: `${input.template}-site-brand`,
-                    width: 210,
-                    height: 30,
-                    props: { content: brandLabel, fontSize: 18, fontWeight: '800', color: '#111827' },
-                }),
-                createCanvasElement('nav', 430, 18, {
-                    id: `${input.template}-site-navigation`,
-                    width: 430,
-                    height: 52,
-                    props: {
-                        navItems,
-                        backgroundColor: 'transparent',
-                        color: '#111827',
-                        padding: 0,
-                    },
-                }),
-                createCanvasElement('button', 982, 20, {
-                    id: `${input.template}-site-header-action`,
-                    width: 146,
-                    height: 48,
-                    props: { label: input.template === 'storefront' ? 'Shop now' : 'Contact', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontWeight: '700' },
-                }),
-            ],
-        }),
-        ...shiftedElements,
-        createCanvasElement('footer', 0, footerY, {
-            id: `${input.template}-site-footer`,
-            width: DEFAULT_CANVAS_SIZE.width,
-            height: PAGE_CHROME_FOOTER_HEIGHT,
-            props: {
-                backgroundColor: '#111827',
-                color: '#ffffff',
-                padding: 0,
-            },
-            children: [
-                createCanvasElement('heading', 72, 40, {
-                    id: `${input.template}-footer-heading`,
-                    width: 360,
-                    height: 38,
-                    props: { content: brandLabel, level: 'h3', fontSize: 24, fontWeight: '800', color: '#ffffff' },
-                }),
-                createCanvasElement('paragraph', 72, 90, {
-                    id: `${input.template}-footer-copy`,
-                    width: 460,
-                    height: 46,
-                    props: { content: 'Edit this footer, save it as a reusable section, or bind links from site navigation.', fontSize: 14, lineHeight: 1.5, color: '#cbd5e1' },
-                }),
-                createCanvasElement('nav', 700, 48, {
-                    id: `${input.template}-footer-navigation`,
-                    width: 330,
-                    height: 56,
-                    props: {
-                        navItems,
-                        backgroundColor: 'transparent',
-                        color: '#ffffff',
-                        padding: 0,
-                    },
-                }),
-            ],
-        }),
-    ];
-}
-
-const getCanvasHeightForElements = (elements: CanvasElement[]) => (
-    Math.max(DEFAULT_CANVAS_SIZE.height, getTemplateBottom(elements) + 48)
-);
 
 const isPageTemplate = (value: unknown): value is PageTemplate => (
     typeof value === 'string' && TEMPLATE_OPTIONS.some((template) => template.id === value)
@@ -1062,7 +957,12 @@ function buildTemplateElements(input: {
     const title = input.title || 'New page';
     const description = input.description || 'Use this space to explain the promise of this page and guide visitors to the next action.';
     const formSlug = slugify(input.slug || title || 'new-page');
-    const withChrome = (elements: CanvasElement[]) => withPageChrome(elements, { title, template: input.template });
+    const withChrome = (elements: CanvasElement[]) => withPageChrome(elements, {
+        title,
+        variant: input.template,
+        navItems: templateNavigationItems[input.template],
+        headerActionLabel: input.template === 'storefront' ? 'Shop now' : 'Contact',
+    });
 
     if (input.template === 'landing') {
         return withChrome([

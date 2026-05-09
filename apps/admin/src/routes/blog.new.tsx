@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { cn } from '@/lib/utils';
+import { getCanvasHeightForElements, withPageChrome } from '@/lib/editorTemplateChrome';
 import type { CanvasElement } from '@/types/editor';
 import type { CanvasSize } from '@/types/editor';
 import type { PageSettings } from '@/components/editor/PageSettingsModal';
@@ -84,6 +85,80 @@ const BLOG_CREATE_WORKFLOW = [
     { label: 'Check', detail: 'Confirm summary, route, schedule state, and canvas content before saving.' },
     { label: 'Ship', detail: 'Save draft, publish immediately, or schedule the post for the selected site.' },
 ] as const;
+
+const createInitialBlogElements = (): CanvasElement[] => withPageChrome([
+    createCanvasElement('section', 0, 0, {
+        id: 'blog-article-hero',
+        width: DEFAULT_CANVAS_SIZE.width,
+        height: 360,
+        dataBindings: [{ source: 'blog', mode: 'current', fields: ['title', 'excerpt', 'author', 'publishedAt', 'coverImage'] }],
+        props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+        children: [
+            createCanvasElement('text', 74, 64, {
+                id: 'blog-article-kicker',
+                width: 220,
+                height: 28,
+                props: { content: 'Article', fontSize: 13, fontWeight: '800', color: '#0f766e', textTransform: 'uppercase' },
+            }),
+            createCanvasElement('heading', 72, 104, {
+                id: 'blog-article-heading',
+                width: 660,
+                height: 106,
+                props: { content: 'Article title', level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+            }),
+            createCanvasElement('paragraph', 76, 226, {
+                id: 'blog-article-excerpt',
+                width: 560,
+                height: 72,
+                props: { content: 'Use the excerpt for feed previews, SEO summaries, and the public article opening.', fontSize: 17, lineHeight: 1.55, color: '#475569' },
+            }),
+            createCanvasElement('box', 790, 70, {
+                id: 'blog-article-cover',
+                width: 300,
+                height: 220,
+                dataBindings: [{ source: 'blog', mode: 'current', fields: ['coverImage'] }],
+                props: { backgroundColor: '#e2e8f0', borderRadius: 8, borderColor: '#cbd5e1', borderWidth: 1, borderStyle: 'solid' },
+            }),
+        ],
+    }),
+    createCanvasElement('section', 0, 360, {
+        id: 'blog-article-body',
+        width: DEFAULT_CANVAS_SIZE.width,
+        height: 480,
+        dataBindings: [{ source: 'blog', mode: 'current', fields: ['content'] }],
+        props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+        children: [
+            createCanvasElement('paragraph', 220, 72, {
+                id: 'blog-article-lede',
+                width: 760,
+                height: 112,
+                props: {
+                    content: 'Start writing your story here. Replace this with rich text, media, quotes, product embeds, forms, or collection-backed sections.',
+                    fontSize: 20,
+                    lineHeight: 1.7,
+                    color: '#334155',
+                },
+            }),
+            createCanvasElement('quote', 260, 226, {
+                id: 'blog-article-quote',
+                width: 680,
+                height: 120,
+                props: {
+                    content: 'Save reusable article sections and reuse them across posts when the publication has a repeated style.',
+                    fontSize: 22,
+                    lineHeight: 1.5,
+                    color: '#0f172a',
+                },
+            }),
+        ],
+    }),
+], {
+    title: 'Blog article',
+    variant: 'blog-article',
+    navItems: ['Home', 'Blog', 'About', 'Contact'],
+    headerActionLabel: 'Subscribe',
+    footerCopy: 'Edit this article footer, save it as a reusable section, or bind it to publication navigation.',
+});
 
 function NewBlogPostPage() {
     const navigate = useNavigate();
@@ -166,21 +241,14 @@ function NewBlogPostPage() {
     };
 
     // Canvas State
-    const initialElements: CanvasElement[] = useMemo(() => [
-        createCanvasElement('text', 50, 50, {
-            width: 800,
-            height: 200,
-            props: {
-                content: 'Start writing your story...',
-                fontSize: 18,
-                lineHeight: 1.6,
-                color: '#334155',
-            },
-        }),
-    ], []);
+    const initialElements: CanvasElement[] = useMemo(() => createInitialBlogElements(), []);
+    const initialCanvasSize = useMemo<CanvasSize>(() => ({
+        ...DEFAULT_CANVAS_SIZE,
+        height: getCanvasHeightForElements(initialElements),
+    }), [initialElements]);
 
     const [canvasElements, setCanvasElements] = useState<CanvasElement[]>(initialElements);
-    const [canvasSize, setCanvasSize] = useState<CanvasSize>(DEFAULT_CANVAS_SIZE);
+    const [canvasSize, setCanvasSize] = useState<CanvasSize>(initialCanvasSize);
     const slugValue = slug || slugify(title);
     const selectedAuthor = authors.find((author) => author.id === selectedAuthorId);
     const selectedSite = sites.find((site) => (site.publicSiteId || site.id) === activeSiteId);
@@ -210,6 +278,7 @@ function NewBlogPostPage() {
         categoryIds: selectedCategoryIds,
         tagIds: selectedTagIds,
         content: `${canvasElements.length} root layer${canvasElements.length === 1 ? '' : 's'}`,
+        siteChrome: 'editable header, navigation, article body, and footer seeded',
         canvas: {
             width: canvasSize.width,
             height: canvasSize.height,
@@ -263,6 +332,7 @@ function NewBlogPostPage() {
             width: canvasSize.width,
             height: canvasSize.height,
             rootLayerCount: canvasElements.length,
+            siteChrome: ['header', 'navigation', 'article hero', 'article body', 'footer'],
             supportsGrouping: true,
             supportsResponsivePreview: true,
             source: 'Backy CanvasEditor serialized content',
@@ -273,6 +343,7 @@ function NewBlogPostPage() {
             'Backend owns duplicate slug validation per site.',
             'Scheduled posts require a publish date before they can be created.',
             'The public frontend should render the saved canvas content for this route instead of hardcoding blog templates.',
+            'New posts start with editable site chrome and article layout blocks so headers, nav, body, and footer remain controlled by Backy.',
             'Categories, tags, and author IDs are site-scoped and should be read from Backy before rendering filters or bylines.',
         ],
     }), [
@@ -564,6 +635,9 @@ function NewBlogPostPage() {
                                         </span>
                                         <span className="rounded bg-muted px-2 py-1">
                                             {canvasElements.length} root layer{canvasElements.length === 1 ? '' : 's'}
+                                        </span>
+                                        <span className="rounded bg-muted px-2 py-1">
+                                            Header/nav/footer seeded
                                         </span>
                                         <span className="rounded bg-muted px-2 py-1">
                                             Cmd/Ctrl+G grouping
