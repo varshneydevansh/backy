@@ -4,8 +4,8 @@
 
 import { useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CheckCircle2, FileText, Globe, Layers3, Link2, Save } from 'lucide-react';
-import { createPage, createSite } from '@/lib/adminContentApi';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Layers3, Link2, Save } from 'lucide-react';
+import { createPage, createSite, getAdminApiBase } from '@/lib/adminContentApi';
 import { useStore, type Site } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { cn } from '@/lib/utils';
@@ -101,6 +101,11 @@ const SITE_CREATION_AREAS = [
     detail: 'The first homepage and supporting routes that will open in the editor.',
     href: '#site-pages',
   },
+  {
+    title: 'API handoff',
+    detail: 'Create endpoint, starter payload, seeded routes, and frontend contract.',
+    href: '#site-api',
+  },
 ] as const;
 
 const slugify = (value: string) => value
@@ -123,6 +128,7 @@ function NewSitePage() {
   const { sites, pages, setSites, setPages } = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [slugEdited, setSlugEdited] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -147,6 +153,8 @@ function NewSitePage() {
   const canSubmit = formData.name.trim().length > 1
     && isValidSlug(displaySlug)
     && isValidDomain(normalizedDomain);
+  const adminSitesUrl = useMemo(() => `${getAdminApiBase()}/sites`, []);
+  const publicApiBase = useMemo(() => getAdminApiBase().replace(/\/api\/admin$/, '/api'), []);
   const siteCreationReadiness = useMemo(() => {
     const hasName = formData.name.trim().length > 1;
     const hasValidSlug = isValidSlug(displaySlug);
@@ -209,17 +217,129 @@ function NewSitePage() {
     selectedBlueprint.pages,
     selectedStatus.detail,
   ]);
+  const createPayloadPreview = useMemo(() => ({
+    name: formData.name.trim() || 'Untitled site',
+    slug: displaySlug || 'new-site',
+    customDomain: normalizedDomain || null,
+    description: formData.description.trim(),
+    status: formData.status,
+    blueprint: formData.blueprint,
+    starterPages: selectedBlueprint.pages.map((page) => ({
+      title: page.title,
+      slug: page.slug,
+      path: page.isHomepage ? '/' : `/${page.slug}`,
+      template: page.template,
+      isHomepage: Boolean(page.isHomepage),
+    })),
+  }), [
+    displaySlug,
+    formData.blueprint,
+    formData.description,
+    formData.name,
+    formData.status,
+    normalizedDomain,
+    selectedBlueprint.pages,
+  ]);
+  const creationHandoff = useMemo(() => ({
+    generatedAt: new Date().toISOString(),
+    endpoint: {
+      method: 'POST',
+      url: adminSitesUrl,
+    },
+    site: {
+      name: formData.name.trim() || 'Untitled site',
+      slug: displaySlug || 'new-site',
+      publicAddress,
+      customDomain: normalizedDomain || null,
+      status: formData.status,
+    },
+    blueprint: {
+      id: selectedBlueprint.id,
+      name: selectedBlueprint.name,
+      detail: selectedBlueprint.detail,
+      seedsPages: selectedBlueprint.pages.length > 0,
+    },
+    seededPages: selectedBlueprint.pages.map((page) => ({
+      title: page.title,
+      slug: page.slug,
+      path: page.isHomepage ? '/' : `/${page.slug}`,
+      template: page.template,
+      isHomepage: Boolean(page.isHomepage),
+      content: 'Serialized Backy canvas starter content',
+    })),
+    endpointsAfterCreate: {
+      siteDetail: `${adminSitesUrl}/{siteId}`,
+      siteReadiness: `${adminSitesUrl}/{siteId}/readiness`,
+      navigation: `${adminSitesUrl}/{siteId}/navigation`,
+      redirects: `${adminSitesUrl}/{siteId}/redirects`,
+      seo: `${adminSitesUrl}/{siteId}/seo`,
+      pages: `${adminSitesUrl}/{siteId}/pages`,
+      publicResolve: `${publicApiBase}/sites/{siteId}/resolve?path=/`,
+      publicRender: `${publicApiBase}/sites/{siteId}/render?path=/`,
+      publicOpenApi: `${publicApiBase}/sites/{siteId}/openapi`,
+    },
+    readiness: siteCreationReadiness,
+    payloadPreview: createPayloadPreview,
+    guardrails: [
+      'Backend owns duplicate slug and custom domain validation.',
+      'Starter pages are persisted only after the site record is created.',
+      'Seeded pages use serialized canvas content so users can edit them immediately.',
+      'Custom frontends should resolve site/page content through public endpoints and keep admin endpoints private.',
+    ],
+  }), [
+    adminSitesUrl,
+    createPayloadPreview,
+    displaySlug,
+    formData.name,
+    formData.status,
+    normalizedDomain,
+    publicAddress,
+    publicApiBase,
+    selectedBlueprint.detail,
+    selectedBlueprint.id,
+    selectedBlueprint.name,
+    selectedBlueprint.pages,
+    siteCreationReadiness,
+  ]);
+  const creationHandoffText = useMemo(() => JSON.stringify(creationHandoff, null, 2), [creationHandoff]);
+
+  const copyCreationText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setError(null);
+      setNotice(`${label} copied.`);
+    } catch {
+      setNotice(null);
+      setError(value);
+    }
+  };
+
+  const downloadCreationHandoff = () => {
+    const blob = new Blob([creationHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${displaySlug || 'new-site'}-backy-site-create-handoff.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setNotice('Site creation handoff manifest downloaded.');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!canSubmit) {
       setError('Add a site name, use a valid URL slug, and check the custom domain format.');
+      setNotice(null);
       return;
     }
 
     setIsLoading(true);
     setError(null);
+    setNotice(null);
 
     try {
       const created = await createSite({
@@ -243,6 +363,7 @@ function NewSitePage() {
       setError(createError instanceof Error
         ? `${createError.message}. The site was not created because the backend did not persist it.`
         : 'Unable to create site. The site was not persisted.');
+      setNotice(null);
       setIsLoading(false);
     }
   };
@@ -282,14 +403,32 @@ function NewSitePage() {
               Prepare a multi-page website workspace with routes, starter canvas content, public address, and backend systems from the first submit.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => navigate({ to: '/pages' })}
-            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
-          >
-            <FileText className="h-4 w-4" />
-            Existing pages
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void copyCreationText(creationHandoffText, 'Site creation handoff manifest')}
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+            >
+              <Copy className="h-4 w-4" />
+              Copy handoff
+            </button>
+            <button
+              type="button"
+              onClick={downloadCreationHandoff}
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+            >
+              <Download className="h-4 w-4" />
+              Download JSON
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate({ to: '/pages' })}
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+            >
+              <FileText className="h-4 w-4" />
+              Existing pages
+            </button>
+          </div>
         </div>
 
         <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
@@ -341,7 +480,7 @@ function NewSitePage() {
               Jump through the decisions that make this site ready for pages, APIs, design work, and publishing.
             </p>
           </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
             {SITE_CREATION_AREAS.map((area) => (
               <a
                 key={area.title}
@@ -373,6 +512,11 @@ function NewSitePage() {
           {error && (
             <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               {error}
+            </div>
+          )}
+          {notice && (
+            <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              {notice}
             </div>
           )}
 
@@ -547,6 +691,38 @@ function NewSitePage() {
                   <div className="mt-1 text-xs text-muted-foreground">/{page.isHomepage ? '' : page.slug}</div>
                 </div>
               ))}
+            </div>
+          </section>
+
+          <section id="site-api" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Code2 className="h-4 w-4 text-teal-700" />
+              API handoff
+            </div>
+            <div className="mt-4 rounded-lg border border-border bg-background p-3">
+              <div className="text-xs font-medium text-muted-foreground">Create endpoint</div>
+              <div className="mt-2 break-all font-mono text-xs text-foreground">{adminSitesUrl}</div>
+            </div>
+            <pre className="mt-3 max-h-72 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
+{JSON.stringify(createPayloadPreview, null, 2)}
+            </pre>
+            <div className="mt-3 grid gap-2">
+              <button
+                type="button"
+                onClick={() => void copyCreationText(adminSitesUrl, 'Site create API URL')}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+              >
+                <Copy className="h-4 w-4" />
+                Copy URL
+              </button>
+              <button
+                type="button"
+                onClick={() => void copyCreationText(creationHandoffText, 'Site creation handoff manifest')}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+              >
+                <Copy className="h-4 w-4" />
+                Copy handoff
+              </button>
             </div>
           </section>
 
