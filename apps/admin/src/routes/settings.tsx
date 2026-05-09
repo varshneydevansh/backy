@@ -101,7 +101,7 @@ const DELIVERY_OPTIONS: Array<{
     id: 'custom-frontend',
     title: 'Custom frontend (headless API mode)',
     description:
-      'Use your own frontend and consume Backy public APIs for pages, forms, and comments.',
+      'Use your own frontend and consume Backy public APIs for pages, products, forms, media, comments, and dynamic data.',
   },
 ];
 
@@ -170,6 +170,16 @@ const PUBLIC_API_ENDPOINTS: ApiEndpoint[] = [
     method: 'GET',
     path: '/sites/:siteId/collections/:collectionId/records?status=published',
     description: 'Fetch public collection records for listings, catalogs, and structured content.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/collections/products/records?status=published',
+    description: 'Fetch published product catalog records for storefront grids and product detail pages.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/collections/products/records?slug=:slug',
+    description: 'Resolve a single public product by slug for a custom storefront.',
   },
   {
     method: 'GET',
@@ -281,8 +291,28 @@ const ADMIN_API_ENDPOINTS: ApiEndpoint[] = [
   },
   {
     method: 'GET',
+    path: '/sites/:siteId/forms/:formId/contacts',
+    description: 'Review private contacts captured by a public registration, contact, or inquiry form.',
+  },
+  {
+    method: 'GET',
     path: '/sites/:siteId/comments?status=pending',
     description: 'Moderate page and blog comments from a custom admin frontend.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/collections/products/records',
+    description: 'Manage sellable product catalog records and storefront publishing state.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/collections/orders/records',
+    description: 'Manage private order records, payment state, fulfillment, refunds, and customer support data.',
+  },
+  {
+    method: 'GET',
+    path: '/users',
+    description: 'List admin collaborators, roles, lifecycle state, and access metadata.',
   },
 ];
 
@@ -300,6 +330,13 @@ const PLATFORM_RESPONSIBILITIES: ResponsibilityArea[] = [
     controlSurface: 'Forms, Contacts, Comments, Users, Notifications',
     runtimeSource: 'Backy public/admin APIs with audit-ready moderation and exports',
     frontendImpact: 'Powers registrations, lead capture, comments, team access, and workflow alerts.',
+  },
+  {
+    area: 'Commerce and selling',
+    owner: 'Backy in-house',
+    controlSurface: 'Products, Orders, checkout handoff fields, refunds, fulfillment, inventory, and exports',
+    runtimeSource: 'Backy collection APIs with public product delivery and private order operations',
+    frontendImpact: 'Lets custom storefronts render products publicly while order/customer/payment data remains admin-only.',
   },
   {
     area: 'Media and file delivery',
@@ -326,8 +363,8 @@ const PLATFORM_RESPONSIBILITIES: ResponsibilityArea[] = [
 
 const PLATFORM_BACKLOG = [
   {
-    item: 'Commerce API persistence',
-    status: 'admin model exists; public storefront and checkout API routes still need backend persistence',
+    item: 'Checkout/provider orchestration',
+    status: 'product and order control surfaces exist; payment-provider sessions, taxes, shipping rates, and webhook settlement still need deeper backend workflows',
   },
   {
     item: 'Supabase auth adapter',
