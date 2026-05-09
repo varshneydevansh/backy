@@ -200,6 +200,14 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     [activeSite?.id, activeSiteId],
   );
   const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
+  const profileUser = useMemo(
+    () => (
+      user
+        ? storeUsers.find((member) => member.id === user.id || member.email.toLowerCase() === user.email.toLowerCase())
+        : undefined
+    ),
+    [storeUsers, user],
+  );
   const notificationCount = pendingComments.length + workflowNotifications.length;
   const workflowShortcuts = useMemo<WorkflowShortcut[]>(() => {
     const routeCount = (route: WorkflowNotification['action']['route']) => (
@@ -1019,8 +1027,14 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                 <button
                   onClick={() => {
                     setUserMenuOpen(false);
+                    if (profileUser) {
+                      navigate({ to: '/users/$userId', params: { userId: profileUser.id } });
+                      return;
+                    }
+
                     navigate({ to: '/settings' });
                   }}
+                  data-testid="header-profile-link"
                   className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-accent w-full text-left"
                 >
                   <User className="w-4 h-4" />
