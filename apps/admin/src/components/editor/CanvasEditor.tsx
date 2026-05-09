@@ -2039,6 +2039,8 @@ export function CanvasEditor({
   }, [handleSaveWrapper, markChanges]);
 
   const handleTogglePublish = useCallback(async () => {
+    const previousSettings = pageSettings;
+    const wasDirty = hasUnsavedChanges;
     const nextStatus = pageSettings.status === 'published' ? 'draft' : 'published';
     if (nextStatus === 'published' && publishDisabled) {
       setEditorNotice(publishDisabledReason || 'Resolve page readiness issues before publishing.');
@@ -2051,8 +2053,12 @@ export function CanvasEditor({
     };
     setPageSettings(nextSettings);
     markChanges();
-    await handleSaveWrapper(nextSettings, true);
-  }, [handleSaveWrapper, pageSettings, markChanges, publishDisabled, publishDisabledReason]);
+    const saved = await handleSaveWrapper(nextSettings, false);
+    if (!saved) {
+      setPageSettings(previousSettings);
+      setHasUnsavedChanges(wasDirty);
+    }
+  }, [handleSaveWrapper, hasUnsavedChanges, pageSettings, markChanges, publishDisabled, publishDisabledReason]);
 
   const performReload = useCallback(() => {
     const nextElements = getInitialElements();
