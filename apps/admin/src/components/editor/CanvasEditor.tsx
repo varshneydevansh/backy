@@ -1452,6 +1452,11 @@ export function CanvasEditor({
     newElements: CanvasElement[],
     options?: { transient?: boolean; commit?: boolean; selectedId?: string | null },
   ) => {
+    if (isCanvasMutationDisabled) {
+      pendingTransformRef.current = null;
+      return;
+    }
+
     if (options?.transient) {
       pendingTransformRef.current = {
         elements: newElements,
@@ -1480,7 +1485,7 @@ export function CanvasEditor({
 
     pendingTransformRef.current = null;
     updateElementsWithHistory(newElements);
-  }, [addToHistory, markChanges, selectedId, selectedIds, updateElementsWithHistory]);
+  }, [addToHistory, isCanvasMutationDisabled, markChanges, selectedId, selectedIds, updateElementsWithHistory]);
 
   /**
    * Handle element update from property panel
@@ -1688,6 +1693,10 @@ export function CanvasEditor({
   }, [activeCanvasScale]);
 
   const addLibraryItemToCanvas = useCallback((item: ComponentLibraryItem, x: number, y: number) => {
+    if (isCanvasMutationDisabled) {
+      return;
+    }
+
     const normalizedType = normalizeElementType(item.type);
     const highestZ = Math.max(walkTreeMaxZ(elements), 0);
     const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
@@ -1753,12 +1762,16 @@ export function CanvasEditor({
     setSelectedId(newElement.id);
     setSelectedIds([newElement.id]);
     setRightPanel('properties');
-  }, [elements, findElementById, selectedId, updateElementsWithHistory]);
+  }, [elements, findElementById, isCanvasMutationDisabled, selectedId, updateElementsWithHistory]);
 
   const handleAddLibraryItem = useCallback((item: ComponentLibraryItem) => {
+    if (isCanvasMutationDisabled) {
+      return;
+    }
+
     const point = getViewportInsertionPoint();
     addLibraryItemToCanvas(item, point.x, point.y);
-  }, [addLibraryItemToCanvas, getViewportInsertionPoint]);
+  }, [addLibraryItemToCanvas, getViewportInsertionPoint, isCanvasMutationDisabled]);
 
   const handleSaveSelectionAsReusableSection = useCallback(() => {
     if (!activeSiteId || !selectedId || isSavingReusableSection) {
@@ -1905,6 +1918,9 @@ export function CanvasEditor({
   const handleCanvasDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
+      if (isCanvasMutationDisabled) {
+        return;
+      }
 
       try {
         const data = e.dataTransfer.getData('application/json');
@@ -1940,7 +1956,7 @@ export function CanvasEditor({
         console.error('Failed to drop element:', err);
       }
     },
-    [activeCanvasScale, addLibraryItemToCanvas]
+    [activeCanvasScale, addLibraryItemToCanvas, isCanvasMutationDisabled]
   );
 
   /**
@@ -2855,7 +2871,11 @@ export function CanvasEditor({
               backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(71,85,105,0.18) 1px, transparent 0)',
               backgroundSize: '20px 20px',
             }}
-            onDragOver={(e) => e.preventDefault()}
+            onDragOver={(e) => {
+              if (!isCanvasMutationDisabled) {
+                e.preventDefault();
+              }
+            }}
             onDrop={handleCanvasDrop}
           >
             <div className="flex min-h-full min-w-max justify-center">
@@ -2895,6 +2915,10 @@ export function CanvasEditor({
                       onToggleSelect={handleCanvasToggleSelect}
                       size={size}
                       onSizeChange={(newSize) => {
+                        if (isCanvasMutationDisabled) {
+                          return;
+                        }
+
                         setSize(newSize);
                         markChanges();
                         if (onChange) {
@@ -2902,6 +2926,7 @@ export function CanvasEditor({
                         }
                       }}
                       isPreview={isPreview}
+                      disabled={isCanvasMutationDisabled}
                       viewportScale={activeCanvasScale}
                     />
                   </div>
@@ -2962,6 +2987,10 @@ export function CanvasEditor({
                           onToggleSelect={handleCanvasToggleSelect}
                           size={size}
                           onSizeChange={(newSize) => {
+                            if (isCanvasMutationDisabled) {
+                              return;
+                            }
+
                             setSize(newSize);
                             markChanges();
                             if (onChange) {
@@ -2969,6 +2998,7 @@ export function CanvasEditor({
                             }
                           }}
                           isPreview={isPreview}
+                          disabled={isCanvasMutationDisabled}
                           viewportScale={activeCanvasScale}
                         />
                       </div>

@@ -668,6 +668,8 @@ interface CanvasProps {
   onSizeChange?: (newSize: CanvasSize) => void;
   /** Whether canvas is in preview mode */
   isPreview?: boolean;
+  /** Whether editing interactions are disabled by the editor shell */
+  disabled?: boolean;
   /** Visual viewport scale applied by the editor shell */
   viewportScale?: number;
 }
@@ -756,6 +758,7 @@ export function Canvas({
   size,
   onSizeChange,
   isPreview = false,
+  disabled = false,
   viewportScale = 1,
 }: CanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -926,7 +929,7 @@ export function Canvas({
    */
   const handleElementDragStart = useCallback(
     (e: React.PointerEvent | React.MouseEvent, elementId: string) => {
-      if (isPreview) return;
+      if (isPreview || disabled) return;
       if ('button' in e && e.button !== 0) return;
       if (dragStateRef.current || resizeStateRef.current) return;
 
@@ -1016,7 +1019,7 @@ export function Canvas({
       setDragState(nextDragState);
       setResizeState(null);
     },
-    [elements, exitTextEditingForTransform, isInteractiveHandle, isTextEditorInteraction, isPreview, onSelect, selectedIds, size.height, size.width]
+    [disabled, elements, exitTextEditingForTransform, isInteractiveHandle, isTextEditorInteraction, isPreview, onSelect, selectedIds, size.height, size.width]
   );
 
   /**
@@ -1024,7 +1027,7 @@ export function Canvas({
    */
   const handleResizeStart = useCallback(
     (e: React.MouseEvent | React.PointerEvent, elementId: string, handle: 'nw' | 'ne' | 'sw' | 'se') => {
-      if (isPreview) return;
+      if (isPreview || disabled) return;
       if ('button' in e && e.button !== 0) return;
 
       e.stopPropagation();
@@ -1055,11 +1058,11 @@ export function Canvas({
         e.currentTarget.setPointerCapture?.(e.pointerId);
       }
     },
-    [elements, isPreview]
+    [disabled, elements, isPreview]
   );
 
   const handleGlobalElementMove = useCallback((event: MouseEvent | PointerEvent) => {
-    if (isPreview) {
+    if (isPreview || disabled) {
       return;
     }
 
@@ -1172,7 +1175,7 @@ export function Canvas({
     setAlignmentGuides(nextGuides);
     elementsRef.current = nextElements;
     onElementsChange(nextElements, { transient: true, selectedId: activeDragState.elementId });
-  }, [isPreview, onElementsChange, size.height, size.width, toCanvasDelta]);
+  }, [disabled, isPreview, onElementsChange, size.height, size.width, toCanvasDelta]);
 
   const handleGlobalElementUp = useCallback((event?: MouseEvent | PointerEvent) => {
     const activeDragState = dragStateRef.current;
@@ -1234,6 +1237,12 @@ export function Canvas({
 
   const handleCanvasElementDrop = useCallback(
     (event: React.DragEvent, forcedParentId?: string) => {
+      if (disabled || isPreview) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
       event.preventDefault();
       event.stopPropagation();
 
@@ -1330,11 +1339,15 @@ export function Canvas({
         console.error('Failed to drop element:', error);
       }
     },
-    [elements, onElementsChange, onSelect, toCanvasDelta]
+    [disabled, elements, isPreview, onElementsChange, onSelect, toCanvasDelta]
   );
 
   const handleElementPropsUpdate = useCallback(
     (elementId: string, updates: { [key: string]: unknown }) => {
+      if (disabled || isPreview) {
+        return;
+      }
+
       const next = updateElementById(elements, elementId, (element) => ({
         ...element,
         props: { ...element.props, ...updates },
@@ -1344,21 +1357,21 @@ export function Canvas({
         onElementsChange(next.elements);
       }
     },
-    [elements, onElementsChange]
+    [disabled, elements, isPreview, onElementsChange]
   );
 
   /**
    * Handle canvas resize start
    */
   const handleCanvasResizeStart = useCallback((e: React.MouseEvent) => {
-    if (isPreview) return;
+    if (isPreview || disabled) return;
     e.preventDefault();
     e.stopPropagation();
     setCanvasResizeState({
       startY: e.clientY,
       initialHeight: size.height,
     });
-  }, [isPreview, size.height]);
+  }, [disabled, isPreview, size.height]);
 
   /**
    * Global mouse move for canvas resize (attached to window/doc usually but we'll use local + capture for now)
@@ -1367,6 +1380,10 @@ export function Canvas({
    */
 
   const handleGlobalMouseMove = useCallback((e: MouseEvent) => {
+    if (disabled || isPreview) {
+      return;
+    }
+
     if (canvasResizeState && onSizeChange) {
       const deltaY = toCanvasDelta(e.clientY - canvasResizeState.startY);
       const newHeight = Math.max(size.minHeight || 600, canvasResizeState.initialHeight + deltaY);
@@ -1374,7 +1391,7 @@ export function Canvas({
       const snappedHeight = Math.round(newHeight / 10) * 10;
       onSizeChange({ ...size, height: snappedHeight });
     }
-  }, [canvasResizeState, onSizeChange, size, toCanvasDelta]);
+  }, [canvasResizeState, disabled, isPreview, onSizeChange, size, toCanvasDelta]);
 
   const handleGlobalMouseUp = useCallback(() => {
     if (canvasResizeState) {
@@ -1474,8 +1491,8 @@ export function Canvas({
       className={cn(
         'relative bg-white shadow-[0_18px_55px_rgba(15,23,42,0.16)] transition-shadow',
         isPreview ? 'overflow-hidden' : 'overflow-visible',
-        !isPreview && 'cursor-default ring-1 ring-slate-200',
-        isDropActive && !isPreview && 'ring-2 ring-sky-500 shadow-[0_22px_70px_rgba(14,165,233,0.24)]'
+        !isPreview && (disabled ? 'cursor-not-allowed ring-1 ring-slate-200' : 'cursor-default ring-1 ring-slate-200'),
+        isDropActive && !isPreview && !disabled && 'ring-2 ring-sky-500 shadow-[0_22px_70px_rgba(14,165,233,0.24)]'
       )}
       style={{
         width: size.width,
@@ -1491,13 +1508,13 @@ export function Canvas({
       onClick={handleCanvasClick}
       onDoubleClick={handleCanvasDoubleClick}
       onDragOver={(event) => {
-        if (!isPreview) {
+        if (!isPreview && !disabled) {
           event.preventDefault();
           event.dataTransfer.dropEffect = 'copy';
         }
       }}
       onDragEnter={(event) => {
-        if (!isPreview) {
+        if (!isPreview && !disabled) {
           event.preventDefault();
           setIsDropActive(true);
         }
