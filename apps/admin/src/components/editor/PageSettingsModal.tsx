@@ -1,8 +1,9 @@
 import { useMemo, useState, useEffect } from 'react';
-import { X, Search, Image as ImageIcon } from 'lucide-react';
+import { X, Search, Image as ImageIcon, Trash2, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ContentStatus } from '@/stores/mockStore';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
+import { MediaLibraryModal, type MediaContext } from '@/components/editor/MediaLibraryModal';
 
 export interface PageSettings {
     title: string;
@@ -24,6 +25,7 @@ interface PageSettingsModalProps {
     settings: PageSettings;
     onSave: (settings: PageSettings) => void;
     validateSettings?: (settings: PageSettings) => string | null;
+    mediaContext?: MediaContext;
 }
 
 const formatJsonLd = (jsonLd: PageSettings['meta']['jsonLd']): string => (
@@ -59,11 +61,13 @@ export function PageSettingsModal({
     settings: initialSettings,
     onSave,
     validateSettings,
+    mediaContext,
 }: PageSettingsModalProps) {
     const [settings, setSettings] = useState<PageSettings>(initialSettings);
     const [activeTab, setActiveTab] = useState<'general' | 'seo' | 'social'>('general');
     const [validationError, setValidationError] = useState<string | null>(null);
     const [jsonLdText, setJsonLdText] = useState(() => formatJsonLd(initialSettings.meta.jsonLd));
+    const [isSocialImagePickerOpen, setIsSocialImagePickerOpen] = useState(false);
 
     useEffect(() => {
         setSettings(initialSettings);
@@ -315,12 +319,52 @@ export function PageSettingsModal({
 
                     {activeTab === 'social' && (
                         <div className="space-y-4">
-                            <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:bg-accent/50 transition-colors cursor-pointer">
-                                <ImageIcon className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                                <p className="text-sm font-medium">Upload Social Share Image</p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Recommmended size: 1200x630
-                                </p>
+                            <div className="overflow-hidden rounded-lg border border-border bg-muted/20">
+                                <div className="aspect-[1200/630] bg-background">
+                                    {settings.meta.ogImage ? (
+                                        <img
+                                            src={settings.meta.ogImage}
+                                            alt="Social share preview"
+                                            className="h-full w-full object-cover"
+                                        />
+                                    ) : (
+                                        <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+                                            <ImageIcon className="mb-3 h-9 w-9 text-muted-foreground" />
+                                            <p className="text-sm font-medium">No social image selected</p>
+                                            <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+                                                Choose an image from Media or upload a new public asset for link previews.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-background px-3 py-3">
+                                    <div className="text-xs text-muted-foreground">
+                                        Recommended size: 1200x630
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {settings.meta.ogImage && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setSettings({
+                                                    ...settings,
+                                                    meta: { ...settings.meta, ogImage: '' },
+                                                })}
+                                                className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                                            >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                                Remove
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsSocialImagePickerOpen(true)}
+                                            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-accent"
+                                        >
+                                            <Upload className="h-3.5 w-3.5" />
+                                            Select image
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
 
                             <div>
@@ -359,6 +403,20 @@ export function PageSettingsModal({
                     </button>
                 </div>
             </div>
+            <MediaLibraryModal
+                isOpen={isSocialImagePickerOpen}
+                onClose={() => setIsSocialImagePickerOpen(false)}
+                onSelect={(asset) => {
+                    setSettings({
+                        ...settings,
+                        meta: { ...settings.meta, ogImage: asset.url },
+                    });
+                }}
+                allowedTypes="image"
+                initialUploadFilter="image"
+                mediaContext={mediaContext}
+                allowScopeSwitcher={Boolean(mediaContext?.scope)}
+            />
         </div>
     );
 }

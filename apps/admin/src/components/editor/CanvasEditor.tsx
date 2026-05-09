@@ -2897,6 +2897,7 @@ export function CanvasEditor({
           onClose={() => setIsSettingsOpen(false)}
           settings={pageSettings}
           validateSettings={validateSettings}
+          mediaContext={mediaContext}
           onSave={(newSettings) => {
             setPageSettings(newSettings);
             markChanges();
