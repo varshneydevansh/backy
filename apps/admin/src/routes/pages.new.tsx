@@ -257,6 +257,8 @@ function NewPageRoute() {
         };
 
         setFormData(nextFormData);
+        setError(null);
+        setNotice(null);
         navigate({ to: '/pages/new', search: buildRouteSearchFromForm(nextFormData), replace: true });
     };
 
@@ -317,8 +319,6 @@ function NewPageRoute() {
 
     const selectPageSite = (nextSiteId: string) => {
         updatePageDraft({ siteId: nextSiteId });
-        setError(null);
-        setNotice(null);
     };
     const selectedTemplate = useMemo(
         () => TEMPLATE_OPTIONS.find((template) => template.id === formData.template) || TEMPLATE_OPTIONS[0],
