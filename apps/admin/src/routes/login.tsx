@@ -78,9 +78,10 @@ function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [resetNotice, setResetNotice] = useState<ResetNotice | null>(null);
+  const isLoginBusy = isLoading;
   const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const passwordIsValid = password.length >= 6;
-  const authReadinessScore = Math.round(([emailIsValid, passwordIsValid, !isLoading].filter(Boolean).length / 3) * 100);
+  const authReadinessScore = Math.round(([emailIsValid, passwordIsValid, !isLoginBusy].filter(Boolean).length / 3) * 100);
 
   /**
    * Validate form inputs
@@ -105,6 +106,8 @@ function LoginPage() {
   };
 
   const handleLocalPasswordRecovery = () => {
+    if (isLoginBusy) return;
+
     clearError();
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -146,6 +149,8 @@ function LoginPage() {
    */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoginBusy) return;
+
     clearError();
     setResetNotice(null);
 
@@ -272,7 +277,7 @@ function LoginPage() {
                       'w-full rounded-lg border bg-background py-2.5 pl-9 pr-10 text-sm outline-none transition focus:ring-2 focus:ring-ring',
                       formErrors.email && 'border-red-500 focus:ring-red-500',
                     )}
-                    disabled={isLoading}
+                    disabled={isLoginBusy}
                   />
                   {emailIsValid && (
                     <CheckCircle2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-600" />
@@ -290,8 +295,9 @@ function LoginPage() {
                   </label>
                   <button
                     type="button"
-                    className="text-sm font-medium text-primary hover:underline"
+                    className="text-sm font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={handleLocalPasswordRecovery}
+                    disabled={isLoginBusy}
                     data-testid="login-password-recovery"
                   >
                     Forgot password?
@@ -309,12 +315,15 @@ function LoginPage() {
                       'w-full rounded-lg border bg-background py-2.5 pl-9 pr-12 text-sm outline-none transition focus:ring-2 focus:ring-ring',
                       formErrors.password && 'border-red-500 focus:ring-red-500',
                     )}
-                    disabled={isLoading}
+                    disabled={isLoginBusy}
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md text-muted-foreground transition hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    onClick={() => {
+                      if (!isLoginBusy) setShowPassword(!showPassword);
+                    }}
+                    disabled={isLoginBusy}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md text-muted-foreground transition hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? (
@@ -355,10 +364,10 @@ function LoginPage() {
 
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoginBusy}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isLoading ? (
+                {isLoginBusy ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Signing in...
@@ -384,8 +393,10 @@ function LoginPage() {
                   <button
                     key={account.email}
                     type="button"
-                    className="rounded-lg border border-border bg-background px-3 py-2 text-left text-sm transition hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+                    disabled={isLoginBusy}
+                    className="rounded-lg border border-border bg-background px-3 py-2 text-left text-sm transition hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={() => {
+                      if (isLoginBusy) return;
                       setEmail(account.email);
                       setPassword(account.password);
                       setFormErrors({});
