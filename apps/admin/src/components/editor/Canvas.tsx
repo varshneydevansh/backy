@@ -789,7 +789,7 @@ export function Canvas({
   }, [elements]);
 
   useEffect(() => {
-    if (isPreview) {
+    if (isPreview || disabled) {
       setEditingId(null);
       clearActiveEditor();
       return;
@@ -799,7 +799,7 @@ export function Canvas({
       setEditingId(null);
       clearActiveEditor();
     }
-  }, [clearActiveEditor, isPreview, selectedId]);
+  }, [clearActiveEditor, disabled, isPreview, selectedId]);
 
   const isInteractiveHandle = useCallback((target: EventTarget | null) => {
     const element = getTargetElement(target);
@@ -834,10 +834,10 @@ export function Canvas({
   }, [clearActiveEditor]);
 
   const requestEditForElement = useCallback((elementId: string | null) => {
-    if (!elementId || isPreview) {
+    if (!elementId || isPreview || disabled) {
       debugTextInteraction('requestEditForElement blocked', {
         elementId,
-        reason: !elementId ? 'missing-element-id' : 'preview-mode',
+        reason: !elementId ? 'missing-element-id' : isPreview ? 'preview-mode' : 'disabled',
       });
       return;
     }
@@ -903,7 +903,7 @@ export function Canvas({
     };
 
     focusEditable();
-  }, [debugTextInteraction, elements, editingId, isPreview, onSelect]);
+  }, [debugTextInteraction, disabled, elements, editingId, isPreview, onSelect]);
 
   const handleExternalEditRequest = useCallback((event: Event) => {
     const elementId = (event as CustomEvent<{ elementId?: string }>)?.detail?.elementId;
@@ -1442,6 +1442,10 @@ export function Canvas({
   }, [clearActiveEditor, isPreview, isTextEditorInteraction, onSelect]);
 
   const handleCanvasDoubleClick = useCallback((event: React.MouseEvent) => {
+    if (disabled) {
+      return;
+    }
+
     const eventTarget = getTargetElement(event.target);
     if (!eventTarget) {
       return;
@@ -1450,15 +1454,15 @@ export function Canvas({
     const clickedId = eventTarget.closest?.('[data-element-id]')?.getAttribute('data-element-id');
     debugTextInteraction('handleCanvasDoubleClick', { clickedId });
     requestEditForElement(clickedId || null);
-  }, [getTargetElement, requestEditForElement]);
+  }, [disabled, getTargetElement, requestEditForElement]);
 
   const handleDoubleClick = useCallback((elementId: string) => {
-    if (isPreview) {
+    if (isPreview || disabled) {
       return;
     }
 
     requestEditForElement(elementId);
-  }, [isPreview, requestEditForElement]);
+  }, [disabled, isPreview, requestEditForElement]);
 
   const handleCanvasKeyDown = useCallback((event: KeyboardEvent) => {
     if (event.key === 'Escape') {
@@ -1580,6 +1584,7 @@ export function Canvas({
             selectedIds={selectedIds}
             draggingId={dragState?.elementId ?? resizeState?.elementId ?? null}
             isPreview={isPreview}
+            disabled={disabled}
             onDragStart={handleElementDragStart}
             onResizeStart={handleResizeStart}
             onClick={(e) => {
@@ -1635,6 +1640,7 @@ interface CanvasElementComponentProps {
   selectedIds: string[];
   draggingId: string | null;
   isPreview: boolean;
+  disabled?: boolean;
   onDragStart: (e: React.PointerEvent | React.MouseEvent, elementId: string) => void;
   onResizeStart: (e: React.MouseEvent | React.PointerEvent, elementId: string, handle: 'nw' | 'ne' | 'sw' | 'se') => void;
   onClick: (e: React.MouseEvent) => void;
@@ -1655,6 +1661,7 @@ function CanvasElementComponent({
   selectedIds,
   draggingId,
   isPreview,
+  disabled = false,
   onDragStart,
   onResizeStart,
   onClick,
@@ -1673,7 +1680,8 @@ function CanvasElementComponent({
   const resolvedSelectedId = selectedId ?? null;
   const isHidden = element.visible === false;
   const isLocked = element.locked === true;
-  const canReceiveNestedDrop = !isLocked && canAcceptNestedDrop(element.type);
+  const isEditingEnabled = isEditing && !isPreview && !disabled;
+  const canReceiveNestedDrop = !disabled && !isLocked && canAcceptNestedDrop(element.type);
 
   if (isPreview && isHidden) {
     return null;
@@ -1690,6 +1698,7 @@ function CanvasElementComponent({
           selectedIds={selectedIds}
           draggingId={draggingId}
           isPreview={isPreview}
+          disabled={disabled}
           onDragStart={onDragStart}
           onResizeStart={onResizeStart}
           onClick={(event) => {
@@ -1713,7 +1722,7 @@ function CanvasElementComponent({
     </>
   );
 
-  const containerDropHandlers = isPreview
+  const containerDropHandlers = isPreview || disabled
     ? {}
     : {
         onDragOver: (event: React.DragEvent) => {
@@ -1746,7 +1755,7 @@ function CanvasElementComponent({
               elementId={element.id}
               content={p.content}
               onChange={(val) => onUpdate({ content: val })}
-              isEditable={isEditing && !isPreview}
+              isEditable={isEditingEnabled}
               className="w-full h-full"
               placeholder="Type '/' for commands..."
               style={{
@@ -1776,7 +1785,7 @@ function CanvasElementComponent({
             elementId={element.id}
             content={p.content}
             onChange={(val) => onUpdate({ content: val })}
-              isEditable={isEditing && !isPreview}
+              isEditable={isEditingEnabled}
               className="w-full h-full"
               defaultType={p.level || 'h2'}
               style={{
@@ -2380,7 +2389,7 @@ function CanvasElementComponent({
                   listType: listType || getListTypeFromSlate(val),
                 })
               }
-              isEditable={isEditing && !isPreview}
+              isEditable={isEditingEnabled}
               className="w-full h-full"
               defaultType={listType === 'number' ? 'ol' : 'ul'}
               style={{
@@ -2417,7 +2426,7 @@ function CanvasElementComponent({
               elementId={element.id}
               content={p.content}
               onChange={(val) => onUpdate({ content: val })}
-              isEditable={isEditing && !isPreview}
+              isEditable={isEditingEnabled}
               className="w-full h-full"
               defaultType="blockquote"
               style={{
@@ -2750,7 +2759,7 @@ function CanvasElementComponent({
               elementId={element.id}
               content={p.content}
               onChange={(val) => onUpdate({ content: val })}
-              isEditable={isEditing && !isPreview}
+              isEditable={isEditingEnabled}
               className="w-full h-full"
               defaultType="p"
               style={{
@@ -2890,16 +2899,16 @@ function CanvasElementComponent({
       <div
       className={cn(
         'absolute touch-none',
-        !isPreview && !isEditing && 'cursor-move select-none',
-        !isPreview && !isSelected && 'hover:ring-1 hover:ring-sky-300 hover:ring-offset-1 hover:ring-offset-white',
-        isSelected && !isPreview && 'ring-2 ring-sky-500 ring-offset-1 ring-offset-white',
+        !isPreview && !disabled && !isEditing && 'cursor-move select-none',
+        !isPreview && !disabled && !isSelected && 'hover:ring-1 hover:ring-sky-300 hover:ring-offset-1 hover:ring-offset-white',
+        isSelected && !isPreview && !disabled && 'ring-2 ring-sky-500 ring-offset-1 ring-offset-white',
         isBeingMoved && !isPreview && 'opacity-95 shadow-[0_16px_40px_rgba(14,165,233,0.22)]',
         isHidden && !isPreview && 'opacity-25',
-        isLocked && !isPreview && 'cursor-default'
+        (isLocked || disabled) && !isPreview && 'cursor-default'
       )}
       data-element-id={element.id}
       data-backy-text-editor={isTextElement ? 'true' : undefined}
-      data-backy-text-editor-editable={String(isTextElement && isEditing && !isPreview)}
+      data-backy-text-editor-editable={String(isTextElement && isEditingEnabled)}
       style={{
         ...sharedStyle,
         boxSizing: 'border-box',
@@ -2912,7 +2921,7 @@ function CanvasElementComponent({
         transform: element.rotation ? `rotate(${element.rotation}deg)` : undefined,
         opacity: isHidden && !isPreview ? 0.25 : sharedStyle.opacity ?? 1,
         pointerEvents: isHidden && !isSelected ? 'none' : undefined,
-        userSelect: !isPreview && !isEditing ? 'none' : sharedStyle.userSelect,
+        userSelect: !isPreview && !isEditingEnabled ? 'none' : sharedStyle.userSelect,
       }}
       onPointerDownCapture={(event) => {
         if (isEditing && isTextElement) {
@@ -2932,7 +2941,7 @@ function CanvasElementComponent({
       {renderContent()}
 
       {/* Resize Handles (only when selected and not in preview) */}
-      {isSelected && !isPreview && (
+      {isSelected && !isPreview && !disabled && (
         <>
           <div
             className="pointer-events-auto absolute -top-8 left-0 z-[90] flex cursor-move touch-none select-none items-center gap-2 rounded bg-sky-600 px-2 py-1 text-[11px] font-medium text-white shadow-sm"
