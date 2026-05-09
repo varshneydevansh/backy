@@ -2539,7 +2539,7 @@ export async function getFormWithSubmissions(
   if (filters.limit) query.set('limit', String(filters.limit));
   if (filters.offset) query.set('offset', String(filters.offset));
 
-  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/forms/${formId}${query.toString() ? `?${query}` : ''}`);
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/forms/${formId}/submissions${query.toString() ? `?${query}` : ''}`);
   const payload = await readJson<ApiFormDetailResponse>(response);
   const form = payload.data?.form || payload.form;
   const submissions = payload.data?.submissions || payload.submissions;

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getFormById, getSiteByIdOrSlug, listFormSubmissions } from '@/lib/backyStore';
+import { getFormById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -11,6 +11,17 @@ interface RouteParams {
 }
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const formEndpoints = (request: NextRequest, siteId: string, formId: string) => {
+    const baseUrl = new URL(request.url);
+    const siteSegment = encodeURIComponent(siteId);
+    const formSegment = encodeURIComponent(formId);
+
+    return {
+        definition: `${baseUrl.origin}/api/sites/${siteSegment}/forms/${formSegment}/definition`,
+        submissions: `${baseUrl.origin}/api/sites/${siteSegment}/forms/${formSegment}/submissions`,
+    };
+};
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
     publicContractJson(
@@ -45,42 +56,21 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
                 return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
             }
 
-            const { searchParams } = new URL(_request.url);
-            const statusParam = searchParams.get('status');
-            const filterRequestId = searchParams.get('requestId')?.trim() || undefined;
-            const status = statusParam === 'pending' || statusParam === 'approved' || statusParam === 'rejected' || statusParam === 'spam'
-              ? statusParam
-              : undefined;
-            const limit = parseInt(searchParams.get('limit') || '20', 10);
-            const offset = parseInt(searchParams.get('offset') || '0', 10);
-            const submissions = await repositories.forms.listSubmissions({
-              siteId: site.id,
-              formId: form.id,
-              status,
-              requestId: filterRequestId,
-              limit: Number.isFinite(limit) ? limit : 20,
-              offset: Number.isFinite(offset) ? offset : 0,
-            });
+            const endpoints = formEndpoints(_request, site.id, form.id);
 
             return publicContractJson({
               success: true,
               requestId,
               data: {
                 form,
-                submissions: {
-                  data: submissions.items,
-                  pagination: submissions.pagination,
-                },
+                endpoints,
               },
               form,
-              submissions: {
-                data: submissions.items,
-                pagination: submissions.pagination,
-              },
+              endpoints,
             }, {
               requestId,
               request: _request,
-              cache: 'private',
+              cache: 'discovery',
               siteId: site.id,
             });
         }
@@ -95,35 +85,21 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
             return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
         }
 
-        const { searchParams } = new URL(_request.url);
-        const statusParam = searchParams.get('status');
-        const filterRequestId = searchParams.get('requestId')?.trim() || undefined;
-        const status = statusParam === 'pending' || statusParam === 'approved' || statusParam === 'rejected' || statusParam === 'spam'
-          ? statusParam
-          : undefined;
-        const limit = parseInt(searchParams.get('limit') || '20', 10);
-        const offset = parseInt(searchParams.get('offset') || '0', 10);
-
-        const submissions = listFormSubmissions(form.id, {
-          status,
-          requestId: filterRequestId,
-          limit: Number.isFinite(limit) ? limit : 20,
-          offset: Number.isFinite(offset) ? offset : 0,
-        });
+        const endpoints = formEndpoints(_request, site.id, form.id);
 
         return publicContractJson({
           success: true,
           requestId,
           data: {
             form,
-            submissions,
+            endpoints,
           },
           form,
-          submissions,
+          endpoints,
         }, {
           requestId,
           request: _request,
-          cache: 'private',
+          cache: 'discovery',
           siteId: site.id,
         });
     } catch (error) {

@@ -616,7 +616,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         [`/api/sites/${site.id}/forms/{formId}`]: {
           get: {
             tags: ['Interactions'],
-            summary: 'Fetch a form detail payload with submission data',
+            summary: 'Fetch a public-safe form detail payload with endpoint handoff links',
             operationId: 'getBackyForm',
             parameters: [pathParameter('formId', 'Form id', formIds)],
             responses: {
@@ -1517,9 +1517,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           }),
           FormEnvelope: envelopeSchema({
             type: 'object',
-            required: ['form'],
+            required: ['form', 'endpoints'],
             properties: {
               form: { type: 'object', additionalProperties: true },
+              endpoints: {
+                type: 'object',
+                required: ['definition', 'submissions'],
+                properties: {
+                  definition: { type: 'string' },
+                  submissions: { type: 'string' },
+                },
+              },
             },
           }),
           FormDefinitionEnvelope: envelopeSchema({

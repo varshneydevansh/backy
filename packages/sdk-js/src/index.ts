@@ -324,6 +324,12 @@ export interface BackyFormDefinition {
   [key: string]: unknown;
 }
 
+export interface BackyFormEndpoints {
+  definition: string;
+  submissions: string;
+  [key: string]: string;
+}
+
 export interface BackyFormSubmission {
   id: string;
   status?: string;
@@ -821,7 +827,7 @@ export class BackyClient {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms`, { query: options });
   }
 
-  form(formId: string): Promise<BackyEnvelope<{ form: BackyFormDefinition }>> {
+  form(formId: string): Promise<BackyEnvelope<{ form: BackyFormDefinition; endpoints: BackyFormEndpoints }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}`);
   }
 

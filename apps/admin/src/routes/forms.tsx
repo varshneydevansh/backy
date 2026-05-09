@@ -611,7 +611,7 @@ function FormsRoute() {
       selectedDefinition: selectedFormDefinitionUrl,
       selectedSubmit: selectedFormSubmitUrl,
       selectedAdminInbox: selectedForm
-        ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}?limit=100`
+        ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/submissions?limit=100`
         : '',
       selectedContacts: selectedFormContactsUrl,
     },
