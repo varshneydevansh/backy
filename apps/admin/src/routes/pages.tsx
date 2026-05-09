@@ -697,7 +697,7 @@ function PagesListView() {
             <Eye className="w-4 h-4" />
           </button>
           <button
-            onClick={() => navigate({ to: '/pages/$pageId/edit', params: { pageId: page.id } })}
+            onClick={() => navigate({ to: '/pages/$pageId/edit', params: { pageId: page.id }, search: { siteId: activeSiteId } })}
             title="Edit page"
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
           >

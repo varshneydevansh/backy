@@ -31,6 +31,7 @@ import { PageShell } from '@/components/layout/PageShell';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn } from '@/lib/utils';
 import {
   createCanvasElement,
@@ -87,9 +88,13 @@ function PageEditorRoute() {
   const storePage = pages.find((candidate) => candidate.id === pageId);
   const storePageId = storePage?.id;
   const storePageSiteId = storePage?.siteId;
-  const fallbackSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
+  const requestedSiteId = getSiteSelectionFromSearch(sites);
+  const storePageSite = storePageSiteId
+    ? sites.find((site) => siteMatchesIdentifier(site, storePageSiteId))
+    : undefined;
+  const fallbackSiteId = storePageSite?.publicSiteId || storePageSite?.id || requestedSiteId || 'site-demo';
   const [page, setPage] = useState<Page | null>(storePage || null);
-  const [siteId, setSiteId] = useState(storePage?.siteId || fallbackSiteId);
+  const [siteId, setSiteId] = useState(storePageSite?.publicSiteId || storePageSite?.id || storePage?.siteId || fallbackSiteId);
   const [isLoadingPage, setIsLoadingPage] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
@@ -109,7 +114,7 @@ function PageEditorRoute() {
   useEffect(() => {
     let cancelled = false;
     const localFallbackPage = storePage;
-    const nextSiteId = storePageSiteId || fallbackSiteId;
+    const nextSiteId = storePageSite?.publicSiteId || storePageSite?.id || storePageSiteId || fallbackSiteId;
     setSiteId(nextSiteId);
 
     const loadPage = async () => {
@@ -144,7 +149,7 @@ function PageEditorRoute() {
     return () => {
       cancelled = true;
     };
-  }, [fallbackSiteId, pageId, storePageId, storePageSiteId, updatePage]);
+  }, [fallbackSiteId, pageId, storePageId, storePageSite?.id, storePageSite?.publicSiteId, storePageSiteId, updatePage]);
 
   useEffect(() => {
     if (!page) {
@@ -261,7 +266,7 @@ function PageEditorRoute() {
   if (!page) {
     return (
       <PageShell title="Page Not Found" description={loadError || "The page you requested doesn't exist."}>
-        <button onClick={() => navigate({ to: '/pages' })} className="text-primary hover:underline">
+        <button onClick={() => navigate({ to: '/pages', search: { siteId } })} className="text-primary hover:underline">
           &larr; Back to Pages
         </button>
       </PageShell>
@@ -288,9 +293,9 @@ function PageEditorRoute() {
   const hasSeo = Boolean(page.meta?.title || page.title);
   const hasRevisionHistory = revisions.length > 0;
   const publicPath = getPagePublicPath(page);
-  const selectedSite = sites.find((site) => (site.publicSiteId || site.id) === siteId);
+  const selectedSite = sites.find((site) => siteMatchesIdentifier(site, siteId));
   const selectedSiteIdentifiers = new Set(
-    [siteId, selectedSite?.id, selectedSite?.publicSiteId].filter(Boolean),
+    [siteId, selectedSite?.id, selectedSite?.publicSiteId, selectedSite?.slug].filter(Boolean),
   );
   const selectedSitePages = pages.filter((candidate) => selectedSiteIdentifiers.has(candidate.siteId));
   const getPublicPathForSettings = (settings: PageSettings) => (
@@ -405,7 +410,7 @@ function PageEditorRoute() {
     },
     site: {
       id: siteId,
-      name: sites.find((site) => (site.publicSiteId || site.id) === siteId)?.name || siteId,
+      name: selectedSite?.name || siteId,
     },
     endpoints: {
       readUpdateDelete: adminPageUrl,
@@ -540,7 +545,7 @@ function PageEditorRoute() {
   };
 
   const handleBack = () => {
-    navigate({ to: '/pages' });
+    navigate({ to: '/pages', search: { siteId } });
   };
 
   const applyWorkflow = async (action: 'publish' | 'archive') => {
@@ -761,7 +766,8 @@ function PageEditorRoute() {
               </a>
             ))}
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-4">
+          <div className="mt-4 grid gap-3 md:grid-cols-5">
+            <EditorMetaTile label="Site" value={`${selectedSite?.name || siteId} (${siteId})`} />
             <EditorMetaTile label="Route" value={page.slug ? `/${page.slug}` : 'No slug'} />
             <EditorMetaTile label="Canvas" value={`${initialCanvasSize.width} x ${initialCanvasSize.height}px`} />
             <EditorMetaTile label="Elements" value={`${elementCount}`} />
