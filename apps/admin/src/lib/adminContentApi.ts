@@ -1403,6 +1403,15 @@ const getEnvValue = (key: string): string => {
   return env[key]?.trim() ?? '';
 };
 
+const isLocalAdminDevHost = (): boolean => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
+    && window.location.port !== '3001';
+};
+
 const getAdminApiBase = (): string => {
   const envBase = (
     getEnvValue('VITE_BACKY_ADMIN_API_BASE_URL') ||
@@ -1413,7 +1422,7 @@ const getAdminApiBase = (): string => {
     ''
   ).trim();
 
-  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+  if (!envBase && isLocalAdminDevHost()) {
     return 'http://localhost:3001/api/admin';
   }
 

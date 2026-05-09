@@ -150,7 +150,7 @@ function NewPageRoute() {
         try {
             const created = await createPage(formData.siteId, input);
             setPages([created, ...pages.filter((page) => page.id !== created.id)]);
-            navigate({ to: '/pages' });
+            navigate({ to: '/pages/$pageId/edit', params: { pageId: created.id } });
         } catch (createError) {
             setError(createError instanceof Error ? createError.message : 'Unable to create page');
         } finally {

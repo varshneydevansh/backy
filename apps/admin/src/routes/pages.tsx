@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
+import { createFileRoute, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
 import { Code2, Copy, ExternalLink, Eye, Filter, Plus, Layout, Edit, Trash2, Home } from 'lucide-react';
 import {
   archivePage,
@@ -110,6 +110,10 @@ function PagesListView() {
   const adminPageDetailUrl = `${adminPagesUrl}/${apiPageSegment}`;
   const adminPageReadinessUrl = `${adminPageDetailUrl}/readiness`;
   const adminPagePreviewUrl = `${adminPageDetailUrl}/preview`;
+
+  const openCreatePage = () => {
+    navigate({ to: '/pages/new', search: { siteId: activeSiteId } });
+  };
 
   const setPageStatusFilter = (status: 'all' | Page['status']) => {
     setStatusFilter(status);
@@ -464,15 +468,16 @@ function PagesListView() {
       title="Pages"
       description="Manage the structure and content of your site."
       action={
-        <Link
-          to="/pages/new"
-          search={{ siteId: activeSiteId }}
+        <button
+          type="button"
+          onClick={openCreatePage}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
           aria-label="Create new page for active site"
+          data-testid="pages-header-create"
         >
           <Plus className="w-4 h-4" />
           New Page
-        </Link>
+        </button>
       }
       className="w-full"
     >
@@ -699,16 +704,16 @@ function PagesListView() {
                     Clear Filters
                   </button>
                 )}
-                <Link
-                  to="/pages/new"
-                  search={{ siteId: activeSiteId }}
+                <button
+                  type="button"
+                  onClick={openCreatePage}
                   data-testid="pages-empty-create"
                   className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                   aria-label={hasPages ? 'Create page after clearing filters' : 'Create first page for active site'}
                 >
                   <Plus className="w-4 h-4" />
                   {hasPages ? 'New Page' : 'Create First Page'}
-                </Link>
+                </button>
               </div>
             }
           />
@@ -817,6 +822,15 @@ const getEnvValue = (key: string): string => {
   return env[key]?.trim() ?? '';
 };
 
+const isLocalAdminDevHost = (): boolean => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
+    && window.location.port !== '3001';
+};
+
 const getPublicBaseUrl = (): string => {
   const envBase = (
     getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
@@ -825,7 +839,7 @@ const getPublicBaseUrl = (): string => {
     ''
   ).trim();
 
-  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+  if (!envBase && isLocalAdminDevHost()) {
     return 'http://localhost:3001';
   }
 
@@ -845,7 +859,7 @@ const getAdminBaseUrl = (): string => {
     ''
   ).trim();
 
-  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+  if (!envBase && isLocalAdminDevHost()) {
     return 'http://localhost:3001/api/admin';
   }
 
