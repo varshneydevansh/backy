@@ -353,6 +353,7 @@ function OrdersRoute() {
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const isOrdersBusy = isLoading || isSaving;
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingDeleteOrder, setPendingDeleteOrder] = useState<CollectionRecord | null>(null);
@@ -707,6 +708,8 @@ function OrdersRoute() {
   };
 
   const loadOrders = async () => {
+    if (isOrdersBusy) return;
+
     setIsLoading(true);
     setError(null);
 
@@ -792,7 +795,7 @@ function OrdersRoute() {
   };
 
   const resetForm = () => {
-    if (isSaving) return;
+    if (isOrdersBusy) return;
 
     clearOrderEditorState({
       ...EMPTY_ORDER_FORM,
@@ -802,7 +805,7 @@ function OrdersRoute() {
   };
 
   const selectOrderForEditing = (orderId: string) => {
-    if (isSaving) return;
+    if (isOrdersBusy) return;
 
     setSelectedOrderId(orderId);
     updateOrdersRouteSearch({ orderId });
@@ -813,7 +816,7 @@ function OrdersRoute() {
   };
 
   const addLineItem = () => {
-    if (isSaving) return;
+    if (isOrdersBusy) return;
 
     const title = itemDraft.title.trim();
     if (!title || orderLineItems.length >= 100) return;
@@ -846,13 +849,13 @@ function OrdersRoute() {
   };
 
   const removeLineItem = (itemId: string) => {
-    if (isSaving) return;
+    if (isOrdersBusy) return;
 
     setLineItems(orderLineItems.filter((item) => item.id !== itemId));
   };
 
   const applyLineItemTotals = () => {
-    if (isSaving) return;
+    if (isOrdersBusy) return;
 
     const shippingAmount = Number(formState.shippingAmount || 0);
     const taxAmount = Number(formState.taxAmount || 0);
@@ -867,7 +870,7 @@ function OrdersRoute() {
   };
 
   const createOrdersCollection = async () => {
-    if (isSaving) return;
+    if (isOrdersBusy) return;
 
     setIsSaving(true);
     setError(null);
@@ -905,7 +908,7 @@ function OrdersRoute() {
 
   const syncOrdersCollection = async () => {
     if (!ordersCollection) return;
-    if (isSaving) return;
+    if (isOrdersBusy) return;
 
     setIsSaving(true);
     setError(null);
@@ -940,7 +943,7 @@ function OrdersRoute() {
   const saveOrder = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!ordersCollection) return;
-    if (isSaving) return;
+    if (isOrdersBusy) return;
 
     if (!formState.orderNumber.trim() || !formState.customerName.trim() || !formState.email.trim()) {
       setError('Add an order number, customer name, and email before saving.');
@@ -1019,7 +1022,7 @@ function OrdersRoute() {
 
   const updateOrderWorkflow = async (order: CollectionRecord, updates: Partial<OrderFormState>) => {
     if (!ordersCollection) return;
-    if (isSaving) return;
+    if (isOrdersBusy) return;
 
     setIsSaving(true);
     setError(null);
@@ -1047,7 +1050,7 @@ function OrdersRoute() {
 
   const removeOrder = async (order: CollectionRecord) => {
     if (!ordersCollection) return;
-    if (isSaving) return;
+    if (isOrdersBusy) return;
 
     setIsSaving(true);
     setError(null);
@@ -1061,6 +1064,7 @@ function OrdersRoute() {
           ...EMPTY_ORDER_FORM,
           orderNumber: `ORD-${Date.now().toString().slice(-6)}`,
         });
+        updateOrdersRouteSearch({ orderId: undefined });
       }
       setPendingDeleteOrder(null);
       setNotice('Order deleted.');
@@ -1072,6 +1076,8 @@ function OrdersRoute() {
   };
 
   const copyOrdersApiUrl = async (value: string, label: string) => {
+    if (isOrdersBusy) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setNotice(`${label} copied.`);
@@ -1080,6 +1086,8 @@ function OrdersRoute() {
     }
   };
   const copyOrderHandoff = async () => {
+    if (isOrdersBusy) return;
+
     try {
       await navigator.clipboard.writeText(orderHandoffText);
       setNotice('Order handoff manifest copied.');
@@ -1088,6 +1096,8 @@ function OrdersRoute() {
     }
   };
   const downloadOrderHandoff = () => {
+    if (isOrdersBusy) return;
+
     const blob = new Blob([orderHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -1100,6 +1110,7 @@ function OrdersRoute() {
     setNotice('Order handoff manifest downloaded.');
   };
   const exportOrdersCsv = () => {
+    if (isOrdersBusy) return;
     if (filteredOrders.length === 0) return;
 
     const rows = filteredOrders.map((order) => {
@@ -1126,7 +1137,7 @@ function OrdersRoute() {
     setNotice(`${filteredOrders.length} visible order${filteredOrders.length === 1 ? '' : 's'} exported.`);
   };
   const clearOrderFilters = () => {
-    if (isSaving) return;
+    if (isOrdersBusy) return;
 
     setSearchQuery('');
     setFilter('all');
@@ -1144,7 +1155,7 @@ function OrdersRoute() {
     });
   };
   const selectOrdersSite = (nextSiteId: string) => {
-    if (isSaving) return;
+    if (isOrdersBusy) return;
 
     setSelectedSiteId(nextSiteId);
     clearOrderEditorState();
@@ -1166,7 +1177,7 @@ function OrdersRoute() {
             id="orders-active-site"
             aria-label="Active Site"
             value={activeSiteId}
-            disabled={isSaving}
+            disabled={isOrdersBusy}
             onChange={(event) => selectOrdersSite(event.target.value)}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -1178,7 +1189,7 @@ function OrdersRoute() {
               </option>
             ))}
           </select>
-          <Button onClick={() => void loadOrders()} disabled={isLoading || isSaving} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+          <Button onClick={() => void loadOrders()} disabled={isOrdersBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
             Refresh
           </Button>
         </div>
@@ -1214,19 +1225,23 @@ function OrdersRoute() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => void copyOrderHandoff()} iconStart={<Copy className="size-4" />}>
+            <Button variant="outline" onClick={() => void copyOrderHandoff()} disabled={isOrdersBusy} iconStart={<Copy className="size-4" />}>
               Copy manifest
             </Button>
-            <Button variant="outline" onClick={downloadOrderHandoff} iconStart={<Download className="size-4" />}>
+            <Button variant="outline" onClick={downloadOrderHandoff} disabled={isOrdersBusy} iconStart={<Download className="size-4" />}>
               Download JSON
             </Button>
-            <Button variant="outline" onClick={exportOrdersCsv} disabled={filteredOrders.length === 0} iconStart={<Download className="size-4" />}>
+            <Button variant="outline" onClick={exportOrdersCsv} disabled={isOrdersBusy || filteredOrders.length === 0} iconStart={<Download className="size-4" />}>
               Export CSV
             </Button>
             <Link
               to="/products"
               search={activeSiteSearch}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              aria-disabled={isOrdersBusy}
+              className={cn(
+                'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
+                isOrdersBusy && 'pointer-events-none opacity-60',
+              )}
             >
               <ShoppingCart className="size-4" />
               Products
@@ -1234,21 +1249,25 @@ function OrdersRoute() {
             <Link
               to="/pages/new"
               search={{ siteId: activeSiteId, template: 'storefront' }}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              aria-disabled={isOrdersBusy}
+              className={cn(
+                'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
+                isOrdersBusy && 'pointer-events-none opacity-60',
+              )}
             >
               <Sparkles className="size-4" />
               Storefront page
             </Link>
             {!ordersCollection ? (
-              <Button onClick={() => void createOrdersCollection()} disabled={isSaving} iconStart={<Sparkles className="size-4" />}>
+              <Button onClick={() => void createOrdersCollection()} disabled={isOrdersBusy} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set up orders'}
               </Button>
             ) : (
-              <Button onClick={resetForm} disabled={isSaving} iconStart={<Plus className="size-4" />}>
+              <Button onClick={resetForm} disabled={isOrdersBusy} iconStart={<Plus className="size-4" />}>
                 New order
               </Button>
             )}
-            <Button onClick={() => void loadOrders()} disabled={isLoading || isSaving} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+            <Button onClick={() => void loadOrders()} disabled={isOrdersBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh
             </Button>
           </div>
@@ -1315,28 +1334,32 @@ function OrdersRoute() {
                 {!ordersApiReady && (
                   <Button
                     onClick={() => void syncOrdersCollection()}
-                    disabled={isSaving}
+                    disabled={isOrdersBusy}
                     iconStart={<Sparkles className="size-4" />}
                   >
                     Sync Schema
                   </Button>
                 )}
-                <Button onClick={() => void copyOrderHandoff()} iconStart={<Copy className="size-4" />}>
+                <Button onClick={() => void copyOrderHandoff()} disabled={isOrdersBusy} iconStart={<Copy className="size-4" />}>
                   Copy manifest
                 </Button>
-                <Button onClick={exportOrdersCsv} disabled={filteredOrders.length === 0} iconStart={<Download className="size-4" />}>
+                <Button onClick={exportOrdersCsv} disabled={isOrdersBusy || filteredOrders.length === 0} iconStart={<Download className="size-4" />}>
                   Export CSV
                 </Button>
-                <Button onClick={() => void copyOrdersApiUrl(adminOrdersApiUrl, 'Internal orders API URL')} iconStart={<Copy className="size-4" />}>
+                <Button onClick={() => void copyOrdersApiUrl(adminOrdersApiUrl, 'Internal orders API URL')} disabled={isOrdersBusy} iconStart={<Copy className="size-4" />}>
                   Copy admin API
                 </Button>
-                <Button onClick={() => void copyOrdersApiUrl(publicOrderIntakeUrl, 'Checkout intake URL')} iconStart={<Copy className="size-4" />}>
+                <Button onClick={() => void copyOrdersApiUrl(publicOrderIntakeUrl, 'Checkout intake URL')} disabled={isOrdersBusy} iconStart={<Copy className="size-4" />}>
                   Copy checkout
                 </Button>
                 <Link
                   to="/products"
                   search={activeSiteSearch}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                  aria-disabled={isOrdersBusy}
+                  className={cn(
+                    'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
+                    isOrdersBusy && 'pointer-events-none opacity-60',
+                  )}
                 >
                   <ShoppingCart className="size-4" />
                   Products
@@ -1344,7 +1367,11 @@ function OrdersRoute() {
                 <Link
                   to="/pages/new"
                   search={{ siteId: activeSiteId, template: 'storefront' }}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                  aria-disabled={isOrdersBusy}
+                  className={cn(
+                    'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
+                    isOrdersBusy && 'pointer-events-none opacity-60',
+                  )}
                 >
                   <Sparkles className="size-4" />
                   Storefront page
@@ -1353,7 +1380,14 @@ function OrdersRoute() {
                   href={adminOrdersApiUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                  aria-disabled={isOrdersBusy}
+                  onClick={(event) => {
+                    if (isOrdersBusy) event.preventDefault();
+                  }}
+                  className={cn(
+                    'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
+                    isOrdersBusy && 'pointer-events-none opacity-60',
+                  )}
                 >
                   <ExternalLink className="size-4" />
                   Open admin API
@@ -1446,7 +1480,7 @@ function OrdersRoute() {
           id="orders-active-site-inline"
           aria-label="Active order site"
           value={activeSiteId}
-          disabled={isSaving}
+          disabled={isOrdersBusy}
           onChange={(event) => selectOrdersSite(event.target.value)}
           className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
         >
@@ -1479,13 +1513,17 @@ function OrdersRoute() {
           description="Create an internal orders collection for payment state, fulfillment, customer, and line item data."
           action={
             <div className="mt-2 flex flex-wrap justify-center gap-2">
-              <Button onClick={() => void createOrdersCollection()} disabled={isSaving} iconStart={<Sparkles className="size-4" />}>
+              <Button onClick={() => void createOrdersCollection()} disabled={isOrdersBusy} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set Up Orders'}
               </Button>
               <Link
                 to="/products"
                 search={activeSiteSearch}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                aria-disabled={isOrdersBusy}
+                className={cn(
+                  'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
+                  isOrdersBusy && 'pointer-events-none opacity-60',
+                )}
               >
                 <ShoppingCart className="size-4" />
                 Set up products
@@ -1493,7 +1531,11 @@ function OrdersRoute() {
               <Link
                 to="/pages/new"
                 search={{ siteId: activeSiteId, template: 'storefront' }}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                aria-disabled={isOrdersBusy}
+                className={cn(
+                  'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
+                  isOrdersBusy && 'pointer-events-none opacity-60',
+                )}
               >
                 <Sparkles className="size-4" />
                 Start storefront page
@@ -1508,7 +1550,7 @@ function OrdersRoute() {
               title="Order Queue"
               description={`${filteredOrders.length}/${orders.length} visible orders`}
               icon={<ClipboardCheck className="size-4" />}
-              action={<Button onClick={resetForm} disabled={isSaving} iconStart={<Plus className="size-4" />}>New Order</Button>}
+              action={<Button onClick={resetForm} disabled={isOrdersBusy} iconStart={<Plus className="size-4" />}>New Order</Button>}
             />
             <PanelContent>
               <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -1517,9 +1559,9 @@ function OrdersRoute() {
                   <input
                     aria-label="Search orders"
                     value={searchQuery}
-                    disabled={isSaving}
+                    disabled={isOrdersBusy}
                     onChange={(event) => {
-                      if (isSaving) return;
+                      if (isOrdersBusy) return;
                       const q = event.target.value;
                       setSearchQuery(q);
                       clearOrderEditorState();
@@ -1534,9 +1576,9 @@ function OrdersRoute() {
                     <button
                       key={status}
                       type="button"
-                      disabled={isSaving}
+                      disabled={isOrdersBusy}
                       onClick={() => {
-                        if (isSaving) return;
+                        if (isOrdersBusy) return;
                         setFilter(status);
                         clearOrderEditorState();
                         updateOrdersRouteSearch({ workflow: status, orderId: undefined });
@@ -1553,9 +1595,9 @@ function OrdersRoute() {
                 <select
                   aria-label="Payment status filter"
                   value={paymentFilter}
-                  disabled={isSaving}
+                  disabled={isOrdersBusy}
                   onChange={(event) => {
-                    if (isSaving) return;
+                    if (isOrdersBusy) return;
                     const payment = event.target.value as PaymentStatusFilter;
                     setPaymentFilter(payment);
                     clearOrderEditorState();
@@ -1572,9 +1614,9 @@ function OrdersRoute() {
                 <select
                   aria-label="Fulfillment status filter"
                   value={fulfillmentFilter}
-                  disabled={isSaving}
+                  disabled={isOrdersBusy}
                   onChange={(event) => {
-                    if (isSaving) return;
+                    if (isOrdersBusy) return;
                     const fulfillment = event.target.value as FulfillmentStatusFilter;
                     setFulfillmentFilter(fulfillment);
                     clearOrderEditorState();
@@ -1591,9 +1633,9 @@ function OrdersRoute() {
                 <select
                   aria-label="Order source filter"
                   value={sourceFilter}
-                  disabled={isSaving}
+                  disabled={isOrdersBusy}
                   onChange={(event) => {
-                    if (isSaving) return;
+                    if (isOrdersBusy) return;
                     const source = event.target.value as OrderSourceFilter;
                     setSourceFilter(source);
                     clearOrderEditorState();
@@ -1609,7 +1651,7 @@ function OrdersRoute() {
                   <option value="pos">POS</option>
                 </select>
                 {hasActiveOrderFilters && (
-                  <Button variant="outline" onClick={clearOrderFilters} disabled={isSaving}>
+                  <Button variant="outline" onClick={clearOrderFilters} disabled={isOrdersBusy}>
                     Clear filters
                   </Button>
                 )}
@@ -1626,7 +1668,7 @@ function OrdersRoute() {
                       : 'Change the search, workflow, payment, fulfillment, or source filters to broaden the queue.'}
                   </div>
                   {orders.length > 0 && hasActiveOrderFilters && (
-                    <Button variant="outline" onClick={clearOrderFilters} disabled={isSaving} className="mt-4">
+                    <Button variant="outline" onClick={clearOrderFilters} disabled={isOrdersBusy} className="mt-4">
                       Clear filters
                     </Button>
                   )}
@@ -1638,12 +1680,15 @@ function OrdersRoute() {
                       key={order.id}
                       order={order}
                       selected={order.id === selectedOrderId}
-                      disabled={isSaving}
+                      disabled={isOrdersBusy}
                       onEdit={() => selectOrderForEditing(order.id)}
                       onPaid={() => void updateOrderWorkflow(order, { orderStatus: 'paid', paymentStatus: 'paid', paidAt: new Date().toISOString() })}
                       onFulfilled={() => void updateOrderWorkflow(order, { orderStatus: 'fulfilled', fulfillmentStatus: 'fulfilled', fulfilledAt: new Date().toISOString() })}
                       onCancelled={() => void updateOrderWorkflow(order, { orderStatus: 'cancelled', fulfillmentStatus: 'cancelled' })}
-                      onDelete={() => setPendingDeleteOrder(order)}
+                      onDelete={() => {
+                        if (isOrdersBusy) return;
+                        setPendingDeleteOrder(order);
+                      }}
                     />
                   ))}
                 </div>
@@ -1659,7 +1704,7 @@ function OrdersRoute() {
             />
             <PanelContent>
               <form onSubmit={saveOrder}>
-                <fieldset disabled={isSaving} className={cn('space-y-4', isSaving && 'opacity-70')}>
+                <fieldset disabled={isOrdersBusy} className={cn('space-y-4', isOrdersBusy && 'opacity-70')}>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Order number">
                     <input
@@ -1924,7 +1969,7 @@ function OrdersRoute() {
                         size="sm"
                         variant="outline"
                         onClick={applyLineItemTotals}
-                        disabled={orderLineItems.length === 0}
+                        disabled={isOrdersBusy || orderLineItems.length === 0}
                       >
                         Use totals
                       </Button>
@@ -1947,7 +1992,7 @@ function OrdersRoute() {
                           </div>
                           <div className="font-mono text-xs text-muted-foreground">x{item.quantity}</div>
                           <div className="font-mono text-xs text-muted-foreground">{formatMoney(item.lineTotal, item.currency)}</div>
-                          <Button size="sm" variant="ghost" onClick={() => removeLineItem(item.id)}>
+                          <Button size="sm" variant="ghost" onClick={() => removeLineItem(item.id)} disabled={isOrdersBusy}>
                             Remove
                           </Button>
                         </div>
@@ -1996,7 +2041,7 @@ function OrdersRoute() {
                     <Button
                       variant="outline"
                       onClick={addLineItem}
-                      disabled={!itemDraft.title.trim() || orderLineItems.length >= 100}
+                      disabled={isOrdersBusy || !itemDraft.title.trim() || orderLineItems.length >= 100}
                     >
                       Add
                     </Button>
@@ -2069,8 +2114,8 @@ function OrdersRoute() {
                   </Field>
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" onClick={resetForm}>Clear</Button>
-                  <Button type="submit" variant="primary" disabled={isSaving || !formState.orderNumber.trim() || !formState.customerName.trim() || !formState.email.trim()} iconStart={<Receipt className="size-4" />}>
+                  <Button variant="outline" onClick={resetForm} disabled={isOrdersBusy}>Clear</Button>
+                  <Button type="submit" variant="primary" disabled={isOrdersBusy || !formState.orderNumber.trim() || !formState.customerName.trim() || !formState.email.trim()} iconStart={<Receipt className="size-4" />}>
                     {isSaving ? 'Saving...' : selectedOrder ? 'Save Order' : 'Create Order'}
                   </Button>
                 </div>
@@ -2104,7 +2149,7 @@ function OrdersRoute() {
               <button
                 type="button"
                 onClick={() => setPendingDeleteOrder(null)}
-                disabled={isSaving}
+                disabled={isOrdersBusy}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -2112,7 +2157,7 @@ function OrdersRoute() {
               <button
                 type="button"
                 onClick={() => void removeOrder(pendingDeleteOrder)}
-                disabled={isSaving}
+                disabled={isOrdersBusy}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSaving ? 'Deleting...' : 'Delete order'}
