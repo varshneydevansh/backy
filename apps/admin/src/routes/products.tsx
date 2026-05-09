@@ -73,6 +73,8 @@ const PRODUCT_CONTROL_AREAS = [
 ] as const;
 
 type ProductStatusFilter = ContentStatus | 'all';
+type ProductTypeFilter = ProductFormState['productType'] | 'all';
+type ProductStockFilter = 'all' | 'in-stock' | 'low-stock' | 'out-of-stock' | 'featured' | 'checkout-missing';
 
 interface ProductFormState {
   title: string;
@@ -229,6 +231,9 @@ function ProductsRoute() {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [formState, setFormState] = useState<ProductFormState>(EMPTY_PRODUCT_FORM);
   const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>('all');
+  const [productTypeFilter, setProductTypeFilter] = useState<ProductTypeFilter>('all');
+  const [stockFilter, setStockFilter] = useState<ProductStockFilter>('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -259,11 +264,55 @@ function ProductsRoute() {
     () => products.find((product) => product.id === selectedProductId) || null,
     [products, selectedProductId],
   );
+  const productCategories = useMemo(() => (
+    [...new Set(products.map((product) => String(product.values.category || '').trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b))
+  ), [products]);
+  const hasActiveCatalogFilters = Boolean(
+    searchQuery.trim() ||
+    statusFilter !== 'all' ||
+    productTypeFilter !== 'all' ||
+    stockFilter !== 'all' ||
+    categoryFilter !== 'all',
+  );
   const filteredProducts = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
     return products.filter((product) => {
       const matchesStatus = statusFilter === 'all' || product.status === statusFilter;
+      if (!matchesStatus) return false;
+
       const values = product.values;
+      const productType = asProductType(values.productType);
+      const inventory = toNumber(values.inventory);
+      const lowStockThreshold = Math.max(0, toNumber(values.lowStockThreshold || 5));
+      const isLowStock = inventory > 0 && inventory <= lowStockThreshold;
+      const category = String(values.category || '').trim();
+      const checkoutUrl = String(values.checkoutUrl || '').trim();
+
+      if (productTypeFilter !== 'all' && productType !== productTypeFilter) {
+        return false;
+      }
+
+      if (categoryFilter !== 'all' && category !== categoryFilter) {
+        return false;
+      }
+
+      if (stockFilter === 'in-stock' && inventory <= 0) {
+        return false;
+      }
+      if (stockFilter === 'low-stock' && !isLowStock) {
+        return false;
+      }
+      if (stockFilter === 'out-of-stock' && inventory > 0) {
+        return false;
+      }
+      if (stockFilter === 'featured' && !values.featured) {
+        return false;
+      }
+      if (stockFilter === 'checkout-missing' && checkoutUrl) {
+        return false;
+      }
+
       const matchesSearch = !normalizedSearch || [
         product.slug,
         values.title,
@@ -274,9 +323,9 @@ function ProductsRoute() {
         values.description,
       ].some((value) => String(value || '').toLowerCase().includes(normalizedSearch));
 
-      return matchesStatus && matchesSearch;
+      return matchesSearch;
     });
-  }, [products, searchQuery, statusFilter]);
+  }, [categoryFilter, productTypeFilter, products, searchQuery, statusFilter, stockFilter]);
   const metrics = useMemo(() => ({
     total: products.length,
     published: products.filter((product) => product.status === 'published').length,
@@ -431,12 +480,22 @@ function ProductsRoute() {
       checks: catalogReadiness.checks,
     },
     metrics,
+    filters: {
+      search: searchQuery,
+      status: statusFilter,
+      productType: productTypeFilter,
+      category: categoryFilter,
+      stock: stockFilter,
+      visible: filteredProducts.length,
+      total: products.length,
+    },
     export: {
       csvIncludesPricing: true,
       csvIncludesInventory: true,
       csvIncludesMerchandising: true,
       csvIncludesCheckoutUrls: true,
       csvColumns: PRODUCT_EXPORT_COLUMNS,
+      filteredRows: filteredProducts.length,
     },
     products: products.map((product) => ({
       id: product.id,
@@ -475,15 +534,21 @@ function ProductsRoute() {
     activeSiteId,
     catalogReadiness.checks,
     catalogReadiness.score,
+    categoryFilter,
     commerceCatalogUrl,
     commerceProductDetailUrl,
+    filteredProducts.length,
     metrics,
     missingProductFields,
     productApiReady,
+    productTypeFilter,
     productCollection,
     products,
+    searchQuery,
     storefrontApiUrl,
     storefrontProductDetailUrl,
+    statusFilter,
+    stockFilter,
   ]);
   const productHandoffText = useMemo(() => JSON.stringify(productHandoff, null, 2), [productHandoff]);
 
@@ -744,6 +809,13 @@ function ProductsRoute() {
     URL.revokeObjectURL(url);
     setNotice(`${filteredProducts.length} visible product${filteredProducts.length === 1 ? '' : 's'} exported.`);
   };
+  const clearCatalogFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setProductTypeFilter('all');
+    setStockFilter('all');
+    setCategoryFilter('all');
+  };
 
   return (
     <PageShell
@@ -755,7 +827,12 @@ function ProductsRoute() {
             id="products-active-site"
             aria-label="Active Site"
             value={activeSiteId}
-            onChange={(event) => setSelectedSiteId(event.target.value)}
+            onChange={(event) => {
+              setSelectedSiteId(event.target.value);
+              setSelectedProductId(null);
+              setFormState(EMPTY_PRODUCT_FORM);
+              clearCatalogFilters();
+            }}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
           >
             {sites.length === 0 ? (
@@ -997,7 +1074,12 @@ function ProductsRoute() {
           id="products-active-site-inline"
           aria-label="Active product site"
           value={activeSiteId}
-          onChange={(event) => setSelectedSiteId(event.target.value)}
+          onChange={(event) => {
+            setSelectedSiteId(event.target.value);
+            setSelectedProductId(null);
+            setFormState(EMPTY_PRODUCT_FORM);
+            clearCatalogFilters();
+          }}
           className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
         >
           {sites.length === 0 ? (
@@ -1059,6 +1141,7 @@ function ProductsRoute() {
                   <div className="relative min-w-64 flex-1">
                     <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                     <input
+                      aria-label="Search products"
                       value={searchQuery}
                       onChange={(event) => setSearchQuery(event.target.value)}
                       placeholder="Search products..."
@@ -1080,11 +1163,63 @@ function ProductsRoute() {
                       </button>
                     ))}
                   </div>
+                  <select
+                    aria-label="Product type filter"
+                    value={productTypeFilter}
+                    onChange={(event) => setProductTypeFilter(event.target.value as ProductTypeFilter)}
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="all">All types</option>
+                    <option value="physical">Physical</option>
+                    <option value="digital">Digital</option>
+                    <option value="service">Service</option>
+                  </select>
+                  <select
+                    aria-label="Product category filter"
+                    value={categoryFilter}
+                    onChange={(event) => setCategoryFilter(event.target.value)}
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="all">All categories</option>
+                    {productCategories.map((category) => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label="Product stock filter"
+                    value={stockFilter}
+                    onChange={(event) => setStockFilter(event.target.value as ProductStockFilter)}
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="all">All stock</option>
+                    <option value="in-stock">In stock</option>
+                    <option value="low-stock">Low stock</option>
+                    <option value="out-of-stock">Out of stock</option>
+                    <option value="featured">Featured</option>
+                    <option value="checkout-missing">No checkout URL</option>
+                  </select>
+                  {hasActiveCatalogFilters && (
+                    <Button variant="outline" onClick={clearCatalogFilters}>
+                      Clear filters
+                    </Button>
+                  )}
                 </div>
 
                 {filteredProducts.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
-                    No products match this view.
+                  <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center">
+                    <div className="text-sm font-medium text-foreground">
+                      {products.length === 0 ? 'No products yet' : 'No products match this view'}
+                    </div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {products.length === 0
+                        ? 'Create the first sellable product, then publish it for storefront APIs.'
+                        : 'Change the search, status, type, category, or stock filters to broaden the catalog.'}
+                    </div>
+                    {products.length > 0 && hasActiveCatalogFilters && (
+                      <Button variant="outline" onClick={clearCatalogFilters} className="mt-4">
+                        Clear filters
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <div className="grid gap-3 lg:grid-cols-2">
