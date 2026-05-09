@@ -22,9 +22,16 @@ import type { CanvasElement } from '@/types/editor';
 interface NewPageSearch {
     siteId?: string;
     template?: PageTemplate;
+    title?: string;
+    slug?: string;
+    description?: string;
+    status?: PageCreationStatus;
+    scheduledAt?: string;
+    isHomepage?: boolean;
 }
 
 type PageTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'about' | 'contact' | 'registration';
+type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 
 const TEMPLATE_OPTIONS: Array<{
     id: PageTemplate;
@@ -165,10 +172,43 @@ const isPageTemplate = (value: unknown): value is PageTemplate => (
     typeof value === 'string' && TEMPLATE_OPTIONS.some((template) => template.id === value)
 );
 
+const isPageCreationStatus = (value: unknown): value is PageCreationStatus => (
+    value === 'draft' || value === 'published' || value === 'scheduled'
+);
+
+const normalizedSearchString = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+};
+
+const normalizedSearchBoolean = (value: unknown): boolean | undefined => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return undefined;
+};
+
+const normalizeNewPageSearch = (input: NewPageSearch): NewPageSearch => ({
+    ...(input.siteId ? { siteId: input.siteId } : {}),
+    ...(input.template && input.template !== 'blank' ? { template: input.template } : {}),
+    ...(input.title?.trim() ? { title: input.title.trim() } : {}),
+    ...(input.slug?.trim() ? { slug: input.slug.trim() } : {}),
+    ...(input.description?.trim() ? { description: input.description.trim() } : {}),
+    ...(input.status && input.status !== 'draft' ? { status: input.status } : {}),
+    ...(input.scheduledAt && input.status === 'scheduled' ? { scheduledAt: input.scheduledAt } : {}),
+    ...(input.isHomepage ? { isHomepage: true } : {}),
+});
+
 export const Route = createFileRoute('/pages/new')({
     validateSearch: (search: Record<string, unknown>): NewPageSearch => ({
-        siteId: typeof search.siteId === 'string' ? search.siteId : undefined,
+        siteId: normalizedSearchString(search.siteId),
         template: isPageTemplate(search.template) ? search.template : undefined,
+        title: normalizedSearchString(search.title),
+        slug: normalizedSearchString(search.slug),
+        description: normalizedSearchString(search.description),
+        status: isPageCreationStatus(search.status) ? search.status : undefined,
+        scheduledAt: normalizedSearchString(search.scheduledAt),
+        isHomepage: normalizedSearchBoolean(search.isHomepage),
     }),
     component: NewPageRoute,
 });
@@ -185,45 +225,100 @@ function NewPageRoute() {
         ? sites.find((site) => siteMatchesIdentifier(site, search.siteId || ''))
         : undefined;
     const requestedSiteId = requestedSite?.publicSiteId || requestedSite?.id || search.siteId || defaultSiteId;
-    const templateDefaults = search.template ? TEMPLATE_DEFAULTS[search.template] : TEMPLATE_DEFAULTS.blank;
+    const initialTemplate = search.template || 'blank';
+    const templateDefaults = TEMPLATE_DEFAULTS[initialTemplate];
 
     // Default to first site if available
     const [formData, setFormData] = useState({
-        title: templateDefaults.title,
-        slug: templateDefaults.slug,
+        title: search.title ?? templateDefaults.title,
+        slug: search.isHomepage ? 'home' : search.slug ?? templateDefaults.slug,
         siteId: requestedSiteId,
-        template: search.template || 'blank' as PageTemplate,
-        status: 'draft' as 'draft' | 'published' | 'scheduled',
-        scheduledAt: null as string | null,
-        isHomepage: false,
-        description: templateDefaults.description,
+        template: initialTemplate,
+        status: search.status || ('draft' as PageCreationStatus),
+        scheduledAt: search.status === 'scheduled' ? search.scheduledAt ?? null : null,
+        isHomepage: search.isHomepage ?? false,
+        description: search.description ?? templateDefaults.description,
     });
     const selectedSite = sites.find((site) => siteMatchesIdentifier(site, formData.siteId));
+    const buildRouteSearchFromForm = (nextFormData: typeof formData): NewPageSearch => normalizeNewPageSearch({
+        siteId: nextFormData.siteId,
+        template: nextFormData.template,
+        title: nextFormData.title,
+        slug: nextFormData.slug,
+        description: nextFormData.description,
+        status: nextFormData.status,
+        scheduledAt: nextFormData.scheduledAt || undefined,
+        isHomepage: nextFormData.isHomepage,
+    });
+    const updatePageDraft = (next: Partial<typeof formData>) => {
+        const nextFormData = {
+            ...formData,
+            ...next,
+        };
+
+        setFormData(nextFormData);
+        navigate({ to: '/pages/new', search: buildRouteSearchFromForm(nextFormData), replace: true });
+    };
+
     useEffect(() => {
         if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, formData.siteId))) {
             const fallbackSiteId = sites[0].publicSiteId || sites[0].id;
-            setFormData((current) => ({ ...current, siteId: fallbackSiteId }));
-            navigate({ to: '/pages/new', search: { siteId: fallbackSiteId, template: formData.template }, replace: true });
+            const nextFormData = { ...formData, siteId: fallbackSiteId };
+            setFormData(nextFormData);
+            navigate({ to: '/pages/new', search: buildRouteSearchFromForm(nextFormData), replace: true });
         }
-    }, [formData.siteId, formData.template, navigate, sites]);
+    }, [formData, navigate, sites]);
 
     useEffect(() => {
         const nextRequestedSite = search.siteId
             ? sites.find((site) => siteMatchesIdentifier(site, search.siteId || ''))
             : undefined;
         const nextSiteId = nextRequestedSite?.publicSiteId || nextRequestedSite?.id || search.siteId || defaultSiteId;
-        if (nextSiteId === formData.siteId) return;
+        const nextTemplate = search.template || 'blank';
+        const nextDefaults = TEMPLATE_DEFAULTS[nextTemplate];
+        const nextFormData = {
+            siteId: nextSiteId,
+            template: nextTemplate,
+            title: search.title ?? nextDefaults.title,
+            slug: search.isHomepage ? 'home' : search.slug ?? nextDefaults.slug,
+            description: search.description ?? nextDefaults.description,
+            status: search.status || ('draft' as PageCreationStatus),
+            scheduledAt: search.status === 'scheduled' ? search.scheduledAt ?? null : null,
+            isHomepage: search.isHomepage ?? false,
+        };
+        setFormData((current) => {
+            const hasChanged = (
+                nextFormData.siteId !== current.siteId
+                || nextFormData.template !== current.template
+                || nextFormData.title !== current.title
+                || nextFormData.slug !== current.slug
+                || nextFormData.description !== current.description
+                || nextFormData.status !== current.status
+                || nextFormData.scheduledAt !== current.scheduledAt
+                || nextFormData.isHomepage !== current.isHomepage
+            );
 
-        setFormData((current) => ({ ...current, siteId: nextSiteId }));
+            return hasChanged ? nextFormData : current;
+        });
         setError(null);
         setNotice(null);
-    }, [defaultSiteId, formData.siteId, search.siteId, sites]);
+    }, [
+        defaultSiteId,
+        search.description,
+        search.isHomepage,
+        search.scheduledAt,
+        search.siteId,
+        search.slug,
+        search.status,
+        search.template,
+        search.title,
+        sites,
+    ]);
 
     const selectPageSite = (nextSiteId: string) => {
-        setFormData((current) => ({ ...current, siteId: nextSiteId }));
+        updatePageDraft({ siteId: nextSiteId });
         setError(null);
         setNotice(null);
-        navigate({ to: '/pages/new', search: { siteId: nextSiteId, template: formData.template }, replace: true });
     };
     const selectedTemplate = useMemo(
         () => TEMPLATE_OPTIONS.find((template) => template.id === formData.template) || TEMPLATE_OPTIONS[0],
@@ -236,8 +331,7 @@ function NewPageRoute() {
         const shouldApplySlug = !formData.slug.trim() || formData.slug === currentDefaults.slug;
         const shouldApplyDescription = !formData.description.trim() || formData.description === currentDefaults.description;
 
-        setFormData({
-            ...formData,
+        updatePageDraft({
             template: nextTemplate,
             title: shouldApplyTitle ? nextDefaults.title : formData.title,
             slug: formData.isHomepage ? 'home' : shouldApplySlug ? nextDefaults.slug : formData.slug,
@@ -729,8 +823,7 @@ function NewPageRoute() {
                                     id="page-title"
                                     type="text"
                                     value={formData.title}
-                                    onChange={(e) => setFormData({
-                                        ...formData,
+                                    onChange={(e) => updatePageDraft({
                                         title: e.target.value,
                                         slug: formData.slug ? formData.slug : slugify(e.target.value),
                                     })}
@@ -750,7 +843,7 @@ function NewPageRoute() {
                                         id="page-slug"
                                         type="text"
                                         value={formData.slug}
-                                        onChange={(e) => setFormData({ ...formData, slug: slugify(e.target.value) })}
+                                        onChange={(e) => updatePageDraft({ slug: slugify(e.target.value) })}
                                         placeholder="about"
                                         disabled={formData.isHomepage}
                                         className="min-w-0 flex-1 rounded-r-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:opacity-60"
@@ -764,7 +857,7 @@ function NewPageRoute() {
                             <textarea
                                 id="page-description"
                                 value={formData.description}
-                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                onChange={(e) => updatePageDraft({ description: e.target.value })}
                                 placeholder="Short summary for search previews and frontend route metadata."
                                 rows={3}
                                 className="w-full resize-none rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring"
@@ -777,8 +870,7 @@ function NewPageRoute() {
                                 checked={formData.isHomepage}
                                 onChange={(e) => {
                                     const isHomepage = e.target.checked;
-                                    setFormData({
-                                        ...formData,
+                                    updatePageDraft({
                                         isHomepage,
                                         slug: isHomepage ? 'home' : formData.slug,
                                     });
@@ -863,8 +955,7 @@ function NewPageRoute() {
                                     value={formData.status}
                                     onChange={(e) => {
                                         const status = e.target.value as typeof formData.status;
-                                        setFormData({
-                                            ...formData,
+                                        updatePageDraft({
                                             status,
                                             scheduledAt: status === 'scheduled' ? formData.scheduledAt : null,
                                         });
@@ -884,8 +975,7 @@ function NewPageRoute() {
                                         id="page-scheduled-at"
                                         type="datetime-local"
                                         value={toDateTimeLocalValue(formData.scheduledAt)}
-                                        onChange={(e) => setFormData({
-                                            ...formData,
+                                        onChange={(e) => updatePageDraft({
                                             scheduledAt: fromDateTimeLocalValue(e.target.value),
                                         })}
                                         className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring"
