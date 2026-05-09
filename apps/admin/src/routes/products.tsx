@@ -23,6 +23,7 @@ import {
   deleteCollectionRecord,
   listCollectionRecords,
   listCollections,
+  updateCollection,
   updateCollectionRecord,
   type Collection,
   type CollectionField,
@@ -126,6 +127,15 @@ function ProductsRoute() {
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const storefrontApiUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${PRODUCT_COLLECTION_SLUG}/records?limit=24&sortBy=title`;
+  const storefrontProductDetailUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${PRODUCT_COLLECTION_SLUG}/records?slug={productSlug}`;
+  const missingProductFields = useMemo(() => (
+    productCollection ? getMissingProductFieldKeys(productCollection) : []
+  ), [productCollection]);
+  const productApiReady = Boolean(
+    productCollection?.status === 'published' &&
+    productCollection.permissions.publicRead &&
+    missingProductFields.length === 0,
+  );
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId) || null,
     [products, selectedProductId],
@@ -232,6 +242,38 @@ function ProductsRoute() {
       setNotice('Products collection created. You can add your first product now.');
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to set up products');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const syncProductsCollection = async () => {
+    if (!productCollection) return;
+    setIsSaving(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const synced = await updateCollection(activeSiteId, productCollection.id, {
+        name: productCollection.name || 'Products',
+        slug: PRODUCT_COLLECTION_SLUG,
+        description: productCollection.description || 'Sellable products controlled by Backy and available to custom frontends through collection APIs.',
+        status: 'published',
+        listRoutePattern: productCollection.listRoutePattern || '/products',
+        routePattern: productCollection.routePattern || '/products/:recordSlug',
+        fields: mergeProductFields(productCollection.fields),
+        permissions: {
+          ...productCollection.permissions,
+          publicRead: true,
+          publicCreate: false,
+          publicUpdate: false,
+          publicDelete: false,
+        },
+      });
+      setProductCollection(synced);
+      setNotice('Product schema synced. Storefront APIs now expose the complete commerce field set.');
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : 'Unable to sync product schema');
     } finally {
       setIsSaving(false);
     }
@@ -375,10 +417,19 @@ function ProductsRoute() {
         <Panel className="mb-6">
           <PanelHeader
             title="Storefront API"
-            description="Use this endpoint from any frontend to list published products."
+            description="Use these endpoints from any frontend to list and render sellable products."
             icon={<Code2 className="size-4" />}
             action={
               <div className="flex flex-wrap items-center gap-2">
+                {!productApiReady && (
+                  <Button
+                    onClick={() => void syncProductsCollection()}
+                    disabled={isSaving}
+                    iconStart={<Sparkles className="size-4" />}
+                  >
+                    Sync Schema
+                  </Button>
+                )}
                 <Button onClick={() => void copyStorefrontApiUrl()} iconStart={<Copy className="size-4" />}>
                   Copy URL
                 </Button>
@@ -395,15 +446,29 @@ function ProductsRoute() {
             }
           />
           <PanelContent>
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-              <code className="min-w-0 overflow-x-auto rounded-lg border border-border bg-muted px-3 py-2 font-mono text-xs text-muted-foreground">
-                {storefrontApiUrl}
-              </code>
+            <div className="space-y-3">
+              <div className="grid gap-2 lg:grid-cols-2">
+                <ProductApiSnippet label="List products" value={storefrontApiUrl} />
+                <ProductApiSnippet label="Product by slug" value={storefrontProductDetailUrl} />
+              </div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span
+                  className={cn(
+                    'inline-flex rounded-md px-2 py-1 font-medium',
+                    productApiReady ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                  )}
+                >
+                  {productApiReady ? 'API ready' : 'Schema needs sync'}
+                </span>
                 <StatusBadge status={productCollection.status} />
                 <span>{productCollection.permissions.publicRead ? 'Public read enabled' : 'Public read disabled'}</span>
                 <span>{products.filter((product) => product.status === 'published').length} published records</span>
               </div>
+              {missingProductFields.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  Missing commerce fields: {missingProductFields.join(', ')}. Sync the schema before relying on product APIs.
+                </div>
+              )}
             </div>
           </PanelContent>
         </Panel>
@@ -785,6 +850,17 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+function ProductApiSnippet({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/50 p-3">
+      <div className="mb-1 text-xs font-medium text-muted-foreground">{label}</div>
+      <code className="block min-w-0 overflow-x-auto whitespace-nowrap font-mono text-xs text-foreground">
+        {value}
+      </code>
+    </div>
+  );
+}
+
 function ProductCard({
   product,
   selected,
@@ -889,6 +965,15 @@ const getEnvValue = (key: string): string => {
   return env[key]?.trim() ?? '';
 };
 
+const isLocalAdminDevHost = (): boolean => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
+    && window.location.port !== '3001';
+};
+
 const getPublicBaseUrl = (): string => {
   const envBase = (
     getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
@@ -897,7 +982,7 @@ const getPublicBaseUrl = (): string => {
     ''
   ).trim();
 
-  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+  if (!envBase && isLocalAdminDevHost()) {
     return 'http://localhost:3001';
   }
 
@@ -962,3 +1047,22 @@ const productToForm = (product: CollectionRecord): ProductFormState => ({
 const asProductType = (value: unknown): ProductFormState['productType'] => (
   value === 'digital' || value === 'service' || value === 'physical' ? value : 'physical'
 );
+
+const getMissingProductFieldKeys = (collection: Collection): string[] => {
+  const existingKeys = new Set(collection.fields.map((field) => field.key));
+  return PRODUCT_FIELDS
+    .filter((field) => !existingKeys.has(field.key))
+    .map((field) => field.key);
+};
+
+const mergeProductFields = (currentFields: CollectionField[]): CollectionField[] => {
+  const fieldsByKey = new Map(currentFields.map((field) => [field.key, field]));
+  const merged = PRODUCT_FIELDS.map((requiredField) => ({
+    ...requiredField,
+    ...fieldsByKey.get(requiredField.key),
+    sortOrder: requiredField.sortOrder,
+  }));
+  const requiredKeys = new Set(PRODUCT_FIELDS.map((field) => field.key));
+  const customFields = currentFields.filter((field) => !requiredKeys.has(field.key));
+  return [...merged, ...customFields].sort((a, b) => a.sortOrder - b.sortOrder);
+};
