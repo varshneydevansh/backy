@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { Archive, CheckCircle2, ExternalLink, Eye, Filter, Plus, FileText, Edit, Trash2 } from 'lucide-react';
+import { AlertTriangle, Archive, CheckCircle2, ExternalLink, Eye, Filter, Plus, FileText, Edit, Trash2 } from 'lucide-react';
 import {
   archiveBlogPost,
   createBlogPostPreview,
@@ -31,6 +31,29 @@ import { cn, formatDate } from '@/lib/utils';
 export const Route = createFileRoute('/blog')({
   component: BlogLayout,
 });
+
+const BLOG_CONTROL_AREAS = [
+  {
+    title: 'Status overview',
+    detail: 'All, published, draft, scheduled, archived, and active site scope.',
+    href: '#blog-overview',
+  },
+  {
+    title: 'Bulk actions',
+    detail: 'Select visible posts, publish, archive, delete, and clear selections.',
+    href: '#blog-bulk',
+  },
+  {
+    title: 'Filters',
+    detail: 'Search by title and filter by status, category, tag, or author.',
+    href: '#blog-filters',
+  },
+  {
+    title: 'Post table',
+    detail: 'Edit, preview, open published posts, and manage taxonomy columns.',
+    href: '#blog-posts',
+  },
+] as const;
 
 function BlogLayout() {
   const routerState = useRouterState();
@@ -419,6 +442,82 @@ function BlogListView() {
   });
   const selectedCurrentRows = data.filter((post) => selectedPostIds.has(post.id));
   const hasPosts = posts.length > 0;
+  const editorialReadiness = useMemo(() => {
+    const hasSite = Boolean(activeSite || activeSiteId);
+    const hasPublished = postMetrics.published > 0;
+    const hasDraftPipeline = postMetrics.draft > 0 || postMetrics.scheduled > 0;
+    const hasTaxonomy = categories.length > 0 || tags.length > 0 || posts.some((post) => (post.categoryIds?.length || 0) > 0 || (post.tagIds?.length || 0) > 0);
+    const hasAuthors = authors.length > 0 || posts.some((post) => Boolean(post.author));
+    const hasBulkSelection = selectedPostIds.size > 0;
+    const checks = [
+      {
+        label: 'Site scope',
+        detail: hasSite ? `Editing ${activeSite?.name || activeSiteId}.` : 'Choose a site before managing posts.',
+        ready: hasSite,
+      },
+      {
+        label: 'Post inventory',
+        detail: hasPosts ? `${postMetrics.total} post${postMetrics.total === 1 ? '' : 's'} available.` : 'Create the first post for this site.',
+        ready: hasPosts,
+      },
+      {
+        label: 'Public delivery',
+        detail: hasPublished ? `${postMetrics.published} published post${postMetrics.published === 1 ? '' : 's'} ready for frontend routes.` : 'Publish posts to expose public article routes.',
+        ready: hasPublished,
+      },
+      {
+        label: 'Draft pipeline',
+        detail: hasDraftPipeline ? `${postMetrics.draft} draft, ${postMetrics.scheduled} scheduled.` : 'Create drafts or scheduled posts for upcoming publishing work.',
+        ready: hasDraftPipeline || hasPublished,
+      },
+      {
+        label: 'Taxonomy',
+        detail: hasTaxonomy ? `${categories.length} categor${categories.length === 1 ? 'y' : 'ies'}, ${tags.length} tag${tags.length === 1 ? '' : 's'}.` : 'Add categories or tags to support lists and filters.',
+        ready: hasTaxonomy,
+      },
+      {
+        label: 'Authors',
+        detail: hasAuthors ? `${authors.length || 'Existing'} author profile${authors.length === 1 ? '' : 's'} available.` : 'Connect authors before publishing editorial content.',
+        ready: hasAuthors,
+      },
+      {
+        label: 'Bulk controls',
+        detail: hasBulkSelection ? `${selectedPostIds.size} selected for bulk action.` : 'Select rows to publish, archive, or delete in batches.',
+        ready: hasPosts,
+      },
+      {
+        label: 'Preview paths',
+        detail: hasPosts ? `Preview and public URLs use ${siteSlug}.` : 'Preview routes appear after the first post exists.',
+        ready: hasPosts,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      checks,
+      workflow: [
+        { label: 'Draft', detail: 'Create posts, assign title, slug, author, taxonomy, excerpt, and canvas design.' },
+        { label: 'Review', detail: 'Preview the article, verify readiness, SEO, media references, and public route.' },
+        { label: 'Publish', detail: 'Publish one post or bulk publish selected editorial work for the active site.' },
+        { label: 'Maintain', detail: 'Archive stale posts, delete only when permanent removal from API delivery is intended.' },
+      ],
+    };
+  }, [
+    activeSite,
+    activeSiteId,
+    authors.length,
+    categories.length,
+    hasPosts,
+    postMetrics.draft,
+    postMetrics.published,
+    postMetrics.scheduled,
+    postMetrics.total,
+    posts,
+    selectedPostIds.size,
+    siteSlug,
+    tags.length,
+  ]);
 
   return (
     <PageShell
@@ -446,7 +545,81 @@ function BlogListView() {
         </div>
       )}
 
-      <div className="mb-6 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="blog-command-center">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">Editorial command center</h2>
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                editorialReadiness.score >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+              )}
+              >
+                {editorialReadiness.score}% ready
+              </span>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Control the full blog surface for the active site: drafts, taxonomy, authors, previews, bulk publishing, archive state, and frontend article delivery.
+            </p>
+          </div>
+          <Link
+            to="/blog/new"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" />
+            New post
+          </Link>
+        </div>
+
+        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+          <div className="rounded-lg border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold">Editorial readiness</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Checks whether this site can draft, organize, preview, publish, and maintain articles.</p>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn('h-full rounded-full', editorialReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                style={{ width: `${editorialReadiness.score}%` }}
+              />
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {editorialReadiness.checks.map((check) => (
+                <BlogReadinessCheck key={check.label} {...check} />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold">Editorial workflow</h3>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {editorialReadiness.workflow.map((step, index) => (
+                <BlogWorkflowStep key={step.label} index={index + 1} {...step} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <h3 className="text-sm font-semibold">Blog control map</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Jump to post status, bulk actions, filters, and the editorial table.</p>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            {BLOG_CONTROL_AREAS.map((area) => (
+              <a
+                key={area.title}
+                href={area.href}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div id="blog-overview" className="mb-6 grid gap-3 scroll-mt-24 lg:grid-cols-[minmax(0,1fr)_auto]">
         <div className="grid gap-3 md:grid-cols-5">
           {[
             { label: 'All', value: postMetrics.total, status: 'all' as const },
@@ -495,7 +668,7 @@ function BlogListView() {
       </div>
 
       {hasPosts && (
-        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
+        <div id="blog-bulk" className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 scroll-mt-24">
           <span className="text-sm font-medium">{selectedPostIds.size} selected</span>
           <button
             type="button"
@@ -546,7 +719,7 @@ function BlogListView() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3 mb-6">
+      <div id="blog-filters" className="flex flex-wrap items-center gap-3 mb-6 scroll-mt-24">
         <div className="relative flex-1 max-w-sm">
           <input
             type="text"
@@ -641,55 +814,57 @@ function BlogListView() {
         </button>
       </div>
 
-      <DataGrid
-        columns={columns}
-        data={data}
-        sortConfig={sortConfig}
-        onSort={handleSort}
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={setCurrentPage}
-        totalItems={totalItems}
-        emptyState={
-          <EmptyState
-            icon={FileText}
-            title={hasPosts ? 'No matching posts' : 'No posts yet'}
-            description={
-              hasPosts
-                ? 'No posts match the current search, status, taxonomy, or author filters.'
-                : 'Write the first post for this site, then design its public page.'
-            }
-            action={
-              <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-                {hasPosts && (
+      <div id="blog-posts" className="scroll-mt-24">
+        <DataGrid
+          columns={columns}
+          data={data}
+          sortConfig={sortConfig}
+          onSort={handleSort}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          totalItems={totalItems}
+          emptyState={
+            <EmptyState
+              icon={FileText}
+              title={hasPosts ? 'No matching posts' : 'No posts yet'}
+              description={
+                hasPosts
+                  ? 'No posts match the current search, status, taxonomy, or author filters.'
+                  : 'Write the first post for this site, then design its public page.'
+              }
+              action={
+                <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                  {hasPosts && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setStatusFilter('all');
+                        setSelectedCategoryId('');
+                        setSelectedTagId('');
+                        setSelectedAuthorId('');
+                      }}
+                      className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 font-medium transition-colors hover:bg-accent"
+                    >
+                      Clear Filters
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => {
-                      setSearchQuery('');
-                      setStatusFilter('all');
-                      setSelectedCategoryId('');
-                      setSelectedTagId('');
-                      setSelectedAuthorId('');
-                    }}
-                    className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 font-medium transition-colors hover:bg-accent"
+                    data-testid="blog-empty-create"
+                    onClick={() => navigate({ to: '/blog/new' })}
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                   >
-                    Clear Filters
+                    <Plus className="w-4 h-4" />
+                    {hasPosts ? 'New Post' : 'Create First Post'}
                   </button>
-                )}
-                <button
-                  type="button"
-                  data-testid="blog-empty-create"
-                  onClick={() => navigate({ to: '/blog/new' })}
-                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                >
-                  <Plus className="w-4 h-4" />
-                  {hasPosts ? 'New Post' : 'Create First Post'}
-                </button>
-              </div>
-            }
-          />
-        }
-      />
+                </div>
+              }
+            />
+          }
+        />
+      </div>
 
       {pendingDeletePost && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
@@ -790,3 +965,35 @@ const getPublicBaseUrl = (): string => {
     .replace(/\/api$/, '')
     .replace(/\/$/, '');
 };
+
+function BlogReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="flex items-start gap-2">
+        {ready ? (
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+        ) : (
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+        )}
+        <div>
+          <div className="text-sm font-semibold text-foreground">{label}</div>
+          <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BlogWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex gap-3 rounded-lg border border-border bg-card p-3">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div>
+        <div className="text-sm font-semibold text-foreground">{label}</div>
+        <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
