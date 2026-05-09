@@ -349,6 +349,7 @@ export function CanvasEditor({
   const [isPreview, setIsPreview] = useState(false);
   const [showComponentPanel, setShowComponentPanel] = useState(true);
   const [showInspectorPanel, setShowInspectorPanel] = useState(true);
+  const [isCanvasFocusMode, setIsCanvasFocusMode] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showReloadConfirm, setShowReloadConfirm] = useState(false);
@@ -422,6 +423,13 @@ export function CanvasEditor({
     const nextScale = Math.min(1.5, availableWidth / size.width, availableHeight / size.height);
     setCanvasZoom(clampCanvasZoom(Number(nextScale.toFixed(2))));
   }, [clampCanvasZoom, size.height, size.width]);
+
+  const handleToggleCanvasFocus = useCallback(() => {
+    setIsCanvasFocusMode((current) => !current);
+    window.requestAnimationFrame(() => {
+      handleFitCanvas();
+    });
+  }, [handleFitCanvas]);
 
   const applyCanvasSize = useCallback((nextSize: CanvasSize, nextBreakpoint = breakpoint) => {
     const normalizedSize = {
@@ -1892,6 +1900,18 @@ export function CanvasEditor({
     };
   }, [isPreview, size.width, size.height]);
 
+  useEffect(() => {
+    if (!isCanvasFocusMode) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      handleFitCanvas();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [handleFitCanvas, isCanvasFocusMode, showComponentPanel, showInspectorPanel]);
+
   return (
     <ActiveEditorProvider>
       <div className={cn("flex flex-col bg-slate-100 text-slate-950", className || "fixed inset-0")}>
@@ -2225,6 +2245,23 @@ export function CanvasEditor({
               Inspector
             </button>
 
+            <button
+              type="button"
+              onClick={handleToggleCanvasFocus}
+              className={cn(
+                'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium',
+                isCanvasFocusMode
+                  ? 'bg-slate-950 text-white'
+                  : 'hover:bg-slate-100'
+              )}
+              title={isCanvasFocusMode ? 'Exit wide canvas focus' : 'Enter wide canvas focus'}
+              aria-label={isCanvasFocusMode ? 'Exit wide canvas focus' : 'Enter wide canvas focus'}
+              aria-pressed={isCanvasFocusMode}
+            >
+              <Maximize2 className="w-4 h-4" />
+              Focus
+            </button>
+
             <div className="w-px h-6 bg-slate-200 mx-1" />
 
             {/* Preview Toggle */}
@@ -2318,7 +2355,7 @@ export function CanvasEditor({
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Sidebar - Component Library */}
-          {!isPreview && showComponentPanel && (
+          {!isPreview && !isCanvasFocusMode && showComponentPanel && (
             <ComponentLibrary
               onDragStart={handleDragStart}
               onAddItem={handleAddLibraryItem}
@@ -2337,7 +2374,10 @@ export function CanvasEditor({
           {/* Center - Canvas */}
           <div
             ref={canvasViewportRef}
-            className="relative flex-1 overflow-auto p-8 pb-20"
+            className={cn(
+              'relative flex-1 overflow-auto pb-20',
+              isCanvasFocusMode ? 'p-10' : 'p-8'
+            )}
             style={{
               backgroundColor: '#e9edf3',
               backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(71,85,105,0.24) 1px, transparent 0)',
@@ -2502,7 +2542,7 @@ export function CanvasEditor({
           </div>
 
           {/* Right Sidebar - Inspector */}
-          {!isPreview && showInspectorPanel && (
+          {!isPreview && !isCanvasFocusMode && showInspectorPanel && (
             <aside
               className="flex h-full min-h-0 w-[clamp(18rem,20vw,24rem)] min-w-[18rem] max-w-[24rem] shrink-0 flex-col border-l border-slate-200 bg-white"
               data-testid="editor-inspector"
