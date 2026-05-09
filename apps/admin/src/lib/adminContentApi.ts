@@ -1956,13 +1956,13 @@ export async function updateSettings(input: Partial<SiteSettingsInput>): Promise
   };
 }
 
-export async function regenerateSettingsApiKeys(): Promise<SiteSettingsInput> {
+export async function regenerateSettingsApiKeys(scope: 'all' | 'public' | 'admin' = 'all'): Promise<SiteSettingsInput> {
   const response = await adminFetch(`${getAdminApiBase()}/settings`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ action: 'regenerate-api-keys' }),
+    body: JSON.stringify({ action: 'regenerate-api-keys', scope }),
   });
   const payload = await readJson<ApiSettingsResponse>(response);
 

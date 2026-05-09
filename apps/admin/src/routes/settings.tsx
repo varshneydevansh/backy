@@ -299,11 +299,11 @@ function SettingsPage() {
     }
   };
 
-  const handleRegenerateKeys = async () => {
+  const handleRegenerateKeys = async (scope: 'all' | 'public' | 'admin' = 'all') => {
     setNotice(null);
 
     try {
-      const backendSettings = await regenerateSettingsApiKeys();
+      const backendSettings = await regenerateSettingsApiKeys(scope);
       applyBackendSettings(backendSettings);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -1235,12 +1235,36 @@ function SecuritySettings({
 }: {
   publicApiKey: string;
   adminApiKey: string;
-  onRegenerateKeys: () => void;
+  onRegenerateKeys: (scope: 'all' | 'public' | 'admin') => Promise<void> | void;
   auditLogs: AdminAuditLog[];
   isAuditLoading: boolean;
   auditNotice: string | null;
   onRefreshAudit: () => void;
 }) {
+  const [copiedKey, setCopiedKey] = useState<'public' | 'admin' | null>(null);
+  const [rotatingKey, setRotatingKey] = useState<'all' | 'public' | 'admin' | null>(null);
+
+  const copyKey = async (scope: 'public' | 'admin', value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedKey(scope);
+      setTimeout(() => {
+        setCopiedKey((current) => (current === scope ? null : current));
+      }, 1200);
+    } catch {
+      setCopiedKey(null);
+    }
+  };
+
+  const rotateKey = async (scope: 'all' | 'public' | 'admin') => {
+    setRotatingKey(scope);
+    try {
+      await onRegenerateKeys(scope);
+    } finally {
+      setRotatingKey(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -1304,29 +1328,65 @@ function SecuritySettings({
 
       <div>
         <h3 className="text-lg font-semibold mb-4">API Keys</h3>
-        <div className="space-y-4 max-w-md">
-          <div className="p-4 bg-muted rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Public API Key</p>
-                <p className="text-sm text-muted-foreground font-mono mt-1">
-                  {publicApiKey}
-                </p>
+        <div className="grid gap-4 xl:grid-cols-2">
+          {[
+            {
+              scope: 'public' as const,
+              label: 'Public API Key',
+              value: publicApiKey,
+              detail: 'Use from custom frontends for published content, forms, comments, and media delivery.',
+            },
+            {
+              scope: 'admin' as const,
+              label: 'Admin API Key',
+              value: adminApiKey,
+              detail: 'Use only from trusted server environments for dashboard and management workflows.',
+            },
+          ].map((item) => (
+            <div key={item.scope} className="rounded-xl border border-border bg-muted/40 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-medium">{item.label}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
+                </div>
+                <span className="rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
+                  Active
+                </span>
               </div>
-              <button
-                type="button"
-                onClick={onRegenerateKeys}
-                className="text-sm text-primary hover:underline"
-              >
-                Regenerate
-              </button>
+              <p className="mt-3 break-all rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+                {item.value}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => void copyKey(item.scope, item.value)}>
+                  {copiedKey === item.scope ? 'Copied' : 'Copy'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void rotateKey(item.scope)}
+                  disabled={rotatingKey !== null}
+                >
+                  {rotatingKey === item.scope ? 'Regenerating...' : `Regenerate ${item.scope}`}
+                </Button>
+              </div>
             </div>
-          </div>
-          <div className="p-4 bg-muted rounded-lg">
-            <p className="font-medium">Admin API Key</p>
-            <p className="text-sm text-muted-foreground font-mono mt-1">
-              {adminApiKey}
-            </p>
+          ))}
+        </div>
+        <div className="mt-3 rounded-xl border border-border p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-medium">Rotate both keys</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Use this when a workspace credential may have been exposed. Existing integrations need to update both keys.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => void rotateKey('all')}
+              disabled={rotatingKey !== null}
+            >
+              {rotatingKey === 'all' ? 'Regenerating...' : 'Regenerate all keys'}
+            </Button>
           </div>
         </div>
       </div>
