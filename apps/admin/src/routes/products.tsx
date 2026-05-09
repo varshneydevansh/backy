@@ -956,20 +956,28 @@ function ProductsRoute() {
   const saveProduct = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!productCollection) return;
+    if (isSaving) return;
+
+    if (!formState.title.trim() || !formState.sku.trim()) {
+      setError('Add a product title and SKU before saving.');
+      setNotice(null);
+      return;
+    }
+
+    const scheduledAt = formState.status === 'scheduled'
+      ? toIsoDateTime(formState.scheduledAt)
+      : null;
+    if (formState.status === 'scheduled' && !scheduledAt) {
+      setError('Choose a publish date before scheduling this product.');
+      setNotice(null);
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
     setNotice(null);
 
     const slug = slugify(formState.slug || formState.title || formState.sku);
-    const scheduledAt = formState.status === 'scheduled'
-      ? toIsoDateTime(formState.scheduledAt)
-      : null;
-    if (formState.status === 'scheduled' && !scheduledAt) {
-      setError('Choose a publish date before scheduling this product.');
-      setIsSaving(false);
-      return;
-    }
     const input = {
       slug,
       status: formState.status,
