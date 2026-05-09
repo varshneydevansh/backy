@@ -596,6 +596,8 @@ function BlogListView() {
   const selectedCurrentRows = data.filter((post) => selectedPostIds.has(post.id));
   const visiblePostIdSet = useMemo(() => new Set(data.map((post) => post.id)), [data]);
   const hiddenSelectedCount = Math.max(0, selectedPosts.length - selectedCurrentRows.length);
+  const bulkActionLabel = getBulkActionLabel(bulkAction, selectedPosts.length, pendingBulkDelete);
+  const bulkBusyLabel = getBulkBusyLabel(bulkAction);
   const hasPosts = siteScopedPosts.length > 0;
   const editorialReadiness = useMemo(() => {
     const hasSite = Boolean(activeSite || activeSiteId);
@@ -1221,7 +1223,7 @@ function BlogListView() {
             {bulkAction === 'publish' && <CheckCircle2 className="size-4" />}
             {bulkAction === 'archive' && <Archive className="size-4" />}
             {bulkAction === 'delete' && <Trash2 className="size-4" />}
-            {isBulkBusy ? 'Applying...' : 'Apply'}
+            {isBulkBusy ? bulkBusyLabel : bulkActionLabel}
           </button>
           {selectedPosts.length > 0 && (
             <button
@@ -1486,6 +1488,35 @@ const getEnvValue = (key: string): string => {
 const csvEscape = (value: unknown): string => {
   const raw = String(value ?? '').replace(/\r?\n/g, '\\n');
   return `"${raw.replace(/"/g, '""')}"`;
+};
+
+const getBulkActionLabel = (action: 'publish' | 'archive' | 'delete' | '', count: number, isConfirmingDelete: boolean): string => {
+  const postLabel = `${count} post${count === 1 ? '' : 's'}`;
+
+  if (action === 'publish') {
+    return count > 0 ? `Publish ${postLabel}` : 'Publish selected';
+  }
+
+  if (action === 'archive') {
+    return count > 0 ? `Archive ${postLabel}` : 'Archive selected';
+  }
+
+  if (action === 'delete') {
+    if (isConfirmingDelete) {
+      return count > 0 ? `Delete ${postLabel}` : 'Delete selected';
+    }
+
+    return count > 0 ? `Review delete for ${postLabel}` : 'Delete selected';
+  }
+
+  return 'Choose action';
+};
+
+const getBulkBusyLabel = (action: 'publish' | 'archive' | 'delete' | ''): string => {
+  if (action === 'publish') return 'Publishing...';
+  if (action === 'archive') return 'Archiving...';
+  if (action === 'delete') return 'Deleting...';
+  return 'Applying...';
 };
 
 function BlogApiSnippet({ label, value }: { label: string; value: string }) {
