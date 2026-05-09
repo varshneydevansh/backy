@@ -33,6 +33,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn, getRelativeTime } from '@/lib/utils';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { useAuthStore } from '@/stores/authStore';
 import { useStore } from '@/stores/mockStore';
 import {
@@ -188,14 +189,17 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchLoadedForSiteId, setSearchLoadedForSiteId] = useState<string | null>(null);
 
-  const activeSiteId = useMemo(
-    () => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo',
-    [sites],
+  const selectedSiteId = getSiteSelectionFromSearch(sites);
+  const activeSite = useMemo(
+    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
+    [selectedSiteId, sites],
   );
+  const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
   const activeSiteRouteId = useMemo(
-    () => sites[0]?.id || activeSiteId,
-    [activeSiteId, sites],
+    () => activeSite?.id || activeSiteId,
+    [activeSite?.id, activeSiteId],
   );
+  const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const notificationCount = pendingComments.length + workflowNotifications.length;
   const workflowShortcuts = useMemo<WorkflowShortcut[]>(() => {
     const routeCount = (route: WorkflowNotification['action']['route']) => (
@@ -297,6 +301,55 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     signOut();
     setUserMenuOpen(false);
     navigate({ to: '/login' });
+  };
+
+  const navigateToTool = (to: StaticToolRoute) => {
+    if (to === '/') {
+      navigate({ to: '/', search: activeSiteSearch });
+      return;
+    }
+
+    if (to === '/forms') {
+      navigate({ to: '/forms', search: activeSiteSearch });
+      return;
+    }
+
+    if (to === '/comments') {
+      navigate({ to: '/comments', search: activeSiteSearch });
+      return;
+    }
+
+    if (to === '/contacts') {
+      navigate({ to: '/contacts', search: activeSiteSearch });
+      return;
+    }
+
+    if (to === '/media') {
+      navigate({ to: '/media', search: activeSiteSearch });
+      return;
+    }
+
+    if (to === '/products') {
+      navigate({ to: '/products', search: activeSiteSearch });
+      return;
+    }
+
+    if (to === '/orders') {
+      navigate({ to: '/orders', search: activeSiteSearch });
+      return;
+    }
+
+    if (to === '/collections') {
+      navigate({ to: '/collections', search: activeSiteSearch });
+      return;
+    }
+
+    if (to === '/users') {
+      navigate({ to: '/users', search: activeSiteSearch });
+      return;
+    }
+
+    navigate({ to });
   };
 
   const loadNotifications = async () => {
@@ -440,19 +493,19 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     setNotificationsOpen(false);
 
     if (notification.action.route === 'comments') {
-      navigate({ to: '/comments' });
+      navigate({ to: '/comments', search: activeSiteSearch });
       return;
     }
     if (notification.action.route === 'forms') {
-      navigate({ to: '/forms' });
+      navigate({ to: '/forms', search: activeSiteSearch });
       return;
     }
     if (notification.action.route === 'contacts') {
-      navigate({ to: '/contacts' });
+      navigate({ to: '/contacts', search: activeSiteSearch });
       return;
     }
     if (notification.action.route === 'orders') {
-      navigate({ to: '/orders' });
+      navigate({ to: '/orders', search: activeSiteSearch });
       return;
     }
     if (notification.action.route === 'site') {
@@ -460,7 +513,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
       return;
     }
     if (notification.action.route === 'dashboard') {
-      navigate({ to: '/' });
+      navigate({ to: '/', search: activeSiteSearch });
       return;
     }
     navigate({ to: '/settings' });
@@ -470,7 +523,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     setNotificationsOpen(false);
 
     if (pendingComments.length > 0) {
-      navigate({ to: '/comments' });
+      navigate({ to: '/comments', search: activeSiteSearch });
       return;
     }
 
@@ -484,7 +537,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
       return;
     }
 
-    navigate({ to: '/' });
+    navigate({ to: '/', search: activeSiteSearch });
   };
 
   const notificationSummaryLabel = pendingComments.length > 0
@@ -590,30 +643,30 @@ export function Header({ onSidebarToggle }: HeaderProps) {
       return;
     }
     if (result.action.route === 'page') {
-      navigate({ to: '/pages/$pageId/edit', params: { pageId: result.action.pageId } });
+      navigate({ to: '/pages/$pageId/edit', params: { pageId: result.action.pageId }, search: activeSiteSearch });
       return;
     }
     if (result.action.route === 'blog') {
-      navigate({ to: '/blog/$postId', params: { postId: result.action.postId } });
+      navigate({ to: '/blog/$postId', params: { postId: result.action.postId }, search: activeSiteSearch });
       return;
     }
     if (result.action.route === 'forms') {
-      navigate({ to: '/forms' });
+      navigate({ to: '/forms', search: activeSiteSearch });
       return;
     }
     if (result.action.route === 'comments') {
-      navigate({ to: '/comments' });
+      navigate({ to: '/comments', search: activeSiteSearch });
       return;
     }
     if (result.action.route === 'contacts') {
-      navigate({ to: '/contacts' });
+      navigate({ to: '/contacts', search: activeSiteSearch });
       return;
     }
     if (result.action.route === 'user') {
       navigate({ to: '/users/$userId', params: { userId: result.action.userId } });
       return;
     }
-    navigate({ to: result.action.to });
+    navigateToTool(result.action.to);
   };
 
   useEffect(() => {
@@ -774,7 +827,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                         type="button"
                         onClick={() => {
                           setNotificationsOpen(false);
-                          navigate({ to: shortcut.to });
+                          navigateToTool(shortcut.to);
                         }}
                         className="group rounded-lg border border-border bg-background px-2.5 py-2 text-left transition hover:border-primary/40 hover:bg-primary/5 focus-ring"
                       >
@@ -885,7 +938,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                                 type="button"
                                 onClick={() => {
                                   setNotificationsOpen(false);
-                                  navigate({ to: '/comments' });
+                                  navigate({ to: '/comments', search: activeSiteSearch });
                                 }}
                                 className="rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 focus-ring"
                               >
