@@ -3,6 +3,8 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import {
   CheckCircle2,
   ClipboardList,
+  Code2,
+  Copy,
   Download,
   ExternalLink,
   FileInput,
@@ -53,16 +55,24 @@ function FormsRoute() {
   const [isLoading, setIsLoading] = useState(false);
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const activeSite = useMemo(
     () => sites.find((site) => (site.publicSiteId || site.id) === selectedSiteId) || sites[0],
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const selectedForm = useMemo(
     () => forms.find((form) => form.id === selectedFormId) || forms[0] || null,
     [forms, selectedFormId],
   );
+  const selectedFormDefinitionUrl = selectedForm
+    ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/definition`
+    : '';
+  const selectedFormSubmitUrl = selectedForm
+    ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/submissions`
+    : '';
   const selectedInbox = selectedForm ? inboxByForm[selectedForm.id] : null;
   const selectedSubmissions = selectedInbox?.submissions || [];
   const filteredSubmissions = useMemo(
@@ -103,6 +113,7 @@ function FormsRoute() {
   const loadForms = async () => {
     setIsLoading(true);
     setError(null);
+    setNotice(null);
 
     try {
       const loadedForms = await listForms(activeSiteId);
@@ -206,6 +217,20 @@ function FormsRoute() {
     URL.revokeObjectURL(url);
   };
 
+  const copyFormApiText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setError(null);
+      setNotice(null);
+    } catch {
+      setError(value);
+      return;
+    }
+
+    setError(null);
+    setNotice(`${label} copied.`);
+  };
+
   return (
     <PageShell
       title="Forms"
@@ -213,6 +238,8 @@ function FormsRoute() {
       action={
         <div className="flex flex-wrap items-center gap-2">
           <select
+            id="forms-active-site"
+            aria-label="Active Site"
             value={activeSiteId}
             onChange={(event) => setSelectedSiteId(event.target.value)}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
@@ -234,6 +261,11 @@ function FormsRoute() {
       {error && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {error}
+        </div>
+      )}
+      {notice && (
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          {notice}
         </div>
       )}
 
@@ -269,9 +301,13 @@ function FormsRoute() {
           title="No forms found"
           description="Forms appear here when a page or blog design includes a form block for this site."
           action={
-            <Button className="mt-2" onClick={() => window.open('/pages', '_self')} iconStart={<Sparkles className="size-4" />}>
+            <Link
+              to="/pages"
+              className="mt-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-primary bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <Sparkles className="size-4" />
               Open Pages
-            </Button>
+            </Link>
           }
         />
       ) : (
@@ -350,6 +386,38 @@ function FormsRoute() {
                   }
                 />
                 <PanelContent>
+                  <div className="mb-5 rounded-lg border border-border bg-muted/30 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 text-sm font-semibold">
+                          <Code2 className="size-4" />
+                          Frontend form API
+                        </div>
+                        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                          Use the definition endpoint to render fields in any frontend, then POST validated values to the submission endpoint.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button onClick={() => void copyFormApiText(selectedFormDefinitionUrl, 'Form definition URL')} iconStart={<Copy className="size-4" />}>
+                          Copy definition
+                        </Button>
+                        <a
+                          href={selectedFormDefinitionUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                        >
+                          <ExternalLink className="size-4" />
+                          Open definition
+                        </a>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                      <ApiSnippet label="Definition URL" value={selectedFormDefinitionUrl} />
+                      <ApiSnippet label="Submit URL" value={selectedFormSubmitUrl} />
+                    </div>
+                  </div>
+
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                     <MetaTile label="Moderation" value={selectedForm.moderationMode || 'manual'} />
                     <MetaTile label="Spam guard" value={[
@@ -387,6 +455,7 @@ function FormsRoute() {
                       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                       <input
                         type="search"
+                        aria-label="Search submissions"
                         value={submissionQuery}
                         onChange={(event) => setSubmissionQuery(event.target.value)}
                         placeholder="Search submissions..."
@@ -452,6 +521,17 @@ function MetaTile({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-border bg-background px-3 py-3">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="mt-1 truncate text-sm font-semibold capitalize">{value}</div>
+    </div>
+  );
+}
+
+function ApiSnippet({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="mb-1 text-xs font-medium text-muted-foreground">{label}</div>
+      <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+        {value}
+      </code>
     </div>
   );
 }
@@ -552,6 +632,29 @@ const formatSubmissionValue = (value: unknown): string => {
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (Array.isArray(value)) return value.map(formatSubmissionValue).join(', ');
   return JSON.stringify(value);
+};
+
+const getEnvValue = (key: string): string => {
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+  return env[key]?.trim() ?? '';
+};
+
+const getPublicBaseUrl = (): string => {
+  const envBase = (
+    getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
+    getEnvValue('VITE_PUBLIC_API_URL') ||
+    getEnvValue('VITE_API_BASE_URL') ||
+    ''
+  ).trim();
+
+  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+    return 'http://localhost:3001';
+  }
+
+  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+    .replace(/\/api\/admin$/, '')
+    .replace(/\/api$/, '')
+    .replace(/\/$/, '');
 };
 
 const csvEscape = (value: unknown): string => {
