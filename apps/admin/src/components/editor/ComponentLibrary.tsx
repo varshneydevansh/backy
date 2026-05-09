@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO: Fix category type access when implementing Page Editor properly
 /**
  * ============================================================================
  * BACKY CMS - COMPONENT LIBRARY
@@ -13,7 +11,7 @@
  * @license MIT
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type DragEvent } from 'react';
 import {
   Type,
   Heading,
@@ -29,8 +27,6 @@ import {
   Link as LinkIcon,
   Box,
   Search,
-  Star,
-  Columns,
   MapPin,
   AlignLeft,
   MessageSquare,
@@ -54,6 +50,8 @@ import type { ReusableSection } from '@/lib/adminContentApi';
 // ============================================
 
 const LIBRARY_ITEMS: ComponentLibraryItem[] = CANVAS_COMPONENT_LIBRARY;
+
+const getLibraryCategory = (item: ComponentLibraryItem): string => item.category || 'basic';
 
 // ============================================
 // COMPONENT
@@ -98,13 +96,13 @@ export function ComponentLibrary({
 
   const reusableItems = useMemo<ComponentLibraryItem[]>(() => (
     reusableSections
-      .map((section) => {
+      .flatMap((section) => {
         const root = section.content.elements?.[0];
         if (!root) {
-          return null;
+          return [];
         }
 
-        return {
+        return [{
           id: `reusable-section:${section.id}`,
           type: root.type,
           name: section.name,
@@ -122,9 +120,8 @@ export function ComponentLibrary({
             sectionId: section.id,
             slug: section.slug,
           },
-        } satisfies ComponentLibraryItem;
+        } satisfies ComponentLibraryItem];
       })
-      .filter(Boolean)
   ), [reusableSections]);
 
   const libraryItems = useMemo(
@@ -139,17 +136,18 @@ export function ComponentLibrary({
       item.description?.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesCategory =
-      !selectedCategory || item.category === selectedCategory;
+      !selectedCategory || getLibraryCategory(item) === selectedCategory;
 
     return matchesSearch && matchesCategory;
   });
 
   // Group by category
   const groupedItems = filteredItems.reduce((acc, item) => {
-    if (!acc[item.category]) {
-      acc[item.category] = [];
+    const category = getLibraryCategory(item);
+    if (!acc[category]) {
+      acc[category] = [];
     }
-    acc[item.category].push(item);
+    acc[category].push(item);
     return acc;
   }, {} as Record<string, ComponentLibraryItem[]>);
 
@@ -348,7 +346,7 @@ function LibraryItem({
   const Icon = getIcon();
   const reusableSectionId = item.reusableContent?.sectionId;
 
-  const handleDragStart = (e: React.DragEvent) => {
+  const handleDragStart = (e: DragEvent<HTMLDivElement>) => {
     e.dataTransfer.setData('application/json', JSON.stringify(item));
     e.dataTransfer.effectAllowed = 'copy';
     onDragStart();
