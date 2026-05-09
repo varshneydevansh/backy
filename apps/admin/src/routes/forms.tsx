@@ -1449,12 +1449,73 @@ function FormsRoute() {
                       </div>
                     </div>
                     <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                      <ApiSnippet label="Forms list URL" value={formsListUrl} />
                       <ApiSnippet label="Definition URL" value={selectedFormDefinitionUrl} />
                       <ApiSnippet label="Submit URL" value={selectedFormSubmitUrl} />
+                      <ApiSnippet label="Contacts URL" value={selectedFormContactsUrl} />
                     </div>
                     <div className="mt-3 grid gap-3 xl:grid-cols-2">
                       <ApiSnippet label="Sample submission payload" value={selectedFormSamplePayloadText} />
                       <ApiSnippet label="cURL submit example" value={selectedFormCurlExample} />
+                    </div>
+                  </div>
+
+                  <div className="mb-5 rounded-lg border border-border bg-muted/30 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 text-sm font-semibold">
+                          <ClipboardList className="size-4" />
+                          Destination routing
+                        </div>
+                        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                          Shows what happens after this form is submitted: inbox review, contact creation, collection writes, notifications, webhooks, and success behavior.
+                        </p>
+                      </div>
+                      <span className={cn(
+                        'rounded-full px-2.5 py-1 text-xs font-semibold',
+                        formHasDestination(selectedForm) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                      )}
+                      >
+                        {formHasDestination(selectedForm) ? 'Routed' : 'Inbox only'}
+                      </span>
+                    </div>
+                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      <RoutingTile
+                        title="Contact share"
+                        status={selectedForm.contactShare?.enabled ? 'Enabled' : 'Off'}
+                        detail={selectedForm.contactShare?.enabled
+                          ? [
+                              selectedForm.contactShare.nameField ? `name:${selectedForm.contactShare.nameField}` : null,
+                              selectedForm.contactShare.emailField ? `email:${selectedForm.contactShare.emailField}` : null,
+                              selectedForm.contactShare.phoneField ? `phone:${selectedForm.contactShare.phoneField}` : null,
+                              selectedForm.contactShare.dedupeByEmail ? 'dedupe email' : null,
+                            ].filter(Boolean).join(' / ')
+                          : 'Submissions stay in the form inbox unless this is enabled.'}
+                        ready={Boolean(selectedForm.contactShare?.enabled)}
+                      />
+                      <RoutingTile
+                        title="Collection write"
+                        status={selectedForm.collectionTarget?.enabled ? 'Enabled' : 'Off'}
+                        detail={selectedForm.collectionTarget?.enabled
+                          ? `${selectedForm.collectionTarget.collectionId}${selectedForm.collectionTarget.slugField ? ` via ${selectedForm.collectionTarget.slugField}` : ''}`
+                          : 'Use collection writes for registrations, applications, events, or custom objects.'}
+                        ready={Boolean(selectedForm.collectionTarget?.enabled)}
+                      />
+                      <RoutingTile
+                        title="Notifications"
+                        status={selectedForm.notificationEmail || selectedForm.notificationWebhook ? 'Configured' : 'Off'}
+                        detail={[
+                          selectedForm.notificationEmail ? `email:${selectedForm.notificationEmail}` : null,
+                          selectedForm.notificationWebhook ? 'webhook configured' : null,
+                        ].filter(Boolean).join(' / ') || 'Use Settings notifications or form-specific email/webhook routing.'}
+                        ready={Boolean(selectedForm.notificationEmail || selectedForm.notificationWebhook)}
+                      />
+                      <RoutingTile
+                        title="Success behavior"
+                        status={selectedForm.successRedirectUrl ? 'Redirect' : 'Message'}
+                        detail={selectedForm.successRedirectUrl || selectedForm.successMessage || 'Default success message'}
+                        ready={Boolean(selectedForm.successRedirectUrl || selectedForm.successMessage)}
+                      />
                     </div>
                   </div>
 
@@ -1604,6 +1665,34 @@ function ApiSnippet({ label, value }: { label: string; value: string }) {
       <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
         {value}
       </code>
+    </div>
+  );
+}
+
+function RoutingTile({
+  title,
+  status,
+  detail,
+  ready,
+}: {
+  title: string;
+  status: string;
+  detail: string;
+  ready: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-background p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 text-sm font-semibold text-foreground">{title}</div>
+        <span className={cn(
+          'shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold',
+          ready ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground',
+        )}
+        >
+          {status}
+        </span>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-muted-foreground">{detail}</p>
     </div>
   );
 }
