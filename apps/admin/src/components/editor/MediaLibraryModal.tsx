@@ -295,6 +295,7 @@ export function MediaLibraryModal({
   };
 
   const handleFileUpload = async (files: FileList | null, filterHint: UploadFilter) => {
+    if (isUploading) return;
     if (!files || files.length === 0) return;
 
     const shouldKeepFile = (file: File) => {
@@ -308,17 +309,25 @@ export function MediaLibraryModal({
       return resolvedType === 'file';
     };
 
+    const selectedFiles = Array.from(files);
+    const acceptedFiles = selectedFiles.filter((file) => (
+      shouldKeepFile(file) && allowedTypesSet.has(getUploadType(file))
+    ));
+    const skippedCount = selectedFiles.length - acceptedFiles.length;
+
+    if (acceptedFiles.length === 0) {
+      setError(`No files matched the current ${filterHint === 'all' ? 'allowed media' : filterHint} upload filter.`);
+      setDragActive(false);
+      return;
+    }
+
     setIsUploading(true);
     setError(null);
-
     const uploaded: MediaAsset[] = [];
     const failed: unknown[] = [];
 
-    for (const file of Array.from(files)) {
+    for (const file of acceptedFiles) {
       const resolvedType = getUploadType(file);
-
-      if (!shouldKeepFile(file)) continue;
-      if (!allowedTypesSet.has(resolvedType)) continue;
 
       try {
         const uploadedItem = await uploadMedia(file, {
@@ -345,11 +354,17 @@ export function MediaLibraryModal({
       setActiveTab('library');
     }
 
-    if (failed.length) {
+    if (failed.length || skippedCount > 0) {
       const firstError = failed[0];
-      setError(firstError instanceof Error
-        ? `${firstError.message}. ${failed.length} file${failed.length === 1 ? '' : 's'} were not uploaded.`
-        : `${failed.length} file${failed.length === 1 ? '' : 's'} were not uploaded.`);
+      const failedText = failed.length > 0
+        ? firstError instanceof Error
+          ? `${firstError.message}. ${failed.length} file${failed.length === 1 ? '' : 's'} failed.`
+          : `${failed.length} file${failed.length === 1 ? '' : 's'} failed.`
+        : '';
+      const skippedText = skippedCount > 0
+        ? `${skippedCount} file${skippedCount === 1 ? '' : 's'} skipped because they did not match the current upload type.`
+        : '';
+      setError([failedText, skippedText].filter(Boolean).join(' '));
     }
 
     setIsUploading(false);
@@ -575,9 +590,13 @@ export function MediaLibraryModal({
                     <button
                       type="button"
                       key={filter}
-                      onClick={() => setUploadFilter(filter)}
+                      onClick={() => {
+                        if (isUploading) return;
+                        setUploadFilter(filter);
+                      }}
+                      disabled={isUploading}
                       className={cn(
-                        'min-h-9 rounded-lg border px-3 text-xs font-medium capitalize transition-colors',
+                        'min-h-9 rounded-lg border px-3 text-xs font-medium capitalize transition-colors disabled:cursor-not-allowed disabled:opacity-60',
                         uploadFilter === filter
                           ? 'border-primary bg-primary text-primary-foreground'
                           : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -590,14 +609,24 @@ export function MediaLibraryModal({
                 <div
                   className={cn(
                     'relative flex min-h-[420px] flex-col items-center justify-center rounded-xl border-2 border-dashed px-8 text-center transition-colors',
-                    dragActive ? 'border-primary bg-primary/5' : 'border-border bg-muted/20 hover:border-primary/50'
+                    dragActive ? 'border-primary bg-primary/5' : 'border-border bg-muted/20 hover:border-primary/50',
+                    isUploading && 'cursor-not-allowed opacity-75 hover:border-border'
                   )}
-                  onDragEnter={() => setDragActive(true)}
+                  onDragEnter={() => {
+                    if (!isUploading) {
+                      setDragActive(true);
+                    }
+                  }}
                   onDragLeave={() => setDragActive(false)}
-                  onDragOver={(e) => e.preventDefault()}
+                  onDragOver={(e) => {
+                    if (!isUploading) {
+                      e.preventDefault();
+                    }
+                  }}
                   onDrop={(e) => {
                     e.preventDefault();
                     setDragActive(false);
+                    if (isUploading) return;
                     void handleFileUpload(e.dataTransfer.files, uploadFilter);
                   }}
                 >
@@ -648,7 +677,8 @@ export function MediaLibraryModal({
                     <select
                       value={uploadVisibility}
                       onChange={(event) => setUploadVisibility(event.target.value === 'private' ? 'private' : 'public')}
-                      className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                      disabled={isUploading}
+                      className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <option value="public">Public delivery</option>
                       <option value="private">Private signed delivery</option>
@@ -660,7 +690,8 @@ export function MediaLibraryModal({
                     <select
                       value={uploadFolderId}
                       onChange={(event) => setUploadFolderId(event.target.value)}
-                      className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                      disabled={isUploading}
+                      className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <option value="root">Root library</option>
                       {folders.map((folder) => (
@@ -680,6 +711,7 @@ export function MediaLibraryModal({
                       placeholder="Add hero, product, brand..."
                       ariaLabel="Media upload tags"
                       maxTags={10}
+                      disabled={isUploading}
                     />
                   </div>
 
