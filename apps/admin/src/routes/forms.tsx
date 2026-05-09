@@ -39,6 +39,34 @@ export const Route = createFileRoute('/forms')({
 
 type SubmissionStatusFilter = FormSubmissionStatus | 'all';
 
+const FORM_CONTROL_AREAS = [
+  {
+    title: 'Site scope',
+    detail: 'Choose the website whose forms and submissions are being reviewed.',
+    href: '#forms-site',
+  },
+  {
+    title: 'Form health',
+    detail: 'Active forms, pending submissions, spam volume, and review status.',
+    href: '#forms-metrics',
+  },
+  {
+    title: 'Form library',
+    detail: 'Switch between page, blog, and embedded forms for this site.',
+    href: '#forms-library',
+  },
+  {
+    title: 'Frontend API',
+    detail: 'Definition, submit URL, sample payload, and cURL handoff.',
+    href: '#forms-api',
+  },
+  {
+    title: 'Submission inbox',
+    detail: 'Search, filter, export, approve, reject, or mark submissions as spam.',
+    href: '#forms-inbox',
+  },
+] as const;
+
 interface FormInbox {
   form: FormDefinition;
   submissions: FormSubmission[];
@@ -203,6 +231,46 @@ function FormsRoute() {
       spam: submissions.filter((submission) => submission.status === 'spam').length,
     };
   }, [forms, inboxByForm]);
+  const formCommandReadiness = useMemo(() => {
+    if (selectedForm) {
+      return selectedFormReadiness;
+    }
+
+    const checks = [
+      {
+        label: 'Form library',
+        detail: forms.length > 0 ? `${forms.length} form${forms.length === 1 ? '' : 's'} loaded.` : 'Create a page or blog form block first.',
+        ready: forms.length > 0,
+      },
+      {
+        label: 'Active forms',
+        detail: metrics.active > 0 ? `${metrics.active} active form${metrics.active === 1 ? '' : 's'}.` : 'Activate a form before public delivery.',
+        ready: metrics.active > 0,
+      },
+      {
+        label: 'Submission inbox',
+        detail: metrics.pending > 0 ? `${metrics.pending} pending submission${metrics.pending === 1 ? '' : 's'}.` : 'No pending submissions for review.',
+        ready: true,
+      },
+      {
+        label: 'Spam review',
+        detail: metrics.spam > 0 ? `${metrics.spam} spam submission${metrics.spam === 1 ? '' : 's'} isolated.` : 'Spam queue is clear.',
+        ready: true,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      checks,
+      workflow: [
+        { label: 'Build', detail: 'Add a form block to a page, post, or frontend surface.' },
+        { label: 'Expose', detail: 'Use definition and submit APIs from custom frontends.' },
+        { label: 'Protect', detail: 'Enable spam guard, review mode, and destination routing.' },
+        { label: 'Review', detail: 'Approve, reject, export, or route submissions into contacts and collections.' },
+      ],
+    };
+  }, [forms.length, metrics.active, metrics.pending, metrics.spam, selectedForm, selectedFormReadiness]);
 
   const loadForms = async () => {
     setIsLoading(true);
@@ -363,7 +431,103 @@ function FormsRoute() {
         </div>
       )}
 
-      <div className="mb-6 grid gap-3 md:grid-cols-4">
+      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="forms-command-center">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">Forms command center</h2>
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                formCommandReadiness.score >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+              )}
+              >
+                {formCommandReadiness.score}% ready
+              </span>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Control public form delivery, dynamic frontend rendering, spam protection, contact routing, collection writes, review queues, and submission exports.
+            </p>
+          </div>
+          <Button onClick={() => void loadForms()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+            Refresh forms
+          </Button>
+        </div>
+
+        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+          <div className="rounded-lg border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold">Form readiness</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Checks whether forms can render publicly, collect usable lead data, protect submissions, and route records.
+            </p>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn('h-full rounded-full', formCommandReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                style={{ width: `${formCommandReadiness.score}%` }}
+              />
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {formCommandReadiness.checks.map((check) => (
+                <FormReadinessCheck key={check.label} {...check} />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex items-center gap-2">
+              <FileInput className="size-4 text-primary" />
+              <h3 className="text-sm font-semibold">Submission workflow</h3>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {formCommandReadiness.workflow.map((step, index) => (
+                <FormWorkflowStep key={step.label} index={index + 1} {...step} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <h3 className="text-sm font-semibold">Forms control map</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, form health, library, frontend API, and submission review.</p>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {FORM_CONTROL_AREAS.map((area) => (
+              <a
+                key={area.title}
+                href={area.href}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div id="forms-site" className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 scroll-mt-24">
+        <label className="text-sm font-medium text-muted-foreground" htmlFor="forms-active-site-inline">
+          Active site
+        </label>
+        <select
+          id="forms-active-site-inline"
+          aria-label="Active forms site"
+          value={activeSiteId}
+          onChange={(event) => setSelectedSiteId(event.target.value)}
+          className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
+        >
+          {sites.length === 0 ? (
+            <option value="site-demo">Demo site</option>
+          ) : sites.map((site) => (
+            <option key={site.id} value={site.publicSiteId || site.id}>
+              {site.name}
+            </option>
+          ))}
+        </select>
+        <span className="text-sm text-muted-foreground">
+          {activeSite?.name || activeSiteId} form inbox
+        </span>
+      </div>
+
+      <div id="forms-metrics" className="mb-6 grid gap-3 scroll-mt-24 md:grid-cols-4">
         {[
           { label: 'Forms', value: metrics.forms, icon: FileInput },
           { label: 'Active', value: metrics.active, icon: ShieldCheck },
@@ -406,7 +570,7 @@ function FormsRoute() {
         />
       ) : (
         <div className="grid gap-6 xl:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
-          <Panel className="self-start overflow-hidden">
+          <Panel id="forms-library" className="self-start overflow-hidden scroll-mt-24">
             <PanelHeader
               title="Form library"
               description={`${forms.length} form${forms.length === 1 ? '' : 's'} on ${activeSite?.name || activeSiteId}`}
@@ -448,7 +612,7 @@ function FormsRoute() {
 
           <div className="min-w-0 space-y-6">
             {selectedForm && (
-              <Panel>
+              <Panel id="forms-detail" className="scroll-mt-24">
                 <PanelHeader
                   title={selectedForm.title || selectedForm.name}
                   description={selectedForm.description || selectedForm.id}
@@ -528,7 +692,7 @@ function FormsRoute() {
                     </div>
                   </div>
 
-                  <div className="mb-5 rounded-lg border border-border bg-muted/30 p-4">
+                  <div id="forms-api" className="mb-5 rounded-lg border border-border bg-muted/30 p-4 scroll-mt-24">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2 text-sm font-semibold">
@@ -604,7 +768,7 @@ function FormsRoute() {
               </Panel>
             )}
 
-            <Panel className="overflow-hidden">
+            <Panel id="forms-inbox" className="overflow-hidden scroll-mt-24">
               <PanelHeader
                 title="Submission inbox"
                 description={`${filteredSubmissions.length}/${selectedSubmissions.length} visible`}
