@@ -33,12 +33,19 @@ import {
   getSettings,
   listBlogPosts,
   listComments,
+  listCollections,
+  listCollectionRecords,
   listFormContacts,
   listForms,
+  getFormWithSubmissions,
+  getSiteReadiness,
   listPages,
   listSites,
   updateComments,
+  type AdminContact,
   type AdminComment,
+  type FormDefinition,
+  type FormSubmission,
   type SiteSettingsInput,
 } from '@/lib/adminContentApi';
 
@@ -64,6 +71,45 @@ const commentsNotificationsEnabled = (settings?: SiteSettingsInput): boolean => 
   settings?.integrations?.notifications?.inApp?.comments !== false
 );
 
+type WorkflowNotificationTone = 'warning' | 'danger' | 'success' | 'info';
+
+interface WorkflowNotification {
+  id: string;
+  tone: WorkflowNotificationTone;
+  title: string;
+  detail: string;
+  meta: string;
+  actionLabel: string;
+  action:
+    | { route: 'comments' }
+    | { route: 'forms' }
+    | { route: 'contacts' }
+    | { route: 'orders' }
+    | { route: 'site'; siteId: string }
+    | { route: 'settings' };
+}
+
+interface FormSubmissionNotification {
+  form: FormDefinition;
+  submission: FormSubmission;
+}
+
+interface ContactNotification {
+  form: FormDefinition;
+  contact: AdminContact;
+}
+
+const notificationToneClasses: Record<WorkflowNotificationTone, string> = {
+  danger: 'border-red-200 bg-red-50 text-red-800',
+  warning: 'border-amber-200 bg-amber-50 text-amber-800',
+  success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  info: 'border-sky-200 bg-sky-50 text-sky-800',
+};
+
+const readRecordValue = (values: Record<string, unknown>, key: string, fallback = '') => (
+  values[key] ?? values[key.toLowerCase()] ?? values[key.replace(/([A-Z])/g, '').toLowerCase()] ?? fallback
+);
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -76,10 +122,11 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [pendingComments, setPendingComments] = useState<AdminComment[]>([]);
+  const [workflowNotifications, setWorkflowNotifications] = useState<WorkflowNotification[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [notificationsNotice, setNotificationsNotice] = useState<string | null>(null);
-  const [notificationsDisabled, setNotificationsDisabled] = useState(false);
+  const [commentsAlertsDisabled, setCommentsAlertsDisabled] = useState(false);
   const [updatingCommentIds, setUpdatingCommentIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -92,6 +139,11 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     () => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo',
     [sites],
   );
+  const activeSiteRouteId = useMemo(
+    () => sites[0]?.id || activeSiteId,
+    [activeSiteId, sites],
+  );
+  const notificationCount = pendingComments.length + workflowNotifications.length;
   const searchResults = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     if (normalizedQuery.length < 2) return searchIndex.slice(0, 6);
@@ -137,15 +189,91 @@ export function Header({ onSidebarToggle }: HeaderProps) {
 
     try {
       const settings = await getSettings().catch(() => undefined);
-      if (!commentsNotificationsEnabled(settings)) {
-        setPendingComments([]);
-        setNotificationsDisabled(true);
-        return;
-      }
+      const commentsEnabled = commentsNotificationsEnabled(settings);
+      setCommentsAlertsDisabled(!commentsEnabled);
 
-      setNotificationsDisabled(false);
-      const result = await listComments(activeSiteId, { status: 'pending', limit: 5, sort: 'newest' });
-      setPendingComments(result.comments);
+      const [commentResult, forms, readiness, collections] = await Promise.all([
+        commentsEnabled
+          ? listComments(activeSiteId, { status: 'pending', limit: 5, sort: 'newest' }).catch(() => ({ comments: [] }))
+          : Promise.resolve({ comments: [] }),
+        listForms(activeSiteId).catch(() => []),
+        getSiteReadiness(activeSiteId).catch(() => null),
+        listCollections(activeSiteId).catch(() => []),
+      ]);
+
+      const formWork = await Promise.all(
+        forms.slice(0, 6).map(async (form) => {
+          const [submissionsResult, contactsResult] = await Promise.all([
+            getFormWithSubmissions(activeSiteId, form.id, { status: 'pending', limit: 3 }).catch(() => null),
+            listFormContacts(activeSiteId, form.id, { status: 'new', limit: 3 }).catch(() => ({ contacts: [] })),
+          ]);
+
+          return {
+            form,
+            submissions: submissionsResult?.submissions.data || [],
+            contacts: contactsResult.contacts || [],
+          };
+        }),
+      );
+
+      const ordersCollection = collections.find((collection) => collection.slug === 'orders');
+      const orderRecords = ordersCollection
+        ? await listCollectionRecords(activeSiteId, ordersCollection.id, { limit: 100 }).then((result) => result.records).catch(() => [])
+        : [];
+
+      const pendingSubmissions: FormSubmissionNotification[] = formWork.flatMap((entry) => (
+        entry.submissions.map((submission) => ({ form: entry.form, submission }))
+      ));
+      const newContacts: ContactNotification[] = formWork.flatMap((entry) => (
+        entry.contacts.map((contact) => ({ form: entry.form, contact }))
+      ));
+      const paidUnfulfilledOrders = orderRecords.filter((record) => {
+        const paymentStatus = String(readRecordValue(record.values, 'paymentstatus', '')).toLowerCase();
+        const fulfillmentStatus = String(readRecordValue(record.values, 'fulfillmentstatus', '')).toLowerCase();
+        return paymentStatus === 'paid' && fulfillmentStatus !== 'fulfilled' && fulfillmentStatus !== 'cancelled';
+      });
+
+      const nextWorkflowNotifications: WorkflowNotification[] = [
+        ...(readiness && (readiness.summary.errors > 0 || readiness.summary.warnings > 0) ? [{
+          id: `site-readiness:${activeSiteId}`,
+          tone: readiness.summary.errors > 0 ? 'danger' as const : 'warning' as const,
+          title: readiness.summary.errors > 0 ? 'Publishing is blocked' : 'Publishing needs review',
+          detail: `${readiness.summary.errors} errors and ${readiness.summary.warnings} warnings found in site readiness.`,
+          meta: `${readiness.score}% ready`,
+          actionLabel: 'Open site',
+          action: { route: 'site' as const, siteId: activeSiteRouteId },
+        }] : []),
+        ...pendingSubmissions.slice(0, 4).map(({ form, submission }) => ({
+          id: `form-submission:${submission.id}`,
+          tone: 'warning' as const,
+          title: `${form.title || form.name || 'Form'} submission pending`,
+          detail: submission.requestId ? `Request ${submission.requestId}` : 'Review, approve, reject, or mark this submission as spam.',
+          meta: getRelativeTime(submission.submittedAt),
+          actionLabel: 'Open forms',
+          action: { route: 'forms' as const },
+        })),
+        ...newContacts.slice(0, 4).map(({ form, contact }) => ({
+          id: `contact:${contact.id}`,
+          tone: 'info' as const,
+          title: contact.name || contact.email || 'New lead captured',
+          detail: `${form.title || form.name || 'Form'} lead is waiting in Contacts.`,
+          meta: getRelativeTime(contact.createdAt || contact.updatedAt || new Date().toISOString()),
+          actionLabel: 'Open contacts',
+          action: { route: 'contacts' as const },
+        })),
+        ...(paidUnfulfilledOrders.length > 0 ? [{
+          id: 'orders:fulfillment',
+          tone: 'warning' as const,
+          title: `${paidUnfulfilledOrders.length} paid order${paidUnfulfilledOrders.length === 1 ? '' : 's'} need fulfillment`,
+          detail: 'Move paid orders through processing, tracking, and fulfilled states.',
+          meta: 'Commerce',
+          actionLabel: 'Open orders',
+          action: { route: 'orders' as const },
+        }] : []),
+      ].slice(0, 10);
+
+      setPendingComments(commentResult.comments);
+      setWorkflowNotifications(nextWorkflowNotifications);
     } catch (error) {
       setNotificationsError(error instanceof Error ? error.message : 'Unable to load notifications');
     } finally {
@@ -176,6 +304,32 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     } finally {
       setUpdatingCommentIds((current) => current.filter((id) => id !== comment.id));
     }
+  };
+
+  const handleWorkflowNotification = (notification: WorkflowNotification) => {
+    setNotificationsOpen(false);
+
+    if (notification.action.route === 'comments') {
+      navigate({ to: '/comments' });
+      return;
+    }
+    if (notification.action.route === 'forms') {
+      navigate({ to: '/forms' });
+      return;
+    }
+    if (notification.action.route === 'contacts') {
+      navigate({ to: '/contacts' });
+      return;
+    }
+    if (notification.action.route === 'orders') {
+      navigate({ to: '/orders' });
+      return;
+    }
+    if (notification.action.route === 'site') {
+      navigate({ to: '/sites/$siteId', params: { siteId: notification.action.siteId } });
+      return;
+    }
+    navigate({ to: '/settings' });
   };
 
   const loadGlobalSearch = async () => {
@@ -386,7 +540,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
         <div className="relative">
           <button
             type="button"
-            aria-label={`${pendingComments.length} pending notifications`}
+            aria-label={`${notificationCount} pending notifications`}
             onClick={() => {
               setNotificationsOpen((open) => !open);
               if (!notificationsOpen) void loadNotifications();
@@ -397,9 +551,9 @@ export function Header({ onSidebarToggle }: HeaderProps) {
             )}
           >
             <Bell className="w-5 h-5" />
-            {pendingComments.length > 0 && (
+            {notificationCount > 0 && (
               <span className="absolute right-1 top-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white">
-                {Math.min(9, pendingComments.length)}
+                {Math.min(9, notificationCount)}
               </span>
             )}
           </button>
@@ -414,14 +568,14 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                 <div className="flex items-center justify-between border-b border-border px-4 py-3">
                   <div>
                     <div className="flex items-center gap-2 text-sm font-semibold">
-                      Moderation center
-                      {pendingComments.length > 0 && (
+                      Notification center
+                      {notificationCount > 0 && (
                         <span className="rounded-md bg-red-50 px-1.5 py-0.5 text-[11px] font-semibold text-red-700">
-                          {pendingComments.length} pending
+                          {notificationCount} active
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-muted-foreground">Comments that need a decision on this site.</div>
+                    <div className="text-xs text-muted-foreground">Moderation, leads, forms, orders, and readiness for this site.</div>
                   </div>
                   <button
                     type="button"
@@ -447,19 +601,17 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                     <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                       {notificationsError}
                     </div>
-                  ) : notificationsDisabled ? (
-                    <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center">
-                      <ShieldAlert className="mx-auto size-5 text-muted-foreground" />
-                      <p className="mt-2 text-sm font-medium">In-app comment alerts are off</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Turn them on in Settings to use this moderation center.
-                      </p>
-                    </div>
-                  ) : pendingComments.length === 0 ? (
+                  ) : pendingComments.length === 0 && workflowNotifications.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center">
                       <CheckCircle2 className="mx-auto size-5 text-success" />
-                      <p className="mt-2 text-sm font-medium">No pending comments</p>
-                      <p className="mt-1 text-xs text-muted-foreground">New moderation tasks will appear here.</p>
+                      <p className="mt-2 text-sm font-medium">No active notifications</p>
+                      <p className="mt-1 text-xs text-muted-foreground">New moderation, lead, order, and readiness tasks will appear here.</p>
+                      {commentsAlertsDisabled && (
+                        <p className="mt-2 inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                          <ShieldAlert className="size-3" />
+                          Comment alerts are off in Settings.
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -468,6 +620,36 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                           {notificationsNotice}
                         </div>
                       )}
+                      {commentsAlertsDisabled && (
+                        <div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                          <ShieldAlert className="mt-0.5 size-3.5 shrink-0" />
+                          <span>Comment alerts are off in Settings. Other backend notifications are still shown.</span>
+                        </div>
+                      )}
+                      {workflowNotifications.map((notification) => (
+                        <article key={notification.id} className="rounded-lg border border-border bg-background p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className={cn('rounded-md border px-1.5 py-0.5 text-[11px] font-semibold', notificationToneClasses[notification.tone])}>
+                                  {notification.meta}
+                                </span>
+                                <h3 className="line-clamp-2 text-sm font-semibold leading-5">{notification.title}</h3>
+                              </div>
+                              <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                                {notification.detail}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleWorkflowNotification(notification)}
+                              className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 focus-ring"
+                            >
+                              {notification.actionLabel}
+                            </button>
+                          </div>
+                        </article>
+                      ))}
                       {pendingComments.map((comment) => {
                         const isUpdating = updatingCommentIds.includes(comment.id);
                         return (
@@ -532,11 +714,11 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                   type="button"
                   onClick={() => {
                     setNotificationsOpen(false);
-                    navigate({ to: '/comments' });
+                    navigate({ to: pendingComments.length > 0 ? '/comments' : '/' });
                   }}
                   className="flex w-full items-center justify-center border-t border-border px-4 py-3 text-sm font-medium text-primary hover:bg-accent focus-ring"
                 >
-                  Open moderation queue
+                  {pendingComments.length > 0 ? 'Open moderation queue' : 'Open dashboard'}
                 </button>
               </div>
             </>
