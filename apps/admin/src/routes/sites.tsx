@@ -1081,6 +1081,7 @@ function SitesListView() {
           columns={columns}
           data={data}
           loading={isLoading}
+          interactionDisabled={isSitesBusy}
           sortConfig={sortConfig}
           onSort={(key) => {
             if (!isSitesBusy) {

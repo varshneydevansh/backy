@@ -1827,6 +1827,7 @@ function PagesListView() {
           columns={columns}
           data={data}
           loading={isLoading}
+          interactionDisabled={isPageLibraryBusy}
           sortConfig={sortConfig}
           onSort={(key) => {
             if (isPageLibraryBusy) return;

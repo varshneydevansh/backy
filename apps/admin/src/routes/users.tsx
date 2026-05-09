@@ -1105,6 +1105,7 @@ function UsersListView() {
               columns={columns}
               data={data}
               loading={isLoading}
+              interactionDisabled={isUsersBusy}
               sortConfig={sortConfig}
               onSort={(key) => {
                 if (!isUsersBusy) {

@@ -14,6 +14,7 @@ interface DataGridProps<T> {
     data: T[];
     loading?: boolean;
     emptyState?: React.ReactNode;
+    interactionDisabled?: boolean;
 
     // Sorting
     sortConfig?: { key: keyof T; direction: 'asc' | 'desc' };
@@ -32,6 +33,7 @@ export function DataGrid<T extends { id: string }>({
     data,
     loading,
     emptyState,
+    interactionDisabled = false,
     sortConfig,
     onSort,
     currentPage = 1,
@@ -63,26 +65,44 @@ export function DataGrid<T extends { id: string }>({
                     <table className="w-full text-sm text-left">
                         <thead className="bg-muted/50 text-muted-foreground font-medium border-b border-border">
                             <tr>
-                                {columns.map((col) => (
+                                {columns.map((col) => {
+                                    const isSorted = sortConfig?.key === col.key;
+                                    const ariaSort = isSorted
+                                        ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending')
+                                        : undefined;
+
+                                    return (
                                     <th
                                         key={String(col.key)}
-                                        className={cn(
-                                            "px-6 py-3",
-                                            col.sortable && "cursor-pointer hover:bg-muted transition-colors"
-                                        )}
-                                        onClick={() => col.sortable && onSort?.(col.key as keyof T)}
+                                        aria-sort={ariaSort}
+                                        className="px-6 py-3"
                                     >
-                                        <div className="flex items-center gap-2">
-                                            {col.label}
-                                            {col.sortable && sortConfig?.key === col.key && (
+                                        {col.sortable ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => onSort?.(col.key as keyof T)}
+                                                disabled={interactionDisabled}
+                                                className={cn(
+                                                    'inline-flex items-center gap-2 rounded-md text-left transition-colors',
+                                                    'hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+                                                    'disabled:cursor-not-allowed disabled:opacity-50',
+                                                    isSorted ? 'text-foreground' : 'text-muted-foreground'
+                                                )}
+                                            >
+                                                {col.label}
                                                 <ArrowUpDown className={cn(
                                                     "w-3 h-3",
-                                                    sortConfig.direction === 'asc' ? "text-primary" : "text-muted-foreground"
+                                                    isSorted && sortConfig.direction === 'asc' ? "text-primary" : "text-muted-foreground"
                                                 )} />
-                                            )}
-                                        </div>
+                                            </button>
+                                        ) : (
+                                            <div className="flex items-center gap-2">
+                                                {col.label}
+                                            </div>
+                                        )}
                                     </th>
-                                ))}
+                                    );
+                                })}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
@@ -110,7 +130,7 @@ export function DataGrid<T extends { id: string }>({
                         <button
                             type="button"
                             onClick={() => onPageChange(currentPage - 1)}
-                            disabled={currentPage === 1}
+                            disabled={currentPage === 1 || interactionDisabled}
                             aria-label="Previous page"
                             className="p-2 rounded-lg border border-border hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
                         >
@@ -122,7 +142,7 @@ export function DataGrid<T extends { id: string }>({
                         <button
                             type="button"
                             onClick={() => onPageChange(currentPage + 1)}
-                            disabled={currentPage === totalPages}
+                            disabled={currentPage === totalPages || interactionDisabled}
                             aria-label="Next page"
                             className="p-2 rounded-lg border border-border hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
                         >

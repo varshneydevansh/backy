@@ -1455,6 +1455,7 @@ function BlogListView() {
           columns={columns}
           data={data}
           loading={isLoading}
+          interactionDisabled={isBlogWorkflowBusy}
           sortConfig={sortConfig}
           onSort={(key) => {
             if (!isBlogWorkflowBusy) {
