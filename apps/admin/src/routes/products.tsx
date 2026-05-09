@@ -243,6 +243,8 @@ function ProductsRoute() {
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
+  const commerceCatalogUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/catalog?limit=24&sortBy=title`;
+  const commerceProductDetailUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/catalog?slug={productSlug}`;
   const storefrontApiUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${PRODUCT_COLLECTION_SLUG}/records?limit=24&sortBy=title`;
   const storefrontProductDetailUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${PRODUCT_COLLECTION_SLUG}/records?slug={productSlug}`;
   const missingProductFields = useMemo(() => (
@@ -396,6 +398,8 @@ function ProductsRoute() {
         }
       : null,
     endpoints: {
+      commerceCatalog: commerceCatalogUrl,
+      commerceProductBySlug: commerceProductDetailUrl,
       list: storefrontApiUrl,
       bySlug: storefrontProductDetailUrl,
     },
@@ -412,6 +416,12 @@ function ProductsRoute() {
         mode: 'per-product checkoutUrl',
         configuredProducts: products.filter((product) => Boolean(String(product.values.checkoutUrl || '').trim())).length,
         note: 'Backy stores product checkout URLs today. Dedicated payment-session creation is still a commerce backend milestone.',
+      },
+      normalizedApi: {
+        schemaVersion: 'backy.commerce-catalog.v1',
+        catalog: commerceCatalogUrl,
+        productBySlug: commerceProductDetailUrl,
+        note: 'Use this endpoint for storefront cards, facets, inventory state, delivery metadata, and checkout URL handoff without re-mapping raw collection fields.',
       },
     },
     frontendSystems: PRODUCT_FRONTEND_SYSTEMS,
@@ -465,6 +475,8 @@ function ProductsRoute() {
     activeSiteId,
     catalogReadiness.checks,
     catalogReadiness.score,
+    commerceCatalogUrl,
+    commerceProductDetailUrl,
     metrics,
     missingProductFields,
     productApiReady,
@@ -907,6 +919,8 @@ function ProductsRoute() {
               <div className="grid gap-2 lg:grid-cols-2">
                 <ProductApiSnippet label="List products" value={storefrontApiUrl} />
                 <ProductApiSnippet label="Product by slug" value={storefrontProductDetailUrl} />
+                <ProductApiSnippet label="Commerce catalog" value={commerceCatalogUrl} />
+                <ProductApiSnippet label="Commerce product by slug" value={commerceProductDetailUrl} />
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span

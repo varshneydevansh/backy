@@ -6,6 +6,7 @@
 
 import { NextRequest } from 'next/server';
 import { getSiteByIdOrSlug, listCollections, listFormsBySite, listReusableSections } from '@/lib/backyStore';
+import { PRODUCT_COLLECTION_SLUG } from '@/lib/commerceCatalog';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRedirectRules } from '@/lib/redirectRules';
@@ -105,6 +106,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       ? (await repositories.reusableSections.list({ siteId: site.id, status: 'active', limit: 100, offset: 0 })).items
       : listReusableSections(site.id, { status: 'active' });
     const collectionIds = collections.map((collection) => collection.id);
+    const hasCommerceCatalog = collections.some((collection) => collection.slug === PRODUCT_COLLECTION_SLUG);
     const formIds = forms.map((form) => form.id);
     const reusableSectionIds = reusableSections.map((section) => section.id);
     const redirectRules = normalizeRedirectRules(site.settings?.redirectRules).filter((rule) => rule.enabled);
@@ -397,6 +399,39 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             responses: {
               '200': {
                 description: 'Collection list',
+              },
+            },
+          },
+        },
+        [`/api/sites/${site.id}/commerce/catalog`]: {
+          get: {
+            tags: ['Content'],
+            summary: 'Fetch normalized storefront product catalog data',
+            operationId: 'getBackyCommerceCatalog',
+            parameters: [
+              queryParameter('slug', { type: 'string' }, 'Return one product by slug'),
+              queryParameter('q', { type: 'string' }, 'Search title, SKU, description, category, vendor, and tags'),
+              queryParameter('category', { type: 'string' }, 'Filter by category'),
+              queryParameter('tag', { type: 'string' }, 'Filter by tag'),
+              queryParameter('vendor', { type: 'string' }, 'Filter by vendor'),
+              queryParameter('productType', { type: 'string', enum: ['physical', 'digital', 'service'] }, 'Filter by product type'),
+              queryParameter('featured', { type: 'boolean' }, 'Filter featured products'),
+              queryParameter('sortBy', { type: 'string', default: 'title' }, 'Sort field'),
+              queryParameter('sortDirection', { type: 'string', enum: ['asc', 'desc'] }, 'Sort direction'),
+              queryParameter('limit', { type: 'integer', minimum: 1, maximum: 100 }, 'Page size'),
+              queryParameter('offset', { type: 'integer', minimum: 0 }, 'Page offset'),
+            ],
+            responses: {
+              '200': {
+                description: 'Normalized commerce catalog',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/CommerceCatalogEnvelope' },
+                  },
+                },
+              },
+              '404': {
+                description: hasCommerceCatalog ? 'Product not found' : 'Product catalog not found or not public',
               },
             },
           },
@@ -1532,6 +1567,47 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               siteId: { type: 'string' },
               events: { type: 'array', items: { type: 'object', additionalProperties: true } },
               count: { type: 'integer', minimum: 0 },
+              pagination: { type: 'object', additionalProperties: true },
+            },
+          }),
+          CommerceProduct: {
+            type: 'object',
+            required: ['id', 'slug', 'title', 'price', 'currency', 'inventory', 'delivery', 'checkout', 'links'],
+            properties: {
+              id: { type: 'string' },
+              slug: { type: 'string' },
+              status: { type: 'string', enum: ['draft', 'published', 'scheduled', 'archived'] },
+              title: { type: 'string' },
+              sku: { type: 'string' },
+              description: { type: 'string' },
+              seoTitle: { type: 'string' },
+              price: { type: 'number' },
+              compareAtPrice: { type: ['number', 'null'] },
+              currency: { type: 'string' },
+              imageUrl: { type: 'string' },
+              category: { type: 'string' },
+              tags: { type: 'array', items: { type: 'string' } },
+              vendor: { type: 'string' },
+              featured: { type: 'boolean' },
+              productType: { type: 'string', enum: ['physical', 'digital', 'service'] },
+              inventory: { type: 'object', additionalProperties: true },
+              delivery: { type: 'object', additionalProperties: true },
+              checkout: { type: 'object', additionalProperties: true },
+              links: { type: 'object', additionalProperties: true },
+              updatedAt: { type: 'string', format: 'date-time' },
+              publishedAt: { type: ['string', 'null'], format: 'date-time' },
+            },
+          },
+          CommerceCatalogEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['schemaVersion', 'collection', 'products', 'facets', 'pagination'],
+            properties: {
+              schemaVersion: { type: 'string', const: 'backy.commerce-catalog.v1' },
+              collection: { type: 'object', additionalProperties: true },
+              products: { type: 'array', items: { $ref: '#/components/schemas/CommerceProduct' } },
+              facets: { type: 'object', additionalProperties: true },
+              filters: { type: 'object', additionalProperties: true },
+              readiness: { type: 'object', additionalProperties: true },
               pagination: { type: 'object', additionalProperties: true },
             },
           }),

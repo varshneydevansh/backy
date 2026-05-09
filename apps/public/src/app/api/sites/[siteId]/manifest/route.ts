@@ -22,6 +22,7 @@ import {
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeCollectionListRoutePattern, normalizeCollectionRoutePattern } from '@/lib/collectionRoutes';
+import { PRODUCT_COLLECTION_SLUG } from '@/lib/commerceCatalog';
 import { buildSiteNavigation } from '@/lib/navigation';
 import { normalizeRedirectRules } from '@/lib/redirectRules';
 
@@ -141,6 +142,7 @@ const buildRepositoryManifest = (
 ) => {
   const fonts = input.media.filter((item) => item.type === 'font');
   const publicCollections = input.collections.filter((collection) => collection.permissions.publicRead);
+  const hasCommerceCatalog = publicCollections.some((collection) => collection.slug === PRODUCT_COLLECTION_SLUG);
   const redirectRules = manifestRedirectRules(input.site.id, input.site.settings);
 
   return {
@@ -184,6 +186,7 @@ const buildRepositoryManifest = (
         forms: input.forms.length > 0,
         collectionSchemas: true,
         collectionRecords: true,
+        commerceCatalog: hasCommerceCatalog,
         publicCollectionCreate: publicCollections.some((collection) => collection.permissions.publicCreate),
         collectionWriteForms: input.forms.some((form) => form.collectionTarget?.enabled),
         dynamicListRoutes: publicCollections.length > 0,
@@ -212,6 +215,7 @@ const buildRepositoryManifest = (
         blogCategories: `/api/sites/${input.site.id}/blog/categories`,
         blogTags: `/api/sites/${input.site.id}/blog/tags`,
         blogAuthors: `/api/sites/${input.site.id}/blog/authors`,
+        commerceCatalog: `/api/sites/${input.site.id}/commerce/catalog`,
         collections: `/api/sites/${input.site.id}/collections`,
         reusableSections: `/api/sites/${input.site.id}/reusable-sections`,
         reusableSectionDetail: `/api/sites/${input.site.id}/reusable-sections/{sectionId}`,
@@ -420,6 +424,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const authors = listBlogAuthors(site.id);
     const fonts = media.media.filter((item) => item.type === 'font');
     const redirectRules = manifestRedirectRules(site.id, site.settings);
+    const hasCommerceCatalog = collections.some((collection) => collection.slug === PRODUCT_COLLECTION_SLUG && collection.permissions.publicRead);
 
     const manifest = {
       success: true,
@@ -462,6 +467,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           forms: true,
           collectionSchemas: true,
           collectionRecords: true,
+          commerceCatalog: hasCommerceCatalog,
           publicCollectionCreate: collections.some((collection) => collection.permissions.publicCreate),
           collectionWriteForms: forms.some((form) => form.collectionTarget?.enabled),
           dynamicListRoutes: collections.length > 0,
@@ -490,6 +496,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           blogCategories: `/api/sites/${site.id}/blog/categories`,
           blogTags: `/api/sites/${site.id}/blog/tags`,
           blogAuthors: `/api/sites/${site.id}/blog/authors`,
+          commerceCatalog: `/api/sites/${site.id}/commerce/catalog`,
           collections: `/api/sites/${site.id}/collections`,
           reusableSections: `/api/sites/${site.id}/reusable-sections`,
           reusableSectionDetail: `/api/sites/${site.id}/reusable-sections/{sectionId}`,
