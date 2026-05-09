@@ -810,6 +810,12 @@ function FormsRoute() {
     }
   };
 
+  const openFormPageTemplate = (template: PageTemplateHandoff) => {
+    if (isFormsBusy) return;
+
+    navigate({ to: '/pages/new', search: { siteId: activeSiteId, template } });
+  };
+
   useEffect(() => {
     if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
       setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
@@ -1314,18 +1320,15 @@ function FormsRoute() {
                     ) : null}
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <Link
-                      to="/pages/new"
-                      search={{ siteId: activeSiteId, template: template.pageTemplate }}
-                      aria-disabled={isFormsBusy}
-                      className={cn(
-                        'inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-primary bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90',
-                        isFormsBusy && 'pointer-events-none opacity-60',
-                      )}
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => openFormPageTemplate(template.pageTemplate)}
+                      disabled={isFormsBusy}
+                      iconStart={<Sparkles className="size-4" />}
                     >
-                      <Sparkles className="size-4" />
                       Start page
-                    </Link>
+                    </Button>
                     <Button
                       size="sm"
                       onClick={() => void copyFormApiText(templateText, `${template.title} form template`)}
@@ -1363,14 +1366,15 @@ function FormsRoute() {
           title="No forms found"
           description="Forms appear here when a page or blog design includes a form block for this site."
           action={
-            <Link
-              to="/pages/new"
-              search={{ siteId: activeSiteId, template: 'registration' }}
-              className="mt-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-primary bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            <Button
+              variant="primary"
+              onClick={() => openFormPageTemplate('registration')}
+              disabled={isFormsBusy}
+              className="mt-2"
+              iconStart={<Sparkles className="size-4" />}
             >
-              <Sparkles className="size-4" />
               Create registration page
-            </Link>
+            </Button>
           }
         />
       ) : (
