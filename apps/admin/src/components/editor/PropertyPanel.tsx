@@ -1418,6 +1418,31 @@ function ContentProperties({
               placeholder="form-contact"
             />
           </div>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={element.props.formActive !== false && String(element.props.formActive || '').toLowerCase() !== 'false'}
+              onChange={(e) => onChange({ formActive: e.target.checked })}
+            />
+            Active for public submissions
+          </label>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Audience
+            </label>
+            <select
+              value={element.props.formAudience || 'public'}
+              onChange={(e) => onChange({ formAudience: e.target.value as 'public' | 'authenticated' | 'adminOnly' })}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              <option value="public">Public</option>
+              <option value="authenticated">Authenticated users</option>
+              <option value="adminOnly">Admin only</option>
+            </select>
+          </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
               Submit Action URL
@@ -1485,6 +1510,36 @@ function ContentProperties({
               placeholder="https://example.com/thank-you"
             />
           </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Notification email
+            </label>
+            <input
+              type="email"
+              value={element.props.notificationEmail || ''}
+              onChange={(e) => onChange({ notificationEmail: e.target.value })}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="ops@example.com"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Notification webhook
+            </label>
+            <input
+              type="url"
+              value={element.props.notificationWebhook || ''}
+              onChange={(e) => onChange({ notificationWebhook: e.target.value })}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="https://hooks.example.com/form"
+            />
+          </div>
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
@@ -1492,6 +1547,14 @@ function ContentProperties({
               onChange={(e) => onChange({ enableHoneypot: e.target.checked })}
             />
             Enable spam protection (honeypot)
+          </label>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={Boolean(element.props.enableCaptcha)}
+              onChange={(e) => onChange({ enableCaptcha: e.target.checked })}
+            />
+            Require captcha challenge
           </label>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">

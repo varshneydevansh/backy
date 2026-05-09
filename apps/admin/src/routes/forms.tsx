@@ -1466,6 +1466,10 @@ function FormsRoute() {
                     ].filter(Boolean).join(' + ') || 'none'} />
                     <MetaTile label="Lead share" value={selectedForm.contactShare?.enabled ? 'enabled' : 'off'} />
                     <MetaTile label="Collection write" value={selectedForm.collectionTarget?.enabled ? selectedForm.collectionTarget.collectionId : 'off'} />
+                    <MetaTile label="Notification" value={selectedForm.notificationEmail || 'off'} />
+                    <MetaTile label="Webhook" value={selectedForm.notificationWebhook ? 'configured' : 'off'} />
+                    <MetaTile label="Success redirect" value={selectedForm.successRedirectUrl || 'message only'} />
+                    <MetaTile label="Active state" value={selectedForm.isActive ? 'active' : 'inactive'} />
                   </div>
 
                   <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -1560,7 +1564,7 @@ function MetaTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-border bg-background px-3 py-3">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
-      <div className="mt-1 truncate text-sm font-semibold capitalize">{value}</div>
+      <div className="mt-1 truncate text-sm font-semibold">{value}</div>
     </div>
   );
 }
@@ -1810,8 +1814,11 @@ function buildTemplateManifest(template: FormTemplateBlueprint) {
       formName: `{pageSlug}-${template.id}`,
       formTitle: template.title,
       formDescription: template.description,
+      formActive: true,
+      formAudience: template.audience,
       successMessage: template.successMessage,
       enableHoneypot: true,
+      enableCaptcha: false,
       moderationMode: template.moderationMode,
       contactShareEnabled: Boolean(template.contactShare?.enabled),
       contactShareNameField: template.contactShare?.nameField,

@@ -2673,6 +2673,10 @@ function buildFormDefinitionFromCanvas(
   const moderationMode = sanitizeString(props.moderationMode) === 'auto-approve'
     ? 'auto-approve'
     : 'manual';
+  const formAudience = sanitizeString(props.formAudience);
+  const audience: FormDefinition['audience'] = formAudience === 'authenticated' || formAudience === 'adminOnly'
+    ? formAudience
+    : 'public';
 
   const enabledContactShare = props.contactShareEnabled === true
     || sanitizeString(props.contactShareEnabled).toLowerCase() === 'true';
@@ -2685,7 +2689,7 @@ function buildFormDefinitionFromCanvas(
     name: sanitizeString(props.formName).length > 0 ? sanitizeString(props.formName) : resolvedFormId,
     title: sanitizeString(props.formTitle) || `Form ${resolvedFormId}`,
     description: sanitizeString(props.formDescription),
-    audience: 'public',
+    audience,
     isActive: props.formActive !== false && sanitizeString(props.formActive).toLowerCase() !== 'false',
     fields,
     notificationEmail: sanitizeString(props.notificationEmail),
@@ -2705,6 +2709,7 @@ function buildFormDefinitionFromCanvas(
         : sanitizeString(props.enableCaptcha).toLowerCase() === 'true'
           ? true
           : undefined,
+    notificationWebhook: sanitizeString(props.notificationWebhook),
     moderationMode,
     contactShare: enabledContactShare
       ? {
