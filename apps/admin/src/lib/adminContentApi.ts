@@ -970,6 +970,7 @@ export interface PageCreateInput {
   scheduledAt?: string | null;
   description?: string;
   template?: string;
+  isHomepage?: boolean;
   meta?: Record<string, unknown>;
   content?: unknown;
 }
