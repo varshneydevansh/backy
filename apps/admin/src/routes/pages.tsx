@@ -388,9 +388,6 @@ function PagesListView() {
   const adminPageReadinessUrl = `${adminPageDetailUrl}/readiness`;
   const adminPagePreviewUrl = `${adminPageDetailUrl}/preview`;
   const createPageSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
-  const openCreatePage = () => {
-    navigate({ to: '/pages/new', search: createPageSearch });
-  };
   const getCreatePageSearch = (template: PageCreationTemplate = 'blank') => (
     template === 'blank' ? createPageSearch : { ...createPageSearch, template }
   );
@@ -1700,16 +1697,42 @@ function PagesListView() {
                       Clear Filters
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={openCreatePage}
+                  <Link
+                    to="/pages/new"
+                    search={createPageSearch}
                     data-testid="pages-empty-create"
                     className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                     aria-label={hasPages ? 'Create page after clearing filters' : 'Create first page for active site'}
                   >
                     <Plus className="w-4 h-4" />
                     {hasPages ? 'New Page' : 'Create First Page'}
-                  </button>
+                  </Link>
+                  {!hasPages && (
+                    <div className="mt-3 grid w-full max-w-3xl gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {PAGE_CREATION_SHORTCUTS.map((shortcut) => {
+                        const ShortcutIcon = shortcut.icon;
+
+                        return (
+                          <Link
+                            key={shortcut.key}
+                            to="/pages/new"
+                            search={getCreatePageSearch(shortcut.key)}
+                            className="rounded-lg border border-border bg-background px-3 py-3 text-left transition hover:border-primary/50 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring"
+                            data-testid={`pages-empty-create-${shortcut.key}`}
+                            aria-label={`Create ${shortcut.title.toLowerCase()} for active site`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                <ShortcutIcon className="size-4" />
+                              </span>
+                              <span className="text-sm font-semibold text-foreground">{shortcut.title}</span>
+                            </div>
+                            <div className="mt-2 text-xs leading-5 text-muted-foreground">{shortcut.detail}</div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               }
             />
