@@ -1397,20 +1397,57 @@ export function CanvasEditor({
     }
 
     updateElementsWithHistory((currentElements) => {
-      const selectedElement = findElementById(currentElements, selectedId);
-      if (!selectedElement || selectedElement.locked) {
+      const primaryEntry = findElementEntry(currentElements, selectedId);
+      if (!primaryEntry || primaryEntry.element.locked) {
         return currentElements;
       }
 
-      const result = updateElementById(currentElements, selectedId, (element) => ({
-        ...element,
-        x: Math.max(0, Math.min(element.x + deltaX, Math.max(0, size.width - element.width))),
-        y: Math.max(0, Math.min(element.y + deltaY, Math.max(0, size.height - element.height))),
-      }));
+      const nudgeEntries = (selectedIds.length > 1
+        ? selectedIds
+            .map((id) => findElementEntry(currentElements, id))
+            .filter((entry): entry is { element: CanvasElement; parentId: string | null } => (
+              !!entry &&
+              entry.parentId === primaryEntry.parentId &&
+              !entry.element.locked &&
+              entry.element.visible !== false
+            ))
+        : [primaryEntry]
+      );
 
-      return result.updated ? result.elements : currentElements;
+      if (nudgeEntries.length === 0) {
+        return currentElements;
+      }
+
+      const parentBounds = primaryEntry.parentId
+        ? findElementEntry(currentElements, primaryEntry.parentId)?.element
+        : null;
+      const boundsWidth = parentBounds?.width ?? size.width;
+      const boundsHeight = parentBounds?.height ?? size.height;
+      const minX = Math.min(...nudgeEntries.map((entry) => entry.element.x));
+      const minY = Math.min(...nudgeEntries.map((entry) => entry.element.y));
+      const maxX = Math.max(...nudgeEntries.map((entry) => entry.element.x + entry.element.width));
+      const maxY = Math.max(...nudgeEntries.map((entry) => entry.element.y + entry.element.height));
+      const clampedDeltaX = Math.max(0, Math.min(minX + deltaX, Math.max(0, boundsWidth - (maxX - minX)))) - minX;
+      const clampedDeltaY = Math.max(0, Math.min(minY + deltaY, Math.max(0, boundsHeight - (maxY - minY)))) - minY;
+
+      if (clampedDeltaX === 0 && clampedDeltaY === 0) {
+        return currentElements;
+      }
+
+      let nextElements = currentElements;
+      for (const entry of nudgeEntries) {
+        const result = updateElementById(nextElements, entry.element.id, (element) => ({
+          ...element,
+          x: element.x + clampedDeltaX,
+          y: element.y + clampedDeltaY,
+        }));
+
+        nextElements = result.updated ? result.elements : nextElements;
+      }
+
+      return nextElements;
     }, selectedId);
-  }, [findElementById, selectedId, size.height, size.width, updateElementsWithHistory]);
+  }, [findElementEntry, selectedId, selectedIds, size.height, size.width, updateElementsWithHistory]);
 
   const alignSelectedElement = useCallback((alignment: CanvasAlignment) => {
     if (!selectedId) {
