@@ -919,6 +919,8 @@ function FormsRoute() {
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
+    setError(null);
+    setNotice(`Submission CSV exported with ${filteredSubmissions.length} visible submission${filteredSubmissions.length === 1 ? '' : 's'}.`);
   };
 
   const handleExportFormsCatalog = () => {
@@ -1044,7 +1046,13 @@ function FormsRoute() {
     if (isFormsBusy) return;
 
     setSelectedFormId(formId);
-    updateFormsRouteSearch({ formId });
+    setSubmissionQuery('');
+    setStatusFilter('all');
+    updateFormsRouteSearch({
+      formId,
+      status: undefined,
+      submissionQ: undefined,
+    });
   };
 
   return (
