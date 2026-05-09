@@ -77,6 +77,31 @@ const MEDIA_CONTROL_AREAS = [
   },
 ] as const;
 
+const MEDIA_EXPORT_COLUMNS = [
+  'asset_id',
+  'name',
+  'type',
+  'mime_type',
+  'size',
+  'size_bytes',
+  'visibility',
+  'folder_id',
+  'folder_name',
+  'tags',
+  'alt_text',
+  'caption',
+  'public_file_url',
+  'transform_url',
+  'referenced_pages',
+  'referenced_posts',
+  'font_family',
+  'font_weight',
+  'font_style',
+  'font_display',
+  'created_at',
+  'updated_at',
+] as const;
+
 function MediaPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -393,6 +418,13 @@ function MediaPage() {
       file: publicMediaFileUrl,
       transform: publicMediaTransformUrl,
       adminUpload: adminMediaUploadUrl,
+    },
+    export: {
+      csvIncludesDeliveryUrls: true,
+      csvIncludesFolderAssignments: true,
+      csvIncludesFontMetadata: true,
+      csvIncludesReferences: true,
+      csvColumns: MEDIA_EXPORT_COLUMNS,
     },
     counts: {
       total: files.length,
@@ -1065,6 +1097,28 @@ function MediaPage() {
     setError(null);
     setBulkNotice('Media handoff manifest downloaded.');
   };
+  const exportMediaCsv = () => {
+    if (displayedFiles.length === 0) return;
+
+    const rows = displayedFiles.map((asset) => {
+      const exportRecord = mediaAssetToExportRecord(asset, folders, siteId);
+      return MEDIA_EXPORT_COLUMNS.map((column) => exportRecord[column]);
+    });
+    const csv = [MEDIA_EXPORT_COLUMNS, ...rows]
+      .map((row) => row.map(csvEscape).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${siteId}-media-library.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setBulkNotice(`${displayedFiles.length} visible media asset${displayedFiles.length === 1 ? '' : 's'} exported.`);
+  };
 
   const referencedPages = selectedAsset
     ? (selectedAsset.targetPageIds || []).map((pageId) => ({
@@ -1144,6 +1198,15 @@ function MediaPage() {
             >
               <Download className="h-4 w-4" />
               Download JSON
+            </button>
+            <button
+              type="button"
+              onClick={exportMediaCsv}
+              disabled={displayedFiles.length === 0}
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
             </button>
             <label
               htmlFor="header-upload"
@@ -3138,6 +3201,53 @@ function MediaAssetPreview({ file }: { file: MediaAsset }) {
     </div>
   );
 }
+
+type MediaExportColumn = typeof MEDIA_EXPORT_COLUMNS[number];
+
+const metadataText = (value: unknown): string => (
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : ''
+);
+
+const mediaAssetToExportRecord = (
+  asset: MediaAsset,
+  folders: MediaFolder[],
+  siteId: string,
+): Record<MediaExportColumn, string | number | null> => {
+  const folder = asset.folderId ? folders.find((item) => item.id === asset.folderId) : null;
+  const isPublic = asset.visibility !== 'private';
+
+  return {
+    asset_id: asset.id,
+    name: asset.name,
+    type: asset.type,
+    mime_type: metadataText(asset.metadata?.mimeType),
+    size: asset.size,
+    size_bytes: asset.sizeBytes ?? null,
+    visibility: asset.visibility || 'public',
+    folder_id: asset.folderId || '',
+    folder_name: folder?.name || '',
+    tags: (asset.tags || []).join('; '),
+    alt_text: asset.altText || '',
+    caption: asset.caption || '',
+    public_file_url: isPublic ? getPublicMediaFileUrl(asset.id, siteId) : '',
+    transform_url: isPublic && asset.type === 'image'
+      ? getPublicImageTransformUrl(asset.id, { width: 1200, quality: 75 }, siteId)
+      : '',
+    referenced_pages: (asset.targetPageIds || []).join('; '),
+    referenced_posts: (asset.targetPostIds || []).join('; '),
+    font_family: metadataText(asset.metadata?.fontFamily),
+    font_weight: metadataText(asset.metadata?.fontWeight),
+    font_style: metadataText(asset.metadata?.fontStyle),
+    font_display: metadataText(asset.metadata?.fontDisplay),
+    created_at: metadataText(asset.metadata?.uploadedAt) || metadataText(asset.metadata?.createdAt),
+    updated_at: metadataText(asset.metadata?.updatedAt),
+  };
+};
+
+const csvEscape = (value: unknown): string => {
+  const raw = String(value ?? '').replace(/\r?\n/g, '\\n');
+  return `"${raw.replace(/"/g, '""')}"`;
+};
 
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
