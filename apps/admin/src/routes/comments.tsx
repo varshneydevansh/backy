@@ -3,7 +3,11 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import {
   CheckCircle2,
   CircleSlash,
+  Code2,
+  Copy,
+  Download,
   ExternalLink,
+  Filter,
   Flag,
   MessageSquare,
   RefreshCw,
@@ -61,11 +65,24 @@ function CommentsRoute() {
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const targetByKey = useMemo(() => {
     const map = new Map<string, CommentTargetSummary>();
     targets.forEach((target) => map.set(`${target.type}:${target.id}`, target));
     return map;
   }, [targets]);
+  const moderationListUrl = useMemo(() => {
+    const query = new URLSearchParams();
+    query.set('limit', '100');
+    query.set('sort', 'newest');
+    if (statusFilter !== 'all') query.set('status', statusFilter);
+    if (targetTypeFilter !== 'all') query.set('targetType', targetTypeFilter);
+    if (searchQuery.trim()) query.set('q', searchQuery.trim());
+
+    return `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments?${query.toString()}`;
+  }, [activeSiteId, publicBaseUrl, searchQuery, statusFilter, targetTypeFilter]);
+  const moderationBulkUpdateUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments`;
+  const moderationSingleUpdateUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/{commentId}`;
   const filteredComments = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
 
@@ -182,6 +199,65 @@ function CommentsRoute() {
     }
   };
 
+  const copyCommentApiText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setError(null);
+      setNotice(`${label} copied.`);
+    } catch {
+      setNotice(null);
+      setError(value);
+    }
+  };
+
+  const handleExportComments = () => {
+    if (filteredComments.length === 0) return;
+
+    const header = [
+      'comment_id',
+      'target_type',
+      'target_id',
+      'target_title',
+      'status',
+      'author_name',
+      'author_email',
+      'content',
+      'reports',
+      'created_at',
+      'updated_at',
+      'request_id',
+    ];
+    const rows = filteredComments.map((comment) => {
+      const target = targetByKey.get(`${comment.targetType}:${comment.targetId}`);
+      return [
+        comment.id,
+        comment.targetType,
+        comment.targetId,
+        target?.label || '',
+        comment.status,
+        comment.authorName || '',
+        comment.authorEmail || '',
+        comment.content || '',
+        comment.reportReasons?.join('; ') || String(comment.reportCount || ''),
+        comment.createdAt || '',
+        comment.updatedAt || '',
+        comment.requestId || '',
+      ];
+    });
+    const csv = [header, ...rows]
+      .map((row) => row.map(csvEscape).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSiteId}-comments.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <PageShell
       title="Comments"
@@ -189,6 +265,8 @@ function CommentsRoute() {
       action={
         <div className="flex flex-wrap items-center gap-2">
           <select
+            id="comments-active-site"
+            aria-label="Active Site"
             value={activeSiteId}
             onChange={(event) => setSelectedSiteId(event.target.value)}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
@@ -232,6 +310,15 @@ function CommentsRoute() {
           icon={<MessageSquare className="size-4" />}
           action={
             <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={filteredComments.length === 0}
+                onClick={handleExportComments}
+                iconStart={<Download className="size-4" />}
+              >
+                Export CSV
+              </Button>
               <Button size="sm" variant="outline" disabled={!hasSelection || updatingIds.length > 0} onClick={() => void handleModerate(selectedIds, 'approved')} iconStart={<CheckCircle2 className="size-4" />}>
                 Approve
               </Button>
@@ -245,17 +332,60 @@ function CommentsRoute() {
           }
         />
         <PanelContent>
+          <div className="mb-5 rounded-lg border border-border bg-muted/30 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Code2 className="size-4" />
+                  Comment moderation API
+                </div>
+                <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                  Use this private moderation contract to list, filter, and update comments from a custom admin frontend.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button onClick={() => void copyCommentApiText(moderationListUrl, 'Comments URL')} iconStart={<Copy className="size-4" />}>
+                  Copy list
+                </Button>
+                <a
+                  href={moderationListUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                >
+                  <ExternalLink className="size-4" />
+                  Open endpoint
+                </a>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <MetaTile label="Visibility" value="private" />
+              <MetaTile label="Bulk action" value={hasSelection ? `${selectedIds.length} selected` : 'none selected'} />
+              <MetaTile label="Queue" value={`${filteredComments.length} visible`} />
+            </div>
+
+            <div className="mt-4 grid gap-3 lg:grid-cols-3">
+              <ApiSnippet label="List comments" value={moderationListUrl} />
+              <ApiSnippet label="Bulk update" value={moderationBulkUpdateUrl} />
+              <ApiSnippet label="Single update" value={moderationSingleUpdateUrl} />
+            </div>
+          </div>
+
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <div className="relative min-w-64 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <input
+                type="search"
+                aria-label="Search comments"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search author, content, request, or target..."
-                className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm"
+                className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <select
+              aria-label="Target type filter"
               value={targetTypeFilter}
               onChange={(event) => setTargetTypeFilter(event.target.value as CommentModerationTarget)}
               className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
@@ -265,13 +395,15 @@ function CommentsRoute() {
               <option value="post">Posts</option>
             </select>
             <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-muted p-1">
+              <Filter className="ml-2 size-4 text-muted-foreground" />
               {(['all', 'pending', 'approved', 'rejected', 'spam', 'blocked'] as const).map((status) => (
                 <button
                   key={status}
                   type="button"
                   onClick={() => setStatusFilter(status)}
+                  aria-pressed={statusFilter === status}
                   className={cn(
-                    'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground hover:bg-background hover:text-foreground',
+                    'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-background hover:text-foreground',
                     statusFilter === status && 'bg-background text-foreground shadow-sm',
                   )}
                 >
@@ -299,6 +431,7 @@ function CommentsRoute() {
                   checked={allVisibleSelected}
                   onChange={toggleVisibleSelection}
                   className="size-4 rounded border-border text-primary"
+                  aria-label="Select visible comments"
                 />
                 Select visible comments
               </label>
@@ -340,6 +473,26 @@ function Metric({ label, value, icon }: { label: string; value: number; icon: Re
   );
 }
 
+function MetaTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-background px-3 py-3">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="mt-1 truncate text-sm font-semibold capitalize">{value}</div>
+    </div>
+  );
+}
+
+function ApiSnippet({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="mb-1 text-xs font-medium text-muted-foreground">{label}</div>
+      <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+        {value}
+      </code>
+    </div>
+  );
+}
+
 function CommentCard({
   comment,
   target,
@@ -372,6 +525,7 @@ function CommentCard({
             checked={selected}
             onChange={(event) => onSelect(event.target.checked)}
             className="mt-1 size-4 shrink-0 rounded border-border text-primary"
+            aria-label={`Select comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
           />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -416,10 +570,45 @@ function CommentCard({
         </div>
       ) : null}
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={onApprove} disabled={disabled || comment.status === 'approved'} iconStart={<CheckCircle2 className="size-4" />}>Approve</Button>
-        <Button size="sm" variant="outline" onClick={onReject} disabled={disabled || comment.status === 'rejected'} iconStart={<XCircle className="size-4" />}>Reject</Button>
-        <Button size="sm" variant="outline" onClick={onSpam} disabled={disabled || comment.status === 'spam'} iconStart={<Trash2 className="size-4" />}>Spam</Button>
-        <Button size="sm" variant="danger" onClick={onBlock} disabled={disabled || comment.status === 'blocked'} iconStart={<CircleSlash className="size-4" />}>Block</Button>
+        <Button
+          size="sm"
+          onClick={onApprove}
+          disabled={disabled || comment.status === 'approved'}
+          iconStart={<CheckCircle2 className="size-4" />}
+          aria-label={`Approve comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
+        >
+          Approve
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onReject}
+          disabled={disabled || comment.status === 'rejected'}
+          iconStart={<XCircle className="size-4" />}
+          aria-label={`Reject comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
+        >
+          Reject
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onSpam}
+          disabled={disabled || comment.status === 'spam'}
+          iconStart={<Trash2 className="size-4" />}
+          aria-label={`Mark comment from ${comment.authorName || comment.authorEmail || 'Anonymous'} as spam`}
+        >
+          Spam
+        </Button>
+        <Button
+          size="sm"
+          variant="danger"
+          onClick={onBlock}
+          disabled={disabled || comment.status === 'blocked'}
+          iconStart={<CircleSlash className="size-4" />}
+          aria-label={`Block comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
+        >
+          Block
+        </Button>
       </div>
     </article>
   );
@@ -431,3 +620,31 @@ function statusType(status: CommentModerationStatus) {
   if (status === 'rejected' || status === 'spam' || status === 'blocked') return 'error';
   return 'neutral';
 }
+
+const getEnvValue = (key: string): string => {
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+  return env[key]?.trim() ?? '';
+};
+
+const getPublicBaseUrl = (): string => {
+  const envBase = (
+    getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
+    getEnvValue('VITE_PUBLIC_API_URL') ||
+    getEnvValue('VITE_API_BASE_URL') ||
+    ''
+  ).trim();
+
+  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+    return 'http://localhost:3001';
+  }
+
+  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+    .replace(/\/api\/admin$/, '')
+    .replace(/\/api$/, '')
+    .replace(/\/$/, '');
+};
+
+const csvEscape = (value: unknown): string => {
+  const raw = String(value ?? '').replace(/\r?\n/g, '\\n');
+  return `"${raw.replace(/"/g, '""')}"`;
+};
