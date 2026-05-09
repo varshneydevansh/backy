@@ -1031,6 +1031,7 @@ function PagesListView() {
   ]);
   const hasPages = activeSitePages.length > 0;
   const selectedTablePages = data.filter((page) => selectedPageIds.has(page.id));
+  const hiddenSelectedCount = Math.max(0, selectedPages.length - selectedTablePages.length);
   const selectedKnownPublishBlockers = useMemo(
     () => selectedPages
       .map((page) => {
@@ -1590,7 +1591,9 @@ function PagesListView() {
 
       {hasPages && (
         <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
-          <span className="text-sm font-medium">{selectedPages.length} selected</span>
+          <span className="text-sm font-medium">
+            {selectedPages.length} selected{hiddenSelectedCount > 0 ? `, ${hiddenSelectedCount} hidden by filters` : ''}
+          </span>
           <button
             type="button"
             onClick={() => setPageSelection(data, selectedTablePages.length !== data.length)}
@@ -1636,6 +1639,14 @@ function PagesListView() {
             >
               Clear selection
             </button>
+          )}
+          {hiddenSelectedCount > 0 && (
+            <div className="flex min-w-0 items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              <span>
+                Bulk actions will include {hiddenSelectedCount} selected page{hiddenSelectedCount === 1 ? '' : 's'} hidden by the current filters.
+              </span>
+            </div>
           )}
           {bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0 && (
             <div className="flex min-w-0 items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
