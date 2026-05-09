@@ -90,6 +90,8 @@ type SearchResult =
   | { id: string; type: 'Comment'; title: string; detail: string; action: { route: 'comments' } }
   | { id: string; type: 'Contact'; title: string; detail: string; action: { route: 'contacts' } }
   | { id: string; type: 'Media'; title: string; detail: string; action: { route: 'media'; assetId: string } }
+  | { id: string; type: 'Collection'; title: string; detail: string; action: { route: 'collection'; collectionId: string } }
+  | { id: string; type: 'Record'; title: string; detail: string; action: { route: 'collectionRecord'; collectionId: string; recordId: string } }
   | { id: string; type: 'Product'; title: string; detail: string; action: { route: 'product'; productId: string } }
   | { id: string; type: 'Order'; title: string; detail: string; action: { route: 'order'; orderId: string } }
   | { id: string; type: 'User'; title: string; detail: string; action: { route: 'user'; userId: string } }
@@ -603,6 +605,9 @@ export function Header({ onSidebarToggle }: HeaderProps) {
       ]);
       const productsCollection = collections.find((collection) => collection.slug === 'products');
       const ordersCollection = collections.find((collection) => collection.slug === 'orders');
+      const customCollections = collections.filter((collection) => (
+        collection.slug !== 'products' && collection.slug !== 'orders'
+      ));
       const contactGroups = await Promise.all(
         forms.map((form) => listFormContacts(activeSiteId, form.id, { limit: 20 }).then((result) => result.contacts).catch(() => [])),
       );
@@ -618,6 +623,14 @@ export function Header({ onSidebarToggle }: HeaderProps) {
             .catch(() => [])
           : Promise.resolve([]),
       ]);
+      const customCollectionRecords = await Promise.all(
+        customCollections.slice(0, 4).map(async (collection) => ({
+          collection,
+          records: await listCollectionRecords(activeSiteId, collection.id, { limit: 8, sortBy: 'updatedAt', sortDirection: 'desc' })
+            .then((result) => result.records)
+            .catch(() => []),
+        })),
+      );
 
       setSearchIndex([
         ...loadedSites.map((site) => ({
@@ -678,6 +691,34 @@ export function Header({ onSidebarToggle }: HeaderProps) {
             action: { route: 'media' as const, assetId: asset.id },
           };
         }),
+        ...customCollections.map((collection) => ({
+          id: `collection:${collection.id}`,
+          type: 'Collection' as const,
+          title: collection.name || collection.slug || collection.id,
+          detail: `${collection.fields.length} fields - ${collection.status}`,
+          action: { route: 'collection' as const, collectionId: collection.id },
+        })),
+        ...customCollectionRecords.flatMap(({ collection, records }) => (
+          records.map((record) => {
+            const nameFallback = String(readRecordValue(record.values, 'name', record.slug) || record.slug);
+            const title = String(
+              readRecordValue(record.values, 'title', nameFallback) || nameFallback
+            );
+            const preview = Object.entries(record.values)
+              .filter(([, value]) => value !== null && value !== undefined && String(value).trim())
+              .slice(0, 2)
+              .map(([key, value]) => `${key}: ${String(value).slice(0, 40)}`)
+              .join(' - ');
+
+            return {
+              id: `collection-record:${collection.id}:${record.id}`,
+              type: 'Record' as const,
+              title,
+              detail: [collection.name || collection.slug, record.status, preview].filter(Boolean).join(' - '),
+              action: { route: 'collectionRecord' as const, collectionId: collection.id, recordId: record.id },
+            };
+          })
+        )),
         ...productRecords.map((product) => {
           const title = String(readRecordValue(product.values, 'title', product.slug) || product.slug);
           const sku = String(readRecordValue(product.values, 'sku', '') || '').trim();
@@ -784,6 +825,21 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     }
     if (result.action.route === 'media') {
       navigate({ to: '/media', search: { siteId: activeSiteId, assetId: result.action.assetId } });
+      return;
+    }
+    if (result.action.route === 'collection') {
+      navigate({ to: '/collections', search: { siteId: activeSiteId, collectionId: result.action.collectionId } });
+      return;
+    }
+    if (result.action.route === 'collectionRecord') {
+      navigate({
+        to: '/collections',
+        search: {
+          siteId: activeSiteId,
+          collectionId: result.action.collectionId,
+          recordId: result.action.recordId,
+        },
+      });
       return;
     }
     if (result.action.route === 'product') {
