@@ -11,7 +11,14 @@ import { cn } from '@/lib/utils';
 import { createUser, getAdminApiBase } from '@/lib/adminContentApi';
 import { useStore, type User } from '@/stores/mockStore';
 
+interface NewUserSearch {
+  siteId?: string;
+}
+
 export const Route = createFileRoute('/users/new')({
+  validateSearch: (search: Record<string, unknown>): NewUserSearch => ({
+    siteId: typeof search.siteId === 'string' ? search.siteId : undefined,
+  }),
   component: NewUserPage,
 });
 
@@ -67,6 +74,7 @@ const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.
 
 function NewUserPage() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
   const { setUsers, users } = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -78,6 +86,10 @@ function NewUserPage() {
     status: 'invited' as UserStatus,
   });
   const usersListUrl = useMemo(() => `${getAdminApiBase()}/users`, []);
+  const usersRouteSearch = useMemo(
+    () => (search.siteId ? { siteId: search.siteId } : undefined),
+    [search.siteId],
+  );
 
   const selectedRole = useMemo(
     () => ROLE_OPTIONS.find((role) => role.value === formData.role) || ROLE_OPTIONS[2],
@@ -177,6 +189,7 @@ function NewUserPage() {
       risk: selectedStatus.risk,
     },
     payload: invitePayload,
+    returnRoute: search.siteId ? `/users?siteId=${encodeURIComponent(search.siteId)}` : '/users',
     guardrails: [
       'Backend rejects duplicate emails.',
       'New collaborators start as invited until auth delivery and activation are connected.',
@@ -199,6 +212,7 @@ function NewUserPage() {
     selectedStatus.label,
     selectedStatus.risk,
     selectedStatus.value,
+    search.siteId,
     usersListUrl,
   ]);
   const inviteHandoffText = useMemo(() => JSON.stringify(inviteHandoff, null, 2), [inviteHandoff]);
@@ -241,7 +255,7 @@ function NewUserPage() {
     try {
       const created = await createUser(invitePayload);
       setUsers([created, ...users]);
-      navigate({ to: '/users' });
+      navigate({ to: '/users', search: usersRouteSearch });
     } catch (error) {
       setErrorMessage(error instanceof Error
         ? `${error.message}. The invitation was not persisted.`
@@ -257,7 +271,7 @@ function NewUserPage() {
       action={
         <button
           type="button"
-          onClick={() => navigate({ to: '/users' })}
+          onClick={() => navigate({ to: '/users', search: usersRouteSearch })}
           className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -610,7 +624,7 @@ function NewUserPage() {
             </button>
             <button
               type="button"
-              onClick={() => navigate({ to: '/users' })}
+              onClick={() => navigate({ to: '/users', search: usersRouteSearch })}
               className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition hover:bg-accent"
             >
               Cancel

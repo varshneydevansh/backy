@@ -718,6 +718,7 @@ function UsersListView() {
       action={
         <Link
           to="/users/new"
+          search={{ siteId: membershipSiteId }}
           className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <Send className="h-4 w-4" />
@@ -778,7 +779,7 @@ function UsersListView() {
             >
               Refresh users
             </Button>
-            <Link to="/users/new">
+            <Link to="/users/new" search={{ siteId: membershipSiteId }}>
               <Button iconStart={<Send className="size-4" />}>
                 Invite user
               </Button>
@@ -1078,6 +1079,7 @@ function UsersListView() {
                     ) : (
                       <Link
                         to="/users/new"
+                        search={{ siteId: membershipSiteId }}
                         className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
                       >
                         <Plus className="h-4 w-4" />
