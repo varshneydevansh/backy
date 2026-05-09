@@ -313,6 +313,18 @@ function SettingsPage() {
     }
   };
 
+  const generalSettings: GeneralSettingsConfig = {
+    ...DEFAULT_GENERAL_SETTINGS,
+    ...(integrations.general || {}),
+  };
+  const appearanceSettings: AppearanceSettingsConfig = {
+    ...DEFAULT_APPEARANCE_SETTINGS,
+    ...(integrations.appearance || {}),
+  };
+  const seoSettings: SeoSettingsConfig = {
+    ...DEFAULT_SEO_SETTINGS,
+    ...(integrations.seo || {}),
+  };
   const notificationSettings: NotificationSettingsConfig = {
     ...DEFAULT_NOTIFICATION_SETTINGS,
     ...(integrations.notifications || {}),
@@ -330,6 +342,24 @@ function SettingsPage() {
     setIntegrations({
       ...integrations,
       notifications: next,
+    });
+  };
+  const updateGeneralSettings = (next: GeneralSettingsConfig) => {
+    setIntegrations({
+      ...integrations,
+      general: next,
+    });
+  };
+  const updateAppearanceSettings = (next: AppearanceSettingsConfig) => {
+    setIntegrations({
+      ...integrations,
+      appearance: next,
+    });
+  };
+  const updateSeoSettings = (next: SeoSettingsConfig) => {
+    setIntegrations({
+      ...integrations,
+      seo: next,
     });
   };
 
@@ -364,9 +394,15 @@ function SettingsPage() {
       {/* Tab Content */}
       <Panel>
         <PanelContent className="pt-5">
-        {activeTab === 'general' && <GeneralSettings />}
-        {activeTab === 'appearance' && <AppearanceSettings />}
-        {activeTab === 'seo' && <SEOSettings />}
+        {activeTab === 'general' && (
+          <GeneralSettings value={generalSettings} onChange={updateGeneralSettings} />
+        )}
+        {activeTab === 'appearance' && (
+          <AppearanceSettings value={appearanceSettings} onChange={updateAppearanceSettings} />
+        )}
+        {activeTab === 'seo' && (
+          <SEOSettings value={seoSettings} onChange={updateSeoSettings} />
+        )}
         {activeTab === 'delivery' && (
           <DeliveryModeSettings
             value={deliveryMode}
@@ -410,19 +446,27 @@ function SettingsPage() {
 // GENERAL SETTINGS
 // ============================================
 
-function GeneralSettings() {
+function GeneralSettings({
+  value,
+  onChange,
+}: {
+  value: GeneralSettingsConfig;
+  onChange: (next: GeneralSettingsConfig) => void;
+}) {
   return (
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold mb-4">Site Information</h3>
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="settings-site-name" className="block text-sm font-medium mb-1">
               Site Name
             </label>
             <input
+              id="settings-site-name"
               type="text"
-              defaultValue="My Website"
+              value={value.siteName || ''}
+              onChange={(event) => onChange({ ...value, siteName: event.target.value })}
               className={cn(
                 'w-full max-w-md px-3 py-2 rounded-lg border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -431,11 +475,13 @@ function GeneralSettings() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="settings-site-description" className="block text-sm font-medium mb-1">
               Site Description
             </label>
             <textarea
-              defaultValue="A brief description of your website"
+              id="settings-site-description"
+              value={value.siteDescription || ''}
+              onChange={(event) => onChange({ ...value, siteDescription: event.target.value })}
               rows={3}
               className={cn(
                 'w-full max-w-md px-3 py-2 rounded-lg border bg-background',
@@ -445,11 +491,13 @@ function GeneralSettings() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="settings-timezone" className="block text-sm font-medium mb-1">
               Timezone
             </label>
             <select
-              defaultValue="UTC"
+              id="settings-timezone"
+              value={value.timezone || DEFAULT_GENERAL_SETTINGS.timezone}
+              onChange={(event) => onChange({ ...value, timezone: event.target.value })}
               className={cn(
                 'w-full max-w-md px-3 py-2 rounded-lg border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -472,25 +520,39 @@ function GeneralSettings() {
 // APPEARANCE SETTINGS
 // ============================================
 
-function AppearanceSettings() {
+function AppearanceSettings({
+  value,
+  onChange,
+}: {
+  value: AppearanceSettingsConfig;
+  onChange: (next: AppearanceSettingsConfig) => void;
+}) {
+  const updateColor = (key: 'primaryColor' | 'secondaryColor', nextValue: string) => {
+    onChange({ ...value, [key]: nextValue });
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold mb-4">Theme Colors</h3>
         <div className="grid grid-cols-2 gap-4 max-w-md">
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="settings-primary-color" className="block text-sm font-medium mb-1">
               Primary Color
             </label>
             <div className="flex items-center gap-2">
               <input
+                id="settings-primary-color"
                 type="color"
-                defaultValue="#3b82f6"
+                value={colorInputValue(value.primaryColor, DEFAULT_APPEARANCE_SETTINGS.primaryColor)}
+                onChange={(event) => updateColor('primaryColor', event.target.value)}
                 className="w-10 h-10 rounded-lg border cursor-pointer"
               />
               <input
                 type="text"
-                defaultValue="#3b82f6"
+                aria-label="Primary color hex"
+                value={value.primaryColor || ''}
+                onChange={(event) => updateColor('primaryColor', event.target.value)}
                 className={cn(
                   'flex-1 px-3 py-2 rounded-lg border bg-background',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -500,18 +562,22 @@ function AppearanceSettings() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="settings-secondary-color" className="block text-sm font-medium mb-1">
               Secondary Color
             </label>
             <div className="flex items-center gap-2">
               <input
+                id="settings-secondary-color"
                 type="color"
-                defaultValue="#8b5cf6"
+                value={colorInputValue(value.secondaryColor, DEFAULT_APPEARANCE_SETTINGS.secondaryColor)}
+                onChange={(event) => updateColor('secondaryColor', event.target.value)}
                 className="w-10 h-10 rounded-lg border cursor-pointer"
               />
               <input
                 type="text"
-                defaultValue="#8b5cf6"
+                aria-label="Secondary color hex"
+                value={value.secondaryColor || ''}
+                onChange={(event) => updateColor('secondaryColor', event.target.value)}
                 className={cn(
                   'flex-1 px-3 py-2 rounded-lg border bg-background',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -526,11 +592,13 @@ function AppearanceSettings() {
         <h3 className="text-lg font-semibold mb-4">Typography</h3>
         <div className="space-y-4 max-w-md">
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="settings-font-family" className="block text-sm font-medium mb-1">
               Font Family
             </label>
             <select
-              defaultValue="inter"
+              id="settings-font-family"
+              value={value.fontFamily || DEFAULT_APPEARANCE_SETTINGS.fontFamily}
+              onChange={(event) => onChange({ ...value, fontFamily: event.target.value })}
               className={cn(
                 'w-full px-3 py-2 rounded-lg border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -545,12 +613,14 @@ function AppearanceSettings() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="settings-base-font-size" className="block text-sm font-medium mb-1">
               Base Font Size
             </label>
             <input
+              id="settings-base-font-size"
               type="number"
-              defaultValue={16}
+              value={value.baseFontSize || DEFAULT_APPEARANCE_SETTINGS.baseFontSize}
+              onChange={(event) => onChange({ ...value, baseFontSize: Number(event.target.value) })}
               min={12}
               max={24}
               className={cn(
@@ -569,19 +639,27 @@ function AppearanceSettings() {
 // SEO SETTINGS
 // ============================================
 
-function SEOSettings() {
+function SEOSettings({
+  value,
+  onChange,
+}: {
+  value: SeoSettingsConfig;
+  onChange: (next: SeoSettingsConfig) => void;
+}) {
   return (
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold mb-4">Default SEO Settings</h3>
         <div className="space-y-4 max-w-md">
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="settings-title-template" className="block text-sm font-medium mb-1">
               Default Title Template
             </label>
             <input
+              id="settings-title-template"
               type="text"
-              defaultValue="%s | My Website"
+              value={value.titleTemplate || ''}
+              onChange={(event) => onChange({ ...value, titleTemplate: event.target.value })}
               className={cn(
                 'w-full px-3 py-2 rounded-lg border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -593,11 +671,13 @@ function SEOSettings() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="settings-meta-description" className="block text-sm font-medium mb-1">
               Default Meta Description
             </label>
             <textarea
-              defaultValue="Welcome to my website"
+              id="settings-meta-description"
+              value={value.metaDescription || ''}
+              onChange={(event) => onChange({ ...value, metaDescription: event.target.value })}
               rows={3}
               className={cn(
                 'w-full px-3 py-2 rounded-lg border bg-background',
@@ -607,12 +687,14 @@ function SEOSettings() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="settings-keywords" className="block text-sm font-medium mb-1">
               Default Keywords
             </label>
             <input
+              id="settings-keywords"
               type="text"
-              defaultValue="website, blog, cms"
+              value={value.keywords || ''}
+              onChange={(event) => onChange({ ...value, keywords: event.target.value })}
               className={cn(
                 'w-full px-3 py-2 rounded-lg border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -626,12 +708,15 @@ function SEOSettings() {
         <h3 className="text-lg font-semibold mb-4">Social Sharing</h3>
         <div className="space-y-4 max-w-md">
           <div>
-            <label className="block text-sm font-medium mb-1">
-              Default OG Image
+            <label htmlFor="settings-og-image" className="block text-sm font-medium mb-1">
+              Default OG Image URL
             </label>
             <input
-              type="file"
-              accept="image/*"
+              id="settings-og-image"
+              type="url"
+              value={value.ogImageUrl || ''}
+              onChange={(event) => onChange({ ...value, ogImageUrl: event.target.value })}
+              placeholder="https://example.com/og-image.jpg"
               className={cn(
                 'w-full px-3 py-2 rounded-lg border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -645,11 +730,14 @@ function SEOSettings() {
         <h3 className="text-lg font-semibold mb-4">Analytics</h3>
         <div className="space-y-4 max-w-md">
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label htmlFor="settings-analytics-id" className="block text-sm font-medium mb-1">
               Google Analytics ID
             </label>
             <input
+              id="settings-analytics-id"
               type="text"
+              value={value.analyticsId || ''}
+              onChange={(event) => onChange({ ...value, analyticsId: event.target.value })}
               placeholder="G-XXXXXXXXXX"
               className={cn(
                 'w-full px-3 py-2 rounded-lg border bg-background',
@@ -907,9 +995,37 @@ function DeliveryModeSettings({
 // ============================================
 
 type IntegrationSettings = NonNullable<SiteSettingsInput['integrations']>;
+type GeneralSettingsConfig = NonNullable<IntegrationSettings['general']>;
+type AppearanceSettingsConfig = NonNullable<IntegrationSettings['appearance']>;
+type SeoSettingsConfig = NonNullable<IntegrationSettings['seo']>;
 type SupabaseSettings = NonNullable<IntegrationSettings['supabase']>;
 type VercelSettings = NonNullable<IntegrationSettings['vercel']>;
 type NotificationSettingsConfig = NonNullable<IntegrationSettings['notifications']>;
+
+const DEFAULT_GENERAL_SETTINGS: Required<GeneralSettingsConfig> = {
+  siteName: 'My Website',
+  siteDescription: 'A brief description of your website',
+  timezone: 'UTC',
+};
+
+const DEFAULT_APPEARANCE_SETTINGS: Required<AppearanceSettingsConfig> = {
+  primaryColor: '#3b82f6',
+  secondaryColor: '#8b5cf6',
+  fontFamily: 'inter',
+  baseFontSize: 16,
+};
+
+const DEFAULT_SEO_SETTINGS: Required<SeoSettingsConfig> = {
+  titleTemplate: '%s | My Website',
+  metaDescription: 'Welcome to my website',
+  keywords: 'website, blog, cms',
+  ogImageUrl: '',
+  analyticsId: '',
+};
+
+const colorInputValue = (value: string | undefined, fallback: string) => (
+  /^#[0-9a-fA-F]{6}$/.test(value || '') ? value || fallback : fallback
+);
 
 const DEFAULT_NOTIFICATION_SETTINGS: Required<Pick<NotificationSettingsConfig, 'email' | 'inApp' | 'digestFrequency'>> & {
   webhookUrl: string;

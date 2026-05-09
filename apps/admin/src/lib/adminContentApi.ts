@@ -862,6 +862,24 @@ export interface SiteSettingsInput {
     adminApiKey: string;
   };
   integrations?: {
+    general?: {
+      siteName?: string;
+      siteDescription?: string;
+      timezone?: string;
+    };
+    appearance?: {
+      primaryColor?: string;
+      secondaryColor?: string;
+      fontFamily?: string;
+      baseFontSize?: number;
+    };
+    seo?: {
+      titleTemplate?: string;
+      metaDescription?: string;
+      keywords?: string;
+      ogImageUrl?: string;
+      analyticsId?: string;
+    };
     supabase?: {
       projectUrl?: string;
       projectRef?: string;
