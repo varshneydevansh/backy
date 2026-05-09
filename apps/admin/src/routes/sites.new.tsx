@@ -8,6 +8,7 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText
 import { createPage, createSite, getAdminApiBase } from '@/lib/adminContentApi';
 import { useStore, type Site } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
+import { getSiteSelectionFromSearch } from '@/lib/siteSelection';
 import { cn } from '@/lib/utils';
 import { getCanvasHeightForElements, withPageChrome } from '@/lib/editorTemplateChrome';
 import {
@@ -147,6 +148,7 @@ function NewSitePage() {
   const displaySlug = formData.slug || slugify(formData.name);
   const normalizedDomain = normalizeDomain(formData.customDomain);
   const publicAddress = normalizedDomain || `${displaySlug || 'new-site'}.backy.app`;
+  const existingPagesSearch = useMemo(() => ({ siteId: getSiteSelectionFromSearch(sites) }), [sites]);
   const selectedBlueprint = useMemo(
     () => BLUEPRINT_OPTIONS.find((blueprint) => blueprint.id === formData.blueprint) || BLUEPRINT_OPTIONS[0],
     [formData.blueprint],
@@ -360,7 +362,7 @@ function NewSitePage() {
       if (createdPages.length > 0) {
         setPages([...createdPages, ...pages.filter((page) => !createdPages.some((createdPage) => createdPage.id === page.id))]);
       }
-      navigate({ to: '/sites' });
+      navigate({ to: '/pages', search: { siteId: created.publicSiteId || created.id } });
     } catch (createError) {
       setError(createError instanceof Error
         ? `${createError.message}. The site was not created because the backend did not persist it.`
@@ -424,7 +426,7 @@ function NewSitePage() {
             </button>
             <button
               type="button"
-              onClick={() => navigate({ to: '/pages' })}
+              onClick={() => navigate({ to: '/pages', search: existingPagesSearch })}
               className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
             >
               <FileText className="h-4 w-4" />
