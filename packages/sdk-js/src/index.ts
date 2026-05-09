@@ -195,6 +195,95 @@ export interface BackyCollectionRecord<TValues extends Record<string, unknown> =
   [key: string]: unknown;
 }
 
+export interface BackyCommerceProduct {
+  id: string;
+  slug: string;
+  title: string;
+  sku?: string;
+  description?: string;
+  price: number;
+  compareAtPrice?: number | null;
+  currency: string;
+  imageUrl?: string;
+  category?: string;
+  tags?: string[];
+  vendor?: string;
+  featured?: boolean;
+  productType?: 'physical' | 'digital' | 'service' | string;
+  inventory?: Record<string, unknown>;
+  delivery?: Record<string, unknown>;
+  checkout?: Record<string, unknown>;
+  links?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface BackyCommerceCatalogOptions extends BackyListOptions {
+  slug?: string;
+  q?: string;
+  search?: string;
+  category?: string;
+  tag?: string;
+  vendor?: string;
+  productType?: 'physical' | 'digital' | 'service' | string;
+  featured?: boolean;
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
+  siteId?: string;
+}
+
+export interface BackyCommerceLineItemInput {
+  productId?: string;
+  slug?: string;
+  quantity?: number;
+}
+
+export interface BackyCommerceOrderInput {
+  customer: {
+    name: string;
+    email: string;
+    phone?: string;
+  };
+  items: BackyCommerceLineItemInput[];
+  shippingAddress?: string;
+  billingAddress?: string;
+  notes?: string;
+  paymentProvider?: string;
+  paymentReference?: string;
+  checkoutSessionId?: string;
+  requestId?: string;
+}
+
+export interface BackyCommerceOrderSummary {
+  id: string;
+  slug: string;
+  orderNumber: string;
+  status: string;
+  paymentStatus: string;
+  fulfillmentStatus: string;
+  total: number;
+  currency: string;
+  itemCount: number;
+  createdAt?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyCommerceCatalog {
+  schemaVersion: 'backy.commerce-catalog.v1';
+  collection?: BackyCollectionSchema;
+  products: BackyCommerceProduct[];
+  facets?: Record<string, unknown>;
+  filters?: Record<string, unknown>;
+  readiness?: Record<string, unknown>;
+  pagination: BackyPagination;
+}
+
+export interface BackyCommerceOrderContract {
+  schemaVersion: 'backy.commerce-orders.v1';
+  accepts: Record<string, unknown>;
+  creates: Record<string, unknown>;
+  relatedEndpoints: Record<string, string>;
+}
+
 export interface BackyReusableSection {
   id: string;
   siteId?: string;
@@ -687,6 +776,30 @@ export class BackyClient {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/records`, {
       query,
       requestId,
+    });
+  }
+
+  commerceCatalog(options: BackyCommerceCatalogOptions = {}): Promise<BackyEnvelope<BackyCommerceCatalog>> {
+    const { requestId, siteId, ...query } = options;
+    return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/commerce/catalog`, {
+      query,
+      requestId,
+    });
+  }
+
+  commerceOrderContract(siteId = this.requireSiteId()): Promise<BackyEnvelope<BackyCommerceOrderContract>> {
+    return this.request(`/api/sites/${encodeURIComponent(siteId)}/commerce/orders`);
+  }
+
+  createCommerceOrder(input: BackyCommerceOrderInput, siteId = this.requireSiteId()): Promise<BackyEnvelope<{
+    schemaVersion: 'backy.commerce-orders.v1';
+    order: BackyCommerceOrderSummary;
+    lineItems: Array<Record<string, unknown>>;
+  }>> {
+    return this.request(`/api/sites/${encodeURIComponent(siteId)}/commerce/orders`, {
+      method: 'POST',
+      body: input,
+      requestId: input.requestId,
     });
   }
 
