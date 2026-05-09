@@ -3,7 +3,7 @@
  */
 
 import { type ElementType, useCallback, useEffect, useMemo, useState } from 'react';
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   ArrowRight,
@@ -52,8 +52,12 @@ import { formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { useStore, type BlogPost, type Page, type Site, type User, type MediaAsset } from '@/stores/mockStore';
+import { siteMatchesIdentifier } from '@/lib/siteSelection';
 
 export const Route = createFileRoute('/')({
+  validateSearch: (search: Record<string, unknown>): { siteId?: string } => ({
+    siteId: typeof search.siteId === 'string' ? search.siteId : undefined,
+  }),
   component: Index,
 });
 
@@ -502,6 +506,8 @@ const getAdminBaseUrl = (): string => {
 };
 
 function Index() {
+  const navigate = useNavigate();
+  const search = Route.useSearch();
   const { user } = useAuthStore();
   const fallbackStore = useStore();
   const [dashboard, setDashboard] = useState<DashboardData>(() => ({
@@ -522,7 +528,7 @@ function Index() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [selectedSiteId, setSelectedSiteId] = useState('');
+  const [selectedSiteId, setSelectedSiteId] = useState(search.siteId || '');
 
   const loadDashboard = useCallback(async () => {
     setIsLoading(true);
@@ -604,10 +610,16 @@ function Index() {
   }, [loadDashboard]);
 
   useEffect(() => {
-    if (!selectedSiteId && dashboard.sites[0]) {
-      setSelectedSiteId(dashboard.sites[0].publicSiteId || dashboard.sites[0].id);
+    const requestedSiteId = search.siteId || '';
+    const requestedSite = requestedSiteId
+      ? dashboard.sites.find((site) => siteMatchesIdentifier(site, requestedSiteId))
+      : undefined;
+    const nextSiteId = requestedSite?.publicSiteId || requestedSite?.id || requestedSiteId || dashboard.sites[0]?.publicSiteId || dashboard.sites[0]?.id || '';
+
+    if (nextSiteId && nextSiteId !== selectedSiteId) {
+      setSelectedSiteId(nextSiteId);
     }
-  }, [dashboard.sites, selectedSiteId]);
+  }, [dashboard.sites, search.siteId, selectedSiteId]);
 
   const issues = useMemo(() => buildDashboardIssues(dashboard, error), [dashboard, error]);
   const publishedSites = dashboard.sites.filter((site) => site.status === 'published').length;
@@ -661,10 +673,14 @@ function Index() {
   const getDashboardRouteSearch = (
     to: '/sites' | '/pages' | '/blog' | '/media' | '/users' | '/settings' | '/collections' | '/forms' | '/comments' | '/products' | '/orders' | '/sites/new' | '/pages/new' | '/blog/new',
   ) => (
-    ['/pages', '/blog', '/media', '/collections', '/forms', '/comments', '/products', '/orders', '/pages/new', '/blog/new'].includes(to)
+    ['/pages', '/blog', '/media', '/collections', '/forms', '/comments', '/products', '/orders', '/users', '/pages/new', '/blog/new'].includes(to)
       ? { siteId: activeSiteId }
       : undefined
   );
+  const selectDashboardSite = (nextSiteId: string) => {
+    setSelectedSiteId(nextSiteId);
+    navigate({ to: '/', search: { siteId: nextSiteId }, replace: true });
+  };
   const frontendHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -700,7 +716,7 @@ function Index() {
       comments: `/comments?siteId=${encodeURIComponent(activeSiteId)}`,
       products: `/products?siteId=${encodeURIComponent(activeSiteId)}`,
       orders: `/orders?siteId=${encodeURIComponent(activeSiteId)}`,
-      users: '/users',
+      users: `/users?siteId=${encodeURIComponent(activeSiteId)}`,
       settings: '/settings',
     },
     commerce: {
@@ -1176,7 +1192,7 @@ function Index() {
           <select
             id="dashboard-active-site"
             value={activeSiteId}
-            onChange={(event) => setSelectedSiteId(event.target.value)}
+            onChange={(event) => selectDashboardSite(event.target.value)}
             className="min-w-48 rounded-lg border bg-background px-3 py-2 text-sm"
           >
             {dashboard.sites.length === 0 ? (
@@ -1365,6 +1381,7 @@ function Index() {
                   </Link>
                   <Link
                     to="/users"
+                    search={{ siteId: activeSiteId }}
                     className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
                   >
                     <div className="text-sm font-semibold text-foreground">Member access</div>
