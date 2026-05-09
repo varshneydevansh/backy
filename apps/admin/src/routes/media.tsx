@@ -238,6 +238,7 @@ function MediaPage() {
   const [isReplacingAsset, setIsReplacingAsset] = useState(false);
   const [isPreparingTransforms, setIsPreparingTransforms] = useState(false);
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [isDeletingAsset, setIsDeletingAsset] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bulkNotice, setBulkNotice] = useState<string | null>(null);
   const [assetDeliveryError, setAssetDeliveryError] = useState<string | null>(null);
@@ -279,6 +280,7 @@ function MediaPage() {
   const [recentUploadSummary, setRecentUploadSummary] = useState<MediaUploadSummary | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [isDeletingFolder, setIsDeletingFolder] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MediaAsset | null>(null);
   const [metadataForm, setMetadataForm] = useState({
     name: '',
@@ -307,6 +309,18 @@ function MediaPage() {
     [selectedSiteId, sites],
   );
   const siteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || getDefaultMediaSiteId();
+  const isMediaMutationBusy = isUploading ||
+    isSavingMetadata ||
+    isCreatingSignedUrl ||
+    isUpdatingBinding ||
+    isReplacingAsset ||
+    isPreparingTransforms ||
+    isBulkUpdating ||
+    isDeletingAsset ||
+    isCreatingFolder ||
+    isUpdatingFolder ||
+    isDeletingFolder;
+  const isMediaLibraryBusy = isLoading || isMediaMutationBusy;
   const activeSiteRouteSearch = useMemo(() => ({ siteId }), [siteId]);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const publicMediaListUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media?limit=100`;
@@ -364,7 +378,7 @@ function MediaPage() {
 
   useEffect(() => {
     const nextSiteId = routeSearch.siteId
-      ? getSiteSelectionFromSearch(sites, getDefaultMediaSiteId())
+      ? getSiteSelectionFromSearch(sites, routeSearch.siteId)
       : selectedSiteId;
     const siteChanged = nextSiteId !== selectedSiteId;
 
@@ -965,6 +979,8 @@ function MediaPage() {
   }, [bindingTargetType]);
 
   const handleCreateSignedUrl = async () => {
+    if (isMediaMutationBusy) return;
+
     if (!selectedAsset) {
       return;
     }
@@ -986,6 +1002,8 @@ function MediaPage() {
   };
 
   const handlePrepareTransforms = async () => {
+    if (isMediaMutationBusy) return;
+
     if (!selectedAsset || selectedAsset.type !== 'image') {
       return;
     }
@@ -1020,6 +1038,7 @@ function MediaPage() {
   };
 
   const handleFileUpload = async (fileList: FileList | null) => {
+    if (isMediaMutationBusy) return;
     if (!fileList || fileList.length === 0) return;
     const uploadFiles = Array.from(fileList);
     const targetFolderLabel = uploadTargetFolderLabel;
@@ -1097,7 +1116,10 @@ function MediaPage() {
   };
 
   const handleDeleteAsset = async (file: MediaAsset) => {
+    if (isMediaMutationBusy) return;
+
     setError(null);
+    setIsDeletingAsset(true);
 
     try {
       await deleteMediaFromBackend(file.id, siteId);
@@ -1109,10 +1131,14 @@ function MediaPage() {
       setPendingDeleteAsset(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete media.');
+    } finally {
+      setIsDeletingAsset(false);
     }
   };
 
   const toggleMediaSelection = (mediaId: string) => {
+    if (isMediaLibraryBusy) return;
+
     setBulkNotice(null);
     setPendingBulkDelete(false);
     setSelectedMediaIds((current) => (
@@ -1123,6 +1149,8 @@ function MediaPage() {
   };
 
   const handleSelectVisibleMedia = () => {
+    if (isMediaLibraryBusy) return;
+
     setBulkNotice(null);
     setSelectedMediaIds((current) => {
       const next = new Set(current);
@@ -1132,12 +1160,16 @@ function MediaPage() {
   };
 
   const handleClearSelection = () => {
+    if (isMediaLibraryBusy) return;
+
     setBulkNotice(null);
     setPendingBulkDelete(false);
     setSelectedMediaIds([]);
   };
 
   const handleBulkUpdate = async () => {
+    if (isMediaMutationBusy) return;
+
     if (selectedMediaAssets.length === 0 || !hasBulkChange) {
       return;
     }
@@ -1200,6 +1232,8 @@ function MediaPage() {
   };
 
   const handleBulkDelete = async () => {
+    if (isMediaMutationBusy) return;
+
     if (selectedMediaAssets.length === 0) {
       return;
     }
@@ -1247,6 +1281,8 @@ function MediaPage() {
   };
 
   const handleSaveMetadata = async () => {
+    if (isMediaMutationBusy) return;
+
     if (!selectedAsset) {
       return;
     }
@@ -1289,6 +1325,8 @@ function MediaPage() {
   };
 
   const handleReplaceAsset = async (fileList: FileList | null) => {
+    if (isMediaMutationBusy) return;
+
     if (!selectedAsset || !fileList || fileList.length === 0) {
       return;
     }
@@ -1326,6 +1364,8 @@ function MediaPage() {
   };
 
   const handleBindTarget = async () => {
+    if (isMediaMutationBusy) return;
+
     if (!selectedAsset || !bindingTargetId) {
       return;
     }
@@ -1352,6 +1392,8 @@ function MediaPage() {
   };
 
   const handleUnbindTarget = async (targetType: 'page' | 'post', targetId: string) => {
+    if (isMediaMutationBusy) return;
+
     if (!selectedAsset) {
       return;
     }
@@ -1377,6 +1419,8 @@ function MediaPage() {
   };
 
   const handleCreateFolder = async () => {
+    if (isMediaMutationBusy) return;
+
     const name = newFolderName.trim();
     if (!name) {
       return;
@@ -1401,6 +1445,8 @@ function MediaPage() {
   };
 
   const startEditingFolder = (folder: MediaFolder) => {
+    if (isMediaLibraryBusy) return;
+
     setEditingFolderId(folder.id);
     setEditingFolderName(folder.name);
     setError(null);
@@ -1412,6 +1458,8 @@ function MediaPage() {
   };
 
   const handleRenameFolder = async (folderId: string) => {
+    if (isMediaMutationBusy) return;
+
     const name = editingFolderName.trim();
     if (!name) {
       setError('Folder name is required.');
@@ -1444,12 +1492,15 @@ function MediaPage() {
   };
 
   const handleDeleteFolder = async (folderId: string) => {
+    if (isMediaMutationBusy) return;
+
     const folder = folders.find((item) => item.id === folderId);
     if (!folder) {
       return;
     }
 
     setError(null);
+    setIsDeletingFolder(true);
 
     try {
       await deleteMediaFolder(folderId, siteId);
@@ -1465,6 +1516,8 @@ function MediaPage() {
       setPendingDeleteFolder(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete folder.');
+    } finally {
+      setIsDeletingFolder(false);
     }
   };
 
@@ -1539,6 +1592,7 @@ function MediaPage() {
             className="hidden"
             multiple
             aria-label="Upload media files"
+            disabled={isMediaMutationBusy}
             onChange={(e) => {
               void handleFileUpload(e.target.files);
               e.currentTarget.value = '';
@@ -1548,7 +1602,7 @@ function MediaPage() {
             htmlFor="header-upload"
             className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 cursor-pointer transition-colors",
-              isUploading && "pointer-events-none opacity-70"
+              isMediaMutationBusy && "pointer-events-none opacity-70"
             )}
           >
             <Upload className="w-4 h-4" />
@@ -1580,13 +1634,15 @@ function MediaPage() {
             <select
               aria-label="Active media site"
               value={siteId}
+              disabled={isMediaLibraryBusy}
               onChange={(event) => {
+                if (isMediaLibraryBusy) return;
                 const nextSiteId = event.target.value;
                 setSelectedSiteId(nextSiteId);
                 resetMediaWorkspaceState();
                 navigate({ to: '/media', search: { siteId: nextSiteId }, replace: true });
               }}
-              className="min-h-10 min-w-56 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+              className="min-h-10 min-w-56 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
             >
               {sites.length === 0 ? (
                 <option value={getDefaultMediaSiteId()}>Demo site</option>
@@ -1615,7 +1671,7 @@ function MediaPage() {
             <button
               type="button"
               onClick={exportMediaCsv}
-              disabled={displayedFiles.length === 0}
+              disabled={displayedFiles.length === 0 || isMediaLibraryBusy}
               className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="h-4 w-4" />
@@ -1623,7 +1679,10 @@ function MediaPage() {
             </button>
             <label
               htmlFor="header-upload"
-              className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+              className={cn(
+                'inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90',
+                isMediaMutationBusy && 'pointer-events-none opacity-70',
+              )}
             >
               <Upload className="h-4 w-4" />
               Upload files
@@ -1729,6 +1788,7 @@ function MediaPage() {
           onDrop={(e) => {
             e.preventDefault();
             setIsDragging(false);
+            if (isMediaMutationBusy) return;
             void handleFileUpload(e.dataTransfer.files);
           }}
           data-testid="media-upload-dropzone"
@@ -1744,7 +1804,7 @@ function MediaPage() {
             className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
             multiple
             aria-label="Upload media files"
-            disabled={isUploading}
+            disabled={isMediaMutationBusy}
             onChange={(e) => {
               void handleFileUpload(e.target.files);
               e.currentTarget.value = '';
@@ -1830,8 +1890,9 @@ function MediaPage() {
               Visibility
               <select
                 value={uploadVisibility}
+                disabled={isMediaMutationBusy}
                 onChange={(event) => setUploadVisibility(event.target.value === 'private' ? 'private' : 'public')}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Upload visibility"
               >
                 <option value="public">Public delivery</option>
@@ -1843,8 +1904,9 @@ function MediaPage() {
               Destination
               <select
                 value={uploadFolderId}
+                disabled={isMediaMutationBusy}
                 onChange={(event) => setUploadFolderId(event.target.value)}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Upload folder"
               >
                 <option value="current">Current folder filter</option>
@@ -1865,6 +1927,8 @@ function MediaPage() {
                 onChange={setUploadTagList}
                 placeholder="Add hero, product, brand..."
                 ariaLabel="Upload tags"
+                disabled={isMediaMutationBusy}
+                className={isMediaMutationBusy ? 'opacity-60' : undefined}
               />
             </div>
 
@@ -2110,10 +2174,12 @@ function MediaPage() {
                 key={metric.label}
                 type="button"
                 onClick={() => {
+                  if (isMediaLibraryBusy) return;
                   setUsageFilter(metric.filter);
                   updateMediaRouteSearch({ usage: metric.filter });
                 }}
-                className="rounded-lg border border-border bg-muted/30 p-4 text-left transition-colors hover:bg-muted"
+                disabled={isMediaLibraryBusy}
+                className="rounded-lg border border-border bg-muted/30 p-4 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <div className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">{metric.label}</div>
                 <div className="mt-2 text-2xl font-semibold">{metric.value}</div>
@@ -2140,12 +2206,14 @@ function MediaPage() {
                       key={option.value}
                       type="button"
                       onClick={() => {
+                        if (isMediaLibraryBusy) return;
                         const usage = option.value as MediaUsageFilter;
                         setUsageFilter(usage);
                         updateMediaRouteSearch({ usage });
                       }}
+                      disabled={isMediaLibraryBusy}
                       className={cn(
-                        'rounded-lg border px-3 py-1.5 text-xs font-medium',
+                        'rounded-lg border px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60',
                         usageFilter === option.value
                           ? 'border-primary bg-primary/10 text-primary'
                           : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -2162,10 +2230,12 @@ function MediaPage() {
                     key={row.type}
                     type="button"
                     onClick={() => {
+                      if (isMediaLibraryBusy) return;
                       setTypeFilter(row.type);
                       updateMediaRouteSearch({ type: row.type });
                     }}
-                    className="grid grid-cols-[90px_minmax(0,1fr)_90px] items-center gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-muted"
+                    disabled={isMediaLibraryBusy}
+                    className="grid grid-cols-[90px_minmax(0,1fr)_90px] items-center gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <span className="text-xs font-medium capitalize text-muted-foreground">{row.type}</span>
                     <span className="h-2 overflow-hidden rounded-full bg-muted">
@@ -2192,10 +2262,12 @@ function MediaPage() {
                   <button
                     type="button"
                     onClick={() => {
+                      if (isMediaLibraryBusy) return;
                       const first = mediaAnalytics.largestAssets[0]?.asset;
                       if (first) openMetadataEditor(first);
                     }}
-                    className="text-xs font-medium text-primary hover:underline"
+                    disabled={isMediaLibraryBusy}
+                    className="text-xs font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Open largest
                   </button>
@@ -2234,23 +2306,27 @@ function MediaPage() {
         <input
           type="text"
           value={searchQuery}
+          disabled={isMediaLibraryBusy}
           onChange={(event) => {
+            if (isMediaLibraryBusy) return;
             const q = event.target.value;
             setSearchQuery(q);
             updateMediaRouteSearch({ q: q || undefined });
           }}
-          className="rounded-lg border bg-background px-4 py-2.5"
+          className="rounded-lg border bg-background px-4 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
           placeholder="Search filenames, captions, alt text, or tags"
           aria-label="Search media"
         />
         <select
           value={typeFilter}
+          disabled={isMediaLibraryBusy}
           onChange={(event) => {
+            if (isMediaLibraryBusy) return;
             const type = event.target.value as MediaTypeFilter;
             setTypeFilter(type);
             updateMediaRouteSearch({ type });
           }}
-          className="rounded-lg border bg-background px-4 py-2.5"
+          className="rounded-lg border bg-background px-4 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
           aria-label="Media type filter"
         >
           <option value="all">All types</option>
@@ -2263,12 +2339,14 @@ function MediaPage() {
         </select>
         <select
           value={visibilityFilter}
+          disabled={isMediaLibraryBusy}
           onChange={(event) => {
+            if (isMediaLibraryBusy) return;
             const visibility = event.target.value as MediaVisibilityFilter;
             setVisibilityFilter(visibility);
             updateMediaRouteSearch({ visibility });
           }}
-          className="rounded-lg border bg-background px-4 py-2.5"
+          className="rounded-lg border bg-background px-4 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
           aria-label="Media visibility filter"
         >
           <option value="all">All visibility</option>
@@ -2287,6 +2365,7 @@ function MediaPage() {
             <input
               type="text"
               value={newFolderName}
+              disabled={isMediaLibraryBusy}
               onChange={(event) => setNewFolderName(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
@@ -2294,15 +2373,15 @@ function MediaPage() {
                   void handleCreateFolder();
                 }
               }}
-              className="w-full max-w-xs rounded-lg border bg-background px-3 py-2 text-sm"
+              className="w-full max-w-xs rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="New folder name"
               aria-label="New folder name"
             />
             <button
               type="button"
-              disabled={isCreatingFolder || !newFolderName.trim()}
+              disabled={isMediaLibraryBusy || !newFolderName.trim()}
               onClick={() => void handleCreateFolder()}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Create media folder"
             >
               <FolderPlus className="h-4 w-4" />
@@ -2315,11 +2394,13 @@ function MediaPage() {
           <button
             type="button"
             onClick={() => {
+              if (isMediaLibraryBusy) return;
               setSelectedFolderId(undefined);
               updateMediaRouteSearch({ folderId: undefined });
             }}
+            disabled={isMediaLibraryBusy}
             className={cn(
-              'rounded-lg border px-3 py-2 text-sm',
+              'rounded-lg border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60',
               selectedFolderId === undefined ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
             )}
           >
@@ -2328,11 +2409,13 @@ function MediaPage() {
           <button
             type="button"
             onClick={() => {
+              if (isMediaLibraryBusy) return;
               setSelectedFolderId(null);
               updateMediaRouteSearch({ folderId: 'root' });
             }}
+            disabled={isMediaLibraryBusy}
             className={cn(
-              'rounded-lg border px-3 py-2 text-sm',
+              'rounded-lg border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60',
               selectedFolderId === null ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
             )}
           >
@@ -2345,7 +2428,7 @@ function MediaPage() {
                   <input
                     type="text"
                     value={editingFolderName}
-                    disabled={isUpdatingFolder}
+                    disabled={isMediaLibraryBusy}
                     onChange={(event) => setEditingFolderName(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') {
@@ -2363,7 +2446,7 @@ function MediaPage() {
                   />
                   <button
                     type="button"
-                    disabled={isUpdatingFolder || !editingFolderName.trim()}
+                    disabled={isMediaLibraryBusy || !editingFolderName.trim()}
                     onClick={() => void handleRenameFolder(folder.id)}
                     className="inline-flex size-8 items-center justify-center rounded-md text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
                     title="Save folder name"
@@ -2373,7 +2456,7 @@ function MediaPage() {
                   </button>
                   <button
                     type="button"
-                    disabled={isUpdatingFolder}
+                    disabled={isMediaLibraryBusy}
                     onClick={cancelEditingFolder}
                     className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
                     title="Cancel rename"
@@ -2387,11 +2470,13 @@ function MediaPage() {
                   <button
                     type="button"
                     onClick={() => {
+                      if (isMediaLibraryBusy) return;
                       setSelectedFolderId(folder.id);
                       updateMediaRouteSearch({ folderId: folder.id });
                     }}
+                    disabled={isMediaLibraryBusy}
                     className={cn(
-                      'px-3 py-2 text-sm',
+                      'px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60',
                       selectedFolderId === folder.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
                     )}
                   >
@@ -2403,7 +2488,8 @@ function MediaPage() {
                   <button
                     type="button"
                     onClick={() => startEditingFolder(folder)}
-                    className="border-l border-border px-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    disabled={isMediaLibraryBusy}
+                    className="border-l border-border px-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                     title="Rename folder"
                     aria-label={`Rename folder ${folder.name}`}
                   >
@@ -2411,8 +2497,12 @@ function MediaPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setPendingDeleteFolder(folder)}
-                    className="border-l border-border px-2 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                    onClick={() => {
+                      if (isMediaLibraryBusy) return;
+                      setPendingDeleteFolder(folder);
+                    }}
+                    disabled={isMediaLibraryBusy}
+                    className="border-l border-border px-2 text-muted-foreground hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                     title="Delete folder"
                     aria-label={`Delete folder ${folder.name}`}
                   >
@@ -2445,7 +2535,7 @@ function MediaPage() {
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={isBulkUpdating || allVisibleSelected}
+                    disabled={isMediaLibraryBusy || allVisibleSelected}
                     onClick={handleSelectVisibleMedia}
                   >
                     Select visible
@@ -2454,7 +2544,7 @@ function MediaPage() {
                     type="button"
                     size="sm"
                     variant="ghost"
-                    disabled={isBulkUpdating || selectedMediaAssets.length === 0}
+                    disabled={isMediaLibraryBusy || selectedMediaAssets.length === 0}
                     onClick={handleClearSelection}
                   >
                     Clear
@@ -2468,7 +2558,7 @@ function MediaPage() {
                   Visibility
                   <select
                     value={bulkVisibility}
-                    disabled={isBulkUpdating}
+                    disabled={isMediaLibraryBusy}
                     onChange={(event) => setBulkVisibility(event.target.value === 'public' || event.target.value === 'private' ? event.target.value : 'keep')}
                     className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
                   >
@@ -2482,7 +2572,7 @@ function MediaPage() {
                   Folder
                   <select
                     value={bulkFolderId}
-                    disabled={isBulkUpdating}
+                    disabled={isMediaLibraryBusy}
                     onChange={(event) => setBulkFolderId(event.target.value)}
                     className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
                   >
@@ -2499,7 +2589,7 @@ function MediaPage() {
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={isBulkUpdating || selectedMediaAssets.length === 0 || !hasBulkChange}
+                    disabled={isMediaLibraryBusy || selectedMediaAssets.length === 0 || !hasBulkChange}
                     onClick={() => void handleBulkUpdate()}
                     className="w-full whitespace-nowrap"
                   >
@@ -2512,7 +2602,7 @@ function MediaPage() {
                     type="button"
                     size="sm"
                     variant="danger"
-                    disabled={isBulkUpdating || selectedMediaAssets.length === 0}
+                    disabled={isMediaLibraryBusy || selectedMediaAssets.length === 0}
                     onClick={() => void handleBulkDelete()}
                     className="w-full whitespace-nowrap"
                     iconStart={<Trash2 className="size-4" />}
@@ -2528,7 +2618,7 @@ function MediaPage() {
                     Tag action
                     <select
                       value={bulkTagMode}
-                      disabled={isBulkUpdating}
+                      disabled={isMediaLibraryBusy}
                       onChange={(event) => setBulkTagMode(event.target.value as typeof bulkTagMode)}
                       className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
                       aria-label="Bulk tag action"
@@ -2550,8 +2640,8 @@ function MediaPage() {
                       onChange={setBulkTagList}
                       placeholder="Add campaign, hero, product..."
                       ariaLabel="Bulk media tags"
-                      disabled={bulkTagMode === 'clear' || bulkTagMode === 'keep'}
-                      className={bulkTagMode === 'clear' || bulkTagMode === 'keep' ? 'opacity-60' : undefined}
+                      disabled={isMediaLibraryBusy || bulkTagMode === 'clear' || bulkTagMode === 'keep'}
+                      className={isMediaLibraryBusy || bulkTagMode === 'clear' || bulkTagMode === 'keep' ? 'opacity-60' : undefined}
                     />
                   </div>
 
@@ -2675,8 +2765,9 @@ function MediaPage() {
                 <input
                   type="checkbox"
                   checked={selectedMediaSet.has(file.id)}
+                  disabled={isMediaLibraryBusy}
                   onChange={() => toggleMediaSelection(file.id)}
-                  className="h-3.5 w-3.5 rounded border-border text-primary"
+                  className="h-3.5 w-3.5 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label={`Select ${file.name}`}
                 />
                 <span className="sr-only">Select {file.name}</span>
@@ -2686,8 +2777,12 @@ function MediaPage() {
 
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                   <button
-                    className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100"
-                    onClick={() => openMetadataEditor(file)}
+                    className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isMediaLibraryBusy}
+                    onClick={() => {
+                      if (isMediaLibraryBusy) return;
+                      openMetadataEditor(file);
+                    }}
                     title="Edit metadata"
                     aria-label={`Edit metadata for ${file.name}`}
                   >
@@ -2696,7 +2791,8 @@ function MediaPage() {
                   {file.visibility !== 'private' && (
                     <>
                       <button
-                        className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100"
+                        className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={isMediaLibraryBusy}
                         onClick={() => void copyMediaApiText(getAssetDeliveryUrl(file), `${file.name} delivery URL`)}
                         title="Copy delivery URL"
                         aria-label={`Copy delivery URL for ${file.name}`}
@@ -2716,8 +2812,12 @@ function MediaPage() {
                     </>
                   )}
                   <button
-                    className="p-2 bg-white rounded-lg text-red-600 hover:bg-red-50"
-                    onClick={() => setPendingDeleteAsset(file)}
+                    className="p-2 bg-white rounded-lg text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isMediaLibraryBusy}
+                    onClick={() => {
+                      if (isMediaLibraryBusy) return;
+                      setPendingDeleteAsset(file);
+                    }}
                     title="Delete media"
                     aria-label={`Delete ${file.name}`}
                   >
@@ -2776,10 +2876,12 @@ function MediaPage() {
               <button
                 type="button"
                 onClick={() => {
+                  if (isMediaMutationBusy) return;
                   setSelectedAsset(null);
                   updateMediaRouteSearch({ assetId: undefined });
                 }}
-                className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+                disabled={isMediaMutationBusy}
+                className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Close media details"
               >
                 <X className="h-5 w-5" />
@@ -3028,7 +3130,7 @@ function MediaPage() {
                   </div>
                   <label className={cn(
                     'inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium shadow-sm hover:bg-muted',
-                    isReplacingAsset && 'pointer-events-none opacity-60',
+                    isMediaMutationBusy && 'pointer-events-none opacity-60',
                   )}>
                     <Upload className="size-4" />
                     {isReplacingAsset ? 'Replacing...' : 'Replace file'}
@@ -3036,7 +3138,7 @@ function MediaPage() {
                       type="file"
                       className="sr-only"
                       accept={replacementAcceptForAsset(selectedAsset.type)}
-                      disabled={isReplacingAsset}
+                      disabled={isMediaMutationBusy}
                       onChange={(event) => {
                         void handleReplaceAsset(event.target.files);
                         event.currentTarget.value = '';
@@ -3244,7 +3346,7 @@ function MediaPage() {
                           type="button"
                           size="sm"
                           variant="outline"
-                          disabled={isCreatingSignedUrl}
+                          disabled={isMediaMutationBusy}
                           onClick={() => void handleCreateSignedUrl()}
                           iconStart={<KeyRound className="size-4" />}
                           className="w-full whitespace-nowrap"
@@ -3349,7 +3451,7 @@ function MediaPage() {
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                disabled={isPreparingTransforms || selectedAsset.visibility === 'private'}
+                                disabled={isMediaMutationBusy || selectedAsset.visibility === 'private'}
                                 onClick={() => void handlePrepareTransforms()}
                               >
                                 {isPreparingTransforms ? 'Preparing...' : 'Prepare variants'}
@@ -3461,7 +3563,7 @@ function MediaPage() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        disabled={isUpdatingBinding || !bindingTargetId}
+                        disabled={isMediaMutationBusy || !bindingTargetId}
                         onClick={() => void handleBindTarget()}
                         className="w-full"
                       >
@@ -3505,7 +3607,7 @@ function MediaPage() {
                           type="button"
                           size="sm"
                           variant="ghost"
-                          disabled={isUpdatingBinding}
+                          disabled={isMediaMutationBusy}
                           onClick={() => void handleUnbindTarget('page', id)}
                         >
                           Remove
@@ -3536,7 +3638,7 @@ function MediaPage() {
                           type="button"
                           size="sm"
                           variant="ghost"
-                          disabled={isUpdatingBinding}
+                          disabled={isMediaMutationBusy}
                           onClick={() => void handleUnbindTarget('post', id)}
                         >
                           Remove
@@ -3609,17 +3711,21 @@ function MediaPage() {
             <div className="flex items-center justify-between border-t border-border px-5 py-4">
               <button
                 type="button"
-                onClick={() => setPendingDeleteAsset(selectedAsset)}
-                className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+                onClick={() => {
+                  if (isMediaMutationBusy) return;
+                  setPendingDeleteAsset(selectedAsset);
+                }}
+                disabled={isMediaMutationBusy}
+                className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Trash2 className="h-4 w-4" />
                 Delete
               </button>
               <button
                 type="button"
-                disabled={isSavingMetadata}
+                disabled={isMediaMutationBusy}
                 onClick={() => void handleSaveMetadata()}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Save className="h-4 w-4" />
                 {isSavingMetadata ? 'Saving...' : 'Save details'}
@@ -3650,16 +3756,18 @@ function MediaPage() {
               <button
                 type="button"
                 onClick={() => setPendingDeleteAsset(null)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                disabled={isDeletingAsset}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void handleDeleteAsset(pendingDeleteAsset)}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+                disabled={isDeletingAsset}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Delete asset
+                {isDeletingAsset ? 'Deleting...' : 'Delete asset'}
               </button>
             </div>
           </div>
@@ -3686,7 +3794,8 @@ function MediaPage() {
               <button
                 type="button"
                 onClick={() => setPendingBulkDelete(false)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                disabled={isBulkUpdating}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -3694,9 +3803,9 @@ function MediaPage() {
                 type="button"
                 onClick={() => void handleBulkDelete()}
                 disabled={isBulkUpdating}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Delete assets
+                {isBulkUpdating ? 'Deleting...' : 'Delete assets'}
               </button>
             </div>
           </div>
@@ -3724,16 +3833,18 @@ function MediaPage() {
               <button
                 type="button"
                 onClick={() => setPendingDeleteFolder(null)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                disabled={isDeletingFolder}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void handleDeleteFolder(pendingDeleteFolder.id)}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+                disabled={isDeletingFolder}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Delete folder
+                {isDeletingFolder ? 'Deleting...' : 'Delete folder'}
               </button>
             </div>
           </div>
