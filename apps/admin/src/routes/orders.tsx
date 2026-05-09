@@ -81,6 +81,9 @@ type OrderWorkflowStatus = 'open' | 'paid' | 'fulfilled' | 'cancelled' | 'refund
 type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
 type FulfillmentStatus = 'unfulfilled' | 'processing' | 'fulfilled' | 'cancelled';
 type OrderSource = 'web' | 'manual' | 'api' | 'import' | 'pos';
+type PaymentStatusFilter = PaymentStatus | 'all';
+type FulfillmentStatusFilter = FulfillmentStatus | 'all';
+type OrderSourceFilter = OrderSource | 'all';
 
 interface OrderFormState {
   orderNumber: string;
@@ -265,6 +268,9 @@ function OrdersRoute() {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [formState, setFormState] = useState<OrderFormState>(EMPTY_ORDER_FORM);
   const [filter, setFilter] = useState<OrderFilter>('all');
+  const [paymentFilter, setPaymentFilter] = useState<PaymentStatusFilter>('all');
+  const [fulfillmentFilter, setFulfillmentFilter] = useState<FulfillmentStatusFilter>('all');
+  const [sourceFilter, setSourceFilter] = useState<OrderSourceFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -299,6 +305,13 @@ function OrdersRoute() {
     () => orders.find((order) => order.id === selectedOrderId) || null,
     [orders, selectedOrderId],
   );
+  const hasActiveOrderFilters = Boolean(
+    searchQuery.trim() ||
+    filter !== 'all' ||
+    paymentFilter !== 'all' ||
+    fulfillmentFilter !== 'all' ||
+    sourceFilter !== 'all',
+  );
   const filteredOrders = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
 
@@ -307,8 +320,14 @@ function OrdersRoute() {
       const orderStatus = String(readOrderValue(values, 'orderstatus', 'open'));
       const paymentStatus = String(readOrderValue(values, 'paymentstatus', 'pending'));
       const fulfillmentStatus = String(readOrderValue(values, 'fulfillmentstatus', 'unfulfilled'));
+      const orderSource = String(readOrderValue(values, 'ordersource', 'web'));
       const matchesFilter = filter === 'all'
         || (filter === 'paid' ? paymentStatus === 'paid' : filter === 'fulfilled' ? fulfillmentStatus === 'fulfilled' : orderStatus === filter);
+      if (!matchesFilter) return false;
+      if (paymentFilter !== 'all' && paymentStatus !== paymentFilter) return false;
+      if (fulfillmentFilter !== 'all' && fulfillmentStatus !== fulfillmentFilter) return false;
+      if (sourceFilter !== 'all' && orderSource !== sourceFilter) return false;
+
       const matchesSearch = !normalizedSearch || [
         order.slug,
         readOrderValue(values, 'ordernumber', ''),
@@ -323,9 +342,9 @@ function OrdersRoute() {
         values.items,
       ].some((value) => String(value || '').toLowerCase().includes(normalizedSearch));
 
-      return matchesFilter && matchesSearch;
+      return matchesSearch;
     });
-  }, [filter, orders, searchQuery]);
+  }, [filter, fulfillmentFilter, orders, paymentFilter, searchQuery, sourceFilter]);
   const metrics = useMemo(() => ({
     orders: orders.length,
     revenue: orders
@@ -469,12 +488,22 @@ function OrdersRoute() {
       checks: orderReadiness.checks,
     },
     metrics,
+    filters: {
+      search: searchQuery,
+      workflow: filter,
+      payment: paymentFilter,
+      fulfillment: fulfillmentFilter,
+      source: sourceFilter,
+      visible: filteredOrders.length,
+      total: orders.length,
+    },
     export: {
       csvIncludesCustomerIdentity: true,
       csvIncludesPaymentReferences: true,
       csvIncludesFulfillmentData: true,
       csvIncludesPrivateNotes: true,
       csvColumns: ORDER_EXPORT_COLUMNS,
+      filteredRows: filteredOrders.length,
     },
     workflowStates: {
       order: ['open', 'paid', 'fulfilled', 'cancelled', 'refunded'],
@@ -532,6 +561,9 @@ function OrdersRoute() {
     activeSiteId,
     adminOrderDetailApiUrl,
     adminOrdersApiUrl,
+    filter,
+    filteredOrders.length,
+    fulfillmentFilter,
     metrics,
     missingOrderFields,
     orderReadiness.checks,
@@ -539,8 +571,11 @@ function OrdersRoute() {
     orders,
     ordersApiReady,
     ordersCollection,
+    paymentFilter,
     publicOrderIntakeUrl,
     publicOrdersApiUrl,
+    searchQuery,
+    sourceFilter,
   ]);
   const orderHandoffText = useMemo(() => JSON.stringify(orderHandoff, null, 2), [orderHandoff]);
 
@@ -817,6 +852,13 @@ function OrdersRoute() {
     URL.revokeObjectURL(url);
     setNotice(`${filteredOrders.length} visible order${filteredOrders.length === 1 ? '' : 's'} exported.`);
   };
+  const clearOrderFilters = () => {
+    setSearchQuery('');
+    setFilter('all');
+    setPaymentFilter('all');
+    setFulfillmentFilter('all');
+    setSourceFilter('all');
+  };
 
   return (
     <PageShell
@@ -828,7 +870,12 @@ function OrdersRoute() {
             id="orders-active-site"
             aria-label="Active Site"
             value={activeSiteId}
-            onChange={(event) => setSelectedSiteId(event.target.value)}
+            onChange={(event) => {
+              setSelectedSiteId(event.target.value);
+              setSelectedOrderId(null);
+              setFormState(EMPTY_ORDER_FORM);
+              clearOrderFilters();
+            }}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
           >
             {sites.length === 0 ? (
@@ -1105,7 +1152,12 @@ function OrdersRoute() {
           id="orders-active-site-inline"
           aria-label="Active order site"
           value={activeSiteId}
-          onChange={(event) => setSelectedSiteId(event.target.value)}
+          onChange={(event) => {
+            setSelectedSiteId(event.target.value);
+            setSelectedOrderId(null);
+            setFormState(EMPTY_ORDER_FORM);
+            clearOrderFilters();
+          }}
           className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
         >
           {sites.length === 0 ? (
@@ -1194,11 +1246,65 @@ function OrdersRoute() {
                     </button>
                   ))}
                 </div>
+                <select
+                  aria-label="Payment status filter"
+                  value={paymentFilter}
+                  onChange={(event) => setPaymentFilter(event.target.value as PaymentStatusFilter)}
+                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                >
+                  <option value="all">All payments</option>
+                  <option value="pending">Pending payment</option>
+                  <option value="paid">Paid</option>
+                  <option value="failed">Failed</option>
+                  <option value="refunded">Refunded</option>
+                </select>
+                <select
+                  aria-label="Fulfillment status filter"
+                  value={fulfillmentFilter}
+                  onChange={(event) => setFulfillmentFilter(event.target.value as FulfillmentStatusFilter)}
+                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                >
+                  <option value="all">All fulfillment</option>
+                  <option value="unfulfilled">Unfulfilled</option>
+                  <option value="processing">Processing</option>
+                  <option value="fulfilled">Fulfilled</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+                <select
+                  aria-label="Order source filter"
+                  value={sourceFilter}
+                  onChange={(event) => setSourceFilter(event.target.value as OrderSourceFilter)}
+                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                >
+                  <option value="all">All sources</option>
+                  <option value="web">Web</option>
+                  <option value="manual">Manual</option>
+                  <option value="api">API</option>
+                  <option value="import">Import</option>
+                  <option value="pos">POS</option>
+                </select>
+                {hasActiveOrderFilters && (
+                  <Button variant="outline" onClick={clearOrderFilters}>
+                    Clear filters
+                  </Button>
+                )}
               </div>
 
               {filteredOrders.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
-                  No orders match this view.
+                <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center">
+                  <div className="text-sm font-medium text-foreground">
+                    {orders.length === 0 ? 'No orders yet' : 'No orders match this view'}
+                  </div>
+                  <div className="mt-1 text-sm text-muted-foreground">
+                    {orders.length === 0
+                      ? 'Create or import the first order to begin payment and fulfillment tracking.'
+                      : 'Change the search, workflow, payment, fulfillment, or source filters to broaden the queue.'}
+                  </div>
+                  {orders.length > 0 && hasActiveOrderFilters && (
+                    <Button variant="outline" onClick={clearOrderFilters} className="mt-4">
+                      Clear filters
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <div className="grid gap-3">
