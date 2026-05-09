@@ -183,6 +183,7 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
   }
 
   const supabase = parseJsonObject(input.supabase) || {};
+  const storage = parseJsonObject(input.storage) || {};
   const vercel = parseJsonObject(input.vercel) || {};
 
   return {
@@ -193,6 +194,14 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
       databaseEnabled: boolValue(supabase.databaseEnabled),
       storageEnabled: boolValue(supabase.storageEnabled),
       authEnabled: boolValue(supabase.authEnabled),
+    },
+    storage: {
+      provider: stringValue(storage.provider),
+      bucket: stringValue(storage.bucket),
+      publicBaseUrl: stringValue(storage.publicBaseUrl),
+      pathPrefix: stringValue(storage.pathPrefix),
+      privateFilesEnabled: boolValue(storage.privateFilesEnabled),
+      imageTransformsEnabled: boolValue(storage.imageTransformsEnabled, true),
     },
     vercel: {
       projectId: stringValue(vercel.projectId),

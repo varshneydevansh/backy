@@ -674,9 +674,11 @@ function SettingsPage() {
     const savedAppearance = integrations.appearance;
     const savedSeo = integrations.seo;
     const savedNotifications = integrations.notifications;
+    const storage = integrations.storage;
     const supabase = integrations.supabase;
     const vercel = integrations.vercel;
-    const storageConfigured = runtimeStorage?.configured === true;
+    const storageConfigured = runtimeStorage?.configured === true
+      || Boolean(storage?.provider || storage?.bucket || storage?.publicBaseUrl);
     const databaseConfigured = runtimeDatabase?.configured === true;
     const supabaseConfigured = runtimeSupabase?.configured === true
       || Boolean(supabase?.databaseEnabled || supabase?.storageEnabled || supabase?.authEnabled);
@@ -770,6 +772,7 @@ function SettingsPage() {
     integrations.general,
     integrations.notifications,
     integrations.seo,
+    integrations.storage,
     integrations.supabase,
     integrations.vercel,
     publicApiKey,
@@ -785,9 +788,11 @@ function SettingsPage() {
     runtimeStorage,
     runtimeSupabase,
     runtimeVercel,
+    storage: integrations.storage,
     supabase: integrations.supabase,
     vercel: integrations.vercel,
   }), [
+    integrations.storage,
     integrations.supabase,
     integrations.vercel,
     runtimeDatabase,
@@ -814,7 +819,11 @@ function SettingsPage() {
       })),
     },
     infrastructure: {
-      storage: runtimeStorage || null,
+      storage: {
+        runtime: runtimeStorage || null,
+        metadata: integrations.storage || null,
+        note: 'Storage provider metadata lives in Backy; bucket credentials and service keys stay in deployment environment variables.',
+      },
       database: runtimeDatabase || null,
       supabase: {
         runtime: runtimeSupabase || null,
@@ -858,6 +867,7 @@ function SettingsPage() {
     authSettings,
     deliveryMode,
     generalSettings,
+    integrations.storage,
     integrations.supabase,
     integrations.vercel,
     infrastructureEnvContract,
@@ -1123,6 +1133,7 @@ function SettingsPage() {
           <InfrastructureSettings
             integrations={integrations}
             runtimeDatabase={runtimeDatabase}
+            runtimeStorage={runtimeStorage}
             runtimeSupabase={runtimeSupabase}
             runtimeVercel={runtimeVercel}
             envContract={infrastructureEnvContract}
@@ -1869,6 +1880,7 @@ type GeneralSettingsConfig = NonNullable<IntegrationSettings['general']>;
 type AppearanceSettingsConfig = NonNullable<IntegrationSettings['appearance']>;
 type SeoSettingsConfig = NonNullable<IntegrationSettings['seo']>;
 type SupabaseSettings = NonNullable<IntegrationSettings['supabase']>;
+type StorageSettings = NonNullable<IntegrationSettings['storage']>;
 type VercelSettings = NonNullable<IntegrationSettings['vercel']>;
 type NotificationSettingsConfig = NonNullable<IntegrationSettings['notifications']>;
 type InfrastructureEnvProvider = 'database' | 'storage' | 'supabase' | 'vercel';
@@ -2027,6 +2039,7 @@ const buildInfrastructureEnvContract = ({
   runtimeStorage,
   runtimeSupabase,
   runtimeVercel,
+  storage,
   supabase,
   vercel,
 }: {
@@ -2034,6 +2047,7 @@ const buildInfrastructureEnvContract = ({
   runtimeStorage?: SiteSettingsInput['runtimeStorage'];
   runtimeSupabase?: SiteSettingsInput['runtimeSupabase'];
   runtimeVercel?: SiteSettingsInput['runtimeVercel'];
+  storage?: StorageSettings;
   supabase?: SupabaseSettings;
   vercel?: VercelSettings;
 }): InfrastructureEnvContract[] => [
@@ -2055,10 +2069,21 @@ const buildInfrastructureEnvContract = ({
     aliases: ['BACKY_MEDIA_STORAGE_PROVIDER'],
     label: 'Media storage provider',
     description: 'Selects local, s3, or supabase storage for uploads, files, fonts, and public assets.',
-    configured: Boolean(runtimeStorage?.configured),
+    configured: configuredValue(runtimeStorage?.provider, storage?.provider),
     required: true,
-    valueHint: runtimeStorage?.provider,
+    valueHint: runtimeStorage?.provider || storage?.provider,
     example: 'supabase',
+  },
+  {
+    provider: 'storage',
+    key: 'BACKY_STORAGE_PUBLIC_BASE_URL',
+    aliases: ['BACKY_MEDIA_PUBLIC_BASE_URL'],
+    label: 'Public file base URL',
+    description: 'Canonical public URL prefix used for hosted images, fonts, documents, and downloadable files.',
+    configured: configuredValue(runtimeStorage?.publicUrl, storage?.publicBaseUrl),
+    required: Boolean(storage?.provider && storage.provider !== 'local'),
+    valueHint: runtimeStorage?.publicUrl || storage?.publicBaseUrl,
+    example: 'https://project-ref.supabase.co/storage/v1/object/public/media',
   },
   {
     provider: 'supabase',
@@ -2099,9 +2124,9 @@ const buildInfrastructureEnvContract = ({
     aliases: ['BACKY_STORAGE_BUCKET'],
     label: 'Supabase storage bucket',
     description: 'Bucket used by media uploads when Supabase storage is selected.',
-    configured: configuredValue(runtimeSupabase?.storageBucket, runtimeStorage?.provider === 'supabase' && runtimeStorage.bucket),
-    required: Boolean(supabase?.storageEnabled || runtimeStorage?.provider === 'supabase'),
-    valueHint: runtimeSupabase?.storageBucket || (runtimeStorage?.provider === 'supabase' ? runtimeStorage.bucket : undefined),
+    configured: configuredValue(runtimeSupabase?.storageBucket, runtimeStorage?.provider === 'supabase' && runtimeStorage.bucket, storage?.provider === 'supabase' && storage.bucket),
+    required: Boolean(supabase?.storageEnabled || runtimeStorage?.provider === 'supabase' || storage?.provider === 'supabase'),
+    valueHint: runtimeSupabase?.storageBucket || (runtimeStorage?.provider === 'supabase' ? runtimeStorage.bucket : undefined) || (storage?.provider === 'supabase' ? storage.bucket : undefined),
     example: 'media',
   },
   {
@@ -2312,6 +2337,7 @@ function InfrastructureEnvContractPanel({
 function InfrastructureSettings({
   integrations,
   runtimeDatabase,
+  runtimeStorage,
   runtimeSupabase,
   runtimeVercel,
   envContract,
@@ -2319,14 +2345,26 @@ function InfrastructureSettings({
 }: {
   integrations: IntegrationSettings;
   runtimeDatabase?: SiteSettingsInput['runtimeDatabase'];
+  runtimeStorage?: SiteSettingsInput['runtimeStorage'];
   runtimeSupabase?: SiteSettingsInput['runtimeSupabase'];
   runtimeVercel?: SiteSettingsInput['runtimeVercel'];
   envContract: InfrastructureEnvContract[];
   onChange: (next: IntegrationSettings) => void;
 }) {
+  const storage: StorageSettings = integrations.storage || {};
   const supabase: SupabaseSettings = integrations.supabase || {};
   const vercel: VercelSettings = integrations.vercel || {};
   const [copiedEnvProfile, setCopiedEnvProfile] = useState('');
+
+  const updateStorage = (next: Partial<StorageSettings>) => {
+    onChange({
+      ...integrations,
+      storage: {
+        ...storage,
+        ...next,
+      },
+    });
+  };
 
   const updateSupabase = (next: Partial<SupabaseSettings>) => {
     onChange({
@@ -2345,6 +2383,16 @@ function InfrastructureSettings({
         ...vercel,
         ...next,
       },
+    });
+  };
+
+  const useRuntimeStorage = () => {
+    updateStorage({
+      provider: runtimeStorage?.provider || storage.provider || 'local',
+      bucket: runtimeStorage?.bucket || storage.bucket || '',
+      publicBaseUrl: runtimeStorage?.publicUrl || storage.publicBaseUrl || '',
+      pathPrefix: runtimeStorage?.basePath || storage.pathPrefix || '',
+      imageTransformsEnabled: storage.imageTransformsEnabled !== false,
     });
   };
 
@@ -2446,6 +2494,113 @@ function InfrastructureSettings({
           ]}
         />
       </div>
+
+      <Panel>
+        <PanelHeader
+          title="Media storage"
+          description="Store the non-secret file-delivery intent that Media, page editors, product downloads, and custom frontends should follow."
+          icon={<Database className="size-4" />}
+          action={
+            <Button size="sm" onClick={useRuntimeStorage}>
+              Use detected storage
+            </Button>
+          }
+        />
+        <PanelContent>
+          <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.2fr)]">
+            <div className="rounded-lg border border-border bg-muted/30 p-3">
+              <div className="text-sm font-semibold text-foreground">Storage behavior</div>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Backy keeps file metadata, folders, visibility, bindings, and transform contracts in-house. The provider below tells deployments where bytes should live.
+              </p>
+              <dl className="mt-3 grid gap-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <dt className="text-muted-foreground">Runtime provider</dt>
+                  <dd className="font-mono">{runtimeStorage?.provider || 'not detected'}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <dt className="text-muted-foreground">Runtime bucket</dt>
+                  <dd className="max-w-[55%] truncate font-mono">{runtimeStorage?.bucket || 'not set'}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <dt className="text-muted-foreground">Configured</dt>
+                  <dd className={runtimeStorage?.configured ? 'text-success' : 'text-warning'}>
+                    {runtimeStorage?.configured ? 'yes' : 'needs env'}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Provider</span>
+                <select
+                  value={storage.provider || ''}
+                  onChange={(event) => updateStorage({ provider: event.target.value })}
+                  className={inputClassName}
+                >
+                  <option value="">Choose provider</option>
+                  <option value="local">Local development</option>
+                  <option value="supabase">Supabase Storage</option>
+                  <option value="s3">S3 compatible</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Bucket</span>
+                <input
+                  value={storage.bucket || ''}
+                  onChange={(event) => updateStorage({ bucket: event.target.value })}
+                  placeholder="media"
+                  className={inputClassName}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm md:col-span-2">
+                <span className="font-medium">Public base URL</span>
+                <input
+                  value={storage.publicBaseUrl || ''}
+                  onChange={(event) => updateStorage({ publicBaseUrl: event.target.value })}
+                  placeholder="https://project-ref.supabase.co/storage/v1/object/public/media"
+                  className={inputClassName}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Path prefix</span>
+                <input
+                  value={storage.pathPrefix || ''}
+                  onChange={(event) => updateStorage({ pathPrefix: event.target.value })}
+                  placeholder="sites/{siteId}"
+                  className={inputClassName}
+                />
+              </label>
+              <div className="grid gap-2">
+                <label className="flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(storage.privateFilesEnabled)}
+                    onChange={(event) => updateStorage({ privateFilesEnabled: event.target.checked })}
+                    className="size-4 rounded border-input"
+                  />
+                  Private files
+                </label>
+                <label className="flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={storage.imageTransformsEnabled !== false}
+                    onChange={(event) => updateStorage({ imageTransformsEnabled: event.target.checked })}
+                    className="size-4 rounded border-input"
+                  />
+                  Image transforms
+                </label>
+              </div>
+            </div>
+          </div>
+          {runtimeStorage?.missing && runtimeStorage.missing.length > 0 && (
+            <Notice tone="warning" className="mt-4">
+              Missing storage env: {runtimeStorage.missing.join(', ')}
+            </Notice>
+          )}
+        </PanelContent>
+      </Panel>
 
       {runtimeDatabase?.error && (
         <Notice tone="warning" title="Database runtime issue">

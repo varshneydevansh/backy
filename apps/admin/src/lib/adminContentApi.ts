@@ -915,6 +915,14 @@ export interface SiteSettingsInput {
       storageEnabled?: boolean;
       authEnabled?: boolean;
     };
+    storage?: {
+      provider?: string;
+      bucket?: string;
+      publicBaseUrl?: string;
+      pathPrefix?: string;
+      privateFilesEnabled?: boolean;
+      imageTransformsEnabled?: boolean;
+    };
     vercel?: {
       projectId?: string;
       teamSlug?: string;
