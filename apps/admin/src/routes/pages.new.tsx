@@ -143,6 +143,122 @@ const slugify = (value: string) => (
     value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 );
 
+const PAGE_CHROME_HEADER_HEIGHT = 88;
+const PAGE_CHROME_FOOTER_HEIGHT = 168;
+
+const templateNavigationItems: Record<PageTemplate, string[]> = {
+    blank: ['Home', 'About', 'Contact'],
+    landing: ['Home', 'Features', 'Contact'],
+    storefront: ['Home', 'Shop', 'About', 'Contact'],
+    'blog-index': ['Home', 'Blog', 'About', 'Contact'],
+    about: ['Home', 'About', 'Contact'],
+    contact: ['Home', 'About', 'Contact'],
+    registration: ['Home', 'Register', 'Contact'],
+};
+
+const cloneCanvasElement = (element: CanvasElement): CanvasElement => ({
+    ...element,
+    props: { ...element.props },
+    dataBindings: element.dataBindings ? element.dataBindings.map((binding) => ({ ...binding })) : undefined,
+    children: element.children?.map(cloneCanvasElement),
+});
+
+const shiftCanvasElement = (element: CanvasElement, offsetY: number): CanvasElement => ({
+    ...cloneCanvasElement(element),
+    y: element.y + offsetY,
+});
+
+const getTemplateBottom = (elements: CanvasElement[]) => (
+    elements.reduce((bottom, element) => Math.max(bottom, element.y + element.height), 0)
+);
+
+function withPageChrome(elements: CanvasElement[], input: { title: string; template: PageTemplate }): CanvasElement[] {
+    const shiftedElements = elements.map((element) => shiftCanvasElement(element, PAGE_CHROME_HEADER_HEIGHT));
+    const footerY = Math.max(getTemplateBottom(shiftedElements) + 56, DEFAULT_CANVAS_SIZE.height - PAGE_CHROME_FOOTER_HEIGHT);
+    const navItems = templateNavigationItems[input.template];
+    const brandLabel = input.title || 'Backy site';
+
+    return [
+        createCanvasElement('header', 0, 0, {
+            id: `${input.template}-site-header`,
+            width: DEFAULT_CANVAS_SIZE.width,
+            height: PAGE_CHROME_HEADER_HEIGHT,
+            props: {
+                backgroundColor: '#ffffff',
+                borderColor: '#e5e7eb',
+                borderWidth: 1,
+                borderStyle: 'solid',
+                padding: 0,
+            },
+            children: [
+                createCanvasElement('text', 72, 30, {
+                    id: `${input.template}-site-brand`,
+                    width: 210,
+                    height: 30,
+                    props: { content: brandLabel, fontSize: 18, fontWeight: '800', color: '#111827' },
+                }),
+                createCanvasElement('nav', 430, 18, {
+                    id: `${input.template}-site-navigation`,
+                    width: 430,
+                    height: 52,
+                    props: {
+                        navItems,
+                        backgroundColor: 'transparent',
+                        color: '#111827',
+                        padding: 0,
+                    },
+                }),
+                createCanvasElement('button', 982, 20, {
+                    id: `${input.template}-site-header-action`,
+                    width: 146,
+                    height: 48,
+                    props: { label: input.template === 'storefront' ? 'Shop now' : 'Contact', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontWeight: '700' },
+                }),
+            ],
+        }),
+        ...shiftedElements,
+        createCanvasElement('footer', 0, footerY, {
+            id: `${input.template}-site-footer`,
+            width: DEFAULT_CANVAS_SIZE.width,
+            height: PAGE_CHROME_FOOTER_HEIGHT,
+            props: {
+                backgroundColor: '#111827',
+                color: '#ffffff',
+                padding: 0,
+            },
+            children: [
+                createCanvasElement('heading', 72, 40, {
+                    id: `${input.template}-footer-heading`,
+                    width: 360,
+                    height: 38,
+                    props: { content: brandLabel, level: 'h3', fontSize: 24, fontWeight: '800', color: '#ffffff' },
+                }),
+                createCanvasElement('paragraph', 72, 90, {
+                    id: `${input.template}-footer-copy`,
+                    width: 460,
+                    height: 46,
+                    props: { content: 'Edit this footer, save it as a reusable section, or bind links from site navigation.', fontSize: 14, lineHeight: 1.5, color: '#cbd5e1' },
+                }),
+                createCanvasElement('nav', 700, 48, {
+                    id: `${input.template}-footer-navigation`,
+                    width: 330,
+                    height: 56,
+                    props: {
+                        navItems,
+                        backgroundColor: 'transparent',
+                        color: '#ffffff',
+                        padding: 0,
+                    },
+                }),
+            ],
+        }),
+    ];
+}
+
+const getCanvasHeightForElements = (elements: CanvasElement[]) => (
+    Math.max(DEFAULT_CANVAS_SIZE.height, getTemplateBottom(elements) + 48)
+);
+
 const isPageTemplate = (value: unknown): value is PageTemplate => (
     typeof value === 'string' && TEMPLATE_OPTIONS.some((template) => template.id === value)
 );
@@ -197,6 +313,7 @@ function NewPageRoute() {
         const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
         const hasSchedule = formData.status !== 'scheduled' || Boolean(formData.scheduledAt);
         const hasStarterCanvas = selectedTemplate.sections.length > 0;
+        const seedsSiteChrome = formData.template !== 'blank';
         const checks = [
             {
                 label: 'Target site',
@@ -223,7 +340,7 @@ function NewPageRoute() {
             {
                 label: 'Canvas seed',
                 detail: hasStarterCanvas
-                    ? `${selectedTemplate.sections.length} starter section${selectedTemplate.sections.length === 1 ? '' : 's'} will be created`
+                    ? `${selectedTemplate.sections.length} starter section${selectedTemplate.sections.length === 1 ? '' : 's'}${seedsSiteChrome ? ' plus editable header, navigation, and footer' : ''} will be created`
                     : 'Blank still creates a heading and intro copy.',
                 ready: true,
             },
@@ -242,7 +359,7 @@ function NewPageRoute() {
             checks,
             workflow: [
                 { label: 'Define route', detail: 'Pick the site, title, slug, homepage flag, status, and SEO summary.' },
-                { label: 'Seed canvas', detail: 'Choose a starter template with editable sections and form blocks when needed.' },
+                { label: 'Seed canvas', detail: 'Choose a starter template with editable sections, page chrome, and form blocks when needed.' },
                 { label: 'Create record', detail: 'Persist page metadata and serialized editor content through the pages API.' },
                 { label: 'Open editor', detail: 'Land in the visual editor to move, group, restyle, bind, and publish.' },
             ],
@@ -254,6 +371,7 @@ function NewPageRoute() {
         formData.siteId,
         formData.slug,
         formData.status,
+        formData.template,
         formData.title,
         selectedSite,
         selectedTemplate.sections.length,
@@ -267,7 +385,8 @@ function NewPageRoute() {
         template: formData.template,
         description: formData.description,
         isHomepage: formData.isHomepage,
-        content: `${selectedTemplate.sections.length} starter block${selectedTemplate.sections.length === 1 ? '' : 's'}`,
+        content: `${selectedTemplate.sections.length + (formData.template === 'blank' ? 0 : 2)} starter block${selectedTemplate.sections.length === 1 ? '' : 's'}`,
+        siteChrome: formData.template === 'blank' ? 'available from component library' : 'editable header, navigation, and footer seeded',
         forms: ['contact', 'registration'].includes(formData.template) ? 'Backy form API seeded' : 'none',
         dynamicData: formData.template === 'storefront'
             ? 'Backy products catalog placeholders'
@@ -314,8 +433,14 @@ function NewPageRoute() {
         },
         canvas: {
             width: DEFAULT_CANVAS_SIZE.width,
-            height: DEFAULT_CANVAS_SIZE.height,
+            height: getCanvasHeightForElements(buildTemplateElements({
+                template: formData.template,
+                title: formData.title.trim() || 'Untitled page',
+                slug: resolvedSlug,
+                description: formData.description,
+            })),
             seededBlocks: selectedTemplate.sections.length,
+            siteChrome: formData.template === 'blank' ? 'component library' : ['header', 'navigation', 'footer'],
         },
         payloadPreview: createPayloadPreview,
         nextStep: 'Created pages open directly in the visual editor for layout, grouping, media, binding, SEO, and publishing work.',
@@ -324,14 +449,17 @@ function NewPageRoute() {
             'Scheduled pages require a publish date before they can be created.',
             'Contact and registration templates seed editable form blocks that connect to Backy Forms and Contacts.',
             'Storefront and blog index templates seed dynamic data placeholders for products and posts.',
+            'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'The canvas seed is serialized before persistence so the editor never starts from a blank record unless the user intentionally keeps the starter sparse.',
         ],
     }), [
         adminPagesUrl,
         createPayloadPreview,
+        formData.description,
         formData.isHomepage,
         formData.siteId,
         formData.template,
+        formData.title,
         pageCreationReadiness.checks,
         pageCreationReadiness.score,
         resolvedSlug,
@@ -912,7 +1040,10 @@ function createInitialPageContent(input: {
     description: string;
 }) {
     const elements = buildTemplateElements(input);
-    return JSON.parse(serializeCanvasContent(elements, DEFAULT_CANVAS_SIZE, undefined, {
+    return JSON.parse(serializeCanvasContent(elements, {
+        ...DEFAULT_CANVAS_SIZE,
+        height: getCanvasHeightForElements(elements),
+    }, undefined, {
         documentId: `page_${input.slug || 'new-page'}`,
         kind: 'page',
         title: input.title,
@@ -931,9 +1062,10 @@ function buildTemplateElements(input: {
     const title = input.title || 'New page';
     const description = input.description || 'Use this space to explain the promise of this page and guide visitors to the next action.';
     const formSlug = slugify(input.slug || title || 'new-page');
+    const withChrome = (elements: CanvasElement[]) => withPageChrome(elements, { title, template: input.template });
 
     if (input.template === 'landing') {
-        return [
+        return withChrome([
             createCanvasElement('section', 0, 0, {
                 id: 'landing-hero-section',
                 width: 1200,
@@ -992,11 +1124,11 @@ function buildTemplateElements(input: {
                     ],
                 })),
             }),
-        ];
+        ]);
     }
 
     if (input.template === 'storefront') {
-        return [
+        return withChrome([
             createCanvasElement('section', 0, 0, {
                 id: 'storefront-hero-section',
                 width: 1200,
@@ -1093,11 +1225,11 @@ function buildTemplateElements(input: {
                     })),
                 ],
             }),
-        ];
+        ]);
     }
 
     if (input.template === 'blog-index') {
-        return [
+        return withChrome([
             createCanvasElement('section', 0, 0, {
                 id: 'blog-index-hero-section',
                 width: 1200,
@@ -1188,11 +1320,11 @@ function buildTemplateElements(input: {
                     })),
                 ],
             }),
-        ];
+        ]);
     }
 
     if (input.template === 'about') {
-        return [
+        return withChrome([
             createCanvasElement('heading', 80, 72, {
                 id: 'about-heading',
                 width: 640,
@@ -1231,11 +1363,11 @@ function buildTemplateElements(input: {
                     ],
                 })),
             }),
-        ];
+        ]);
     }
 
     if (input.template === 'contact') {
-        return [
+        return withChrome([
             createCanvasElement('heading', 72, 72, {
                 id: 'contact-heading',
                 width: 520,
@@ -1276,11 +1408,11 @@ function buildTemplateElements(input: {
                     createCanvasElement('button', 24, 326, { id: 'contact-submit', width: 170, height: 48, props: { label: 'Send message', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontWeight: '700' } }),
                 ],
             }),
-        ];
+        ]);
     }
 
     if (input.template === 'registration') {
-        return [
+        return withChrome([
             createCanvasElement('section', 0, 0, {
                 id: 'registration-hero-section',
                 width: 1200,
@@ -1353,7 +1485,7 @@ function buildTemplateElements(input: {
                     }),
                 ],
             }),
-        ];
+        ]);
     }
 
     return [
