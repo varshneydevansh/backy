@@ -334,6 +334,8 @@ function SitesListView() {
   const [statusFilter, setStatusFilter] = useState<SiteStatusFilter>('all');
   const [updatingSiteId, setUpdatingSiteId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Site | null>(null);
+  const isSiteMutationBusy = updatingSiteId !== null;
+  const isSitesBusy = isLoading || isSiteMutationBusy;
   const publicApiBase = useMemo(() => getApiBaseUrl('public'), []);
   const adminApiBase = useMemo(() => getApiBaseUrl('admin'), []);
 
@@ -448,6 +450,8 @@ function SitesListView() {
   }, [selectedApiSite, sites]);
 
   const handleStatusChange = async (site: Site, status: Site['status']) => {
+    if (isSitesBusy) return;
+
     setUpdatingSiteId(site.id);
     setNotice(null);
 
@@ -463,7 +467,7 @@ function SitesListView() {
   };
 
   const handleDeleteSite = async () => {
-    if (!pendingDelete) return;
+    if (!pendingDelete || isSiteMutationBusy) return;
 
     setUpdatingSiteId(pendingDelete.id);
     setNotice(null);
@@ -480,6 +484,8 @@ function SitesListView() {
   };
 
   const copySiteApiText = async (value: string, label: string) => {
+    if (isSitesBusy) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setNotice(`${label} copied.`);
@@ -489,6 +495,8 @@ function SitesListView() {
   };
 
   const copySelectedFrontendContract = async () => {
+    if (isSitesBusy) return;
+
     if (!selectedFrontendContract) {
       setNotice('Create a site before copying a frontend contract.');
       return;
@@ -505,8 +513,13 @@ function SitesListView() {
       render: (site) => (
         <button
           type="button"
-          onClick={() => navigate({ to: '/sites/$siteId', params: { siteId: site.id } })}
-          className="group flex min-w-[260px] items-center gap-3 text-left"
+          onClick={() => {
+            if (!isSitesBusy) {
+              void navigate({ to: '/sites/$siteId', params: { siteId: site.id } });
+            }
+          }}
+          disabled={isSitesBusy}
+          className="group flex min-w-[260px] items-center gap-3 text-left disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
             <Globe className="h-5 w-5" />
@@ -527,7 +540,7 @@ function SitesListView() {
           <StatusBadge status={site.status} />
           <select
             value={site.status}
-            disabled={updatingSiteId === site.id}
+            disabled={isSitesBusy}
             onChange={(event) => void handleStatusChange(site, event.target.value as Site['status'])}
             className="block w-36 rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none transition focus:ring-2 focus:ring-ring disabled:opacity-50"
             aria-label={`Change status for ${site.name}`}
@@ -560,7 +573,16 @@ function SitesListView() {
             href={getPublicPreviewHref(site)}
             target="_blank"
             rel="noreferrer"
-            className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            aria-disabled={isSitesBusy}
+            onClick={(event) => {
+              if (isSitesBusy) {
+                event.preventDefault();
+              }
+            }}
+            className={cn(
+              'rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring',
+              isSitesBusy && 'pointer-events-none cursor-not-allowed opacity-50',
+            )}
             aria-label={`Preview ${site.name}`}
             title="Preview site"
           >
@@ -568,8 +590,13 @@ function SitesListView() {
           </a>
           <button
             type="button"
-            onClick={() => navigate({ to: '/sites/$siteId', params: { siteId: site.id } })}
-            className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            onClick={() => {
+              if (!isSitesBusy) {
+                void navigate({ to: '/sites/$siteId', params: { siteId: site.id } });
+              }
+            }}
+            disabled={isSitesBusy}
+            className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={`Manage ${site.name}`}
             title="Manage site"
           >
@@ -577,9 +604,13 @@ function SitesListView() {
           </button>
           <button
             type="button"
-            onClick={() => setPendingDelete(site)}
-            disabled={updatingSiteId === site.id}
-            className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-200 disabled:opacity-50"
+            onClick={() => {
+              if (!isSitesBusy) {
+                setPendingDelete(site);
+              }
+            }}
+            disabled={isSitesBusy}
+            className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-200 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={`Delete ${site.name}`}
             title="Delete site"
           >
@@ -610,7 +641,7 @@ function SitesListView() {
   const hasActiveFilters = Boolean(searchQuery) || statusFilter !== 'all';
 
   const handleExportSites = () => {
-    if (data.length === 0) return;
+    if (data.length === 0 || isSitesBusy) return;
 
     const rows = data.map((site) => {
       const contract = buildSiteFrontendContract(site, publicApiBase, adminApiBase);
@@ -651,6 +682,14 @@ function SitesListView() {
     URL.revokeObjectURL(url);
   };
 
+  const clearSiteFilters = () => {
+    if (isSitesBusy) return;
+
+    setSearchQuery('');
+    setStatusFilter('all');
+    setCurrentPage(1);
+  };
+
   return (
     <PageShell
       title="Sites"
@@ -658,7 +697,11 @@ function SitesListView() {
       action={
         <Link
           to="/sites/new"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
+          aria-disabled={isSitesBusy}
+          className={cn(
+            'inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring',
+            isSitesBusy && 'pointer-events-none opacity-60',
+          )}
         >
           <Plus className="h-4 w-4" />
           New site
@@ -687,7 +730,7 @@ function SitesListView() {
             <button
               type="button"
               onClick={() => void loadSites()}
-              disabled={isLoading}
+              disabled={isSitesBusy}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />
@@ -695,7 +738,11 @@ function SitesListView() {
             </button>
             <Link
               to="/sites/new"
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+              aria-disabled={isSitesBusy}
+              className={cn(
+                'inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90',
+                isSitesBusy && 'pointer-events-none opacity-60',
+              )}
             >
               <Plus className="size-4" />
               New site
@@ -780,7 +827,7 @@ function SitesListView() {
               <Button
                 type="button"
                 variant="outline"
-                disabled={data.length === 0}
+                disabled={data.length === 0 || isSitesBusy}
                 onClick={handleExportSites}
                 iconStart={<Download className="size-4" />}
               >
@@ -789,6 +836,7 @@ function SitesListView() {
               <Button
                 type="button"
                 variant="outline"
+                disabled={isSitesBusy}
                 onClick={() => void copySiteApiText(publicManifestUrl, 'Site manifest URL')}
                 iconStart={<Copy className="size-4" />}
               >
@@ -797,7 +845,7 @@ function SitesListView() {
               <Button
                 type="button"
                 variant="outline"
-                disabled={!selectedFrontendContract}
+                disabled={!selectedFrontendContract || isSitesBusy}
                 onClick={() => void copySelectedFrontendContract()}
                 iconStart={<Code2 className="size-4" />}
               >
@@ -914,7 +962,7 @@ function SitesListView() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={!selectedFrontendContract}
+                  disabled={!selectedFrontendContract || isSitesBusy}
                   onClick={() => void copySelectedFrontendContract()}
                   iconStart={<Copy className="size-3.5" />}
                 >
@@ -974,12 +1022,15 @@ function SitesListView() {
               type="search"
               placeholder="Search sites, slugs, domains, or status..."
               value={searchQuery}
+              disabled={isSitesBusy}
               onChange={(event) => {
+                if (isSitesBusy) return;
+
                 setSearchQuery(event.target.value);
                 setCurrentPage(1);
               }}
               aria-label="Search sites"
-              className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+              className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
 
@@ -988,11 +1039,14 @@ function SitesListView() {
               <Filter className="h-4 w-4" />
               <select
                 value={statusFilter}
+                disabled={isSitesBusy}
                 onChange={(event) => {
+                  if (isSitesBusy) return;
+
                   setStatusFilter(event.target.value as SiteStatusFilter);
                   setCurrentPage(1);
                 }}
-                className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring"
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label="Filter sites by status"
               >
                 <option value="all">All statuses</option>
@@ -1005,7 +1059,7 @@ function SitesListView() {
             <button
               type="button"
               onClick={() => void loadSites()}
-              disabled={isLoading}
+              disabled={isSitesBusy}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
               aria-label="Refresh sites"
             >
@@ -1028,11 +1082,19 @@ function SitesListView() {
           data={data}
           loading={isLoading}
           sortConfig={sortConfig}
-          onSort={handleSort}
+          onSort={(key) => {
+            if (!isSitesBusy) {
+              handleSort(key);
+            }
+          }}
           currentPage={currentPage}
           totalPages={totalPages}
           pageSize={10}
-          onPageChange={setCurrentPage}
+          onPageChange={(page) => {
+            if (!isSitesBusy) {
+              setCurrentPage(page);
+            }
+          }}
           totalItems={totalItems}
           emptyState={
             <EmptyState
@@ -1043,19 +1105,20 @@ function SitesListView() {
                 hasActiveFilters ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      setSearchQuery('');
-                      setStatusFilter('all');
-                      setCurrentPage(1);
-                    }}
-                    className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+                    onClick={clearSiteFilters}
+                    disabled={isSitesBusy}
+                    className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Clear filters
                   </button>
                 ) : (
                   <Link
                     to="/sites/new"
-                    className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+                    aria-disabled={isSitesBusy}
+                    className={cn(
+                      'mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90',
+                      isSitesBusy && 'pointer-events-none opacity-60',
+                    )}
                   >
                     <Plus className="h-4 w-4" />
                     Create site
@@ -1087,18 +1150,23 @@ function SitesListView() {
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setPendingDelete(null)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+                onClick={() => {
+                  if (!isSiteMutationBusy) {
+                    setPendingDelete(null);
+                  }
+                }}
+                disabled={isSiteMutationBusy}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void handleDeleteSite()}
-                disabled={updatingSiteId === pendingDelete.id}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+                disabled={isSiteMutationBusy}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Delete site
+                {isSiteMutationBusy ? 'Deleting...' : 'Delete site'}
               </button>
             </div>
           </div>
