@@ -82,6 +82,40 @@ const TEMPLATE_OPTIONS: Array<{
     },
 ];
 
+const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; description: string }> = {
+    blank: { title: '', slug: '', description: '' },
+    landing: {
+        title: 'Landing page',
+        slug: 'landing',
+        description: 'A focused landing page with an editable hero, feature grid, and call to action.',
+    },
+    storefront: {
+        title: 'Storefront',
+        slug: 'store',
+        description: 'A public storefront page ready to connect products, catalog sections, and checkout actions.',
+    },
+    'blog-index': {
+        title: 'Blog',
+        slug: 'blog',
+        description: 'A public blog index with featured posts and editable editorial sections.',
+    },
+    about: {
+        title: 'About',
+        slug: 'about',
+        description: 'A public about page for story, values, team, and trust-building content.',
+    },
+    contact: {
+        title: 'Contact',
+        slug: 'contact',
+        description: 'A public contact page with editable copy and a Backy form connected to submissions.',
+    },
+    registration: {
+        title: 'Member registration',
+        slug: 'register',
+        description: 'A public registration page with member fields, consent, and Backy form submission routing.',
+    },
+};
+
 const PAGE_CREATION_AREAS = [
     {
         title: 'Page basics',
@@ -132,17 +166,18 @@ function NewPageRoute() {
     const requestedSiteId = search.siteId && sites.some((site) => (site.publicSiteId || site.id) === search.siteId)
         ? search.siteId
         : defaultSiteId;
+    const templateDefaults = search.template ? TEMPLATE_DEFAULTS[search.template] : TEMPLATE_DEFAULTS.blank;
 
     // Default to first site if available
     const [formData, setFormData] = useState({
-        title: '',
-        slug: '',
+        title: templateDefaults.title,
+        slug: templateDefaults.slug,
         siteId: requestedSiteId,
         template: search.template || 'blank' as PageTemplate,
         status: 'draft' as 'draft' | 'published' | 'scheduled',
         scheduledAt: null as string | null,
         isHomepage: false,
-        description: '',
+        description: templateDefaults.description,
     });
     const selectedSite = sites.find((site) => (site.publicSiteId || site.id) === formData.siteId);
     const selectedTemplate = useMemo(
