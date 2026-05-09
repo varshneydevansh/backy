@@ -30,6 +30,8 @@ import {
   Cloud,
   Rocket,
   CheckCircle2,
+  Copy,
+  Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
@@ -555,6 +557,100 @@ function SettingsPage() {
     runtimeSupabase,
     runtimeVercel,
   ]);
+  const publicApiBase = useMemo(() => getApiBase('public'), []);
+  const adminApiBase = useMemo(() => getApiBase('admin'), []);
+  const settingsHandoff = useMemo(() => ({
+    generatedAt: new Date().toISOString(),
+    delivery: {
+      mode: deliveryMode,
+      publicApiBase,
+      adminApiBase,
+      publicSiteBase: publicApiBase.replace(/\/api$/, '/sites'),
+    },
+    endpoints: {
+      public: PUBLIC_API_ENDPOINTS.map((endpoint) => ({
+        ...endpoint,
+        url: buildCopyText(publicApiBase, endpoint.path),
+      })),
+      admin: ADMIN_API_ENDPOINTS.map((endpoint) => ({
+        ...endpoint,
+        url: buildCopyText(adminApiBase, endpoint.path),
+      })),
+    },
+    infrastructure: {
+      storage: runtimeStorage || null,
+      database: runtimeDatabase || null,
+      supabase: {
+        runtime: runtimeSupabase || null,
+        metadata: integrations.supabase || null,
+        note: 'Secrets and database URLs stay in deployment environment variables; Backy stores non-secret project metadata only.',
+      },
+      vercel: {
+        runtime: runtimeVercel || null,
+        metadata: integrations.vercel || null,
+        note: 'Project ownership, domains, and preview-deploy preferences are tracked here; deploy tokens remain environment-managed.',
+      },
+    },
+    frontendDefaults: {
+      general: generalSettings,
+      appearance: appearanceSettings,
+      seo: seoSettings,
+      notifications: notificationSettings,
+    },
+    security: {
+      hasPublicApiKey: Boolean(publicApiKey),
+      hasAdminApiKey: Boolean(adminApiKey),
+      auth: authSettings || null,
+    },
+    readiness: platformReadiness,
+    guardrails: [
+      'Backy owns CMS data, editor content, API keys, forms, media metadata, and admin workflows.',
+      'Supabase and Vercel are external providers connected through runtime env and non-secret metadata.',
+      'Custom frontends should use public endpoints and design defaults; admin endpoints must remain private.',
+      'Infrastructure runtime cards show detected capability, while form fields store operator-controlled metadata.',
+    ],
+  }), [
+    adminApiBase,
+    adminApiKey,
+    appearanceSettings,
+    authSettings,
+    deliveryMode,
+    generalSettings,
+    integrations.supabase,
+    integrations.vercel,
+    notificationSettings,
+    platformReadiness,
+    publicApiBase,
+    publicApiKey,
+    runtimeDatabase,
+    runtimeStorage,
+    runtimeSupabase,
+    runtimeVercel,
+    seoSettings,
+  ]);
+  const settingsHandoffText = useMemo(() => JSON.stringify(settingsHandoff, null, 2), [settingsHandoff]);
+
+  const copySettingsHandoffText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setNotice(`${label} copied.`);
+    } catch {
+      setNotice(value);
+    }
+  };
+
+  const downloadSettingsHandoff = () => {
+    const blob = new Blob([settingsHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'backy-settings-handoff.json';
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice('Settings handoff manifest downloaded.');
+  };
 
   const updateNotificationSettings = (next: NotificationSettingsConfig) => {
     setIntegrations({
@@ -598,14 +694,30 @@ function SettingsPage() {
           </p>
         </div>
 
-        <Button
-          variant="primary"
-          onClick={() => void handleSave()}
-          disabled={isSaving}
-          iconStart={saved ? <Check className="size-4" /> : <Save className="size-4" />}
-        >
-          {saved ? 'Saved' : isSaving ? 'Saving...' : 'Save Changes'}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => void copySettingsHandoffText(settingsHandoffText, 'Settings handoff manifest')}
+            iconStart={<Copy className="size-4" />}
+          >
+            Copy handoff
+          </Button>
+          <Button
+            variant="outline"
+            onClick={downloadSettingsHandoff}
+            iconStart={<Download className="size-4" />}
+          >
+            Download JSON
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => void handleSave()}
+            disabled={isSaving}
+            iconStart={saved ? <Check className="size-4" /> : <Save className="size-4" />}
+          >
+            {saved ? 'Saved' : isSaving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
       </div>
 
       {notice && (
