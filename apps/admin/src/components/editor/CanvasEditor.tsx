@@ -20,6 +20,8 @@ import {
   AlignVerticalJustifyEnd,
   AlignVerticalJustifyStart,
   ArrowLeft,
+  ClipboardPaste,
+  Copy,
   Save,
   Eye,
   Group,
@@ -2032,23 +2034,21 @@ export function CanvasEditor({
               type="button"
               onClick={handleUndo}
               disabled={historyIndex <= 0}
-              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Undo (Ctrl+Z)"
+              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Undo (Cmd/Ctrl+Z)"
               aria-label="Undo"
             >
-              <Undo className="w-4 h-4 inline-block mr-1" />
-              Undo
+              <Undo className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={handleRedo}
               disabled={historyIndex >= history.length - 1}
-              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Redo (Ctrl+Shift+Z)"
+              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Redo (Cmd/Ctrl+Shift+Z)"
               aria-label="Redo"
             >
-              <Redo className="w-4 h-4 inline-block mr-1" />
-              Redo
+              <Redo className="h-4 w-4" />
             </button>
 
             {/* Clipboard actions */}
@@ -2056,65 +2056,64 @@ export function CanvasEditor({
               type="button"
               onClick={handleCopy}
               disabled={!selectedId}
-              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Copy (Ctrl+C)"
+              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Copy selected layer (Cmd/Ctrl+C)"
               aria-label="Copy"
             >
-              Copy
+              <Copy className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={handleCut}
               disabled={!selectedId}
-              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Cut (Ctrl+X)"
+              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Cut selected layer (Cmd/Ctrl+X)"
               aria-label="Cut"
             >
-              <Scissors className="w-4 h-4 inline-block mr-1" />
-              Cut
+              <Scissors className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={handlePaste}
-              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100"
-              title="Paste (Ctrl+V)"
+              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100"
+              title="Paste layer (Cmd/Ctrl+V)"
               aria-label="Paste"
             >
-              Paste
+              <ClipboardPaste className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={handleDuplicate}
               disabled={!selectedId}
-              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Duplicate (Ctrl+D)"
+              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Duplicate selected layer (Cmd/Ctrl+D)"
               aria-label="Duplicate"
             >
-              Duplicate
+              <Copy className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={handleGroupSelected}
               disabled={!canGroupSelected}
-              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title="Group selected layers (Cmd/Ctrl+G)"
               aria-label="Group selected layers"
               data-testid="editor-group-selection"
             >
-              <Group className="w-4 h-4 inline-block mr-1" />
-              Group
+              <Group className="h-4 w-4" />
+              <span className="hidden 2xl:inline">Group</span>
             </button>
             <button
               type="button"
               onClick={handleUngroupSelected}
               disabled={!canUngroupSelected}
-              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               title="Ungroup selected element (Shift+Cmd/Ctrl+G)"
               aria-label="Ungroup selected element"
               data-testid="editor-ungroup-selection"
             >
-              <Ungroup className="w-4 h-4 inline-block mr-1" />
-              Ungroup
+              <Ungroup className="h-4 w-4" />
+              <span className="hidden 2xl:inline">Ungroup</span>
             </button>
 
             <div className="w-px h-6 bg-slate-200 mx-1" />
@@ -2186,11 +2185,11 @@ export function CanvasEditor({
               type="button"
               onClick={deleteElement}
               disabled={!selectedId}
-              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-md p-1.5 text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               title="Delete (Delete)"
               aria-label="Delete"
             >
-              Delete
+              <Trash2 className="h-4 w-4" />
             </button>
 
             <div className="w-px h-6 bg-slate-200 mx-1" />

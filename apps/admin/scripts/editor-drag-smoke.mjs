@@ -337,33 +337,53 @@ const scrollElementIntoView = async (client, elementId) => {
     const node = document.querySelector('[data-element-id="${elementId}"]');
     if (!node) return;
 
+    node.scrollIntoView({ block: 'center', inline: 'center' });
+
+    const scrollers = [];
     let scroller = node.parentElement;
     while (scroller) {
       const style = window.getComputedStyle(scroller);
       const canScrollX = scroller.scrollWidth > scroller.clientWidth && /(auto|scroll)/.test(style.overflowX);
       const canScrollY = scroller.scrollHeight > scroller.clientHeight && /(auto|scroll)/.test(style.overflowY);
       if (canScrollX || canScrollY) {
-        break;
+        scrollers.push(scroller);
       }
       scroller = scroller.parentElement;
     }
 
-    if (!scroller) return;
-
-    const margin = 160;
-    const nodeRect = node.getBoundingClientRect();
-    const scrollerRect = scroller.getBoundingClientRect();
-
-    if (nodeRect.left < scrollerRect.left + margin) {
-      scroller.scrollLeft -= (scrollerRect.left + margin) - nodeRect.left;
-    } else if (nodeRect.right > scrollerRect.right - margin) {
-      scroller.scrollLeft += nodeRect.right - (scrollerRect.right - margin);
+    const pageScroller = document.scrollingElement || document.documentElement;
+    if (pageScroller && !scrollers.includes(pageScroller)) {
+      scrollers.push(pageScroller);
     }
 
-    if (nodeRect.top < scrollerRect.top + margin) {
-      scroller.scrollTop -= (scrollerRect.top + margin) - nodeRect.top;
-    } else if (nodeRect.bottom > scrollerRect.bottom - margin) {
-      scroller.scrollTop += nodeRect.bottom - (scrollerRect.bottom - margin);
+    const margin = 160;
+
+    for (const currentScroller of scrollers.reverse()) {
+      const nodeRect = node.getBoundingClientRect();
+      const scrollerRect = currentScroller === pageScroller
+        ? { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }
+        : currentScroller.getBoundingClientRect();
+
+      if (nodeRect.left < scrollerRect.left + margin) {
+        currentScroller.scrollLeft -= (scrollerRect.left + margin) - nodeRect.left;
+      } else if (nodeRect.right > scrollerRect.right - margin) {
+        currentScroller.scrollLeft += nodeRect.right - (scrollerRect.right - margin);
+      }
+
+      if (nodeRect.top < scrollerRect.top + margin) {
+        currentScroller.scrollTop -= (scrollerRect.top + margin) - nodeRect.top;
+      } else if (nodeRect.bottom > scrollerRect.bottom - margin) {
+        currentScroller.scrollTop += nodeRect.bottom - (scrollerRect.bottom - margin);
+      }
+    }
+
+    const finalRect = node.getBoundingClientRect();
+    if (finalRect.top < margin || finalRect.bottom > window.innerHeight - margin) {
+      window.scrollBy({
+        top: finalRect.top + finalRect.height / 2 - window.innerHeight / 2,
+        left: 0,
+        behavior: 'instant',
+      });
     }
   })()`);
   await sleep(120);
@@ -675,6 +695,7 @@ const dragElement = async (client, elementId, deltaX, deltaY) => {
       role: element?.getAttribute?.('data-role') || null,
       editable: host?.getAttribute('data-backy-text-editor-editable') || null,
       text: element?.textContent?.trim?.().slice(0, 120) || '',
+      viewport: { width: window.innerWidth, height: window.innerHeight, scrollX: window.scrollX, scrollY: window.scrollY },
     };
   })()`);
 
@@ -717,11 +738,17 @@ const dragElement = async (client, elementId, deltaX, deltaY) => {
   const after = await getElementBox(client, elementId);
   assert(after, `Element ${elementId} disappeared after drag`);
 
-  const actualDeltaX = Math.round(after.x - before.x);
-  const actualDeltaY = Math.round(after.y - before.y);
+  const cssDeltaX = parseCssPixel(after.left) !== null && parseCssPixel(before.left) !== null
+    ? parseCssPixel(after.left) - parseCssPixel(before.left)
+    : null;
+  const cssDeltaY = parseCssPixel(after.top) !== null && parseCssPixel(before.top) !== null
+    ? parseCssPixel(after.top) - parseCssPixel(before.top)
+    : null;
+  const actualDeltaX = Math.round(cssDeltaX ?? (after.x - before.x));
+  const actualDeltaY = Math.round(cssDeltaY ?? (after.y - before.y));
   assert(
     Math.abs(actualDeltaX - deltaX) <= 12 && Math.abs(actualDeltaY - deltaY) <= 12,
-    `${elementId} did not drag correctly: expected ${deltaX},${deltaY}; got ${actualDeltaX},${actualDeltaY}; hit ${JSON.stringify(hitTarget)}`,
+    `${elementId} did not drag correctly: expected ${deltaX},${deltaY}; got ${actualDeltaX},${actualDeltaY}; before ${JSON.stringify(before)}; start ${startX},${startY}; hit ${JSON.stringify(hitTarget)}`,
   );
 
   return {
@@ -1148,8 +1175,14 @@ const dragSelectionHandle = async (client, elementId, deltaX, deltaY, options = 
   const after = await getElementBox(client, elementId);
   assert(after, `Element ${elementId} disappeared after move-handle drag`);
 
-  const actualDeltaX = Math.round(after.x - before.x);
-  const actualDeltaY = Math.round(after.y - before.y);
+  const cssDeltaX = parseCssPixel(after.left) !== null && parseCssPixel(before.left) !== null
+    ? parseCssPixel(after.left) - parseCssPixel(before.left)
+    : null;
+  const cssDeltaY = parseCssPixel(after.top) !== null && parseCssPixel(before.top) !== null
+    ? parseCssPixel(after.top) - parseCssPixel(before.top)
+    : null;
+  const actualDeltaX = Math.round(cssDeltaX ?? (after.x - before.x));
+  const actualDeltaY = Math.round(cssDeltaY ?? (after.y - before.y));
   assert(
     Math.abs(actualDeltaX - deltaX) <= 12 && Math.abs(actualDeltaY - deltaY) <= 12,
     `${elementId} move handle did not drag correctly: expected ${deltaX},${deltaY}; got ${actualDeltaX},${actualDeltaY}`,
