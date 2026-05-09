@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   Check,
   CheckCircle2,
+  ClipboardList,
   Code2,
   Copy,
   Download,
@@ -22,6 +23,7 @@ import {
   RefreshCw,
   Search,
   Send,
+  Settings,
   Shield,
   SlidersHorizontal,
   Trash2,
@@ -502,10 +504,16 @@ function UsersListView() {
     },
     membership: {
       model: 'Public members are captured through Forms, Contacts, and Collections today; admin users remain private workspace users.',
+      routes: {
+        registrationPage: '/pages/new?template=registration',
+        forms: '/forms',
+        authAndInfrastructureSettings: '/settings',
+      },
       systems: MEMBERSHIP_FLOW_SYSTEMS,
       frontendFlow: [
         'Create a registration page from the page starter template.',
-        'Use the Membership registration panel to open page creation with the registration template selected.',
+        'Use Forms to review the registration definition, public submit URL, contacts, and submissions.',
+        'Use Settings to connect Supabase metadata and auth/infrastructure readiness.',
         'Connect the form to Backy Forms contact sharing and optional collection writes.',
         'Use Supabase Auth settings when credentialed sessions are implemented.',
         'Use private admin users only for Backy workspace access.',
@@ -1010,19 +1018,35 @@ function UsersListView() {
               description="Public registration capture and credentialed auth handoff."
               icon={<Shield className="size-4" />}
               action={
-                <Link
-                  to="/pages/new"
-                  search={{ template: 'registration' }}
-                  className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <Plus className="size-4" />
-                  Create page
-                </Link>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    to="/pages/new"
+                    search={{ template: 'registration' }}
+                    className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <Plus className="size-4" />
+                    Create page
+                  </Link>
+                  <Link
+                    to="/forms"
+                    className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 text-sm font-semibold transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <ClipboardList className="size-4" />
+                    Forms
+                  </Link>
+                  <Link
+                    to="/settings"
+                    className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 text-sm font-semibold transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <Settings className="size-4" />
+                    Auth settings
+                  </Link>
+                </div>
               }
             />
             <PanelContent>
               <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-                Start from the registration template, then edit the canvas form fields and publish it like any other page.
+                Start from the registration template, review the generated form in Forms, then connect auth/provider settings when member credentials are ready.
               </div>
 
               <div className="space-y-3">
