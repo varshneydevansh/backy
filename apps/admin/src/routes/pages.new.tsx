@@ -810,7 +810,8 @@ function NewPageRoute() {
                                     id="page-target-site"
                                     value={formData.siteId}
                                     onChange={(e) => selectPageSite(e.target.value)}
-                                    className="w-full rounded-lg border bg-background py-2.5 pl-10 pr-4 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+                                    disabled={isLoading}
+                                    className="w-full rounded-lg border bg-background py-2.5 pl-10 pr-4 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                     required
                                 >
                                     <option value="" disabled>Select a site...</option>
@@ -838,7 +839,8 @@ function NewPageRoute() {
                                         slug: formData.slug ? formData.slug : slugify(e.target.value),
                                     })}
                                     placeholder="About us"
-                                    className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+                                    disabled={isLoading}
+                                    className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                     required
                                 />
                             </div>
@@ -855,8 +857,8 @@ function NewPageRoute() {
                                         value={formData.slug}
                                         onChange={(e) => updatePageDraft({ slug: slugify(e.target.value) })}
                                         placeholder="about"
-                                        disabled={formData.isHomepage}
-                                        className="min-w-0 flex-1 rounded-r-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:opacity-60"
+                                        disabled={isLoading || formData.isHomepage}
+                                        className="min-w-0 flex-1 rounded-r-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                     />
                                 </div>
                             </div>
@@ -870,14 +872,19 @@ function NewPageRoute() {
                                 onChange={(e) => updatePageDraft({ description: e.target.value })}
                                 placeholder="Short summary for search previews and frontend route metadata."
                                 rows={3}
-                                className="w-full resize-none rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+                                disabled={isLoading}
+                                className="w-full resize-none rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                             />
                         </div>
 
-                        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background p-3 transition hover:bg-accent">
+                        <label className={cn(
+                            'flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background p-3 transition hover:bg-accent',
+                            isLoading && 'cursor-not-allowed opacity-70'
+                        )}>
                             <input
                                 type="checkbox"
                                 checked={formData.isHomepage}
+                                disabled={isLoading}
                                 onChange={(e) => {
                                     const isHomepage = e.target.checked;
                                     updatePageDraft({
@@ -914,7 +921,8 @@ function NewPageRoute() {
                                             params: { pageId: routeConflict.id },
                                             search: { siteId: formData.siteId },
                                         })}
-                                        className="inline-flex shrink-0 items-center justify-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 transition hover:bg-amber-100"
+                                        disabled={isLoading}
+                                        className="inline-flex shrink-0 items-center justify-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                         Open existing page
                                     </button>
@@ -942,7 +950,8 @@ function NewPageRoute() {
                                         key={tmpl.id}
                                         className={cn(
                                             'flex cursor-pointer flex-col rounded-lg border p-4 transition-all hover:shadow-sm',
-                                            formData.template === tmpl.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/50'
+                                            formData.template === tmpl.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/50',
+                                            isLoading && 'cursor-not-allowed opacity-70'
                                         )}
                                     >
                                         <input
@@ -951,6 +960,7 @@ function NewPageRoute() {
                                             value={tmpl.id}
                                             checked={formData.template === tmpl.id}
                                             onChange={(e) => handleTemplateChange(e.target.value as PageTemplate)}
+                                            disabled={isLoading}
                                             className="sr-only"
                                         />
                                         <div className="mb-1 flex items-center gap-2">
@@ -985,7 +995,8 @@ function NewPageRoute() {
                                             scheduledAt: status === 'scheduled' ? formData.scheduledAt : null,
                                         });
                                     }}
-                                    className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+                                    disabled={isLoading}
+                                    className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     <option value="draft">Draft</option>
                                     <option value="published">Published</option>
@@ -1003,7 +1014,8 @@ function NewPageRoute() {
                                         onChange={(e) => updatePageDraft({
                                             scheduledAt: fromDateTimeLocalValue(e.target.value),
                                         })}
-                                        className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+                                        disabled={isLoading}
+                                        className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                         required
                                     />
                                 </div>
