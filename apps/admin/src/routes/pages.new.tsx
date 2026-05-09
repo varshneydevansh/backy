@@ -21,7 +21,7 @@ interface NewPageSearch {
     siteId?: string;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'about' | 'contact';
+type PageTemplate = 'blank' | 'landing' | 'about' | 'contact' | 'registration';
 
 const TEMPLATE_OPTIONS: Array<{
     id: PageTemplate;
@@ -55,8 +55,15 @@ const TEMPLATE_OPTIONS: Array<{
         id: 'contact',
         name: 'Contact page',
         desc: 'Contact copy, form fields, and response expectations.',
-        detail: 'Starts with editable form controls that can later bind to Backy forms.',
+        detail: 'Starts with an editable Backy form that appears in the Forms inbox.',
         sections: ['Intro', 'Form', 'Response note'],
+    },
+    {
+        id: 'registration',
+        name: 'Registration page',
+        desc: 'Signup copy, member fields, consent, and submission routing.',
+        detail: 'Creates a public registration form API without needing a separate frontend first.',
+        sections: ['Hero', 'Registration form', 'Consent'],
     },
 ];
 
@@ -471,6 +478,7 @@ function NewPageRoute() {
     template: formData.template,
     isHomepage: formData.isHomepage,
     content: `${selectedTemplate.sections.length} starter blocks`,
+    forms: ['contact', 'registration'].includes(formData.template) ? 'Backy form API seeded' : 'none',
 }, null, 2)}
                         </pre>
                     </section>
@@ -501,10 +509,12 @@ function createInitialPageContent(input: {
 function buildTemplateElements(input: {
     template: PageTemplate;
     title: string;
+    slug?: string;
     description: string;
 }): CanvasElement[] {
     const title = input.title || 'New page';
     const description = input.description || 'Use this space to explain the promise of this page and guide visitors to the next action.';
+    const formSlug = slugify(input.slug || title || 'new-page');
 
     if (input.template === 'landing') {
         return [
@@ -626,16 +636,109 @@ function buildTemplateElements(input: {
                 height: 100,
                 props: { content: description, fontSize: 18, lineHeight: 1.6, color: '#475569' },
             }),
-            createCanvasElement('box', 680, 72, {
+            createCanvasElement('form', 680, 72, {
                 id: 'contact-form-card',
                 width: 420,
                 height: 430,
-                props: { backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#e2e8f0', borderWidth: 1, borderStyle: 'solid' },
+                props: {
+                    formId: `form-${formSlug}-contact`,
+                    formName: `${formSlug}-contact`,
+                    formTitle: 'Contact form',
+                    formDescription: 'Public contact form generated from the page canvas.',
+                    successMessage: 'Thanks. We will reply soon.',
+                    enableHoneypot: true,
+                    contactShareEnabled: true,
+                    contactShareNameField: 'name',
+                    contactShareEmailField: 'email',
+                    contactShareNotesField: 'message',
+                    backgroundColor: '#f8fafc',
+                    borderRadius: 8,
+                    borderColor: '#e2e8f0',
+                    borderWidth: 1,
+                    borderStyle: 'solid',
+                },
                 children: [
                     createCanvasElement('input', 24, 30, { id: 'contact-name', width: 360, height: 54, props: { label: 'Name', name: 'name', placeholder: 'Your name', required: true } }),
                     createCanvasElement('input', 24, 104, { id: 'contact-email', width: 360, height: 54, props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true } }),
                     createCanvasElement('textarea', 24, 180, { id: 'contact-message', width: 360, height: 110, props: { label: 'Message', name: 'message', placeholder: 'Tell us what you need', required: true } }),
                     createCanvasElement('button', 24, 326, { id: 'contact-submit', width: 170, height: 48, props: { label: 'Send message', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontWeight: '700' } }),
+                ],
+            }),
+        ];
+    }
+
+    if (input.template === 'registration') {
+        return [
+            createCanvasElement('section', 0, 0, {
+                id: 'registration-hero-section',
+                width: 1200,
+                height: 680,
+                props: { backgroundColor: '#f7f8f4', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 96, {
+                        id: 'registration-heading',
+                        width: 540,
+                        height: 120,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                    }),
+                    createCanvasElement('paragraph', 78, 238, {
+                        id: 'registration-copy',
+                        width: 500,
+                        height: 110,
+                        props: { content: description, fontSize: 18, lineHeight: 1.65, color: '#4b5563' },
+                    }),
+                    createCanvasElement('box', 78, 392, {
+                        id: 'registration-note',
+                        width: 470,
+                        height: 112,
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#d8ded2', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 20, 18, {
+                                id: 'registration-note-heading',
+                                width: 380,
+                                height: 32,
+                                props: { content: 'What happens next', level: 'h3', fontSize: 18, fontWeight: '750', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 20, 56, {
+                                id: 'registration-note-copy',
+                                width: 390,
+                                height: 42,
+                                props: { content: 'Submissions land in Backy Forms and Contacts, ready for approval, export, or collection routing.', fontSize: 14, lineHeight: 1.45, color: '#556052' },
+                            }),
+                        ],
+                    }),
+                    createCanvasElement('form', 700, 70, {
+                        id: 'registration-form-card',
+                        width: 430,
+                        height: 560,
+                        props: {
+                            formId: `form-${formSlug}-registration`,
+                            formName: `${formSlug}-registration`,
+                            formTitle: 'Registration form',
+                            formDescription: 'Public registration form generated from the page canvas.',
+                            successMessage: 'Registration received. Check your inbox for the next step.',
+                            enableHoneypot: true,
+                            moderationMode: 'manual',
+                            contactShareEnabled: true,
+                            contactShareNameField: 'full_name',
+                            contactShareEmailField: 'email',
+                            contactSharePhoneField: 'phone',
+                            contactShareNotesField: 'member_type',
+                            backgroundColor: '#ffffff',
+                            borderRadius: 8,
+                            borderColor: '#d8ded2',
+                            borderWidth: 1,
+                            borderStyle: 'solid',
+                        },
+                        children: [
+                            createCanvasElement('input', 24, 34, { id: 'registration-name', width: 360, height: 54, props: { label: 'Full name', name: 'full_name', placeholder: 'Ada Lovelace', required: true } }),
+                            createCanvasElement('input', 24, 106, { id: 'registration-email', width: 360, height: 54, props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true } }),
+                            createCanvasElement('input', 24, 178, { id: 'registration-phone', width: 360, height: 54, props: { label: 'Phone', name: 'phone', inputType: 'tel', placeholder: '+1 555 0100', required: false } }),
+                            createCanvasElement('select', 24, 250, { id: 'registration-member-type', width: 360, height: 54, props: { label: 'Member type', name: 'member_type', options: ['Customer', 'Creator', 'Partner'], placeholder: 'Choose a type', required: true } }),
+                            createCanvasElement('checkbox', 24, 330, { id: 'registration-consent', width: 360, height: 42, props: { label: 'I agree to be contacted about this registration.', name: 'consent', required: true } }),
+                            createCanvasElement('button', 24, 414, { id: 'registration-submit', width: 190, height: 50, props: { label: 'Create account', backgroundColor: '#14532d', color: '#ffffff', borderRadius: 8, fontWeight: '700' } }),
+                        ],
+                    }),
                 ],
             }),
         ];
