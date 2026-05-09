@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -32,7 +32,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
-import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/forms')({
@@ -291,6 +291,8 @@ interface FormInbox {
 }
 
 function FormsRoute() {
+  const navigate = useNavigate();
+  const routerState = useRouterState();
   const { sites } = useStore();
   const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
   const [forms, setForms] = useState<FormDefinition[]>([]);
@@ -313,6 +315,7 @@ function FormsRoute() {
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const selectedForm = useMemo(
     () => forms.find((form) => form.id === selectedFormId) || forms[0] || null,
@@ -712,6 +715,24 @@ function FormsRoute() {
   }, [selectedSiteId, sites]);
 
   useEffect(() => {
+    const requestedSiteId = getSiteSearchParam();
+    if (!requestedSiteId) return;
+
+    const nextSiteId = getSiteSelectionFromSearch(sites);
+    if (nextSiteId === selectedSiteId) return;
+
+    setSelectedSiteId(nextSiteId);
+    setFormSearchQuery('');
+    setFormSourceFilter('all');
+    setFormStateFilter('all');
+    setFormDestinationFilter('all');
+    setFormReadinessFilter('all');
+    setSubmissionQuery('');
+    setStatusFilter('all');
+    setSelectedFormId(null);
+  }, [routerState.location.search, selectedSiteId, sites]);
+
+  useEffect(() => {
     void loadForms();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSiteId]);
@@ -872,6 +893,14 @@ function FormsRoute() {
     setFormDestinationFilter('all');
     setFormReadinessFilter('all');
   };
+  const selectFormsSite = (nextSiteId: string) => {
+    setSelectedSiteId(nextSiteId);
+    clearFormFilters();
+    setSubmissionQuery('');
+    setStatusFilter('all');
+    setSelectedFormId(null);
+    navigate({ to: '/forms', search: { siteId: nextSiteId }, replace: true });
+  };
 
   return (
     <PageShell
@@ -884,10 +913,7 @@ function FormsRoute() {
             aria-label="Active Site"
             value={activeSiteId}
             onChange={(event) => {
-              setSelectedSiteId(event.target.value);
-              clearFormFilters();
-              setSubmissionQuery('');
-              setStatusFilter('all');
+              selectFormsSite(event.target.value);
             }}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
           >
@@ -1046,10 +1072,7 @@ function FormsRoute() {
           aria-label="Active forms site"
           value={activeSiteId}
           onChange={(event) => {
-            setSelectedSiteId(event.target.value);
-            clearFormFilters();
-            setSubmissionQuery('');
-            setStatusFilter('all');
+            selectFormsSite(event.target.value);
           }}
           className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
         >
@@ -1326,6 +1349,7 @@ function FormsRoute() {
                         <Link
                           to="/pages/$pageId/edit"
                           params={{ pageId: selectedForm.pageId }}
+                          search={activeSiteSearch}
                           className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
                         >
                           <ExternalLink className="size-4" />
@@ -1336,6 +1360,7 @@ function FormsRoute() {
                         <Link
                           to="/blog/$postId"
                           params={{ postId: selectedForm.postId }}
+                          search={activeSiteSearch}
                           className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
                         >
                           <ExternalLink className="size-4" />
