@@ -12,7 +12,6 @@
  */
 
 import { Link, useLocation } from '@tanstack/react-router';
-import { useMemo } from 'react';
 import {
   LayoutDashboard,
   FileText,
@@ -135,12 +134,9 @@ const SITE_SCOPED_NAV_ROUTES = new Set([
  */
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const location = useLocation();
-  const activeSiteSearch = useMemo(() => {
-    if (typeof window === 'undefined') return undefined;
-
-    const siteId = new URLSearchParams(window.location.search).get('siteId')?.trim();
-    return siteId ? { siteId } : undefined;
-  }, [location.search]);
+  const currentSearch = typeof window === 'undefined' ? '' : window.location.search;
+  const activeSiteId = new URLSearchParams(currentSearch).get('siteId')?.trim();
+  const activeSiteSearch = activeSiteId ? { siteId: activeSiteId } : undefined;
   const getNavSearch = (to: string) => (
     activeSiteSearch && SITE_SCOPED_NAV_ROUTES.has(to) ? activeSiteSearch : undefined
   );

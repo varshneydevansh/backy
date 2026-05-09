@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   AlertTriangle,
   Archive,
@@ -33,7 +33,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/contacts')({
@@ -113,6 +113,8 @@ interface ContactInbox {
 }
 
 function ContactsRoute() {
+  const navigate = useNavigate();
+  const routerState = useRouterState();
   const { sites } = useStore();
   const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
   const [forms, setForms] = useState<FormDefinition[]>([]);
@@ -131,6 +133,7 @@ function ContactsRoute() {
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const formById = useMemo(() => new Map(forms.map((form) => [form.id, form])), [forms]);
   const apiForm = useMemo(
@@ -348,7 +351,7 @@ function ContactsRoute() {
       forms: `/forms?siteId=${encodeURIComponent(activeSiteId)}`,
       contactPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=contact`,
       registrationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
-      users: '/users',
+      users: `/users?siteId=${encodeURIComponent(activeSiteId)}`,
       settings: '/settings',
     },
     readiness: {
@@ -480,6 +483,20 @@ function ContactsRoute() {
       setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
     }
   }, [selectedSiteId, sites]);
+
+  useEffect(() => {
+    const requestedSiteId = getSiteSearchParam();
+    if (!requestedSiteId) return;
+
+    const nextSiteId = getSiteSelectionFromSearch(sites);
+    if (nextSiteId === selectedSiteId) return;
+
+    setSelectedSiteId(nextSiteId);
+    setSearchQuery('');
+    setSelectedFormId('all');
+    setStatusFilter('all');
+    setQualityFilter('all');
+  }, [routerState.location.search, selectedSiteId, sites]);
 
   useEffect(() => {
     void loadContacts();
@@ -617,6 +634,11 @@ function ContactsRoute() {
     setStatusFilter('all');
     setQualityFilter('all');
   };
+  const selectContactsSite = (nextSiteId: string) => {
+    setSelectedSiteId(nextSiteId);
+    clearContactFilters();
+    navigate({ to: '/contacts', search: { siteId: nextSiteId }, replace: true });
+  };
 
   return (
     <PageShell
@@ -629,8 +651,7 @@ function ContactsRoute() {
             aria-label="Active Site"
             value={activeSiteId}
             onChange={(event) => {
-              setSelectedSiteId(event.target.value);
-              clearContactFilters();
+              selectContactsSite(event.target.value);
             }}
             className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
           >
@@ -781,7 +802,7 @@ function ContactsRoute() {
                 <Link
                   key={surface.key}
                   to={surface.route}
-                  search={surface.route === '/forms' ? { siteId: activeSiteId } : undefined}
+                  search={surface.route === '/forms' || surface.route === '/users' ? activeSiteSearch : undefined}
                   className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
                 >
                   <div className="text-sm font-semibold text-foreground">{surface.title}</div>
@@ -802,8 +823,7 @@ function ContactsRoute() {
           aria-label="Active contacts site"
           value={activeSiteId}
           onChange={(event) => {
-            setSelectedSiteId(event.target.value);
-            clearContactFilters();
+            selectContactsSite(event.target.value);
           }}
           className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
         >
