@@ -137,6 +137,8 @@ function CommentsRoute() {
     flagged: comments.filter((comment) => (comment.reportCount || 0) > 0 || comment.status === 'spam' || comment.status === 'blocked').length,
   }), [comments]);
   const hasSelection = selectedIds.length > 0;
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const allVisibleSelected = filteredComments.length > 0 && filteredComments.every((comment) => selectedSet.has(comment.id));
   const moderationReadiness = useMemo(() => {
     const reviewComplete = metrics.pending === 0;
     const safetyClean = metrics.flagged === 0;
@@ -187,8 +189,85 @@ function CommentsRoute() {
       ],
     };
   }, [activeSite, hasSelection, metrics.flagged, metrics.pending, selectedIds.length, targets.length]);
-  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const allVisibleSelected = filteredComments.length > 0 && filteredComments.every((comment) => selectedSet.has(comment.id));
+  const moderationHandoff = useMemo(() => ({
+    site: {
+      id: activeSiteId,
+      name: activeSite?.name || activeSiteId,
+      slug: activeSite?.slug,
+      status: activeSite?.status,
+    },
+    generatedAt: new Date().toISOString(),
+    endpoints: {
+      list: moderationListUrl,
+      bulkUpdate: moderationBulkUpdateUrl,
+      singleUpdate: moderationSingleUpdateUrl,
+    },
+    readiness: {
+      score: moderationReadiness.score,
+      checks: moderationReadiness.checks,
+    },
+    metrics,
+    filters: {
+      status: statusFilter,
+      targetType: targetTypeFilter,
+      query: searchQuery.trim(),
+    },
+    moderationStates: ['pending', 'approved', 'rejected', 'spam', 'blocked'],
+    selectedCommentIds: selectedIds,
+    targets: targets.map((target) => ({
+      id: target.id,
+      type: target.type,
+      label: target.label,
+      path: target.path,
+      commentCount: comments.filter((comment) => comment.targetType === target.type && comment.targetId === target.id).length,
+    })),
+    comments: comments.map((comment) => ({
+      id: comment.id,
+      targetType: comment.targetType,
+      targetId: comment.targetId,
+      status: comment.status,
+      reportCount: comment.reportCount || 0,
+      hasAuthorName: Boolean(comment.authorName),
+      hasAuthorEmail: Boolean(comment.authorEmail),
+      hasContent: Boolean(comment.content),
+      hasReports: Boolean(comment.reportReasons?.length),
+      hasRejectionReason: Boolean(comment.rejectionReason),
+      hasBlockReason: Boolean(comment.blockReason),
+      requestId: comment.requestId,
+      createdAt: comment.createdAt,
+      updatedAt: comment.updatedAt,
+    })),
+    visibleQueue: {
+      count: filteredComments.length,
+      ids: filteredComments.map((comment) => comment.id),
+      allVisibleSelected,
+    },
+    privacy: {
+      includesCommentContent: false,
+      includesAuthorIdentity: false,
+      note: 'Use CSV export or the private moderation API for author identity and comment content. This manifest exposes queue shape, endpoint contracts, counts, state, and non-content flags only.',
+    },
+  }), [
+    activeSite?.name,
+    activeSite?.slug,
+    activeSite?.status,
+    activeSiteId,
+    allVisibleSelected,
+    comments,
+    filteredComments,
+    metrics,
+    moderationBulkUpdateUrl,
+    moderationListUrl,
+    moderationReadiness.checks,
+    moderationReadiness.score,
+    moderationSingleUpdateUrl,
+    searchQuery,
+    selectedIds,
+    statusFilter,
+    targetTypeFilter,
+    targets,
+  ]);
+  const moderationHandoffText = useMemo(() => JSON.stringify(moderationHandoff, null, 2), [moderationHandoff]);
   const moderationReasonText = moderationReason.trim();
   const rejectReason = moderationReasonText || 'Rejected from moderation queue.';
   const spamReason = moderationReasonText || 'Marked as spam.';
@@ -291,6 +370,19 @@ function CommentsRoute() {
       setNotice(null);
       setError(value);
     }
+  };
+  const downloadModerationHandoff = () => {
+    const blob = new Blob([moderationHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSite?.slug || activeSiteId}-backy-comments-handoff.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setNotice('Comment moderation handoff manifest downloaded.');
   };
 
   const handleExportComments = () => {
@@ -397,6 +489,16 @@ function CommentsRoute() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void copyCommentApiText(moderationHandoffText, 'Comment moderation handoff manifest')}
+              iconStart={<Copy className="size-4" />}
+            >
+              Copy manifest
+            </Button>
+            <Button variant="outline" onClick={downloadModerationHandoff} iconStart={<Download className="size-4" />}>
+              Download JSON
+            </Button>
             <Button
               variant="outline"
               disabled={filteredComments.length === 0}
@@ -535,6 +637,13 @@ function CommentsRoute() {
               <div className="flex flex-wrap items-center gap-2">
                 <Button onClick={() => void copyCommentApiText(moderationListUrl, 'Comments URL')} iconStart={<Copy className="size-4" />}>
                   Copy list
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => void copyCommentApiText(moderationHandoffText, 'Comment moderation handoff manifest')}
+                  iconStart={<Copy className="size-4" />}
+                >
+                  Copy manifest
                 </Button>
                 <a
                   href={moderationListUrl}
