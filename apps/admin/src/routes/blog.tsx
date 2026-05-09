@@ -27,6 +27,7 @@ import { PageShell } from '@/components/layout/PageShell';
 import { DataGrid } from '@/components/ui/DataGrid';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/blog')({
@@ -169,7 +170,7 @@ function BlogListView() {
   const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [tags, setTags] = useState<BlogTag[]>([]);
   const [authors, setAuthors] = useState<BlogAuthor[]>([]);
-  const [selectedSiteId, setSelectedSiteId] = useState(() => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo');
+  const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
   const [statusFilter, setStatusFilter] = useState<'all' | BlogPost['status']>('all');
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [selectedTagId, setSelectedTagId] = useState('');
@@ -254,7 +255,7 @@ function BlogListView() {
   );
 
   useEffect(() => {
-    if (sites.length > 0 && !sites.some((site) => (site.publicSiteId || site.id) === selectedSiteId)) {
+    if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
       setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
     }
   }, [selectedSiteId, sites]);

@@ -37,6 +37,7 @@ import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { getSiteRouteSearch } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/sites')({
@@ -391,6 +392,7 @@ function SitesListView() {
   const selectedFrontendContract = useMemo(() => (
     selectedApiSite ? buildSiteFrontendContract(selectedApiSite, publicApiBase, adminApiBase) : null
   ), [adminApiBase, publicApiBase, selectedApiSite]);
+  const selectedSiteRouteSearch = useMemo(() => getSiteRouteSearch(selectedApiSite), [selectedApiSite]);
   const siteLaunchReadiness = useMemo(() => {
     const published = sites.filter((site) => site.status === 'published').length;
     const draft = sites.filter((site) => site.status === 'draft').length;
@@ -881,6 +883,7 @@ function SitesListView() {
                 <Link
                   key={area.title}
                   to={area.href}
+                  search={selectedSiteRouteSearch}
                   className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
                 >
                   <div className="text-sm font-semibold text-foreground">{area.title}</div>
@@ -923,6 +926,7 @@ function SitesListView() {
                   <Link
                     key={system.key}
                     to={system.adminPath}
+                    search={selectedSiteRouteSearch}
                     className="rounded-lg border border-border bg-card p-3 transition hover:border-primary/40 hover:bg-primary/5"
                   >
                     <div className="flex items-start justify-between gap-3">

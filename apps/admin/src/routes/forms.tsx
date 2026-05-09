@@ -32,6 +32,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/forms')({
@@ -291,7 +292,7 @@ interface FormInbox {
 
 function FormsRoute() {
   const { sites } = useStore();
-  const [selectedSiteId, setSelectedSiteId] = useState(() => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo');
+  const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
   const [forms, setForms] = useState<FormDefinition[]>([]);
   const [inboxByForm, setInboxByForm] = useState<Record<string, FormInbox>>({});
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
@@ -705,7 +706,7 @@ function FormsRoute() {
   };
 
   useEffect(() => {
-    if (sites.length > 0 && !sites.some((site) => (site.publicSiteId || site.id) === selectedSiteId)) {
+    if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
       setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
     }
   }, [selectedSiteId, sites]);

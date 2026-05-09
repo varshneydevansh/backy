@@ -39,6 +39,7 @@ import {
   type MediaFolder,
   type SignedMediaUrl,
 } from '@/lib/mediaApi';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatBytes } from '@/lib/utils';
 import { useStore, type MediaAsset } from '@/stores/mockStore';
 
@@ -191,6 +192,7 @@ function MediaPage() {
     folderId: '',
     visibility: 'public' as 'public' | 'private',
   });
+  const sites = useStore((state) => state.sites);
   const files = useStore((state) => state.media);
   const pages = useStore((state) => state.pages);
   const posts = useStore((state) => state.posts);
@@ -198,7 +200,13 @@ function MediaPage() {
   const setPages = useStore((state) => state.setPages);
   const setPosts = useStore((state) => state.setPosts);
   const deleteMedia = useStore((state) => state.deleteMedia);
-  const siteId = getDefaultMediaSiteId();
+  const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites, getDefaultMediaSiteId()));
+  const activeSite = useMemo(
+    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
+    [selectedSiteId, sites],
+  );
+  const siteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || getDefaultMediaSiteId();
+  const activeSiteRouteSearch = useMemo(() => ({ siteId }), [siteId]);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const publicMediaListUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media?limit=100`;
   const publicMediaDetailUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/{mediaId}`;
@@ -208,6 +216,13 @@ function MediaPage() {
   const adminMediaUploadUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media`;
   const adminMediaFoldersUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media/folders`;
   const adminMediaFolderUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media/folders/{folderId}`;
+
+  useEffect(() => {
+    if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
+      setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
+    }
+  }, [selectedSiteId, sites]);
+
   const getAssetDeliveryUrl = useCallback(
     (asset: MediaAsset) => getPublicMediaFileUrl(asset.id, siteId),
     [siteId],
@@ -1328,6 +1343,29 @@ function MediaPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <select
+              aria-label="Active media site"
+              value={siteId}
+              onChange={(event) => {
+                setSelectedSiteId(event.target.value);
+                setSelectedMediaIds([]);
+                setSelectedAsset(null);
+                setSelectedFolderId(undefined);
+                setSearchQuery('');
+                setTypeFilter('all');
+                setVisibilityFilter('all');
+                setUsageFilter('all');
+              }}
+              className="min-h-10 min-w-56 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+            >
+              {sites.length === 0 ? (
+                <option value={getDefaultMediaSiteId()}>Demo site</option>
+              ) : sites.map((site) => (
+                <option key={site.id} value={site.publicSiteId || site.id}>
+                  {site.name}
+                </option>
+              ))}
+            </select>
             <button
               type="button"
               onClick={() => void copyMediaApiText(mediaHandoffText, 'Media handoff manifest')}
@@ -1443,6 +1481,7 @@ function MediaPage() {
               <Link
                 key={surface.title}
                 to={surface.route}
+                search={activeSiteRouteSearch}
                 className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
               >
                 <div className="text-sm font-semibold text-foreground">{surface.title}</div>

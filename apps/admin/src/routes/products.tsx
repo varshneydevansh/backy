@@ -41,6 +41,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
 import { getPublicMediaFileUrl } from '@/lib/mediaApi';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/products')({
@@ -256,7 +257,7 @@ const EMPTY_PRODUCT_FORM: ProductFormState = {
 
 function ProductsRoute() {
   const { sites } = useStore();
-  const [selectedSiteId, setSelectedSiteId] = useState(() => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo');
+  const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
   const [productCollection, setProductCollection] = useState<Collection | null>(null);
   const [ordersCollection, setOrdersCollection] = useState<Collection | null>(null);
   const [products, setProducts] = useState<CollectionRecord[]>([]);
@@ -688,7 +689,7 @@ function ProductsRoute() {
   };
 
   useEffect(() => {
-    if (sites.length > 0 && !sites.some((site) => (site.publicSiteId || site.id) === selectedSiteId)) {
+    if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
       setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
     }
   }, [selectedSiteId, sites]);

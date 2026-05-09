@@ -24,6 +24,7 @@ import { PageShell } from '@/components/layout/PageShell';
 import { DataGrid } from '@/components/ui/DataGrid';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/pages')({
@@ -187,7 +188,7 @@ function PagesListView() {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingReadiness, setIsLoadingReadiness] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedSiteId, setSelectedSiteId] = useState(() => sites[0]?.publicSiteId || sites[0]?.id || 'site-demo');
+  const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
   const [statusFilter, setStatusFilter] = useState<'all' | Page['status']>('all');
   const [healthFilter, setHealthFilter] = useState<PageLibraryFilter>('all');
   const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(() => new Set());
@@ -436,7 +437,7 @@ function PagesListView() {
   };
 
   useEffect(() => {
-    if (sites.length > 0 && !sites.some((site) => (site.publicSiteId || site.id) === selectedSiteId)) {
+    if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
       setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
     }
   }, [selectedSiteId, sites]);
