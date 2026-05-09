@@ -39,6 +39,34 @@ export const Route = createFileRoute('/comments')({
 
 type CommentStatusFilter = CommentModerationStatus | 'all';
 
+const COMMENT_CONTROL_AREAS = [
+  {
+    title: 'Site scope',
+    detail: 'Choose the website whose page and blog discussions are being moderated.',
+    href: '#comments-site',
+  },
+  {
+    title: 'Moderation health',
+    detail: 'Track pending, approved, flagged, and total discussion volume.',
+    href: '#comments-metrics',
+  },
+  {
+    title: 'Moderation API',
+    detail: 'List comments, bulk update records, and sync public discussion state.',
+    href: '#comments-api',
+  },
+  {
+    title: 'Queue review',
+    detail: 'Search, filter, select, export, and process the visible moderation queue.',
+    href: '#comments-queue',
+  },
+  {
+    title: 'Bulk decisions',
+    detail: 'Approve, reject, mark spam, block authors, and store review reasons.',
+    href: '#comments-actions',
+  },
+] as const;
+
 interface CommentTargetSummary {
   id: string;
   type: 'page' | 'post';
@@ -351,71 +379,120 @@ function CommentsRoute() {
         </div>
       )}
 
-      <div className="mb-6 grid gap-3 md:grid-cols-4">
+      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="comments-command-center">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">Comments command center</h2>
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                moderationReadiness.score >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+              )}
+              >
+                {moderationReadiness.score}% ready
+              </span>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Control public discussion safety, approval queues, reported content, blocked authors, frontend comment feeds, and private moderation APIs.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              disabled={filteredComments.length === 0}
+              onClick={handleExportComments}
+              iconStart={<Download className="size-4" />}
+            >
+              Export CSV
+            </Button>
+            <Button onClick={() => void loadComments()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+              Refresh comments
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+          <div className="rounded-lg border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold">Discussion readiness</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Checks whether public comments are mapped, moderated, safe, and ready for frontend delivery.
+            </p>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn('h-full rounded-full', moderationReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                style={{ width: `${moderationReadiness.score}%` }}
+              />
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {moderationReadiness.checks.map((check) => (
+                <ModerationCheck key={check.label} {...check} />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="size-4 text-primary" />
+              <h3 className="text-sm font-semibold">Comment workflow</h3>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {moderationReadiness.workflow.map((step, index) => (
+                <ModerationWorkflowStep key={step.label} index={index + 1} {...step} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <h3 className="text-sm font-semibold">Comments control map</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, moderation health, API handoff, queue review, and bulk decisions.</p>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {COMMENT_CONTROL_AREAS.map((area) => (
+              <a
+                key={area.title}
+                href={area.href}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div id="comments-site" className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 scroll-mt-24">
+        <label className="text-sm font-medium text-muted-foreground" htmlFor="comments-active-site-inline">
+          Active site
+        </label>
+        <select
+          id="comments-active-site-inline"
+          aria-label="Active comments site"
+          value={activeSiteId}
+          onChange={(event) => setSelectedSiteId(event.target.value)}
+          className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
+        >
+          {sites.length === 0 ? (
+            <option value="site-demo">Demo site</option>
+          ) : sites.map((site) => (
+            <option key={site.id} value={site.publicSiteId || site.id}>
+              {site.name}
+            </option>
+          ))}
+        </select>
+        <span className="text-sm text-muted-foreground">
+          {activeSite?.name || activeSiteId} moderation queue
+        </span>
+      </div>
+
+      <div id="comments-metrics" className="mb-6 grid gap-3 scroll-mt-24 md:grid-cols-4">
         <Metric label="Comments" value={metrics.total} icon={<MessageSquare className="size-4" />} />
         <Metric label="Pending" value={metrics.pending} icon={<ShieldAlert className="size-4" />} />
         <Metric label="Approved" value={metrics.approved} icon={<CheckCircle2 className="size-4" />} />
         <Metric label="Flagged" value={metrics.flagged} icon={<Flag className="size-4" />} />
       </div>
 
-      <Panel>
-        <PanelHeader
-          title="Discussion readiness"
-          description="Checks whether public comments are mapped, moderated, safe, and ready for frontend delivery."
-          icon={<ShieldAlert className="size-4" />}
-        />
-        <PanelContent>
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-            <div className="rounded-lg border border-border bg-background p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold">Moderation operating state</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Keeps discussion quality visible before comments are exposed through public page and blog APIs.
-                  </p>
-                </div>
-                <span className={cn(
-                  'rounded-full px-2.5 py-1 text-xs font-semibold',
-                  moderationReadiness.score >= 80
-                    ? 'bg-emerald-50 text-emerald-700'
-                    : 'bg-amber-50 text-amber-700',
-                )}
-                >
-                  {moderationReadiness.score}% ready
-                </span>
-              </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-                <div
-                  className={cn(
-                    'h-full rounded-full',
-                    moderationReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500',
-                  )}
-                  style={{ width: `${moderationReadiness.score}%` }}
-                />
-              </div>
-              <div className="mt-4 grid gap-2 md:grid-cols-2">
-                {moderationReadiness.checks.map((check) => (
-                  <ModerationCheck key={check.label} {...check} />
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-border bg-background p-4">
-              <div className="flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold">Comment workflow</h3>
-              </div>
-              <div className="mt-3 grid gap-2">
-                {moderationReadiness.workflow.map((step, index) => (
-                  <ModerationWorkflowStep key={step.label} index={index + 1} {...step} />
-                ))}
-              </div>
-            </div>
-          </div>
-        </PanelContent>
-      </Panel>
-
-      <Panel>
+      <Panel id="comments-queue" className="scroll-mt-24">
         <PanelHeader
           title="Moderation Queue"
           description={`${filteredComments.length}/${comments.length} visible comments`}
@@ -444,7 +521,7 @@ function CommentsRoute() {
           }
         />
         <PanelContent>
-          <div className="mb-5 rounded-lg border border-border bg-muted/30 p-4">
+          <div id="comments-api" className="mb-5 rounded-lg border border-border bg-muted/30 p-4 scroll-mt-24">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2 text-sm font-semibold">
@@ -484,7 +561,7 @@ function CommentsRoute() {
             </div>
           </div>
 
-          <div className="mb-4 flex flex-wrap items-center gap-3">
+          <div id="comments-actions" className="mb-4 flex flex-wrap items-center gap-3 scroll-mt-24">
             <div className="relative min-w-64 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <input
