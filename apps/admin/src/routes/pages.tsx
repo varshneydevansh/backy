@@ -1042,6 +1042,8 @@ function PagesListView() {
       .filter((result): result is { page: Page; blocker: string } => Boolean(result?.blocker)),
     [readinessMap, selectedPages],
   );
+  const bulkActionLabel = getBulkActionLabel(bulkAction, selectedPages.length, pendingBulkDelete);
+  const bulkBusyLabel = getBulkBusyLabel(bulkAction);
   const pageHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     site: {
@@ -1630,7 +1632,7 @@ function PagesListView() {
                 : 'bg-primary text-primary-foreground hover:bg-primary/90',
             )}
           >
-            {isBulkBusy ? 'Applying...' : 'Apply'}
+            {isBulkBusy ? bulkBusyLabel : bulkActionLabel}
           </button>
           {selectedPages.length > 0 && (
             <button
@@ -2025,4 +2027,33 @@ const getPublishBlocker = (readiness: PageReadiness): string | null => {
     || readiness.checks.find((check) => check.status !== 'pass');
 
   return firstBlockingCheck?.message || 'Resolve page readiness errors before publishing.';
+};
+
+const getBulkActionLabel = (action: 'publish' | 'archive' | 'delete' | '', count: number, isConfirmingDelete: boolean): string => {
+  const pageLabel = `${count} page${count === 1 ? '' : 's'}`;
+
+  if (action === 'publish') {
+    return count > 0 ? `Publish ${pageLabel}` : 'Publish selected';
+  }
+
+  if (action === 'archive') {
+    return count > 0 ? `Archive ${pageLabel}` : 'Archive selected';
+  }
+
+  if (action === 'delete') {
+    if (isConfirmingDelete) {
+      return count > 0 ? `Delete ${pageLabel}` : 'Delete selected';
+    }
+
+    return count > 0 ? `Review delete for ${pageLabel}` : 'Delete selected';
+  }
+
+  return 'Choose action';
+};
+
+const getBulkBusyLabel = (action: 'publish' | 'archive' | 'delete' | ''): string => {
+  if (action === 'publish') return 'Publishing...';
+  if (action === 'archive') return 'Archiving...';
+  if (action === 'delete') return 'Deleting...';
+  return 'Applying...';
 };
