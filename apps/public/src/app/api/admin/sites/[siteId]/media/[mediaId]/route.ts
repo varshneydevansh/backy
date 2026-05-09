@@ -100,16 +100,16 @@ const toStringValue = (value: FormDataEntryValue | null): string | null => (
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 );
 
-const getMediaType = (mimeType: string, originalName: string): MediaItem['type'] | null => {
+const getMediaType = (mimeType: string, originalName: string): MediaItem['type'] => {
   const extension = extname(originalName).toLowerCase();
-  return MIME_TYPE_TO_MEDIA_TYPE.find((candidate) => candidate.test(mimeType, extension))?.type ?? null;
+  return MIME_TYPE_TO_MEDIA_TYPE.find((candidate) => candidate.test(mimeType, extension))?.type ?? 'other';
 };
 
 const mediaFolderForType = (type: MediaItem['type']) => {
   if (type === 'font') return 'fonts';
   if (type === 'image') return 'images';
   if (type === 'video') return 'videos';
-  if (type === 'audio') return 'audios';
+  if (type === 'audio') return 'audio';
   if (type === 'document') return 'documents';
   return 'files';
 };
@@ -367,10 +367,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const originalName = file.name || 'replacement.bin';
     const mimeType = file.type || 'application/octet-stream';
     const mediaType = getMediaType(mimeType, originalName);
-
-    if (!mediaType) {
-      return errorResponse(415, 'UNSUPPORTED_MEDIA_TYPE', `Unsupported replacement type: ${mimeType}`, requestId);
-    }
 
     if (mediaType !== beforeMedia.type) {
       return errorResponse(

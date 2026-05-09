@@ -93,7 +93,7 @@ export interface MediaResponsiveManifest {
 export interface MediaAsset {
   id: string;
   name: string;
-  type: 'image' | 'video' | 'file' | 'font';
+  type: 'image' | 'video' | 'audio' | 'file' | 'font' | 'other';
   size: string;
   sizeBytes?: number;
   url: string;

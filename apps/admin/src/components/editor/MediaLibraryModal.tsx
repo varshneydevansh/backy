@@ -4,6 +4,7 @@ import {
   Upload,
   Image as ImageIcon,
   Film,
+  Music,
   FileText,
   Type as TypeIcon,
   Search,
@@ -16,9 +17,9 @@ import { cn } from '@/lib/utils';
 import { getDefaultMediaSiteId, listMedia, listMediaFolders, uploadMedia, type MediaFolder } from '@/lib/mediaApi';
 import { useStore, type MediaAsset } from '@/stores/mockStore';
 
-type AllowedType = 'image' | 'video' | 'file' | 'font' | 'any';
+type AllowedType = 'image' | 'video' | 'audio' | 'file' | 'font' | 'other' | 'any';
 type MediaScopeFilter = 'all' | 'global' | 'page' | 'post';
-type UploadFilter = 'all' | 'image' | 'video' | 'file' | 'font';
+type UploadFilter = 'all' | 'image' | 'video' | 'audio' | 'file' | 'font' | 'other';
 type MediaLibraryTab = 'library' | 'upload';
 
 export interface MediaContext {
@@ -74,7 +75,7 @@ export function MediaLibraryModal({
 
     setActiveTab(initialTab || 'library');
     setUploadFilter(
-      initialUploadFilter && ['all', 'image', 'video', 'file', 'font'].includes(initialUploadFilter)
+      initialUploadFilter && ['all', 'image', 'video', 'audio', 'file', 'font', 'other'].includes(initialUploadFilter)
         ? initialUploadFilter
         : 'all'
     );
@@ -83,7 +84,7 @@ export function MediaLibraryModal({
   }, [initialTab, initialUploadFilter, isOpen]);
 
   const allowedTypesSet = useMemo(() => {
-    if (allowedTypes === 'any') return new Set(['image', 'video', 'file', 'font']);
+    if (allowedTypes === 'any') return new Set(['image', 'video', 'audio', 'file', 'font', 'other']);
     if (allowedTypes === 'file') return new Set(['file']);
     return new Set([allowedTypes]);
   }, [allowedTypes]);
@@ -132,7 +133,7 @@ export function MediaLibraryModal({
   };
 
   const allowedTypeOptions = useMemo(
-    () => (['all', 'image', 'video', 'file', 'font'] as const).filter((filter) => (
+    () => (['all', 'image', 'video', 'audio', 'file', 'font', 'other'] as const).filter((filter) => (
       filter === 'all' ? allowedTypes === 'any' : allowedTypes === 'any' || allowedTypesSet.has(filter)
     )),
     [allowedTypes, allowedTypesSet]
@@ -217,6 +218,12 @@ export function MediaLibraryModal({
     return `${scope === 'page' ? 'Page' : 'Post'}${item.scopeTargetId ? ` • ${item.scopeTargetId}` : ''}`;
   };
 
+  const formatTypeLabel = (type: MediaAsset['type']) => {
+    if (type === 'file') return 'document';
+    if (type === 'other') return 'other file';
+    return type;
+  };
+
   const getFileExtension = (file: File) => file.name.split('.').pop()?.toLowerCase() || '';
 
   const isFontFile = (file: File) => (
@@ -225,11 +232,18 @@ export function MediaLibraryModal({
     ['woff', 'woff2', 'ttf', 'otf', 'eot'].includes(getFileExtension(file))
   );
 
+  const isDocumentFile = (file: File) => (
+    file.type === 'application/pdf' ||
+    ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv'].includes(getFileExtension(file))
+  );
+
   const getUploadType = (file: File): MediaAsset['type'] => {
     if (file.type.startsWith('image/')) return 'image';
     if (file.type.startsWith('video/')) return 'video';
+    if (file.type.startsWith('audio/')) return 'audio';
     if (isFontFile(file)) return 'font';
-    return 'file';
+    if (isDocumentFile(file)) return 'file';
+    return 'other';
   };
 
   const cleanFontFamilyFromFilename = (name: string): string => (
@@ -267,6 +281,8 @@ export function MediaLibraryModal({
       <div className="w-full h-full bg-muted flex items-center justify-center">
         {item.type === 'video' ? (
           <Film className="w-8 h-8 text-muted-foreground" />
+        ) : item.type === 'audio' ? (
+          <Music className="w-8 h-8 text-muted-foreground" />
         ) : (
           <FileText className="w-8 h-8 text-muted-foreground" />
         )}
@@ -278,7 +294,9 @@ export function MediaLibraryModal({
     const resolved = filter !== 'all' ? filter : allowedTypes;
     if (resolved === 'image') return 'image/*';
     if (resolved === 'video') return 'video/*';
+    if (resolved === 'audio') return 'audio/*';
     if (resolved === 'font') return '.woff,.woff2,.ttf,.otf,.eot,font/*';
+    if (resolved === 'other') return '*/*';
     return undefined;
   };
 
@@ -290,7 +308,9 @@ export function MediaLibraryModal({
       if (filterHint === 'all') return true;
       if (filterHint === 'image') return resolvedType === 'image';
       if (filterHint === 'video') return resolvedType === 'video';
+      if (filterHint === 'audio') return resolvedType === 'audio';
       if (filterHint === 'font') return resolvedType === 'font';
+      if (filterHint === 'other') return resolvedType === 'other';
       return resolvedType === 'file';
     };
 
@@ -355,7 +375,7 @@ export function MediaLibraryModal({
               </span>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Select or upload reusable images, videos, documents, and fonts for this workspace.
+              Select or upload reusable images, videos, audio, documents, fonts, and other files for this workspace.
             </p>
             {targetLabel ? (
               <p className="mt-1 truncate text-xs text-muted-foreground">
@@ -477,7 +497,7 @@ export function MediaLibraryModal({
                           {allowStatusLabels ? (
                             <div className="flex flex-wrap gap-1.5">
                               <span className="rounded bg-muted px-2 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
-                                {item.type === 'file' ? 'document' : item.type}
+                                {formatTypeLabel(item.type)}
                               </span>
                               <span className="rounded bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                                 {formatScopeLabel(item)}
@@ -605,7 +625,7 @@ export function MediaLibraryModal({
                     {isUploading ? 'Uploading assets...' : 'Drop files into the library'}
                   </h3>
                   <p className="pointer-events-none mt-2 max-w-md text-sm text-muted-foreground">
-                    Assets will upload as {uploadVisibility} files in {uploadFolderLabel}. Images, videos, documents, and fonts are supported.
+                    Assets will upload as {uploadVisibility} files in {uploadFolderLabel}. Images, videos, audio, documents, fonts, and other files are supported.
                   </p>
                   {uploadTagList.length > 0 ? (
                     <div className="pointer-events-none mt-4 flex flex-wrap justify-center gap-2">

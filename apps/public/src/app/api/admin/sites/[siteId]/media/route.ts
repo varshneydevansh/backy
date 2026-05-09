@@ -150,9 +150,18 @@ const paginateMedia = (items: MediaItem[], limit: number, offset: number) => ({
   },
 });
 
-const getMediaType = (mimeType: string, originalName: string): MediaItem['type'] | null => {
+const getMediaType = (mimeType: string, originalName: string): MediaItem['type'] => {
   const extension = extname(originalName).toLowerCase();
-  return MIME_TYPE_TO_MEDIA_TYPE.find((candidate) => candidate.test(mimeType, extension))?.type ?? null;
+  return MIME_TYPE_TO_MEDIA_TYPE.find((candidate) => candidate.test(mimeType, extension))?.type ?? 'other';
+};
+
+const mediaFolderForType = (type: MediaItem['type']) => {
+  if (type === 'font') return 'fonts';
+  if (type === 'image') return 'images';
+  if (type === 'video') return 'videos';
+  if (type === 'audio') return 'audio';
+  if (type === 'document') return 'documents';
+  return 'files';
 };
 
 const configuredSiteMediaQuotaBytes = () => {
@@ -331,17 +340,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const mimeType = file.type || 'application/octet-stream';
     const mediaType = getMediaType(mimeType, originalName);
 
-    if (!mediaType) {
-      return errorResponse(415, 'UNSUPPORTED_MEDIA_TYPE', `Unsupported file type: ${mimeType}`, requestId);
-    }
-
     const siteMediaQuotaBytes = configuredSiteMediaQuotaBytes();
     const currentMedia = repositories
       ? (await repositories.media.list({
           siteId: site.id,
           type: 'all',
           visibility: 'all',
-          limit: 100,
+          limit: 10000,
           offset: 0,
         })).items
       : getMediaList(site.id, {
@@ -367,7 +372,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const extension = extname(originalName).toLowerCase();
     const safeName = safePathSegment(extension ? originalName.slice(0, -extension.length) : originalName);
     const storedFilename = `${Date.now().toString(36)}-${safeName}${extension}`;
-    const mediaFolder = mediaType === 'font' ? 'fonts' : `${mediaType}s`;
+    const mediaFolder = mediaFolderForType(mediaType);
     const storagePath = getMediaStoragePath({ siteId: site.id, mediaFolder, storedFilename });
     const metadata = parseMetadata(formData.get('metadata'));
     const uploadBuffer = Buffer.from(await file.arrayBuffer());

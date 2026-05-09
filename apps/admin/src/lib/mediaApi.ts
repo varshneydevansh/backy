@@ -308,7 +308,7 @@ const adminFetch: typeof globalThis.fetch = (input, init = {}) => {
 };
 
 const toAdminMediaType = (type: ApiMediaItem['type']): MediaAsset['type'] => {
-  if (type === 'image' || type === 'video' || type === 'font') {
+  if (type === 'image' || type === 'video' || type === 'audio' || type === 'font' || type === 'other') {
     return type;
   }
 

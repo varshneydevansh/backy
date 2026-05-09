@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { AlertTriangle, CheckCircle2, CheckSquare, Code2, Copy, Download, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Save, Trash2, Type, Upload, Video, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CheckSquare, Code2, Copy, Download, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Music, Save, Trash2, Type, Upload, Video, X } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
@@ -328,7 +328,7 @@ function MediaPage() {
       },
       {
         label: 'Library inventory',
-        detail: hasAssets ? `${files.length} asset${files.length === 1 ? '' : 's'} in the library` : 'Upload the first image, video, document, or font.',
+        detail: hasAssets ? `${files.length} asset${files.length === 1 ? '' : 's'} in the library` : 'Upload the first image, video, audio, document, font, or file.',
         ready: hasAssets,
       },
       {
@@ -373,7 +373,7 @@ function MediaPage() {
       score: Math.round((readyCount / checks.length) * 100),
       checks,
       workflow: [
-        { label: 'Upload', detail: 'Drop images, videos, documents, or fonts with visibility, folder, and tag defaults.' },
+        { label: 'Upload', detail: 'Drop images, videos, audio, documents, fonts, or other files with visibility, folder, and tag defaults.' },
         { label: 'Organize', detail: 'Group media into folders, edit metadata, alt text, captions, and delivery rules.' },
         { label: 'Bind', detail: 'Attach assets to pages/posts and prepare transforms or signed URLs as needed.' },
         { label: 'Deliver', detail: 'Expose public files, private signed delivery, transforms, and font manifests to frontends.' },
@@ -1319,7 +1319,7 @@ function MediaPage() {
             {isUploading ? 'Uploading files' : 'Upload files'}
           </h3>
           <p className="pointer-events-none mx-auto max-w-xl text-sm text-muted-foreground">
-            Images, videos, documents, and fonts will upload as {uploadVisibility} assets into {uploadTargetFolderLabel}.
+            Images, videos, audio, documents, fonts, and other files will upload as {uploadVisibility} assets into {uploadTargetFolderLabel}.
           </p>
           {uploadTagList.length > 0 && (
             <div className="pointer-events-none mt-4 flex flex-wrap justify-center gap-2">
@@ -1724,7 +1724,7 @@ function MediaPage() {
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-medium">{asset.name}</span>
                         <span className="block text-xs text-muted-foreground">
-                          {asset.type} · {(asset.targetPageIds?.length || 0) + (asset.targetPostIds?.length || 0)} references
+                          {mediaTypeLabel(asset.type)} · {(asset.targetPageIds?.length || 0) + (asset.targetPostIds?.length || 0)} references
                         </span>
                       </span>
                       <span className="shrink-0 font-mono text-xs text-muted-foreground">{formatBytes(bytes)}</span>
@@ -1755,8 +1755,10 @@ function MediaPage() {
           <option value="all">All types</option>
           <option value="image">Images</option>
           <option value="video">Videos</option>
+          <option value="audio">Audio</option>
           <option value="file">Documents</option>
           <option value="font">Fonts</option>
+          <option value="other">Other files</option>
         </select>
         <select
           value={visibilityFilter}
@@ -2112,7 +2114,7 @@ function MediaPage() {
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate" title={file.name}>{file.name}</p>
                     <p className="text-xs capitalize text-muted-foreground">
-                      {file.type === 'file' ? 'document' : file.type} · {file.size} · {file.visibility || 'public'}
+                      {mediaTypeLabel(file.type)} · {file.size} · {file.visibility || 'public'}
                     </p>
                   </div>
                 </div>
@@ -3174,6 +3176,10 @@ function MediaTypeIcon({ type, className }: { type: MediaAsset['type']; classNam
     return <Video className={className} />;
   }
 
+  if (type === 'audio') {
+    return <Music className={className} />;
+  }
+
   if (type === 'font') {
     return <Type className={className} />;
   }
@@ -3184,6 +3190,12 @@ function MediaTypeIcon({ type, className }: { type: MediaAsset['type']; classNam
 
   return <File className={className} />;
 }
+
+const mediaTypeLabel = (type: MediaAsset['type']) => {
+  if (type === 'file') return 'document';
+  if (type === 'other') return 'other file';
+  return type;
+};
 
 function MediaAssetPreview({ file }: { file: MediaAsset }) {
   if (file.type === 'image' && file.url) {
@@ -3208,7 +3220,7 @@ function MediaAssetPreview({ file }: { file: MediaAsset }) {
         <MediaTypeIcon type={file.type} className="h-7 w-7" />
       </span>
       <span className="max-w-full truncate rounded bg-background/80 px-2 py-1 text-xs font-medium capitalize text-muted-foreground">
-        {file.type === 'file' ? 'document' : file.type}
+        {mediaTypeLabel(file.type)}
       </span>
     </div>
   );
@@ -3591,7 +3603,9 @@ const getReplacementVersions = (metadata: Record<string, unknown> | undefined): 
 const replacementAcceptForAsset = (type: MediaAsset['type']) => {
   if (type === 'image') return 'image/*';
   if (type === 'video') return 'video/*';
+  if (type === 'audio') return 'audio/*';
   if (type === 'font') return '.woff,.woff2,.ttf,.otf,.eot,font/*';
+  if (type === 'other') return '*/*';
   return '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv';
 };
 
