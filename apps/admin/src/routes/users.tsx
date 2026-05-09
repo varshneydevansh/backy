@@ -174,6 +174,49 @@ const MEMBERSHIP_FLOW_SYSTEMS = [
   },
 ] as const;
 
+const MEMBERSHIP_HANDOFF_STEPS = [
+  {
+    step: '1',
+    title: 'Create registration page',
+    detail: 'Seed a public page with the registration template and Backy form block.',
+    status: 'available',
+    to: '/pages/new',
+    label: 'Start page',
+  },
+  {
+    step: '2',
+    title: 'Review form contract',
+    detail: 'Confirm definition, submit URL, sample payload, contact sharing, and spam guard in Forms.',
+    status: 'available',
+    to: '/forms',
+    label: 'Open forms',
+  },
+  {
+    step: '3',
+    title: 'Route registrants',
+    detail: 'Use Contacts for lead/member review or Collections for structured profile records.',
+    status: 'available',
+    to: '/contacts',
+    label: 'Open contacts',
+  },
+  {
+    step: '4',
+    title: 'Connect auth provider',
+    detail: 'Use Settings to track Supabase/Auth infrastructure before credentialed member sessions.',
+    status: 'next',
+    to: '/settings',
+    label: 'Open settings',
+  },
+  {
+    step: '5',
+    title: 'Expose member portal',
+    detail: 'Protected account pages, profile updates, downloads, order history, and account deletion remain future work.',
+    status: 'next',
+    to: '/settings',
+    label: 'Track gap',
+  },
+] as const;
+
 function UsersLayout() {
   const routerState = useRouterState();
   const isExactUsersRoute = routerState.location.pathname === '/users';
@@ -531,6 +574,7 @@ function UsersListView() {
         authAndInfrastructureSettings: '/settings',
       },
       systems: MEMBERSHIP_FLOW_SYSTEMS,
+      handoffSteps: MEMBERSHIP_HANDOFF_STEPS,
       frontendFlow: [
         'Create a registration page from the page starter template.',
         'Use Forms to review the registration definition, public submit URL, contacts, and submissions.',
@@ -1099,6 +1143,25 @@ function UsersListView() {
                 Start from the registration template, review the generated form in Forms, then connect auth/provider settings when member credentials are ready.
               </div>
 
+              <div className="mb-4 rounded-lg border border-border bg-background p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Registration handoff workflow</h3>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      What Backy can control today and which member-account pieces still need the auth/provider pass.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    {MEMBERSHIP_HANDOFF_STEPS.filter((step) => step.status === 'available').length}/{MEMBERSHIP_HANDOFF_STEPS.length} available
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {MEMBERSHIP_HANDOFF_STEPS.map((step) => (
+                    <MembershipStepCard key={step.step} step={step} />
+                  ))}
+                </div>
+              </div>
+
               <div className="space-y-3">
                 {MEMBERSHIP_FLOW_SYSTEMS.map((system) => (
                   <div key={system.key} className="rounded-lg border border-border bg-background p-3">
@@ -1254,6 +1317,46 @@ function UserApiSnippet({ label, value }: { label: string; value: string }) {
       <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
         {value}
       </code>
+    </div>
+  );
+}
+
+function MembershipStepCard({ step }: { step: (typeof MEMBERSHIP_HANDOFF_STEPS)[number] }) {
+  const available = step.status === 'available';
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="flex items-start gap-3">
+        <span className={cn(
+          'flex size-7 shrink-0 items-center justify-center rounded-full font-mono text-xs font-semibold',
+          available ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+        )}
+        >
+          {step.step}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <div className="text-sm font-semibold text-foreground">{step.title}</div>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{step.detail}</p>
+            </div>
+            <span className={cn(
+              'rounded-md px-2 py-1 text-[11px] font-semibold',
+              available ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+            )}
+            >
+              {step.status}
+            </span>
+          </div>
+          <Link
+            to={step.to}
+            search={step.to === '/pages/new' ? { template: 'registration' } : undefined}
+            className="mt-3 inline-flex min-h-8 items-center justify-center rounded-lg border border-border bg-background px-3 text-xs font-medium transition hover:bg-accent"
+          >
+            {step.label}
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
