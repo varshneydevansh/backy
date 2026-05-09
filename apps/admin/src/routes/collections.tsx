@@ -40,7 +40,7 @@ import { PageShell } from '@/components/layout/PageShell';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { useStore } from '@/stores/mockStore';
-import { formatDate } from '@/lib/utils';
+import { cn, formatDate } from '@/lib/utils';
 
 const DEFAULT_RECORD_PAGE_SIZE = 25;
 const RECORD_PAGE_SIZES = [25, 50, 100] as const;
@@ -1006,6 +1006,8 @@ function CollectionsPage() {
   };
 
   const copyCollectionApiText = async (value: string, label: string) => {
+    if (isCollectionsBusy) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setError(null);
@@ -1016,6 +1018,8 @@ function CollectionsPage() {
     }
   };
   const downloadCollectionHandoff = () => {
+    if (isCollectionsBusy) return;
+
     const blob = new Blob([collectionHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -1030,6 +1034,9 @@ function CollectionsPage() {
   };
 
   const downloadCollectionSchemaCsv = () => {
+    if (isCollectionsBusy) return;
+    if (collections.length === 0) return;
+
     const rows = collections.map((collection) => {
       const exportRecord = collectionToSchemaExportRecord(collection, {
         activeSiteId,
@@ -1225,6 +1232,8 @@ function CollectionsPage() {
   };
 
   const loadCollections = async () => {
+    if (isCollectionsBusy) return;
+
     setIsLoading(true);
     setError(null);
     setValidationDetails([]);
@@ -1342,7 +1351,7 @@ function CollectionsPage() {
 
   const handleCollectionSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (isSavingCollection) return;
+    if (isCollectionsBusy) return;
 
     setIsSavingCollection(true);
     setError(null);
@@ -1388,7 +1397,7 @@ function CollectionsPage() {
   };
 
   const handleDeleteCollection = async (collection: Collection) => {
-    if (isSavingCollection) return;
+    if (isCollectionsBusy) return;
 
     setIsSavingCollection(true);
     setError(null);
@@ -1418,7 +1427,7 @@ function CollectionsPage() {
   const handleRecordSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!activeCollection) return;
-    if (isSavingRecord) return;
+    if (isCollectionsBusy) return;
 
     setIsSavingRecord(true);
     setError(null);
@@ -1462,7 +1471,7 @@ function CollectionsPage() {
     if (!activeCollection) {
       return;
     }
-    if (isSavingRecord) return;
+    if (isCollectionsBusy) return;
 
     setIsSavingRecord(true);
     setError(null);
@@ -1487,7 +1496,7 @@ function CollectionsPage() {
 
   const handleBulkUpdateStatus = async (status: CollectionRecord['status']) => {
     if (!activeCollection || selectedRecordIds.length === 0) return;
-    if (isSavingRecord) return;
+    if (isCollectionsBusy) return;
 
     setIsSavingRecord(true);
     setError(null);
@@ -1514,7 +1523,7 @@ function CollectionsPage() {
 
   const handleBulkDeleteRecords = async () => {
     if (!activeCollection || selectedRecordIds.length === 0) return;
-    if (isSavingRecord) return;
+    if (isCollectionsBusy) return;
 
     setIsSavingRecord(true);
     setError(null);
@@ -1673,7 +1682,8 @@ function CollectionsPage() {
             <button
               type="button"
               onClick={() => void copyCollectionApiText(collectionHandoffText, 'Collections handoff manifest')}
-              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+              disabled={isCollectionsBusy}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Copy className="h-4 w-4" />
               Copy manifest
@@ -1681,7 +1691,8 @@ function CollectionsPage() {
             <button
               type="button"
               onClick={downloadCollectionHandoff}
-              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+              disabled={isCollectionsBusy}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="h-4 w-4" />
               Download JSON
@@ -1793,7 +1804,11 @@ function CollectionsPage() {
                 key={surface.key}
                 to={surface.route}
                 search={['/pages', '/media', '/products', '/forms'].includes(surface.route) ? activeSiteSearch : undefined}
-                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                aria-disabled={isCollectionsBusy}
+                className={cn(
+                  'rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5',
+                  isCollectionsBusy && 'pointer-events-none opacity-60',
+                )}
               >
                 <div className="text-sm font-semibold text-foreground">{surface.title}</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
@@ -1873,7 +1888,8 @@ function CollectionsPage() {
           <button
             type="button"
             onClick={() => void copyCollectionApiText(recordsCopyUrl, recordsCopyLabel)}
-            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            disabled={isCollectionsBusy}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             aria-label={`Copy ${activeCollectionIsPublic ? 'public' : 'admin'} records URL`}
           >
             <Copy className="h-4 w-4" />
@@ -1882,7 +1898,8 @@ function CollectionsPage() {
           <button
             type="button"
             onClick={() => void copyCollectionApiText(collectionHandoffText, 'Collections handoff manifest')}
-            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            disabled={isCollectionsBusy}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Copy className="h-4 w-4" />
             Copy manifest
@@ -2354,7 +2371,14 @@ function CollectionsPage() {
                     href={`${dynamicBaseUrl}${buildCollectionListRoutePath(activeCollection)}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    aria-disabled={isCollectionsBusy}
+                    onClick={(event) => {
+                      if (isCollectionsBusy) event.preventDefault();
+                    }}
+                    className={cn(
+                      'mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline',
+                      isCollectionsBusy && 'pointer-events-none opacity-60',
+                    )}
                   >
                     <ExternalLink className="h-3 w-3" />
                     View list page
@@ -2609,7 +2633,14 @@ function CollectionsPage() {
                                 href={href}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-primary hover:underline"
+                                aria-disabled={isCollectionsBusy}
+                                onClick={(event) => {
+                                  if (isCollectionsBusy) event.preventDefault();
+                                }}
+                                className={cn(
+                                  'inline-flex items-center gap-1 text-primary hover:underline',
+                                  isCollectionsBusy && 'pointer-events-none opacity-60',
+                                )}
                               >
                                 {routePath}
                                 <ExternalLink className="h-3 w-3" />
@@ -2843,7 +2874,7 @@ function CollectionsPage() {
               <button
                 type="button"
                 onClick={() => setPendingCollectionDelete(null)}
-                disabled={isSavingCollection}
+                disabled={isCollectionsBusy}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -2851,7 +2882,7 @@ function CollectionsPage() {
               <button
                 type="button"
                 onClick={() => void handleDeleteCollection(pendingCollectionDelete)}
-                disabled={isSavingCollection}
+                disabled={isCollectionsBusy}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSavingCollection ? 'Deleting...' : 'Delete collection'}
@@ -2879,7 +2910,7 @@ function CollectionsPage() {
               <button
                 type="button"
                 onClick={() => setPendingRecordDelete(null)}
-                disabled={isSavingRecord}
+                disabled={isCollectionsBusy}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -2887,7 +2918,7 @@ function CollectionsPage() {
               <button
                 type="button"
                 onClick={() => void handleDeleteRecord(pendingRecordDelete)}
-                disabled={isSavingRecord}
+                disabled={isCollectionsBusy}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSavingRecord ? 'Deleting...' : 'Delete record'}
@@ -2915,7 +2946,7 @@ function CollectionsPage() {
               <button
                 type="button"
                 onClick={() => setPendingBulkDelete(false)}
-                disabled={isSavingRecord}
+                disabled={isCollectionsBusy}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -2923,7 +2954,7 @@ function CollectionsPage() {
               <button
                 type="button"
                 onClick={() => void handleBulkDeleteRecords()}
-                disabled={isSavingRecord}
+                disabled={isCollectionsBusy}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSavingRecord ? 'Deleting...' : 'Delete records'}
