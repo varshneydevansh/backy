@@ -180,31 +180,33 @@ try {
   const collectionRecordSlug = `admin-contract-record-${unique}`;
   const boundPageSlug = `admin-contract-bound-page-${unique}`;
   const routeConflictPageSlug = `admin-contract-route-conflict-${unique}`;
-  const adminDevOrigin = 'http://localhost:5173';
+  const adminDevOrigins = ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:4173'];
 
   await record('api cors allows local admin dev origin', async () => {
-    const preflight = await request('/api/admin/sites', {
-      method: 'OPTIONS',
-      headers: {
-        origin: adminDevOrigin,
-        'access-control-request-method': 'GET',
-        'access-control-request-headers': 'content-type,x-backy-admin-key',
-      },
-    });
-    assert(preflight.response.status === 204, `${preflight.url} expected 204 preflight, got ${preflight.response.status}`);
-    assert(preflight.response.headers.get('access-control-allow-origin') === adminDevOrigin, `${preflight.url} missing allowed origin`);
-    assert(preflight.response.headers.get('access-control-allow-methods')?.includes('GET'), `${preflight.url} missing allowed methods`);
-    assert(preflight.response.headers.get('access-control-allow-headers')?.toLowerCase().includes('x-backy-admin-key'), `${preflight.url} missing admin key header`);
-    assert(preflight.response.headers.get('x-backy-request-id'), `${preflight.url} missing request id header`);
+    for (const adminDevOrigin of adminDevOrigins) {
+      const preflight = await request('/api/admin/sites', {
+        method: 'OPTIONS',
+        headers: {
+          origin: adminDevOrigin,
+          'access-control-request-method': 'GET',
+          'access-control-request-headers': 'content-type,x-backy-admin-key',
+        },
+      });
+      assert(preflight.response.status === 204, `${preflight.url} expected 204 preflight for ${adminDevOrigin}, got ${preflight.response.status}`);
+      assert(preflight.response.headers.get('access-control-allow-origin') === adminDevOrigin, `${preflight.url} missing allowed origin ${adminDevOrigin}`);
+      assert(preflight.response.headers.get('access-control-allow-methods')?.includes('GET'), `${preflight.url} missing allowed methods`);
+      assert(preflight.response.headers.get('access-control-allow-headers')?.toLowerCase().includes('x-backy-admin-key'), `${preflight.url} missing admin key header`);
+      assert(preflight.response.headers.get('x-backy-request-id'), `${preflight.url} missing request id header`);
 
-    const actual = await request('/api/admin/sites?includeUnpublished=true', {
-      headers: {
-        origin: adminDevOrigin,
-      },
-    });
-    assert(actual.response.status === 200, `${actual.url} expected 200, got ${actual.response.status}`);
-    assert(actual.response.headers.get('access-control-allow-origin') === adminDevOrigin, `${actual.url} missing CORS header`);
-    assert(actual.response.headers.get('x-backy-request-id'), `${actual.url} missing request id header`);
+      const actual = await request('/api/admin/sites?includeUnpublished=true', {
+        headers: {
+          origin: adminDevOrigin,
+        },
+      });
+      assert(actual.response.status === 200, `${actual.url} expected 200 for ${adminDevOrigin}, got ${actual.response.status}`);
+      assert(actual.response.headers.get('access-control-allow-origin') === adminDevOrigin, `${actual.url} missing CORS header for ${adminDevOrigin}`);
+      assert(actual.response.headers.get('x-backy-request-id'), `${actual.url} missing request id header`);
+    }
   });
 
   await record('admin sites list returns success envelope', async () => {

@@ -182,6 +182,38 @@
         }
       },
       "required": ["id", "type", "label", "children"]
+    },
+    "navigationLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "header": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "variant": { "type": "string" },
+            "position": { "type": "string" },
+            "width": { "type": "string" },
+            "showBrand": { "type": "boolean" },
+            "showSearch": { "type": "boolean" },
+            "showAccount": { "type": "boolean" },
+            "showCart": { "type": "boolean" },
+            "ctaLabel": { "type": "string" },
+            "ctaHref": { "type": "string" }
+          }
+        },
+        "footer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "variant": { "type": "string" },
+            "width": { "type": "string" },
+            "showSocial": { "type": "boolean" },
+            "showNewsletter": { "type": "boolean" },
+            "note": { "type": "string" }
+          }
+        }
+      }
     }
   },
   "properties": {
@@ -231,6 +263,9 @@
             "footer": {
               "type": "array",
               "items": { "$ref": "#/$defs/navigationItem" }
+            },
+            "layout": {
+              "$ref": "#/$defs/navigationLayout"
             }
           },
           "required": ["primary"]
