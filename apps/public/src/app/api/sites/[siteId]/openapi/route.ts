@@ -107,6 +107,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       : listReusableSections(site.id, { status: 'active' });
     const collectionIds = collections.map((collection) => collection.id);
     const hasCommerceCatalog = collections.some((collection) => collection.slug === PRODUCT_COLLECTION_SLUG);
+    const hasPrivateOrders = collections.some((collection) => (
+      collection.slug === 'orders' &&
+      collection.status === 'published' &&
+      !collection.permissions.publicRead &&
+      !collection.permissions.publicCreate
+    ));
     const formIds = forms.map((form) => form.id);
     const reusableSectionIds = reusableSections.map((section) => section.id);
     const redirectRules = normalizeRedirectRules(site.settings?.redirectRules).filter((rule) => rule.enabled);
@@ -432,6 +438,52 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               },
               '404': {
                 description: hasCommerceCatalog ? 'Product not found' : 'Product catalog not found or not public',
+              },
+            },
+          },
+        },
+        [`/api/sites/${site.id}/commerce/orders`]: {
+          get: {
+            tags: ['Interactions'],
+            summary: 'Fetch the public checkout order intake contract',
+            operationId: 'getBackyCommerceOrderContract',
+            responses: {
+              '200': {
+                description: 'Commerce order intake contract',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/CommerceOrderContractEnvelope' },
+                  },
+                },
+              },
+            },
+          },
+          post: {
+            tags: ['Interactions'],
+            summary: 'Create a private Backy order from a public checkout cart',
+            operationId: 'createBackyCommerceOrder',
+            requestBody: {
+              required: true,
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/CommerceOrderCreateRequest' },
+                },
+              },
+            },
+            responses: {
+              '201': {
+                description: 'Private order captured',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/CommerceOrderEnvelope' },
+                  },
+                },
+              },
+              '404': {
+                description: hasCommerceCatalog && hasPrivateOrders ? 'Product not found' : 'Product catalog or private order queue not found',
+              },
+              '409': {
+                description: 'Product is out of stock or orders collection is not private',
               },
             },
           },
@@ -1609,6 +1661,58 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               filters: { type: 'object', additionalProperties: true },
               readiness: { type: 'object', additionalProperties: true },
               pagination: { type: 'object', additionalProperties: true },
+            },
+          }),
+          CommerceOrderCreateRequest: {
+            type: 'object',
+            required: ['customer', 'items'],
+            properties: {
+              customer: {
+                type: 'object',
+                required: ['name', 'email'],
+                properties: {
+                  name: { type: 'string' },
+                  email: { type: 'string', format: 'email' },
+                  phone: { type: 'string' },
+                },
+              },
+              items: {
+                type: 'array',
+                minItems: 1,
+                items: {
+                  type: 'object',
+                  properties: {
+                    productId: { type: 'string' },
+                    slug: { type: 'string' },
+                    quantity: { type: 'integer', minimum: 1 },
+                  },
+                },
+              },
+              shippingAddress: { type: 'string' },
+              billingAddress: { type: 'string' },
+              notes: { type: 'string' },
+              paymentProvider: { type: 'string' },
+              paymentReference: { type: 'string' },
+              checkoutSessionId: { type: 'string' },
+            },
+          },
+          CommerceOrderContractEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['schemaVersion', 'accepts', 'creates', 'relatedEndpoints'],
+            properties: {
+              schemaVersion: { type: 'string', const: 'backy.commerce-orders.v1' },
+              accepts: { type: 'object', additionalProperties: true },
+              creates: { type: 'object', additionalProperties: true },
+              relatedEndpoints: { type: 'object', additionalProperties: true },
+            },
+          }),
+          CommerceOrderEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['schemaVersion', 'order', 'lineItems'],
+            properties: {
+              schemaVersion: { type: 'string', const: 'backy.commerce-orders.v1' },
+              order: { type: 'object', additionalProperties: true },
+              lineItems: { type: 'array', items: { type: 'object', additionalProperties: true } },
             },
           }),
         },

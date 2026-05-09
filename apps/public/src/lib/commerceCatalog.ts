@@ -13,6 +13,7 @@ export interface CommerceSourceRecord {
   values: Record<string, unknown>;
   updatedAt: string;
   publishedAt?: string | null;
+  scheduledAt?: string | null;
 }
 
 export interface CommerceProduct {
@@ -123,11 +124,13 @@ const maybeNumber = (value: unknown): number | null => {
 export const isCommerceSourceRecord = (record: unknown): record is CommerceSourceRecord => {
   if (!record || typeof record !== 'object') return false;
   const candidate = record as Partial<CommerceSourceRecord>;
+  const scheduledAt = typeof candidate.scheduledAt === 'string' ? Date.parse(candidate.scheduledAt) : null;
 
   return (
     typeof candidate.id === 'string' &&
     typeof candidate.slug === 'string' &&
     candidate.status === 'published' &&
+    (!scheduledAt || scheduledAt <= Date.now()) &&
     candidate.values !== null &&
     typeof candidate.values === 'object' &&
     !Array.isArray(candidate.values)

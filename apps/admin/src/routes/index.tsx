@@ -162,6 +162,7 @@ const frontendContracts = [
   { label: 'Media', key: 'media', detail: 'Public assets, fonts, files' },
   { label: 'Collections', key: 'collections', detail: 'Structured records for custom UI' },
   { label: 'Commerce', key: 'products', detail: 'Normalized product catalog, facets, inventory, delivery, and checkout handoff' },
+  { label: 'Order intake', key: 'orderIntake', detail: 'Public checkout cart capture into the private order queue' },
   { label: 'Forms', key: 'forms', detail: 'Definitions and submission endpoints' },
   { label: 'Comments', key: 'comments', detail: 'Moderation-ready public discussions' },
   { label: 'SEO', key: 'seo', detail: 'Sitemap, robots, metadata, route index' },
@@ -632,6 +633,7 @@ function Index() {
     media: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/media`,
     collections: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections`,
     products: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/catalog?limit=24&sortBy=title`,
+    orderIntake: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/orders`,
     forms: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms`,
     comments: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments`,
     seo: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/seo?format=sitemap`,
@@ -671,6 +673,7 @@ function Index() {
     adminEndpoints: adminContractUrls,
     commerce: {
       catalogEndpoint: frontendContractUrls.products,
+      orderIntakeEndpoint: frontendContractUrls.orderIntake,
       productsCollection: productsCollection
         ? { id: productsCollection.id, status: productsCollection.status, publicRead: productsCollection.permissions.publicRead }
         : null,

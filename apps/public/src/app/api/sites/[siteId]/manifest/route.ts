@@ -143,6 +143,12 @@ const buildRepositoryManifest = (
   const fonts = input.media.filter((item) => item.type === 'font');
   const publicCollections = input.collections.filter((collection) => collection.permissions.publicRead);
   const hasCommerceCatalog = publicCollections.some((collection) => collection.slug === PRODUCT_COLLECTION_SLUG);
+  const hasPrivateOrders = input.collections.some((collection) => (
+    collection.slug === 'orders' &&
+    collection.status === 'published' &&
+    !collection.permissions.publicRead &&
+    !collection.permissions.publicCreate
+  ));
   const redirectRules = manifestRedirectRules(input.site.id, input.site.settings);
 
   return {
@@ -187,6 +193,7 @@ const buildRepositoryManifest = (
         collectionSchemas: true,
         collectionRecords: true,
         commerceCatalog: hasCommerceCatalog,
+        commerceOrderIntake: hasCommerceCatalog && hasPrivateOrders,
         publicCollectionCreate: publicCollections.some((collection) => collection.permissions.publicCreate),
         collectionWriteForms: input.forms.some((form) => form.collectionTarget?.enabled),
         dynamicListRoutes: publicCollections.length > 0,
@@ -216,6 +223,7 @@ const buildRepositoryManifest = (
         blogTags: `/api/sites/${input.site.id}/blog/tags`,
         blogAuthors: `/api/sites/${input.site.id}/blog/authors`,
         commerceCatalog: `/api/sites/${input.site.id}/commerce/catalog`,
+        commerceOrders: `/api/sites/${input.site.id}/commerce/orders`,
         collections: `/api/sites/${input.site.id}/collections`,
         reusableSections: `/api/sites/${input.site.id}/reusable-sections`,
         reusableSectionDetail: `/api/sites/${input.site.id}/reusable-sections/{sectionId}`,
@@ -425,6 +433,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const fonts = media.media.filter((item) => item.type === 'font');
     const redirectRules = manifestRedirectRules(site.id, site.settings);
     const hasCommerceCatalog = collections.some((collection) => collection.slug === PRODUCT_COLLECTION_SLUG && collection.permissions.publicRead);
+    const hasPrivateOrders = collections.some((collection) => (
+      collection.slug === 'orders' &&
+      collection.status === 'published' &&
+      !collection.permissions.publicRead &&
+      !collection.permissions.publicCreate
+    ));
 
     const manifest = {
       success: true,
@@ -468,6 +482,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           collectionSchemas: true,
           collectionRecords: true,
           commerceCatalog: hasCommerceCatalog,
+          commerceOrderIntake: hasCommerceCatalog && hasPrivateOrders,
           publicCollectionCreate: collections.some((collection) => collection.permissions.publicCreate),
           collectionWriteForms: forms.some((form) => form.collectionTarget?.enabled),
           dynamicListRoutes: collections.length > 0,
@@ -497,6 +512,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           blogTags: `/api/sites/${site.id}/blog/tags`,
           blogAuthors: `/api/sites/${site.id}/blog/authors`,
           commerceCatalog: `/api/sites/${site.id}/commerce/catalog`,
+          commerceOrders: `/api/sites/${site.id}/commerce/orders`,
           collections: `/api/sites/${site.id}/collections`,
           reusableSections: `/api/sites/${site.id}/reusable-sections`,
           reusableSectionDetail: `/api/sites/${site.id}/reusable-sections/{sectionId}`,

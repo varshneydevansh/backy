@@ -18,6 +18,7 @@ import {
   RotateCcw,
   Search,
   ShieldCheck,
+  ShoppingCart,
   Sparkles,
   Trash2,
   Truck,
@@ -54,8 +55,8 @@ const ORDER_CONTROL_AREAS = [
     href: '#orders-site',
   },
   {
-    title: 'Private API',
-    detail: 'Admin-only list, create, update, payment, fulfillment, and refund endpoints.',
+    title: 'Order APIs',
+    detail: 'Public checkout intake plus private admin list, payment, fulfillment, and refund endpoints.',
     href: '#orders-api',
   },
   {
@@ -213,8 +214,8 @@ const ORDER_BACKEND_SYSTEMS = [
   },
   {
     key: 'security',
-    title: 'Private API security',
-    detail: 'Orders stay admin-only; public read, create, update, and delete access must remain disabled.',
+    title: 'Private queue security',
+    detail: 'Raw orders stay admin-only; checkout intake writes private records without exposing customer data.',
   },
   {
     key: 'reporting',
@@ -284,6 +285,7 @@ function OrdersRoute() {
     ? `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/collections/${encodeURIComponent(ordersCollection.id)}/records/{orderId}`
     : '';
   const publicOrdersApiUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${ORDERS_COLLECTION_SLUG}/records`;
+  const publicOrderIntakeUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/orders`;
   const missingOrderFields = useMemo(() => (
     ordersCollection ? getMissingOrderFieldKeys(ordersCollection) : []
   ), [ordersCollection]);
@@ -443,6 +445,7 @@ function OrdersRoute() {
     endpoints: {
       adminListCreate: adminOrdersApiUrl,
       adminDetailUpdate: adminOrderDetailApiUrl,
+      checkoutIntake: publicOrderIntakeUrl,
       publicBlocked: publicOrdersApiUrl,
     },
     security: {
@@ -451,6 +454,7 @@ function OrdersRoute() {
       publicUpdate: Boolean(ordersCollection?.permissions.publicUpdate),
       publicDelete: Boolean(ordersCollection?.permissions.publicDelete),
       adminOnly: ordersApiReady,
+      publicCheckoutIntake: ordersApiReady ? 'enabled through /commerce/orders without public collection permissions' : 'requires private orders collection',
     },
     backendSystems: ORDER_BACKEND_SYSTEMS,
     readiness: {
@@ -529,6 +533,7 @@ function OrdersRoute() {
     orders,
     ordersApiReady,
     ordersCollection,
+    publicOrderIntakeUrl,
     publicOrdersApiUrl,
   ]);
   const orderHandoffText = useMemo(() => JSON.stringify(orderHandoff, null, 2), [orderHandoff]);
@@ -860,7 +865,7 @@ function OrdersRoute() {
               </span>
             </div>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-              Control private commerce operations: checkout records, payment state, fulfillment, tracking, refunds, customer support notes, and admin API handoff.
+              Control private commerce operations: public checkout intake, payment state, fulfillment, tracking, refunds, customer support notes, and admin API handoff.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -922,7 +927,7 @@ function OrdersRoute() {
 
         <div className="mt-4 rounded-lg border border-border bg-background p-4">
           <h3 className="text-sm font-semibold">Order control map</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, private API, order health, queue, and editor controls.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, checkout intake, private API, order health, queue, and editor controls.</p>
           <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
             {ORDER_CONTROL_AREAS.map((area) => (
               <a
@@ -942,7 +947,7 @@ function OrdersRoute() {
         <Panel id="orders-api" className="mb-6 scroll-mt-24">
           <PanelHeader
             title="Order API and security"
-            description="Internal fulfillment data stays private while custom frontends can talk to the controlled admin endpoint."
+            description="Custom frontends post checkout carts to a public intake endpoint while raw order records stay private."
             icon={<ShieldCheck className="size-4" />}
             action={
               <div className="flex flex-wrap items-center gap-2">
@@ -964,6 +969,9 @@ function OrdersRoute() {
                 <Button onClick={() => void copyOrdersApiUrl(adminOrdersApiUrl, 'Internal orders API URL')} iconStart={<Copy className="size-4" />}>
                   Copy admin API
                 </Button>
+                <Button onClick={() => void copyOrdersApiUrl(publicOrderIntakeUrl, 'Checkout intake URL')} iconStart={<Copy className="size-4" />}>
+                  Copy checkout
+                </Button>
                 <a
                   href={adminOrdersApiUrl}
                   target="_blank"
@@ -980,6 +988,7 @@ function OrdersRoute() {
             <div className="space-y-3">
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="space-y-2">
+                  <OrderApiSnippet icon={<ShoppingCart className="size-4" />} label="Checkout intake" value={publicOrderIntakeUrl} />
                   <OrderApiSnippet icon={<Code2 className="size-4" />} label="List and create orders" value={adminOrdersApiUrl} />
                   <OrderApiSnippet icon={<Receipt className="size-4" />} label="Read or update order" value={adminOrderDetailApiUrl} />
                 </div>
@@ -998,7 +1007,7 @@ function OrdersRoute() {
                     <span className="rounded-md border border-border bg-background px-2 py-1">
                       publicCreate {ordersCollection.permissions.publicCreate ? 'enabled' : 'disabled'}
                     </span>
-                    <span>Use a server checkout or admin key before writing orders.</span>
+                    <span>Use /commerce/orders for public checkout intake; keep this raw collection endpoint private.</span>
                   </div>
                 </div>
               </div>
