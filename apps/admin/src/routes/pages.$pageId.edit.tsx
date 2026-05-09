@@ -126,6 +126,7 @@ function PageEditorRoute() {
   const [pageReadiness, setPageReadiness] = useState<PageReadiness | null>(null);
   const [readinessLoading, setReadinessLoading] = useState(false);
   const [readinessError, setReadinessError] = useState<string | null>(null);
+  const [editorHasUnsavedChanges, setEditorHasUnsavedChanges] = useState(false);
   const [editorResetVersion, setEditorResetVersion] = useState(0);
   const [pendingRestoreRevision, setPendingRestoreRevision] = useState<ContentRevision | null>(null);
   const [isWorkspaceFocus, setIsWorkspaceFocus] = useState(routeSearch.focus === 'canvas');
@@ -337,6 +338,9 @@ function PageEditorRoute() {
     : isReadinessBlocked
       ? pageReadinessFindings.find((check) => check.severity === 'error')?.message || 'Resolve page readiness errors before publishing.'
       : null;
+  const externalWorkflowDisabledReason = editorHasUnsavedChanges
+    ? 'Save the canvas before previewing, publishing, archiving, or restoring from the page panels.'
+    : publishDisabledReason;
   const validatePageSettings = (settings: PageSettings) => {
     const nextSlug = slugify(settings.slug || settings.title || 'page');
     const nextPath = getPublicPathForSettings(settings);
@@ -600,6 +604,11 @@ function PageEditorRoute() {
     setWorkflowNotice(null);
 
     try {
+      if (editorHasUnsavedChanges) {
+        setSaveWarning('Save the canvas before changing the page publishing state from the page panels.');
+        return;
+      }
+
       if (action === 'publish') {
         const readiness = await loadPageReadiness();
         if (readiness?.statusLabel === 'blocked') {
@@ -628,6 +637,11 @@ function PageEditorRoute() {
     setSaveWarning(null);
 
     try {
+      if (editorHasUnsavedChanges) {
+        setSaveWarning('Save the canvas before generating a page preview.');
+        return;
+      }
+
       const preview = await createPagePreview(siteId, pageId);
       setPreviewUrl(preview.url);
       setPreviewExpiresAt(preview.expiresAt);
@@ -646,6 +660,11 @@ function PageEditorRoute() {
     setWorkflowNotice(null);
 
     try {
+      if (editorHasUnsavedChanges) {
+        setSaveWarning('Save or reload the canvas before restoring a revision.');
+        return;
+      }
+
       const restoredPage = await rollbackPage(siteId, pageId, revision.id);
       setPage(restoredPage);
       updatePage(pageId, restoredPage);
@@ -739,8 +758,9 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void generatePreview()}
-              disabled={isPreviewBusy}
+              disabled={isPreviewBusy || editorHasUnsavedChanges}
               iconStart={<Eye className="size-4" />}
+              title={editorHasUnsavedChanges ? 'Save the canvas before generating a preview' : 'Preview page'}
             >
               Preview
             </Button>
@@ -756,9 +776,9 @@ function PageEditorRoute() {
             <Button
               type="button"
               onClick={() => void applyWorkflow('publish')}
-              disabled={isWorkflowBusy || page.status === 'published' || Boolean(publishDisabledReason)}
+              disabled={isWorkflowBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
               iconStart={<CheckCircle2 className="size-4" />}
-              title={publishDisabledReason || 'Publish page'}
+              title={externalWorkflowDisabledReason || 'Publish page'}
             >
               Publish
             </Button>
@@ -920,6 +940,7 @@ function PageEditorRoute() {
               validateSettings={validatePageSettings}
               publishDisabled={Boolean(publishDisabledReason)}
               publishDisabledReason={publishDisabledReason || undefined}
+              onUnsavedChangesChange={setEditorHasUnsavedChanges}
               className="h-full w-full"
             />
           </EditorWorkspaceFrame>
@@ -938,29 +959,31 @@ function PageEditorRoute() {
               <div className="grid gap-2">
                 <Button
                   onClick={() => void generatePreview()}
-                  disabled={isPreviewBusy}
+                  disabled={isPreviewBusy || editorHasUnsavedChanges}
                   variant="outline"
                   iconStart={<Eye className="size-4" />}
                   className="w-full"
+                  title={editorHasUnsavedChanges ? 'Save the canvas before generating a preview' : 'Preview page'}
                 >
                   Preview
                 </Button>
                 <Button
                   onClick={() => void applyWorkflow('publish')}
-                  disabled={isWorkflowBusy || page.status === 'published' || Boolean(publishDisabledReason)}
+                  disabled={isWorkflowBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
                   variant="primary"
                   iconStart={<CheckCircle2 className="size-4" />}
                   className="w-full"
-                  title={publishDisabledReason || 'Publish page'}
+                  title={externalWorkflowDisabledReason || 'Publish page'}
                 >
                   Publish
                 </Button>
                 <Button
                   onClick={() => void applyWorkflow('archive')}
-                  disabled={isWorkflowBusy || page.status === 'archived'}
+                  disabled={isWorkflowBusy || page.status === 'archived' || editorHasUnsavedChanges}
                   variant="outline"
                   iconStart={<Archive className="size-4" />}
                   className="w-full"
+                  title={editorHasUnsavedChanges ? 'Save the canvas before archiving from this panel' : 'Archive page'}
                 >
                   Archive
                 </Button>
@@ -1066,10 +1089,10 @@ function PageEditorRoute() {
                         </div>
                         <button
                           type="button"
-                          disabled={isWorkflowBusy}
+                          disabled={isWorkflowBusy || editorHasUnsavedChanges}
                           onClick={() => setPendingRestoreRevision(revision)}
                           className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
-                          title="Restore revision"
+                          title={editorHasUnsavedChanges ? 'Save or reload the canvas before restoring' : 'Restore revision'}
                         >
                           <RotateCcw className="h-4 w-4" />
                         </button>
@@ -1117,7 +1140,7 @@ function PageEditorRoute() {
               <button
                 type="button"
                 onClick={() => void restoreRevision(pendingRestoreRevision)}
-                disabled={isWorkflowBusy}
+                disabled={isWorkflowBusy || editorHasUnsavedChanges}
                 className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:opacity-60"
               >
                 Restore revision

@@ -172,6 +172,7 @@ export interface CanvasEditorProps {
   validateSettings?: (settings: PageSettings) => string | null;
   publishDisabled?: boolean;
   publishDisabledReason?: string;
+  onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
 }
 
 const normalizeTypeToken = (value: string): string => {
@@ -278,6 +279,7 @@ export function CanvasEditor({
   validateSettings,
   publishDisabled = false,
   publishDisabledReason,
+  onUnsavedChangesChange,
 }: CanvasEditorProps) {
   const media = useStore((state) => state.media);
   const setMedia = useStore((state) => state.setMedia);
@@ -797,6 +799,10 @@ export function CanvasEditor({
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    onUnsavedChangesChange?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onUnsavedChangesChange]);
 
   useEffect(() => {
     setSelectedIds((current) => current.filter((id) => !!findElementById(elements, id)));
