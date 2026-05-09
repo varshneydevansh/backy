@@ -876,6 +876,21 @@ export interface SiteSettingsInput {
       autoDeploy?: boolean;
       previewDeployments?: boolean;
     };
+    notifications?: {
+      email?: {
+        newUser?: boolean;
+        pagePublished?: boolean;
+        formSubmission?: boolean;
+        systemUpdates?: boolean;
+      };
+      inApp?: {
+        comments?: boolean;
+        mentions?: boolean;
+        activity?: boolean;
+      };
+      digestFrequency?: 'instant' | 'daily' | 'weekly' | 'off';
+      webhookUrl?: string;
+    };
   };
   runtimeStorage?: {
     provider: 'local' | 's3' | 'supabase';

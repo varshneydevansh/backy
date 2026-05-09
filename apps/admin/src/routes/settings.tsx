@@ -313,6 +313,26 @@ function SettingsPage() {
     }
   };
 
+  const notificationSettings: NotificationSettingsConfig = {
+    ...DEFAULT_NOTIFICATION_SETTINGS,
+    ...(integrations.notifications || {}),
+    email: {
+      ...DEFAULT_NOTIFICATION_SETTINGS.email,
+      ...(integrations.notifications?.email || {}),
+    },
+    inApp: {
+      ...DEFAULT_NOTIFICATION_SETTINGS.inApp,
+      ...(integrations.notifications?.inApp || {}),
+    },
+  };
+
+  const updateNotificationSettings = (next: NotificationSettingsConfig) => {
+    setIntegrations({
+      ...integrations,
+      notifications: next,
+    });
+  };
+
   return (
     <div className="flex animate-fade-in flex-col gap-6">
       {/* Page Header */}
@@ -363,7 +383,12 @@ function SettingsPage() {
             onChange={setIntegrations}
           />
         )}
-        {activeTab === 'notifications' && <NotificationSettings />}
+        {activeTab === 'notifications' && (
+          <NotificationSettings
+            value={notificationSettings}
+            onChange={updateNotificationSettings}
+          />
+        )}
         {activeTab === 'security' && (
           <SecuritySettings
             publicApiKey={publicApiKey}
@@ -884,6 +909,25 @@ function DeliveryModeSettings({
 type IntegrationSettings = NonNullable<SiteSettingsInput['integrations']>;
 type SupabaseSettings = NonNullable<IntegrationSettings['supabase']>;
 type VercelSettings = NonNullable<IntegrationSettings['vercel']>;
+type NotificationSettingsConfig = NonNullable<IntegrationSettings['notifications']>;
+
+const DEFAULT_NOTIFICATION_SETTINGS: Required<Pick<NotificationSettingsConfig, 'email' | 'inApp' | 'digestFrequency'>> & {
+  webhookUrl: string;
+} = {
+  email: {
+    newUser: true,
+    pagePublished: true,
+    formSubmission: true,
+    systemUpdates: false,
+  },
+  inApp: {
+    comments: true,
+    mentions: true,
+    activity: true,
+  },
+  digestFrequency: 'instant',
+  webhookUrl: '',
+};
 
 const inputClassName = cn(
   'w-full rounded-lg border border-input bg-background px-3 py-2 text-sm',
@@ -1173,49 +1217,127 @@ function InfrastructureSettings({
 // NOTIFICATION SETTINGS
 // ============================================
 
-function NotificationSettings() {
-  return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold mb-4">Email Notifications</h3>
-        <div className="space-y-3">
-          {[
-            { id: 'new-user', label: 'New user registration' },
-            { id: 'page-published', label: 'Page published' },
-            { id: 'form-submission', label: 'New form submission' },
-            { id: 'system-updates', label: 'System updates' },
-          ].map((item) => (
-            <label key={item.id} className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                defaultChecked
-                className="w-4 h-4 rounded border-gray-300"
-              />
-              <span className="text-sm">{item.label}</span>
-            </label>
-          ))}
-        </div>
-      </div>
+function NotificationSettings({
+  value,
+  onChange,
+}: {
+  value: NotificationSettingsConfig;
+  onChange: (next: NotificationSettingsConfig) => void;
+}) {
+  const updateEmail = (key: keyof NonNullable<NotificationSettingsConfig['email']>, checked: boolean) => {
+    onChange({
+      ...value,
+      email: {
+        ...value.email,
+        [key]: checked,
+      },
+    });
+  };
 
-      <div>
-        <h3 className="text-lg font-semibold mb-4">In-App Notifications</h3>
-        <div className="space-y-3">
-          {[
-            { id: 'comments', label: 'New comments' },
-            { id: 'mentions', label: 'Mentions' },
-            { id: 'activity', label: 'Team activity' },
-          ].map((item) => (
-            <label key={item.id} className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                defaultChecked
-                className="w-4 h-4 rounded border-gray-300"
-              />
-              <span className="text-sm">{item.label}</span>
+  const updateInApp = (key: keyof NonNullable<NotificationSettingsConfig['inApp']>, checked: boolean) => {
+    onChange({
+      ...value,
+      inApp: {
+        ...value.inApp,
+        [key]: checked,
+      },
+    });
+  };
+
+  return (
+    <div className="grid gap-6 xl:grid-cols-2">
+      <Panel>
+        <PanelHeader
+          title="Email notifications"
+          description="Workspace events that should be sent to configured notification channels."
+        />
+        <PanelContent>
+          <div className="grid gap-3">
+            {[
+              { key: 'newUser' as const, label: 'New user registration' },
+              { key: 'pagePublished' as const, label: 'Page published' },
+              { key: 'formSubmission' as const, label: 'New form submission' },
+              { key: 'systemUpdates' as const, label: 'System updates' },
+            ].map((item) => (
+              <label key={item.key} className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border px-3 text-sm">
+                <span>{item.label}</span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(value.email?.[item.key])}
+                  onChange={(event) => updateEmail(item.key, event.target.checked)}
+                  className="size-4 rounded border-input"
+                />
+              </label>
+            ))}
+          </div>
+        </PanelContent>
+      </Panel>
+
+      <Panel>
+        <PanelHeader
+          title="In-app notifications"
+          description="Events shown in the dashboard notification bell."
+        />
+        <PanelContent>
+          <div className="grid gap-3">
+            {[
+              { key: 'comments' as const, label: 'Pending comments' },
+              { key: 'mentions' as const, label: 'Team mentions' },
+              { key: 'activity' as const, label: 'Team activity' },
+            ].map((item) => (
+              <label key={item.key} className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border px-3 text-sm">
+                <span>{item.label}</span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(value.inApp?.[item.key])}
+                  onChange={(event) => updateInApp(item.key, event.target.checked)}
+                  className="size-4 rounded border-input"
+                />
+              </label>
+            ))}
+          </div>
+        </PanelContent>
+      </Panel>
+
+      <Panel>
+        <PanelHeader
+          title="Digest and webhook"
+          description="Persist notification cadence and a future-compatible webhook endpoint."
+        />
+        <PanelContent>
+          <div className="grid gap-4">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Digest frequency</span>
+              <select
+                value={value.digestFrequency || DEFAULT_NOTIFICATION_SETTINGS.digestFrequency}
+                onChange={(event) => onChange({
+                  ...value,
+                  digestFrequency: event.target.value as NotificationSettingsConfig['digestFrequency'],
+                })}
+                className={inputClassName}
+              >
+                <option value="instant">Instant</option>
+                <option value="daily">Daily digest</option>
+                <option value="weekly">Weekly digest</option>
+                <option value="off">Off</option>
+              </select>
             </label>
-          ))}
-        </div>
-      </div>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Webhook URL</span>
+              <input
+                value={value.webhookUrl || ''}
+                onChange={(event) => onChange({ ...value, webhookUrl: event.target.value })}
+                placeholder="https://example.com/backy-events"
+                className={inputClassName}
+              />
+            </label>
+          </div>
+        </PanelContent>
+      </Panel>
+
+      <Notice tone="info" title="Runtime behavior">
+        Pending comment notifications in the header honor the in-app comments toggle immediately after settings are saved.
+      </Notice>
     </div>
   );
 }

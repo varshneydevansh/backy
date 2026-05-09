@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { useStore } from '@/stores/mockStore';
 import {
+  getSettings,
   listBlogPosts,
   listComments,
   listFormContacts,
@@ -33,6 +34,7 @@ import {
   listPages,
   listSites,
   type AdminComment,
+  type SiteSettingsInput,
 } from '@/lib/adminContentApi';
 
 // ============================================
@@ -52,6 +54,10 @@ type SearchResult =
   | { id: string; type: 'Comment'; title: string; detail: string; action: { route: 'comments' } }
   | { id: string; type: 'Contact'; title: string; detail: string; action: { route: 'contacts' } }
   | { id: string; type: 'Tool'; title: string; detail: string; action: { route: 'static'; to: '/media' | '/products' | '/orders' | '/collections' | '/settings' } };
+
+const commentsNotificationsEnabled = (settings?: SiteSettingsInput): boolean => (
+  settings?.integrations?.notifications?.inApp?.comments !== false
+);
 
 // ============================================
 // COMPONENT
@@ -119,6 +125,12 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     setNotificationsError(null);
 
     try {
+      const settings = await getSettings().catch(() => undefined);
+      if (!commentsNotificationsEnabled(settings)) {
+        setPendingComments([]);
+        return;
+      }
+
       const result = await listComments(activeSiteId, { status: 'pending', limit: 5, sort: 'newest' });
       setPendingComments(result.comments);
     } catch (error) {
