@@ -183,6 +183,9 @@ function BlogListView() {
   const [previewingPostId, setPreviewingPostId] = useState<string | null>(null);
   const [pendingDeletePost, setPendingDeletePost] = useState<BlogPost | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
+  const isPostMutationBusy = mutatingPostId !== null;
+  const isPostPreviewBusy = previewingPostId !== null;
+  const isBlogWorkflowBusy = isLoading || isBulkBusy || isPostMutationBusy || isPostPreviewBusy;
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
@@ -322,12 +325,16 @@ function BlogListView() {
   );
 
   const setPostStatusFilter = (nextStatus: 'all' | BlogPost['status']) => {
+    if (isBlogWorkflowBusy) return;
+
     setStatusFilter(nextStatus);
     setCurrentPage(1);
     setSelectedPostIds(new Set());
   };
 
   const setPostSelection = (targetPosts: BlogPost[], selected: boolean) => {
+    if (isBlogWorkflowBusy) return;
+
     setSelectedPostIds((current) => {
       const next = new Set(current);
       targetPosts.forEach((post) => {
@@ -342,6 +349,8 @@ function BlogListView() {
   };
 
   const togglePostSelection = (postId: string) => {
+    if (isBlogWorkflowBusy) return;
+
     setSelectedPostIds((current) => {
       const next = new Set(current);
       if (next.has(postId)) {
@@ -358,6 +367,8 @@ function BlogListView() {
   );
 
   const handlePreviewPost = async (post: BlogPost) => {
+    if (isBlogWorkflowBusy) return;
+
     setPreviewingPostId(post.id);
     setError(null);
     setNotice(null);
@@ -373,6 +384,8 @@ function BlogListView() {
   };
 
   const handleDeletePost = async (post: BlogPost) => {
+    if (isBlogWorkflowBusy) return;
+
     setMutatingPostId(post.id);
     setError(null);
     setNotice(null);
@@ -395,6 +408,8 @@ function BlogListView() {
   };
 
   const handleBulkAction = async () => {
+    if (isBlogWorkflowBusy) return;
+
     if (!bulkAction || selectedPosts.length === 0) {
       return;
     }
@@ -448,8 +463,9 @@ function BlogListView() {
           type="checkbox"
           aria-label={`Select ${post.title}`}
           checked={selectedPostIds.has(post.id)}
+          disabled={isBlogWorkflowBusy}
           onChange={() => togglePostSelection(post.id)}
-          className="size-4 rounded border-border text-primary focus:ring-ring"
+          className="size-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         />
       )
     },
@@ -521,7 +537,16 @@ function BlogListView() {
               target="_blank"
               rel="noreferrer"
               title="Open published post"
-              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+              aria-disabled={isBlogWorkflowBusy}
+              onClick={(event) => {
+                if (isBlogWorkflowBusy) {
+                  event.preventDefault();
+                }
+              }}
+              className={cn(
+                'p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors',
+                isBlogWorkflowBusy && 'pointer-events-none opacity-50',
+              )}
             >
               <ExternalLink className="w-4 h-4" />
             </a>
@@ -530,23 +555,31 @@ function BlogListView() {
             onClick={() => {
               void handlePreviewPost(post);
             }}
-            disabled={previewingPostId === post.id || mutatingPostId === post.id}
+            disabled={isBlogWorkflowBusy}
             title="Preview post"
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Eye className="w-4 h-4" />
           </button>
           <button
-            onClick={() => navigate({ to: '/blog/$postId', params: { postId: post.id }, search: { siteId: activeSiteId } })}
-            disabled={mutatingPostId === post.id}
+            onClick={() => {
+              if (!isBlogWorkflowBusy) {
+                void navigate({ to: '/blog/$postId', params: { postId: post.id }, search: { siteId: activeSiteId } });
+              }
+            }}
+            disabled={isBlogWorkflowBusy}
             title="Edit post"
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Edit className="w-4 h-4" />
           </button>
           <button
-            onClick={() => setPendingDeletePost(post)}
-            disabled={mutatingPostId === post.id}
+            onClick={() => {
+              if (!isBlogWorkflowBusy) {
+                setPendingDeletePost(post);
+              }
+            }}
+            disabled={isBlogWorkflowBusy}
             title="Delete post"
             className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -795,6 +828,8 @@ function BlogListView() {
   const blogHandoffText = useMemo(() => JSON.stringify(blogHandoff, null, 2), [blogHandoff]);
 
   const copyBlogText = async (value: string, label: string) => {
+    if (isBlogWorkflowBusy) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setError(null);
@@ -806,6 +841,8 @@ function BlogListView() {
   };
 
   const downloadBlogHandoff = () => {
+    if (isBlogWorkflowBusy) return;
+
     const blob = new Blob([blogHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -820,6 +857,8 @@ function BlogListView() {
   };
 
   const downloadBlogCsv = () => {
+    if (isBlogWorkflowBusy) return;
+
     if (data.length === 0) {
       setError('No blog posts are available to export with the current controls.');
       setNotice(null);
@@ -883,6 +922,18 @@ function BlogListView() {
     setNotice('Blog CSV exported.');
   };
 
+  const clearBlogFilters = () => {
+    if (isBlogWorkflowBusy) return;
+
+    setSearchQuery('');
+    setStatusFilter('all');
+    setSelectedCategoryId('');
+    setSelectedTagId('');
+    setSelectedAuthorId('');
+    setCurrentPage(1);
+    setSelectedPostIds(new Set());
+  };
+
   return (
     <PageShell
       title="Blog Posts"
@@ -891,7 +942,11 @@ function BlogListView() {
         <Link
           to="/blog/new"
           search={createPostSearch}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
+          aria-disabled={isBlogWorkflowBusy}
+          className={cn(
+            'inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors',
+            isBlogWorkflowBusy && 'pointer-events-none opacity-60',
+          )}
         >
           <Plus className="w-4 h-4" />
           New Post
@@ -937,7 +992,8 @@ function BlogListView() {
             <button
               type="button"
               onClick={() => void copyBlogText(blogHandoffText, 'Blog handoff manifest')}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              disabled={isBlogWorkflowBusy}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Copy className="size-4" />
               Copy handoff
@@ -945,7 +1001,8 @@ function BlogListView() {
             <button
               type="button"
               onClick={downloadBlogHandoff}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              disabled={isBlogWorkflowBusy}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="size-4" />
               Download JSON
@@ -953,7 +1010,7 @@ function BlogListView() {
             <button
               type="button"
               onClick={downloadBlogCsv}
-              disabled={data.length === 0}
+              disabled={data.length === 0 || isBlogWorkflowBusy}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="size-4" />
@@ -962,7 +1019,11 @@ function BlogListView() {
             <Link
               to="/blog/new"
               search={createPostSearch}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+              aria-disabled={isBlogWorkflowBusy}
+              className={cn(
+                'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90',
+                isBlogWorkflowBusy && 'pointer-events-none opacity-60',
+              )}
               data-testid="blog-command-create"
             >
               <Plus className="h-4 w-4" />
@@ -1074,8 +1135,9 @@ function BlogListView() {
               key={metric.label}
               type="button"
               onClick={() => setPostStatusFilter(metric.status)}
+              disabled={isBlogWorkflowBusy}
               className={cn(
-                'rounded-lg border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-muted',
+                'rounded-lg border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60',
                 statusFilter === metric.status && 'border-primary bg-primary/5',
               )}
             >
@@ -1088,7 +1150,10 @@ function BlogListView() {
           <div className="text-xs font-medium text-muted-foreground">Active Site</div>
           <select
             value={activeSiteId}
+            disabled={isBlogWorkflowBusy}
             onChange={(event) => {
+              if (isBlogWorkflowBusy) return;
+
               const nextSiteId = event.target.value;
               setSelectedSiteId(nextSiteId);
               setStatusFilter('all');
@@ -1098,7 +1163,7 @@ function BlogListView() {
               setSelectedPostIds(new Set());
               navigate({ to: '/blog', search: { siteId: nextSiteId }, replace: true });
             }}
-            className="mt-2 w-full min-w-52 rounded-lg border bg-background px-3 py-2 text-sm"
+            className="mt-2 w-full min-w-52 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           >
             {sites.length === 0 ? (
               <option value="site-demo">Demo site</option>
@@ -1126,7 +1191,8 @@ function BlogListView() {
             <button
               type="button"
               onClick={() => void copyBlogText(publicBlogUrl, 'Blog posts API URL')}
-              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+              disabled={isBlogWorkflowBusy}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Copy className="h-4 w-4" />
               Copy API
@@ -1134,7 +1200,8 @@ function BlogListView() {
             <button
               type="button"
               onClick={() => void copyBlogText(blogHandoffText, 'Blog handoff manifest')}
-              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+              disabled={isBlogWorkflowBusy}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Copy className="h-4 w-4" />
               Copy handoff
@@ -1142,7 +1209,7 @@ function BlogListView() {
             <button
               type="button"
               onClick={downloadBlogCsv}
-              disabled={data.length === 0}
+              disabled={data.length === 0 || isBlogWorkflowBusy}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="h-4 w-4" />
@@ -1197,18 +1264,21 @@ function BlogListView() {
           <button
             type="button"
             onClick={() => setPostSelection(data, selectedCurrentRows.length !== data.length)}
-            disabled={data.length === 0}
+            disabled={data.length === 0 || isBlogWorkflowBusy}
             className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             {selectedCurrentRows.length === data.length && data.length > 0 ? 'Clear visible' : 'Select visible'}
           </button>
           <select
             value={bulkAction}
+            disabled={isBlogWorkflowBusy}
             onChange={(event) => {
+              if (isBlogWorkflowBusy) return;
+
               setBulkAction(event.target.value as typeof bulkAction);
               setPendingBulkDelete(false);
             }}
-            className="min-w-44 rounded-lg border bg-background px-3 py-2 text-sm"
+            className="min-w-44 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           >
             <option value="">Bulk action...</option>
             <option value="publish">Publish selected</option>
@@ -1218,7 +1288,7 @@ function BlogListView() {
           <button
             type="button"
             onClick={() => void handleBulkAction()}
-            disabled={!bulkAction || selectedPosts.length === 0 || isBulkBusy}
+            disabled={!bulkAction || selectedPosts.length === 0 || isBlogWorkflowBusy}
             className={cn(
               'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-primary-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60',
               bulkAction === 'delete'
@@ -1234,8 +1304,13 @@ function BlogListView() {
           {selectedPosts.length > 0 && (
             <button
               type="button"
-              onClick={() => setSelectedPostIds(new Set())}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              onClick={() => {
+                if (!isBlogWorkflowBusy) {
+                  setSelectedPostIds(new Set());
+                }
+              }}
+              disabled={isBlogWorkflowBusy}
+              className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
               Clear selection
             </button>
@@ -1248,8 +1323,13 @@ function BlogListView() {
               </span>
               <button
                 type="button"
-                onClick={() => setSelectedPostIds((current) => new Set([...current].filter((postId) => visiblePostIdSet.has(postId))))}
-                className="shrink-0 rounded-md border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-900 transition hover:bg-amber-100"
+                onClick={() => {
+                  if (!isBlogWorkflowBusy) {
+                    setSelectedPostIds((current) => new Set([...current].filter((postId) => visiblePostIdSet.has(postId))));
+                  }
+                }}
+                disabled={isBlogWorkflowBusy}
+                className="shrink-0 rounded-md border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Clear non-visible
               </button>
@@ -1264,11 +1344,14 @@ function BlogListView() {
             type="text"
             placeholder="Search posts..."
             value={searchQuery}
+            disabled={isBlogWorkflowBusy}
             onChange={(e) => {
+              if (isBlogWorkflowBusy) return;
+
               setSearchQuery(e.target.value);
               setSelectedPostIds(new Set());
             }}
-            className="w-full pl-4 pr-4 py-2 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            className="w-full pl-4 pr-4 py-2 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           />
         </div>
         <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card p-1">
@@ -1278,8 +1361,9 @@ function BlogListView() {
               key={status}
               type="button"
               onClick={() => setPostStatusFilter(status)}
+              disabled={isBlogWorkflowBusy}
               className={cn(
-                'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60',
                 statusFilter === status && 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground',
               )}
             >
@@ -1289,12 +1373,15 @@ function BlogListView() {
         </div>
         <select
           value={selectedCategoryId}
+          disabled={isBlogWorkflowBusy}
           onChange={(event) => {
+            if (isBlogWorkflowBusy) return;
+
             setSelectedCategoryId(event.target.value);
             setCurrentPage(1);
             setSelectedPostIds(new Set());
           }}
-          className="w-48 rounded-lg border bg-background px-3 py-2 text-sm"
+          className="w-48 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
         >
           <option value="">All categories</option>
           {categories.map((category) => (
@@ -1305,12 +1392,15 @@ function BlogListView() {
         </select>
         <select
           value={selectedTagId}
+          disabled={isBlogWorkflowBusy}
           onChange={(event) => {
+            if (isBlogWorkflowBusy) return;
+
             setSelectedTagId(event.target.value);
             setCurrentPage(1);
             setSelectedPostIds(new Set());
           }}
-          className="w-44 rounded-lg border bg-background px-3 py-2 text-sm"
+          className="w-44 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
         >
           <option value="">All tags</option>
           {tags.map((tag) => (
@@ -1321,12 +1411,15 @@ function BlogListView() {
         </select>
         <select
           value={selectedAuthorId}
+          disabled={isBlogWorkflowBusy}
           onChange={(event) => {
+            if (isBlogWorkflowBusy) return;
+
             setSelectedAuthorId(event.target.value);
             setCurrentPage(1);
             setSelectedPostIds(new Set());
           }}
-          className="w-44 rounded-lg border bg-background px-3 py-2 text-sm"
+          className="w-44 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
         >
           <option value="">All authors</option>
           {authors.map((author) => (
@@ -1337,23 +1430,20 @@ function BlogListView() {
         </select>
         <button
           type="button"
-          onClick={() => {
-            setSearchQuery('');
-            setStatusFilter('all');
-            setSelectedCategoryId('');
-            setSelectedTagId('');
-            setSelectedAuthorId('');
-            setCurrentPage(1);
-            setSelectedPostIds(new Set());
-          }}
-          className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+          onClick={clearBlogFilters}
+          disabled={isBlogWorkflowBusy}
+          className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
           Clear Filters
         </button>
         <button
           type="button"
-          onClick={() => void refreshPosts(activeSiteId)}
-          disabled={isLoading}
+          onClick={() => {
+            if (!isBlogWorkflowBusy) {
+              void refreshPosts(activeSiteId);
+            }
+          }}
+          disabled={isBlogWorkflowBusy}
           className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
           Refresh
@@ -1364,12 +1454,21 @@ function BlogListView() {
         <DataGrid
           columns={columns}
           data={data}
+          loading={isLoading}
           sortConfig={sortConfig}
-          onSort={handleSort}
+          onSort={(key) => {
+            if (!isBlogWorkflowBusy) {
+              handleSort(key);
+            }
+          }}
           currentPage={currentPage}
           totalPages={totalPages}
           pageSize={10}
-          onPageChange={setCurrentPage}
+          onPageChange={(page) => {
+            if (!isBlogWorkflowBusy) {
+              setCurrentPage(page);
+            }
+          }}
           totalItems={totalItems}
           emptyState={
             <EmptyState
@@ -1385,15 +1484,9 @@ function BlogListView() {
                   {hasPosts && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setSearchQuery('');
-                        setStatusFilter('all');
-                        setSelectedCategoryId('');
-                        setSelectedTagId('');
-                        setSelectedAuthorId('');
-                        setSelectedPostIds(new Set());
-                      }}
-                      className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 font-medium transition-colors hover:bg-accent"
+                      onClick={clearBlogFilters}
+                      disabled={isBlogWorkflowBusy}
+                      className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Clear Filters
                     </button>
@@ -1402,7 +1495,11 @@ function BlogListView() {
                     to="/blog/new"
                     search={createPostSearch}
                     data-testid="blog-empty-create"
-                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                    aria-disabled={isBlogWorkflowBusy}
+                    className={cn(
+                      'inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90',
+                      isBlogWorkflowBusy && 'pointer-events-none opacity-60',
+                    )}
                   >
                     <Plus className="w-4 h-4" />
                     Create Post
