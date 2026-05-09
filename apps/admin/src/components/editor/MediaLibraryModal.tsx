@@ -1,7 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { X, Upload, Image as ImageIcon, Film, FileText, Type as TypeIcon } from 'lucide-react';
+import {
+  X,
+  Upload,
+  Image as ImageIcon,
+  Film,
+  FileText,
+  Type as TypeIcon,
+  Search,
+  Globe2,
+  LockKeyhole,
+  FolderOpen,
+  CheckCircle2,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getDefaultMediaSiteId, listMedia, uploadMedia } from '@/lib/mediaApi';
+import { getDefaultMediaSiteId, listMedia, listMediaFolders, uploadMedia, type MediaFolder } from '@/lib/mediaApi';
 import { useStore, type MediaAsset } from '@/stores/mockStore';
 
 type AllowedType = 'image' | 'video' | 'file' | 'font' | 'any';
@@ -43,6 +55,12 @@ export function MediaLibraryModal({
   const setMedia = useStore((state) => state.setMedia);
   const [activeTab, setActiveTab] = useState<MediaLibraryTab>('library');
   const [uploadFilter, setUploadFilter] = useState<UploadFilter>('all');
+  const [libraryTypeFilter, setLibraryTypeFilter] = useState<UploadFilter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [uploadVisibility, setUploadVisibility] = useState<'public' | 'private'>('public');
+  const [uploadFolderId, setUploadFolderId] = useState<'root' | string>('root');
+  const [uploadTags, setUploadTags] = useState('');
+  const [folders, setFolders] = useState<MediaFolder[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [scopeFilter, setScopeFilter] = useState<MediaScopeFilter>(mediaContext?.scope || 'all');
   const [isLoading, setIsLoading] = useState(false);
@@ -60,6 +78,8 @@ export function MediaLibraryModal({
         ? initialUploadFilter
         : 'all'
     );
+    setLibraryTypeFilter('all');
+    setSearchQuery('');
   }, [initialTab, initialUploadFilter, isOpen]);
 
   const allowedTypesSet = useMemo(() => {
@@ -111,18 +131,43 @@ export function MediaLibraryModal({
     return scopeMatches(item, scopeFilter);
   };
 
+  const allowedTypeOptions = useMemo(
+    () => (['all', 'image', 'video', 'file', 'font'] as const).filter((filter) => (
+      filter === 'all' ? allowedTypes === 'any' : allowedTypes === 'any' || allowedTypesSet.has(filter)
+    )),
+    [allowedTypes, allowedTypesSet]
+  );
+
+  const uploadTagList = useMemo(
+    () => uploadTags
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+      .slice(0, 10),
+    [uploadTags]
+  );
+
+  const uploadFolderLabel = useMemo(() => {
+    if (uploadFolderId === 'root') return 'Root library';
+    return folders.find((folder) => folder.id === uploadFolderId)?.name || 'Selected folder';
+  }, [folders, uploadFolderId]);
+
   const loadMedia = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const loaded = await listMedia({
-        siteId,
-        limit: 100,
-        pageId: targetScope === 'page' ? targetId : undefined,
-        postId: targetScope === 'post' ? targetId : undefined,
-      });
+      const [loaded, loadedFolders] = await Promise.all([
+        listMedia({
+          siteId,
+          limit: 100,
+          pageId: targetScope === 'page' ? targetId : undefined,
+          postId: targetScope === 'post' ? targetId : undefined,
+        }),
+        listMediaFolders(siteId),
+      ]);
       setMedia(loaded);
+      setFolders(loadedFolders);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load media library');
     } finally {
@@ -142,10 +187,29 @@ export function MediaLibraryModal({
     () =>
       normalized.filter((item) => {
         if (!allowedTypesSet.has(item.type)) return false;
+        if (libraryTypeFilter !== 'all' && item.type !== libraryTypeFilter) return false;
+        const query = searchQuery.trim().toLowerCase();
+        if (query) {
+          const haystack = [
+            item.name,
+            item.altText,
+            item.caption,
+            item.visibility,
+            item.scope,
+            ...(item.tags || []),
+          ].filter(Boolean).join(' ').toLowerCase();
+          if (!haystack.includes(query)) return false;
+        }
         return mediaContextFilter(item as MediaAsset & { scope: 'global' | 'page' | 'post'; scopeTargetId: string | null });
       }),
-    [allowedTypesSet, mediaContextFilter, normalized, scopeFilter, targetScope]
+    [allowedTypesSet, libraryTypeFilter, mediaContextFilter, normalized, searchQuery, scopeFilter, targetScope]
   );
+
+  const libraryStats = useMemo(() => ({
+    total: filteredMedia.length,
+    public: filteredMedia.filter((item) => item.visibility !== 'private').length,
+    private: filteredMedia.filter((item) => item.visibility === 'private').length,
+  }), [filteredMedia]);
 
   const formatScopeLabel = (item: MediaAsset & { scope?: 'global' | 'page' | 'post'; scopeTargetId: string | null }) => {
     const scope = item.scope || 'global';
@@ -210,6 +274,14 @@ export function MediaLibraryModal({
     );
   };
 
+  const getAcceptValue = (filter: UploadFilter) => {
+    const resolved = filter !== 'all' ? filter : allowedTypes;
+    if (resolved === 'image') return 'image/*';
+    if (resolved === 'video') return 'video/*';
+    if (resolved === 'font') return '.woff,.woff2,.ttf,.otf,.eot,font/*';
+    return undefined;
+  };
+
   const handleFileUpload = async (files: FileList | null, filterHint: UploadFilter) => {
     if (!files || files.length === 0) return;
 
@@ -239,11 +311,14 @@ export function MediaLibraryModal({
           siteId,
           scope: targetScope,
           scopeTargetId: targetId || null,
-          visibility: 'public',
+          visibility: uploadVisibility,
+          folderId: uploadFolderId === 'root' ? null : uploadFolderId,
           fontFamily: resolvedType === 'font' ? cleanFontFamilyFromFilename(file.name) : undefined,
           fontWeight: resolvedType === 'font' ? '400' : undefined,
           fontStyle: resolvedType === 'font' ? 'normal' : undefined,
-          tags: resolvedType === 'font' ? ['font'] : undefined,
+          tags: resolvedType === 'font'
+            ? Array.from(new Set(['font', ...uploadTagList]))
+            : uploadTagList.length ? uploadTagList : undefined,
         });
         uploaded.push(uploadedItem);
       } catch (uploadError) {
@@ -269,193 +344,335 @@ export function MediaLibraryModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-background w-full max-w-3xl rounded-xl shadow-2xl border border-border overflow-hidden flex flex-col max-h-[80vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <div>
-            <h2 className="text-lg font-semibold">Media Library</h2>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-foreground/45 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold text-foreground">Media library</h2>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {media.length} assets
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Select or upload reusable images, videos, documents, and fonts for this workspace.
+            </p>
             {targetLabel ? (
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Context: {targetLabel}
+              <p className="mt-1 truncate text-xs text-muted-foreground">
+                Context: <span className="font-medium text-foreground">{targetLabel}</span>
               </p>
             ) : null}
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-muted rounded-full" type="button" aria-label="Close media library">
-            <X className="w-5 h-5" />
+          <button
+            onClick={onClose}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            type="button"
+            aria-label="Close media library"
+          >
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex p-2 gap-2 border-b border-border bg-muted/20">
-          <button
-            type="button"
-            onClick={() => setActiveTab('library')}
-            className={cn(
-              'px-4 py-2 text-sm font-medium rounded-md transition-colors',
-              activeTab === 'library' ? 'bg-background shadow text-primary' : 'hover:bg-background/50 text-muted-foreground'
-            )}
-          >
-            Library
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('upload')}
-            className={cn(
-              'px-4 py-2 text-sm font-medium rounded-md transition-colors',
-              activeTab === 'upload' ? 'bg-background shadow text-primary' : 'hover:bg-background/50 text-muted-foreground'
-            )}
-          >
-            Upload
-          </button>
+        <div className="border-b border-border bg-muted/30 px-5 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="inline-flex rounded-lg border border-border bg-background p-1">
+              {(['library', 'upload'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={cn(
+                    'min-h-9 rounded-md px-4 text-sm font-medium capitalize transition-colors',
+                    activeTab === tab ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1">
+                <Globe2 className="h-3.5 w-3.5" />
+                {libraryStats.public} public
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1">
+                <LockKeyhole className="h-3.5 w-3.5" />
+                {libraryStats.private} private
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1">
+                <FolderOpen className="h-3.5 w-3.5" />
+                {folders.length} folders
+              </span>
+            </div>
+          </div>
         </div>
 
-        {allowScopeSwitcher && activeTab === 'library' ? (
-          <div className="px-2 pt-2 flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-muted-foreground">Scope</span>
-            {(['all', 'global', 'page', 'post'] as const).map((scope) => (
-              <button
-                key={scope}
-                type="button"
-                onClick={() => setScopeFilter(scope)}
-                className={cn(
-                  'px-2 py-1 text-[11px] rounded-full border transition-colors',
-                  scopeFilter === scope
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background hover:bg-accent/50 border-border'
-                )}
-              >
-                {scope.toUpperCase()}
-              </button>
-            ))}
+        {error ? (
+          <div className="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-800">
+            {error}
           </div>
         ) : null}
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 min-h-[400px]">
-          {error ? (
-            <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              {error}
-            </div>
-          ) : null}
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {activeTab === 'library' ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {isLoading ? (
-                <div className="col-span-full py-12 text-center text-sm text-muted-foreground">
-                  Loading media...
+            <div className="grid min-h-[560px] gap-0 lg:grid-cols-[minmax(0,1fr)_280px]">
+              <div className="min-w-0 p-5">
+                <div className="mb-4 grid gap-3 xl:grid-cols-[minmax(220px,1fr)_auto]">
+                  <label className="relative block">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="search"
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      className="h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
+                      placeholder="Search filename, tag, caption, visibility..."
+                      aria-label="Search media"
+                    />
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {allowedTypeOptions.map((filter) => (
+                      <button
+                        type="button"
+                        key={filter}
+                        onClick={() => setLibraryTypeFilter(filter)}
+                        className={cn(
+                          'min-h-9 rounded-lg border px-3 text-xs font-medium capitalize transition-colors',
+                          libraryTypeFilter === filter
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
+                        )}
+                      >
+                        {filter}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              ) : null}
-              {filteredMedia.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    onSelect(item);
-                    onClose();
-                  }}
-                  className="group relative aspect-square rounded-lg border border-border overflow-hidden hover:ring-2 hover:ring-primary focus:outline-none"
-                >
-                  {renderMediaThumb(item)}
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <span className="text-white text-xs font-medium">{item.name}</span>
-                  </div>
-                  {allowStatusLabels ? (
-                    <div className="absolute left-2 top-2 flex items-center gap-1 flex-wrap">
-                      <span className="px-2 py-0.5 rounded-full bg-black/60 text-white text-[10px] uppercase">{item.type}</span>
-                      <span className="px-2 py-0.5 rounded-full bg-black/50 text-white text-[10px]">
-                        {formatScopeLabel(item)}
-                      </span>
-                    </div>
-                  ) : null}
-                  <div className="absolute bottom-2 right-2 flex flex-col items-end gap-1">
-                    <span className="px-2 py-0.5 rounded bg-white/80 text-[10px] text-black">
-                      {item.size}
-                    </span>
-                    <span className="px-2 py-0.5 rounded bg-black/60 text-white text-[10px]">
-                      {item.visibility || 'public'}
-                    </span>
-                  </div>
-                </button>
-              ))}
 
-              {!isLoading && filteredMedia.length === 0 ? (
-                <div className="col-span-full flex flex-col items-center justify-center py-12 text-muted-foreground">
-                  <ImageIcon className="w-12 h-12 mb-2 opacity-50" />
-                  <p>No media found</p>
-                  <p className="text-xs mt-1">Upload files to this scope and then attach them.</p>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                {(['all', 'image', 'video', 'file', 'font'] as const).filter((filter) => (
-                  filter === 'all' ? allowedTypes === 'any' : allowedTypes === 'any' || allowedTypesSet.has(filter)
-                )).map((filter) => (
-                  <button
-                    type="button"
-                    key={filter}
-                    onClick={() => setUploadFilter(filter)}
-                    className={cn(
-                      'px-2 py-1 text-xs rounded-full border transition-colors',
-                      uploadFilter === filter
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-background hover:bg-accent/50 border-border'
-                    )}
-                  >
-                    {filter}
-                  </button>
-                ))}
-              </div>
-              <div
-                className={cn(
-                  'h-full border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-colors relative',
-                  dragActive ? 'border-primary bg-primary/5' : 'border-border'
-                )}
-                onDragEnter={() => setDragActive(true)}
-                onDragLeave={() => setDragActive(false)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragActive(false);
-                  void handleFileUpload(e.dataTransfer.files, uploadFilter);
-                }}
-              >
-                <input
-                  type="file"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  multiple
-                  disabled={isUploading}
-                  accept={allowedTypes === 'image'
-                    ? 'image/*'
-                    : allowedTypes === 'video'
-                      ? 'video/*'
-                      : allowedTypes === 'font'
-                        ? '.woff,.woff2,.ttf,.otf,.eot,font/*'
-                        : undefined}
-                  onChange={(e) => void handleFileUpload(e.target.files, uploadFilter)}
-                />
-                <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4 pointer-events-none">
-                  <Upload className="w-8 h-8 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-medium mb-1 pointer-events-none">
-                  {isUploading ? 'Uploading...' : 'Drag & Drop files here'}
-                </h3>
-                <p className="text-sm text-muted-foreground mb-4 pointer-events-none">
-                  or click to browse
-                </p>
-                <button
-                  type="button"
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm font-medium pointer-events-none"
-                >
-                  Choose Files
-                </button>
-                {targetLabel ? (
-                  <p className="text-xs text-muted-foreground mt-3 pointer-events-none">
-                    Upload target: {targetLabel}
-                  </p>
+                {isLoading ? (
+                  <div className="rounded-xl border border-border bg-muted/40 py-16 text-center text-sm text-muted-foreground">
+                    Loading media...
+                  </div>
+                ) : null}
+
+                {!isLoading && filteredMedia.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                    {filteredMedia.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          onSelect(item);
+                          onClose();
+                        }}
+                        className="group relative overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      >
+                        <div className="aspect-[4/3] overflow-hidden bg-muted">
+                          {renderMediaThumb(item)}
+                        </div>
+                        <div className="space-y-2 p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="min-w-0 truncate text-sm font-medium text-foreground">{item.name}</span>
+                            <CheckCircle2 className="h-4 w-4 shrink-0 text-primary opacity-0 transition group-hover:opacity-100" />
+                          </div>
+                          {allowStatusLabels ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className="rounded bg-muted px-2 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
+                                {item.type === 'file' ? 'document' : item.type}
+                              </span>
+                              <span className="rounded bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                {formatScopeLabel(item)}
+                              </span>
+                              <span className={cn(
+                                'rounded px-2 py-0.5 text-[10px] font-medium',
+                                item.visibility === 'private' ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'
+                              )}>
+                                {item.visibility || 'public'}
+                              </span>
+                            </div>
+                          ) : null}
+                          <p className="truncate text-xs text-muted-foreground">{item.size}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {!isLoading && filteredMedia.length === 0 ? (
+                  <div className="flex min-h-[360px] flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-6 text-center text-muted-foreground">
+                    <ImageIcon className="mb-3 h-10 w-10 opacity-60" />
+                    <p className="text-sm font-medium text-foreground">No media matches this view</p>
+                    <p className="mt-1 max-w-sm text-sm">
+                      Upload assets to this site or clear filters to attach existing files.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('upload')}
+                      className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+                    >
+                      Upload assets
+                    </button>
+                  </div>
                 ) : null}
               </div>
+
+              <aside className="border-t border-border bg-muted/20 p-5 lg:border-l lg:border-t-0">
+                <h3 className="text-sm font-semibold text-foreground">Selection controls</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  The picker respects allowed file types, page/post scope, and public/private delivery labels.
+                </p>
+
+                {allowScopeSwitcher ? (
+                  <div className="mt-5 space-y-2">
+                    <div className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">Scope</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(['all', 'global', 'page', 'post'] as const).map((scope) => (
+                        <button
+                          key={scope}
+                          type="button"
+                          onClick={() => setScopeFilter(scope)}
+                          className={cn(
+                            'min-h-9 rounded-lg border px-3 text-xs font-medium capitalize transition-colors',
+                            scopeFilter === scope
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
+                          )}
+                        >
+                          {scope}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="mt-5 rounded-lg border border-border bg-background p-3">
+                  <div className="text-xs font-medium text-muted-foreground">Current result</div>
+                  <div className="mt-1 text-2xl font-semibold text-foreground">{libraryStats.total}</div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Assets available for this component.
+                  </p>
+                </div>
+              </aside>
+            </div>
+          ) : (
+            <div className="grid min-h-[560px] gap-0 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="p-5">
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {allowedTypeOptions.map((filter) => (
+                    <button
+                      type="button"
+                      key={filter}
+                      onClick={() => setUploadFilter(filter)}
+                      className={cn(
+                        'min-h-9 rounded-lg border px-3 text-xs font-medium capitalize transition-colors',
+                        uploadFilter === filter
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
+                      )}
+                    >
+                      {filter}
+                    </button>
+                  ))}
+                </div>
+                <div
+                  className={cn(
+                    'relative flex min-h-[420px] flex-col items-center justify-center rounded-xl border-2 border-dashed px-8 text-center transition-colors',
+                    dragActive ? 'border-primary bg-primary/5' : 'border-border bg-muted/20 hover:border-primary/50'
+                  )}
+                  onDragEnter={() => setDragActive(true)}
+                  onDragLeave={() => setDragActive(false)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragActive(false);
+                    void handleFileUpload(e.dataTransfer.files, uploadFilter);
+                  }}
+                >
+                  <input
+                    type="file"
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    multiple
+                    disabled={isUploading}
+                    accept={getAcceptValue(uploadFilter)}
+                    onChange={(e) => {
+                      void handleFileUpload(e.target.files, uploadFilter);
+                      e.currentTarget.value = '';
+                    }}
+                  />
+                  <div className="pointer-events-none mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
+                    <Upload className="h-7 w-7 text-primary" />
+                  </div>
+                  <h3 className="pointer-events-none text-lg font-semibold text-foreground">
+                    {isUploading ? 'Uploading assets...' : 'Drop files into the library'}
+                  </h3>
+                  <p className="pointer-events-none mt-2 max-w-md text-sm text-muted-foreground">
+                    Assets will upload as {uploadVisibility} files in {uploadFolderLabel}. Images, videos, documents, and fonts are supported.
+                  </p>
+                  {uploadTagList.length > 0 ? (
+                    <div className="pointer-events-none mt-4 flex flex-wrap justify-center gap-2">
+                      {uploadTagList.map((tag) => (
+                        <span key={tag} className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  <span className="pointer-events-none mt-5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+                    Choose files
+                  </span>
+                </div>
+              </div>
+
+              <aside className="border-t border-border bg-muted/20 p-5 lg:border-l lg:border-t-0">
+                <h3 className="text-sm font-semibold text-foreground">Upload defaults</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Set delivery, folder, tags, and target scope before files enter the shared library.
+                </p>
+
+                <div className="mt-5 grid gap-4">
+                  <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                    Visibility
+                    <select
+                      value={uploadVisibility}
+                      onChange={(event) => setUploadVisibility(event.target.value === 'private' ? 'private' : 'public')}
+                      className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                    >
+                      <option value="public">Public delivery</option>
+                      <option value="private">Private signed delivery</option>
+                    </select>
+                  </label>
+
+                  <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                    Folder
+                    <select
+                      value={uploadFolderId}
+                      onChange={(event) => setUploadFolderId(event.target.value)}
+                      className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                    >
+                      <option value="root">Root library</option>
+                      {folders.map((folder) => (
+                        <option key={folder.id} value={folder.id}>{folder.name}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                    Default tags
+                    <input
+                      value={uploadTags}
+                      onChange={(event) => setUploadTags(event.target.value)}
+                      className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                      placeholder="hero, product, brand"
+                    />
+                  </label>
+
+                  <div className="rounded-lg border border-border bg-background p-3 text-xs text-muted-foreground">
+                    <div className="font-medium text-foreground">Target scope</div>
+                    <p className="mt-1">
+                      {targetScope === 'global' ? 'Global site library' : `${targetScope} asset${targetId ? ` for ${targetId}` : ''}`}
+                    </p>
+                  </div>
+                </div>
+              </aside>
             </div>
           )}
         </div>
