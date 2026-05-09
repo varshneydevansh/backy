@@ -26,6 +26,7 @@ import {
   deleteCollectionRecord,
   listCollectionRecords,
   listCollections,
+  updateCollection,
   updateCollectionRecord,
   type Collection,
   type CollectionField,
@@ -152,7 +153,19 @@ function OrdersRoute() {
   const adminOrdersApiUrl = ordersCollection
     ? `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/collections/${encodeURIComponent(ordersCollection.id)}/records`
     : '';
+  const adminOrderDetailApiUrl = ordersCollection
+    ? `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/collections/${encodeURIComponent(ordersCollection.id)}/records/{orderId}`
+    : '';
   const publicOrdersApiUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/${ORDERS_COLLECTION_SLUG}/records`;
+  const missingOrderFields = useMemo(() => (
+    ordersCollection ? getMissingOrderFieldKeys(ordersCollection) : []
+  ), [ordersCollection]);
+  const ordersApiReady = Boolean(
+    ordersCollection?.status === 'published' &&
+    !ordersCollection.permissions.publicRead &&
+    !ordersCollection.permissions.publicCreate &&
+    missingOrderFields.length === 0,
+  );
   const selectedOrder = useMemo(
     () => orders.find((order) => order.id === selectedOrderId) || null,
     [orders, selectedOrderId],
@@ -274,6 +287,38 @@ function OrdersRoute() {
       setNotice('Orders collection created. You can record the first order now.');
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to set up orders');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const syncOrdersCollection = async () => {
+    if (!ordersCollection) return;
+    setIsSaving(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const synced = await updateCollection(activeSiteId, ordersCollection.id, {
+        name: ordersCollection.name || 'Orders',
+        slug: ORDERS_COLLECTION_SLUG,
+        description: ordersCollection.description || 'Commerce orders for storefronts, custom checkout flows, and fulfillment dashboards.',
+        status: 'published',
+        listRoutePattern: ordersCollection.listRoutePattern || '/orders',
+        routePattern: ordersCollection.routePattern || '/orders/:recordSlug',
+        fields: mergeOrderFields(ordersCollection.fields),
+        permissions: {
+          ...ordersCollection.permissions,
+          publicRead: false,
+          publicCreate: false,
+          publicUpdate: false,
+          publicDelete: false,
+        },
+      });
+      setOrdersCollection(synced);
+      setNotice('Order schema synced. Payment, fulfillment, tracking, refund, and address fields are now available.');
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : 'Unable to sync order schema');
     } finally {
       setIsSaving(false);
     }
@@ -431,6 +476,15 @@ function OrdersRoute() {
             icon={<ShieldCheck className="size-4" />}
             action={
               <div className="flex flex-wrap items-center gap-2">
+                {!ordersApiReady && (
+                  <Button
+                    onClick={() => void syncOrdersCollection()}
+                    disabled={isSaving}
+                    iconStart={<Sparkles className="size-4" />}
+                  >
+                    Sync Schema
+                  </Button>
+                )}
                 <Button onClick={() => void copyOrdersApiUrl(adminOrdersApiUrl, 'Internal orders API URL')} iconStart={<Copy className="size-4" />}>
                   Copy admin API
                 </Button>
@@ -447,34 +501,48 @@ function OrdersRoute() {
             }
           />
           <PanelContent>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-lg border border-border bg-muted/40 p-3">
-                <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-                  <Code2 className="size-4" />
-                  Internal orders endpoint
+            <div className="space-y-3">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="space-y-2">
+                  <OrderApiSnippet icon={<Code2 className="size-4" />} label="List and create orders" value={adminOrdersApiUrl} />
+                  <OrderApiSnippet icon={<Receipt className="size-4" />} label="Read or update order" value={adminOrderDetailApiUrl} />
                 </div>
-                <code className="block overflow-x-auto rounded-md bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
-                  {adminOrdersApiUrl}
-                </code>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/40 p-3">
-                <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-                  <ShieldCheck className="size-4" />
-                  Public order access
-                </div>
-                <code className="block overflow-x-auto rounded-md bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
-                  {publicOrdersApiUrl}
-                </code>
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span className="rounded-md border border-border bg-background px-2 py-1">
-                    publicRead {ordersCollection.permissions.publicRead ? 'enabled' : 'disabled'}
-                  </span>
-                  <span className="rounded-md border border-border bg-background px-2 py-1">
-                    publicCreate {ordersCollection.permissions.publicCreate ? 'enabled' : 'disabled'}
-                  </span>
-                  <span>Use a server checkout or admin key before writing orders.</span>
+                <div className="rounded-lg border border-border bg-muted/40 p-3">
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                    <ShieldCheck className="size-4" />
+                    Public order access
+                  </div>
+                  <code className="block overflow-x-auto rounded-md bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+                    {publicOrdersApiUrl}
+                  </code>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span className="rounded-md border border-border bg-background px-2 py-1">
+                      publicRead {ordersCollection.permissions.publicRead ? 'enabled' : 'disabled'}
+                    </span>
+                    <span className="rounded-md border border-border bg-background px-2 py-1">
+                      publicCreate {ordersCollection.permissions.publicCreate ? 'enabled' : 'disabled'}
+                    </span>
+                    <span>Use a server checkout or admin key before writing orders.</span>
+                  </div>
                 </div>
               </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span
+                  className={cn(
+                    'inline-flex rounded-md px-2 py-1 font-medium',
+                    ordersApiReady ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                  )}
+                >
+                  {ordersApiReady ? 'Workflow ready' : 'Schema needs sync'}
+                </span>
+                <StatusBadge status={ordersCollection.status} />
+                <span>{orders.length} internal records</span>
+              </div>
+              {missingOrderFields.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  Missing order fields: {missingOrderFields.join(', ')}. Sync the schema before relying on fulfillment workflows.
+                </div>
+              )}
             </div>
           </PanelContent>
         </Panel>
@@ -879,6 +947,20 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+function OrderApiSnippet({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/40 p-3">
+      <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+        {icon}
+        {label}
+      </div>
+      <code className="block overflow-x-auto rounded-md bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+        {value}
+      </code>
+    </div>
+  );
+}
+
 function OrderCard({
   order,
   selected,
@@ -1007,6 +1089,15 @@ const getEnvValue = (key: string): string => {
   return env[key]?.trim() ?? '';
 };
 
+const isLocalAdminDevHost = (): boolean => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
+    && window.location.port !== '3001';
+};
+
 const getPublicBaseUrl = (): string => {
   const envBase = (
     getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
@@ -1015,7 +1106,7 @@ const getPublicBaseUrl = (): string => {
     ''
   ).trim();
 
-  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+  if (!envBase && isLocalAdminDevHost()) {
     return 'http://localhost:3001';
   }
 
@@ -1149,4 +1240,23 @@ const orderToForm = (order: CollectionRecord): OrderFormState => ({
 const formatWorkflowDate = (value: string): string => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+};
+
+const getMissingOrderFieldKeys = (collection: Collection): string[] => {
+  const existingKeys = new Set(collection.fields.map((field) => field.key));
+  return ORDER_FIELDS
+    .filter((field) => !existingKeys.has(field.key))
+    .map((field) => field.key);
+};
+
+const mergeOrderFields = (currentFields: CollectionField[]): CollectionField[] => {
+  const fieldsByKey = new Map(currentFields.map((field) => [field.key, field]));
+  const merged = ORDER_FIELDS.map((requiredField) => ({
+    ...requiredField,
+    ...fieldsByKey.get(requiredField.key),
+    sortOrder: requiredField.sortOrder,
+  }));
+  const requiredKeys = new Set(ORDER_FIELDS.map((field) => field.key));
+  const customFields = currentFields.filter((field) => !requiredKeys.has(field.key));
+  return [...merged, ...customFields].sort((a, b) => a.sortOrder - b.sortOrder);
 };
