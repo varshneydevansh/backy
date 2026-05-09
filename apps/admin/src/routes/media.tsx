@@ -10,7 +10,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
-import { DEFAULT_MAX_TAGS, parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
+import { DEFAULT_MAX_TAGS, normalizeTagValues, parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 import {
   getSettings,
   listAdminAuditLogs,
@@ -68,7 +68,7 @@ const MEDIA_CONTROL_AREAS = [
   },
   {
     title: 'Bulk controls',
-    detail: 'Move, reclassify visibility, select visible assets, and delete in batches.',
+    detail: 'Move, tag, reclassify visibility, select visible assets, and delete in batches.',
     href: '#media-bulk',
   },
   {
@@ -157,6 +157,8 @@ function MediaPage() {
   const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
   const [bulkVisibility, setBulkVisibility] = useState<'keep' | 'public' | 'private'>('keep');
   const [bulkFolderId, setBulkFolderId] = useState<'keep' | 'root' | string>('keep');
+  const [bulkTagMode, setBulkTagMode] = useState<'keep' | 'merge' | 'replace' | 'clear'>('keep');
+  const [bulkTags, setBulkTags] = useState('');
   const [pendingDeleteAsset, setPendingDeleteAsset] = useState<MediaAsset | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [pendingDeleteFolder, setPendingDeleteFolder] = useState<MediaFolder | null>(null);
@@ -213,6 +215,10 @@ function MediaPage() {
   const uploadTagList = useMemo(() => parseTagInput(uploadTags), [uploadTags]);
   const setUploadTagList = useCallback((nextTags: string[]) => {
     setUploadTags(serializeTagValues(nextTags));
+  }, []);
+  const bulkTagList = useMemo(() => parseTagInput(bulkTags), [bulkTags]);
+  const setBulkTagList = useCallback((nextTags: string[]) => {
+    setBulkTags(serializeTagValues(nextTags));
   }, []);
 
   const publicFileUrl = useMemo(
@@ -301,7 +307,9 @@ function MediaPage() {
     [files, selectedMediaSet],
   );
   const allVisibleSelected = displayedFiles.length > 0 && displayedFiles.every((file) => selectedMediaSet.has(file.id));
-  const hasBulkChange = bulkVisibility !== 'keep' || bulkFolderId !== 'keep';
+  const hasBulkTagChange = bulkTagMode === 'clear' ||
+    ((bulkTagMode === 'merge' || bulkTagMode === 'replace') && bulkTagList.length > 0);
+  const hasBulkChange = bulkVisibility !== 'keep' || bulkFolderId !== 'keep' || hasBulkTagChange;
   const fontGroups = useMemo(() => {
     const groups = new Map<string, {
       family: string;
@@ -886,7 +894,7 @@ function MediaPage() {
       return;
     }
 
-    const input = {
+    const baseInput = {
       ...(bulkVisibility !== 'keep' ? { visibility: bulkVisibility } : {}),
       ...(bulkFolderId !== 'keep' ? { folderId: bulkFolderId === 'root' ? null : bulkFolderId } : {}),
     };
@@ -896,7 +904,20 @@ function MediaPage() {
     setBulkNotice(null);
 
     const results = await Promise.allSettled(
-      selectedMediaAssets.map((asset) => updateMedia(asset.id, input, siteId)),
+      selectedMediaAssets.map((asset) => {
+        const nextTags = bulkTagMode === 'clear'
+          ? []
+          : bulkTagMode === 'replace'
+            ? bulkTagList
+            : bulkTagMode === 'merge'
+              ? normalizeTagValues([...(asset.tags || []), ...bulkTagList])
+              : undefined;
+
+        return updateMedia(asset.id, {
+          ...baseInput,
+          ...(nextTags !== undefined ? { tags: nextTags } : {}),
+        }, siteId);
+      }),
     );
     const updated = results
       .filter((result): result is PromiseFulfilledResult<MediaAsset> => result.status === 'fulfilled')
@@ -914,6 +935,8 @@ function MediaPage() {
       }
       setBulkVisibility('keep');
       setBulkFolderId('keep');
+      setBulkTagMode('keep');
+      setBulkTags('');
       void loadLibrary();
     }
 
@@ -1945,7 +1968,7 @@ function MediaPage() {
         <Panel className="mb-6 scroll-mt-24" id="media-bulk">
           <PanelHeader
             title="Bulk management"
-            description="Select visible assets, move them between folders, change delivery visibility, or remove them from the library."
+            description="Select visible assets, move them between folders, change delivery visibility, retag them, or remove them from the library."
             icon={<CheckSquare className="size-4" />}
             action={
               <span className="rounded bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
@@ -1954,86 +1977,133 @@ function MediaPage() {
             }
           />
           <PanelContent>
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_170px_220px_auto_auto]">
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={isBulkUpdating || allVisibleSelected}
-                  onClick={handleSelectVisibleMedia}
-                >
-                  Select visible
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  disabled={isBulkUpdating || selectedMediaAssets.length === 0}
-                  onClick={handleClearSelection}
-                >
-                  Clear
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  Selection follows the current search, type, visibility, and folder filters.
-                </p>
+            <div className="grid gap-4">
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_170px_220px_auto_auto]">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={isBulkUpdating || allVisibleSelected}
+                    onClick={handleSelectVisibleMedia}
+                  >
+                    Select visible
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={isBulkUpdating || selectedMediaAssets.length === 0}
+                    onClick={handleClearSelection}
+                  >
+                    Clear
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Selection follows the current search, type, visibility, and folder filters.
+                  </p>
+                </div>
+
+                <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                  Visibility
+                  <select
+                    value={bulkVisibility}
+                    disabled={isBulkUpdating}
+                    onChange={(event) => setBulkVisibility(event.target.value === 'public' || event.target.value === 'private' ? event.target.value : 'keep')}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                  >
+                    <option value="keep">No change</option>
+                    <option value="public">Public</option>
+                    <option value="private">Private</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                  Folder
+                  <select
+                    value={bulkFolderId}
+                    disabled={isBulkUpdating}
+                    onChange={(event) => setBulkFolderId(event.target.value)}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                  >
+                    <option value="keep">No change</option>
+                    <option value="root">Root</option>
+                    {folders.map((folder) => (
+                      <option key={folder.id} value={folder.id}>{folder.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="flex items-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={isBulkUpdating || selectedMediaAssets.length === 0 || !hasBulkChange}
+                    onClick={() => void handleBulkUpdate()}
+                    className="w-full whitespace-nowrap"
+                  >
+                    {isBulkUpdating ? 'Applying...' : 'Apply changes'}
+                  </Button>
+                </div>
+
+                <div className="flex items-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="danger"
+                    disabled={isBulkUpdating || selectedMediaAssets.length === 0}
+                    onClick={() => void handleBulkDelete()}
+                    className="w-full whitespace-nowrap"
+                    iconStart={<Trash2 className="size-4" />}
+                  >
+                    Delete selected
+                  </Button>
+                </div>
               </div>
 
-              <label className="space-y-1 text-xs font-medium text-muted-foreground">
-                Visibility
-                <select
-                  value={bulkVisibility}
-                  disabled={isBulkUpdating}
-                  onChange={(event) => setBulkVisibility(event.target.value === 'public' || event.target.value === 'private' ? event.target.value : 'keep')}
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
-                >
-                  <option value="keep">No change</option>
-                  <option value="public">Public</option>
-                  <option value="private">Private</option>
-                </select>
-              </label>
+              <div className="rounded-lg border border-border bg-muted/30 p-3">
+                <div className="grid gap-3 xl:grid-cols-[180px_minmax(0,1fr)_minmax(220px,0.55fr)]">
+                  <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                    Tag action
+                    <select
+                      value={bulkTagMode}
+                      disabled={isBulkUpdating}
+                      onChange={(event) => setBulkTagMode(event.target.value as typeof bulkTagMode)}
+                      className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                      aria-label="Bulk tag action"
+                    >
+                      <option value="keep">No tag change</option>
+                      <option value="merge">Add to existing tags</option>
+                      <option value="replace">Replace all tags</option>
+                      <option value="clear">Clear all tags</option>
+                    </select>
+                  </label>
 
-              <label className="space-y-1 text-xs font-medium text-muted-foreground">
-                Folder
-                <select
-                  value={bulkFolderId}
-                  disabled={isBulkUpdating}
-                  onChange={(event) => setBulkFolderId(event.target.value)}
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
-                >
-                  <option value="keep">No change</option>
-                  <option value="root">Root</option>
-                  {folders.map((folder) => (
-                    <option key={folder.id} value={folder.id}>{folder.name}</option>
-                  ))}
-                </select>
-              </label>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
+                      <span>Tags</span>
+                      <span className="font-mono">{bulkTagList.length}/{DEFAULT_MAX_TAGS}</span>
+                    </div>
+                    <TagInput
+                      tags={bulkTagList}
+                      onChange={setBulkTagList}
+                      placeholder="Add campaign, hero, product..."
+                      ariaLabel="Bulk media tags"
+                      disabled={bulkTagMode === 'clear' || bulkTagMode === 'keep'}
+                      className={bulkTagMode === 'clear' || bulkTagMode === 'keep' ? 'opacity-60' : undefined}
+                    />
+                  </div>
 
-              <div className="flex items-end">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={isBulkUpdating || selectedMediaAssets.length === 0 || !hasBulkChange}
-                  onClick={() => void handleBulkUpdate()}
-                  className="w-full whitespace-nowrap"
-                >
-                  {isBulkUpdating ? 'Applying...' : 'Apply changes'}
-                </Button>
-              </div>
-
-              <div className="flex items-end">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="danger"
-                  disabled={isBulkUpdating || selectedMediaAssets.length === 0}
-                  onClick={() => void handleBulkDelete()}
-                  className="w-full whitespace-nowrap"
-                  iconStart={<Trash2 className="size-4" />}
-                >
-                  Delete selected
-                </Button>
+                  <div className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                    <div className="font-medium text-foreground">Tag preview</div>
+                    <p className="mt-1 leading-5">
+                      {bulkTagMode === 'merge' && 'Selected assets keep their existing tags and receive the tags listed here.'}
+                      {bulkTagMode === 'replace' && 'Selected assets will use only the tags listed here.'}
+                      {bulkTagMode === 'clear' && 'Selected assets will have every tag removed.'}
+                      {bulkTagMode === 'keep' && 'Choose a tag action to update selected assets in the same batch as folder or visibility changes.'}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </PanelContent>

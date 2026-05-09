@@ -37,6 +37,7 @@ interface TagInputProps {
   ariaLabel: string;
   maxTags?: number;
   className?: string;
+  disabled?: boolean;
 }
 
 export function TagInput({
@@ -46,6 +47,7 @@ export function TagInput({
   ariaLabel,
   maxTags = DEFAULT_MAX_TAGS,
   className,
+  disabled = false,
 }: TagInputProps) {
   const [draft, setDraft] = useState('');
   const normalizedTags = normalizeTagValues(tags, maxTags);
@@ -91,7 +93,8 @@ export function TagInput({
               <button
                 type="button"
                 onClick={() => removeTag(tag)}
-                className="rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
+                disabled={disabled}
+                className="rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label={`Remove tag ${tag}`}
               >
                 <X className="h-3 w-3" />
@@ -106,7 +109,7 @@ export function TagInput({
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={commitDraft}
-        disabled={normalizedTags.length >= maxTags}
+        disabled={disabled || normalizedTags.length >= maxTags}
         className="min-h-8 w-full border-0 bg-transparent px-0 text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
         placeholder={normalizedTags.length >= maxTags ? 'Maximum tags reached' : placeholder}
         aria-label={ariaLabel}
