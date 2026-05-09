@@ -816,7 +816,7 @@ function EditBlogPostPage() {
                     </div>
                 </section>
 
-                <form id="blog-editor-form" onSubmit={handleSubmit} className="grid gap-5">
+                <form id="blog-editor-form" onSubmit={handleSubmit} className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px] 2xl:items-start">
                     <div className="min-w-0 space-y-6">
                         <Panel id="blog-editor-draft" className="overflow-hidden scroll-mt-24">
                             <PanelHeader
@@ -906,7 +906,7 @@ function EditBlogPostPage() {
                         </div>
                     </div>
 
-                    <aside className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-4">
+                    <aside className="grid gap-4 xl:grid-cols-2 2xl:sticky 2xl:top-4 2xl:block 2xl:space-y-4">
                         <Panel id="blog-editor-publish" className="scroll-mt-24">
                             <PanelHeader
                                 title="Publish"

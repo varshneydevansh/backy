@@ -700,7 +700,7 @@ function PageEditorRoute() {
         </div>
       </section>
 
-      <div className="grid gap-5">
+      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px] 2xl:items-start">
         <div id="page-editor-canvas" className="min-w-0 scroll-mt-24">
           <EditorWorkspaceFrame
             title="Page design canvas"
@@ -740,7 +740,7 @@ function PageEditorRoute() {
           </EditorWorkspaceFrame>
         </div>
 
-        <aside className="grid gap-4 lg:grid-cols-3">
+        <aside className="grid gap-4 lg:grid-cols-3 2xl:sticky 2xl:top-4 2xl:block 2xl:space-y-4">
           <Panel id="page-editor-publish" className="scroll-mt-24">
             <PanelHeader
               title="Publish"
