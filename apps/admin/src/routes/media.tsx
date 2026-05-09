@@ -32,6 +32,7 @@ import {
   listMediaFolders,
   prepareMediaTransforms,
   replaceMedia,
+  updateMediaFolder,
   updateMedia,
   uploadMedia,
   type MediaQuota,
@@ -63,7 +64,7 @@ const MEDIA_CONTROL_AREAS = [
   },
   {
     title: 'Folders',
-    detail: 'Organize files into folders without breaking asset references.',
+    detail: 'Create, rename, delete, and filter folders without breaking asset references.',
     href: '#media-folders',
   },
   {
@@ -167,6 +168,9 @@ function MediaPage() {
   const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'public' | 'private'>('all');
   const [usageFilter, setUsageFilter] = useState<'all' | 'unused' | 'referenced' | 'replaced'>('all');
   const [folders, setFolders] = useState<MediaFolder[]>([]);
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [editingFolderName, setEditingFolderName] = useState('');
+  const [isUpdatingFolder, setIsUpdatingFolder] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null | undefined>(undefined);
   const [uploadVisibility, setUploadVisibility] = useState<'public' | 'private'>('public');
   const [uploadFolderId, setUploadFolderId] = useState<'current' | 'root' | string>('current');
@@ -202,6 +206,8 @@ function MediaPage() {
   const publicMediaFileUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/{mediaId}/file`;
   const publicMediaTransformUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media/{mediaId}/transform?width=1200&quality=75`;
   const adminMediaUploadUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media`;
+  const adminMediaFoldersUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media/folders`;
+  const adminMediaFolderUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(siteId)}/media/folders/{folderId}`;
   const getAssetDeliveryUrl = useCallback(
     (asset: MediaAsset) => getPublicMediaFileUrl(asset.id, siteId),
     [siteId],
@@ -485,6 +491,8 @@ function MediaPage() {
       file: publicMediaFileUrl,
       transform: publicMediaTransformUrl,
       adminUpload: adminMediaUploadUrl,
+      adminFolders: adminMediaFoldersUrl,
+      adminFolder: adminMediaFolderUrl,
     },
     controlRoutes: Object.fromEntries(MEDIA_USAGE_SURFACES.map((surface) => [
       surface.title,
@@ -555,6 +563,8 @@ function MediaPage() {
     })),
   }), [
     adminMediaUploadUrl,
+    adminMediaFolderUrl,
+    adminMediaFoldersUrl,
     displayedFiles.length,
     files,
     folders,
@@ -1132,11 +1142,56 @@ function MediaPage() {
       const folder = await createMediaFolder(name, siteId);
       setFolders((current) => [...current, folder].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)));
       setSelectedFolderId(folder.id);
+      setEditingFolderId(null);
+      setEditingFolderName('');
       setNewFolderName('');
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to create folder.');
     } finally {
       setIsCreatingFolder(false);
+    }
+  };
+
+  const startEditingFolder = (folder: MediaFolder) => {
+    setEditingFolderId(folder.id);
+    setEditingFolderName(folder.name);
+    setError(null);
+  };
+
+  const cancelEditingFolder = () => {
+    setEditingFolderId(null);
+    setEditingFolderName('');
+  };
+
+  const handleRenameFolder = async (folderId: string) => {
+    const name = editingFolderName.trim();
+    if (!name) {
+      setError('Folder name is required.');
+      return;
+    }
+
+    const duplicateFolder = folders.find((folder) => (
+      folder.id !== folderId && folder.name.trim().toLowerCase() === name.toLowerCase()
+    ));
+    if (duplicateFolder) {
+      setError(`A folder named ${name} already exists.`);
+      return;
+    }
+
+    setIsUpdatingFolder(true);
+    setError(null);
+
+    try {
+      const folder = await updateMediaFolder(folderId, { name }, siteId);
+      setFolders((current) => current
+        .map((item) => item.id === folder.id ? folder : item)
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)));
+      setBulkNotice(`Folder renamed to ${folder.name}.`);
+      cancelEditingFolder();
+    } catch (renameError) {
+      setError(renameError instanceof Error ? renameError.message : 'Unable to rename folder.');
+    } finally {
+      setIsUpdatingFolder(false);
     }
   };
 
@@ -1154,6 +1209,9 @@ function MediaPage() {
       setMedia(files.map((file) => file.folderId === folderId ? { ...file, folderId: null } : file));
       if (selectedFolderId === folderId) {
         setSelectedFolderId(undefined);
+      }
+      if (editingFolderId === folderId) {
+        cancelEditingFolder();
       }
       setPendingDeleteFolder(null);
     } catch (deleteError) {
@@ -1579,6 +1637,8 @@ function MediaPage() {
             <MediaApiSnippet label="File delivery" value={publicMediaFileUrl} />
             <MediaApiSnippet label="Image transform" value={publicMediaTransformUrl} />
             <MediaApiSnippet label="Admin upload" value={adminMediaUploadUrl} />
+            <MediaApiSnippet label="Admin folders" value={adminMediaFoldersUrl} />
+            <MediaApiSnippet label="Admin folder detail" value={adminMediaFolderUrl} />
           </div>
         </PanelContent>
       </Panel>
@@ -1939,26 +1999,84 @@ function MediaPage() {
             Root
           </button>
           {folders.map((folder) => (
-            <div key={folder.id} className="inline-flex overflow-hidden rounded-lg border border-border">
-              <button
-                type="button"
-                onClick={() => setSelectedFolderId(folder.id)}
-                className={cn(
-                  'px-3 py-2 text-sm',
-                  selectedFolderId === folder.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
-                )}
-              >
-                {folder.name}
-              </button>
-              <button
-                type="button"
-                onClick={() => setPendingDeleteFolder(folder)}
-                className="border-l border-border px-2 text-muted-foreground hover:bg-red-50 hover:text-red-600"
-                title="Delete folder"
-                aria-label={`Delete folder ${folder.name}`}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+            <div key={folder.id} className="inline-flex min-h-10 overflow-hidden rounded-lg border border-border bg-background">
+              {editingFolderId === folder.id ? (
+                <div className="flex min-w-[260px] items-center gap-1 px-1.5 py-1">
+                  <input
+                    type="text"
+                    value={editingFolderName}
+                    disabled={isUpdatingFolder}
+                    onChange={(event) => setEditingFolderName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        void handleRenameFolder(folder.id);
+                      }
+                      if (event.key === 'Escape') {
+                        event.preventDefault();
+                        cancelEditingFolder();
+                      }
+                    }}
+                    className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm"
+                    aria-label={`Rename folder ${folder.name}`}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    disabled={isUpdatingFolder || !editingFolderName.trim()}
+                    onClick={() => void handleRenameFolder(folder.id)}
+                    className="inline-flex size-8 items-center justify-center rounded-md text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    title="Save folder name"
+                    aria-label={`Save folder name for ${folder.name}`}
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isUpdatingFolder}
+                    onClick={cancelEditingFolder}
+                    className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                    title="Cancel rename"
+                    aria-label={`Cancel renaming ${folder.name}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFolderId(folder.id)}
+                    className={cn(
+                      'px-3 py-2 text-sm',
+                      selectedFolderId === folder.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+                    )}
+                  >
+                    <span className="font-medium">{folder.name}</span>
+                    <span className="ml-2 font-mono text-xs text-muted-foreground">
+                      {files.filter((file) => file.folderId === folder.id).length}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => startEditingFolder(folder)}
+                    className="border-l border-border px-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    title="Rename folder"
+                    aria-label={`Rename folder ${folder.name}`}
+                  >
+                    <Edit3 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPendingDeleteFolder(folder)}
+                    className="border-l border-border px-2 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                    title="Delete folder"
+                    aria-label={`Delete folder ${folder.name}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </>
+              )}
             </div>
           ))}
         </div>

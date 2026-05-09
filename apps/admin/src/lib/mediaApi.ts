@@ -416,6 +416,27 @@ export async function createMediaFolder(name: string, siteId = getDefaultMediaSi
   return toMediaFolder(payload.data.folder);
 }
 
+export async function updateMediaFolder(
+  folderId: string,
+  input: { name?: string; parentId?: string | null; sortOrder?: number },
+  siteId = getDefaultMediaSiteId(),
+): Promise<MediaFolder> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/folders/${folderId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await response.json() as ApiMediaFolderResponse;
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to update media folder');
+  }
+
+  return toMediaFolder(payload.data.folder);
+}
+
 export async function deleteMediaFolder(folderId: string, siteId = getDefaultMediaSiteId()): Promise<void> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/folders/${folderId}`, {
     method: 'DELETE',
