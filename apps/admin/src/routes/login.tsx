@@ -13,7 +13,7 @@
 
 import { useEffect, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { CheckCircle2, Code2, Database, Eye, EyeOff, LayoutDashboard, Loader2, Lock, Mail, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Code2, Database, Eye, EyeOff, KeyRound, LayoutDashboard, Loader2, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/lib/utils';
 
@@ -21,6 +21,11 @@ const DEMO_ACCOUNTS = [
   { email: 'admin@backy.io', password: 'admin123', label: 'Admin' },
   { email: 'editor@backy.io', password: 'editor123', label: 'Editor' },
 ];
+
+type ResetNotice = {
+  tone: 'success' | 'warning';
+  message: string;
+};
 
 const AUTH_WORKSPACE_ITEMS = [
   {
@@ -72,7 +77,7 @@ function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [resetNotice, setResetNotice] = useState<string | null>(null);
+  const [resetNotice, setResetNotice] = useState<ResetNotice | null>(null);
   const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const passwordIsValid = password.length >= 6;
   const authReadinessScore = Math.round(([emailIsValid, passwordIsValid, !isLoading].filter(Boolean).length / 3) * 100);
@@ -97,6 +102,43 @@ function LoginPage() {
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
+  };
+
+  const handleLocalPasswordRecovery = () => {
+    clearError();
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setFormErrors((current) => ({
+        ...current,
+        email: 'Enter a valid workspace email before requesting recovery.',
+      }));
+      setResetNotice({
+        tone: 'warning',
+        message: 'Enter the account email first so Backy can check whether local recovery is available.',
+      });
+      return;
+    }
+
+    const demoAccount = DEMO_ACCOUNTS.find((account) => account.email === normalizedEmail);
+
+    if (!demoAccount) {
+      setResetNotice({
+        tone: 'warning',
+        message: 'This account is not available in local demo auth. Ask a workspace owner to reset access from Users, or connect production email recovery in Settings.',
+      });
+      return;
+    }
+
+    setPassword(demoAccount.password);
+    setFormErrors((current) => {
+      const { password: _password, email: _email, ...rest } = current;
+      return rest;
+    });
+    setResetNotice({
+      tone: 'success',
+      message: `${demoAccount.label} local recovery is ready. The demo password was filled, so you can sign in now.`,
+    });
   };
 
   /**
@@ -249,9 +291,8 @@ function LoginPage() {
                   <button
                     type="button"
                     className="text-sm font-medium text-primary hover:underline"
-                    onClick={() => {
-                      setResetNotice('Password reset is not connected yet. Use a demo account for local testing.');
-                    }}
+                    onClick={handleLocalPasswordRecovery}
+                    data-testid="login-password-recovery"
                   >
                     Forgot password?
                   </button>
@@ -297,10 +338,17 @@ function LoginPage() {
               )}
 
               {resetNotice && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                <div className={cn(
+                  'rounded-lg border px-3 py-2 text-sm',
+                  resetNotice.tone === 'success'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                    : 'border-amber-200 bg-amber-50 text-amber-800',
+                )}>
                   <div className="flex gap-2">
-                    <Mail className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>{resetNotice}</span>
+                    {resetNotice.tone === 'success'
+                      ? <KeyRound className="mt-0.5 h-4 w-4 shrink-0" />
+                      : <Mail className="mt-0.5 h-4 w-4 shrink-0" />}
+                    <span>{resetNotice.message}</span>
                   </div>
                 </div>
               )}
