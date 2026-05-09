@@ -22,6 +22,7 @@ import {
   listForms,
   updateFormSubmission,
   type FormDefinition,
+  type FormFieldDefinition,
   type FormSubmission,
   type FormSubmissionStatus,
 } from '@/lib/adminContentApi';
@@ -56,6 +57,11 @@ const FORM_CONTROL_AREAS = [
     href: '#forms-library',
   },
   {
+    title: 'Templates',
+    detail: 'Registration, contact, newsletter, and product inquiry schemas.',
+    href: '#forms-templates',
+  },
+  {
     title: 'Frontend API',
     detail: 'Definition, submit URL, sample payload, and cURL handoff.',
     href: '#forms-api',
@@ -66,6 +72,110 @@ const FORM_CONTROL_AREAS = [
     href: '#forms-inbox',
   },
 ] as const;
+
+interface FormTemplateBlueprint {
+  id: string;
+  title: string;
+  description: string;
+  audience: FormDefinition['audience'];
+  moderationMode: NonNullable<FormDefinition['moderationMode']>;
+  successMessage: string;
+  fields: FormFieldDefinition[];
+  contactShare?: FormDefinition['contactShare'];
+  collectionTarget?: FormDefinition['collectionTarget'];
+}
+
+const FORM_TEMPLATES: FormTemplateBlueprint[] = [
+  {
+    id: 'registration',
+    title: 'Registration',
+    description: 'Account, member, or waitlist signup with identity, phone, role, and consent fields.',
+    audience: 'public',
+    moderationMode: 'manual',
+    successMessage: 'Registration received. Check your inbox for the next step.',
+    contactShare: {
+      enabled: true,
+      nameField: 'full_name',
+      emailField: 'email',
+      phoneField: 'phone',
+      notesField: 'member_type',
+      dedupeByEmail: true,
+    },
+    fields: [
+      { key: 'full_name', label: 'Full name', type: 'text', placeholder: 'Ada Lovelace', required: true },
+      { key: 'email', label: 'Email', type: 'email', placeholder: 'you@example.com', required: true },
+      { key: 'phone', label: 'Phone', type: 'tel', placeholder: '+1 555 0100' },
+      { key: 'member_type', label: 'Member type', type: 'select', options: ['Customer', 'Creator', 'Partner'], required: true },
+      { key: 'consent', label: 'I agree to be contacted about this registration.', type: 'checkbox', required: true },
+    ],
+  },
+  {
+    id: 'contact',
+    title: 'Contact',
+    description: 'Standard lead capture form for service inquiries and general website contact pages.',
+    audience: 'public',
+    moderationMode: 'manual',
+    successMessage: 'Thanks. We will reply soon.',
+    contactShare: {
+      enabled: true,
+      nameField: 'name',
+      emailField: 'email',
+      phoneField: 'phone',
+      notesField: 'message',
+      dedupeByEmail: true,
+    },
+    fields: [
+      { key: 'name', label: 'Name', type: 'text', placeholder: 'Your name', required: true },
+      { key: 'email', label: 'Email', type: 'email', placeholder: 'you@example.com', required: true },
+      { key: 'phone', label: 'Phone', type: 'tel', placeholder: '+1 555 0100' },
+      { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Tell us what you need', required: true },
+    ],
+  },
+  {
+    id: 'newsletter',
+    title: 'Newsletter',
+    description: 'Lightweight subscriber capture with topic preference and consent controls.',
+    audience: 'public',
+    moderationMode: 'auto-approve',
+    successMessage: 'You are subscribed.',
+    contactShare: {
+      enabled: true,
+      nameField: 'name',
+      emailField: 'email',
+      notesField: 'topics',
+      dedupeByEmail: true,
+    },
+    fields: [
+      { key: 'email', label: 'Email', type: 'email', placeholder: 'you@example.com', required: true },
+      { key: 'name', label: 'Name', type: 'text', placeholder: 'Optional' },
+      { key: 'topics', label: 'Topics', type: 'select', options: ['Product updates', 'Design notes', 'Launches'], defaultValue: 'Product updates' },
+      { key: 'consent', label: 'I agree to receive email updates.', type: 'checkbox', required: true },
+    ],
+  },
+  {
+    id: 'product-inquiry',
+    title: 'Product inquiry',
+    description: 'Commerce support or quote request form that can sit on product detail pages.',
+    audience: 'public',
+    moderationMode: 'manual',
+    successMessage: 'Inquiry received. We will follow up with details.',
+    contactShare: {
+      enabled: true,
+      nameField: 'name',
+      emailField: 'email',
+      phoneField: 'phone',
+      notesField: 'question',
+      dedupeByEmail: true,
+    },
+    fields: [
+      { key: 'product_sku', label: 'Product SKU', type: 'text', placeholder: 'BKY-001', required: true },
+      { key: 'name', label: 'Name', type: 'text', placeholder: 'Your name', required: true },
+      { key: 'email', label: 'Email', type: 'email', placeholder: 'you@example.com', required: true },
+      { key: 'quantity', label: 'Quantity', type: 'number', defaultValue: '1' },
+      { key: 'question', label: 'Question', type: 'textarea', placeholder: 'Ask about pricing, delivery, or customization.' },
+    ],
+  },
+];
 
 interface FormInbox {
   form: FormDefinition;
@@ -297,6 +407,7 @@ function FormsRoute() {
       checks: formCommandReadiness.checks,
     },
     metrics,
+    templates: FORM_TEMPLATES.map((template) => buildTemplateManifest(template)),
     selectedForm: selectedForm ? {
       id: selectedForm.id,
       name: selectedForm.name,
@@ -624,8 +735,8 @@ function FormsRoute() {
 
         <div className="mt-4 rounded-lg border border-border bg-background p-4">
           <h3 className="text-sm font-semibold">Forms control map</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, form health, library, frontend API, and submission review.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, form health, templates, library, frontend API, and submission review.</p>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
             {FORM_CONTROL_AREAS.map((area) => (
               <a
                 key={area.title}
@@ -683,6 +794,72 @@ function FormsRoute() {
           );
         })}
       </div>
+
+      <Panel id="forms-templates" className="mb-6 scroll-mt-24">
+        <PanelHeader
+          title="Form templates"
+          description="Copy complete schemas for registration, contact, newsletter, and product inquiry experiences."
+          icon={<Sparkles className="size-4" />}
+        />
+        <PanelContent>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {FORM_TEMPLATES.map((template) => {
+              const templateManifest = buildTemplateManifest(template);
+              const templateText = JSON.stringify(templateManifest, null, 2);
+              const payloadText = JSON.stringify(templateManifest.samplePayload, null, 2);
+
+              return (
+                <div key={template.id} className="rounded-lg border border-border bg-background p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">{template.title}</h3>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">{template.description}</p>
+                    </div>
+                    <span className="rounded-full bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">
+                      {template.fields.length} fields
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">{template.audience}</span>
+                    <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">{template.moderationMode}</span>
+                    <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                      {template.contactShare?.enabled ? 'contacts' : 'inbox'}
+                    </span>
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    {template.fields.slice(0, 4).map((field) => (
+                      <div key={field.key} className="flex items-center justify-between gap-3 rounded border border-border bg-muted/40 px-2.5 py-2">
+                        <span className="truncate text-xs font-medium text-foreground">{field.label}</span>
+                        <span className="shrink-0 rounded bg-background px-2 py-0.5 text-[10px] text-muted-foreground">{field.type}</span>
+                      </div>
+                    ))}
+                    {template.fields.length > 4 ? (
+                      <div className="text-xs text-muted-foreground">+{template.fields.length - 4} more field{template.fields.length - 4 === 1 ? '' : 's'}</div>
+                    ) : null}
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => void copyFormApiText(templateText, `${template.title} form template`)}
+                      iconStart={<Copy className="size-4" />}
+                    >
+                      Copy schema
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void copyFormApiText(payloadText, `${template.title} sample payload`)}
+                      iconStart={<Copy className="size-4" />}
+                    >
+                      Payload
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </PanelContent>
+      </Panel>
 
       {isLoading && forms.length === 0 ? (
         <Panel>
@@ -1175,6 +1352,47 @@ const sampleFormFieldValue = (field: FormDefinition['fields'][number]): unknown 
       return field.placeholder || field.label || 'Sample value';
   }
 };
+
+function buildTemplateManifest(template: FormTemplateBlueprint) {
+  const samplePayload = {
+    values: Object.fromEntries(template.fields.map((field) => [field.key, sampleFormFieldValue(field)])),
+    requestId: `web-${template.id}-request`,
+    startedAt: Date.now() - 8000,
+  };
+
+  return {
+    schemaVersion: 'backy.form-template.v1',
+    id: template.id,
+    title: template.title,
+    description: template.description,
+    audience: template.audience,
+    isActive: true,
+    moderationMode: template.moderationMode,
+    successMessage: template.successMessage,
+    spamGuards: {
+      honeypot: true,
+      captcha: false,
+    },
+    contactShare: template.contactShare,
+    collectionTarget: template.collectionTarget,
+    fields: template.fields,
+    editorFormBlockProps: {
+      formId: `form-{pageSlug}-${template.id}`,
+      formName: `{pageSlug}-${template.id}`,
+      formTitle: template.title,
+      formDescription: template.description,
+      successMessage: template.successMessage,
+      enableHoneypot: true,
+      moderationMode: template.moderationMode,
+      contactShareEnabled: Boolean(template.contactShare?.enabled),
+      contactShareNameField: template.contactShare?.nameField,
+      contactShareEmailField: template.contactShare?.emailField,
+      contactSharePhoneField: template.contactShare?.phoneField,
+      contactShareNotesField: template.contactShare?.notesField,
+    },
+    samplePayload,
+  };
+}
 
 const toSingleQuotedShellString = (value: string): string => (
   `'${value.replace(/'/g, "'\\''")}'`
