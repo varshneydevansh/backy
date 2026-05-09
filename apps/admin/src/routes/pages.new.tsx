@@ -21,7 +21,7 @@ interface NewPageSearch {
     siteId?: string;
 }
 
-type PageTemplate = 'blank' | 'landing' | 'about' | 'contact' | 'registration';
+type PageTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'about' | 'contact' | 'registration';
 
 const TEMPLATE_OPTIONS: Array<{
     id: PageTemplate;
@@ -43,6 +43,20 @@ const TEMPLATE_OPTIONS: Array<{
         desc: 'Hero, value cards, and a call to action.',
         detail: 'Good for offers, products, launches, and lead capture pages.',
         sections: ['Hero', 'Feature grid', 'CTA'],
+    },
+    {
+        id: 'storefront',
+        name: 'Storefront page',
+        desc: 'Product hero, catalog rail, and checkout-ready cards.',
+        detail: 'Starts a public selling page that can bind to Backy products and orders.',
+        sections: ['Product hero', 'Catalog grid', 'Checkout CTA'],
+    },
+    {
+        id: 'blog-index',
+        name: 'Blog index',
+        desc: 'Editorial intro, featured story, and article list blocks.',
+        detail: 'Creates a public publication route ready to bind to Backy blog posts.',
+        sections: ['Editorial hero', 'Featured post', 'Article list'],
     },
     {
         id: 'about',
@@ -214,6 +228,11 @@ function NewPageRoute() {
         isHomepage: formData.isHomepage,
         content: `${selectedTemplate.sections.length} starter block${selectedTemplate.sections.length === 1 ? '' : 's'}`,
         forms: ['contact', 'registration'].includes(formData.template) ? 'Backy form API seeded' : 'none',
+        dynamicData: formData.template === 'storefront'
+            ? 'Backy products catalog placeholders'
+            : formData.template === 'blog-index'
+                ? 'Backy blog feed placeholders'
+                : 'none',
     }), [
         formData.description,
         formData.isHomepage,
@@ -250,6 +269,7 @@ function NewPageRoute() {
             name: selectedTemplate.name,
             sections: selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration'].includes(formData.template),
+            seedsDynamicData: ['storefront', 'blog-index'].includes(formData.template),
         },
         canvas: {
             width: DEFAULT_CANVAS_SIZE.width,
@@ -262,6 +282,7 @@ function NewPageRoute() {
             'Backend owns duplicate route and homepage conflict validation.',
             'Scheduled pages require a publish date before they can be created.',
             'Contact and registration templates seed editable form blocks that connect to Backy Forms and Contacts.',
+            'Storefront and blog index templates seed dynamic data placeholders for products and posts.',
             'The canvas seed is serialized before persistence so the editor never starts from a blank record unless the user intentionally keeps the starter sparse.',
         ],
     }), [
@@ -929,6 +950,202 @@ function buildTemplateElements(input: {
                         }),
                     ],
                 })),
+            }),
+        ];
+    }
+
+    if (input.template === 'storefront') {
+        return [
+            createCanvasElement('section', 0, 0, {
+                id: 'storefront-hero-section',
+                width: 1200,
+                height: 380,
+                dataBindings: [{ source: 'products', mode: 'featured', limit: 1 }],
+                props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 72, 70, {
+                        id: 'storefront-heading',
+                        width: 520,
+                        height: 112,
+                        props: { content: title, level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                    }),
+                    createCanvasElement('paragraph', 76, 204, {
+                        id: 'storefront-copy',
+                        width: 500,
+                        height: 78,
+                        props: { content: description, fontSize: 18, lineHeight: 1.55, color: '#4b5563' },
+                    }),
+                    createCanvasElement('button', 76, 306, {
+                        id: 'storefront-shop-button',
+                        width: 178,
+                        height: 50,
+                        props: { label: 'Shop products', href: '#products', backgroundColor: '#0f766e', color: '#ffffff', borderRadius: 8, fontSize: 16, fontWeight: '700' },
+                    }),
+                    createCanvasElement('box', 720, 54, {
+                        id: 'storefront-featured-product',
+                        width: 350,
+                        height: 280,
+                        dataBindings: [{ source: 'products', mode: 'featured', fields: ['title', 'price', 'image', 'slug'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#dbe3ea', borderWidth: 1, borderStyle: 'solid', boxShadow: '0 20px 60px rgba(15, 23, 42, 0.10)' },
+                        children: [
+                            createCanvasElement('box', 24, 24, {
+                                id: 'storefront-featured-media',
+                                width: 302,
+                                height: 150,
+                                props: { backgroundColor: '#e6f3f1', borderRadius: 8 },
+                            }),
+                            createCanvasElement('heading', 24, 196, {
+                                id: 'storefront-featured-title',
+                                width: 220,
+                                height: 30,
+                                props: { content: 'Featured product', level: 'h3', fontSize: 20, fontWeight: '750', color: '#111827' },
+                            }),
+                            createCanvasElement('text', 24, 234, {
+                                id: 'storefront-featured-price',
+                                width: 120,
+                                height: 26,
+                                props: { content: '$49', fontSize: 17, fontWeight: '700', color: '#0f766e' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 380, {
+                id: 'storefront-products-section',
+                width: 1200,
+                height: 380,
+                dataBindings: [{ source: 'products', mode: 'list', limit: 6, sort: 'manual' }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 72, 50, {
+                        id: 'storefront-products-heading',
+                        width: 420,
+                        height: 46,
+                        props: { content: 'Product catalog', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...['Digital kit', 'Service package', 'Featured item'].map((item, index) => createCanvasElement('box', 72 + index * 360, 132, {
+                        id: `storefront-product-card-${index}`,
+                        width: 318,
+                        height: 198,
+                        dataBindings: [{ source: 'products', mode: 'item', index }],
+                        props: { backgroundColor: '#f9fafb', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 20, 22, {
+                                id: `storefront-product-title-${index}`,
+                                width: 230,
+                                height: 34,
+                                props: { content: item, level: 'h3', fontSize: 21, fontWeight: '750', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 20, 70, {
+                                id: `storefront-product-copy-${index}`,
+                                width: 240,
+                                height: 54,
+                                props: { content: 'Bind this card to product title, media, price, and detail URL.', fontSize: 14, lineHeight: 1.45, color: '#4b5563' },
+                            }),
+                            createCanvasElement('button', 20, 142, {
+                                id: `storefront-product-button-${index}`,
+                                width: 128,
+                                height: 38,
+                                props: { label: 'View item', backgroundColor: '#111827', color: '#ffffff', borderRadius: 8, fontSize: 14, fontWeight: '700' },
+                            }),
+                        ],
+                    })),
+                ],
+            }),
+        ];
+    }
+
+    if (input.template === 'blog-index') {
+        return [
+            createCanvasElement('section', 0, 0, {
+                id: 'blog-index-hero-section',
+                width: 1200,
+                height: 330,
+                dataBindings: [{ source: 'blog', mode: 'latest', limit: 1 }],
+                props: { backgroundColor: '#111827', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('text', 74, 62, {
+                        id: 'blog-index-kicker',
+                        width: 220,
+                        height: 28,
+                        props: { content: 'Publication', fontSize: 13, fontWeight: '800', color: '#7dd3fc', textTransform: 'uppercase' },
+                    }),
+                    createCanvasElement('heading', 72, 98, {
+                        id: 'blog-index-heading',
+                        width: 640,
+                        height: 96,
+                        props: { content: title, level: 'h1', fontSize: 50, fontWeight: '800', lineHeight: 1.08, color: '#ffffff' },
+                    }),
+                    createCanvasElement('paragraph', 76, 210, {
+                        id: 'blog-index-copy',
+                        width: 560,
+                        height: 72,
+                        props: { content: description, fontSize: 17, lineHeight: 1.55, color: '#d1d5db' },
+                    }),
+                    createCanvasElement('box', 790, 70, {
+                        id: 'blog-index-featured-card',
+                        width: 300,
+                        height: 190,
+                        dataBindings: [{ source: 'blog', mode: 'featured', fields: ['title', 'excerpt', 'slug', 'publishedAt'] }],
+                        props: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#374151', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('text', 22, 24, {
+                                id: 'blog-index-featured-label',
+                                width: 160,
+                                height: 22,
+                                props: { content: 'Featured story', fontSize: 12, fontWeight: '800', color: '#0369a1', textTransform: 'uppercase' },
+                            }),
+                            createCanvasElement('heading', 22, 58, {
+                                id: 'blog-index-featured-title',
+                                width: 240,
+                                height: 54,
+                                props: { content: 'Latest article title', level: 'h3', fontSize: 21, fontWeight: '750', color: '#111827' },
+                            }),
+                            createCanvasElement('paragraph', 22, 122, {
+                                id: 'blog-index-featured-copy',
+                                width: 230,
+                                height: 44,
+                                props: { content: 'Bind this to the latest or selected Backy blog post.', fontSize: 13, lineHeight: 1.45, color: '#4b5563' },
+                            }),
+                        ],
+                    }),
+                ],
+            }),
+            createCanvasElement('section', 0, 330, {
+                id: 'blog-index-list-section',
+                width: 1200,
+                height: 420,
+                dataBindings: [{ source: 'blog', mode: 'list', limit: 8, sort: 'publishedAt:desc' }],
+                props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 74, 52, {
+                        id: 'blog-index-list-heading',
+                        width: 420,
+                        height: 46,
+                        props: { content: 'Latest articles', level: 'h2', fontSize: 34, fontWeight: '800', color: '#111827' },
+                    }),
+                    ...['Design notes', 'Product update', 'Field guide'].map((item, index) => createCanvasElement('box', 74, 130 + index * 86, {
+                        id: `blog-index-post-row-${index}`,
+                        width: 860,
+                        height: 68,
+                        dataBindings: [{ source: 'blog', mode: 'item', index }],
+                        props: { backgroundColor: '#f9fafb', borderRadius: 8, borderColor: '#e5e7eb', borderWidth: 1, borderStyle: 'solid' },
+                        children: [
+                            createCanvasElement('heading', 20, 14, {
+                                id: `blog-index-post-title-${index}`,
+                                width: 320,
+                                height: 30,
+                                props: { content: item, level: 'h3', fontSize: 20, fontWeight: '750', color: '#111827' },
+                            }),
+                            createCanvasElement('text', 650, 20, {
+                                id: `blog-index-post-meta-${index}`,
+                                width: 150,
+                                height: 24,
+                                props: { content: '5 min read', fontSize: 13, color: '#6b7280' },
+                            }),
+                        ],
+                    })),
+                ],
             }),
         ];
     }
