@@ -58,6 +58,7 @@ import {
   type FormSubmission,
   type SiteSettingsInput,
 } from '@/lib/adminContentApi';
+import { listMedia } from '@/lib/mediaApi';
 
 // ============================================
 // TYPES
@@ -88,6 +89,7 @@ type SearchResult =
   | { id: string; type: 'Form'; title: string; detail: string; action: { route: 'forms' } }
   | { id: string; type: 'Comment'; title: string; detail: string; action: { route: 'comments' } }
   | { id: string; type: 'Contact'; title: string; detail: string; action: { route: 'contacts' } }
+  | { id: string; type: 'Media'; title: string; detail: string; action: { route: 'media'; assetId: string } }
   | { id: string; type: 'Product'; title: string; detail: string; action: { route: 'product'; productId: string } }
   | { id: string; type: 'Order'; title: string; detail: string; action: { route: 'order'; orderId: string } }
   | { id: string; type: 'User'; title: string; detail: string; action: { route: 'user'; userId: string } }
@@ -590,12 +592,13 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     setSearchError(null);
 
     try {
-      const [loadedSites, pages, posts, forms, comments, collections] = await Promise.all([
+      const [loadedSites, pages, posts, forms, comments, mediaAssets, collections] = await Promise.all([
         listSites().catch(() => []),
         listPages(activeSiteId).catch(() => []),
         listBlogPosts(activeSiteId).catch(() => []),
         listForms(activeSiteId).catch(() => []),
         listComments(activeSiteId, { status: 'all', limit: 20, sort: 'newest' }).then((result) => result.comments).catch(() => []),
+        listMedia({ siteId: activeSiteId, limit: 20 }).catch(() => []),
         listCollections(activeSiteId).catch(() => []),
       ]);
       const productsCollection = collections.find((collection) => collection.slug === 'products');
@@ -659,6 +662,22 @@ export function Header({ onSidebarToggle }: HeaderProps) {
           detail: contact.email || contact.notes || contact.status,
           action: { route: 'contacts' as const },
         })),
+        ...mediaAssets.map((asset) => {
+          const tags = asset.tags || [];
+
+          return {
+            id: `media:${asset.id}`,
+            type: 'Media' as const,
+            title: asset.name || asset.id,
+            detail: [
+              asset.type,
+              asset.size,
+              asset.visibility,
+              tags.slice(0, 2).join(', '),
+            ].filter(Boolean).join(' - '),
+            action: { route: 'media' as const, assetId: asset.id },
+          };
+        }),
         ...productRecords.map((product) => {
           const title = String(readRecordValue(product.values, 'title', product.slug) || product.slug);
           const sku = String(readRecordValue(product.values, 'sku', '') || '').trim();
@@ -761,6 +780,10 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     }
     if (result.action.route === 'contacts') {
       navigate({ to: '/contacts', search: activeSiteSearch });
+      return;
+    }
+    if (result.action.route === 'media') {
+      navigate({ to: '/media', search: { siteId: activeSiteId, assetId: result.action.assetId } });
       return;
     }
     if (result.action.route === 'product') {
