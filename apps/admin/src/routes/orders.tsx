@@ -148,6 +148,43 @@ const ORDER_FIELDS: CollectionField[] = [
   { key: 'notes', label: 'Internal Notes', type: 'richText', required: false, unique: false, sortOrder: 220 },
 ];
 
+const ORDER_EXPORT_COLUMNS = [
+  'order_id',
+  'slug',
+  'record_status',
+  'order_number',
+  'customer_name',
+  'email',
+  'phone',
+  'total',
+  'subtotal',
+  'tax_amount',
+  'shipping_amount',
+  'discount_amount',
+  'currency',
+  'items',
+  'order_source',
+  'checkout_session_id',
+  'customer_id',
+  'order_status',
+  'payment_status',
+  'payment_provider',
+  'payment_reference',
+  'paid_at',
+  'fulfillment_status',
+  'fulfillment_carrier',
+  'tracking_number',
+  'tracking_url',
+  'fulfilled_at',
+  'shipping_address',
+  'billing_address',
+  'refund_amount',
+  'refund_reason',
+  'notes',
+  'created_at',
+  'updated_at',
+] as const;
+
 const EMPTY_ORDER_FORM: OrderFormState = {
   orderNumber: '',
   customerName: '',
@@ -383,6 +420,13 @@ function OrdersRoute() {
       checks: orderReadiness.checks,
     },
     metrics,
+    export: {
+      csvIncludesCustomerIdentity: true,
+      csvIncludesPaymentReferences: true,
+      csvIncludesFulfillmentData: true,
+      csvIncludesPrivateNotes: true,
+      csvColumns: ORDER_EXPORT_COLUMNS,
+    },
     workflowStates: {
       order: ['open', 'paid', 'fulfilled', 'cancelled', 'refunded'],
       payment: ['pending', 'paid', 'failed', 'refunded'],
@@ -697,6 +741,27 @@ function OrdersRoute() {
     URL.revokeObjectURL(url);
     setNotice('Order handoff manifest downloaded.');
   };
+  const exportOrdersCsv = () => {
+    if (filteredOrders.length === 0) return;
+
+    const rows = filteredOrders.map((order) => {
+      const exportRecord = orderToExportRecord(order);
+      return ORDER_EXPORT_COLUMNS.map((column) => exportRecord[column]);
+    });
+    const csv = [ORDER_EXPORT_COLUMNS, ...rows]
+      .map((row) => row.map(csvEscape).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSite?.slug || activeSiteId}-orders.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice(`${filteredOrders.length} visible order${filteredOrders.length === 1 ? '' : 's'} exported.`);
+  };
 
   return (
     <PageShell
@@ -760,6 +825,9 @@ function OrdersRoute() {
             </Button>
             <Button variant="outline" onClick={downloadOrderHandoff} iconStart={<Download className="size-4" />}>
               Download JSON
+            </Button>
+            <Button variant="outline" onClick={exportOrdersCsv} disabled={filteredOrders.length === 0} iconStart={<Download className="size-4" />}>
+              Export CSV
             </Button>
             {!ordersCollection ? (
               <Button onClick={() => void createOrdersCollection()} disabled={isSaving} iconStart={<Sparkles className="size-4" />}>
@@ -845,6 +913,9 @@ function OrdersRoute() {
                 )}
                 <Button onClick={() => void copyOrderHandoff()} iconStart={<Copy className="size-4" />}>
                   Copy manifest
+                </Button>
+                <Button onClick={exportOrdersCsv} disabled={filteredOrders.length === 0} iconStart={<Download className="size-4" />}>
+                  Export CSV
                 </Button>
                 <Button onClick={() => void copyOrdersApiUrl(adminOrdersApiUrl, 'Internal orders API URL')} iconStart={<Copy className="size-4" />}>
                   Copy admin API
@@ -1792,4 +1863,52 @@ const mergeOrderFields = (currentFields: CollectionField[]): CollectionField[] =
   const requiredKeys = new Set(ORDER_FIELDS.map((field) => field.key));
   const customFields = currentFields.filter((field) => !requiredKeys.has(field.key));
   return [...merged, ...customFields].sort((a, b) => a.sortOrder - b.sortOrder);
+};
+
+type OrderExportColumn = typeof ORDER_EXPORT_COLUMNS[number];
+
+const optionalNumber = (value: unknown): number | null => (
+  value === null || value === undefined || value === '' ? null : toNumber(value)
+);
+
+const orderToExportRecord = (order: CollectionRecord): Record<OrderExportColumn, string | number | null> => ({
+  order_id: order.id,
+  slug: order.slug,
+  record_status: order.status,
+  order_number: String(readOrderValue(order.values, 'ordernumber', order.slug)),
+  customer_name: String(readOrderValue(order.values, 'customername', '')),
+  email: String(order.values.email || ''),
+  phone: String(readOrderValue(order.values, 'phone', '')),
+  total: toNumber(order.values.total),
+  subtotal: optionalNumber(readOrderValue(order.values, 'subtotal', null)),
+  tax_amount: optionalNumber(readOrderValue(order.values, 'taxamount', null)),
+  shipping_amount: optionalNumber(readOrderValue(order.values, 'shippingamount', null)),
+  discount_amount: optionalNumber(readOrderValue(order.values, 'discountamount', null)),
+  currency: normalizeCurrency(String(order.values.currency || 'USD')),
+  items: String(order.values.items || ''),
+  order_source: asOrderSource(readOrderValue(order.values, 'ordersource', undefined)),
+  checkout_session_id: String(readOrderValue(order.values, 'checkoutsessionid', '')),
+  customer_id: String(readOrderValue(order.values, 'customerid', '')),
+  order_status: asOrderStatus(readOrderValue(order.values, 'orderstatus', undefined)),
+  payment_status: asPaymentStatus(readOrderValue(order.values, 'paymentstatus', undefined)),
+  payment_provider: String(readOrderValue(order.values, 'paymentprovider', '')),
+  payment_reference: String(readOrderValue(order.values, 'paymentreference', '')),
+  paid_at: String(readOrderValue(order.values, 'paidat', '') || ''),
+  fulfillment_status: asFulfillmentStatus(readOrderValue(order.values, 'fulfillmentstatus', undefined)),
+  fulfillment_carrier: String(readOrderValue(order.values, 'fulfillmentcarrier', '')),
+  tracking_number: String(readOrderValue(order.values, 'trackingnumber', '')),
+  tracking_url: String(readOrderValue(order.values, 'trackingurl', '')),
+  fulfilled_at: String(readOrderValue(order.values, 'fulfilledat', '') || ''),
+  shipping_address: String(readOrderValue(order.values, 'shippingaddress', '')),
+  billing_address: String(readOrderValue(order.values, 'billingaddress', '')),
+  refund_amount: optionalNumber(readOrderValue(order.values, 'refundamount', null)),
+  refund_reason: String(readOrderValue(order.values, 'refundreason', '')),
+  notes: String(order.values.notes || ''),
+  created_at: order.createdAt || '',
+  updated_at: order.updatedAt || '',
+});
+
+const csvEscape = (value: unknown): string => {
+  const raw = String(value ?? '').replace(/\r?\n/g, '\\n');
+  return `"${raw.replace(/"/g, '""')}"`;
 };
