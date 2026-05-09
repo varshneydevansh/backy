@@ -438,6 +438,10 @@ function EditBlogPostPage() {
     };
 
     const applyWorkflow = async (action: 'publish' | 'archive') => {
+        if (editorBusy || (action === 'publish' && (readinessLoading || readinessBlocked || status === 'published')) || (action === 'archive' && status === 'archived')) {
+            return;
+        }
+
         setIsWorkflowBusy(true);
         setSaveWarning(null);
         setWorkflowNotice(null);
@@ -465,6 +469,8 @@ function EditBlogPostPage() {
     };
 
     const generatePreview = async () => {
+        if (editorBusy || isPreviewBusy) return;
+
         setIsPreviewBusy(true);
         setSaveWarning(null);
 
@@ -482,6 +488,8 @@ function EditBlogPostPage() {
     };
 
     const restoreRevision = async (revision: ContentRevision) => {
+        if (editorBusy) return;
+
         setIsWorkflowBusy(true);
         setSaveWarning(null);
         setWorkflowNotice(null);
@@ -500,6 +508,8 @@ function EditBlogPostPage() {
     };
 
     const handleDelete = async () => {
+        if (editorBusy) return;
+
         setIsWorkflowBusy(true);
         setSaveWarning(null);
 
