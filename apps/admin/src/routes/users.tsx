@@ -442,6 +442,93 @@ function UsersListView() {
     initialSort: { key: 'fullName', direction: 'asc' },
     pageSize: 10,
   });
+  const userHandoff = useMemo(() => ({
+    generatedAt: new Date().toISOString(),
+    endpoints: {
+      listAndInvite: usersListUrl,
+      detailUpdateDelete: userDetailUrl,
+    },
+    readiness: {
+      score: accessReadiness.score,
+      checks: accessReadiness.checks,
+    },
+    metrics: {
+      total: users.length,
+      visible: data.length,
+      active: users.filter((user) => user.status === 'active').length,
+      invited: users.filter((user) => user.status === 'invited').length,
+      inactive: users.filter((user) => user.status === 'inactive').length,
+      suspended: users.filter((user) => user.status === 'suspended').length,
+      adminAuthority: users.filter((user) => user.role === 'owner' || user.role === 'admin').length,
+    },
+    filters: {
+      search: searchQuery,
+      role: roleFilter,
+      status: statusFilter,
+      currentPage,
+      totalPages,
+      totalItems,
+    },
+    roles: ROLE_OPTIONS.map((role) => ({
+      value: role.value,
+      label: role.label,
+      detail: role.detail,
+      summary: ROLE_ACCESS_SUMMARY[role.value],
+      userCount: users.filter((user) => user.role === role.value).length,
+      capabilities: ROLE_CAPABILITIES.map((capability) => ({
+        label: capability.label,
+        allowed: capability.roles.includes(role.value),
+      })),
+    })),
+    statuses: STATUS_OPTIONS.map((status) => ({
+      value: status.value,
+      label: status.label,
+      userCount: users.filter((user) => user.status === status.value).length,
+    })),
+    users: data.map((user) => ({
+      id: user.id,
+      role: user.role,
+      status: user.status,
+      lastActive: user.lastActive,
+      hasName: Boolean(user.fullName),
+      hasEmail: Boolean(user.email),
+    })),
+    guardrails: [
+      'Backend blocks deleting or demoting the final active owner/admin.',
+      'Invites and edits reject emails already attached to another user.',
+      'CSV export is the explicit admin path for identity fields.',
+    ],
+    privacy: {
+      includesIdentity: false,
+      note: 'Use CSV export or the private users API for names and emails. This manifest exposes endpoint contracts, role model, filters, counts, and non-PII user state only.',
+    },
+  }), [
+    accessReadiness.checks,
+    accessReadiness.score,
+    currentPage,
+    data,
+    roleFilter,
+    searchQuery,
+    statusFilter,
+    totalItems,
+    totalPages,
+    userDetailUrl,
+    users,
+    usersListUrl,
+  ]);
+  const userHandoffText = useMemo(() => JSON.stringify(userHandoff, null, 2), [userHandoff]);
+  const downloadUserHandoff = () => {
+    const blob = new Blob([userHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'backy-users-handoff.json';
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice('Users handoff manifest downloaded.');
+  };
 
   const hasActiveFilters = searchQuery || roleFilter !== 'all' || statusFilter !== 'all';
 
@@ -478,6 +565,22 @@ function UsersListView() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void copyUserApiText(userHandoffText, 'Users handoff manifest')}
+              iconStart={<Copy className="size-4" />}
+            >
+              Copy manifest
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={downloadUserHandoff}
+              iconStart={<Download className="size-4" />}
+            >
+              Download JSON
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -596,6 +699,14 @@ function UsersListView() {
                     iconStart={<Copy className="size-4" />}
                   >
                     Copy API
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void copyUserApiText(userHandoffText, 'Users handoff manifest')}
+                    iconStart={<Copy className="size-4" />}
+                  >
+                    Copy manifest
                   </Button>
                 </div>
               }
