@@ -159,6 +159,8 @@ function CommentsRoute() {
   const [updatingIds, setUpdatingIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const isCommentMutationBusy = updatingIds.length > 0;
+  const isCommentsBusy = isLoading || isCommentMutationBusy;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -419,6 +421,8 @@ function CommentsRoute() {
   const blockReason = moderationReasonText || 'Blocked from moderation queue.';
 
   const loadComments = async () => {
+    if (isCommentsBusy) return;
+
     setIsLoading(true);
     setError(null);
     setNotice(null);
@@ -478,6 +482,8 @@ function CommentsRoute() {
   }, [activeSiteId]);
 
   const toggleVisibleSelection = () => {
+    if (isCommentsBusy) return;
+
     setSelectedIds((current) => {
       const currentSet = new Set(current);
       if (allVisibleSelected) {
@@ -494,7 +500,7 @@ function CommentsRoute() {
     status: CommentModerationStatus,
     options: { rejectionReason?: string; blockReason?: string } = {},
   ) => {
-    if (commentIds.length === 0) return;
+    if (commentIds.length === 0 || isCommentsBusy) return;
     setUpdatingIds(commentIds);
     setError(null);
     setNotice(null);
@@ -520,6 +526,8 @@ function CommentsRoute() {
   };
 
   const copyCommentApiText = async (value: string, label: string) => {
+    if (isCommentsBusy) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setError(null);
@@ -530,6 +538,8 @@ function CommentsRoute() {
     }
   };
   const downloadModerationHandoff = () => {
+    if (isCommentsBusy) return;
+
     const blob = new Blob([moderationHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -543,6 +553,8 @@ function CommentsRoute() {
     setNotice('Comment moderation handoff manifest downloaded.');
   };
   const clearCommentFilters = () => {
+    if (isCommentsBusy) return;
+
     setSearchQuery('');
     setStatusFilter('all');
     setTargetTypeFilter('all');
@@ -550,6 +562,8 @@ function CommentsRoute() {
     setSortFilter('newest');
   };
   const selectCommentsSite = (nextSiteId: string) => {
+    if (isCommentsBusy) return;
+
     setSelectedSiteId(nextSiteId);
     setSelectedIds([]);
     setModerationReason('');
@@ -558,7 +572,7 @@ function CommentsRoute() {
   };
 
   const handleExportComments = () => {
-    if (filteredComments.length === 0) return;
+    if (filteredComments.length === 0 || isCommentsBusy) return;
 
     const rows = filteredComments.map((comment) => {
       const target = targetByKey.get(`${comment.targetType}:${comment.targetId}`);
@@ -615,8 +629,9 @@ function CommentsRoute() {
             id="comments-active-site"
             aria-label="Active Site"
             value={activeSiteId}
+            disabled={isCommentsBusy}
             onChange={(event) => selectCommentsSite(event.target.value)}
-            className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
+            className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
           >
             {sites.length === 0 ? (
               <option value="site-demo">Demo site</option>
@@ -626,7 +641,7 @@ function CommentsRoute() {
               </option>
             ))}
           </select>
-          <Button onClick={() => void loadComments()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+          <Button onClick={() => void loadComments()} disabled={isCommentsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
             Refresh
           </Button>
         </div>
@@ -664,22 +679,23 @@ function CommentsRoute() {
             <Button
               variant="outline"
               onClick={() => void copyCommentApiText(moderationHandoffText, 'Comment moderation handoff manifest')}
+              disabled={isCommentsBusy}
               iconStart={<Copy className="size-4" />}
             >
               Copy manifest
             </Button>
-            <Button variant="outline" onClick={downloadModerationHandoff} iconStart={<Download className="size-4" />}>
+            <Button variant="outline" onClick={downloadModerationHandoff} disabled={isCommentsBusy} iconStart={<Download className="size-4" />}>
               Download JSON
             </Button>
             <Button
               variant="outline"
-              disabled={filteredComments.length === 0}
+              disabled={filteredComments.length === 0 || isCommentsBusy}
               onClick={handleExportComments}
               iconStart={<Download className="size-4" />}
             >
               Export CSV
             </Button>
-            <Button onClick={() => void loadComments()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+            <Button onClick={() => void loadComments()} disabled={isCommentsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh comments
             </Button>
           </div>
@@ -755,7 +771,11 @@ function CommentsRoute() {
                 key={surface.key}
                 to={surface.route}
                 search={surface.route === '/settings' ? undefined : activeSiteSearch}
-                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                aria-disabled={isCommentsBusy}
+                className={cn(
+                  'rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5',
+                  isCommentsBusy && 'pointer-events-none opacity-60',
+                )}
               >
                 <div className="text-sm font-semibold text-foreground">{surface.title}</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
@@ -773,8 +793,9 @@ function CommentsRoute() {
           id="comments-active-site-inline"
           aria-label="Active comments site"
           value={activeSiteId}
+          disabled={isCommentsBusy}
           onChange={(event) => selectCommentsSite(event.target.value)}
-          className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
+          className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
         >
           {sites.length === 0 ? (
             <option value="site-demo">Demo site</option>
@@ -806,19 +827,19 @@ function CommentsRoute() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={filteredComments.length === 0}
+                disabled={filteredComments.length === 0 || isCommentsBusy}
                 onClick={handleExportComments}
                 iconStart={<Download className="size-4" />}
               >
                 Export CSV
               </Button>
-              <Button size="sm" variant="outline" disabled={!hasSelection || updatingIds.length > 0} onClick={() => void handleModerate(selectedIds, 'approved')} iconStart={<CheckCircle2 className="size-4" />}>
+              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy} onClick={() => void handleModerate(selectedIds, 'approved')} iconStart={<CheckCircle2 className="size-4" />}>
                 Approve
               </Button>
-              <Button size="sm" variant="outline" disabled={!hasSelection || updatingIds.length > 0} onClick={() => void handleModerate(selectedIds, 'rejected', { rejectionReason: rejectReason })} iconStart={<XCircle className="size-4" />}>
+              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy} onClick={() => void handleModerate(selectedIds, 'rejected', { rejectionReason: rejectReason })} iconStart={<XCircle className="size-4" />}>
                 Reject
               </Button>
-              <Button size="sm" variant="outline" disabled={!hasSelection || updatingIds.length > 0} onClick={() => void handleModerate(selectedIds, 'spam', { rejectionReason: spamReason })} iconStart={<Trash2 className="size-4" />}>
+              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy} onClick={() => void handleModerate(selectedIds, 'spam', { rejectionReason: spamReason })} iconStart={<Trash2 className="size-4" />}>
                 Spam
               </Button>
             </div>
@@ -837,12 +858,13 @@ function CommentsRoute() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Button onClick={() => void copyCommentApiText(moderationListUrl, 'Comments URL')} iconStart={<Copy className="size-4" />}>
+                <Button onClick={() => void copyCommentApiText(moderationListUrl, 'Comments URL')} disabled={isCommentsBusy} iconStart={<Copy className="size-4" />}>
                   Copy list
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => void copyCommentApiText(moderationHandoffText, 'Comment moderation handoff manifest')}
+                  disabled={isCommentsBusy}
                   iconStart={<Copy className="size-4" />}
                 >
                   Copy manifest
@@ -851,7 +873,11 @@ function CommentsRoute() {
                   href={moderationListUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                  aria-disabled={isCommentsBusy}
+                  className={cn(
+                    'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
+                    isCommentsBusy && 'pointer-events-none opacity-60',
+                  )}
                 >
                   <ExternalLink className="size-4" />
                   Open endpoint
@@ -880,16 +906,24 @@ function CommentsRoute() {
                 type="search"
                 aria-label="Search comments"
                 value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
+                disabled={isCommentsBusy}
+                onChange={(event) => {
+                  if (isCommentsBusy) return;
+                  setSearchQuery(event.target.value);
+                }}
                 placeholder="Search author, content, request, or target..."
-                className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>
             <select
               aria-label="Target type filter"
               value={targetTypeFilter}
-              onChange={(event) => setTargetTypeFilter(event.target.value as CommentModerationTarget)}
-              className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+              disabled={isCommentsBusy}
+              onChange={(event) => {
+                if (isCommentsBusy) return;
+                setTargetTypeFilter(event.target.value as CommentModerationTarget);
+              }}
+              className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
               <option value="all">All targets</option>
               <option value="page">Pages</option>
@@ -898,8 +932,12 @@ function CommentsRoute() {
             <select
               aria-label="Comment triage filter"
               value={triageFilter}
-              onChange={(event) => setTriageFilter(event.target.value as CommentTriageFilter)}
-              className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+              disabled={isCommentsBusy}
+              onChange={(event) => {
+                if (isCommentsBusy) return;
+                setTriageFilter(event.target.value as CommentTriageFilter);
+              }}
+              className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
               <option value="all">All triage</option>
               <option value="reported">Reported only</option>
@@ -914,8 +952,12 @@ function CommentsRoute() {
             <select
               aria-label="Comment sort order"
               value={sortFilter}
-              onChange={(event) => setSortFilter(event.target.value as CommentSortFilter)}
-              className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+              disabled={isCommentsBusy}
+              onChange={(event) => {
+                if (isCommentsBusy) return;
+                setSortFilter(event.target.value as CommentSortFilter);
+              }}
+              className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
@@ -926,10 +968,14 @@ function CommentsRoute() {
                 <button
                   key={status}
                   type="button"
-                  onClick={() => setStatusFilter(status)}
+                  onClick={() => {
+                    if (isCommentsBusy) return;
+                    setStatusFilter(status);
+                  }}
+                  disabled={isCommentsBusy}
                   aria-pressed={statusFilter === status}
                   className={cn(
-                    'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-background hover:text-foreground',
+                    'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60',
                     statusFilter === status && 'bg-background text-foreground shadow-sm',
                   )}
                 >
@@ -938,7 +984,7 @@ function CommentsRoute() {
               ))}
             </div>
             {hasActiveCommentFilters && (
-              <Button variant="outline" onClick={clearCommentFilters}>
+              <Button variant="outline" onClick={clearCommentFilters} disabled={isCommentsBusy}>
                 Clear filters
               </Button>
             )}
@@ -950,9 +996,13 @@ function CommentsRoute() {
                 Moderation reason
                 <textarea
                   value={moderationReason}
-                  onChange={(event) => setModerationReason(event.target.value)}
+                  disabled={isCommentsBusy}
+                  onChange={(event) => {
+                    if (isCommentsBusy) return;
+                    setModerationReason(event.target.value);
+                  }}
                   rows={2}
-                  className="mt-2 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  className="mt-2 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                   placeholder="Explain why selected comments are rejected, marked spam, or blocked."
                 />
               </label>
@@ -967,7 +1017,11 @@ function CommentsRoute() {
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => setModerationReason(reason)}
+                    disabled={isCommentsBusy}
+                    onClick={() => {
+                      if (isCommentsBusy) return;
+                      setModerationReason(reason);
+                    }}
                   >
                     {reason.replace(/\.$/, '')}
                   </Button>
@@ -976,8 +1030,11 @@ function CommentsRoute() {
                   type="button"
                   size="sm"
                   variant="ghost"
-                  disabled={!moderationReason}
-                  onClick={() => setModerationReason('')}
+                  disabled={!moderationReason || isCommentsBusy}
+                  onClick={() => {
+                    if (isCommentsBusy) return;
+                    setModerationReason('');
+                  }}
                 >
                   Clear
                 </Button>
@@ -997,7 +1054,7 @@ function CommentsRoute() {
                 Try another status, target type, triage state, sort order, or search query.
               </div>
               {hasActiveCommentFilters && (
-                <Button variant="outline" onClick={clearCommentFilters} className="mt-4">
+                <Button variant="outline" onClick={clearCommentFilters} disabled={isCommentsBusy} className="mt-4">
                   Clear filters
                 </Button>
               )}
@@ -1008,8 +1065,9 @@ function CommentsRoute() {
                 <input
                   type="checkbox"
                   checked={allVisibleSelected}
+                  disabled={isCommentsBusy}
                   onChange={toggleVisibleSelection}
-                  className="size-4 rounded border-border text-primary"
+                  className="size-4 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-60"
                   aria-label="Select visible comments"
                 />
                 Select visible comments
@@ -1020,12 +1078,15 @@ function CommentsRoute() {
                   comment={comment}
                   target={targetByKey.get(`${comment.targetType}:${comment.targetId}`)}
                   selected={selectedSet.has(comment.id)}
-                  disabled={updatingIds.includes(comment.id)}
-                  onSelect={(checked) => setSelectedIds((current) => (
-                    checked
-                      ? Array.from(new Set([...current, comment.id]))
-                      : current.filter((id) => id !== comment.id)
-                  ))}
+                  disabled={isCommentsBusy}
+                  onSelect={(checked) => {
+                    if (isCommentsBusy) return;
+                    setSelectedIds((current) => (
+                      checked
+                        ? Array.from(new Set([...current, comment.id]))
+                        : current.filter((id) => id !== comment.id)
+                    ));
+                  }}
                   onApprove={() => void handleModerate([comment.id], 'approved')}
                   onReject={() => void handleModerate([comment.id], 'rejected', { rejectionReason: rejectReason })}
                   onSpam={() => void handleModerate([comment.id], 'spam', { rejectionReason: spamReason })}
@@ -1130,8 +1191,9 @@ function CommentCard({
           <input
             type="checkbox"
             checked={selected}
+            disabled={disabled}
             onChange={(event) => onSelect(event.target.checked)}
-            className="mt-1 size-4 shrink-0 rounded border-border text-primary"
+            className="mt-1 size-4 shrink-0 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-60"
             aria-label={`Select comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
           />
           <div className="min-w-0">
@@ -1149,7 +1211,15 @@ function CommentCard({
               {comment.authorEmail ? <span>{comment.authorEmail}</span> : null}
               <span>{comment.targetType}</span>
               {target ? (
-                <Link to={target.type === 'page' ? '/pages/$pageId/edit' : '/blog/$postId'} params={target.type === 'page' ? { pageId: target.id } : { postId: target.id }} className="inline-flex items-center gap-1 text-primary hover:underline">
+                <Link
+                  to={target.type === 'page' ? '/pages/$pageId/edit' : '/blog/$postId'}
+                  params={target.type === 'page' ? { pageId: target.id } : { postId: target.id }}
+                  aria-disabled={disabled}
+                  className={cn(
+                    'inline-flex items-center gap-1 text-primary hover:underline',
+                    disabled && 'pointer-events-none opacity-60',
+                  )}
+                >
                   {target.label}
                   <ExternalLink className="size-3" />
                 </Link>
