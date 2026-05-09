@@ -878,8 +878,18 @@ export interface SiteSettingsInput {
     appearance?: {
       primaryColor?: string;
       secondaryColor?: string;
+      backgroundColor?: string;
+      surfaceColor?: string;
+      textColor?: string;
+      mutedTextColor?: string;
       fontFamily?: string;
+      headingFontFamily?: string;
+      bodyFontFamily?: string;
+      monoFontFamily?: string;
       baseFontSize?: number;
+      radius?: number;
+      spacingUnit?: number;
+      motionPreset?: string;
     };
     seo?: {
       titleTemplate?: string;

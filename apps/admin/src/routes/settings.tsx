@@ -739,6 +739,7 @@ function SettingsPage() {
     frontendDefaults: {
       general: generalSettings,
       appearance: appearanceSettings,
+      themeContract: buildAppearanceThemeContract(appearanceSettings),
       seo: seoSettings,
       notifications: notificationSettings,
     },
@@ -1144,108 +1145,199 @@ function AppearanceSettings({
   value: AppearanceSettingsConfig;
   onChange: (next: AppearanceSettingsConfig) => void;
 }) {
-  const updateColor = (key: 'primaryColor' | 'secondaryColor', nextValue: string) => {
+  const resolved = resolveAppearanceSettings(value);
+  const colorControls = [
+    { key: 'primaryColor', label: 'Primary', variable: '--backy-color-primary' },
+    { key: 'secondaryColor', label: 'Secondary', variable: '--backy-color-secondary' },
+    { key: 'backgroundColor', label: 'Background', variable: '--backy-color-background' },
+    { key: 'surfaceColor', label: 'Surface', variable: '--backy-color-surface' },
+    { key: 'textColor', label: 'Text', variable: '--backy-color-text' },
+    { key: 'mutedTextColor', label: 'Muted text', variable: '--backy-color-muted-text' },
+  ] as const;
+  const themeContract = buildAppearanceThemeContract(value);
+
+  const updateColor = (key: typeof colorControls[number]['key'], nextValue: string) => {
+    onChange({ ...value, [key]: nextValue });
+  };
+  const updateNumber = (key: 'baseFontSize' | 'radius' | 'spacingUnit', nextValue: number) => {
     onChange({ ...value, [key]: nextValue });
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold mb-4">Theme Colors</h3>
-        <div className="grid grid-cols-2 gap-4 max-w-md">
-          <div>
-            <label htmlFor="settings-primary-color" className="block text-sm font-medium mb-1">
-              Primary Color
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                id="settings-primary-color"
-                type="color"
-                value={colorInputValue(value.primaryColor, DEFAULT_APPEARANCE_SETTINGS.primaryColor)}
-                onChange={(event) => updateColor('primaryColor', event.target.value)}
-                className="w-10 h-10 rounded-lg border cursor-pointer"
-              />
-              <input
-                type="text"
-                aria-label="Primary color hex"
-                value={value.primaryColor || ''}
-                onChange={(event) => updateColor('primaryColor', event.target.value)}
-                className={cn(
-                  'flex-1 px-3 py-2 rounded-lg border bg-background',
-                  'focus:outline-none focus:ring-2 focus:ring-ring'
-                )}
-              />
+        <h3 className="mb-4 text-lg font-semibold">Theme colors</h3>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {colorControls.map((control) => (
+            <div key={control.key} className="rounded-lg border border-border bg-background p-3">
+              <label htmlFor={`settings-${control.key}`} className="block text-sm font-medium">
+                {control.label}
+              </label>
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  id={`settings-${control.key}`}
+                  type="color"
+                  value={colorInputValue(resolved[control.key], DEFAULT_APPEARANCE_SETTINGS[control.key])}
+                  onChange={(event) => updateColor(control.key, event.target.value)}
+                  className="h-10 w-10 shrink-0 cursor-pointer rounded-lg border"
+                />
+                <input
+                  type="text"
+                  aria-label={`${control.label} color hex`}
+                  value={resolved[control.key]}
+                  onChange={(event) => updateColor(control.key, event.target.value)}
+                  className={cn(
+                    'min-w-0 flex-1 rounded-lg border bg-background px-3 py-2 font-mono text-sm',
+                    'focus:outline-none focus:ring-2 focus:ring-ring',
+                  )}
+                />
+              </div>
+              <div className="mt-2 font-mono text-[11px] text-muted-foreground">{control.variable}</div>
             </div>
-          </div>
-
-          <div>
-            <label htmlFor="settings-secondary-color" className="block text-sm font-medium mb-1">
-              Secondary Color
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                id="settings-secondary-color"
-                type="color"
-                value={colorInputValue(value.secondaryColor, DEFAULT_APPEARANCE_SETTINGS.secondaryColor)}
-                onChange={(event) => updateColor('secondaryColor', event.target.value)}
-                className="w-10 h-10 rounded-lg border cursor-pointer"
-              />
-              <input
-                type="text"
-                aria-label="Secondary color hex"
-                value={value.secondaryColor || ''}
-                onChange={(event) => updateColor('secondaryColor', event.target.value)}
-                className={cn(
-                  'flex-1 px-3 py-2 rounded-lg border bg-background',
-                  'focus:outline-none focus:ring-2 focus:ring-ring'
-                )}
-              />
-            </div>
-          </div>
+          ))}
         </div>
       </div>
 
       <div>
-        <h3 className="text-lg font-semibold mb-4">Typography</h3>
-        <div className="space-y-4 max-w-md">
-          <div>
-            <label htmlFor="settings-font-family" className="block text-sm font-medium mb-1">
-              Font Family
+        <h3 className="mb-4 text-lg font-semibold">Typography and layout tokens</h3>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {[
+            { key: 'headingFontFamily', label: 'Heading font' },
+            { key: 'bodyFontFamily', label: 'Body font' },
+            { key: 'monoFontFamily', label: 'Mono font' },
+          ].map((control) => (
+            <label key={control.key} className="space-y-2 text-sm">
+              <span className="font-medium">{control.label}</span>
+              <select
+                value={String(resolved[control.key as keyof typeof resolved] || '')}
+                onChange={(event) => onChange({ ...value, [control.key]: event.target.value })}
+                className={cn(
+                  'w-full rounded-lg border bg-background px-3 py-2',
+                  'focus:outline-none focus:ring-2 focus:ring-ring',
+                )}
+              >
+                {FONT_FAMILY_OPTIONS.map((font) => (
+                  <option key={font.value} value={font.value}>{font.label}</option>
+                ))}
+              </select>
             </label>
-            <select
-              id="settings-font-family"
-              value={value.fontFamily || DEFAULT_APPEARANCE_SETTINGS.fontFamily}
-              onChange={(event) => onChange({ ...value, fontFamily: event.target.value })}
-              className={cn(
-                'w-full px-3 py-2 rounded-lg border bg-background',
-                'focus:outline-none focus:ring-2 focus:ring-ring'
-              )}
-            >
-              <option value="inter">Inter</option>
-              <option value="roboto">Roboto</option>
-              <option value="opensans">Open Sans</option>
-              <option value="lato">Lato</option>
-              <option value="poppins">Poppins</option>
-            </select>
-          </div>
+          ))}
 
-          <div>
-            <label htmlFor="settings-base-font-size" className="block text-sm font-medium mb-1">
-              Base Font Size
-            </label>
+          <label htmlFor="settings-base-font-size" className="space-y-2 text-sm">
+            <span className="font-medium">Base font size</span>
             <input
               id="settings-base-font-size"
               type="number"
-              value={value.baseFontSize || DEFAULT_APPEARANCE_SETTINGS.baseFontSize}
-              onChange={(event) => onChange({ ...value, baseFontSize: Number(event.target.value) })}
+              value={resolved.baseFontSize}
+              onChange={(event) => updateNumber('baseFontSize', Number(event.target.value))}
               min={12}
               max={24}
               className={cn(
-                'w-full px-3 py-2 rounded-lg border bg-background',
-                'focus:outline-none focus:ring-2 focus:ring-ring'
+                'w-full rounded-lg border bg-background px-3 py-2',
+                'focus:outline-none focus:ring-2 focus:ring-ring',
               )}
             />
+          </label>
+
+          <label htmlFor="settings-radius" className="space-y-2 text-sm">
+            <span className="font-medium">Corner radius</span>
+            <input
+              id="settings-radius"
+              type="number"
+              value={resolved.radius}
+              onChange={(event) => updateNumber('radius', Number(event.target.value))}
+              min={0}
+              max={32}
+              className={cn(
+                'w-full rounded-lg border bg-background px-3 py-2',
+                'focus:outline-none focus:ring-2 focus:ring-ring',
+              )}
+            />
+          </label>
+
+          <label htmlFor="settings-spacing-unit" className="space-y-2 text-sm">
+            <span className="font-medium">Spacing unit</span>
+            <input
+              id="settings-spacing-unit"
+              type="number"
+              value={resolved.spacingUnit}
+              onChange={(event) => updateNumber('spacingUnit', Number(event.target.value))}
+              min={2}
+              max={16}
+              className={cn(
+                'w-full rounded-lg border bg-background px-3 py-2',
+                'focus:outline-none focus:ring-2 focus:ring-ring',
+              )}
+            />
+          </label>
+
+          <label htmlFor="settings-motion-preset" className="space-y-2 text-sm">
+            <span className="font-medium">Motion preset</span>
+            <select
+              id="settings-motion-preset"
+              value={resolved.motionPreset}
+              onChange={(event) => onChange({ ...value, motionPreset: event.target.value })}
+              className={cn(
+                'w-full rounded-lg border bg-background px-3 py-2',
+                'focus:outline-none focus:ring-2 focus:ring-ring',
+              )}
+            >
+              {MOTION_PRESETS.map((preset) => (
+                <option key={preset.value} value={preset.value}>{preset.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]">
+        <div
+          className="rounded-lg border border-border p-5"
+          style={{
+            backgroundColor: resolved.backgroundColor,
+            color: resolved.textColor,
+            borderRadius: resolved.radius,
+          }}
+        >
+          <div
+            className="rounded-lg border p-4"
+            style={{
+              backgroundColor: resolved.surfaceColor,
+              borderColor: resolved.mutedTextColor,
+              borderRadius: resolved.radius,
+            }}
+          >
+            <div className="text-xs font-semibold uppercase tracking-[0.12em]" style={{ color: resolved.mutedTextColor }}>
+              Theme preview
+            </div>
+            <h4 className="mt-3 text-2xl font-semibold" style={{ fontFamily: resolved.headingFontFamily }}>
+              Designed from Backy tokens
+            </h4>
+            <p className="mt-2 text-sm leading-6" style={{ color: resolved.mutedTextColor, fontFamily: resolved.bodyFontFamily || resolved.fontFamily }}>
+              Custom frontends can consume these colors, type roles, spacing, radius, and motion defaults from Settings.
+            </p>
+            <button
+              type="button"
+              className="mt-4 rounded-lg px-4 py-2 text-sm font-semibold"
+              style={{
+                backgroundColor: resolved.primaryColor,
+                color: resolved.backgroundColor,
+                borderRadius: resolved.radius,
+              }}
+            >
+              Primary action
+            </button>
           </div>
+        </div>
+
+        <div className="rounded-lg border border-border bg-background p-4">
+          <h3 className="text-sm font-semibold">Frontend theme contract</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            This token payload is included in the Settings handoff manifest and can drive any custom frontend design system.
+          </p>
+          <pre className="mt-4 max-h-96 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
+{JSON.stringify(themeContract, null, 2)}
+          </pre>
         </div>
       </div>
     </div>
@@ -1629,9 +1721,37 @@ const DEFAULT_GENERAL_SETTINGS: Required<GeneralSettingsConfig> = {
 const DEFAULT_APPEARANCE_SETTINGS: Required<AppearanceSettingsConfig> = {
   primaryColor: '#3b82f6',
   secondaryColor: '#8b5cf6',
+  backgroundColor: '#ffffff',
+  surfaceColor: '#f8fafc',
+  textColor: '#0f172a',
+  mutedTextColor: '#64748b',
   fontFamily: 'inter',
+  headingFontFamily: 'inter',
+  bodyFontFamily: 'inter',
+  monoFontFamily: 'jetbrains-mono',
   baseFontSize: 16,
+  radius: 8,
+  spacingUnit: 4,
+  motionPreset: 'subtle',
 };
+
+const FONT_FAMILY_OPTIONS = [
+  { value: 'inter', label: 'Inter' },
+  { value: 'system', label: 'System UI' },
+  { value: 'geist', label: 'Geist' },
+  { value: 'roboto', label: 'Roboto' },
+  { value: 'opensans', label: 'Open Sans' },
+  { value: 'lato', label: 'Lato' },
+  { value: 'poppins', label: 'Poppins' },
+  { value: 'playfair', label: 'Playfair Display' },
+  { value: 'jetbrains-mono', label: 'JetBrains Mono' },
+] as const;
+
+const MOTION_PRESETS = [
+  { value: 'none', label: 'None' },
+  { value: 'subtle', label: 'Subtle' },
+  { value: 'expressive', label: 'Expressive' },
+] as const;
 
 const DEFAULT_SEO_SETTINGS: Required<SeoSettingsConfig> = {
   titleTemplate: '%s | My Website',
@@ -1652,6 +1772,55 @@ const DEFAULT_AUTH_SETTINGS: Required<AuthSettingsConfig> = {
 const colorInputValue = (value: string | undefined, fallback: string) => (
   /^#[0-9a-fA-F]{6}$/.test(value || '') ? value || fallback : fallback
 );
+
+const resolveAppearanceSettings = (value?: AppearanceSettingsConfig): Required<AppearanceSettingsConfig> => ({
+  ...DEFAULT_APPEARANCE_SETTINGS,
+  ...(value || {}),
+});
+
+const buildAppearanceThemeContract = (value?: AppearanceSettingsConfig) => {
+  const resolved = resolveAppearanceSettings(value);
+
+  return {
+    schemaVersion: 'backy.theme.v1',
+    colors: {
+      primary: resolved.primaryColor,
+      secondary: resolved.secondaryColor,
+      background: resolved.backgroundColor,
+      surface: resolved.surfaceColor,
+      text: resolved.textColor,
+      mutedText: resolved.mutedTextColor,
+    },
+    typography: {
+      heading: resolved.headingFontFamily,
+      body: resolved.bodyFontFamily || resolved.fontFamily,
+      mono: resolved.monoFontFamily,
+      baseFontSize: resolved.baseFontSize,
+    },
+    layout: {
+      radius: resolved.radius,
+      spacingUnit: resolved.spacingUnit,
+    },
+    motion: {
+      preset: resolved.motionPreset,
+    },
+    cssVariables: {
+      '--backy-color-primary': resolved.primaryColor,
+      '--backy-color-secondary': resolved.secondaryColor,
+      '--backy-color-background': resolved.backgroundColor,
+      '--backy-color-surface': resolved.surfaceColor,
+      '--backy-color-text': resolved.textColor,
+      '--backy-color-muted-text': resolved.mutedTextColor,
+      '--backy-font-heading': resolved.headingFontFamily,
+      '--backy-font-body': resolved.bodyFontFamily || resolved.fontFamily,
+      '--backy-font-mono': resolved.monoFontFamily,
+      '--backy-font-size-base': `${resolved.baseFontSize}px`,
+      '--backy-radius': `${resolved.radius}px`,
+      '--backy-spacing-unit': `${resolved.spacingUnit}px`,
+      '--backy-motion-preset': resolved.motionPreset,
+    },
+  };
+};
 
 const DEFAULT_NOTIFICATION_SETTINGS: Required<Pick<NotificationSettingsConfig, 'email' | 'inApp' | 'digestFrequency'>> & {
   webhookUrl: string;
