@@ -480,17 +480,20 @@ function EditBlogPostPage() {
     };
 
     const handleDelete = async () => {
+        setIsWorkflowBusy(true);
         setSaveWarning(null);
 
         try {
             await deleteBlogPost(activeSiteId, postId);
         } catch (error) {
             setSaveWarning(error instanceof Error ? error.message : 'Unable to delete post');
+            setIsWorkflowBusy(false);
             return;
         }
 
         setShowDeleteConfirm(false);
         deletePost(postId);
+        setIsWorkflowBusy(false);
         navigate({ to: '/blog', search: { siteId: activeSiteId } });
     };
 
@@ -525,6 +528,7 @@ function EditBlogPostPage() {
     ];
     const localReadyCount = localReadinessChecks.filter((check) => check.complete).length;
     const canSave = title.trim().length > 0 && slug.trim().length > 0 && (status !== 'scheduled' || Boolean(scheduledAt));
+    const editorBusy = isLoading || isWorkflowBusy;
     const submitLabel = status === 'published' ? 'Save published post' : status === 'scheduled' ? 'Schedule changes' : status === 'archived' ? 'Save archived post' : 'Save draft';
     const backendReadinessDetail = postReadiness
         ? `${postReadiness.score}% ${postReadiness.statusLabel.replace('-', ' ')}.`
@@ -706,7 +710,11 @@ function EditBlogPostPage() {
         <PageShell
             title={
                 <div className="flex items-center gap-4">
-                    <button onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })} className="rounded-lg border border-border bg-background p-2 hover:bg-accent">
+                    <button
+                        onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })}
+                        disabled={editorBusy}
+                        className="rounded-lg border border-border bg-background p-2 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                    >
                         <ArrowLeft className="w-5 h-5" />
                     </button>
                     <span>Edit Blog Post</span>
@@ -718,6 +726,7 @@ function EditBlogPostPage() {
                     type="button"
                     variant="outline"
                     onClick={() => setWorkspaceFocusRoute(!isWorkspaceFocus)}
+                    disabled={editorBusy}
                     iconStart={isWorkspaceFocus ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
                 >
                     {isWorkspaceFocus ? 'Show blog panels' : 'Focus canvas'}
@@ -775,7 +784,7 @@ function EditBlogPostPage() {
                             <Button
                                 type="submit"
                                 form="blog-editor-form"
-                                disabled={isLoading || !canSave}
+                                disabled={editorBusy || !canSave}
                                 variant="primary"
                                 iconStart={<Save className="size-4" />}
                             >
@@ -785,7 +794,7 @@ function EditBlogPostPage() {
                                 type="button"
                                 variant="outline"
                                 onClick={() => void generatePreview()}
-                                disabled={isPreviewBusy}
+                                disabled={editorBusy || isPreviewBusy}
                                 iconStart={<Eye className="size-4" />}
                             >
                                 Preview
@@ -794,7 +803,7 @@ function EditBlogPostPage() {
                                 type="button"
                                 variant="outline"
                                 onClick={() => void loadPostReadiness()}
-                                disabled={readinessLoading}
+                                disabled={editorBusy || readinessLoading}
                                 iconStart={<RefreshCw className={cn('size-4', readinessLoading && 'animate-spin')} />}
                             >
                                 Refresh readiness
@@ -890,7 +899,7 @@ function EditBlogPostPage() {
                                 <Button
                                     type="submit"
                                     form="blog-editor-form"
-                                    disabled={isLoading || !canSave}
+                                    disabled={editorBusy || !canSave}
                                     size="sm"
                                     iconStart={<Save className="size-4" />}
                                 >
@@ -901,6 +910,7 @@ function EditBlogPostPage() {
                                     variant="outline"
                                     size="sm"
                                     onClick={() => setWorkspaceFocusRoute(false)}
+                                    disabled={editorBusy}
                                     iconStart={<Minimize2 className="size-4" />}
                                 >
                                     Show panels
@@ -935,7 +945,8 @@ function EditBlogPostPage() {
                                         value={title}
                                         onChange={(e) => setTitle(e.target.value)}
                                         placeholder="Untitled post"
-                                        className="w-full rounded-lg border-0 bg-transparent px-0 text-4xl font-semibold tracking-normal placeholder:text-muted-foreground/45 focus:outline-none focus:ring-0"
+                                        disabled={editorBusy}
+                                        className="w-full rounded-lg border-0 bg-transparent px-0 text-4xl font-semibold tracking-normal placeholder:text-muted-foreground/45 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
                                     />
                                 </div>
 
@@ -945,7 +956,8 @@ function EditBlogPostPage() {
                                         type="text"
                                         value={slug}
                                         onChange={(e) => setSlug(e.target.value)}
-                                        className="min-w-48 flex-1 border-0 bg-transparent p-0 font-mono text-foreground focus:outline-none focus:ring-0"
+                                        disabled={editorBusy}
+                                        className="min-w-48 flex-1 border-0 bg-transparent p-0 font-mono text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
                                         placeholder="post-slug"
                                     />
                                 </div>
@@ -956,7 +968,8 @@ function EditBlogPostPage() {
                                         value={excerpt}
                                         onChange={(e) => setExcerpt(e.target.value)}
                                         rows={3}
-                                        className="w-full resize-none rounded-lg border bg-background px-4 py-3 text-sm leading-6 focus:outline-none focus:ring-2 focus:ring-ring"
+                                        disabled={editorBusy}
+                                        className="w-full resize-none rounded-lg border bg-background px-4 py-3 text-sm leading-6 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                         placeholder="Short summary for blog lists, feeds, and SEO previews."
                                     />
                                     <div className="text-xs text-muted-foreground">{excerpt.length} characters</div>
@@ -1006,6 +1019,7 @@ function EditBlogPostPage() {
                                     initialSize={canvasSize}
                                     onSave={() => { }}
                                     onChange={(elements, _settings, size) => {
+                                        if (editorBusy) return;
                                         setCanvasElements(elements);
                                         if (size) setCanvasSize(size);
                                     }}
@@ -1020,6 +1034,13 @@ function EditBlogPostPage() {
                                       targetLabel: post.title,
                                     }}
                                 />
+                                {editorBusy && (
+                                    <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/75 backdrop-blur-sm">
+                                        <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm font-medium text-foreground shadow-sm">
+                                            {isLoading ? 'Saving post design...' : 'Updating post workflow...'}
+                                        </div>
+                                    </div>
+                                )}
                             </EditorWorkspaceFrame>
                         </div>
                     </div>
@@ -1044,8 +1065,9 @@ function EditBlogPostPage() {
                                                     setScheduledAt(null);
                                                 }
                                             }}
+                                            disabled={editorBusy}
                                             className={cn(
-                                                'rounded-md px-2 py-2 text-xs font-medium capitalize transition-colors',
+                                                'rounded-md px-2 py-2 text-xs font-medium capitalize transition-colors disabled:cursor-not-allowed disabled:opacity-60',
                                                 status === nextStatus
                                                     ? 'bg-background text-foreground shadow-sm'
                                                     : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
@@ -1063,7 +1085,8 @@ function EditBlogPostPage() {
                                             type="datetime-local"
                                             value={toDateTimeLocalValue(scheduledAt)}
                                             onChange={(e) => setScheduledAt(fromDateTimeLocalValue(e.target.value))}
-                                            className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                                            disabled={editorBusy}
+                                            className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                             required
                                         />
                                     </div>
@@ -1092,8 +1115,8 @@ function EditBlogPostPage() {
                                             <button
                                                 type="button"
                                                 onClick={() => void loadPostReadiness()}
-                                                disabled={readinessLoading}
-                                                className="rounded-lg border border-current/20 p-1.5 hover:bg-white/40 disabled:opacity-50"
+                                                disabled={editorBusy || readinessLoading}
+                                                className="rounded-lg border border-current/20 p-1.5 hover:bg-white/40 disabled:cursor-not-allowed disabled:opacity-50"
                                                 title="Refresh readiness"
                                             >
                                                 <RefreshCw className={cn('h-3.5 w-3.5', readinessLoading && 'animate-spin')} />
@@ -1114,13 +1137,13 @@ function EditBlogPostPage() {
                                 )}
 
                                 <div className="grid gap-2">
-                                    <Button type="submit" disabled={isLoading || !canSave} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
+                                    <Button type="submit" disabled={editorBusy || !canSave} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
                                         {isLoading ? 'Saving...' : submitLabel}
                                     </Button>
                                     <div className="grid grid-cols-2 gap-2">
                                         <Button
                                             onClick={() => void generatePreview()}
-                                            disabled={isPreviewBusy}
+                                            disabled={editorBusy || isPreviewBusy}
                                             variant="outline"
                                             iconStart={<Eye className="size-4" />}
                                         >
@@ -1128,7 +1151,7 @@ function EditBlogPostPage() {
                                         </Button>
                                         <Button
                                             onClick={() => void applyWorkflow('publish')}
-                                            disabled={isWorkflowBusy || readinessLoading || readinessBlocked || status === 'published'}
+                                            disabled={editorBusy || readinessLoading || readinessBlocked || status === 'published'}
                                             variant="secondary"
                                             iconStart={<CheckCircle2 className="size-4" />}
                                             title={readinessBlocked ? 'Resolve post readiness errors before publishing' : 'Publish post'}
@@ -1139,17 +1162,17 @@ function EditBlogPostPage() {
                                     <div className="grid grid-cols-2 gap-2">
                                         <Button
                                             onClick={() => void applyWorkflow('archive')}
-                                            disabled={isWorkflowBusy || status === 'archived'}
+                                            disabled={editorBusy || status === 'archived'}
                                             variant="outline"
                                             iconStart={<Archive className="size-4" />}
                                         >
                                             Archive
                                         </Button>
-                                        <Button onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })} variant="outline">
+                                        <Button onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })} disabled={editorBusy} variant="outline">
                                             Discard
                                         </Button>
                                     </div>
-                                    <Button onClick={() => setShowDeleteConfirm(true)} variant="danger" iconStart={<Trash2 className="size-4" />} className="w-full">
+                                    <Button onClick={() => setShowDeleteConfirm(true)} disabled={editorBusy} variant="danger" iconStart={<Trash2 className="size-4" />} className="w-full">
                                         Delete post
                                     </Button>
                                 </div>
@@ -1235,7 +1258,8 @@ function EditBlogPostPage() {
                                 <select
                                     value={selectedAuthorId}
                                     onChange={(event) => setSelectedAuthorId(event.target.value)}
-                                    className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                                    disabled={editorBusy}
+                                    className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     {authors.length === 0 ? (
                                         <option value={selectedAuthorId}>{selectedAuthorId}</option>
@@ -1261,6 +1285,7 @@ function EditBlogPostPage() {
                                     items={categories}
                                     selectedIds={selectedCategoryIds}
                                     onToggle={(id) => toggleSelection(id, selectedCategoryIds, setSelectedCategoryIds)}
+                                    disabled={editorBusy}
                                 />
                                 <TaxonomyPicker
                                     title="Tags"
@@ -1268,6 +1293,7 @@ function EditBlogPostPage() {
                                     items={tags}
                                     selectedIds={selectedTagIds}
                                     onToggle={(id) => toggleSelection(id, selectedTagIds, setSelectedTagIds)}
+                                    disabled={editorBusy}
                                 />
                             </PanelContent>
                         </Panel>
@@ -1292,9 +1318,9 @@ function EditBlogPostPage() {
                                                     </div>
                                                     <button
                                                         type="button"
-                                                        disabled={isWorkflowBusy}
+                                                        disabled={editorBusy}
                                                         onClick={() => setPendingRestoreRevision(revision)}
-                                                        className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                                                        className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                                                         title="Restore revision"
                                                     >
                                                         <RotateCcw className="w-4 h-4" />
@@ -1336,7 +1362,8 @@ function EditBlogPostPage() {
                                 <button
                                     type="button"
                                     onClick={() => setPendingRestoreRevision(null)}
-                                    className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                                    disabled={isWorkflowBusy}
+                                    className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     Cancel
                                 </button>
@@ -1344,9 +1371,9 @@ function EditBlogPostPage() {
                                     type="button"
                                     onClick={() => void restoreRevision(pendingRestoreRevision)}
                                     disabled={isWorkflowBusy}
-                                    className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:opacity-60"
+                                    className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
-                                    Restore revision
+                                    {isWorkflowBusy ? 'Restoring...' : 'Restore revision'}
                                 </button>
                             </div>
                         </div>
@@ -1374,7 +1401,8 @@ function EditBlogPostPage() {
                                 <button
                                     type="button"
                                     onClick={() => setShowDeleteConfirm(false)}
-                                    className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                                    disabled={isWorkflowBusy}
+                                    className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     Cancel
                                 </button>
@@ -1382,9 +1410,9 @@ function EditBlogPostPage() {
                                     type="button"
                                     onClick={() => void handleDelete()}
                                     disabled={isWorkflowBusy}
-                                    className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+                                    className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
-                                    Delete post
+                                    {isWorkflowBusy ? 'Deleting...' : 'Delete post'}
                                 </button>
                             </div>
                         </div>
@@ -1447,9 +1475,10 @@ interface TaxonomyPickerProps {
     items: Array<BlogCategory | BlogTag>;
     selectedIds: string[];
     onToggle: (id: string) => void;
+    disabled?: boolean;
 }
 
-function TaxonomyPicker({ title, emptyLabel, items, selectedIds, onToggle }: TaxonomyPickerProps) {
+function TaxonomyPicker({ title, emptyLabel, items, selectedIds, onToggle, disabled = false }: TaxonomyPickerProps) {
     return (
         <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
@@ -1466,8 +1495,9 @@ function TaxonomyPicker({ title, emptyLabel, items, selectedIds, onToggle }: Tax
                             key={item.id}
                             type="button"
                             onClick={() => onToggle(item.id)}
+                            disabled={disabled}
                             className={cn(
-                                'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+                                'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
                                 selected
                                     ? 'border-primary bg-primary text-primary-foreground'
                                     : 'border-border bg-muted text-muted-foreground hover:bg-accent hover:text-foreground',
