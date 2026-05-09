@@ -181,6 +181,40 @@ const FORM_TEMPLATES: FormTemplateBlueprint[] = [
       { key: 'question', label: 'Question', type: 'textarea', placeholder: 'Ask about pricing, delivery, or customization.' },
     ],
   },
+  {
+    id: 'file-intake',
+    title: 'File intake',
+    description: 'Document, portfolio, asset, or support-file upload flow backed by media references and review notes.',
+    pageTemplate: 'contact',
+    audience: 'public',
+    moderationMode: 'manual',
+    successMessage: 'Files received. We will review them and follow up.',
+    contactShare: {
+      enabled: true,
+      nameField: 'name',
+      emailField: 'email',
+      notesField: 'notes',
+      dedupeByEmail: true,
+    },
+    collectionTarget: {
+      enabled: true,
+      collectionId: 'file-requests',
+      slugField: 'email',
+      fieldMap: {
+        name: 'name',
+        email: 'email',
+        upload: 'file_reference',
+        notes: 'notes',
+      },
+    },
+    fields: [
+      { key: 'name', label: 'Name', type: 'text', placeholder: 'Your name', required: true },
+      { key: 'email', label: 'Email', type: 'email', placeholder: 'you@example.com', required: true },
+      { key: 'upload', label: 'Upload', type: 'file', helpText: 'Attach a media asset ID or signed upload reference.', required: true },
+      { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Describe the file or request.' },
+      { key: 'consent', label: 'I confirm I have permission to share these files.', type: 'checkbox', required: true },
+    ],
+  },
 ];
 
 const FORM_FRONTEND_SYSTEMS = [
@@ -896,7 +930,7 @@ function FormsRoute() {
             <div>
               <h3 className="text-sm font-semibold">Form frontend control contract</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Custom frontends need these systems to render registration, contact, newsletter, product inquiry, and file-upload forms from Backy.
+                Custom frontends need these systems to render registration, contact, newsletter, product inquiry, file intake, and upload forms from Backy.
               </p>
             </div>
             <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
@@ -972,7 +1006,7 @@ function FormsRoute() {
           icon={<Sparkles className="size-4" />}
         />
         <PanelContent>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             {FORM_TEMPLATES.map((template) => {
               const templateManifest = buildTemplateManifest(template);
               const templateText = JSON.stringify(templateManifest, null, 2);
