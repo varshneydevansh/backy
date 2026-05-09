@@ -110,6 +110,7 @@ interface ProductFormState {
   description: string;
   seoTitle: string;
   status: ContentStatus;
+  scheduledAt: string;
   featured: boolean;
   taxable: boolean;
 }
@@ -229,6 +230,7 @@ const PRODUCT_EXPORT_COLUMNS = [
   'public_render_url',
   'public_resolve_url',
   'checkout_mode',
+  'scheduled_at',
   'frontend_systems',
   'created_at',
   'updated_at',
@@ -291,6 +293,7 @@ const EMPTY_PRODUCT_FORM: ProductFormState = {
   description: '',
   seoTitle: '',
   status: 'draft',
+  scheduledAt: '',
   featured: false,
   taxable: true,
 };
@@ -431,6 +434,7 @@ function ProductsRoute() {
     total: products.length,
     published: products.filter((product) => product.status === 'published').length,
     draft: products.filter((product) => product.status === 'draft').length,
+    scheduled: products.filter((product) => product.status === 'scheduled').length,
     inventory: products.reduce((sum, product) => sum + toNumber(product.values.inventory), 0),
     lowStock: products.filter((product) => {
       const inventory = toNumber(product.values.inventory);
@@ -672,6 +676,7 @@ function ProductsRoute() {
       weight: product.values.weight === null || product.values.weight === undefined ? null : toNumber(product.values.weight),
       downloadUrl: String(product.values.downloadUrl || ''),
       checkoutUrl: String(product.values.checkoutUrl || ''),
+      scheduledAt: product.scheduledAt || null,
       storefrontPath: `/products/${product.slug}`,
     })),
   }), [
@@ -957,9 +962,18 @@ function ProductsRoute() {
     setNotice(null);
 
     const slug = slugify(formState.slug || formState.title || formState.sku);
+    const scheduledAt = formState.status === 'scheduled'
+      ? toIsoDateTime(formState.scheduledAt)
+      : null;
+    if (formState.status === 'scheduled' && !scheduledAt) {
+      setError('Choose a publish date before scheduling this product.');
+      setIsSaving(false);
+      return;
+    }
     const input = {
       slug,
       status: formState.status,
+      scheduledAt,
       values: {
         title: formState.title.trim(),
         sku: formState.sku.trim(),
@@ -1011,6 +1025,7 @@ function ProductsRoute() {
     try {
       const updated = await updateCollectionRecord(activeSiteId, productCollection.id, product.id, {
         status,
+        scheduledAt: status === 'scheduled' ? product.scheduledAt || new Date().toISOString() : null,
         values: product.values,
       });
       setProducts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
@@ -1453,10 +1468,11 @@ function ProductsRoute() {
         </span>
       </div>
 
-      <div id="products-metrics" className="mb-6 grid gap-3 scroll-mt-24 md:grid-cols-3 xl:grid-cols-7">
+      <div id="products-metrics" className="mb-6 grid gap-3 scroll-mt-24 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
         <Metric label="Products" value={metrics.total} icon={<Package className="size-4" />} />
         <Metric label="Published" value={metrics.published} icon={<CheckCircle2 className="size-4" />} />
         <Metric label="Draft" value={metrics.draft} icon={<Edit3 className="size-4" />} />
+        <Metric label="Scheduled" value={metrics.scheduled} icon={<Sparkles className="size-4" />} />
         <Metric label="Inventory" value={metrics.inventory} icon={<Boxes className="size-4" />} />
         <Metric label="Low stock" value={metrics.lowStock} icon={<Archive className="size-4" />} />
         <Metric label="Categories" value={metrics.categories} icon={<ShoppingBag className="size-4" />} />
@@ -1511,7 +1527,7 @@ function ProductsRoute() {
                     />
                   </div>
                   <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-muted p-1">
-                    {(['all', 'published', 'draft', 'archived'] as const).map((status) => (
+                    {PRODUCT_STATUS_FILTERS.map((status) => (
                       <button
                         key={status}
                         type="button"
@@ -1992,7 +2008,7 @@ function ProductsRoute() {
                     placeholder={formState.title || 'Product title for search previews'}
                   />
                 </Field>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 md:grid-cols-2">
                   <Field label="Status">
                     <select
                       aria-label="Status"
@@ -2002,9 +2018,21 @@ function ProductsRoute() {
                     >
                       <option value="draft">Draft</option>
                       <option value="published">Published</option>
+                      <option value="scheduled">Scheduled</option>
                       <option value="archived">Archived</option>
                     </select>
                   </Field>
+                  {formState.status === 'scheduled' && (
+                    <Field label="Publish at">
+                      <input
+                        type="datetime-local"
+                        value={formState.scheduledAt}
+                        onChange={(event) => setFormState((current) => ({ ...current, scheduledAt: event.target.value }))}
+                        required
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
+                      />
+                    </Field>
+                  )}
                   <div className="space-y-2 pt-6">
                     <label className="flex items-center gap-2 text-sm">
                       <input
@@ -2038,7 +2066,7 @@ function ProductsRoute() {
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="outline" onClick={resetForm}>Clear</Button>
-                  <Button type="submit" variant="primary" disabled={isSaving || !formState.title.trim() || !formState.sku.trim()} iconStart={<Package className="size-4" />}>
+                  <Button type="submit" variant="primary" disabled={isSaving || !formState.title.trim() || !formState.sku.trim() || (formState.status === 'scheduled' && !formState.scheduledAt)} iconStart={<Package className="size-4" />}>
                     {isSaving ? 'Saving...' : selectedProduct ? 'Save Product' : 'Create Product'}
                   </Button>
                 </div>
@@ -2258,6 +2286,11 @@ function ProductCard({
                 Featured
               </span>
             ) : null}
+            {product.status === 'scheduled' && product.scheduledAt ? (
+              <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-800">
+                Publishes {formatDate(product.scheduledAt)}
+              </span>
+            ) : null}
             {galleryImages.length > 0 ? (
               <span className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
                 {galleryImages.length} gallery
@@ -2406,6 +2439,20 @@ const slugify = (value: string): string => (
     .replace(/(^-|-$)/g, '')
 );
 
+const toDateTimeLocalValue = (value?: string | null): string => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 16);
+};
+
+const toIsoDateTime = (value: string): string | null => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
 const productToForm = (product: CollectionRecord): ProductFormState => ({
   title: String(product.values.title || ''),
   slug: product.slug,
@@ -2430,6 +2477,7 @@ const productToForm = (product: CollectionRecord): ProductFormState => ({
   description: String(product.values.description || ''),
   seoTitle: String(product.values.seoTitle || ''),
   status: product.status,
+  scheduledAt: toDateTimeLocalValue(product.scheduledAt),
   featured: Boolean(product.values.featured),
   taxable: product.values.taxable !== false,
 });
@@ -2595,6 +2643,7 @@ const productToExportRecord = (
   public_render_url: `${context.publicBaseUrl}/api/sites/${encodeURIComponent(context.activeSiteId)}/render?path=${encodeURIComponent(storefrontPath)}`,
   public_resolve_url: `${context.publicBaseUrl}/api/sites/${encodeURIComponent(context.activeSiteId)}/resolve?path=${encodeURIComponent(storefrontPath)}`,
   checkout_mode: String(product.values.checkoutUrl || '').trim() ? 'external checkout URL' : 'not configured',
+  scheduled_at: product.scheduledAt || '',
   frontend_systems: PRODUCT_FRONTEND_SYSTEMS.map((system) => `${system.key}:${system.title}`).join('; '),
   created_at: product.createdAt || '',
   updated_at: product.updatedAt || '',

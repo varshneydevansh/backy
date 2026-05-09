@@ -89,7 +89,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             siteId: site.id,
             collectionId: collection.id,
             includeUnpublished: false,
-            status: 'published',
+            status: 'all',
             search: filters.search,
             sortBy,
             sortDirection,

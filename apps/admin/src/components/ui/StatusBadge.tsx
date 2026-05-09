@@ -22,6 +22,7 @@ const STATUS_MAP: Record<string, StatusType> = {
     online: 'success',
     draft: 'warning',
     pending: 'warning',
+    scheduled: 'info',
     invited: 'info',
     archived: 'neutral',
     inactive: 'neutral',

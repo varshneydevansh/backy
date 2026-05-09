@@ -201,12 +201,17 @@ export const isCommerceSourceRecord = (record: unknown): record is CommerceSourc
   if (!record || typeof record !== 'object') return false;
   const candidate = record as Partial<CommerceSourceRecord>;
   const scheduledAt = typeof candidate.scheduledAt === 'string' ? Date.parse(candidate.scheduledAt) : null;
+  const isPubliclyReadable = candidate.status === 'published' || (
+    candidate.status === 'scheduled' &&
+    scheduledAt !== null &&
+    Number.isFinite(scheduledAt) &&
+    scheduledAt <= Date.now()
+  );
 
   return (
     typeof candidate.id === 'string' &&
     typeof candidate.slug === 'string' &&
-    candidate.status === 'published' &&
-    (!scheduledAt || scheduledAt <= Date.now()) &&
+    isPubliclyReadable &&
     candidate.values !== null &&
     typeof candidate.values === 'object' &&
     !Array.isArray(candidate.values)
