@@ -587,6 +587,7 @@ interface ApiSettings {
     publicApiKey: string;
     adminApiKey: string;
   };
+  auth?: SiteSettingsInput['auth'];
   runtimeStorage?: SiteSettingsInput['runtimeStorage'];
   integrations?: SiteSettingsInput['integrations'];
   runtimeDatabase?: SiteSettingsInput['runtimeDatabase'];
@@ -860,6 +861,13 @@ export interface SiteSettingsInput {
   apiKeys: {
     publicApiKey: string;
     adminApiKey: string;
+  };
+  auth?: {
+    requireTwoFactor?: boolean;
+    inviteOnly?: boolean;
+    minPasswordLength?: number;
+    sessionTimeoutMinutes?: number;
+    allowedEmailDomains?: string;
   };
   integrations?: {
     general?: {
@@ -1956,6 +1964,7 @@ export async function getSettings(): Promise<SiteSettingsInput> {
   return {
     deliveryMode: payload.data.settings.deliveryMode,
     apiKeys: payload.data.settings.apiKeys,
+    auth: payload.data.settings.auth,
     runtimeStorage: payload.data.settings.runtimeStorage,
     integrations: payload.data.settings.integrations,
     runtimeDatabase: payload.data.settings.runtimeDatabase,
@@ -1981,6 +1990,7 @@ export async function updateSettings(input: Partial<SiteSettingsInput>): Promise
   return {
     deliveryMode: payload.data.settings.deliveryMode,
     apiKeys: payload.data.settings.apiKeys,
+    auth: payload.data.settings.auth,
     runtimeStorage: payload.data.settings.runtimeStorage,
     integrations: payload.data.settings.integrations,
     runtimeDatabase: payload.data.settings.runtimeDatabase,
@@ -2006,6 +2016,7 @@ export async function regenerateSettingsApiKeys(scope: 'all' | 'public' | 'admin
   return {
     deliveryMode: payload.data.settings.deliveryMode,
     apiKeys: payload.data.settings.apiKeys,
+    auth: payload.data.settings.auth,
     runtimeStorage: payload.data.settings.runtimeStorage,
     integrations: payload.data.settings.integrations,
     runtimeDatabase: payload.data.settings.runtimeDatabase,

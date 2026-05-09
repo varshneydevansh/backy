@@ -224,6 +224,7 @@ interface StoreSettings {
     publicApiKey: string;
     adminApiKey: string;
   };
+  auth?: BackyJsonObject;
   integrations?: BackyJsonObject;
   updatedAt: string;
 }
@@ -492,6 +493,13 @@ let SETTINGS: StoreSettings = {
   apiKeys: {
     publicApiKey: createRuntimeApiKey('public'),
     adminApiKey: createRuntimeApiKey('admin'),
+  },
+  auth: {
+    requireTwoFactor: false,
+    inviteOnly: false,
+    minPasswordLength: 12,
+    sessionTimeoutMinutes: 120,
+    allowedEmailDomains: '',
   },
   integrations: {
     supabase: {
@@ -3757,6 +3765,7 @@ export function updateAdminSettings(input: Record<string, unknown>): StoreSettin
   ensurePersistedAdminContentLoaded();
 
   const apiKeysInput = toRecord(input.apiKeys);
+  const authInput = asJsonObject(input.auth) || {};
   const integrationsInput = asJsonObject(input.integrations) || {};
   SETTINGS = {
     ...SETTINGS,
@@ -3771,6 +3780,12 @@ export function updateAdminSettings(input: Record<string, unknown>): StoreSettin
         ? SETTINGS.apiKeys.adminApiKey
         : sanitizeString(apiKeysInput.adminApiKey) || SETTINGS.apiKeys.adminApiKey,
     },
+    auth: input.auth === undefined
+      ? SETTINGS.auth
+      : {
+          ...(SETTINGS.auth || {}),
+          ...authInput,
+        },
     integrations: input.integrations === undefined
       ? SETTINGS.integrations
       : {

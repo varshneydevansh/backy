@@ -206,6 +206,7 @@ function buildCopyText(base: string, path: string): string {
 function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('managed-hosting');
+  const [authSettings, setAuthSettings] = useState<SiteSettingsInput['auth']>();
   const [runtimeStorage, setRuntimeStorage] = useState<SiteSettingsInput['runtimeStorage']>();
   const [integrations, setIntegrations] = useState<NonNullable<SiteSettingsInput['integrations']>>({});
   const [runtimeDatabase, setRuntimeDatabase] = useState<SiteSettingsInput['runtimeDatabase']>();
@@ -225,6 +226,7 @@ function SettingsPage() {
   const applyBackendSettings = useCallback((backendSettings: SiteSettingsInput) => {
     updateSettings(backendSettings);
     setDeliveryMode(backendSettings.deliveryMode);
+    setAuthSettings(backendSettings.auth);
     setRuntimeStorage(backendSettings.runtimeStorage);
     setIntegrations(backendSettings.integrations || {});
     setRuntimeDatabase(backendSettings.runtimeDatabase);
@@ -287,7 +289,7 @@ function SettingsPage() {
     setNotice(null);
 
     try {
-      const backendSettings = await updateBackendSettings({ deliveryMode, integrations });
+      const backendSettings = await updateBackendSettings({ deliveryMode, auth: authSettings, integrations });
       applyBackendSettings(backendSettings);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -429,6 +431,8 @@ function SettingsPage() {
           <SecuritySettings
             publicApiKey={publicApiKey}
             adminApiKey={adminApiKey}
+            authSettings={authSettings}
+            onAuthSettingsChange={setAuthSettings}
             onRegenerateKeys={handleRegenerateKeys}
             auditLogs={settingsAuditLogs}
             isAuditLoading={isAuditLoading}
@@ -995,6 +999,7 @@ function DeliveryModeSettings({
 // ============================================
 
 type IntegrationSettings = NonNullable<SiteSettingsInput['integrations']>;
+type AuthSettingsConfig = NonNullable<SiteSettingsInput['auth']>;
 type GeneralSettingsConfig = NonNullable<IntegrationSettings['general']>;
 type AppearanceSettingsConfig = NonNullable<IntegrationSettings['appearance']>;
 type SeoSettingsConfig = NonNullable<IntegrationSettings['seo']>;
@@ -1021,6 +1026,14 @@ const DEFAULT_SEO_SETTINGS: Required<SeoSettingsConfig> = {
   keywords: 'website, blog, cms',
   ogImageUrl: '',
   analyticsId: '',
+};
+
+const DEFAULT_AUTH_SETTINGS: Required<AuthSettingsConfig> = {
+  requireTwoFactor: false,
+  inviteOnly: false,
+  minPasswordLength: 12,
+  sessionTimeoutMinutes: 120,
+  allowedEmailDomains: '',
 };
 
 const colorInputValue = (value: string | undefined, fallback: string) => (
@@ -1465,6 +1478,8 @@ function NotificationSettings({
 function SecuritySettings({
   publicApiKey,
   adminApiKey,
+  authSettings,
+  onAuthSettingsChange,
   onRegenerateKeys,
   auditLogs,
   isAuditLoading,
@@ -1473,6 +1488,8 @@ function SecuritySettings({
 }: {
   publicApiKey: string;
   adminApiKey: string;
+  authSettings?: SiteSettingsInput['auth'];
+  onAuthSettingsChange: (next: SiteSettingsInput['auth']) => void;
   onRegenerateKeys: (scope: 'all' | 'public' | 'admin') => Promise<void> | void;
   auditLogs: AdminAuditLog[];
   isAuditLoading: boolean;
@@ -1481,6 +1498,17 @@ function SecuritySettings({
 }) {
   const [copiedKey, setCopiedKey] = useState<'public' | 'admin' | null>(null);
   const [rotatingKey, setRotatingKey] = useState<'all' | 'public' | 'admin' | null>(null);
+  const policy: Required<AuthSettingsConfig> = {
+    ...DEFAULT_AUTH_SETTINGS,
+    ...(authSettings || {}),
+  };
+
+  const updatePolicy = (next: Partial<AuthSettingsConfig>) => {
+    onAuthSettingsChange({
+      ...policy,
+      ...next,
+    });
+  };
 
   const copyKey = async (scope: 'public' | 'admin', value: string) => {
     try {
@@ -1505,64 +1533,71 @@ function SecuritySettings({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold mb-4">Password</h3>
-        <div className="space-y-4 max-w-md">
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Current Password
+      <Panel>
+        <PanelHeader
+          title="Workspace security policy"
+          description="Persist auth policy for admin sessions and future Supabase auth enforcement."
+        />
+        <PanelContent>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border px-3 text-sm">
+              <span>Require two-factor authentication</span>
+              <input
+                type="checkbox"
+                checked={policy.requireTwoFactor}
+                onChange={(event) => updatePolicy({ requireTwoFactor: event.target.checked })}
+                className="size-4 rounded border-input"
+              />
             </label>
-            <input
-              type="password"
-              className={cn(
-                'w-full px-3 py-2 rounded-lg border bg-background',
-                'focus:outline-none focus:ring-2 focus:ring-ring'
-              )}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              New Password
+            <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border px-3 text-sm">
+              <span>Invite-only workspace access</span>
+              <input
+                type="checkbox"
+                checked={policy.inviteOnly}
+                onChange={(event) => updatePolicy({ inviteOnly: event.target.checked })}
+                className="size-4 rounded border-input"
+              />
             </label>
-            <input
-              type="password"
-              className={cn(
-                'w-full px-3 py-2 rounded-lg border bg-background',
-                'focus:outline-none focus:ring-2 focus:ring-ring'
-              )}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Confirm New Password
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Minimum password length</span>
+              <input
+                type="number"
+                min={8}
+                max={128}
+                value={policy.minPasswordLength}
+                onChange={(event) => updatePolicy({ minPasswordLength: Number(event.target.value) })}
+                className={inputClassName}
+              />
             </label>
-            <input
-              type="password"
-              className={cn(
-                'w-full px-3 py-2 rounded-lg border bg-background',
-                'focus:outline-none focus:ring-2 focus:ring-ring'
-              )}
-            />
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Session timeout</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={15}
+                  max={10080}
+                  value={policy.sessionTimeoutMinutes}
+                  onChange={(event) => updatePolicy({ sessionTimeoutMinutes: Number(event.target.value) })}
+                  className={inputClassName}
+                />
+                <span className="text-sm text-muted-foreground">minutes</span>
+              </div>
+            </label>
+            <label className="flex flex-col gap-1 text-sm xl:col-span-2">
+              <span className="font-medium">Allowed email domains</span>
+              <input
+                value={policy.allowedEmailDomains}
+                onChange={(event) => updatePolicy({ allowedEmailDomains: event.target.value })}
+                placeholder="example.com, agency.dev"
+                className={inputClassName}
+              />
+              <span className="text-xs text-muted-foreground">
+                Leave blank to allow any invited email domain.
+              </span>
+            </label>
           </div>
-        </div>
-      </div>
-
-      <div>
-        <h3 className="text-lg font-semibold mb-4">Two-Factor Authentication</h3>
-        <p className="text-sm text-muted-foreground mb-4">
-          Add an extra layer of security to your account
-        </p>
-        <button
-          className={cn(
-            'px-4 py-2 rounded-lg border font-medium',
-            'hover:bg-accent transition-colors'
-          )}
-        >
-          Enable 2FA
-        </button>
-      </div>
+        </PanelContent>
+      </Panel>
 
       <div>
         <h3 className="text-lg font-semibold mb-4">API Keys</h3>
