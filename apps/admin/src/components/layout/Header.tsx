@@ -10,7 +10,7 @@
  * @license MIT
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   Search,
@@ -30,6 +30,7 @@ import {
   ShoppingBag,
   Users,
   SlidersHorizontal,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { cn, getRelativeTime } from '@/lib/utils';
@@ -188,6 +189,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchLoadedForSiteId, setSearchLoadedForSiteId] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const selectedSiteId = getSiteSelectionFromSearch(sites);
   const activeSite = useMemo(
@@ -567,7 +569,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
         ? 'Open notification settings'
       : 'Open dashboard';
 
-  const loadGlobalSearch = async () => {
+  const loadGlobalSearch = useCallback(async () => {
     if (searchLoading || searchLoadedForSiteId === activeSiteId) return;
     setSearchLoading(true);
     setSearchError(null);
@@ -651,11 +653,23 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     } finally {
       setSearchLoading(false);
     }
-  };
+  }, [activeSiteId, searchLoadedForSiteId, searchLoading, storeUsers]);
 
-  const handleSearchResult = (result: SearchResult) => {
+  const openGlobalSearch = useCallback(() => {
+    setSearchOpen(true);
+    setNotificationsOpen(false);
+    setUserMenuOpen(false);
+    window.setTimeout(() => searchInputRef.current?.focus(), 0);
+    void loadGlobalSearch();
+  }, [loadGlobalSearch]);
+
+  const closeGlobalSearch = useCallback(() => {
     setSearchOpen(false);
     setSearchQuery('');
+  }, []);
+
+  const handleSearchResult = (result: SearchResult) => {
+    closeGlobalSearch();
 
     if (result.action.route === 'site') {
       navigate({ to: '/sites/$siteId', params: { siteId: result.action.siteId } });
@@ -693,6 +707,31 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSiteId]);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      const isTypingTarget =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
+      const key = event.key.toLowerCase();
+
+      if ((event.metaKey || event.ctrlKey) && key === 'k') {
+        event.preventDefault();
+        openGlobalSearch();
+        return;
+      }
+
+      if (!isTypingTarget && event.key === '/') {
+        event.preventDefault();
+        openGlobalSearch();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [openGlobalSearch]);
+
   return (
     <header className="h-16 bg-card border-b border-border flex items-center justify-between px-4 lg:px-6">
       {/* Left Section */}
@@ -712,16 +751,28 @@ export function Header({ onSidebarToggle }: HeaderProps) {
       {/* Right Section */}
       <div className="flex items-center gap-2">
         {/* Search */}
-        <div className="relative hidden md:flex items-center">
+        <button
+          type="button"
+          onClick={openGlobalSearch}
+          className="inline-flex rounded-lg p-2 transition-colors hover:bg-accent focus-ring md:hidden"
+          aria-label="Open search"
+        >
+          <Search className="h-5 w-5" />
+        </button>
+        <div className={cn(
+          'relative items-center',
+          searchOpen
+            ? 'fixed inset-x-3 top-3 z-40 flex md:static md:z-auto'
+            : 'hidden md:flex',
+        )}>
           <Search className="w-4 h-4 absolute left-3 text-muted-foreground" />
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="Search..."
             value={searchQuery}
-            onFocus={() => {
-              setSearchOpen(true);
-              void loadGlobalSearch();
-            }}
+            aria-label="Search Backy"
+            onFocus={openGlobalSearch}
             onBlur={() => window.setTimeout(() => setSearchOpen(false), 120)}
             onChange={(event) => {
               setSearchQuery(event.target.value);
@@ -739,13 +790,31 @@ export function Header({ onSidebarToggle }: HeaderProps) {
               }
             }}
             className={cn(
-              'pl-9 pr-4 py-2 rounded-lg bg-muted text-sm',
+              'pl-9 pr-20 py-2 rounded-lg bg-muted text-sm',
               'focus:outline-none focus:ring-2 focus:ring-ring',
-              'w-48 lg:w-64 transition-all'
+              'w-full shadow-lg md:w-48 md:shadow-none lg:w-64 transition-all'
             )}
           />
+          {searchQuery ? (
+            <button
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                setSearchQuery('');
+                searchInputRef.current?.focus();
+              }}
+              className="absolute right-2 rounded-md p-1 text-muted-foreground hover:bg-background hover:text-foreground focus-ring"
+              aria-label="Clear search"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : (
+            <kbd className="pointer-events-none absolute right-2 hidden rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground lg:block">
+              / or cmd K
+            </kbd>
+          )}
           {searchOpen && (
-            <div className="absolute left-0 top-full z-30 mt-2 w-[22rem] overflow-hidden rounded-lg border border-border bg-card shadow-lg">
+            <div className="fixed left-3 right-3 top-14 z-40 overflow-hidden rounded-lg border border-border bg-card shadow-lg md:absolute md:left-0 md:right-auto md:top-full md:mt-2 md:w-[22rem]">
               <div className="border-b border-border px-4 py-3">
                 <div className="text-sm font-semibold">Search Backy</div>
                 <div className="text-xs text-muted-foreground">Sites, pages, posts, forms, contacts, and tools.</div>
