@@ -4,7 +4,7 @@
  * Team access control for owners, admins, editors, and viewers.
  */
 
-import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
+import { createFileRoute, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   AlertTriangle,
   Check,
@@ -584,17 +584,31 @@ function UsersListView() {
     initialSort: { key: 'fullName', direction: 'asc' },
     pageSize: 10,
   });
-  const membershipStepSearch = useCallback((to: (typeof MEMBERSHIP_HANDOFF_STEPS)[number]['to']) => {
-    if (to === '/pages/new') {
-      return { siteId: membershipSiteId, template: 'registration' };
+  const openInviteUser = () => {
+    if (isUsersBusy) return;
+
+    navigate({ to: '/users/new', search: { siteId: membershipSiteId } });
+  };
+  const openMembershipStep = (step: (typeof MEMBERSHIP_HANDOFF_STEPS)[number]) => {
+    if (isUsersBusy) return;
+
+    if (step.to === '/pages/new') {
+      navigate({ to: '/pages/new', search: { siteId: membershipSiteId, template: 'registration' } });
+      return;
     }
 
-    if (to === '/forms' || to === '/contacts') {
-      return { siteId: membershipSiteId };
+    if (step.to === '/forms') {
+      navigate({ to: '/forms', search: { siteId: membershipSiteId } });
+      return;
     }
 
-    return undefined;
-  }, [membershipSiteId]);
+    if (step.to === '/contacts') {
+      navigate({ to: '/contacts', search: { siteId: membershipSiteId } });
+      return;
+    }
+
+    navigate({ to: '/settings', search: { tab: 'infrastructure' } });
+  };
   const userHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     endpoints: {
@@ -740,18 +754,15 @@ function UsersListView() {
       title="Users"
       description="Control team access, invitation state, and publishing authority."
       action={
-        <Link
-          to="/users/new"
-          search={{ siteId: membershipSiteId }}
-          aria-disabled={isUsersBusy}
-          className={cn(
-            'inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring',
-            isUsersBusy && 'pointer-events-none opacity-60',
-          )}
+        <Button
+          type="button"
+          variant="primary"
+          onClick={openInviteUser}
+          disabled={isUsersBusy}
+          iconStart={<Send className="h-4 w-4" />}
         >
-          <Send className="h-4 w-4" />
           Invite user
-        </Link>
+        </Button>
       }
       className="w-full"
     >
@@ -809,16 +820,9 @@ function UsersListView() {
             >
               Refresh users
             </Button>
-            <Link
-              to="/users/new"
-              search={{ siteId: membershipSiteId }}
-              aria-disabled={isUsersBusy}
-              className={cn(isUsersBusy && 'pointer-events-none opacity-60')}
-            >
-              <Button iconStart={<Send className="size-4" />}>
-                Invite user
-              </Button>
-            </Link>
+            <Button onClick={openInviteUser} disabled={isUsersBusy} iconStart={<Send className="size-4" />}>
+              Invite user
+            </Button>
           </div>
         </div>
 
@@ -1137,18 +1141,16 @@ function UsersListView() {
                         Clear filters
                       </button>
                     ) : (
-                      <Link
-                        to="/users/new"
-                        search={{ siteId: membershipSiteId }}
-                        aria-disabled={isUsersBusy}
-                        className={cn(
-                          'mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90',
-                          isUsersBusy && 'pointer-events-none opacity-60',
-                        )}
+                      <Button
+                        type="button"
+                        variant="primary"
+                        onClick={openInviteUser}
+                        disabled={isUsersBusy}
+                        className="mt-4"
+                        iconStart={<Plus className="h-4 w-4" />}
                       >
-                        <Plus className="h-4 w-4" />
                         Invite user
-                      </Link>
+                      </Button>
                     )
                   }
                 />
@@ -1208,29 +1210,33 @@ function UsersListView() {
               icon={<Shield className="size-4" />}
               action={
                 <div className="flex flex-wrap items-center gap-2">
-                  <Link
-                    to="/pages/new"
-                    search={{ siteId: membershipSiteId, template: 'registration' }}
-                    className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => openMembershipStep(MEMBERSHIP_HANDOFF_STEPS[0])}
+                    disabled={isUsersBusy}
+                    iconStart={<Plus className="size-4" />}
                   >
-                    <Plus className="size-4" />
                     Create page
-                  </Link>
-                  <Link
-                    to="/forms"
-                    search={{ siteId: membershipSiteId }}
-                    className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 text-sm font-semibold transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openMembershipStep(MEMBERSHIP_HANDOFF_STEPS[1])}
+                    disabled={isUsersBusy}
+                    iconStart={<ClipboardList className="size-4" />}
                   >
-                    <ClipboardList className="size-4" />
                     Forms
-                  </Link>
-                  <Link
-                    to="/settings"
-                    className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 text-sm font-semibold transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openMembershipStep(MEMBERSHIP_HANDOFF_STEPS[3])}
+                    disabled={isUsersBusy}
+                    iconStart={<Settings className="size-4" />}
                   >
-                    <Settings className="size-4" />
                     Auth settings
-                  </Link>
+                  </Button>
                 </div>
               }
             />
@@ -1253,7 +1259,12 @@ function UsersListView() {
                 </div>
                 <div className="mt-3 grid gap-2">
                   {MEMBERSHIP_HANDOFF_STEPS.map((step) => (
-                    <MembershipStepCard key={step.step} step={step} search={membershipStepSearch(step.to)} />
+                    <MembershipStepCard
+                      key={step.step}
+                      step={step}
+                      disabled={isUsersBusy}
+                      onOpen={() => openMembershipStep(step)}
+                    />
                   ))}
                 </div>
               </div>
@@ -1424,10 +1435,12 @@ function UserApiSnippet({ label, value }: { label: string; value: string }) {
 
 function MembershipStepCard({
   step,
-  search,
+  disabled,
+  onOpen,
 }: {
   step: (typeof MEMBERSHIP_HANDOFF_STEPS)[number];
-  search?: { siteId: string; template?: string };
+  disabled: boolean;
+  onOpen: () => void;
 }) {
   const available = step.status === 'available';
 
@@ -1455,13 +1468,14 @@ function MembershipStepCard({
               {step.status}
             </span>
           </div>
-          <Link
-            to={step.to}
-            search={search}
-            className="mt-3 inline-flex min-h-8 items-center justify-center rounded-lg border border-border bg-background px-3 text-xs font-medium transition hover:bg-accent"
+          <button
+            type="button"
+            onClick={onOpen}
+            disabled={disabled}
+            className="mt-3 inline-flex min-h-8 items-center justify-center rounded-lg border border-border bg-background px-3 text-xs font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             {step.label}
-          </Link>
+          </button>
         </div>
       </div>
     </div>
