@@ -323,7 +323,7 @@ const insertElementAsChild = (
       inserted = true;
       return {
         ...element,
-        children: [...(element.children || []), child],
+        children: [...(element.children || []), { ...child, parentId }],
       };
     }
 
@@ -1252,7 +1252,7 @@ export function Canvas({
 
         if (forcedParentId) {
           const parent = findElementById(elements, forcedParentId);
-          const isDropTarget = parent && canAcceptNestedDrop(parent.type);
+          const isDropTarget = parent && !parent.locked && canAcceptNestedDrop(parent.type);
 
           const dropHost = canvasRef.current?.querySelector<HTMLElement>(
             `[data-element-id="${forcedParentId}"]`
@@ -1656,6 +1656,7 @@ function CanvasElementComponent({
   const resolvedSelectedId = selectedId ?? null;
   const isHidden = element.visible === false;
   const isLocked = element.locked === true;
+  const canReceiveNestedDrop = !isLocked && canAcceptNestedDrop(element.type);
 
   if (isPreview && isHidden) {
     return null;
@@ -1699,12 +1700,12 @@ function CanvasElementComponent({
     ? {}
     : {
         onDragOver: (event: React.DragEvent) => {
-          if (canAcceptNestedDrop(element.type)) {
+          if (canReceiveNestedDrop) {
             event.preventDefault();
           }
         },
         onDrop: (event: React.DragEvent) => {
-          if (onDrop) {
+          if (onDrop && canReceiveNestedDrop) {
             onDrop(event, element.id);
           }
         },
@@ -2425,12 +2426,12 @@ function CanvasElementComponent({
         return (
           <div
             onDragOver={(e) => {
-              if (!isPreview && onDrop && canAcceptNestedDrop(element.type)) {
+              if (!isPreview && onDrop && canReceiveNestedDrop) {
                 e.preventDefault();
               }
             }}
             onDrop={(e) => {
-              if (!isPreview && onDrop) {
+              if (!isPreview && onDrop && canReceiveNestedDrop) {
                 onDrop(e, element.id);
               }
             }}

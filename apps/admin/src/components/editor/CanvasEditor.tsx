@@ -1008,7 +1008,7 @@ export function CanvasEditor({
   const handlePaste = useCallback(() => {
     if (clipboardElements.length > 0) {
       const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
-      const canNest = selectedElement && canAcceptNestedDrop(selectedElement.type);
+      const canNest = selectedElement && !selectedElement.locked && canAcceptNestedDrop(selectedElement.type);
       const parentId = canNest ? selectedElement.id : null;
       const pastedElements = clipboardElements.map((clipboardElement) => (
         cloneElementTreeWithFreshIds(clipboardElement, 20, 20, parentId)
@@ -1661,7 +1661,7 @@ export function CanvasEditor({
     const normalizedType = normalizeElementType(item.type);
     const highestZ = Math.max(walkTreeMaxZ(elements), 0);
     const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
-    const canNestInSelection = selectedElement && canAcceptNestedDrop(selectedElement.type);
+    const canNestInSelection = selectedElement && !selectedElement.locked && canAcceptNestedDrop(selectedElement.type);
 
     if (item.reusableContent?.elements?.length) {
       const newElements = createCanvasElementsFromReusableContent(
