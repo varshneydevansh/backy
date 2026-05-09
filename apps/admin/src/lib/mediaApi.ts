@@ -191,6 +191,11 @@ export interface MediaReplaceOptions {
   siteId?: string;
   reason?: string;
   replacedBy?: string;
+  fontFamily?: string;
+  fontWeight?: string;
+  fontStyle?: 'normal' | 'italic' | 'oblique';
+  fontFallback?: string;
+  fontDisplay?: 'auto' | 'block' | 'swap' | 'fallback' | 'optional';
 }
 
 export interface MediaTransformPrepareInput {
@@ -511,6 +516,11 @@ export async function replaceMedia(
   formData.set('file', file);
   if (options.reason) formData.set('reason', options.reason);
   if (options.replacedBy) formData.set('replacedBy', options.replacedBy);
+  if (options.fontFamily) formData.set('fontFamily', options.fontFamily);
+  if (options.fontWeight) formData.set('fontWeight', options.fontWeight);
+  if (options.fontStyle) formData.set('fontStyle', options.fontStyle);
+  if (options.fontFallback) formData.set('fontFallback', options.fontFallback);
+  if (options.fontDisplay) formData.set('fontDisplay', options.fontDisplay);
 
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/${mediaId}`, {
     method: 'POST',

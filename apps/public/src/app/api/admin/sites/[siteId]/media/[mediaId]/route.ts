@@ -96,8 +96,32 @@ const safePathSegment = (value: string) => (
     || 'asset'
 );
 
+const cleanFontFamily = (value: string) => (
+  value
+    .trim()
+    .replace(/\.[a-z0-9]+$/i, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    || 'Uploaded Font'
+);
+
 const toStringValue = (value: FormDataEntryValue | null): string | null => (
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+);
+
+const metadataString = (metadata: Record<string, unknown>, key: string): string | null => {
+  const value = metadata[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+};
+
+const parseFontDisplay = (value: unknown) => (
+  value === 'auto' ||
+  value === 'block' ||
+  value === 'fallback' ||
+  value === 'optional' ||
+  value === 'swap'
+    ? value
+    : 'swap'
 );
 
 const getMediaType = (mimeType: string, originalName: string): MediaItem['type'] => {
@@ -460,6 +484,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       replacementCount: replacementVersions.length,
       lastReplacedAt: replacedAt,
       lastReplacedBy: replacedBy,
+      ...(mediaType === 'font'
+        ? {
+            fontFamily: toStringValue(formData.get('fontFamily')) || metadataString(metadataWithoutGeneratedTransforms, 'fontFamily') || cleanFontFamily(originalName),
+            fontWeight: toStringValue(formData.get('fontWeight')) || metadataString(metadataWithoutGeneratedTransforms, 'fontWeight') || '400',
+            fontStyle: toStringValue(formData.get('fontStyle')) || metadataString(metadataWithoutGeneratedTransforms, 'fontStyle') || 'normal',
+            fontFallback: toStringValue(formData.get('fontFallback')) || metadataString(metadataWithoutGeneratedTransforms, 'fontFallback') || 'system-ui, sans-serif',
+            fontDisplay: parseFontDisplay(toStringValue(formData.get('fontDisplay')) || metadataString(metadataWithoutGeneratedTransforms, 'fontDisplay')),
+          }
+        : {}),
     };
     const updated = repositories
       ? (await repositories.media.update(site.id, mediaId, {

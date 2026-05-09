@@ -1302,10 +1302,18 @@ function MediaPage() {
     setAssetReplacementError(null);
 
     try {
+      const isFontReplacement = selectedAsset.type === 'font';
       const updated = await replaceMedia(selectedAsset.id, file, {
         siteId,
         replacedBy: 'admin',
         reason: 'Manual replacement from media detail',
+        fontFamily: isFontReplacement
+          ? metadataForm.fontFamily.trim() || cleanFontFamilyFromFilename(file.name)
+          : undefined,
+        fontWeight: isFontReplacement ? metadataForm.fontWeight.trim() || '400' : undefined,
+        fontStyle: isFontReplacement ? metadataForm.fontStyle : undefined,
+        fontFallback: isFontReplacement ? metadataForm.fontFallback.trim() || 'system-ui, sans-serif' : undefined,
+        fontDisplay: isFontReplacement ? metadataForm.fontDisplay : undefined,
       });
       applyUpdatedAsset(updated);
       void loadLibrary();
