@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createFileRoute, Link, useNavigate, useRouterState } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -32,12 +32,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
-import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
-
-export const Route = createFileRoute('/forms')({
-  component: FormsRoute,
-});
 
 type SubmissionStatusFilter = FormSubmissionStatus | 'all';
 type PageTemplateHandoff = 'landing' | 'storefront' | 'contact' | 'registration';
@@ -45,6 +41,65 @@ type FormSourceFilter = 'all' | 'page' | 'blog' | 'embedded';
 type FormStateFilter = 'all' | 'active' | 'inactive';
 type FormDestinationFilter = 'all' | 'contacts' | 'collections' | 'inbox-only';
 type FormReadinessFilter = 'all' | 'ready' | 'needs-work';
+
+interface FormsSearch {
+  siteId?: string;
+  formId?: string;
+  q?: string;
+  source?: FormSourceFilter;
+  state?: FormStateFilter;
+  destination?: FormDestinationFilter;
+  readiness?: FormReadinessFilter;
+  status?: SubmissionStatusFilter;
+  submissionQ?: string;
+}
+
+const FORM_SOURCE_FILTERS: FormSourceFilter[] = ['all', 'page', 'blog', 'embedded'];
+const FORM_STATE_FILTERS: FormStateFilter[] = ['all', 'active', 'inactive'];
+const FORM_DESTINATION_FILTERS: FormDestinationFilter[] = ['all', 'contacts', 'collections', 'inbox-only'];
+const FORM_READINESS_FILTERS: FormReadinessFilter[] = ['all', 'ready', 'needs-work'];
+const SUBMISSION_STATUS_FILTERS: SubmissionStatusFilter[] = ['all', 'pending', 'approved', 'rejected', 'spam'];
+
+const isFormSourceFilter = (value: unknown): value is FormSourceFilter => (
+  typeof value === 'string' && FORM_SOURCE_FILTERS.includes(value as FormSourceFilter)
+);
+
+const isFormStateFilter = (value: unknown): value is FormStateFilter => (
+  typeof value === 'string' && FORM_STATE_FILTERS.includes(value as FormStateFilter)
+);
+
+const isFormDestinationFilter = (value: unknown): value is FormDestinationFilter => (
+  typeof value === 'string' && FORM_DESTINATION_FILTERS.includes(value as FormDestinationFilter)
+);
+
+const isFormReadinessFilter = (value: unknown): value is FormReadinessFilter => (
+  typeof value === 'string' && FORM_READINESS_FILTERS.includes(value as FormReadinessFilter)
+);
+
+const isSubmissionStatusFilter = (value: unknown): value is SubmissionStatusFilter => (
+  typeof value === 'string' && SUBMISSION_STATUS_FILTERS.includes(value as SubmissionStatusFilter)
+);
+
+const normalizedSearchString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+export const Route = createFileRoute('/forms')({
+  validateSearch: (search: Record<string, unknown>): FormsSearch => ({
+    siteId: normalizedSearchString(search.siteId),
+    formId: normalizedSearchString(search.formId),
+    q: normalizedSearchString(search.q),
+    source: isFormSourceFilter(search.source) ? search.source : undefined,
+    state: isFormStateFilter(search.state) ? search.state : undefined,
+    destination: isFormDestinationFilter(search.destination) ? search.destination : undefined,
+    readiness: isFormReadinessFilter(search.readiness) ? search.readiness : undefined,
+    status: isSubmissionStatusFilter(search.status) ? search.status : undefined,
+    submissionQ: normalizedSearchString(search.submissionQ),
+  }),
+  component: FormsRoute,
+});
 
 const FORM_CONTROL_AREAS = [
   {
@@ -292,19 +347,19 @@ interface FormInbox {
 
 function FormsRoute() {
   const navigate = useNavigate();
-  const routerState = useRouterState();
+  const routeSearch = Route.useSearch();
   const { sites } = useStore();
-  const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
+  const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
   const [forms, setForms] = useState<FormDefinition[]>([]);
   const [inboxByForm, setInboxByForm] = useState<Record<string, FormInbox>>({});
-  const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
-  const [formSearchQuery, setFormSearchQuery] = useState('');
-  const [formSourceFilter, setFormSourceFilter] = useState<FormSourceFilter>('all');
-  const [formStateFilter, setFormStateFilter] = useState<FormStateFilter>('all');
-  const [formDestinationFilter, setFormDestinationFilter] = useState<FormDestinationFilter>('all');
-  const [formReadinessFilter, setFormReadinessFilter] = useState<FormReadinessFilter>('all');
-  const [statusFilter, setStatusFilter] = useState<SubmissionStatusFilter>('all');
-  const [submissionQuery, setSubmissionQuery] = useState('');
+  const [selectedFormId, setSelectedFormId] = useState<string | null>(routeSearch.formId || null);
+  const [formSearchQuery, setFormSearchQuery] = useState(routeSearch.q || '');
+  const [formSourceFilter, setFormSourceFilter] = useState<FormSourceFilter>(routeSearch.source || 'all');
+  const [formStateFilter, setFormStateFilter] = useState<FormStateFilter>(routeSearch.state || 'all');
+  const [formDestinationFilter, setFormDestinationFilter] = useState<FormDestinationFilter>(routeSearch.destination || 'all');
+  const [formReadinessFilter, setFormReadinessFilter] = useState<FormReadinessFilter>(routeSearch.readiness || 'all');
+  const [statusFilter, setStatusFilter] = useState<SubmissionStatusFilter>(routeSearch.status || 'all');
+  const [submissionQuery, setSubmissionQuery] = useState(routeSearch.submissionQ || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -675,6 +730,47 @@ function FormsRoute() {
     selectedFormSubmitUrl,
   ]);
   const formsHandoffText = useMemo(() => JSON.stringify(formsHandoff, null, 2), [formsHandoff]);
+  const formsRouteSearch = useMemo<FormsSearch>(() => ({
+    siteId: activeSiteId,
+    ...(selectedFormId ? { formId: selectedFormId } : {}),
+    ...(formSearchQuery.trim() ? { q: formSearchQuery.trim() } : {}),
+    ...(formSourceFilter !== 'all' ? { source: formSourceFilter } : {}),
+    ...(formStateFilter !== 'all' ? { state: formStateFilter } : {}),
+    ...(formDestinationFilter !== 'all' ? { destination: formDestinationFilter } : {}),
+    ...(formReadinessFilter !== 'all' ? { readiness: formReadinessFilter } : {}),
+    ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+    ...(submissionQuery.trim() ? { submissionQ: submissionQuery.trim() } : {}),
+  }), [
+    activeSiteId,
+    formDestinationFilter,
+    formReadinessFilter,
+    formSearchQuery,
+    formSourceFilter,
+    formStateFilter,
+    selectedFormId,
+    statusFilter,
+    submissionQuery,
+  ]);
+
+  const updateFormsRouteSearch = (next: FormsSearch) => {
+    const merged: FormsSearch = {
+      ...formsRouteSearch,
+      ...next,
+    };
+    const normalized: FormsSearch = {
+      siteId: merged.siteId || activeSiteId,
+      ...(merged.formId ? { formId: merged.formId } : {}),
+      ...(merged.q?.trim() ? { q: merged.q.trim() } : {}),
+      ...(merged.source && merged.source !== 'all' ? { source: merged.source } : {}),
+      ...(merged.state && merged.state !== 'all' ? { state: merged.state } : {}),
+      ...(merged.destination && merged.destination !== 'all' ? { destination: merged.destination } : {}),
+      ...(merged.readiness && merged.readiness !== 'all' ? { readiness: merged.readiness } : {}),
+      ...(merged.status && merged.status !== 'all' ? { status: merged.status } : {}),
+      ...(merged.submissionQ?.trim() ? { submissionQ: merged.submissionQ.trim() } : {}),
+    };
+
+    navigate({ to: '/forms', search: normalized, replace: true });
+  };
 
   const loadForms = async () => {
     setIsLoading(true);
@@ -715,22 +811,36 @@ function FormsRoute() {
   }, [selectedSiteId, sites]);
 
   useEffect(() => {
-    const requestedSiteId = getSiteSearchParam();
-    if (!requestedSiteId) return;
+    const nextSiteId = routeSearch.siteId
+      ? getSiteSelectionFromSearch(sites, routeSearch.siteId)
+      : selectedSiteId;
+    const siteChanged = nextSiteId !== selectedSiteId;
 
-    const nextSiteId = getSiteSelectionFromSearch(sites);
-    if (nextSiteId === selectedSiteId) return;
+    if (siteChanged) {
+      setSelectedSiteId(nextSiteId);
+    }
 
-    setSelectedSiteId(nextSiteId);
-    setFormSearchQuery('');
-    setFormSourceFilter('all');
-    setFormStateFilter('all');
-    setFormDestinationFilter('all');
-    setFormReadinessFilter('all');
-    setSubmissionQuery('');
-    setStatusFilter('all');
-    setSelectedFormId(null);
-  }, [routerState.location.search, selectedSiteId, sites]);
+    setSelectedFormId(routeSearch.formId || null);
+    setFormSearchQuery(routeSearch.q || '');
+    setFormSourceFilter(routeSearch.source || 'all');
+    setFormStateFilter(routeSearch.state || 'all');
+    setFormDestinationFilter(routeSearch.destination || 'all');
+    setFormReadinessFilter(routeSearch.readiness || 'all');
+    setSubmissionQuery(routeSearch.submissionQ || '');
+    setStatusFilter(routeSearch.status || 'all');
+  }, [
+    routeSearch.destination,
+    routeSearch.formId,
+    routeSearch.q,
+    routeSearch.readiness,
+    routeSearch.siteId,
+    routeSearch.source,
+    routeSearch.state,
+    routeSearch.status,
+    routeSearch.submissionQ,
+    selectedSiteId,
+    sites,
+  ]);
 
   useEffect(() => {
     void loadForms();
@@ -892,14 +1002,29 @@ function FormsRoute() {
     setFormStateFilter('all');
     setFormDestinationFilter('all');
     setFormReadinessFilter('all');
+    updateFormsRouteSearch({
+      q: undefined,
+      source: undefined,
+      state: undefined,
+      destination: undefined,
+      readiness: undefined,
+    });
   };
   const selectFormsSite = (nextSiteId: string) => {
     setSelectedSiteId(nextSiteId);
-    clearFormFilters();
+    setFormSearchQuery('');
+    setFormSourceFilter('all');
+    setFormStateFilter('all');
+    setFormDestinationFilter('all');
+    setFormReadinessFilter('all');
     setSubmissionQuery('');
     setStatusFilter('all');
     setSelectedFormId(null);
     navigate({ to: '/forms', search: { siteId: nextSiteId }, replace: true });
+  };
+  const selectForm = (formId: string) => {
+    setSelectedFormId(formId);
+    updateFormsRouteSearch({ formId });
   };
 
   return (
@@ -1221,7 +1346,11 @@ function FormsRoute() {
                     type="search"
                     aria-label="Search forms"
                     value={formSearchQuery}
-                    onChange={(event) => setFormSearchQuery(event.target.value)}
+                    onChange={(event) => {
+                      const q = event.target.value;
+                      setFormSearchQuery(q);
+                      updateFormsRouteSearch({ q: q || undefined });
+                    }}
                     placeholder="Search forms, fields, IDs..."
                     className="min-h-10 w-full rounded-lg border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                   />
@@ -1230,7 +1359,11 @@ function FormsRoute() {
                   <select
                     aria-label="Form source filter"
                     value={formSourceFilter}
-                    onChange={(event) => setFormSourceFilter(event.target.value as FormSourceFilter)}
+                    onChange={(event) => {
+                      const source = event.target.value as FormSourceFilter;
+                      setFormSourceFilter(source);
+                      updateFormsRouteSearch({ source });
+                    }}
                     className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
                   >
                     <option value="all">All sources</option>
@@ -1241,7 +1374,11 @@ function FormsRoute() {
                   <select
                     aria-label="Form state filter"
                     value={formStateFilter}
-                    onChange={(event) => setFormStateFilter(event.target.value as FormStateFilter)}
+                    onChange={(event) => {
+                      const state = event.target.value as FormStateFilter;
+                      setFormStateFilter(state);
+                      updateFormsRouteSearch({ state });
+                    }}
                     className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
                   >
                     <option value="all">All states</option>
@@ -1251,7 +1388,11 @@ function FormsRoute() {
                   <select
                     aria-label="Form destination filter"
                     value={formDestinationFilter}
-                    onChange={(event) => setFormDestinationFilter(event.target.value as FormDestinationFilter)}
+                    onChange={(event) => {
+                      const destination = event.target.value as FormDestinationFilter;
+                      setFormDestinationFilter(destination);
+                      updateFormsRouteSearch({ destination });
+                    }}
                     className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
                   >
                     <option value="all">All destinations</option>
@@ -1262,7 +1403,11 @@ function FormsRoute() {
                   <select
                     aria-label="Form readiness filter"
                     value={formReadinessFilter}
-                    onChange={(event) => setFormReadinessFilter(event.target.value as FormReadinessFilter)}
+                    onChange={(event) => {
+                      const readiness = event.target.value as FormReadinessFilter;
+                      setFormReadinessFilter(readiness);
+                      updateFormsRouteSearch({ readiness });
+                    }}
                     className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
                   >
                     <option value="all">All readiness</option>
@@ -1301,7 +1446,7 @@ function FormsRoute() {
                     <button
                       key={form.id}
                       type="button"
-                      onClick={() => setSelectedFormId(form.id)}
+                      onClick={() => selectForm(form.id)}
                       className={cn(
                         'rounded-lg border px-3 py-3 text-left transition-colors',
                         isSelected ? 'border-primary bg-primary/5' : 'border-border bg-background hover:bg-muted',
@@ -1588,7 +1733,11 @@ function FormsRoute() {
                         type="search"
                         aria-label="Search submissions"
                         value={submissionQuery}
-                        onChange={(event) => setSubmissionQuery(event.target.value)}
+                        onChange={(event) => {
+                          const submissionQ = event.target.value;
+                          setSubmissionQuery(submissionQ);
+                          updateFormsRouteSearch({ submissionQ: submissionQ || undefined });
+                        }}
                         placeholder="Search submissions..."
                         className="min-h-10 w-full rounded-lg border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                       />
@@ -1607,7 +1756,10 @@ function FormsRoute() {
                         <button
                           key={status}
                           type="button"
-                          onClick={() => setStatusFilter(status)}
+                          onClick={() => {
+                            setStatusFilter(status);
+                            updateFormsRouteSearch({ status });
+                          }}
                           className={cn(
                             'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-background hover:text-foreground',
                             statusFilter === status && 'bg-background text-foreground shadow-sm',
