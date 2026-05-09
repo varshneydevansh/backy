@@ -352,6 +352,17 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     navigate({ to });
   };
 
+  const navigateToWorkflowShortcut = (shortcut: WorkflowShortcut) => {
+    setNotificationsOpen(false);
+
+    if (shortcut.id === 'site') {
+      navigate({ to: '/sites/$siteId', params: { siteId: activeSiteRouteId } });
+      return;
+    }
+
+    navigateToTool(shortcut.to);
+  };
+
   const loadNotifications = async () => {
     setNotificationsLoading(true);
     setNotificationsError(null);
@@ -825,10 +836,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                       <button
                         key={shortcut.id}
                         type="button"
-                        onClick={() => {
-                          setNotificationsOpen(false);
-                          navigateToTool(shortcut.to);
-                        }}
+                        onClick={() => navigateToWorkflowShortcut(shortcut)}
                         className="group rounded-lg border border-border bg-background px-2.5 py-2 text-left transition hover:border-primary/40 hover:bg-primary/5 focus-ring"
                       >
                         <div className="flex items-center justify-between gap-2">
