@@ -324,6 +324,7 @@ function BlogListView() {
   const setPostStatusFilter = (nextStatus: 'all' | BlogPost['status']) => {
     setStatusFilter(nextStatus);
     setCurrentPage(1);
+    setSelectedPostIds(new Set());
   };
 
   const setPostSelection = (targetPosts: BlogPost[], selected: boolean) => {
@@ -1258,7 +1259,10 @@ function BlogListView() {
             type="text"
             placeholder="Search posts..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setSelectedPostIds(new Set());
+            }}
             className="w-full pl-4 pr-4 py-2 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
@@ -1283,6 +1287,7 @@ function BlogListView() {
           onChange={(event) => {
             setSelectedCategoryId(event.target.value);
             setCurrentPage(1);
+            setSelectedPostIds(new Set());
           }}
           className="w-48 rounded-lg border bg-background px-3 py-2 text-sm"
         >
@@ -1298,6 +1303,7 @@ function BlogListView() {
           onChange={(event) => {
             setSelectedTagId(event.target.value);
             setCurrentPage(1);
+            setSelectedPostIds(new Set());
           }}
           className="w-44 rounded-lg border bg-background px-3 py-2 text-sm"
         >
@@ -1313,6 +1319,7 @@ function BlogListView() {
           onChange={(event) => {
             setSelectedAuthorId(event.target.value);
             setCurrentPage(1);
+            setSelectedPostIds(new Set());
           }}
           className="w-44 rounded-lg border bg-background px-3 py-2 text-sm"
         >
@@ -1332,6 +1339,7 @@ function BlogListView() {
             setSelectedTagId('');
             setSelectedAuthorId('');
             setCurrentPage(1);
+            setSelectedPostIds(new Set());
           }}
           className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
         >
@@ -1378,6 +1386,7 @@ function BlogListView() {
                         setSelectedCategoryId('');
                         setSelectedTagId('');
                         setSelectedAuthorId('');
+                        setSelectedPostIds(new Set());
                       }}
                       className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 font-medium transition-colors hover:bg-accent"
                     >
