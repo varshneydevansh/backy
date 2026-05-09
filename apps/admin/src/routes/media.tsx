@@ -128,6 +128,17 @@ const MEDIA_EXPORT_COLUMNS = [
   'updated_at',
 ] as const;
 
+interface MediaUploadSummary {
+  attempted: number;
+  uploaded: number;
+  failed: number;
+  folderLabel: string;
+  visibility: 'public' | 'private';
+  assets: Array<{ id: string; name: string; type: MediaAsset['type']; size: string }>;
+  failures: string[];
+  completedAt: string;
+}
+
 function MediaPage() {
   const navigate = useNavigate();
   const routerState = useRouterState();
@@ -178,6 +189,7 @@ function MediaPage() {
   const [uploadVisibility, setUploadVisibility] = useState<'public' | 'private'>('public');
   const [uploadFolderId, setUploadFolderId] = useState<'current' | 'root' | string>('current');
   const [uploadTags, setUploadTags] = useState('');
+  const [recentUploadSummary, setRecentUploadSummary] = useState<MediaUploadSummary | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MediaAsset | null>(null);
@@ -233,6 +245,7 @@ function MediaPage() {
     setTypeFilter('all');
     setVisibilityFilter('all');
     setUsageFilter('all');
+    setRecentUploadSummary(null);
   }, []);
 
   useEffect(() => {
@@ -861,9 +874,12 @@ function MediaPage() {
   const handleFileUpload = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
     const uploadFiles = Array.from(fileList);
+    const targetFolderLabel = uploadTargetFolderLabel;
+    const targetVisibility = uploadVisibility;
 
     setIsUploading(true);
     setError(null);
+    setBulkNotice(null);
 
     const results = await Promise.allSettled(uploadFiles.map((file) => uploadMedia(file, {
         siteId,
@@ -876,6 +892,9 @@ function MediaPage() {
       .filter((result): result is PromiseFulfilledResult<MediaAsset> => result.status === 'fulfilled')
       .map((result) => result.value);
     const failures = results.filter((result) => result.status === 'rejected');
+    const failureMessages = failures.map((failure) => (
+      failure.reason instanceof Error ? failure.reason.message : 'Upload failed.'
+    ));
 
     try {
       if (uploaded.length) {
@@ -883,13 +902,30 @@ function MediaPage() {
         if (uploadFolderId !== 'current') {
           setSelectedFolderId(uploadTargetFolderId);
         }
+        setBulkNotice(`${uploaded.length} file${uploaded.length === 1 ? '' : 's'} uploaded to ${targetFolderLabel}.`);
         void loadLibrary();
       }
 
+      setRecentUploadSummary({
+        attempted: uploadFiles.length,
+        uploaded: uploaded.length,
+        failed: failures.length,
+        folderLabel: targetFolderLabel,
+        visibility: targetVisibility,
+        assets: uploaded.map((asset) => ({
+          id: asset.id,
+          name: asset.name,
+          type: asset.type,
+          size: asset.size,
+        })),
+        failures: failureMessages,
+        completedAt: new Date().toISOString(),
+      });
+
       if (failures.length) {
-        const firstReason = failures[0]?.reason;
-        setError(firstReason instanceof Error
-          ? `${firstReason.message}. ${failures.length} file${failures.length === 1 ? '' : 's'} were not uploaded.`
+        const firstReason = failureMessages[0];
+        setError(firstReason
+          ? `${firstReason}. ${failures.length} file${failures.length === 1 ? '' : 's'} were not uploaded.`
           : `${failures.length} file${failures.length === 1 ? '' : 's'} were not uploaded.`);
       }
     } finally {
@@ -1520,6 +1556,7 @@ function MediaPage() {
             setIsDragging(false);
             void handleFileUpload(e.dataTransfer.files);
           }}
+          data-testid="media-upload-dropzone"
           className={cn(
             "relative min-h-[260px] rounded-xl border-2 border-dashed p-8 text-center transition-all",
             isDragging
@@ -1554,6 +1591,43 @@ function MediaPage() {
                   {tag}
                 </span>
               ))}
+            </div>
+          )}
+
+          {recentUploadSummary && (
+            <div className="pointer-events-none mx-auto mt-5 max-w-2xl rounded-lg border border-border bg-background/90 p-3 text-left shadow-sm" data-testid="media-upload-summary">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm font-semibold text-foreground">
+                  Last upload: {recentUploadSummary.uploaded}/{recentUploadSummary.attempted} saved
+                </div>
+                <span className={cn(
+                  'rounded-md px-2 py-1 text-xs font-medium',
+                  recentUploadSummary.failed > 0 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700',
+                )}
+                >
+                  {recentUploadSummary.visibility} · {recentUploadSummary.folderLabel}
+                </span>
+              </div>
+              {recentUploadSummary.assets.length > 0 && (
+                <div className="mt-2 grid gap-1">
+                  {recentUploadSummary.assets.slice(0, 3).map((asset) => (
+                    <div key={asset.id} className="flex items-center justify-between gap-3 text-xs">
+                      <span className="min-w-0 truncate text-muted-foreground">{asset.name}</span>
+                      <span className="shrink-0 font-mono text-muted-foreground">{asset.type} · {asset.size}</span>
+                    </div>
+                  ))}
+                  {recentUploadSummary.assets.length > 3 && (
+                    <div className="text-xs text-muted-foreground">
+                      +{recentUploadSummary.assets.length - 3} more file{recentUploadSummary.assets.length - 3 === 1 ? '' : 's'}
+                    </div>
+                  )}
+                </div>
+              )}
+              {recentUploadSummary.failed > 0 && (
+                <div className="mt-2 text-xs text-amber-700">
+                  {recentUploadSummary.failed} failed: {recentUploadSummary.failures[0] || 'Upload failed.'}
+                </div>
+              )}
             </div>
           )}
         </div>
