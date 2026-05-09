@@ -86,6 +86,14 @@ type ResponsibilityArea = {
   frontendImpact: string;
 };
 
+type FrontendApiCapability = {
+  area: string;
+  status: 'ready' | 'partial' | 'planned';
+  contract: string;
+  controls: string;
+  stillNeeded: string;
+};
+
 const DELIVERY_OPTIONS: Array<{
   id: DeliveryMode;
   title: string;
@@ -158,6 +166,11 @@ const PUBLIC_API_ENDPOINTS: ApiEndpoint[] = [
   },
   {
     method: 'GET',
+    path: '/sites/:siteId/media/fonts',
+    description: 'Fetch the public font manifest for frontend typography loading.',
+  },
+  {
+    method: 'GET',
     path: '/sites/:siteId/media/:mediaId/file',
     description: 'Deliver a media file; private files require a signed URL.',
   },
@@ -180,6 +193,26 @@ const PUBLIC_API_ENDPOINTS: ApiEndpoint[] = [
     method: 'GET',
     path: '/sites/:siteId/collections/products/records?slug=:slug',
     description: 'Resolve a single public product by slug for a custom storefront.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/commerce/catalog',
+    description: 'Fetch normalized storefront catalog data with product facets, filters, readiness, and pagination.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/commerce/catalog?slug=:slug',
+    description: 'Resolve one normalized storefront product by slug.',
+  },
+  {
+    method: 'GET',
+    path: '/sites/:siteId/commerce/orders',
+    description: 'Fetch the public order-intake contract before wiring a custom checkout.',
+  },
+  {
+    method: 'POST',
+    path: '/sites/:siteId/commerce/orders',
+    description: 'Create a private Backy order from a public cart while keeping the raw orders collection private.',
   },
   {
     method: 'GET',
@@ -261,7 +294,7 @@ const ADMIN_API_ENDPOINTS: ApiEndpoint[] = [
   },
   {
     method: 'GET',
-    path: '/sites/:siteId/blog/posts',
+    path: '/sites/:siteId/blog',
     description: 'List and manage blog posts for the active site.',
   },
   {
@@ -375,6 +408,51 @@ const PLATFORM_BACKLOG = [
     status: 'project/domain metadata exists; deploy execution should remain a separate connected workflow',
   },
 ] as const;
+
+const FRONTEND_API_CAPABILITIES: FrontendApiCapability[] = [
+  {
+    area: 'Site routing and render payloads',
+    status: 'ready',
+    contract: 'manifest, openapi, resolve, render, navigation, SEO, pages, blog',
+    controls: 'Sites, Pages, Blog, reusable sections, redirects, SEO',
+    stillNeeded: 'More visual QA and template presets for every common website pattern.',
+  },
+  {
+    area: 'Visual design and reusable blocks',
+    status: 'partial',
+    contract: 'page/post render payloads, reusable sections, media, fonts, theme tokens',
+    controls: 'Page editor, blog editor, media library, appearance settings',
+    stillNeeded: 'Global header/footer editing, richer responsive constraints, symbols, and component variants.',
+  },
+  {
+    area: 'Dynamic CMS objects',
+    status: 'ready',
+    contract: 'collections, collection records, dynamic list/detail routes',
+    controls: 'Collections, records, import/export, permissions',
+    stillNeeded: 'Relationship fields, computed fields, validation presets, and richer list designer controls.',
+  },
+  {
+    area: 'Commerce and selling',
+    status: 'partial',
+    contract: 'commerce catalog, order-intake contract, private orders collection, product records',
+    controls: 'Products, Orders, collections, media galleries',
+    stillNeeded: 'Provider checkout sessions, taxes, shipping rates, refunds, discounts, subscriptions, and fulfillment automation.',
+  },
+  {
+    area: 'Forms, contacts, comments, registration',
+    status: 'partial',
+    contract: 'form definition, submissions, contacts, comments, moderation/reporting',
+    controls: 'Forms, Contacts, Comments, Users, notification settings',
+    stillNeeded: 'Full member registration/login flows, form templates, automations, spam controls, and approval workflows.',
+  },
+  {
+    area: 'Infrastructure and custom frontend handoff',
+    status: 'partial',
+    contract: 'settings handoff, env contract, public/admin API bases, runtime summaries',
+    controls: 'Settings delivery, infrastructure, security, API keys',
+    stillNeeded: 'One-click deploy orchestration, Supabase auth adapter, domain verification, and deployment history.',
+  },
+];
 
 const SETTINGS_CONTROL_AREAS: Array<{
   tab: SettingsTab;
@@ -751,6 +829,7 @@ function SettingsPage() {
       envContract: infrastructureEnvContract,
     },
     ownershipModel: PLATFORM_RESPONSIBILITIES,
+    frontendApiCapabilities: FRONTEND_API_CAPABILITIES,
     backlog: PLATFORM_BACKLOG,
     frontendDefaults: {
       general: generalSettings,
@@ -981,6 +1060,31 @@ function SettingsPage() {
                 ))}
               </div>
             </div>
+
+            <div className="mt-4 rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Frontend API capability map</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    What a custom frontend can already consume from Backy, and which Wix/Webflow/Squarespace-level backend pieces still need product work.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openSettingsTab('delivery')}
+                  iconStart={<Code className="size-4" />}
+                >
+                  Open API delivery
+                </Button>
+              </div>
+              <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+                {FRONTEND_API_CAPABILITIES.map((capability) => (
+                  <SettingsCapabilityCard key={capability.area} capability={capability} />
+                ))}
+              </div>
+            </div>
           </PanelContent>
         </Panel>
       </div>
@@ -1074,6 +1178,44 @@ function SettingsWorkflowStep({ index, label, detail }: { index: number; label: 
         <div className="text-xs font-semibold text-foreground">{label}</div>
         <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
       </div>
+    </div>
+  );
+}
+
+function SettingsCapabilityCard({ capability }: { capability: FrontendApiCapability }) {
+  const statusLabel = {
+    ready: 'Ready',
+    partial: 'Partial',
+    planned: 'Planned',
+  }[capability.status];
+  const statusClassName = {
+    ready: 'bg-emerald-50 text-emerald-700',
+    partial: 'bg-amber-50 text-amber-700',
+    planned: 'bg-slate-100 text-slate-600',
+  }[capability.status];
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="flex items-start justify-between gap-3">
+        <h4 className="min-w-0 text-sm font-semibold text-foreground">{capability.area}</h4>
+        <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold', statusClassName)}>
+          {statusLabel}
+        </span>
+      </div>
+      <dl className="mt-3 grid gap-2 text-xs leading-5">
+        <div>
+          <dt className="font-semibold text-foreground">Contract</dt>
+          <dd className="text-muted-foreground">{capability.contract}</dd>
+        </div>
+        <div>
+          <dt className="font-semibold text-foreground">Admin controls</dt>
+          <dd className="text-muted-foreground">{capability.controls}</dd>
+        </div>
+        <div>
+          <dt className="font-semibold text-foreground">Still needed</dt>
+          <dd className="text-muted-foreground">{capability.stillNeeded}</dd>
+        </div>
+      </dl>
     </div>
   );
 }
