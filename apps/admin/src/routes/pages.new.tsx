@@ -201,6 +201,21 @@ function NewPageRoute() {
         () => TEMPLATE_OPTIONS.find((template) => template.id === formData.template) || TEMPLATE_OPTIONS[0],
         [formData.template],
     );
+    const handleTemplateChange = (nextTemplate: PageTemplate) => {
+        const currentDefaults = TEMPLATE_DEFAULTS[formData.template];
+        const nextDefaults = TEMPLATE_DEFAULTS[nextTemplate];
+        const shouldApplyTitle = !formData.title.trim() || formData.title === currentDefaults.title;
+        const shouldApplySlug = !formData.slug.trim() || formData.slug === currentDefaults.slug;
+        const shouldApplyDescription = !formData.description.trim() || formData.description === currentDefaults.description;
+
+        setFormData({
+            ...formData,
+            template: nextTemplate,
+            title: shouldApplyTitle ? nextDefaults.title : formData.title,
+            slug: formData.isHomepage ? 'home' : shouldApplySlug ? nextDefaults.slug : formData.slug,
+            description: shouldApplyDescription ? nextDefaults.description : formData.description,
+        });
+    };
     const selectedSiteIdentifiers = useMemo(
         () => [formData.siteId, selectedSite?.id, selectedSite?.publicSiteId].filter((value): value is string => Boolean(value)),
         [formData.siteId, selectedSite?.id, selectedSite?.publicSiteId],
@@ -790,7 +805,7 @@ function NewPageRoute() {
                                             name="template"
                                             value={tmpl.id}
                                             checked={formData.template === tmpl.id}
-                                            onChange={(e) => setFormData({ ...formData, template: e.target.value as PageTemplate })}
+                                            onChange={(e) => handleTemplateChange(e.target.value as PageTemplate)}
                                             className="sr-only"
                                         />
                                         <div className="mb-1 flex items-center gap-2">
