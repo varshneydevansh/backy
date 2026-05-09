@@ -56,6 +56,65 @@ const BLOG_CONTROL_AREAS = [
   },
 ] as const;
 
+const BLOG_FRONTEND_SYSTEMS = [
+  {
+    key: 'feed',
+    title: 'Post feeds',
+    detail: 'Public list pages, pagination, status filtering, excerpts, thumbnails, and scheduled visibility.',
+  },
+  {
+    key: 'article',
+    title: 'Article detail',
+    detail: 'Slug routes, rendered canvas content, SEO metadata, preview URLs, and revision-aware publishing.',
+  },
+  {
+    key: 'taxonomy',
+    title: 'Taxonomy filters',
+    detail: 'Categories, tags, archive pages, related posts, frontend filter chips, and feed grouping.',
+  },
+  {
+    key: 'authors',
+    title: 'Authors and bylines',
+    detail: 'Author IDs, display names, post counts, profile pages, and public byline contracts.',
+  },
+  {
+    key: 'editorial',
+    title: 'Editorial workflow',
+    detail: 'Drafts, scheduled posts, publish/archive actions, bulk actions, previews, and readiness checks.',
+  },
+  {
+    key: 'handoff',
+    title: 'Frontend API handoff',
+    detail: 'Public blog list, post-by-slug, render, resolve, and private admin management endpoints.',
+  },
+] as const;
+
+const BLOG_EXPORT_COLUMNS = [
+  'post_id',
+  'active_site_id',
+  'title',
+  'slug',
+  'path',
+  'status',
+  'scheduled_at',
+  'published_at',
+  'author_id',
+  'author_name',
+  'category_ids',
+  'category_names',
+  'tag_ids',
+  'tag_names',
+  'excerpt',
+  'public_url',
+  'public_post_by_slug_url',
+  'public_render_url',
+  'public_resolve_url',
+  'admin_post_url',
+  'admin_readiness_url',
+  'admin_preview_url',
+  'frontend_systems',
+] as const;
+
 function BlogLayout() {
   const routerState = useRouterState();
   const isExactBlogRoute = routerState.location.pathname === '/blog';
@@ -128,6 +187,7 @@ function BlogListView() {
   const publicBlogUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/blog`;
   const publicPostBySlugUrl = `${publicBlogUrl}?slug=${handoffPostSlug}`;
   const publicPostRenderUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/render?path=${encodeURIComponent(handoffPost ? `/blog/${handoffPost.slug}` : '/blog/{postSlug}')}`;
+  const publicPostResolveUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/resolve?path=${encodeURIComponent(handoffPost ? `/blog/${handoffPost.slug}` : '/blog/{postSlug}')}`;
   const adminBlogUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/blog`;
   const adminBlogPostUrl = `${adminBlogUrl}/${handoffPostSegment}`;
   const adminBlogReadinessUrl = `${adminBlogPostUrl}/readiness`;
@@ -546,11 +606,18 @@ function BlogListView() {
       publicPosts: publicBlogUrl,
       publicPostBySlug: publicPostBySlugUrl,
       publicRender: publicPostRenderUrl,
+      publicResolve: publicPostResolveUrl,
       adminPosts: adminBlogUrl,
       adminPostDetail: adminBlogPostUrl,
       adminPostReadiness: adminBlogReadinessUrl,
       adminPostPreview: adminBlogPreviewUrl,
     },
+    export: {
+      format: 'csv',
+      columns: BLOG_EXPORT_COLUMNS,
+      filteredRows: data.length,
+    },
+    frontendSystems: BLOG_FRONTEND_SYSTEMS,
     readiness: {
       score: editorialReadiness.score,
       checks: editorialReadiness.checks,
@@ -619,6 +686,7 @@ function BlogListView() {
     postMetrics,
     publicBlogUrl,
     publicPostBySlugUrl,
+    publicPostResolveUrl,
     publicPostRenderUrl,
     searchQuery,
     selectedAuthorId,
@@ -656,6 +724,70 @@ function BlogListView() {
     URL.revokeObjectURL(url);
     setError(null);
     setNotice('Blog handoff manifest downloaded.');
+  };
+
+  const downloadBlogCsv = () => {
+    if (data.length === 0) {
+      setError('No blog posts are available to export with the current controls.');
+      setNotice(null);
+      return;
+    }
+
+    const rows = data.map((post) => {
+      const postPath = `/blog/${post.slug}`;
+      const postBySlugUrl = `${publicBlogUrl}?slug=${encodeURIComponent(post.slug)}`;
+      const renderUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/render?path=${encodeURIComponent(postPath)}`;
+      const resolveUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/resolve?path=${encodeURIComponent(postPath)}`;
+      const adminPostUrl = `${adminBlogUrl}/${encodeURIComponent(post.id)}`;
+      const postCategoryNames = (post.categoryIds || [])
+        .map((id) => categoryById.get(id)?.name)
+        .filter(Boolean)
+        .join('; ');
+      const postTagNames = (post.tagIds || [])
+        .map((id) => tagById.get(id)?.name)
+        .filter(Boolean)
+        .join('; ');
+
+      return [
+        post.id,
+        activeSiteId,
+        post.title,
+        post.slug,
+        postPath,
+        post.status,
+        post.scheduledAt || '',
+        post.publishedAt || '',
+        post.author,
+        authorById.get(post.author)?.name || post.author,
+        (post.categoryIds || []).join('; '),
+        postCategoryNames,
+        (post.tagIds || []).join('; '),
+        postTagNames,
+        post.excerpt || '',
+        post.status === 'published' ? publicPostUrl(post) : '',
+        postBySlugUrl,
+        renderUrl,
+        resolveUrl,
+        adminPostUrl,
+        `${adminPostUrl}/readiness`,
+        `${adminPostUrl}/preview`,
+        BLOG_FRONTEND_SYSTEMS.map((system) => `${system.key}:${system.title}`).join('; '),
+      ];
+    });
+    const csv = [BLOG_EXPORT_COLUMNS, ...rows]
+      .map((row) => row.map(csvEscape).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${siteSlug || activeSiteId}-backy-blog-posts.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setNotice('Blog CSV exported.');
   };
 
   return (
@@ -724,6 +856,15 @@ function BlogListView() {
             >
               <Download className="size-4" />
               Download JSON
+            </button>
+            <button
+              type="button"
+              onClick={downloadBlogCsv}
+              disabled={data.length === 0}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Download className="size-4" />
+              Export CSV
             </button>
             <Link
               to="/blog/new"
@@ -861,13 +1002,53 @@ function BlogListView() {
               <Copy className="h-4 w-4" />
               Copy handoff
             </button>
+            <button
+              type="button"
+              onClick={downloadBlogCsv}
+              disabled={data.length === 0}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </button>
           </div>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <BlogApiSnippet label="Public posts" value={publicBlogUrl} />
           <BlogApiSnippet label="Post by slug" value={publicPostBySlugUrl} />
+          <BlogApiSnippet label="Render post" value={publicPostRenderUrl} />
+          <BlogApiSnippet label="Resolve post" value={publicPostResolveUrl} />
           <BlogApiSnippet label="Admin posts" value={adminBlogUrl} />
           <BlogApiSnippet label="Preview" value={adminBlogPreviewUrl} />
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Blog frontend control contract</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Public frontends need these editorial systems to render blog lists, article pages, taxonomy views, bylines, and preview states from Backy.
+              </p>
+            </div>
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              {BLOG_FRONTEND_SYSTEMS.length} systems
+            </span>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {BLOG_FRONTEND_SYSTEMS.map((system) => (
+              <div key={system.key} className="rounded-lg border border-border bg-card p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-foreground">{system.title}</div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">{system.detail}</div>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                    {system.key}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -1061,7 +1242,7 @@ function BlogListView() {
                     className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                   >
                     <Plus className="w-4 h-4" />
-                    {hasPosts ? 'New Post' : 'Create First Post'}
+                    Create Post
                   </Link>
                 </div>
               }
@@ -1150,6 +1331,11 @@ function BlogListView() {
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
   return env[key]?.trim() ?? '';
+};
+
+const csvEscape = (value: unknown): string => {
+  const raw = String(value ?? '').replace(/\r?\n/g, '\\n');
+  return `"${raw.replace(/"/g, '""')}"`;
 };
 
 function BlogApiSnippet({ label, value }: { label: string; value: string }) {
