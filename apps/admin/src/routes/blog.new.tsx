@@ -189,6 +189,7 @@ function NewBlogPostPage() {
     const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
     const [selectedAuthorId, setSelectedAuthorId] = useState(user?.id || 'admin');
+    const isCreateBusy = isLoading;
 
     const clearCreationFeedback = () => {
         setError((current) => current ? null : current);
@@ -252,6 +253,8 @@ function NewBlogPostPage() {
     }, [activeSiteId, defaultSiteId, search.siteId, sites]);
 
     const selectBlogSite = (nextSiteId: string) => {
+        if (isCreateBusy) return;
+
         setActiveSiteId(nextSiteId);
         setSelectedCategoryIds([]);
         setSelectedTagIds([]);
@@ -264,6 +267,8 @@ function NewBlogPostPage() {
         selectedIds: string[],
         setSelectedIds: Dispatch<SetStateAction<string[]>>,
     ) => {
+        if (isCreateBusy) return;
+
         clearCreationFeedback();
         setSelectedIds(
             selectedIds.includes(id)
@@ -414,6 +419,8 @@ function NewBlogPostPage() {
     };
 
     const copyCreationText = async (value: string, label: string) => {
+        if (isCreateBusy) return;
+
         try {
             await navigator.clipboard.writeText(value);
             setError(null);
@@ -425,6 +432,8 @@ function NewBlogPostPage() {
     };
 
     const downloadCreationHandoff = () => {
+        if (isCreateBusy) return;
+
         const blob = new Blob([creationHandoffText], { type: 'application/json;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
@@ -440,6 +449,8 @@ function NewBlogPostPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isCreateBusy) return;
+
         if (!canSubmit) {
             setError(status === 'scheduled' && !scheduledAt ? 'Choose a publish date before scheduling' : 'Add a title and URL slug before saving');
             setNotice(null);
@@ -493,8 +504,12 @@ function NewBlogPostPage() {
                 <div className="flex items-center gap-4">
                     <button
                         type="button"
-                        onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })}
-                        disabled={isLoading}
+                        onClick={() => {
+                            if (!isCreateBusy) {
+                                void navigate({ to: '/blog', search: { siteId: activeSiteId } });
+                            }
+                        }}
+                        disabled={isCreateBusy}
                         className="rounded-lg border border-border bg-background p-2 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                     >
                         <ArrowLeft className="w-5 h-5" />
@@ -537,6 +552,7 @@ function NewBlogPostPage() {
                             <div className="flex flex-wrap items-center gap-2">
                                 <Button
                                     type="button"
+                                    disabled={isCreateBusy}
                                     onClick={() => void copyCreationText(creationHandoffText, 'Blog creation handoff manifest')}
                                     variant="outline"
                                     iconStart={<Copy className="size-4" />}
@@ -545,14 +561,15 @@ function NewBlogPostPage() {
                                 </Button>
                                 <Button
                                     type="button"
+                                    disabled={isCreateBusy}
                                     onClick={downloadCreationHandoff}
                                     variant="outline"
                                     iconStart={<Download className="size-4" />}
                                 >
                                     Download JSON
                                 </Button>
-                                <Button type="submit" disabled={isLoading || !canSubmit} variant="primary" iconStart={<Save className="size-4" />}>
-                                    {isLoading ? 'Saving...' : submitLabel}
+                                <Button type="submit" disabled={isCreateBusy || !canSubmit} variant="primary" iconStart={<Save className="size-4" />}>
+                                    {isCreateBusy ? 'Saving...' : submitLabel}
                                 </Button>
                             </div>
                         </div>
@@ -630,7 +647,7 @@ function NewBlogPostPage() {
                                     }
                                 }}
                                 placeholder="Untitled post"
-                                disabled={isLoading}
+                                disabled={isCreateBusy}
                                 className="w-full rounded-lg border-0 bg-transparent px-0 text-4xl font-semibold tracking-normal placeholder:text-muted-foreground/45 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
                                 autoFocus
                             />
@@ -646,7 +663,7 @@ function NewBlogPostPage() {
                                     clearCreationFeedback();
                                     setSlug(e.target.value);
                                 }}
-                                disabled={isLoading}
+                                disabled={isCreateBusy}
                                 className="min-w-48 flex-1 border-0 bg-transparent p-0 font-mono text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
                                 placeholder="post-slug"
                             />
@@ -662,7 +679,7 @@ function NewBlogPostPage() {
                                     setExcerpt(e.target.value);
                                 }}
                                 rows={3}
-                                disabled={isLoading}
+                                disabled={isCreateBusy}
                                 className="w-full resize-none rounded-lg border bg-background px-4 py-3 text-sm leading-6 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                 placeholder="Write the summary that appears in blog lists, feeds, and SEO previews."
                             />
@@ -703,7 +720,7 @@ function NewBlogPostPage() {
                                     initialSize={canvasSize}
                                     onSave={() => { }}
                                     onChange={(elements, _settings, size) => {
-                                        if (isLoading) return;
+                                        if (isCreateBusy) return;
                                         clearCreationFeedback();
                                         setCanvasElements(elements);
                                         if (size) setCanvasSize(size);
@@ -713,7 +730,7 @@ function NewBlogPostPage() {
                                     hideSettings={true}
                                     hideSave={true}
                                 />
-                                {isLoading && (
+                                {isCreateBusy && (
                                     <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/75 backdrop-blur-sm">
                                         <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm font-medium text-foreground shadow-sm">
                                             Saving post design...
@@ -738,13 +755,15 @@ function NewBlogPostPage() {
                                             key={nextStatus}
                                             type="button"
                                             onClick={() => {
+                                                if (isCreateBusy) return;
+
                                                 clearCreationFeedback();
                                                 setStatus(nextStatus);
                                                 if (nextStatus !== 'scheduled') {
                                                     setScheduledAt(null);
                                                 }
                                             }}
-                                            disabled={isLoading}
+                                            disabled={isCreateBusy}
                                             className={cn(
                                                 'rounded-md px-3 py-2 text-xs font-medium capitalize transition-colors disabled:cursor-not-allowed disabled:opacity-60',
                                                 status === nextStatus
@@ -764,10 +783,12 @@ function NewBlogPostPage() {
                                             type="datetime-local"
                                             value={toDateTimeLocalValue(scheduledAt)}
                                             onChange={(e) => {
+                                                if (isCreateBusy) return;
+
                                                 clearCreationFeedback();
                                                 setScheduledAt(fromDateTimeLocalValue(e.target.value));
                                             }}
-                                            disabled={isLoading}
+                                            disabled={isCreateBusy}
                                             className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                             required
                                         />
@@ -792,10 +813,20 @@ function NewBlogPostPage() {
                                 </div>
 
                                 <div className="grid gap-2">
-                                    <Button type="submit" disabled={isLoading || !canSubmit} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
-                                        {isLoading ? 'Saving...' : submitLabel}
+                                    <Button type="submit" disabled={isCreateBusy || !canSubmit} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
+                                        {isCreateBusy ? 'Saving...' : submitLabel}
                                     </Button>
-                                    <Button type="button" onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })} disabled={isLoading} variant="outline" className="w-full">
+                                    <Button
+                                        type="button"
+                                        onClick={() => {
+                                            if (!isCreateBusy) {
+                                                void navigate({ to: '/blog', search: { siteId: activeSiteId } });
+                                            }
+                                        }}
+                                        disabled={isCreateBusy}
+                                        variant="outline"
+                                        className="w-full"
+                                    >
                                         Discard
                                     </Button>
                                 </div>
@@ -811,7 +842,7 @@ function NewBlogPostPage() {
                                         id="blog-create-active-site"
                                         value={activeSiteId}
                                         onChange={(event) => selectBlogSite(event.target.value)}
-                                        disabled={isLoading}
+                                        disabled={isCreateBusy}
                                         className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                         {sites.length === 0 ? (
@@ -830,10 +861,12 @@ function NewBlogPostPage() {
                                         <select
                                             value={selectedAuthorId}
                                             onChange={(event) => {
+                                                if (isCreateBusy) return;
+
                                                 clearCreationFeedback();
                                                 setSelectedAuthorId(event.target.value);
                                             }}
-                                            disabled={isLoading}
+                                            disabled={isCreateBusy}
                                             className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                         >
                                             {authors.length === 0 ? (
@@ -861,7 +894,7 @@ function NewBlogPostPage() {
                                     items={categories}
                                     selectedIds={selectedCategoryIds}
                                     onToggle={(id) => toggleSelection(id, selectedCategoryIds, setSelectedCategoryIds)}
-                                    disabled={isLoading}
+                                    disabled={isCreateBusy}
                                 />
                                 <TaxonomyPicker
                                     title="Tags"
@@ -869,7 +902,7 @@ function NewBlogPostPage() {
                                     items={tags}
                                     selectedIds={selectedTagIds}
                                     onToggle={(id) => toggleSelection(id, selectedTagIds, setSelectedTagIds)}
-                                    disabled={isLoading}
+                                    disabled={isCreateBusy}
                                 />
                             </PanelContent>
                         </Panel>
@@ -903,6 +936,7 @@ function NewBlogPostPage() {
                                 <div className="grid gap-2">
                                     <Button
                                         type="button"
+                                        disabled={isCreateBusy}
                                         onClick={() => void copyCreationText(adminBlogUrl, 'Blog create API URL')}
                                         variant="outline"
                                         iconStart={<Copy className="size-4" />}
@@ -912,6 +946,7 @@ function NewBlogPostPage() {
                                     </Button>
                                     <Button
                                         type="button"
+                                        disabled={isCreateBusy}
                                         onClick={() => void copyCreationText(creationHandoffText, 'Blog creation handoff manifest')}
                                         variant="outline"
                                         iconStart={<Copy className="size-4" />}
