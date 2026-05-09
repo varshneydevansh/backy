@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Code2,
   Copy,
+  Download,
   Edit3,
   ExternalLink,
   Image as ImageIcon,
@@ -267,6 +268,85 @@ function ProductsRoute() {
     productCollection,
     products,
   ]);
+  const productHandoff = useMemo(() => ({
+    site: {
+      id: activeSiteId,
+      name: activeSite?.name || activeSiteId,
+      slug: activeSite?.slug,
+      status: activeSite?.status,
+    },
+    generatedAt: new Date().toISOString(),
+    collection: productCollection
+      ? {
+          id: productCollection.id,
+          name: productCollection.name,
+          slug: productCollection.slug,
+          status: productCollection.status,
+          listRoutePattern: productCollection.listRoutePattern,
+          routePattern: productCollection.routePattern,
+          permissions: productCollection.permissions,
+          missingFields: missingProductFields,
+          fields: mergeProductFields(productCollection.fields).map((field) => ({
+            key: field.key,
+            label: field.label,
+            type: field.type,
+            required: field.required,
+            unique: field.unique,
+            options: field.options,
+            defaultValue: field.defaultValue,
+          })),
+        }
+      : null,
+    endpoints: {
+      list: storefrontApiUrl,
+      bySlug: storefrontProductDetailUrl,
+    },
+    readiness: {
+      ready: productApiReady,
+      score: catalogReadiness.score,
+      checks: catalogReadiness.checks,
+    },
+    metrics,
+    products: products.map((product) => ({
+      id: product.id,
+      slug: product.slug,
+      status: product.status,
+      updatedAt: product.updatedAt,
+      title: String(product.values.title || product.slug),
+      sku: String(product.values.sku || ''),
+      price: toNumber(product.values.price),
+      compareAtPrice: product.values.compareAtPrice === null || product.values.compareAtPrice === undefined
+        ? null
+        : toNumber(product.values.compareAtPrice),
+      currency: normalizeCurrency(String(product.values.currency || 'USD')),
+      inventory: toNumber(product.values.inventory),
+      productType: asProductType(product.values.productType),
+      imageUrl: String(product.values.imageUrl || ''),
+      description: String(product.values.description || ''),
+      seoTitle: String(product.values.seoTitle || ''),
+      featured: Boolean(product.values.featured),
+      taxable: product.values.taxable !== false,
+      shippingRequired: product.values.shippingRequired !== false,
+      weight: product.values.weight === null || product.values.weight === undefined ? null : toNumber(product.values.weight),
+      downloadUrl: String(product.values.downloadUrl || ''),
+      storefrontPath: `/products/${product.slug}`,
+    })),
+  }), [
+    activeSite?.name,
+    activeSite?.slug,
+    activeSite?.status,
+    activeSiteId,
+    catalogReadiness.checks,
+    catalogReadiness.score,
+    metrics,
+    missingProductFields,
+    productApiReady,
+    productCollection,
+    products,
+    storefrontApiUrl,
+    storefrontProductDetailUrl,
+  ]);
+  const productHandoffText = useMemo(() => JSON.stringify(productHandoff, null, 2), [productHandoff]);
 
   const loadProducts = async () => {
     setIsLoading(true);
@@ -474,6 +554,26 @@ function ProductsRoute() {
       setNotice(storefrontApiUrl);
     }
   };
+  const copyProductHandoff = async () => {
+    try {
+      await navigator.clipboard.writeText(productHandoffText);
+      setNotice('Product handoff manifest copied.');
+    } catch {
+      setNotice(productHandoffText);
+    }
+  };
+  const downloadProductHandoff = () => {
+    const blob = new Blob([productHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSite?.slug || activeSiteId}-backy-products-handoff.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice('Product handoff manifest downloaded.');
+  };
 
   return (
     <PageShell
@@ -532,6 +632,12 @@ function ProductsRoute() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => void copyProductHandoff()} iconStart={<Copy className="size-4" />}>
+              Copy manifest
+            </Button>
+            <Button variant="outline" onClick={downloadProductHandoff} iconStart={<Download className="size-4" />}>
+              Download JSON
+            </Button>
             {!productCollection ? (
               <Button onClick={() => void createProductsCollection()} disabled={isSaving} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set up products'}
@@ -614,6 +720,9 @@ function ProductsRoute() {
                     Sync Schema
                   </Button>
                 )}
+                <Button onClick={() => void copyProductHandoff()} iconStart={<Copy className="size-4" />}>
+                  Copy manifest
+                </Button>
                 <Button onClick={() => void copyStorefrontApiUrl()} iconStart={<Copy className="size-4" />}>
                   Copy URL
                 </Button>
