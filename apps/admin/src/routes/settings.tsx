@@ -702,6 +702,21 @@ function SettingsPage() {
   ]);
   const publicApiBase = useMemo(() => getApiBase('public'), []);
   const adminApiBase = useMemo(() => getApiBase('admin'), []);
+  const infrastructureEnvContract = useMemo(() => buildInfrastructureEnvContract({
+    runtimeDatabase,
+    runtimeStorage,
+    runtimeSupabase,
+    runtimeVercel,
+    supabase: integrations.supabase,
+    vercel: integrations.vercel,
+  }), [
+    integrations.supabase,
+    integrations.vercel,
+    runtimeDatabase,
+    runtimeStorage,
+    runtimeSupabase,
+    runtimeVercel,
+  ]);
   const settingsHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     delivery: {
@@ -733,6 +748,7 @@ function SettingsPage() {
         metadata: integrations.vercel || null,
         note: 'Project ownership, domains, and preview-deploy preferences are tracked here; deploy tokens remain environment-managed.',
       },
+      envContract: infrastructureEnvContract,
     },
     ownershipModel: PLATFORM_RESPONSIBILITIES,
     backlog: PLATFORM_BACKLOG,
@@ -765,6 +781,7 @@ function SettingsPage() {
     generalSettings,
     integrations.supabase,
     integrations.vercel,
+    infrastructureEnvContract,
     notificationSettings,
     platformReadiness,
     publicApiBase,
@@ -1004,6 +1021,7 @@ function SettingsPage() {
             runtimeDatabase={runtimeDatabase}
             runtimeSupabase={runtimeSupabase}
             runtimeVercel={runtimeVercel}
+            envContract={infrastructureEnvContract}
             onChange={setIntegrations}
           />
         )}
@@ -1711,6 +1729,19 @@ type SeoSettingsConfig = NonNullable<IntegrationSettings['seo']>;
 type SupabaseSettings = NonNullable<IntegrationSettings['supabase']>;
 type VercelSettings = NonNullable<IntegrationSettings['vercel']>;
 type NotificationSettingsConfig = NonNullable<IntegrationSettings['notifications']>;
+type InfrastructureEnvProvider = 'database' | 'storage' | 'supabase' | 'vercel';
+type InfrastructureEnvContract = {
+  provider: InfrastructureEnvProvider;
+  key: string;
+  label: string;
+  description: string;
+  configured: boolean;
+  required: boolean;
+  secret?: boolean;
+  aliases?: string[];
+  valueHint?: string;
+  example: string;
+};
 
 const DEFAULT_GENERAL_SETTINGS: Required<GeneralSettingsConfig> = {
   siteName: 'My Website',
@@ -1845,6 +1876,138 @@ const inputClassName = cn(
   'focus:outline-none focus:ring-2 focus:ring-ring'
 );
 
+const configuredValue = (...values: Array<string | boolean | undefined | null>): boolean => (
+  values.some((value) => (typeof value === 'boolean' ? value : Boolean(value)))
+);
+
+const buildInfrastructureEnvContract = ({
+  runtimeDatabase,
+  runtimeStorage,
+  runtimeSupabase,
+  runtimeVercel,
+  supabase,
+  vercel,
+}: {
+  runtimeDatabase?: SiteSettingsInput['runtimeDatabase'];
+  runtimeStorage?: SiteSettingsInput['runtimeStorage'];
+  runtimeSupabase?: SiteSettingsInput['runtimeSupabase'];
+  runtimeVercel?: SiteSettingsInput['runtimeVercel'];
+  supabase?: SupabaseSettings;
+  vercel?: VercelSettings;
+}): InfrastructureEnvContract[] => [
+  {
+    provider: 'database',
+    key: 'BACKY_DATABASE_URL',
+    aliases: ['DATABASE_URL'],
+    label: 'Repository database',
+    description: 'Postgres or hosted database URL used by Backy repositories outside demo/local mode.',
+    configured: Boolean(runtimeDatabase?.mode === 'database' && runtimeDatabase.configured),
+    required: true,
+    secret: true,
+    valueHint: runtimeDatabase?.host || runtimeDatabase?.path || runtimeDatabase?.database,
+    example: 'postgres://user:password@host:5432/backy',
+  },
+  {
+    provider: 'storage',
+    key: 'BACKY_STORAGE_PROVIDER',
+    aliases: ['BACKY_MEDIA_STORAGE_PROVIDER'],
+    label: 'Media storage provider',
+    description: 'Selects local, s3, or supabase storage for uploads, files, fonts, and public assets.',
+    configured: Boolean(runtimeStorage?.configured),
+    required: true,
+    valueHint: runtimeStorage?.provider,
+    example: 'supabase',
+  },
+  {
+    provider: 'supabase',
+    key: 'BACKY_SUPABASE_URL',
+    aliases: ['SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL'],
+    label: 'Supabase project URL',
+    description: 'Project URL for Supabase-backed database, storage, and future auth adapter work.',
+    configured: configuredValue(runtimeSupabase?.projectUrl, supabase?.projectUrl),
+    required: Boolean(supabase?.databaseEnabled || supabase?.storageEnabled || supabase?.authEnabled),
+    valueHint: runtimeSupabase?.projectUrl || supabase?.projectUrl,
+    example: 'https://project-ref.supabase.co',
+  },
+  {
+    provider: 'supabase',
+    key: 'BACKY_SUPABASE_ANON_KEY',
+    aliases: ['SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'],
+    label: 'Supabase anon key',
+    description: 'Public Supabase key for read/client-safe Supabase workflows when enabled.',
+    configured: Boolean(runtimeSupabase?.anonKeyConfigured),
+    required: Boolean(supabase?.authEnabled),
+    secret: true,
+    example: '<supabase-anon-key>',
+  },
+  {
+    provider: 'supabase',
+    key: 'BACKY_SUPABASE_SERVICE_ROLE_KEY',
+    aliases: ['SUPABASE_SERVICE_ROLE_KEY'],
+    label: 'Supabase service role key',
+    description: 'Server-only Supabase key for Backy storage and privileged database operations.',
+    configured: Boolean(runtimeSupabase?.serviceRoleConfigured),
+    required: Boolean(supabase?.databaseEnabled || supabase?.storageEnabled),
+    secret: true,
+    example: '<supabase-service-role-key>',
+  },
+  {
+    provider: 'supabase',
+    key: 'BACKY_SUPABASE_STORAGE_BUCKET',
+    aliases: ['BACKY_STORAGE_BUCKET'],
+    label: 'Supabase storage bucket',
+    description: 'Bucket used by media uploads when Supabase storage is selected.',
+    configured: configuredValue(runtimeSupabase?.storageBucket, runtimeStorage?.provider === 'supabase' && runtimeStorage.bucket),
+    required: Boolean(supabase?.storageEnabled || runtimeStorage?.provider === 'supabase'),
+    valueHint: runtimeSupabase?.storageBucket || (runtimeStorage?.provider === 'supabase' ? runtimeStorage.bucket : undefined),
+    example: 'media',
+  },
+  {
+    provider: 'vercel',
+    key: 'VERCEL_PROJECT_ID',
+    aliases: ['BACKY_VERCEL_PROJECT_ID'],
+    label: 'Vercel project',
+    description: 'Project identifier for hosted Backy and future deploy orchestration.',
+    configured: configuredValue(runtimeVercel?.projectId, vercel?.projectId),
+    required: Boolean(vercel?.autoDeploy || vercel?.previewDeployments),
+    valueHint: runtimeVercel?.projectId || vercel?.projectId,
+    example: 'prj_xxxxxxxxxxxxxxxxxxxx',
+  },
+  {
+    provider: 'vercel',
+    key: 'VERCEL_TEAM_ID',
+    aliases: ['BACKY_VERCEL_TEAM_ID'],
+    label: 'Vercel team',
+    description: 'Optional team owner for deployments, domains, and account-scoped workflows.',
+    configured: configuredValue(runtimeVercel?.teamId, vercel?.teamSlug),
+    required: false,
+    valueHint: runtimeVercel?.teamId || vercel?.teamSlug,
+    example: 'team_xxxxxxxxxxxxxxxxxxxx',
+  },
+  {
+    provider: 'vercel',
+    key: 'BACKY_PUBLIC_APP_URL',
+    aliases: ['VERCEL_URL'],
+    label: 'Public app URL',
+    description: 'Canonical hosted URL used in API contracts, callbacks, previews, and frontend handoff.',
+    configured: configuredValue(runtimeVercel?.url, vercel?.productionDomain),
+    required: true,
+    valueHint: runtimeVercel?.url || vercel?.productionDomain,
+    example: 'https://backy.example.com',
+  },
+];
+
+const formatEnvTemplate = (
+  contracts: InfrastructureEnvContract[],
+  provider?: InfrastructureEnvProvider,
+) => contracts
+  .filter((item) => !provider || item.provider === provider)
+  .map((item) => {
+    const value = item.secret ? item.example : item.valueHint || item.example;
+    return `${item.key}=${value}`;
+  })
+  .join('\n');
+
 function RuntimeCard({
   title,
   description,
@@ -1890,21 +2053,138 @@ function RuntimeCard({
   );
 }
 
+function InfrastructureEnvContractPanel({
+  contracts,
+  copiedProfile,
+  onCopy,
+}: {
+  contracts: InfrastructureEnvContract[];
+  copiedProfile: string;
+  onCopy: (label: string, provider?: InfrastructureEnvProvider) => void;
+}) {
+  const configuredCount = contracts.filter((item) => item.configured).length;
+  const requiredOpenCount = contracts.filter((item) => item.required && !item.configured).length;
+  const profiles: Array<{ label: string; provider?: InfrastructureEnvProvider }> = [
+    { label: 'all env' },
+    { label: 'supabase', provider: 'supabase' },
+    { label: 'vercel', provider: 'vercel' },
+  ];
+
+  return (
+    <Panel>
+      <PanelHeader
+        title="Deployment env contract"
+        description="Copy the environment contract needed for Vercel and Supabase without exposing stored secrets in Backy."
+        icon={<Server className="size-4" />}
+        action={
+          <span
+            className={cn(
+              'inline-flex rounded-full px-2.5 py-1 text-xs font-medium',
+              requiredOpenCount === 0 ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+            )}
+          >
+            {configuredCount}/{contracts.length} detected
+          </span>
+        }
+      />
+      <PanelContent>
+        <div className="flex flex-wrap gap-2">
+          {profiles.map((profile) => (
+            <Button
+              key={profile.label}
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => onCopy(profile.label, profile.provider)}
+              iconStart={copiedProfile === profile.label ? <Check className="size-4" /> : <Copy className="size-4" />}
+            >
+              {copiedProfile === profile.label ? 'Copied' : `Copy ${profile.label}`}
+            </Button>
+          ))}
+        </div>
+
+        {requiredOpenCount > 0 && (
+          <Notice tone="warning" className="mt-4">
+            {requiredOpenCount} required environment {requiredOpenCount === 1 ? 'variable is' : 'variables are'} still missing for the selected infrastructure options.
+          </Notice>
+        )}
+
+        <div className="mt-4 overflow-hidden rounded-lg border border-border">
+          <div className="grid grid-cols-[minmax(180px,0.9fr)_minmax(180px,1fr)_120px] border-b border-border bg-muted/50 px-3 py-2 text-xs font-semibold text-muted-foreground max-lg:hidden">
+            <div>Variable</div>
+            <div>Purpose</div>
+            <div className="text-right">Status</div>
+          </div>
+          <div className="divide-y divide-border">
+            {contracts.map((item) => (
+              <div
+                key={item.key}
+                className="grid gap-2 px-3 py-3 text-sm lg:grid-cols-[minmax(180px,0.9fr)_minmax(180px,1fr)_120px] lg:items-center"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{item.key}</code>
+                    {item.required && (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                        Required
+                      </span>
+                    )}
+                    {item.secret && (
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                        Secret
+                      </span>
+                    )}
+                  </div>
+                  {item.aliases && item.aliases.length > 0 && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Aliases: {item.aliases.join(', ')}
+                    </p>
+                  )}
+                </div>
+                <div className="text-xs leading-5 text-muted-foreground">
+                  <div className="font-medium text-foreground">{item.label}</div>
+                  <p>{item.description}</p>
+                  {item.valueHint && !item.secret && (
+                    <p className="mt-1 font-mono text-[11px] text-muted-foreground">{item.valueHint}</p>
+                  )}
+                </div>
+                <div className="flex justify-start lg:justify-end">
+                  <span
+                    className={cn(
+                      'inline-flex rounded-full px-2.5 py-1 text-xs font-medium',
+                      item.configured ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                    )}
+                  >
+                    {item.configured ? 'Detected' : 'Missing'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </PanelContent>
+    </Panel>
+  );
+}
+
 function InfrastructureSettings({
   integrations,
   runtimeDatabase,
   runtimeSupabase,
   runtimeVercel,
+  envContract,
   onChange,
 }: {
   integrations: IntegrationSettings;
   runtimeDatabase?: SiteSettingsInput['runtimeDatabase'];
   runtimeSupabase?: SiteSettingsInput['runtimeSupabase'];
   runtimeVercel?: SiteSettingsInput['runtimeVercel'];
+  envContract: InfrastructureEnvContract[];
   onChange: (next: IntegrationSettings) => void;
 }) {
   const supabase: SupabaseSettings = integrations.supabase || {};
   const vercel: VercelSettings = integrations.vercel || {};
+  const [copiedEnvProfile, setCopiedEnvProfile] = useState('');
 
   const updateSupabase = (next: Partial<SupabaseSettings>) => {
     onChange({
@@ -1940,6 +2220,19 @@ function InfrastructureSettings({
       projectId: runtimeVercel?.projectId || vercel.projectId || '',
       productionDomain: runtimeVercel?.url || vercel.productionDomain || '',
     });
+  };
+
+  const copyEnvTemplate = async (label: string, provider?: InfrastructureEnvProvider) => {
+    const value = formatEnvTemplate(envContract, provider);
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedEnvProfile(label);
+      setTimeout(() => {
+        setCopiedEnvProfile((current) => (current === label ? '' : current));
+      }, 1400);
+    } catch {
+      setCopiedEnvProfile('');
+    }
   };
 
   return (
@@ -2017,6 +2310,12 @@ function InfrastructureSettings({
           {runtimeDatabase.error}
         </Notice>
       )}
+
+      <InfrastructureEnvContractPanel
+        contracts={envContract}
+        copiedProfile={copiedEnvProfile}
+        onCopy={copyEnvTemplate}
+      />
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Panel>
