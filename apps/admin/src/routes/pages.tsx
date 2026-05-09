@@ -319,6 +319,8 @@ function PagesListView() {
   const [pendingDeletePage, setPendingDeletePage] = useState<Page | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const isPageMutationBusy = isBulkBusy || mutatingPageId !== null || previewingPageId !== null;
+  const isPageLibraryBusy = isLoading || isLoadingReadiness || isPageMutationBusy;
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
@@ -458,6 +460,8 @@ function PagesListView() {
   }, [activeSitePages, pageMetrics.blocked, pageMetrics.published, readinessMap]);
 
   const setPageStatusFilter = (status: PageStatusFilter) => {
+    if (isPageLibraryBusy) return;
+
     setStatusFilter(status);
     setHealthFilter('all');
     setCurrentPage(1);
@@ -465,6 +469,8 @@ function PagesListView() {
   };
 
   const showBlockedPages = () => {
+    if (isPageLibraryBusy) return;
+
     setStatusFilter('all');
     setHealthFilter('blocked');
     setCurrentPage(1);
@@ -483,6 +489,8 @@ function PagesListView() {
   };
 
   const downloadPagesCsv = () => {
+    if (isPageLibraryBusy) return;
+
     if (filteredPages.length === 0) {
       setError('No pages are available to export with the current controls.');
       setNotice(null);
@@ -536,6 +544,8 @@ function PagesListView() {
   };
 
   const togglePageSelection = (pageId: string) => {
+    if (isPageLibraryBusy) return;
+
     setSelectedPageIds((current) => {
       const next = new Set(current);
 
@@ -550,6 +560,8 @@ function PagesListView() {
   };
 
   const setPageSelection = (targetPages: Page[], selected: boolean) => {
+    if (isPageLibraryBusy) return;
+
     setSelectedPageIds((current) => {
       const next = new Set(current);
       targetPages.forEach((page) => {
@@ -635,6 +647,8 @@ function PagesListView() {
   );
 
   const handlePreviewPage = async (page: Page) => {
+    if (isPageMutationBusy) return;
+
     setPreviewingPageId(page.id);
     setError(null);
 
@@ -649,6 +663,8 @@ function PagesListView() {
   };
 
   const handlePublishPage = async (page: Page) => {
+    if (isPageMutationBusy) return;
+
     setMutatingPageId(page.id);
     setError(null);
     setNotice(null);
@@ -674,6 +690,8 @@ function PagesListView() {
   };
 
   const handleArchivePage = async (page: Page) => {
+    if (isPageMutationBusy) return;
+
     setMutatingPageId(page.id);
     setError(null);
     setNotice(null);
@@ -690,6 +708,8 @@ function PagesListView() {
   };
 
   const handleDeletePage = async (page: Page) => {
+    if (isPageMutationBusy) return;
+
     setMutatingPageId(page.id);
     setError(null);
     setNotice(null);
@@ -717,6 +737,10 @@ function PagesListView() {
   };
 
   const handleBulkAction = async () => {
+    if (isPageMutationBusy) {
+      return;
+    }
+
     if (!bulkAction || selectedPages.length === 0) {
       return;
     }
@@ -799,8 +823,9 @@ function PagesListView() {
           type="checkbox"
           aria-label={`Select ${page.title}`}
           checked={selectedPageIds.has(page.id)}
+          disabled={isPageLibraryBusy}
           onChange={() => togglePageSelection(page.id)}
-          className="size-4 rounded border-border text-primary focus:ring-ring"
+          className="size-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         />
       )
     },
@@ -885,7 +910,7 @@ function PagesListView() {
                 onClick={() => {
                   void handlePublishPage(page);
                 }}
-                disabled={mutatingPageId === page.id || Boolean(publishBlocker)}
+                disabled={isPageLibraryBusy || Boolean(publishBlocker)}
                 title={publishBlocker ? `Resolve before publishing: ${publishBlocker}` : 'Publish page'}
                 className="p-2 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -897,7 +922,7 @@ function PagesListView() {
                 onClick={() => {
                   void handleArchivePage(page);
                 }}
-                disabled={mutatingPageId === page.id}
+                disabled={isPageLibraryBusy}
                 title="Archive page"
                 className="p-2 text-muted-foreground hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -919,7 +944,7 @@ function PagesListView() {
               onClick={() => {
                 void handlePreviewPage(page);
               }}
-              disabled={previewingPageId === page.id}
+              disabled={isPageLibraryBusy}
               title="Preview page"
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -927,16 +952,18 @@ function PagesListView() {
             </button>
             <button
               onClick={() => navigate({ to: '/pages/$pageId/edit', params: { pageId: page.id }, search: { siteId: activeSiteId } })}
+              disabled={isPageMutationBusy}
               title="Edit page"
-              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
               onClick={() => {
+                if (isPageLibraryBusy) return;
                 setPendingDeletePage(page);
               }}
-              disabled={mutatingPageId === page.id}
+              disabled={isPageLibraryBusy}
               title="Delete page"
               className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -1159,6 +1186,8 @@ function PagesListView() {
   const pageHandoffText = useMemo(() => JSON.stringify(pageHandoff, null, 2), [pageHandoff]);
 
   const clearPageFilters = () => {
+    if (isPageLibraryBusy) return;
+
     setSearchQuery('');
     setStatusFilter('all');
     setHealthFilter('all');
@@ -1252,7 +1281,7 @@ function PagesListView() {
             <button
               type="button"
               onClick={downloadPagesCsv}
-              disabled={filteredPages.length === 0}
+              disabled={filteredPages.length === 0 || isPageLibraryBusy}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="size-4" />
@@ -1261,7 +1290,7 @@ function PagesListView() {
             <button
               type="button"
               onClick={() => void refreshPages(activeSiteId)}
-              disabled={isLoading}
+              disabled={isPageLibraryBusy}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />
@@ -1414,8 +1443,9 @@ function PagesListView() {
               key={metric.label}
               type="button"
               onClick={metric.onSelect}
+              disabled={isPageLibraryBusy}
               className={cn(
-                'rounded-lg border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-muted',
+                'rounded-lg border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60',
                 metric.active && 'border-primary bg-primary/5',
               )}
             >
@@ -1431,7 +1461,9 @@ function PagesListView() {
           <select
             id="pages-active-site"
             value={activeSiteId}
+            disabled={isPageLibraryBusy}
             onChange={(event) => {
+              if (isPageLibraryBusy) return;
               const nextSiteId = event.target.value;
               setSelectedSiteId(nextSiteId);
               setStatusFilter('all');
@@ -1441,7 +1473,7 @@ function PagesListView() {
               setSelectedPageIds(new Set());
               navigate({ to: '/pages', search: { siteId: nextSiteId }, replace: true });
             }}
-            className="mt-2 w-full min-w-52 rounded-lg border bg-background px-3 py-2 text-sm"
+            className="mt-2 w-full min-w-52 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
           >
             {sites.length === 0 ? (
               <option value="site-demo">Demo site</option>
@@ -1487,7 +1519,7 @@ function PagesListView() {
             <button
               type="button"
               onClick={downloadPagesCsv}
-              disabled={filteredPages.length === 0}
+              disabled={filteredPages.length === 0 || isPageLibraryBusy}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Export filtered pages CSV"
             >
@@ -1602,18 +1634,20 @@ function PagesListView() {
           <button
             type="button"
             onClick={() => setPageSelection(data, selectedTablePages.length !== data.length)}
-            disabled={data.length === 0}
+            disabled={data.length === 0 || isPageLibraryBusy}
             className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             {selectedTablePages.length === data.length && data.length > 0 ? 'Clear visible' : 'Select visible'}
           </button>
           <select
             value={bulkAction}
+            disabled={isPageLibraryBusy}
             onChange={(event) => {
+              if (isPageLibraryBusy) return;
               setBulkAction(event.target.value as typeof bulkAction);
               setPendingBulkDelete(false);
             }}
-            className="min-w-44 rounded-lg border bg-background px-3 py-2 text-sm"
+            className="min-w-44 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
           >
             <option value="">Bulk action...</option>
             <option value="publish">Publish selected</option>
@@ -1623,7 +1657,7 @@ function PagesListView() {
           <button
             type="button"
             onClick={() => void handleBulkAction()}
-            disabled={!bulkAction || selectedPages.length === 0 || isBulkBusy || (bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0)}
+            disabled={!bulkAction || selectedPages.length === 0 || isPageLibraryBusy || (bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0)}
             title={bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0
               ? 'Resolve selected page blockers before publishing.'
               : 'Apply selected bulk action'}
@@ -1640,7 +1674,8 @@ function PagesListView() {
             <button
               type="button"
               onClick={() => setSelectedPageIds(new Set())}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              disabled={isPageLibraryBusy}
+              className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
               Clear selection
             </button>
@@ -1654,7 +1689,8 @@ function PagesListView() {
               <button
                 type="button"
                 onClick={() => setSelectedPageIds((current) => new Set([...current].filter((pageId) => visiblePageIdSet.has(pageId))))}
-                className="shrink-0 rounded-md border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-900 transition hover:bg-amber-100"
+                disabled={isPageLibraryBusy}
+                className="shrink-0 rounded-md border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Clear non-visible
               </button>
@@ -1681,13 +1717,15 @@ function PagesListView() {
             type="text"
             placeholder="Search pages..."
             value={searchQuery}
+            disabled={isPageLibraryBusy}
             onChange={(event) => {
+              if (isPageLibraryBusy) return;
               const q = event.target.value;
               setSearchQuery(q);
               setCurrentPage(1);
               updatePagesRouteSearch({ q: q || undefined, page: undefined });
             }}
-            className="w-full pl-4 pr-4 py-2 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            className="w-full pl-4 pr-4 py-2 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
           />
         </div>
         <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card p-1">
@@ -1697,8 +1735,9 @@ function PagesListView() {
               key={status}
               type="button"
               onClick={() => setPageStatusFilter(status)}
+              disabled={isPageLibraryBusy}
               className={cn(
-                'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60',
                 statusFilter === status && healthFilter === 'all' && 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground',
               )}
             >
@@ -1709,13 +1748,15 @@ function PagesListView() {
         <select
           aria-label="Filter pages by library readiness"
           value={healthFilter}
+          disabled={isPageLibraryBusy}
           onChange={(event) => {
+            if (isPageLibraryBusy) return;
             const health = event.target.value as PageLibraryFilter;
             setHealthFilter(health);
             setCurrentPage(1);
             updatePagesRouteSearch({ health, page: undefined });
           }}
-          className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm"
+          className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
         >
           <option value="all">All library states</option>
           <option value="ready">Ready pages</option>
@@ -1730,7 +1771,7 @@ function PagesListView() {
         <button
           type="button"
           onClick={() => void refreshPages(activeSiteId)}
-          disabled={isLoading}
+          disabled={isPageLibraryBusy}
           className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           aria-label="Refresh pages"
         >
@@ -1740,7 +1781,8 @@ function PagesListView() {
           <button
             type="button"
             onClick={clearPageFilters}
-            className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            disabled={isPageLibraryBusy}
+            className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             Clear filters
           </button>
@@ -1751,8 +1793,10 @@ function PagesListView() {
         <DataGrid
           columns={columns}
           data={data}
+          loading={isLoading}
           sortConfig={sortConfig}
           onSort={(key) => {
+            if (isPageLibraryBusy) return;
             const sortBy = key as PageSortKey;
             const sortDirection = sortConfig.key === key && sortConfig.direction === 'asc' ? 'desc' : 'asc';
             handleSort(key);
@@ -1763,6 +1807,7 @@ function PagesListView() {
           totalPages={totalPages}
           pageSize={10}
           onPageChange={(page) => {
+            if (isPageLibraryBusy) return;
             setCurrentPage(page);
             updatePagesRouteSearch({ page });
           }}
@@ -1782,7 +1827,8 @@ function PagesListView() {
                     <button
                       type="button"
                       onClick={clearPageFilters}
-                      className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 font-medium transition-colors hover:bg-accent"
+                      disabled={isPageLibraryBusy}
+                      className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Clear Filters
                     </button>
