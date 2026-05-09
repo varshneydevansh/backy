@@ -122,6 +122,7 @@ function EditUserPage() {
   const user = users.find((item) => item.id === userId);
   const userDetailUrl = useMemo(() => `${getAdminApiBase()}/users/${userId}`, [userId]);
 
+  const [isLoadingUser, setIsLoadingUser] = useState(Boolean(user));
   const [isLoading, setIsLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -136,6 +137,7 @@ function EditUserPage() {
     role: 'editor',
     status: 'invited',
   });
+  const isUserDetailBusy = isLoadingUser || isLoading;
 
   useEffect(() => {
     if (user) {
@@ -152,6 +154,7 @@ function EditUserPage() {
     let cancelled = false;
 
     const loadUser = async () => {
+      setIsLoadingUser(true);
       try {
         const backendUser = await getBackendUser(userId);
         if (!cancelled) {
@@ -164,6 +167,10 @@ function EditUserPage() {
       } catch {
         if (!cancelled) {
           setNotice('Using local fallback user data because the backend users API is unavailable.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingUser(false);
         }
       }
     };
@@ -269,6 +276,7 @@ function EditUserPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isUserDetailBusy) return;
 
     if (!canSubmit) {
       setNotice('Enter a full name and a valid email address before saving.');
@@ -299,6 +307,8 @@ function EditUserPage() {
   };
 
   const handleDelete = async () => {
+    if (isUserDetailBusy) return;
+
     setIsLoading(true);
     setNotice(null);
 
@@ -314,7 +324,7 @@ function EditUserPage() {
   };
 
   const handleLifecycleAction = async (status: UserStatus) => {
-    if (status === formData.status) return;
+    if (isUserDetailBusy || status === formData.status) return;
 
     setIsLoading(true);
     setNotice(null);
@@ -332,6 +342,8 @@ function EditUserPage() {
   };
 
   const resetForm = () => {
+    if (isUserDetailBusy) return;
+
     setFormData({
       fullName: user.fullName,
       email: user.email,
@@ -396,6 +408,8 @@ function EditUserPage() {
   const userDetailHandoffText = JSON.stringify(userDetailHandoff, null, 2);
 
   const copyUserDetailText = async (value: string, label: string) => {
+    if (isUserDetailBusy) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setNotice(`${label} copied.`);
@@ -405,6 +419,8 @@ function EditUserPage() {
   };
 
   const downloadUserDetailHandoff = () => {
+    if (isUserDetailBusy) return;
+
     const blob = new Blob([userDetailHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -424,8 +440,13 @@ function EditUserPage() {
       action={
         <button
           type="button"
-          onClick={() => navigate({ to: '/users' })}
-          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+          onClick={() => {
+            if (!isUserDetailBusy) {
+              navigate({ to: '/users' });
+            }
+          }}
+          disabled={isUserDetailBusy}
+          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
         >
           <ArrowLeft className="h-4 w-4" />
           Users
@@ -456,6 +477,7 @@ function EditUserPage() {
                 type="button"
                 variant="outline"
                 onClick={() => void copyUserDetailText(userDetailHandoffText, 'User detail handoff manifest')}
+                disabled={isUserDetailBusy}
                 iconStart={<Copy className="size-4" />}
               >
                 Copy manifest
@@ -464,6 +486,7 @@ function EditUserPage() {
                 type="button"
                 variant="outline"
                 onClick={downloadUserDetailHandoff}
+                disabled={isUserDetailBusy}
                 iconStart={<Download className="size-4" />}
               >
                 Download JSON
@@ -473,6 +496,7 @@ function EditUserPage() {
                   type="button"
                   variant="outline"
                   onClick={resetForm}
+                  disabled={isUserDetailBusy}
                 >
                   Reset changes
                 </Button>
@@ -480,10 +504,10 @@ function EditUserPage() {
               <Button
                 type="submit"
                 variant="primary"
-                disabled={isLoading || !canSubmit || !hasUnsavedChanges}
+                disabled={isUserDetailBusy || !canSubmit || !hasUnsavedChanges}
                 iconStart={<Save className="size-4" />}
               >
-                {isLoading ? 'Saving...' : 'Save changes'}
+                {isLoading ? 'Saving...' : isLoadingUser ? 'Loading user...' : 'Save changes'}
               </Button>
             </div>
           </div>
@@ -566,8 +590,12 @@ function EditUserPage() {
                   <input
                     type="text"
                     value={formData.fullName}
-                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                    className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+                    disabled={isUserDetailBusy}
+                    onChange={(e) => {
+                      if (isUserDetailBusy) return;
+                      setFormData({ ...formData, fullName: e.target.value });
+                    }}
+                    className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                     required
                   />
                 </div>
@@ -580,8 +608,12 @@ function EditUserPage() {
                   <input
                     type="email"
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+                    disabled={isUserDetailBusy}
+                    onChange={(e) => {
+                      if (isUserDetailBusy) return;
+                      setFormData({ ...formData, email: e.target.value });
+                    }}
+                    className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                     required
                   />
                 </div>
@@ -605,8 +637,12 @@ function EditUserPage() {
                 <span className="text-sm font-medium">Role</span>
                 <select
                   value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+                  disabled={isUserDetailBusy}
+                  onChange={(e) => {
+                    if (isUserDetailBusy) return;
+                    setFormData({ ...formData, role: e.target.value as UserRole });
+                  }}
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {ROLE_OPTIONS.map((role) => (
                     <option key={role.value} value={role.value}>{role.label}</option>
@@ -619,8 +655,12 @@ function EditUserPage() {
                 <span className="text-sm font-medium">Status</span>
                 <select
                   value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as UserStatus })}
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+                  disabled={isUserDetailBusy}
+                  onChange={(e) => {
+                    if (isUserDetailBusy) return;
+                    setFormData({ ...formData, status: e.target.value as UserStatus });
+                  }}
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {STATUS_OPTIONS.map((status) => (
                     <option key={status.value} value={status.value}>{status.label}</option>
@@ -714,6 +754,7 @@ function EditUserPage() {
                 type="button"
                 variant="outline"
                 onClick={() => void copyUserDetailText(userDetailUrl, 'User detail API URL')}
+                disabled={isUserDetailBusy}
                 iconStart={<Copy className="size-4" />}
               >
                 Copy URL
@@ -722,6 +763,7 @@ function EditUserPage() {
                 type="button"
                 variant="outline"
                 onClick={() => void copyUserDetailText(userDetailHandoffText, 'User detail handoff manifest')}
+                disabled={isUserDetailBusy}
                 iconStart={<Copy className="size-4" />}
               >
                 Copy manifest
@@ -751,7 +793,11 @@ function EditUserPage() {
             </div>
             <a
               href={resetMailTo}
-              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+              aria-disabled={isUserDetailBusy}
+              className={cn(
+                'mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring',
+                isUserDetailBusy && 'pointer-events-none opacity-60',
+              )}
             >
               <Mail className="h-4 w-4" />
               Email reset instructions
@@ -765,7 +811,7 @@ function EditUserPage() {
                     key={action.status}
                     type="button"
                     onClick={() => void handleLifecycleAction(action.status)}
-                    disabled={isLoading || active}
+                    disabled={isUserDetailBusy || active}
                     className={cn(
                       'rounded-lg border px-3 py-2 text-left text-sm transition focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60',
                       active ? 'border-primary bg-primary/5 text-primary' : 'border-border hover:bg-accent',
@@ -787,7 +833,8 @@ function EditUserPage() {
             <button
               type="button"
               onClick={() => setShowDeleteConfirm(true)}
-              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-300"
+              disabled={isUserDetailBusy}
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Trash2 className="h-4 w-4" />
               Remove user
@@ -797,19 +844,24 @@ function EditUserPage() {
           <div className="flex flex-col gap-2">
             <button
               type="submit"
-              disabled={isLoading || !canSubmit || !hasUnsavedChanges}
+              disabled={isUserDetailBusy || !canSubmit || !hasUnsavedChanges}
               className={cn(
                 'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-ring',
                 'bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50',
               )}
             >
               <Save className="h-4 w-4" />
-              {isLoading ? 'Saving...' : 'Save changes'}
+              {isLoading ? 'Saving...' : isLoadingUser ? 'Loading user...' : 'Save changes'}
             </button>
             <button
               type="button"
-              onClick={() => navigate({ to: '/users' })}
-              className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition hover:bg-accent"
+              onClick={() => {
+                if (!isUserDetailBusy) {
+                  navigate({ to: '/users' });
+                }
+              }}
+              disabled={isUserDetailBusy}
+              className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               Cancel
             </button>
@@ -817,7 +869,8 @@ function EditUserPage() {
               <button
                 type="button"
                 onClick={resetForm}
-                className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition hover:bg-accent"
+                disabled={isUserDetailBusy}
+                className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Reset changes
               </button>
@@ -845,17 +898,18 @@ function EditUserPage() {
               <button
                 type="button"
                 onClick={() => setShowDeleteConfirm(false)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent"
+                disabled={isUserDetailBusy}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void handleDelete()}
-                disabled={isLoading}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+                disabled={isUserDetailBusy}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Remove user
+                {isLoading ? 'Removing...' : 'Remove user'}
               </button>
             </div>
           </div>
