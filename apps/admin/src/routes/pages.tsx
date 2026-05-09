@@ -91,6 +91,45 @@ const PAGE_BUILDER_SYSTEMS = [
   },
 ] as const;
 
+const PAGE_WORKFLOW_SURFACES = [
+  {
+    key: 'sites',
+    title: 'Sites',
+    detail: 'Control navigation, domains, redirects, SEO defaults, and site-wide page delivery settings.',
+    route: '/sites',
+  },
+  {
+    key: 'media',
+    title: 'Media',
+    detail: 'Use uploaded images, fonts, documents, videos, icons, and reusable assets inside the visual editor.',
+    route: '/media',
+  },
+  {
+    key: 'forms',
+    title: 'Forms',
+    detail: 'Bind contact, registration, survey, and custom form blocks to Backy submissions and contacts.',
+    route: '/forms',
+  },
+  {
+    key: 'products',
+    title: 'Products',
+    detail: 'Connect storefront sections, product cards, checkout buttons, and digital delivery blocks to commerce data.',
+    route: '/products',
+  },
+  {
+    key: 'blog',
+    title: 'Blog',
+    detail: 'Create blog index pages, article routes, editorial previews, taxonomy sections, and post feeds.',
+    route: '/blog',
+  },
+  {
+    key: 'settings',
+    title: 'Settings',
+    detail: 'Confirm API keys, Supabase/storage/runtime connectivity, auth policy, and deployment readiness.',
+    route: '/settings',
+  },
+] as const;
+
 const PAGE_EXPORT_COLUMNS = [
   'page_id',
   'site_id',
@@ -683,6 +722,19 @@ function PagesListView() {
       adminPageReadiness: adminPageReadinessUrl,
       adminPagePreview: adminPagePreviewUrl,
     },
+    controlRoutes: {
+      sites: '/sites',
+      media: '/media',
+      forms: '/forms',
+      products: '/products',
+      blog: '/blog',
+      settings: '/settings',
+      blankPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}`,
+      contactPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=contact`,
+      registrationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
+      storefrontPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
+      blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
+    },
     export: {
       format: 'csv',
       columns: PAGE_EXPORT_COLUMNS,
@@ -924,6 +976,35 @@ function PagesListView() {
                 <div className="text-sm font-semibold text-foreground">{area.title}</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
               </a>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Layout className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold">Connected page workflows</h3>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Page design is the shared surface where site navigation, media, forms, commerce, blog feeds, runtime settings, and public APIs meet.
+              </p>
+            </div>
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              {PAGE_WORKFLOW_SURFACES.length} surfaces
+            </span>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+            {PAGE_WORKFLOW_SURFACES.map((surface) => (
+              <Link
+                key={surface.key}
+                to={surface.route}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{surface.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
+              </Link>
             ))}
           </div>
         </div>
