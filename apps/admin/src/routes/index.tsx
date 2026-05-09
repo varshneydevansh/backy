@@ -286,9 +286,65 @@ function StatCard({
   );
 }
 
+type DashboardReadinessRoute =
+  | '/settings'
+  | '/media'
+  | '/sites'
+  | '/collections'
+  | '/forms'
+  | '/products'
+  | '/users';
+
+function DashboardReadinessCheck({
+  label,
+  detail,
+  ready,
+  to,
+}: {
+  label: string;
+  detail: string;
+  ready: boolean;
+  to: DashboardReadinessRoute;
+}) {
+  const Icon = ready ? CheckCircle2 : AlertTriangle;
+
+  return (
+    <Link
+      to={to}
+      className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 transition-colors hover:bg-accent"
+    >
+      <Icon className={cn('mt-0.5 size-4 shrink-0', ready ? 'text-success' : 'text-warning')} />
+      <span className="min-w-0">
+        <span className="block text-xs font-semibold text-foreground">{label}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{detail}</span>
+      </span>
+    </Link>
+  );
+}
+
+function DashboardWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-border bg-background px-3 py-2">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
   return env[key]?.trim() ?? '';
+};
+
+const isLocalAdminHost = () => {
+  if (typeof window === 'undefined') return false;
+
+  return ['localhost', '127.0.0.1'].includes(window.location.hostname) && window.location.port !== '3001';
 };
 
 const getPublicBaseUrl = (): string => {
@@ -299,7 +355,7 @@ const getPublicBaseUrl = (): string => {
     ''
   ).trim();
 
-  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+  if (!envBase && isLocalAdminHost()) {
     return 'http://localhost:3001';
   }
 
@@ -319,7 +375,7 @@ const getAdminBaseUrl = (): string => {
     ''
   ).trim();
 
-  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+  if (!envBase && isLocalAdminHost()) {
     return 'http://localhost:3001/api/admin';
   }
 
@@ -524,6 +580,126 @@ function Index() {
     vercel,
   ]);
   const frontendHandoffText = useMemo(() => JSON.stringify(frontendHandoff, null, 2), [frontendHandoff]);
+  const platformReadiness = useMemo(() => {
+    const activeUsers = dashboard.users.filter((item) => item.status === 'active').length;
+    const activeAdmins = dashboard.users.filter((item) => (
+      item.status === 'active' && (item.role === 'owner' || item.role === 'admin')
+    )).length;
+    const hasPublicContent = publishedSites > 0 && (
+      dashboard.pages.some((page) => page.status === 'published') ||
+      dashboard.posts.some((post) => post.status === 'published') ||
+      publishedCollections > 0
+    );
+    const hasCommerce = Boolean(productsCollection && ordersCollection);
+    const checks = [
+      {
+        label: 'Backend API',
+        detail: backendHealthy ? 'Admin and public APIs are reachable.' : 'Dashboard is using fallback data.',
+        ready: backendHealthy,
+        to: '/settings' as const,
+      },
+      {
+        label: 'API keys',
+        detail: apiKeysConfigured ? 'Public and admin API keys are configured.' : 'Configure API keys before external frontend handoff.',
+        ready: apiKeysConfigured,
+        to: '/settings' as const,
+      },
+      {
+        label: 'Database',
+        detail: database?.configured ? `${database.provider} is configured.` : 'Configure the runtime database or Supabase connection.',
+        ready: Boolean(database?.configured || supabase?.configured),
+        to: '/settings' as const,
+      },
+      {
+        label: 'Storage',
+        detail: storage?.configured ? `${storage.provider} storage is ready.` : 'Configure central file storage for media delivery.',
+        ready: Boolean(storage?.configured),
+        to: '/media' as const,
+      },
+      {
+        label: 'Vercel',
+        detail: vercel?.configured ? 'Deployment integration is connected.' : 'Connect Vercel when hosted frontend deployment is required.',
+        ready: Boolean(vercel?.configured),
+        to: '/settings' as const,
+      },
+      {
+        label: 'Sites and content',
+        detail: hasPublicContent ? 'Published site content is available for rendering.' : 'Publish a site and at least one page, post, or collection.',
+        ready: hasPublicContent,
+        to: '/sites' as const,
+      },
+      {
+        label: 'Media library',
+        detail: dashboard.media.length > 0 ? `${dashboard.media.length} assets available.` : 'Upload images, files, fonts, or downloads.',
+        ready: dashboard.media.length > 0,
+        to: '/media' as const,
+      },
+      {
+        label: 'Dynamic data',
+        detail: dashboard.collections.length > 0 ? `${dashboard.collections.length} collections loaded.` : 'Create collections for reusable frontend data.',
+        ready: dashboard.collections.length > 0,
+        to: '/collections' as const,
+      },
+      {
+        label: 'Forms and leads',
+        detail: dashboard.forms.length > 0 ? `${dashboard.forms.length} forms, ${dashboard.contacts} contacts.` : 'Add lead, registration, or contact forms.',
+        ready: dashboard.forms.length > 0,
+        to: '/forms' as const,
+      },
+      {
+        label: 'Commerce',
+        detail: hasCommerce ? 'Products and orders schemas are present.' : 'Sync product and order schemas for selling workflows.',
+        ready: hasCommerce,
+        to: hasCommerce ? '/products' as const : '/collections' as const,
+      },
+      {
+        label: 'Team access',
+        detail: activeAdmins > 0 ? `${activeUsers} active users, ${activeAdmins} active admins.` : 'Keep at least one active owner/admin.',
+        ready: activeAdmins > 0,
+        to: '/users' as const,
+      },
+      {
+        label: 'Readiness blockers',
+        detail: readinessErrors === 0 ? `${readinessWarnings} readiness warnings.` : `${readinessErrors} errors block publish handoff.`,
+        ready: readinessErrors === 0,
+        to: '/sites' as const,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      readyCount,
+      total: checks.length,
+      checks,
+      workflow: [
+        { label: 'Configure', detail: 'Connect API keys, storage, database/Supabase, and Vercel.' },
+        { label: 'Model', detail: 'Build sites, pages, media, collections, forms, products, and orders.' },
+        { label: 'Publish', detail: 'Resolve readiness blockers and expose public contracts.' },
+        { label: 'Handoff', detail: 'Copy or download the frontend manifest for any custom UI.' },
+      ],
+    };
+  }, [
+    apiKeysConfigured,
+    backendHealthy,
+    dashboard.collections.length,
+    dashboard.contacts,
+    dashboard.forms.length,
+    dashboard.media.length,
+    dashboard.pages,
+    dashboard.posts,
+    dashboard.users,
+    database,
+    ordersCollection,
+    productsCollection,
+    publishedCollections,
+    publishedSites,
+    readinessErrors,
+    readinessWarnings,
+    storage,
+    supabase,
+    vercel,
+  ]);
 
   const copyDashboardText = async (value: string, label: string) => {
     try {
@@ -690,6 +866,61 @@ function Index() {
             <StatCard key={stat.label} {...stat} />
           ))}
         </div>
+
+        <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="size-4 text-primary" />
+                <h2 className="font-semibold">Backy platform readiness</h2>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                One view for the backend pieces a custom frontend needs: APIs, storage, database, Supabase, Vercel, content, media, forms, commerce, users, and publish checks.
+              </p>
+            </div>
+            <div className="min-w-48 rounded-lg border border-border bg-muted/30 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-medium text-muted-foreground">Overall</span>
+                <span className={cn(
+                  'rounded-full px-2.5 py-1 text-xs font-semibold',
+                  platformReadiness.score >= 80 ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                )}
+                >
+                  {platformReadiness.score}% ready
+                </span>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-background">
+                <div
+                  className={cn('h-full rounded-full', platformReadiness.score >= 80 ? 'bg-success' : 'bg-warning')}
+                  style={{ width: `${platformReadiness.score}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {platformReadiness.readyCount}/{platformReadiness.total} checks passing
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {platformReadiness.checks.map((check) => (
+                <DashboardReadinessCheck key={check.label} {...check} />
+              ))}
+            </div>
+
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="flex items-center gap-2">
+                <Code2 className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold">Handoff workflow</h3>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {platformReadiness.workflow.map((step, index) => (
+                  <DashboardWorkflowStep key={step.label} index={index + 1} {...step} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
           <div className="flex flex-col gap-6 xl:col-span-2">
