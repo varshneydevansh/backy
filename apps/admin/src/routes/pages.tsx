@@ -58,6 +58,62 @@ const PAGES_CONTROL_AREAS = [
   },
 ] as const;
 
+const PAGE_BUILDER_SYSTEMS = [
+  {
+    key: 'canvas',
+    title: 'Canvas and breakpoints',
+    detail: 'Desktop, tablet, and mobile sizing, zoom, selection, grouping, rulers, and layout bounds.',
+  },
+  {
+    key: 'sections',
+    title: 'Reusable sections',
+    detail: 'Headers, navigation, footers, hero sections, feature grids, forms, and saved blocks.',
+  },
+  {
+    key: 'style',
+    title: 'Design tokens',
+    detail: 'Colors, typography, spacing, borders, shadows, animation timing, and component variants.',
+  },
+  {
+    key: 'content',
+    title: 'Content bindings',
+    detail: 'Static copy, collection records, blog posts, products, media, forms, and user state.',
+  },
+  {
+    key: 'publishing',
+    title: 'Publishing controls',
+    detail: 'Draft, scheduled, published, archived, preview URLs, readiness, rollback, and SEO checks.',
+  },
+  {
+    key: 'frontend',
+    title: 'Frontend delivery',
+    detail: 'Resolve, render, manifest, navigation, route metadata, redirects, and custom frontend APIs.',
+  },
+] as const;
+
+const PAGE_EXPORT_COLUMNS = [
+  'page_id',
+  'site_id',
+  'active_site_id',
+  'title',
+  'slug',
+  'path',
+  'status',
+  'is_homepage',
+  'scheduled_at',
+  'last_updated',
+  'readiness_score',
+  'readiness_status',
+  'element_count',
+  'public_url',
+  'admin_edit_url',
+  'public_render_url',
+  'public_resolve_url',
+  'admin_detail_url',
+  'admin_readiness_url',
+  'builder_systems',
+] as const;
+
 /**
  * Layout component that decides what to render based on current path:
  * - /pages -> shows PagesListView
@@ -223,6 +279,59 @@ function PagesListView() {
       setNotice(null);
       setError(value);
     }
+  };
+
+  const downloadPagesCsv = () => {
+    if (data.length === 0) {
+      setError('No pages are available to export with the current controls.');
+      setNotice(null);
+      return;
+    }
+
+    const rows = data.map((page) => {
+      const pageSiteId = page.siteId || activeSiteId;
+      const pagePath = pagePublicPath(page);
+      const encodedSiteId = encodeURIComponent(pageSiteId);
+      const encodedPageId = encodeURIComponent(page.id);
+      const readiness = readinessMap[page.id];
+
+      return [
+        page.id,
+        page.siteId || '',
+        activeSiteId,
+        page.title,
+        page.slug,
+        pagePath,
+        page.status,
+        Boolean(page.isHomepage),
+        page.scheduledAt || '',
+        page.lastUpdated || '',
+        readiness?.score ?? '',
+        readiness?.statusLabel ?? '',
+        readiness?.elementCount ?? '',
+        page.status === 'published' ? publicPageUrl(page) : '',
+        `${typeof window !== 'undefined' ? window.location.origin : ''}/pages/${page.id}/edit`,
+        `${publicBaseUrl}/api/sites/${encodedSiteId}/render?path=${encodeURIComponent(pagePath)}`,
+        `${publicBaseUrl}/api/sites/${encodedSiteId}/resolve?path=${encodeURIComponent(pagePath)}`,
+        `${adminBaseUrl}/sites/${encodedSiteId}/pages/${encodedPageId}`,
+        `${adminBaseUrl}/sites/${encodedSiteId}/pages/${encodedPageId}/readiness`,
+        PAGE_BUILDER_SYSTEMS.map((system) => `${system.key}:${system.title}`).join('; '),
+      ];
+    });
+    const csv = [PAGE_EXPORT_COLUMNS, ...rows]
+      .map((row) => row.map(csvEscape).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${siteSlug || activeSiteId}-backy-pages.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setNotice('Pages CSV exported.');
   };
 
   const togglePageSelection = (pageId: string) => {
@@ -568,6 +677,12 @@ function PagesListView() {
       adminPageReadiness: adminPageReadinessUrl,
       adminPagePreview: adminPagePreviewUrl,
     },
+    export: {
+      format: 'csv',
+      columns: PAGE_EXPORT_COLUMNS,
+      filteredRows: data.length,
+    },
+    builderSystems: PAGE_BUILDER_SYSTEMS,
     readiness: {
       score: pageDesignReadiness.score,
       checks: pageDesignReadiness.checks,
@@ -730,6 +845,15 @@ function PagesListView() {
             </button>
             <button
               type="button"
+              onClick={downloadPagesCsv}
+              disabled={data.length === 0}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Download className="size-4" />
+              Export CSV
+            </button>
+            <button
+              type="button"
               onClick={() => void refreshPages(activeSiteId)}
               disabled={isLoading}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
@@ -876,6 +1000,16 @@ function PagesListView() {
               <Copy className="h-4 w-4" />
               Copy handoff
             </button>
+            <button
+              type="button"
+              onClick={downloadPagesCsv}
+              disabled={data.length === 0}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label="Export filtered pages CSV"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </button>
           </div>
         </div>
         <div className="p-4">
@@ -943,6 +1077,35 @@ function PagesListView() {
             <PageApiSnippet label="Admin page detail" value={adminPageDetailUrl} />
             <PageApiSnippet label="Readiness check" value={adminPageReadinessUrl} />
             <PageApiSnippet label="Preview link" value={adminPagePreviewUrl} />
+          </div>
+
+          <div className="mt-4 rounded-lg border border-border bg-background p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Visual builder control contract</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Backy pages need these controls to support Wix-style design freedom while still shipping clean APIs to any frontend.
+                </p>
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {PAGE_BUILDER_SYSTEMS.length} systems
+              </span>
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {PAGE_BUILDER_SYSTEMS.map((system) => (
+                <div key={system.key} className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-foreground">{system.title}</div>
+                      <div className="mt-1 text-xs leading-5 text-muted-foreground">{system.detail}</div>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                      {system.key}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -1076,7 +1239,7 @@ function PagesListView() {
                     aria-label={hasPages ? 'Create page after clearing filters' : 'Create first page for active site'}
                   >
                     <Plus className="w-4 h-4" />
-                    {hasPages ? 'New Page' : 'Create First Page'}
+                    Create Page
                   </Link>
                 </div>
               }
@@ -1213,6 +1376,11 @@ function PageApiSnippet({ label, value }: { label: string; value: string }) {
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
   return env[key]?.trim() ?? '';
+};
+
+const csvEscape = (value: unknown): string => {
+  const raw = String(value ?? '').replace(/\r?\n/g, '\\n');
+  return `"${raw.replace(/"/g, '""')}"`;
 };
 
 const isLocalAdminDevHost = (): boolean => {
