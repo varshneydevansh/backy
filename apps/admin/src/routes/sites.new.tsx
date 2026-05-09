@@ -4,7 +4,7 @@
 
 import { useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, CheckCircle2, FileText, Globe, Layers3, Link2, Save } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, FileText, Globe, Layers3, Link2, Save } from 'lucide-react';
 import { createPage, createSite } from '@/lib/adminContentApi';
 import { useStore, type Site } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
@@ -80,6 +80,29 @@ const BLUEPRINT_OPTIONS: Array<{
   },
 ];
 
+const SITE_CREATION_AREAS = [
+  {
+    title: 'Site identity',
+    detail: 'Name, slug, custom domain, status, and description.',
+    href: '#site-identity',
+  },
+  {
+    title: 'Starter structure',
+    detail: 'Blueprint pages that become editable canvas records after creation.',
+    href: '#site-blueprint',
+  },
+  {
+    title: 'Public address',
+    detail: 'Managed Backy subdomain or normalized custom domain.',
+    href: '#site-preview',
+  },
+  {
+    title: 'Seeded pages',
+    detail: 'The first homepage and supporting routes that will open in the editor.',
+    href: '#site-pages',
+  },
+] as const;
+
 const slugify = (value: string) => value
   .toLowerCase()
   .trim()
@@ -124,6 +147,68 @@ function NewSitePage() {
   const canSubmit = formData.name.trim().length > 1
     && isValidSlug(displaySlug)
     && isValidDomain(normalizedDomain);
+  const siteCreationReadiness = useMemo(() => {
+    const hasName = formData.name.trim().length > 1;
+    const hasValidSlug = isValidSlug(displaySlug);
+    const hasValidDomain = isValidDomain(normalizedDomain);
+    const hasStarterPages = selectedBlueprint.pages.length > 0;
+    const checks = [
+      {
+        label: 'Workspace name',
+        detail: hasName ? formData.name.trim() : 'Add a clear site name.',
+        ready: hasName,
+      },
+      {
+        label: 'Managed route',
+        detail: hasValidSlug ? `${displaySlug}.backy.app` : 'Use lowercase letters, numbers, and hyphens.',
+        ready: hasValidSlug,
+      },
+      {
+        label: 'Domain input',
+        detail: normalizedDomain ? normalizedDomain : 'Managed Backy subdomain will be used.',
+        ready: hasValidDomain,
+      },
+      {
+        label: 'Starter pages',
+        detail: hasStarterPages
+          ? `${selectedBlueprint.pages.length} page${selectedBlueprint.pages.length === 1 ? '' : 's'} will be seeded`
+          : 'Blank workspace starts without pages.',
+        ready: true,
+      },
+      {
+        label: 'Homepage seed',
+        detail: selectedBlueprint.pages.some((page) => page.isHomepage)
+          ? 'Blueprint includes a homepage route.'
+          : 'Create a homepage after the blank site is created.',
+        ready: selectedBlueprint.id === 'blank' || selectedBlueprint.pages.some((page) => page.isHomepage),
+      },
+      {
+        label: 'Publish state',
+        detail: selectedStatus.detail,
+        ready: Boolean(formData.status),
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      checks,
+      workflow: [
+        { label: 'Create workspace', detail: 'Persist the site identity, slug, status, and optional custom domain.' },
+        { label: 'Seed structure', detail: 'Optionally create starter pages with serialized editable canvas content.' },
+        { label: 'Open controls', detail: 'Manage readiness, navigation, redirects, SEO, automation, and API handoff.' },
+        { label: 'Design and publish', detail: 'Edit seeded pages, connect content systems, and expose the frontend contract.' },
+      ],
+    };
+  }, [
+    displaySlug,
+    formData.name,
+    formData.status,
+    normalizedDomain,
+    selectedBlueprint.id,
+    selectedBlueprint.pages,
+    selectedStatus.detail,
+  ]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,10 +261,103 @@ function NewSitePage() {
           Sites
         </button>
       }
-      className="mx-auto max-w-6xl"
+      className="w-full"
     >
+      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="site-creation-command-center">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">Site creation command center</h2>
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                siteCreationReadiness.score >= 80
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'bg-amber-50 text-amber-700',
+              )}
+              >
+                {siteCreationReadiness.score}% ready
+              </span>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Prepare a multi-page website workspace with routes, starter canvas content, public address, and backend systems from the first submit.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate({ to: '/pages' })}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+          >
+            <FileText className="h-4 w-4" />
+            Existing pages
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Workspace readiness</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Checks whether this site will be created with usable identity, route, domain state, blueprint, and publishing behavior.
+                </p>
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium capitalize text-muted-foreground">
+                {formData.blueprint}
+              </span>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn(
+                  'h-full rounded-full',
+                  siteCreationReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500',
+                )}
+                style={{ width: `${siteCreationReadiness.score}%` }}
+              />
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {siteCreationReadiness.checks.map((check) => (
+                <SiteCreationCheck key={check.label} {...check} />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold">Create-to-control workflow</h3>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {siteCreationReadiness.workflow.map((step, index) => (
+                <SiteCreationWorkflowStep key={step.label} index={index + 1} {...step} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <div>
+            <h3 className="text-sm font-semibold">Creation control map</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Jump through the decisions that make this site ready for pages, APIs, design work, and publishing.
+            </p>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            {SITE_CREATION_AREAS.map((area) => (
+              <a
+                key={area.title}
+                href={area.href}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <form onSubmit={handleSubmit} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+        <section id="site-identity" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
           <div className="flex items-start gap-3">
             <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
               <Globe className="h-5 w-5" />
@@ -282,7 +460,7 @@ function NewSitePage() {
             />
           </label>
 
-          <div className="mt-6">
+          <div id="site-blueprint" className="mt-6 scroll-mt-24">
             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <FileText className="h-4 w-4 text-teal-700" />
               Starter structure
@@ -319,7 +497,7 @@ function NewSitePage() {
         </section>
 
         <aside className="space-y-4">
-          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+          <section id="site-preview" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <Globe className="h-4 w-4 text-teal-700" />
               Public address
@@ -350,7 +528,7 @@ function NewSitePage() {
             </ul>
           </section>
 
-          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+          <section id="site-pages" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <FileText className="h-4 w-4 text-teal-700" />
               Pages to seed
@@ -395,6 +573,34 @@ function NewSitePage() {
         </aside>
       </form>
     </PageShell>
+  );
+}
+
+function SiteCreationCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  const Icon = ready ? CheckCircle2 : AlertTriangle;
+
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-card px-3 py-2">
+      <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', ready ? 'text-emerald-600' : 'text-amber-600')} />
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function SiteCreationWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
   );
 }
 
