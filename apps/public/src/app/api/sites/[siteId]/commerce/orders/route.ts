@@ -170,6 +170,8 @@ const lineItemFromProduct = (product: CommerceProduct, quantity: number) => ({
   currency: product.currency,
   lineTotal: moneyValue(product.price * quantity),
   productType: product.productType,
+  imageUrl: product.imageUrl,
+  galleryImages: product.galleryImages,
   checkoutUrl: product.checkout.url,
 });
 

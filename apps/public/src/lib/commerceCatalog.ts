@@ -28,6 +28,7 @@ export interface CommerceProduct {
   compareAtPrice: number | null;
   currency: string;
   imageUrl: string;
+  galleryImages: string[];
   category: string;
   tags: string[];
   vendor: string;
@@ -105,6 +106,23 @@ const normalizeTags = (value: unknown): string[] => {
     .filter(Boolean);
 };
 
+const normalizeUrlList = (value: unknown, limit = 12): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => normalizeText(item))
+      .filter(Boolean)
+      .filter((url, index, urls) => urls.indexOf(url) === index)
+      .slice(0, limit);
+  }
+
+  return normalizeText(value)
+    .split(/\r?\n|,/g)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((url, index, urls) => urls.indexOf(url) === index)
+    .slice(0, limit);
+};
+
 const normalizeProductType = (value: unknown): CommerceProduct['productType'] => {
   const productType = normalizeIdentifier(value);
   return productType === 'digital' || productType === 'service' ? productType : 'physical';
@@ -158,6 +176,7 @@ export const productRecordToCommerceProduct = (record: CommerceSourceRecord): Co
     compareAtPrice: maybeNumber(values.compareAtPrice),
     currency: normalizeCurrency(values.currency),
     imageUrl: normalizeText(values.imageUrl),
+    galleryImages: normalizeUrlList(values.galleryImages),
     category: normalizeText(values.category),
     tags: normalizeTags(values.tags),
     vendor: normalizeText(values.vendor),
@@ -244,7 +263,7 @@ export const buildCommerceReadiness = (
   const publishedProducts = products.length;
   const pricedProducts = products.filter((product) => product.price > 0).length;
   const checkoutProducts = products.filter((product) => product.checkout.enabled).length;
-  const imageProducts = products.filter((product) => product.imageUrl).length;
+  const imageProducts = products.filter((product) => product.imageUrl || product.galleryImages.length > 0).length;
   const checks = [
     {
       label: 'Products collection',
@@ -269,7 +288,7 @@ export const buildCommerceReadiness = (
     {
       label: 'Media',
       ready: imageProducts === products.length && hasProducts,
-      detail: hasProducts ? `${imageProducts}/${products.length} products have images.` : 'Attach product images for storefront cards.',
+      detail: hasProducts ? `${imageProducts}/${products.length} products have images or galleries.` : 'Attach product images for storefront cards.',
     },
   ];
 

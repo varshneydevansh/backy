@@ -1637,6 +1637,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               compareAtPrice: { type: ['number', 'null'] },
               currency: { type: 'string' },
               imageUrl: { type: 'string' },
+              galleryImages: { type: 'array', items: { type: 'string' } },
               category: { type: 'string' },
               tags: { type: 'array', items: { type: 'string' } },
               vendor: { type: 'string' },

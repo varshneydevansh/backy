@@ -205,6 +205,7 @@ export interface BackyCommerceProduct {
   compareAtPrice?: number | null;
   currency: string;
   imageUrl?: string;
+  galleryImages?: string[];
   category?: string;
   tags?: string[];
   vendor?: string;
