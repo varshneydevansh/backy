@@ -187,12 +187,44 @@ interface MediaUploadSummary {
   attempted: number;
   uploaded: number;
   failed: number;
+  fontsRegistered: number;
   folderLabel: string;
   visibility: 'public' | 'private';
   assets: Array<{ id: string; name: string; type: MediaAsset['type']; size: string }>;
   failures: string[];
   completedAt: string;
 }
+
+const getUploadFileExtension = (file: File): string => file.name.split('.').pop()?.toLowerCase() || '';
+
+const isUploadFontFile = (file: File): boolean => (
+  file.type.includes('font') ||
+  file.type === 'application/vnd.ms-fontobject' ||
+  ['woff', 'woff2', 'ttf', 'otf', 'eot'].includes(getUploadFileExtension(file))
+);
+
+const isUploadDocumentFile = (file: File): boolean => (
+  file.type === 'application/pdf' ||
+  ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv'].includes(getUploadFileExtension(file))
+);
+
+const getCentralUploadType = (file: File): MediaAsset['type'] => {
+  if (file.type.startsWith('image/')) return 'image';
+  if (file.type.startsWith('video/')) return 'video';
+  if (file.type.startsWith('audio/')) return 'audio';
+  if (isUploadFontFile(file)) return 'font';
+  if (isUploadDocumentFile(file)) return 'file';
+  return 'other';
+};
+
+const cleanFontFamilyFromFilename = (name: string): string => (
+  name
+    .replace(/\.[a-z0-9]+$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b(regular|normal|bold|italic|black|light|medium|semibold|extrabold|thin|variable)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim() || name.replace(/\.[a-z0-9]+$/i, '')
+);
 
 function MediaPage() {
   const navigate = useNavigate();
@@ -997,13 +1029,26 @@ function MediaPage() {
     setError(null);
     setBulkNotice(null);
 
-    const results = await Promise.allSettled(uploadFiles.map((file) => uploadMedia(file, {
+    const uploadRequests = uploadFiles.map((file) => {
+      const uploadType = getCentralUploadType(file);
+      const uploadTagsForFile = uploadType === 'font'
+        ? Array.from(new Set(['font', ...uploadTagList]))
+        : uploadTagList;
+
+      return uploadMedia(file, {
         siteId,
         scope: 'global',
         folderId: uploadTargetFolderId,
         visibility: uploadVisibility,
-        tags: uploadTagList,
-      })));
+        tags: uploadTagsForFile.length ? uploadTagsForFile : undefined,
+        fontFamily: uploadType === 'font' ? cleanFontFamilyFromFilename(file.name) : undefined,
+        fontWeight: uploadType === 'font' ? '400' : undefined,
+        fontStyle: uploadType === 'font' ? 'normal' : undefined,
+        fontFallback: uploadType === 'font' ? 'system-ui, sans-serif' : undefined,
+        fontDisplay: uploadType === 'font' ? 'swap' : undefined,
+      });
+    });
+    const results = await Promise.allSettled(uploadRequests);
     const uploaded = results
       .filter((result): result is PromiseFulfilledResult<MediaAsset> => result.status === 'fulfilled')
       .map((result) => result.value);
@@ -1027,6 +1072,7 @@ function MediaPage() {
         attempted: uploadFiles.length,
         uploaded: uploaded.length,
         failed: failures.length,
+        fontsRegistered: uploaded.filter((asset) => asset.type === 'font').length,
         folderLabel: targetFolderLabel,
         visibility: targetVisibility,
         assets: uploaded.map((asset) => ({
@@ -1703,7 +1749,7 @@ function MediaPage() {
             {isUploading ? 'Uploading files' : 'Upload files'}
           </h3>
           <p className="pointer-events-none mx-auto max-w-xl text-sm text-muted-foreground">
-            Images, videos, audio, documents, fonts, and other files will upload as {uploadVisibility} assets into {uploadTargetFolderLabel}.
+            Images, videos, audio, documents, fonts, and other files will upload as {uploadVisibility} assets into {uploadTargetFolderLabel}. Font files are registered for editor font controls and public font manifests.
           </p>
           {uploadTagList.length > 0 && (
             <div className="pointer-events-none mt-4 flex flex-wrap justify-center gap-2">
@@ -1728,6 +1774,11 @@ function MediaPage() {
                 >
                   {recentUploadSummary.visibility} · {recentUploadSummary.folderLabel}
                 </span>
+                {recentUploadSummary.fontsRegistered > 0 && (
+                  <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                    {recentUploadSummary.fontsRegistered} font{recentUploadSummary.fontsRegistered === 1 ? '' : 's'} registered
+                  </span>
+                )}
               </div>
               {recentUploadSummary.assets.length > 0 && (
                 <div className="mt-2 grid gap-1">
