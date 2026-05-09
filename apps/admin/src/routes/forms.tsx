@@ -271,6 +271,118 @@ function FormsRoute() {
       ],
     };
   }, [forms.length, metrics.active, metrics.pending, metrics.spam, selectedForm, selectedFormReadiness]);
+  const formsListUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms`;
+  const selectedFormContactsUrl = selectedForm
+    ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/contacts?limit=100`
+    : '';
+  const formsHandoff = useMemo(() => ({
+    site: {
+      id: activeSiteId,
+      name: activeSite?.name || activeSiteId,
+      slug: activeSite?.slug,
+      status: activeSite?.status,
+    },
+    generatedAt: new Date().toISOString(),
+    endpoints: {
+      formList: formsListUrl,
+      selectedDefinition: selectedFormDefinitionUrl,
+      selectedSubmit: selectedFormSubmitUrl,
+      selectedAdminInbox: selectedForm
+        ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}?limit=100`
+        : '',
+      selectedContacts: selectedFormContactsUrl,
+    },
+    readiness: {
+      score: formCommandReadiness.score,
+      checks: formCommandReadiness.checks,
+    },
+    metrics,
+    selectedForm: selectedForm ? {
+      id: selectedForm.id,
+      name: selectedForm.name,
+      title: selectedForm.title,
+      description: selectedForm.description,
+      isActive: selectedForm.isActive,
+      audience: selectedForm.audience,
+      moderationMode: selectedForm.moderationMode,
+      pageId: selectedForm.pageId,
+      postId: selectedForm.postId,
+      enableHoneypot: selectedForm.enableHoneypot,
+      enableCaptcha: selectedForm.enableCaptcha,
+      contactShare: selectedForm.contactShare,
+      collectionTarget: selectedForm.collectionTarget,
+      fields: selectedForm.fields.map((field) => ({
+        key: field.key,
+        label: field.label,
+        type: field.type,
+        required: field.required,
+        placeholder: field.placeholder,
+        helpText: field.helpText,
+        options: field.options,
+        defaultValue: field.defaultValue,
+        validation: field.validation,
+      })),
+      samplePayload: selectedFormSamplePayload,
+      curl: selectedFormCurlExample,
+    } : null,
+    forms: forms.map((form) => {
+      const inbox = inboxByForm[form.id];
+      return {
+        id: form.id,
+        name: form.name,
+        title: form.title,
+        description: form.description,
+        isActive: form.isActive,
+        audience: form.audience,
+        source: form.pageId ? 'page' : form.postId ? 'blog' : 'embedded',
+        pageId: form.pageId,
+        postId: form.postId,
+        fieldCount: form.fields.length,
+        requiredFieldCount: form.fields.filter((field) => field.required).length,
+        moderationMode: form.moderationMode,
+        spamGuards: {
+          honeypot: form.enableHoneypot,
+          captcha: form.enableCaptcha,
+        },
+        destinations: {
+          contactShare: Boolean(form.contactShare?.enabled),
+          collectionTarget: Boolean(form.collectionTarget?.enabled),
+        },
+        submissionCounts: {
+          total: inbox?.total || 0,
+          pending: inbox?.submissions.filter((submission) => submission.status === 'pending').length || 0,
+          approved: inbox?.submissions.filter((submission) => submission.status === 'approved').length || 0,
+          rejected: inbox?.submissions.filter((submission) => submission.status === 'rejected').length || 0,
+          spam: inbox?.submissions.filter((submission) => submission.status === 'spam').length || 0,
+        },
+        definitionUrl: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/definition`,
+        submitUrl: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/submissions`,
+      };
+    }),
+    privacy: {
+      includesSubmissionValues: false,
+      note: 'Submission values stay in the admin inbox and CSV export. This manifest exposes form definitions, endpoints, routing configuration, and counts only.',
+    },
+  }), [
+    activeSite?.name,
+    activeSite?.slug,
+    activeSite?.status,
+    activeSiteId,
+    formCommandReadiness.checks,
+    formCommandReadiness.score,
+    forms,
+    formsListUrl,
+    inboxByForm,
+    metrics,
+    publicBaseUrl,
+    selectedForm,
+    selectedFormContactsUrl,
+    selectedFormCurlExample,
+    selectedFormDefinitionUrl,
+    selectedFormSamplePayload,
+    selectedFormSubmitUrl,
+  ]);
+  const formsHandoffText = useMemo(() => JSON.stringify(formsHandoff, null, 2), [formsHandoff]);
 
   const loadForms = async () => {
     setIsLoading(true);
@@ -392,6 +504,19 @@ function FormsRoute() {
     setError(null);
     setNotice(`${label} copied.`);
   };
+  const downloadFormsHandoff = () => {
+    const blob = new Blob([formsHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSite?.slug || activeSiteId}-backy-forms-handoff.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setNotice('Forms handoff manifest downloaded.');
+  };
 
   return (
     <PageShell
@@ -448,9 +573,21 @@ function FormsRoute() {
               Control public form delivery, dynamic frontend rendering, spam protection, contact routing, collection writes, review queues, and submission exports.
             </p>
           </div>
-          <Button onClick={() => void loadForms()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
-            Refresh forms
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void copyFormApiText(formsHandoffText, 'Forms handoff manifest')}
+              iconStart={<Copy className="size-4" />}
+            >
+              Copy manifest
+            </Button>
+            <Button variant="outline" onClick={downloadFormsHandoff} iconStart={<Download className="size-4" />}>
+              Download JSON
+            </Button>
+            <Button onClick={() => void loadForms()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+              Refresh forms
+            </Button>
+          </div>
         </div>
 
         <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
@@ -706,6 +843,13 @@ function FormsRoute() {
                       <div className="flex flex-wrap items-center gap-2">
                         <Button onClick={() => void copyFormApiText(selectedFormDefinitionUrl, 'Form definition URL')} iconStart={<Copy className="size-4" />}>
                           Copy definition
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => void copyFormApiText(formsHandoffText, 'Forms handoff manifest')}
+                          iconStart={<Copy className="size-4" />}
+                        >
+                          Copy manifest
                         </Button>
                         <Button
                           variant="outline"
