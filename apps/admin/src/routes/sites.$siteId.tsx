@@ -454,6 +454,7 @@ function EditSitePage() {
   const [commentTargetType, setCommentTargetType] = useState<CommentTargetFilter>('all');
   const [commentTargetId, setCommentTargetId] = useState('');
   const [commentBlockReason, setCommentBlockReason] = useState<CommentReportReason>(DEFAULT_COMMENT_REPORT_REASONS[0]);
+  const [contactNoteDrafts, setContactNoteDrafts] = useState<Record<string, string>>({});
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -867,6 +868,9 @@ function EditSitePage() {
         contacts,
         contactCount,
       }));
+      setContactNoteDrafts((current) => Object.fromEntries(
+        contacts.map((contact) => [contact.id, current[contact.id] ?? contact.notes ?? '']),
+      ));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to load contacts.';
       setState((prev) => ({ ...prev, contacts: [], contactCount: 0 }));
@@ -1021,6 +1025,33 @@ function EditSitePage() {
       await loadContacts(state.selectedFormId);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to update contact status.';
+      setWorkflowError(message);
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
+  const updateContactNotes = async (contact: Contact) => {
+    if (!siteApiId || !state.selectedFormId) return;
+    const notes = contactNoteDrafts[contact.id] ?? '';
+    setActionBusyId(`contact-notes:${contact.id}`);
+    try {
+      const response = await fetch(
+        buildApiUrl(
+          `/api/sites/${siteApiId}/forms/${state.selectedFormId}/contacts/${contact.id}`,
+        ),
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notes: notes.trim() || null }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error('Unable to save contact notes.');
+      }
+      await loadContacts(state.selectedFormId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to save contact notes.';
       setWorkflowError(message);
     } finally {
       setActionBusyId(null);
@@ -2663,9 +2694,29 @@ function EditSitePage() {
                                   }
                                 />
                               </td>
-                              <td className="px-3 py-2 text-xs max-w-sm truncate">{contact.notes || '—'}</td>
+                              <td className="px-3 py-2 min-w-[260px]">
+                                <textarea
+                                  value={contactNoteDrafts[contact.id] ?? contact.notes ?? ''}
+                                  onChange={(event) => setContactNoteDrafts((current) => ({
+                                    ...current,
+                                    [contact.id]: event.target.value,
+                                  }))}
+                                  rows={2}
+                                  className="w-full resize-none rounded-md border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                  placeholder="Internal follow-up notes"
+                                  aria-label={`Notes for ${contact.name || contact.email || contact.id}`}
+                                />
+                              </td>
                               <td className="px-3 py-2">
                                 <div className="flex gap-2 flex-wrap">
+                                  <button
+                                    onClick={() => updateContactNotes(contact)}
+                                    disabled={actionBusyId === `contact-notes:${contact.id}` || (contactNoteDrafts[contact.id] ?? contact.notes ?? '').trim() === (contact.notes || '').trim()}
+                                    className="text-xs px-2 py-1 rounded-md border hover:bg-teal-50 hover:text-teal-700 flex items-center gap-1 disabled:opacity-50"
+                                  >
+                                    <Save className="w-3.5 h-3.5" />
+                                    Save notes
+                                  </button>
                                   <button
                                     onClick={() => updateContactStatus(contact, 'contacted')}
                                     disabled={actionBusyId === contact.id}
