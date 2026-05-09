@@ -67,6 +67,33 @@ const COMMENT_CONTROL_AREAS = [
   },
 ] as const;
 
+const COMMENT_WORKFLOW_SURFACES = [
+  {
+    key: 'pages',
+    title: 'Pages',
+    detail: 'Review public page targets, edit comment-enabled sections, and verify route-level discussion settings.',
+    route: '/pages',
+  },
+  {
+    key: 'blog',
+    title: 'Blog',
+    detail: 'Moderate article threads, public post comments, reported replies, and editorial discussion handoff.',
+    route: '/blog',
+  },
+  {
+    key: 'users',
+    title: 'Users',
+    detail: 'Connect authenticated commenters, member identity, block state, and reviewer authority.',
+    route: '/users',
+  },
+  {
+    key: 'settings',
+    title: 'Settings',
+    detail: 'Confirm auth, API keys, storage, and runtime policy before exposing public discussion at scale.',
+    route: '/settings',
+  },
+] as const;
+
 const COMMENT_EXPORT_COLUMNS = [
   'site_id',
   'comment_id',
@@ -239,6 +266,12 @@ function CommentsRoute() {
       publicBlogThread: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/blog/{postId}/comments`,
       reportReasons: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/report-reasons`,
       reportComment: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/{commentId}/report`,
+    },
+    controlRoutes: {
+      pages: '/pages',
+      blog: '/blog',
+      users: '/users',
+      settings: '/settings',
     },
     readiness: {
       score: moderationReadiness.score,
@@ -614,6 +647,35 @@ function CommentsRoute() {
                 <div className="text-sm font-semibold text-foreground">{area.title}</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
               </a>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold">Connected discussion workflows</h3>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Public comments need page/blog targets, identity rules, moderation authority, and runtime policy to work as a controlled frontend feature.
+              </p>
+            </div>
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              {COMMENT_WORKFLOW_SURFACES.length} surfaces
+            </span>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            {COMMENT_WORKFLOW_SURFACES.map((surface) => (
+              <Link
+                key={surface.key}
+                to={surface.route}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{surface.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
+              </Link>
             ))}
           </div>
         </div>
