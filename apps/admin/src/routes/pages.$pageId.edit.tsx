@@ -30,6 +30,7 @@ import { PageShell } from '@/components/layout/PageShell';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
+import { cn } from '@/lib/utils';
 import {
   createCanvasElement,
   normalizeSavedCanvasContent,
@@ -39,6 +40,34 @@ import {
 export const Route = createFileRoute('/pages/$pageId/edit')({
   component: PageEditorRoute,
 });
+
+const PAGE_EDITOR_CONTROL_AREAS = [
+  {
+    title: 'Design canvas',
+    detail: 'Drag, group, layer, bind, and arrange every public page element.',
+    href: '#page-editor-canvas',
+  },
+  {
+    title: 'Publish controls',
+    detail: 'Preview, publish, archive, and confirm the current route state.',
+    href: '#page-editor-publish',
+  },
+  {
+    title: 'Readiness checks',
+    detail: 'Validate SEO, canvas content, route health, blockers, and public delivery.',
+    href: '#page-editor-readiness',
+  },
+  {
+    title: 'Revision history',
+    detail: 'Restore saved snapshots when a design needs to roll back.',
+    href: '#page-editor-revisions',
+  },
+  {
+    title: 'Frontend handoff',
+    detail: 'Track the page route, canvas dimensions, element count, and public status.',
+    href: '#page-editor-handoff',
+  },
+] as const;
 
 function PageEditorRoute() {
   const navigate = useNavigate();
@@ -239,6 +268,56 @@ function PageEditorRoute() {
     .filter((check) => check.status !== 'pass')
     .slice(0, 3) || [];
   const isReadinessBlocked = pageReadiness?.statusLabel === 'blocked';
+  const elementCount = initialElements.length || fallbackElements.length;
+  const backendReadinessDetail = pageReadiness
+    ? `${pageReadiness.score}% ${pageReadiness.statusLabel.replace('-', ' ')}.`
+    : readinessError || 'Run readiness before publishing.';
+  const hasUsableRoute = page.slug.trim().length > 0;
+  const hasSeo = Boolean(page.meta?.title || page.title);
+  const hasRevisionHistory = revisions.length > 0;
+  const editorReadinessChecks = [
+    {
+      label: 'Page identity',
+      detail: page.title ? `${page.title} is the editor source.` : 'Add a title before handoff.',
+      ready: Boolean(page.title),
+    },
+    {
+      label: 'Route',
+      detail: hasUsableRoute ? `/${page.slug}` : 'Add a slug so the frontend can resolve this page.',
+      ready: hasUsableRoute,
+    },
+    {
+      label: 'Canvas content',
+      detail: elementCount > 0 ? `${elementCount} root layer${elementCount === 1 ? '' : 's'} ready for render.` : 'Add at least one element to the page.',
+      ready: elementCount > 0,
+    },
+    {
+      label: 'SEO handoff',
+      detail: hasSeo ? 'Title metadata is available to frontend renderers.' : 'Add page title or SEO metadata.',
+      ready: hasSeo,
+    },
+    {
+      label: 'Backend readiness',
+      detail: backendReadinessDetail,
+      ready: Boolean(pageReadiness) && !isReadinessBlocked,
+    },
+    {
+      label: 'Revision safety',
+      detail: hasRevisionHistory ? `${revisions.length} saved revision${revisions.length === 1 ? '' : 's'}.` : 'Save once to create a restore point.',
+      ready: hasRevisionHistory,
+    },
+  ];
+  const editorReadyCount = editorReadinessChecks.filter((check) => check.ready).length;
+  const editorReadiness = {
+    score: Math.round((editorReadyCount / editorReadinessChecks.length) * 100),
+    checks: editorReadinessChecks,
+    workflow: [
+      { label: 'Design', detail: 'Build the page with components, media, layers, grouping, and bindings.' },
+      { label: 'Validate', detail: 'Refresh readiness to catch route, SEO, empty canvas, and delivery blockers.' },
+      { label: 'Preview', detail: 'Open a temporary public preview before changing the published route.' },
+      { label: 'Publish', detail: 'Publish or archive after the backend confirms the page is not blocked.' },
+    ],
+  };
 
   const handleSave = async (
     elements: CanvasElement[],
@@ -375,46 +454,153 @@ function PageEditorRoute() {
         </div>
       )}
 
+      <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="page-editor-command-center">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">Page editor command center</h2>
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                editorReadiness.score >= 80 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+              )}
+              >
+                {editorReadiness.score}% ready
+              </span>
+              <StatusBadge status={page.status} />
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Control the public page canvas, route, publish state, readiness blockers, revisions, preview links, and frontend handoff from one workspace.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void generatePreview()}
+              disabled={isPreviewBusy}
+              iconStart={<Eye className="size-4" />}
+            >
+              Preview
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void loadPageReadiness()}
+              disabled={readinessLoading}
+              iconStart={<RefreshCw className={cn('size-4', readinessLoading && 'animate-spin')} />}
+            >
+              Refresh readiness
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void applyWorkflow('publish')}
+              disabled={isWorkflowBusy || page.status === 'published' || isReadinessBlocked}
+              iconStart={<CheckCircle2 className="size-4" />}
+              title={isReadinessBlocked ? 'Resolve page readiness errors before publishing' : 'Publish page'}
+            >
+              Publish
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+          <div className="rounded-lg border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold">Editor readiness</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Checks page identity, route, canvas content, SEO metadata, backend readiness, and restore safety.
+            </p>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn('h-full rounded-full', editorReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                style={{ width: `${editorReadiness.score}%` }}
+              />
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {editorReadiness.checks.map((check) => (
+                <EditorReadinessCheck key={check.label} {...check} />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="size-4 text-primary" />
+              <h3 className="text-sm font-semibold">Editor workflow</h3>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {editorReadiness.workflow.map((step, index) => (
+                <EditorWorkflowStep key={step.label} index={index + 1} {...step} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div id="page-editor-handoff" className="mt-4 rounded-lg border border-border bg-background p-4 scroll-mt-24">
+          <h3 className="text-sm font-semibold">Page editor control map</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Jump to the canvas, publish controls, readiness checks, revision history, and frontend handoff details.</p>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {PAGE_EDITOR_CONTROL_AREAS.map((area) => (
+              <a
+                key={area.title}
+                href={area.href}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+              </a>
+            ))}
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-4">
+            <EditorMetaTile label="Route" value={page.slug ? `/${page.slug}` : 'No slug'} />
+            <EditorMetaTile label="Canvas" value={`${initialCanvasSize.width} x ${initialCanvasSize.height}px`} />
+            <EditorMetaTile label="Elements" value={`${elementCount}`} />
+            <EditorMetaTile label="Status" value={page.status} />
+          </div>
+        </div>
+      </section>
+
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_320px]">
-        <EditorWorkspaceFrame
-          title="Page design canvas"
-          description="Compose the public page with components, layers, media, grouping, reusable sections, and data bindings."
-          meta={
-            <>
-              <span className="rounded bg-muted px-2 py-1 tabular-nums">
-                {initialCanvasSize.width} x {initialCanvasSize.height}px
-              </span>
-              <span className="rounded bg-muted px-2 py-1">
-                {(initialElements.length || fallbackElements.length)} root layer{(initialElements.length || fallbackElements.length) === 1 ? '' : 's'}
-              </span>
-              <span className="rounded bg-muted px-2 py-1">
-                Cmd/Ctrl+G grouping
-              </span>
-            </>
-          }
-          className="relative min-h-[760px] xl:h-[calc(100vh-168px)] xl:min-h-[860px]"
-        >
-          <CanvasEditor
-            key={`${page.id}:${editorResetVersion}`}
-            mode="page"
-            initialElements={initialElements.length ? initialElements : fallbackElements}
-            initialSize={initialCanvasSize}
-            initialSettings={initialSettings}
-            onSave={handleSave}
-            onBack={handleBack}
-            hideNavigation={true}
-            mediaContext={{
-              siteId,
-              scope: 'page',
-              targetId: pageId,
-              targetLabel: page.title,
-            }}
-            className="h-full w-full"
-          />
-        </EditorWorkspaceFrame>
+        <div id="page-editor-canvas" className="min-w-0 scroll-mt-24">
+          <EditorWorkspaceFrame
+            title="Page design canvas"
+            description="Compose the public page with components, layers, media, grouping, reusable sections, and data bindings."
+            meta={
+              <>
+                <span className="rounded bg-muted px-2 py-1 tabular-nums">
+                  {initialCanvasSize.width} x {initialCanvasSize.height}px
+                </span>
+                <span className="rounded bg-muted px-2 py-1">
+                  {elementCount} root layer{elementCount === 1 ? '' : 's'}
+                </span>
+                <span className="rounded bg-muted px-2 py-1">
+                  Cmd/Ctrl+G grouping
+                </span>
+              </>
+            }
+            className="relative min-h-[780px] xl:h-[calc(100vh-132px)] xl:min-h-[900px]"
+          >
+            <CanvasEditor
+              key={`${page.id}:${editorResetVersion}`}
+              mode="page"
+              initialElements={initialElements.length ? initialElements : fallbackElements}
+              initialSize={initialCanvasSize}
+              initialSettings={initialSettings}
+              onSave={handleSave}
+              onBack={handleBack}
+              hideNavigation={true}
+              mediaContext={{
+                siteId,
+                scope: 'page',
+                targetId: pageId,
+                targetLabel: page.title,
+              }}
+              className="h-full w-full"
+            />
+          </EditorWorkspaceFrame>
+        </div>
 
         <aside className="grid gap-4 lg:grid-cols-3 2xl:grid-cols-1">
-          <Panel>
+          <Panel id="page-editor-publish" className="scroll-mt-24">
             <PanelHeader
               title="Publish"
               description={page.slug ? `/${page.slug}` : 'Public page'}
@@ -469,7 +655,7 @@ function PageEditorRoute() {
             </PanelContent>
           </Panel>
 
-          <Panel>
+          <Panel id="page-editor-readiness" className="scroll-mt-24">
             <PanelHeader
               title="Readiness"
               description={pageReadiness
@@ -533,7 +719,7 @@ function PageEditorRoute() {
             </PanelContent>
           </Panel>
 
-          <Panel>
+          <Panel id="page-editor-revisions" className="scroll-mt-24">
             <PanelHeader title="Revisions" icon={<RotateCcw className="size-4" />} />
             <PanelContent>
               {revisions.length === 0 ? (
@@ -613,5 +799,42 @@ function PageEditorRoute() {
         </div>
       )}
     </PageShell>
+  );
+}
+
+function EditorMetaTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-3">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="mt-1 truncate text-sm font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function EditorReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  const Icon = ready ? CheckCircle2 : AlertTriangle;
+
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-card px-3 py-2">
+      <Icon className={cn('mt-0.5 size-4 shrink-0', ready ? 'text-emerald-600' : 'text-amber-600')} />
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function EditorWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
   );
 }
