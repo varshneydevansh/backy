@@ -430,7 +430,7 @@ function PageEditorRoute() {
     },
     editorCapabilities: [
       'Drag and resize elements on the page canvas.',
-      'Group selected sibling layers with Cmd/Ctrl+G and ungroup with Shift+Cmd/Ctrl+G.',
+      'Select unlocked sibling layers with Cmd/Ctrl+A, group them with Cmd/Ctrl+G, and ungroup with Shift+Cmd/Ctrl+G.',
       'Save selected elements as reusable sections from the component library.',
       'Bind media, forms, and CMS-ready element props through the inspector.',
       'Persist canvas, settings, route, status, metadata, and revision notes through the page update endpoint.',
@@ -790,6 +790,9 @@ function PageEditorRoute() {
                 </span>
                 <span className="rounded bg-muted px-2 py-1">
                   Cmd/Ctrl+G grouping
+                </span>
+                <span className="rounded bg-muted px-2 py-1">
+                  Cmd/Ctrl+A siblings
                 </span>
               </>
             }

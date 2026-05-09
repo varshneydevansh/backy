@@ -642,6 +642,9 @@ function NewBlogPostPage() {
                                         <span className="rounded bg-muted px-2 py-1">
                                             Cmd/Ctrl+G grouping
                                         </span>
+                                        <span className="rounded bg-muted px-2 py-1">
+                                            Cmd/Ctrl+A siblings
+                                        </span>
                                     </>
                                 }
                                 className="relative min-h-[760px] xl:h-[calc(100vh-168px)] xl:min-h-[860px]"

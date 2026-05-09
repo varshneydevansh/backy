@@ -590,7 +590,7 @@ function EditBlogPostPage() {
         },
         editorCapabilities: [
             'Edit blog metadata, route, status, taxonomy, and SEO summary beside the public canvas.',
-            'Drag, resize, group, ungroup, layer, save reusable selections, and bind media-ready components.',
+            'Drag, resize, select unlocked siblings with Cmd/Ctrl+A, group with Cmd/Ctrl+G, ungroup, layer, save reusable selections, and bind media-ready components.',
             'Persist serialized canvas content, settings, taxonomy, and revision metadata through the blog update endpoint.',
             'Generate preview links before publishing route changes.',
             'Restore backend revisions when a public article design needs rollback.',
@@ -876,6 +876,9 @@ function EditBlogPostPage() {
                                         </span>
                                         <span className="rounded bg-muted px-2 py-1">
                                             Cmd/Ctrl+G grouping
+                                        </span>
+                                        <span className="rounded bg-muted px-2 py-1">
+                                            Cmd/Ctrl+A siblings
                                         </span>
                                     </>
                                 }
