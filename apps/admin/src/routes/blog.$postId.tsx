@@ -35,6 +35,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import type { CanvasElement } from '@/types/editor';
 import type { CanvasSize } from '@/types/editor';
 import type { PageSettings } from '@/components/editor/PageSettingsModal';
@@ -87,7 +88,17 @@ function EditBlogPostPage() {
     const { sites, posts, updatePost, deletePost } = useStore();
     const storePost = posts.find((p) => p.id === postId);
     const storePostId = storePost?.id;
-    const activeSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
+    const storePostSiteId = storePost?.siteId;
+    const fallbackSiteId = getSiteSelectionFromSearch(sites);
+    const activeSite = useMemo(
+        () => (
+            storePostSiteId
+                ? sites.find((site) => siteMatchesIdentifier(site, storePostSiteId))
+                : sites.find((site) => siteMatchesIdentifier(site, fallbackSiteId))
+        ) || sites[0],
+        [fallbackSiteId, sites, storePostSiteId],
+    );
+    const activeSiteId = activeSite?.publicSiteId || activeSite?.id || storePostSiteId || fallbackSiteId || 'site-demo';
     const [post, setPost] = useState<BlogPost | null>(storePost || null);
 
     const [isLoading, setIsLoading] = useState(false);
@@ -299,7 +310,7 @@ function EditBlogPostPage() {
     if (!post) {
         return (
             <PageShell title="Post Not Found" description={loadError || "The article you requested doesn't exist."}>
-                <button onClick={() => navigate({ to: '/blog' })} className="text-primary hover:underline">
+                <button onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })} className="text-primary hover:underline">
                     &larr; Back to Blog
                 </button>
             </PageShell>
@@ -457,7 +468,7 @@ function EditBlogPostPage() {
 
         setShowDeleteConfirm(false);
         deletePost(postId);
-        navigate({ to: '/blog' });
+        navigate({ to: '/blog', search: { siteId: activeSiteId } });
     };
 
     const readinessFindings = postReadiness?.checks.filter((check) => check.status !== 'pass') || [];
@@ -468,7 +479,7 @@ function EditBlogPostPage() {
             ? 'border-red-200 bg-red-50 text-red-900'
             : 'border-amber-200 bg-amber-50 text-amber-900';
     const selectedAuthor = authors.find((author) => author.id === selectedAuthorId);
-    const selectedSite = sites.find((site) => (site.publicSiteId || site.id) === activeSiteId);
+    const selectedSite = activeSite;
     const localReadinessChecks = [
         { label: 'Title', complete: title.trim().length > 0 },
         { label: 'Slug', complete: slug.trim().length > 0 },
@@ -659,7 +670,7 @@ function EditBlogPostPage() {
         <PageShell
             title={
                 <div className="flex items-center gap-4">
-                    <button onClick={() => navigate({ to: '/blog' })} className="rounded-lg border border-border bg-background p-2 hover:bg-accent">
+                    <button onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })} className="rounded-lg border border-border bg-background p-2 hover:bg-accent">
                         <ArrowLeft className="w-5 h-5" />
                     </button>
                     <span>Edit Blog Post</span>
@@ -1098,7 +1109,7 @@ function EditBlogPostPage() {
                                         >
                                             Archive
                                         </Button>
-                                        <Button onClick={() => navigate({ to: '/blog' })} variant="outline">
+                                        <Button onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })} variant="outline">
                                             Discard
                                         </Button>
                                     </div>

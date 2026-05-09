@@ -519,7 +519,7 @@ function BlogListView() {
             <Eye className="w-4 h-4" />
           </button>
           <button
-            onClick={() => navigate({ to: '/blog/$postId', params: { postId: post.id } })}
+            onClick={() => navigate({ to: '/blog/$postId', params: { postId: post.id }, search: { siteId: activeSiteId } })}
             title="Edit post"
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
           >

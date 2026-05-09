@@ -1536,6 +1536,7 @@ const stringifyContent = (content: unknown): string => {
 
 const toStorePost = (post: ApiBlogPost): BlogPost => ({
   id: post.id,
+  siteId: post.siteId,
   title: post.title,
   slug: post.slug,
   excerpt: post.excerpt || '',

@@ -42,6 +42,7 @@ export interface Page {
 
 export interface BlogPost {
     id: string;
+    siteId?: string;
     title: string;
     slug: string;
     excerpt: string;
@@ -192,6 +193,7 @@ const INITIAL_SITES: Site[] = [
 const INITIAL_POSTS: BlogPost[] = [
     {
         id: '1',
+        siteId: 'site-demo',
         title: 'Getting Started with Backy CMS',
         slug: 'getting-started',
         excerpt: 'Everything you need to know about setting up your first site.',
@@ -202,6 +204,7 @@ const INITIAL_POSTS: BlogPost[] = [
     },
     {
         id: '2',
+        siteId: 'site-cook',
         title: 'Why We Switched to React',
         slug: 'react-switch',
         excerpt: 'A deep dive into our engineering decisions.',
