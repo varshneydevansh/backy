@@ -823,11 +823,15 @@ function ProductsRoute() {
   };
 
   const resetForm = () => {
+    if (isSaving) return;
+
     clearProductEditorState();
     updateProductsRouteSearch({ productId: undefined });
   };
 
   const selectProductForEditing = (productId: string) => {
+    if (isSaving) return;
+
     setSelectedProductId(productId);
     updateProductsRouteSearch({ productId });
   };
@@ -1134,6 +1138,8 @@ function ProductsRoute() {
     setNotice(`${filteredProducts.length} visible product${filteredProducts.length === 1 ? '' : 's'} exported.`);
   };
   const clearCatalogFilters = () => {
+    if (isSaving) return;
+
     setSearchQuery('');
     setStatusFilter('all');
     setProductTypeFilter('all');
@@ -1150,6 +1156,8 @@ function ProductsRoute() {
     });
   };
   const selectProductsSite = (nextSiteId: string) => {
+    if (isSaving) return;
+
     setSelectedSiteId(nextSiteId);
     clearProductEditorState();
     setSearchQuery('');
@@ -1170,10 +1178,11 @@ function ProductsRoute() {
             id="products-active-site"
             aria-label="Active Site"
             value={activeSiteId}
+            disabled={isSaving}
             onChange={(event) => {
               selectProductsSite(event.target.value);
             }}
-            className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
+            className="min-h-11 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
           >
             {sites.length === 0 ? (
               <option value="site-demo">Demo site</option>
@@ -1183,7 +1192,7 @@ function ProductsRoute() {
               </option>
             ))}
           </select>
-          <Button onClick={() => void loadProducts()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+          <Button onClick={() => void loadProducts()} disabled={isLoading || isSaving} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
             Refresh
           </Button>
         </div>
@@ -1245,7 +1254,7 @@ function ProductsRoute() {
                 New product
               </Button>
             )}
-            <Button onClick={() => void loadProducts()} disabled={isLoading} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+            <Button onClick={() => void loadProducts()} disabled={isLoading || isSaving} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh
             </Button>
           </div>
@@ -1471,10 +1480,11 @@ function ProductsRoute() {
           id="products-active-site-inline"
           aria-label="Active product site"
           value={activeSiteId}
+          disabled={isSaving}
           onChange={(event) => {
             selectProductsSite(event.target.value);
           }}
-          className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm"
+          className="min-h-10 min-w-56 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
         >
           {sites.length === 0 ? (
             <option value="site-demo">Demo site</option>
@@ -1538,14 +1548,16 @@ function ProductsRoute() {
                     <input
                       aria-label="Search products"
                       value={searchQuery}
+                      disabled={isSaving}
                       onChange={(event) => {
+                        if (isSaving) return;
                         const q = event.target.value;
                         setSearchQuery(q);
                         clearProductEditorState();
                         updateProductsRouteSearch({ q: q || undefined, productId: undefined });
                       }}
                       placeholder="Search products..."
-                      className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm"
+                      className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                     />
                   </div>
                   <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-muted p-1">
@@ -1553,13 +1565,15 @@ function ProductsRoute() {
                       <button
                         key={status}
                         type="button"
+                        disabled={isSaving}
                         onClick={() => {
+                          if (isSaving) return;
                           setStatusFilter(status);
                           clearProductEditorState();
                           updateProductsRouteSearch({ status, productId: undefined });
                         }}
                         className={cn(
-                          'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground hover:bg-background hover:text-foreground',
+                          'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60',
                           statusFilter === status && 'bg-background text-foreground shadow-sm',
                         )}
                       >
@@ -1570,13 +1584,15 @@ function ProductsRoute() {
                   <select
                     aria-label="Product type filter"
                     value={productTypeFilter}
+                    disabled={isSaving}
                     onChange={(event) => {
+                      if (isSaving) return;
                       const type = event.target.value as ProductTypeFilter;
                       setProductTypeFilter(type);
                       clearProductEditorState();
                       updateProductsRouteSearch({ type, productId: undefined });
                     }}
-                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="all">All types</option>
                     <option value="physical">Physical</option>
@@ -1586,13 +1602,15 @@ function ProductsRoute() {
                   <select
                     aria-label="Product category filter"
                     value={categoryFilter}
+                    disabled={isSaving}
                     onChange={(event) => {
+                      if (isSaving) return;
                       const category = event.target.value;
                       setCategoryFilter(category);
                       clearProductEditorState();
                       updateProductsRouteSearch({ category, productId: undefined });
                     }}
-                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="all">All categories</option>
                     {productCategories.map((category) => (
@@ -1602,13 +1620,15 @@ function ProductsRoute() {
                   <select
                     aria-label="Product stock filter"
                     value={stockFilter}
+                    disabled={isSaving}
                     onChange={(event) => {
+                      if (isSaving) return;
                       const stock = event.target.value as ProductStockFilter;
                       setStockFilter(stock);
                       clearProductEditorState();
                       updateProductsRouteSearch({ stock, productId: undefined });
                     }}
-                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="all">All stock</option>
                     <option value="in-stock">In stock</option>
@@ -1618,7 +1638,7 @@ function ProductsRoute() {
                     <option value="checkout-missing">No checkout URL</option>
                   </select>
                   {hasActiveCatalogFilters && (
-                    <Button variant="outline" onClick={clearCatalogFilters}>
+                    <Button variant="outline" onClick={clearCatalogFilters} disabled={isSaving}>
                       Clear filters
                     </Button>
                   )}
@@ -1635,7 +1655,7 @@ function ProductsRoute() {
                         : 'Change the search, status, type, category, or stock filters to broaden the catalog.'}
                     </div>
                     {products.length > 0 && hasActiveCatalogFilters && (
-                      <Button variant="outline" onClick={clearCatalogFilters} className="mt-4">
+                      <Button variant="outline" onClick={clearCatalogFilters} disabled={isSaving} className="mt-4">
                         Clear filters
                       </Button>
                     )}
@@ -2380,7 +2400,7 @@ function ProductCard({
         </div>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={onEdit} iconStart={<Edit3 className="size-4" />}>Edit</Button>
+        <Button size="sm" onClick={onEdit} disabled={disabled} iconStart={<Edit3 className="size-4" />}>Edit</Button>
         <Button size="sm" variant="outline" onClick={onPublish} disabled={disabled || product.status === 'published'} iconStart={<CheckCircle2 className="size-4" />}>Publish</Button>
         <Button size="sm" variant="outline" onClick={onArchive} disabled={disabled || product.status === 'archived'} iconStart={<Archive className="size-4" />}>Archive</Button>
         <Button size="sm" variant="danger" onClick={onDelete} disabled={disabled} iconStart={<Trash2 className="size-4" />}>Delete</Button>
