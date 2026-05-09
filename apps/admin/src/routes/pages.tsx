@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { ExternalLink, Eye, Filter, Plus, Layout, Edit, Trash2, Home } from 'lucide-react';
+import { Code2, Copy, ExternalLink, Eye, Filter, Plus, Layout, Edit, Trash2, Home } from 'lucide-react';
 import {
   archivePage,
   createPagePreview,
@@ -63,6 +63,7 @@ function PagesListView() {
   const [previewingPageId, setPreviewingPageId] = useState<string | null>(null);
   const [pendingDeletePage, setPendingDeletePage] = useState<Page | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const activeSite = useMemo(
     () => sites.find((site) => (site.publicSiteId || site.id) === selectedSiteId) || sites[0],
     [selectedSiteId, sites],
@@ -91,11 +92,24 @@ function PagesListView() {
     [pages, readinessMap],
   );
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
+  const adminBaseUrl = useMemo(() => getAdminBaseUrl(), []);
   const siteSlug = activeSite?.slug || activeSiteId;
   const selectedPages = useMemo(
     () => pages.filter((page) => selectedPageIds.has(page.id)),
     [pages, selectedPageIds],
   );
+  const apiPage = selectedPages[0] || pages.find((page) => page.status === 'published') || pages[0] || null;
+  const apiPageSegment = apiPage?.id ? encodeURIComponent(apiPage.id) : '{pageId}';
+  const apiPageSlug = apiPage?.slug ? encodeURIComponent(apiPage.slug) : '{pageSlug}';
+  const apiPagePath = apiPage ? pagePublicPath(apiPage) : '/{pageSlug}';
+  const publicPagesUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/pages`;
+  const publicPageBySlugUrl = `${publicPagesUrl}?slug=${apiPageSlug}`;
+  const publicRenderUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/render?path=${apiPage ? encodeURIComponent(apiPagePath) : '/{pageSlug}'}`;
+  const publicResolveUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/resolve?path=${apiPage ? encodeURIComponent(apiPagePath) : '/{pageSlug}'}`;
+  const adminPagesUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/pages`;
+  const adminPageDetailUrl = `${adminPagesUrl}/${apiPageSegment}`;
+  const adminPageReadinessUrl = `${adminPageDetailUrl}/readiness`;
+  const adminPagePreviewUrl = `${adminPageDetailUrl}/preview`;
 
   const setPageStatusFilter = (status: 'all' | Page['status']) => {
     setStatusFilter(status);
@@ -105,6 +119,17 @@ function PagesListView() {
   const showBlockedPages = () => {
     setStatusFilter('all');
     setHealthFilter('blocked');
+  };
+
+  const copyPageApiText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setError(null);
+      setNotice(`${label} copied.`);
+    } catch {
+      setNotice(null);
+      setError(value);
+    }
   };
 
   const togglePageSelection = (pageId: string) => {
@@ -443,6 +468,7 @@ function PagesListView() {
           to="/pages/new"
           search={{ siteId: activeSiteId }}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
+          aria-label="Create new page for active site"
         >
           <Plus className="w-4 h-4" />
           New Page
@@ -452,6 +478,12 @@ function PagesListView() {
       {error && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {error}
+        </div>
+      )}
+
+      {notice && (
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          {notice}
         </div>
       )}
 
@@ -507,6 +539,48 @@ function PagesListView() {
           </select>
         </div>
       </div>
+
+      <section className="mb-6 rounded-lg border border-border bg-card">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Code2 className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">Page API contract</h2>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Public page, route, and render endpoints plus admin endpoints for editor saves, previews, readiness, and publishing workflows.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void copyPageApiText(publicPagesUrl, 'Pages API URL')}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            aria-label="Copy pages API URL"
+          >
+            <Copy className="h-4 w-4" />
+            Copy pages API
+          </button>
+        </div>
+        <div className="p-4">
+          <div className="grid gap-3 md:grid-cols-4">
+            <PageApiStat label="Active site" value={activeSite?.name || activeSiteId} />
+            <PageApiStat label="Public pages" value={`${pageMetrics.published}`} />
+            <PageApiStat label="API page" value={apiPage?.title || 'No page'} />
+            <PageApiStat label="Blocked" value={`${pageMetrics.blocked}`} />
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            <PageApiSnippet label="Public pages" value={publicPagesUrl} />
+            <PageApiSnippet label="Public page by slug" value={publicPageBySlugUrl} />
+            <PageApiSnippet label="Render by path" value={publicRenderUrl} />
+            <PageApiSnippet label="Resolve by path" value={publicResolveUrl} />
+            <PageApiSnippet label="Admin pages" value={adminPagesUrl} />
+            <PageApiSnippet label="Admin page detail" value={adminPageDetailUrl} />
+            <PageApiSnippet label="Readiness check" value={adminPageReadinessUrl} />
+            <PageApiSnippet label="Preview link" value={adminPagePreviewUrl} />
+          </div>
+        </div>
+      </section>
 
       {hasPages && (
         <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
@@ -585,6 +659,7 @@ function PagesListView() {
           onClick={() => void refreshPages(activeSiteId)}
           disabled={isLoading}
           className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label="Refresh pages"
         >
           Refresh
         </button>
@@ -628,6 +703,7 @@ function PagesListView() {
                   data-testid="pages-empty-create"
                   onClick={() => navigate({ to: '/pages/new', search: { siteId: activeSiteId } })}
                   className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                  aria-label={hasPages ? 'Create page after clearing filters' : 'Create first page for active site'}
                 >
                   <Plus className="w-4 h-4" />
                   {hasPages ? 'New Page' : 'Create First Page'}
@@ -715,6 +791,26 @@ function PagesListView() {
   );
 }
 
+function PageApiStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 px-3 py-3">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="mt-1 truncate text-sm font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function PageApiSnippet({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="mb-1 text-xs font-medium text-muted-foreground">{label}</div>
+      <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+        {value}
+      </code>
+    </div>
+  );
+}
+
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
   return env[key]?.trim() ?? '';
@@ -738,7 +834,28 @@ const getPublicBaseUrl = (): string => {
     .replace(/\/$/, '');
 };
 
+const getAdminBaseUrl = (): string => {
+  const envBase = (
+    getEnvValue('VITE_BACKY_ADMIN_API_BASE_URL') ||
+    getEnvValue('VITE_ADMIN_API_URL') ||
+    getEnvValue('VITE_BACKY_PUBLIC_API_BASE_URL') ||
+    getEnvValue('VITE_PUBLIC_API_URL') ||
+    getEnvValue('VITE_API_BASE_URL') ||
+    ''
+  ).trim();
+
+  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+    return 'http://localhost:3001/api/admin';
+  }
+
+  const base = envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
+  return `${base.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api/admin`;
+};
+
 const pagePublicPath = (page: Page): string => {
   const slug = (page.slug || '').replace(/^\/+|\/+$/g, '');
+  if (page.isHomepage) {
+    return '/';
+  }
   return !slug || slug === 'home' ? '/' : `/${slug}`;
 };

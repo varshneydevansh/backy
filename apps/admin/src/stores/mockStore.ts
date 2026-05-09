@@ -32,6 +32,7 @@ export interface Page {
     siteId: string;
     title: string;
     slug: string;
+    isHomepage?: boolean;
     status: ContentStatus;
     scheduledAt?: string | null;
     content?: string;

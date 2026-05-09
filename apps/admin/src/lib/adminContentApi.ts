@@ -246,6 +246,7 @@ interface ApiPage {
   title: string;
   slug: string;
   description?: string | null;
+  isHomepage?: boolean;
   status?: AdminSiteStatus;
   scheduledAt?: string | null;
   content?: unknown;
@@ -1431,6 +1432,7 @@ const toStorePage = (page: ApiPage): Page => ({
   siteId: page.siteId,
   title: page.title,
   slug: page.slug,
+  isHomepage: page.isHomepage === true,
   status: toContentStatus(page.status, page.status === 'published'),
   scheduledAt: page.scheduledAt || null,
   content: page.content ? JSON.stringify(page.content) : undefined,
