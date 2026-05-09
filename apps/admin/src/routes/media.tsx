@@ -1030,6 +1030,12 @@ function MediaPage() {
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
+    if (isMediaMutationBusy) {
+      e.dataTransfer.dropEffect = 'none';
+      setIsDragging(false);
+      return;
+    }
+    e.dataTransfer.dropEffect = 'copy';
     setIsDragging(true);
   };
 
@@ -1041,47 +1047,50 @@ function MediaPage() {
     if (isMediaMutationBusy) return;
     if (!fileList || fileList.length === 0) return;
     const uploadFiles = Array.from(fileList);
+    const targetFolderMode = uploadFolderId;
+    const targetFolderId = uploadTargetFolderId;
     const targetFolderLabel = uploadTargetFolderLabel;
     const targetVisibility = uploadVisibility;
+    const targetTags = uploadTagList;
 
     setIsUploading(true);
     setError(null);
     setBulkNotice(null);
 
-    const uploadRequests = uploadFiles.map((file) => {
-      const uploadType = getCentralUploadType(file);
-      const uploadTagsForFile = uploadType === 'font'
-        ? Array.from(new Set(['font', ...uploadTagList]))
-        : uploadTagList;
-
-      return uploadMedia(file, {
-        siteId,
-        scope: 'global',
-        folderId: uploadTargetFolderId,
-        visibility: uploadVisibility,
-        tags: uploadTagsForFile.length ? uploadTagsForFile : undefined,
-        fontFamily: uploadType === 'font' ? cleanFontFamilyFromFilename(file.name) : undefined,
-        fontWeight: uploadType === 'font' ? '400' : undefined,
-        fontStyle: uploadType === 'font' ? 'normal' : undefined,
-        fontFallback: uploadType === 'font' ? 'system-ui, sans-serif' : undefined,
-        fontDisplay: uploadType === 'font' ? 'swap' : undefined,
-      });
-    });
-    const results = await Promise.allSettled(uploadRequests);
-    const uploaded = results
-      .filter((result): result is PromiseFulfilledResult<MediaAsset> => result.status === 'fulfilled')
-      .map((result) => result.value);
-    const failures = results.filter((result) => result.status === 'rejected');
-    const failureMessages = failures.map((failure) => (
-      failure.reason instanceof Error ? failure.reason.message : 'Upload failed.'
-    ));
-
     try {
+      const uploadRequests = uploadFiles.map((file) => {
+        const uploadType = getCentralUploadType(file);
+        const uploadTagsForFile = uploadType === 'font'
+          ? Array.from(new Set(['font', ...targetTags]))
+          : targetTags;
+
+        return uploadMedia(file, {
+          siteId,
+          scope: 'global',
+          folderId: targetFolderId,
+          visibility: targetVisibility,
+          tags: uploadTagsForFile.length ? uploadTagsForFile : undefined,
+          fontFamily: uploadType === 'font' ? cleanFontFamilyFromFilename(file.name) : undefined,
+          fontWeight: uploadType === 'font' ? '400' : undefined,
+          fontStyle: uploadType === 'font' ? 'normal' : undefined,
+          fontFallback: uploadType === 'font' ? 'system-ui, sans-serif' : undefined,
+          fontDisplay: uploadType === 'font' ? 'swap' : undefined,
+        });
+      });
+      const results = await Promise.allSettled(uploadRequests);
+      const uploaded = results
+        .filter((result): result is PromiseFulfilledResult<MediaAsset> => result.status === 'fulfilled')
+        .map((result) => result.value);
+      const failures = results.filter((result) => result.status === 'rejected');
+      const failureMessages = failures.map((failure) => (
+        failure.reason instanceof Error ? failure.reason.message : 'Upload failed.'
+      ));
+
       if (uploaded.length) {
         setMedia([...uploaded, ...files.filter((file) => !uploaded.some((item) => item.id === file.id))]);
-        if (uploadFolderId !== 'current') {
-          setSelectedFolderId(uploadTargetFolderId);
-          updateMediaRouteSearch({ folderId: folderSelectionToRoute(uploadTargetFolderId) });
+        if (targetFolderMode !== 'current') {
+          setSelectedFolderId(targetFolderId);
+          updateMediaRouteSearch({ folderId: folderSelectionToRoute(targetFolderId) });
         }
         setBulkNotice(`${uploaded.length} file${uploaded.length === 1 ? '' : 's'} uploaded to ${targetFolderLabel}.`);
         void loadLibrary();
@@ -1796,7 +1805,8 @@ function MediaPage() {
             "relative min-h-[260px] rounded-xl border-2 border-dashed p-8 text-center transition-all",
             isDragging
               ? "border-primary bg-primary/5 scale-[1.01]"
-              : "border-border hover:border-primary/50"
+              : "border-border hover:border-primary/50",
+            isMediaMutationBusy && "cursor-not-allowed opacity-75 hover:border-border"
           )}
         >
           <input
@@ -1890,7 +1900,7 @@ function MediaPage() {
               Visibility
               <select
                 value={uploadVisibility}
-                disabled={isMediaMutationBusy}
+                disabled={isUploading}
                 onChange={(event) => setUploadVisibility(event.target.value === 'private' ? 'private' : 'public')}
                 className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Upload visibility"
@@ -1904,7 +1914,7 @@ function MediaPage() {
               Destination
               <select
                 value={uploadFolderId}
-                disabled={isMediaMutationBusy}
+                disabled={isUploading}
                 onChange={(event) => setUploadFolderId(event.target.value)}
                 className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Upload folder"
@@ -1927,8 +1937,8 @@ function MediaPage() {
                 onChange={setUploadTagList}
                 placeholder="Add hero, product, brand..."
                 ariaLabel="Upload tags"
-                disabled={isMediaMutationBusy}
-                className={isMediaMutationBusy ? 'opacity-60' : undefined}
+                disabled={isUploading}
+                className={isUploading ? 'opacity-60' : undefined}
               />
             </div>
 
