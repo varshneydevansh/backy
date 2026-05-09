@@ -152,6 +152,62 @@ function UsersListView() {
       { label: 'Needs review', value: suspended, detail: 'Suspended accounts', icon: AlertTriangle },
     ];
   }, [users]);
+  const accessReadiness = useMemo(() => {
+    const activeAdmins = users.filter((user) => (
+      user.status === 'active' && (user.role === 'owner' || user.role === 'admin')
+    )).length;
+    const invited = users.filter((user) => user.status === 'invited').length;
+    const suspended = users.filter((user) => user.status === 'suspended').length;
+    const knownRoles = new Set(ROLE_OPTIONS.map((role) => role.value));
+    const unknownRoleCount = users.filter((user) => !knownRoles.has(user.role)).length;
+    const checks = [
+      {
+        label: 'Admin continuity',
+        detail: activeAdmins > 0
+          ? `${activeAdmins} active owner/admin account${activeAdmins === 1 ? '' : 's'}`
+          : 'Add at least one active owner or admin before handoff.',
+        ready: activeAdmins > 0,
+      },
+      {
+        label: 'Role model',
+        detail: unknownRoleCount === 0
+          ? 'Every account maps to a supported Backy role.'
+          : `${unknownRoleCount} account${unknownRoleCount === 1 ? '' : 's'} use unknown roles.`,
+        ready: unknownRoleCount === 0,
+      },
+      {
+        label: 'Invite queue',
+        detail: invited > 0
+          ? `${invited} pending invite${invited === 1 ? '' : 's'} need activation or resend.`
+          : 'No pending invites.',
+        ready: invited === 0,
+      },
+      {
+        label: 'Access review',
+        detail: suspended > 0
+          ? `${suspended} suspended account${suspended === 1 ? '' : 's'} require review.`
+          : 'No suspended users.',
+        ready: suspended === 0,
+      },
+      {
+        label: 'Email delivery',
+        detail: 'User records persist now; invite email delivery still belongs to the auth/integrations pass.',
+        ready: false,
+      },
+    ];
+    const readyCount = checks.filter((check) => check.ready).length;
+
+    return {
+      score: Math.round((readyCount / checks.length) * 100),
+      checks,
+      workflow: [
+        { label: 'Invite', detail: 'Create a persisted user record with role and invited status.' },
+        { label: 'Activate', detail: 'Move the account to active after credentials are ready.' },
+        { label: 'Govern', detail: 'Use role and status changes to control admin access.' },
+        { label: 'Protect', detail: 'Backend guards prevent removing the final active owner/admin.' },
+      ],
+    };
+  }, [users]);
 
   const filteredUsers = useMemo(() => (
     users.filter((user) => {
@@ -430,6 +486,54 @@ function UsersListView() {
                 <UserApiStat label="Invites pending" value={`${users.filter((user) => user.status === 'invited').length}`} />
               </div>
 
+              <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">Access readiness</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Checks admin continuity, role integrity, pending invites, suspended accounts, and email delivery.
+                      </p>
+                    </div>
+                    <span className={cn(
+                      'rounded-full px-2.5 py-1 text-xs font-semibold',
+                      accessReadiness.score >= 80
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-amber-50 text-amber-700',
+                    )}
+                    >
+                      {accessReadiness.score}% ready
+                    </span>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={cn(
+                        'h-full rounded-full',
+                        accessReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500',
+                      )}
+                      style={{ width: `${accessReadiness.score}%` }}
+                    />
+                  </div>
+                  <div className="mt-4 grid gap-2 md:grid-cols-2">
+                    {accessReadiness.checks.map((check) => (
+                      <UserReadinessCheck key={check.label} {...check} />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <div className="flex items-center gap-2">
+                    <Shield className="size-4 text-primary" />
+                    <h3 className="text-sm font-semibold">Account workflow</h3>
+                  </div>
+                  <div className="mt-3 grid gap-2">
+                    {accessReadiness.workflow.map((step, index) => (
+                      <UserWorkflowStep key={step.label} index={index + 1} {...step} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <div className="mt-4 grid gap-3 lg:grid-cols-2">
                 <UserApiSnippet label="List and invite users" value={usersListUrl} />
                 <UserApiSnippet label="Read, update, or remove user" value={userDetailUrl} />
@@ -685,6 +789,34 @@ function UserApiStat({ label, value }: { label: string; value: string }) {
   );
 }
 
+function UserReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
+  const Icon = ready ? CheckCircle2 : AlertTriangle;
+
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-card px-3 py-2">
+      <Icon className={cn('mt-0.5 size-4 shrink-0', ready ? 'text-emerald-600' : 'text-amber-600')} />
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function UserWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-xs font-semibold text-primary">
+        {index}
+      </span>
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-foreground">{label}</div>
+        <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
 function UserApiSnippet({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -701,6 +833,12 @@ const getEnvValue = (key: string): string => {
   return env[key]?.trim() ?? '';
 };
 
+const isLocalAdminHost = () => {
+  if (typeof window === 'undefined') return false;
+
+  return ['localhost', '127.0.0.1'].includes(window.location.hostname) && window.location.port !== '3001';
+};
+
 const getAdminBaseUrl = (): string => {
   const envBase = (
     getEnvValue('VITE_BACKY_ADMIN_API_BASE_URL') ||
@@ -711,7 +849,7 @@ const getAdminBaseUrl = (): string => {
     ''
   ).trim();
 
-  if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
+  if (!envBase && isLocalAdminHost()) {
     return 'http://localhost:3001/api/admin';
   }
 
