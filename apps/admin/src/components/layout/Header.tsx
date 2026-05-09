@@ -25,6 +25,12 @@ import {
   CircleSlash,
   RefreshCw,
   ShieldAlert,
+  ClipboardList,
+  Globe2,
+  ShoppingBag,
+  Users,
+  SlidersHorizontal,
+  type LucideIcon,
 } from 'lucide-react';
 import { cn, getRelativeTime } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
@@ -58,6 +64,18 @@ interface HeaderProps {
   onSidebarToggle: () => void;
 }
 
+type StaticToolRoute =
+  | '/sites'
+  | '/forms'
+  | '/comments'
+  | '/contacts'
+  | '/media'
+  | '/products'
+  | '/orders'
+  | '/collections'
+  | '/users'
+  | '/settings';
+
 type SearchResult =
   | { id: string; type: 'Site'; title: string; detail: string; action: { route: 'site'; siteId: string } }
   | { id: string; type: 'Page'; title: string; detail: string; action: { route: 'page'; pageId: string } }
@@ -65,7 +83,8 @@ type SearchResult =
   | { id: string; type: 'Form'; title: string; detail: string; action: { route: 'forms' } }
   | { id: string; type: 'Comment'; title: string; detail: string; action: { route: 'comments' } }
   | { id: string; type: 'Contact'; title: string; detail: string; action: { route: 'contacts' } }
-  | { id: string; type: 'Tool'; title: string; detail: string; action: { route: 'static'; to: '/media' | '/products' | '/orders' | '/collections' | '/settings' } };
+  | { id: string; type: 'User'; title: string; detail: string; action: { route: 'user'; userId: string } }
+  | { id: string; type: 'Tool'; title: string; detail: string; action: { route: 'static'; to: StaticToolRoute } };
 
 const commentsNotificationsEnabled = (settings?: SiteSettingsInput): boolean => (
   settings?.integrations?.notifications?.inApp?.comments !== false
@@ -99,6 +118,15 @@ interface ContactNotification {
   contact: AdminContact;
 }
 
+interface WorkflowShortcut {
+  id: string;
+  label: string;
+  detail: string;
+  count: number;
+  to: StaticToolRoute;
+  icon: LucideIcon;
+}
+
 const notificationToneClasses: Record<WorkflowNotificationTone, string> = {
   danger: 'border-red-200 bg-red-50 text-red-800',
   warning: 'border-amber-200 bg-amber-50 text-amber-800',
@@ -119,6 +147,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   const routerState = useRouterState();
   const { user, signOut } = useAuthStore();
   const sites = useStore((state) => state.sites);
+  const storeUsers = useStore((state) => state.users);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [pendingComments, setPendingComments] = useState<AdminComment[]>([]);
@@ -144,6 +173,62 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     [activeSiteId, sites],
   );
   const notificationCount = pendingComments.length + workflowNotifications.length;
+  const workflowShortcuts = useMemo<WorkflowShortcut[]>(() => {
+    const routeCount = (route: WorkflowNotification['action']['route']) => (
+      workflowNotifications.filter((notification) => notification.action.route === route).length
+    );
+
+    return [
+      {
+        id: 'comments',
+        label: 'Comments',
+        detail: commentsAlertsDisabled ? 'Alerts off' : 'Moderation',
+        count: pendingComments.length,
+        to: '/comments',
+        icon: MessageSquare,
+      },
+      {
+        id: 'forms',
+        label: 'Forms',
+        detail: 'Submissions',
+        count: routeCount('forms'),
+        to: '/forms',
+        icon: ClipboardList,
+      },
+      {
+        id: 'contacts',
+        label: 'Contacts',
+        detail: 'Leads',
+        count: routeCount('contacts'),
+        to: '/contacts',
+        icon: Users,
+      },
+      {
+        id: 'orders',
+        label: 'Orders',
+        detail: 'Fulfillment',
+        count: routeCount('orders'),
+        to: '/orders',
+        icon: ShoppingBag,
+      },
+      {
+        id: 'site',
+        label: 'Site',
+        detail: 'Readiness',
+        count: routeCount('site'),
+        to: '/sites',
+        icon: Globe2,
+      },
+      {
+        id: 'settings',
+        label: 'Settings',
+        detail: 'Routing',
+        count: commentsAlertsDisabled ? 1 : routeCount('settings'),
+        to: '/settings',
+        icon: SlidersHorizontal,
+      },
+    ];
+  }, [commentsAlertsDisabled, pendingComments.length, workflowNotifications]);
   const searchResults = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     if (normalizedQuery.length < 2) return searchIndex.slice(0, 6);
@@ -345,6 +430,11 @@ export function Header({ onSidebarToggle }: HeaderProps) {
       return;
     }
 
+    if (commentsAlertsDisabled) {
+      navigate({ to: '/settings' });
+      return;
+    }
+
     navigate({ to: '/' });
   };
 
@@ -352,6 +442,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     ? 'Open moderation queue'
     : workflowNotifications[0]
       ? workflowNotifications[0].actionLabel
+      : commentsAlertsDisabled
+        ? 'Open notification settings'
       : 'Open dashboard';
 
   const loadGlobalSearch = async () => {
@@ -414,10 +506,22 @@ export function Header({ onSidebarToggle }: HeaderProps) {
           detail: contact.email || contact.notes || contact.status,
           action: { route: 'contacts' as const },
         })),
+        ...storeUsers.map((member) => ({
+          id: `user:${member.id}`,
+          type: 'User' as const,
+          title: member.fullName || member.email || member.id,
+          detail: `${member.role} - ${member.status}`,
+          action: { route: 'user' as const, userId: member.id },
+        })),
+        { id: 'tool:sites', type: 'Tool' as const, title: 'Sites', detail: 'Site settings, readiness, routing, domains', action: { route: 'static' as const, to: '/sites' as const } },
+        { id: 'tool:forms', type: 'Tool' as const, title: 'Forms', detail: 'Registration, contact, submissions', action: { route: 'static' as const, to: '/forms' as const } },
+        { id: 'tool:comments', type: 'Tool' as const, title: 'Comments', detail: 'Moderation queue and public replies', action: { route: 'static' as const, to: '/comments' as const } },
+        { id: 'tool:contacts', type: 'Tool' as const, title: 'Contacts', detail: 'Captured leads and audience records', action: { route: 'static' as const, to: '/contacts' as const } },
         { id: 'tool:media', type: 'Tool' as const, title: 'Media Library', detail: 'Files, folders, images, fonts', action: { route: 'static' as const, to: '/media' as const } },
         { id: 'tool:products', type: 'Tool' as const, title: 'Products', detail: 'Catalog and sellable items', action: { route: 'static' as const, to: '/products' as const } },
         { id: 'tool:orders', type: 'Tool' as const, title: 'Orders', detail: 'Sales and fulfillment queue', action: { route: 'static' as const, to: '/orders' as const } },
         { id: 'tool:collections', type: 'Tool' as const, title: 'Collections', detail: 'Schemas, records, dynamic data', action: { route: 'static' as const, to: '/collections' as const } },
+        { id: 'tool:users', type: 'Tool' as const, title: 'Users', detail: 'Admins, roles, invites, membership handoff', action: { route: 'static' as const, to: '/users' as const } },
         { id: 'tool:settings', type: 'Tool' as const, title: 'Settings', detail: 'API keys, infrastructure, delivery mode', action: { route: 'static' as const, to: '/settings' as const } },
       ]);
       setSearchLoadedForSiteId(activeSiteId);
@@ -454,6 +558,10 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     }
     if (result.action.route === 'contacts') {
       navigate({ to: '/contacts' });
+      return;
+    }
+    if (result.action.route === 'user') {
+      navigate({ to: '/users/$userId', params: { userId: result.action.userId } });
       return;
     }
     navigate({ to: result.action.to });
@@ -607,6 +715,38 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                     <RefreshCw className={cn('size-3', notificationsLoading && 'animate-spin')} />
                     Refresh
                   </button>
+                </div>
+                <div className="grid grid-cols-3 gap-2 border-b border-border bg-muted/30 p-3">
+                  {workflowShortcuts.map((shortcut) => {
+                    const ShortcutIcon = shortcut.icon;
+                    return (
+                      <button
+                        key={shortcut.id}
+                        type="button"
+                        onClick={() => {
+                          setNotificationsOpen(false);
+                          navigate({ to: shortcut.to });
+                        }}
+                        className="group rounded-lg border border-border bg-background px-2.5 py-2 text-left transition hover:border-primary/40 hover:bg-primary/5 focus-ring"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="inline-flex size-7 items-center justify-center rounded-md bg-muted text-muted-foreground group-hover:text-primary">
+                            <ShortcutIcon className="size-3.5" />
+                          </span>
+                          <span className={cn(
+                            'inline-flex min-w-5 justify-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold',
+                            shortcut.count > 0
+                              ? 'bg-red-50 text-red-700'
+                              : 'bg-muted text-muted-foreground',
+                          )}>
+                            {shortcut.count}
+                          </span>
+                        </div>
+                        <div className="mt-2 truncate text-xs font-semibold">{shortcut.label}</div>
+                        <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{shortcut.detail}</div>
+                      </button>
+                    );
+                  })}
                 </div>
                 <div className="max-h-80 overflow-y-auto p-2">
                   {notificationsLoading ? (
