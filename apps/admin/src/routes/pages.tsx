@@ -7,8 +7,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { createFileRoute, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { AlertTriangle, CheckCircle2, Code2, Copy, ExternalLink, Eye, Filter, Plus, Layout, Edit, Trash2, Home, RefreshCw } from 'lucide-react';
+import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
+import { AlertTriangle, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Filter, Plus, Layout, Edit, Trash2, Home, RefreshCw } from 'lucide-react';
 import {
   archivePage,
   createPagePreview,
@@ -138,6 +138,7 @@ function PagesListView() {
   const adminPageDetailUrl = `${adminPagesUrl}/${apiPageSegment}`;
   const adminPageReadinessUrl = `${adminPageDetailUrl}/readiness`;
   const adminPagePreviewUrl = `${adminPageDetailUrl}/preview`;
+  const createPageSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const pageDesignReadiness = useMemo(() => {
     const checkedPages = pages.filter((page) => readinessMap[page.id]);
     const readyPages = pages.filter((page) => readinessMap[page.id]?.statusLabel === 'ready');
@@ -202,10 +203,6 @@ function PagesListView() {
       ],
     };
   }, [pageMetrics.blocked, pageMetrics.published, pages, readinessMap]);
-
-  const openCreatePage = () => {
-    navigate({ to: '/pages/new', search: { siteId: activeSiteId } });
-  };
 
   const setPageStatusFilter = (status: 'all' | Page['status']) => {
     setStatusFilter(status);
@@ -554,22 +551,128 @@ function PagesListView() {
   });
   const hasPages = pages.length > 0;
   const selectedTablePages = data.filter((page) => selectedPageIds.has(page.id));
+  const pageHandoff = useMemo(() => ({
+    generatedAt: new Date().toISOString(),
+    site: {
+      id: activeSiteId,
+      name: activeSite?.name || activeSiteId,
+      slug: siteSlug,
+    },
+    endpoints: {
+      publicPages: publicPagesUrl,
+      publicPageBySlug: publicPageBySlugUrl,
+      publicRenderByPath: publicRenderUrl,
+      publicResolveByPath: publicResolveUrl,
+      adminPages: adminPagesUrl,
+      adminPageDetail: adminPageDetailUrl,
+      adminPageReadiness: adminPageReadinessUrl,
+      adminPagePreview: adminPagePreviewUrl,
+    },
+    readiness: {
+      score: pageDesignReadiness.score,
+      checks: pageDesignReadiness.checks,
+    },
+    metrics: pageMetrics,
+    filters: {
+      search: searchQuery,
+      status: statusFilter,
+      health: healthFilter,
+      selected: selectedPageIds.size,
+      visible: data.length,
+      currentPage,
+      totalPages,
+      totalItems,
+    },
+    pages: data.map((page) => ({
+      id: page.id,
+      title: page.title,
+      slug: page.slug,
+      path: pagePublicPath(page),
+      status: page.status,
+      isHomepage: Boolean(page.isHomepage),
+      health: readinessMap[page.id]
+        ? {
+            score: readinessMap[page.id].score,
+            statusLabel: readinessMap[page.id].statusLabel,
+            elementCount: readinessMap[page.id].elementCount,
+          }
+        : null,
+      publicUrl: page.status === 'published' ? publicPageUrl(page) : null,
+    })),
+    selectedPage: apiPage
+      ? {
+          id: apiPage.id,
+          title: apiPage.title,
+          slug: apiPage.slug,
+          path: pagePublicPath(apiPage),
+          status: apiPage.status,
+        }
+      : null,
+    workflows: pageDesignReadiness.workflow,
+    guardrails: [
+      'Use the visual editor for canvas, section, grouping, media, and publish changes.',
+      'Run readiness before handing a page to a custom frontend.',
+      'Archive a page instead of deleting when URL history, SEO, or ownership matters.',
+      'The create entry points all route to /pages/new with the active siteId search parameter.',
+    ],
+  }), [
+    activeSite?.name,
+    activeSiteId,
+    adminPageDetailUrl,
+    adminPagePreviewUrl,
+    adminPageReadinessUrl,
+    adminPagesUrl,
+    apiPage,
+    currentPage,
+    data,
+    healthFilter,
+    pageDesignReadiness.checks,
+    pageDesignReadiness.score,
+    pageDesignReadiness.workflow,
+    pageMetrics,
+    publicPageBySlugUrl,
+    publicPagesUrl,
+    publicRenderUrl,
+    publicResolveUrl,
+    readinessMap,
+    searchQuery,
+    selectedPageIds.size,
+    siteSlug,
+    statusFilter,
+    totalItems,
+    totalPages,
+  ]);
+  const pageHandoffText = useMemo(() => JSON.stringify(pageHandoff, null, 2), [pageHandoff]);
+
+  const downloadPageHandoff = () => {
+    const blob = new Blob([pageHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${siteSlug || activeSiteId}-backy-pages-handoff.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setNotice('Pages handoff manifest downloaded.');
+  };
 
   return (
     <PageShell
       title="Pages"
       description="Manage the structure and content of your site."
       action={
-        <button
-          type="button"
-          onClick={openCreatePage}
+        <Link
+          to="/pages/new"
+          search={createPageSearch}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
           aria-label="Create new page for active site"
           data-testid="pages-header-create"
         >
           <Plus className="w-4 h-4" />
           New Page
-        </button>
+        </Link>
       }
       className="w-full"
     >
@@ -611,6 +714,22 @@ function PagesListView() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              onClick={() => void copyPageApiText(pageHandoffText, 'Pages handoff manifest')}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              <Copy className="size-4" />
+              Copy handoff
+            </button>
+            <button
+              type="button"
+              onClick={downloadPageHandoff}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              <Download className="size-4" />
+              Download JSON
+            </button>
+            <button
+              type="button"
               onClick={() => void refreshPages(activeSiteId)}
               disabled={isLoading}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
@@ -618,14 +737,15 @@ function PagesListView() {
               <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />
               Refresh pages
             </button>
-            <button
-              type="button"
-              onClick={openCreatePage}
+            <Link
+              to="/pages/new"
+              search={createPageSearch}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+              data-testid="pages-command-create"
             >
               <Plus className="size-4" />
               New Page
-            </button>
+            </Link>
           </div>
         </div>
 
@@ -737,15 +857,26 @@ function PagesListView() {
               Public page, route, and render endpoints plus admin endpoints for editor saves, previews, readiness, and publishing workflows.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void copyPageApiText(publicPagesUrl, 'Pages API URL')}
-            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
-            aria-label="Copy pages API URL"
-          >
-            <Copy className="h-4 w-4" />
-            Copy pages API
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void copyPageApiText(publicPagesUrl, 'Pages API URL')}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+              aria-label="Copy pages API URL"
+            >
+              <Copy className="h-4 w-4" />
+              Copy pages API
+            </button>
+            <button
+              type="button"
+              onClick={() => void copyPageApiText(pageHandoffText, 'Pages handoff manifest')}
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+              aria-label="Copy pages handoff manifest"
+            >
+              <Copy className="h-4 w-4" />
+              Copy handoff
+            </button>
+          </div>
         </div>
         <div className="p-4">
           <div className="grid gap-3 md:grid-cols-4">
@@ -933,16 +1064,20 @@ function PagesListView() {
                       Clear Filters
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={openCreatePage}
+                  <Link
+                    to="/pages/new"
+                    search={createPageSearch}
                     data-testid="pages-empty-create"
+                    onClick={() => {
+                      setError(null);
+                      setNotice(null);
+                    }}
                     className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                     aria-label={hasPages ? 'Create page after clearing filters' : 'Create first page for active site'}
                   >
                     <Plus className="w-4 h-4" />
                     {hasPages ? 'New Page' : 'Create First Page'}
-                  </button>
+                  </Link>
                 </div>
               }
             />
