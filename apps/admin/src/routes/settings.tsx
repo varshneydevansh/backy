@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
   Palette,
@@ -49,18 +49,31 @@ import {
 } from '@/lib/adminContentApi';
 
 // ============================================
-// ROUTE DEFINITION
-// ============================================
-
-export const Route = createFileRoute('/settings')({
-  component: SettingsPage,
-});
-
-// ============================================
 // TABS
 // ============================================
 
 type SettingsTab = 'general' | 'appearance' | 'seo' | 'delivery' | 'infrastructure' | 'notifications' | 'security';
+
+interface SettingsSearch {
+  tab?: SettingsTab;
+}
+
+const SETTINGS_TAB_IDS: SettingsTab[] = ['general', 'appearance', 'seo', 'delivery', 'infrastructure', 'notifications', 'security'];
+
+const isSettingsTab = (value: unknown): value is SettingsTab => (
+  typeof value === 'string' && SETTINGS_TAB_IDS.includes(value as SettingsTab)
+);
+
+// ============================================
+// ROUTE DEFINITION
+// ============================================
+
+export const Route = createFileRoute('/settings')({
+  validateSearch: (search: Record<string, unknown>): SettingsSearch => ({
+    tab: isSettingsTab(search.tab) ? search.tab : undefined,
+  }),
+  component: SettingsPage,
+});
 
 const TABS: Array<SegmentedTabItem<SettingsTab>> = [
   { id: 'general', name: 'General', icon: Globe },
@@ -534,7 +547,9 @@ function buildCopyText(base: string, path: string): string {
 // ============================================
 
 function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const navigate = useNavigate();
+  const search = Route.useSearch();
+  const [activeTab, setActiveTab] = useState<SettingsTab>(search.tab || 'general');
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('managed-hosting');
   const [authSettings, setAuthSettings] = useState<SiteSettingsInput['auth']>();
   const [runtimeStorage, setRuntimeStorage] = useState<SiteSettingsInput['runtimeStorage']>();
@@ -567,6 +582,12 @@ function SettingsPage() {
   useEffect(() => {
     setDeliveryMode(persistedDeliveryMode);
   }, [persistedDeliveryMode]);
+
+  useEffect(() => {
+    if (search.tab && search.tab !== activeTab) {
+      setActiveTab(search.tab);
+    }
+  }, [activeTab, search.tab]);
 
   const loadSettingsAuditLogs = useCallback(async () => {
     setIsAuditLoading(true);
@@ -931,6 +952,7 @@ function SettingsPage() {
   };
   const openSettingsTab = (tab: SettingsTab) => {
     setActiveTab(tab);
+    navigate({ to: '/settings', search: { tab }, replace: true });
     window.requestAnimationFrame(() => {
       document.getElementById('settings-tab-content')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
     });
@@ -1104,7 +1126,7 @@ function SettingsPage() {
         <SegmentedTabs
           items={TABS}
           value={activeTab}
-          onChange={setActiveTab}
+          onChange={openSettingsTab}
           ariaLabel="Settings sections"
           getPanelId={() => 'settings-tab-content'}
         />
