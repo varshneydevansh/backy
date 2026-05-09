@@ -1593,7 +1593,7 @@ function PagesListView() {
       {hasPages && (
         <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
           <span className="text-sm font-medium">
-            {selectedPages.length} selected{hiddenSelectedCount > 0 ? `, ${hiddenSelectedCount} hidden by filters` : ''}
+            {selectedPages.length} selected{hiddenSelectedCount > 0 ? `, ${hiddenSelectedCount} not visible` : ''}
           </span>
           <button
             type="button"
@@ -1645,14 +1645,14 @@ function PagesListView() {
             <div className="flex min-w-0 items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
               <span className="min-w-0">
-                Bulk actions will include {hiddenSelectedCount} selected page{hiddenSelectedCount === 1 ? '' : 's'} hidden by the current filters.
+                Bulk actions will include {hiddenSelectedCount} selected page{hiddenSelectedCount === 1 ? '' : 's'} outside the current table view.
               </span>
               <button
                 type="button"
                 onClick={() => setSelectedPageIds((current) => new Set([...current].filter((pageId) => visiblePageIdSet.has(pageId))))}
                 className="shrink-0 rounded-md border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-900 transition hover:bg-amber-100"
               >
-                Clear hidden
+                Clear non-visible
               </button>
             </div>
           )}
