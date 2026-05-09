@@ -10,6 +10,8 @@ import {
   CheckCircle2,
   Clock3,
   Code2,
+  Copy,
+  Download,
   ExternalLink,
   KeyRound,
   Mail,
@@ -20,10 +22,12 @@ import {
   UserRound,
 } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
+import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { cn } from '@/lib/utils';
 import {
   deleteUser as deleteBackendUser,
+  getAdminApiBase,
   getUser as getBackendUser,
   updateUser as updateBackendUser,
 } from '@/lib/adminContentApi';
@@ -109,6 +113,7 @@ function EditUserPage() {
   const { userId } = Route.useParams();
   const { users, setUsers } = useStore();
   const user = users.find((item) => item.id === userId);
+  const userDetailUrl = useMemo(() => `${getAdminApiBase()}/users/${userId}`, [userId]);
 
   const [isLoading, setIsLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -279,6 +284,68 @@ function EditUserPage() {
   };
 
   const resetMailTo = `mailto:${encodeURIComponent(user.email)}?subject=${encodeURIComponent('Reset your Backy access')}&body=${encodeURIComponent(`Hi ${user.fullName},\n\nPlease reset your Backy access before continuing work in the admin workspace.`)}`;
+  const updatePayload = {
+    fullName: formData.fullName.trim() || user.fullName,
+    email: formData.email.trim().toLowerCase() || user.email,
+    role: formData.role,
+    status: formData.status,
+  };
+  const userDetailHandoff = {
+    generatedAt: new Date().toISOString(),
+    endpoint: {
+      read: { method: 'GET', url: userDetailUrl },
+      update: { method: 'PATCH', url: userDetailUrl },
+      remove: { method: 'DELETE', url: userDetailUrl },
+    },
+    readiness: {
+      score: accessReadiness.score,
+      checks: accessReadiness.checks,
+    },
+    account: {
+      id: user.id,
+      role: user.role,
+      status: user.status,
+      lastActive: user.lastActive,
+      hasName: Boolean(user.fullName),
+      hasEmail: Boolean(user.email),
+    },
+    selectedState: {
+      role: selectedRole,
+      status: selectedStatus,
+      enabledCapabilities: ROLE_CAPABILITIES
+        .filter((capability) => capability.roles.includes(formData.role))
+        .map((capability) => capability.label),
+    },
+    updatePayload,
+    guardrails: [
+      'Backend prevents deleting or demoting the final active owner/admin.',
+      'Duplicate emails are rejected before persistence.',
+      'Suspend or inactivate access before destructive removal when ownership history matters.',
+    ],
+  };
+  const userDetailHandoffText = JSON.stringify(userDetailHandoff, null, 2);
+
+  const copyUserDetailText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setNotice(`${label} copied.`);
+    } catch {
+      setNotice(value);
+    }
+  };
+
+  const downloadUserDetailHandoff = () => {
+    const blob = new Blob([userDetailHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `backy-user-${user.id}-handoff.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice('User detail handoff manifest downloaded.');
+  };
 
   return (
     <PageShell
@@ -314,14 +381,32 @@ function EditUserPage() {
                 Control this collaborator as a full access object: identity, permissions, lifecycle, recovery, API payload, and destructive guardrails.
               </p>
             </div>
-            <button
-              type="submit"
-              disabled={isLoading || !canSubmit}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-            >
-              <Save className="h-4 w-4" />
-              {isLoading ? 'Saving...' : 'Save changes'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void copyUserDetailText(userDetailHandoffText, 'User detail handoff manifest')}
+                iconStart={<Copy className="size-4" />}
+              >
+                Copy manifest
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={downloadUserDetailHandoff}
+                iconStart={<Download className="size-4" />}
+              >
+                Download JSON
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={isLoading || !canSubmit}
+                iconStart={<Save className="size-4" />}
+              >
+                {isLoading ? 'Saving...' : 'Save changes'}
+              </Button>
+            </div>
           </div>
 
           <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
@@ -539,13 +624,26 @@ function EditUserPage() {
                 <p className="mt-1 text-sm text-muted-foreground">Save sends this payload to the user detail endpoint.</p>
               </div>
             </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void copyUserDetailText(userDetailUrl, 'User detail API URL')}
+                iconStart={<Copy className="size-4" />}
+              >
+                Copy URL
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void copyUserDetailText(userDetailHandoffText, 'User detail handoff manifest')}
+                iconStart={<Copy className="size-4" />}
+              >
+                Copy manifest
+              </Button>
+            </div>
             <pre className="mt-4 overflow-x-auto rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-{JSON.stringify({
-  fullName: formData.fullName.trim() || user.fullName,
-  email: formData.email.trim().toLowerCase() || user.email,
-  role: formData.role,
-  status: formData.status,
-}, null, 2)}
+{JSON.stringify(updatePayload, null, 2)}
             </pre>
           </section>
 

@@ -1412,7 +1412,7 @@ const isLocalAdminDevHost = (): boolean => {
     && window.location.port !== '3001';
 };
 
-const getAdminApiBase = (): string => {
+export const getAdminApiBase = (): string => {
   const envBase = (
     getEnvValue('VITE_BACKY_ADMIN_API_BASE_URL') ||
     getEnvValue('VITE_ADMIN_API_URL') ||

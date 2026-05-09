@@ -4,10 +4,11 @@
 
 import { useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Clock3, Code2, KeyRound, Mail, Shield, UserPlus } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Clock3, Code2, Copy, Download, KeyRound, Mail, Shield, UserPlus } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
+import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
-import { createUser } from '@/lib/adminContentApi';
+import { createUser, getAdminApiBase } from '@/lib/adminContentApi';
 import { useStore, type User } from '@/stores/mockStore';
 
 export const Route = createFileRoute('/users/new')({
@@ -61,11 +62,13 @@ function NewUserPage() {
   const { setUsers, users } = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
     role: 'editor' as UserRole,
   });
+  const usersListUrl = useMemo(() => `${getAdminApiBase()}/users`, []);
 
   const selectedRole = useMemo(
     () => ROLE_OPTIONS.find((role) => role.value === formData.role) || ROLE_OPTIONS[2],
@@ -122,25 +125,79 @@ function NewUserPage() {
       ],
     };
   }, [formData.email, formData.fullName, formData.role, selectedCapabilities.length, selectedRole.detail, users.length]);
+  const invitePayload = useMemo(() => ({
+    fullName: formData.fullName.trim() || 'New collaborator',
+    email: formData.email.trim().toLowerCase() || 'person@example.com',
+    role: formData.role,
+    status: 'invited' as const,
+  }), [formData.email, formData.fullName, formData.role]);
+  const inviteHandoff = useMemo(() => ({
+    generatedAt: new Date().toISOString(),
+    endpoint: {
+      method: 'POST',
+      url: usersListUrl,
+    },
+    readiness: {
+      score: inviteReadiness.score,
+      checks: inviteReadiness.checks,
+    },
+    selectedRole: {
+      value: selectedRole.value,
+      label: selectedRole.label,
+      detail: selectedRole.detail,
+      capabilities: selectedCapabilities.map((capability) => capability.label),
+    },
+    payload: invitePayload,
+    guardrails: [
+      'Backend rejects duplicate emails.',
+      'New collaborators start as invited until auth delivery and activation are connected.',
+      'Owners should be assigned only when billing, destructive settings, or workspace transfer authority is required.',
+    ],
+    missingInfrastructure: [
+      'Transactional invite email delivery.',
+      'Auth-provider accept-invite flow.',
+      'Resend and expiry controls.',
+    ],
+  }), [invitePayload, inviteReadiness.checks, inviteReadiness.score, selectedCapabilities, selectedRole.detail, selectedRole.label, selectedRole.value, usersListUrl]);
+  const inviteHandoffText = useMemo(() => JSON.stringify(inviteHandoff, null, 2), [inviteHandoff]);
+
+  const copyInviteText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setNoticeMessage(`${label} copied.`);
+    } catch {
+      setNoticeMessage(value);
+    }
+  };
+
+  const downloadInviteHandoff = () => {
+    const blob = new Blob([inviteHandoffText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'backy-user-invite-handoff.json';
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNoticeMessage('Invite handoff manifest downloaded.');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!canSubmit) {
       setErrorMessage('Enter a full name and a valid email address before sending the invite.');
+      setNoticeMessage(null);
       return;
     }
 
     setIsLoading(true);
     setErrorMessage(null);
+    setNoticeMessage(null);
 
     try {
-      const created = await createUser({
-        fullName: formData.fullName.trim(),
-        email: formData.email.trim().toLowerCase(),
-        role: formData.role,
-        status: 'invited',
-      });
+      const created = await createUser(invitePayload);
       setUsers([created, ...users]);
       navigate({ to: '/users' });
     } catch (error) {
@@ -185,15 +242,39 @@ function NewUserPage() {
                 Create collaborators with explicit role scope, lifecycle state, and API payload visibility before they touch a site.
               </p>
             </div>
-            <button
-              type="submit"
-              disabled={isLoading || !canSubmit}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-            >
-              <UserPlus className="h-4 w-4" />
-              {isLoading ? 'Sending invite...' : 'Send invite'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void copyInviteText(inviteHandoffText, 'Invite handoff manifest')}
+                iconStart={<Copy className="size-4" />}
+              >
+                Copy manifest
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={downloadInviteHandoff}
+                iconStart={<Download className="size-4" />}
+              >
+                Download JSON
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={isLoading || !canSubmit}
+                iconStart={<UserPlus className="size-4" />}
+              >
+                {isLoading ? 'Sending invite...' : 'Send invite'}
+              </Button>
+            </div>
           </div>
+
+          {noticeMessage && (
+            <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              {noticeMessage}
+            </div>
+          )}
 
           <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
             <div className="rounded-lg border border-border bg-background p-4">
@@ -399,13 +480,26 @@ function NewUserPage() {
                 <p className="mt-1 text-sm text-muted-foreground">The submit action sends this structure to the backend.</p>
               </div>
             </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void copyInviteText(usersListUrl, 'Invite API URL')}
+                iconStart={<Copy className="size-4" />}
+              >
+                Copy URL
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void copyInviteText(inviteHandoffText, 'Invite handoff manifest')}
+                iconStart={<Copy className="size-4" />}
+              >
+                Copy manifest
+              </Button>
+            </div>
             <pre className="mt-4 overflow-x-auto rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-{JSON.stringify({
-  fullName: formData.fullName.trim() || 'New collaborator',
-  email: formData.email.trim().toLowerCase() || 'person@example.com',
-  role: formData.role,
-  status: 'invited',
-}, null, 2)}
+{JSON.stringify(invitePayload, null, 2)}
             </pre>
           </section>
 
