@@ -14,6 +14,9 @@ let createdTagId = null;
 let createdUserId = null;
 let createdCollectionId = null;
 let createdCollectionRecordId = null;
+let commerceProductsCollectionId = null;
+let commerceFutureProductRecordId = null;
+let commercePastProductRecordId = null;
 let createdMediaId = null;
 let createdImageMediaId = null;
 let createdMediaFolderId = null;
@@ -113,6 +116,18 @@ async function cleanup() {
     await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}`, { method: 'DELETE' }).catch(() => {});
   }
 
+  if (createdSiteId && commerceProductsCollectionId && commerceFutureProductRecordId) {
+    await request(`/api/admin/sites/${createdSiteId}/collections/${commerceProductsCollectionId}/records/${commerceFutureProductRecordId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (createdSiteId && commerceProductsCollectionId && commercePastProductRecordId) {
+    await request(`/api/admin/sites/${createdSiteId}/collections/${commerceProductsCollectionId}/records/${commercePastProductRecordId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (createdSiteId && commerceProductsCollectionId) {
+    await request(`/api/admin/sites/${createdSiteId}/collections/${commerceProductsCollectionId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
   if (createdSiteId && createdReusableSectionId) {
     await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}`, { method: 'DELETE' }).catch(() => {});
   }
@@ -178,6 +193,8 @@ try {
   const tagSlug = `admin-contract-tag-${unique}`;
   const collectionSlug = `admin-contract-collection-${unique}`;
   const collectionRecordSlug = `admin-contract-record-${unique}`;
+  const futureProductSlug = `admin-contract-future-product-${unique}`;
+  const pastProductSlug = `admin-contract-past-product-${unique}`;
   const boundPageSlug = `admin-contract-bound-page-${unique}`;
   const routeConflictPageSlug = `admin-contract-route-conflict-${unique}`;
   const adminDevOrigins = ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:4173'];
@@ -2651,6 +2668,136 @@ try {
         await request(`/api/admin/sites/${createdSiteId}/pages/${formWritePageId}`, { method: 'DELETE' }).catch(() => {});
       }
     }
+
+    const futureScheduledAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const pastScheduledAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const createProductsCollection = await request(`/api/admin/sites/${createdSiteId}/collections`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'Products',
+        slug: 'products',
+        listRoutePattern: '/products',
+        routePattern: '/products/:recordSlug',
+        status: 'published',
+        fields: [
+          { key: 'title', label: 'Title', type: 'text', required: true },
+          { key: 'sku', label: 'SKU', type: 'text', required: true, unique: true },
+          { key: 'description', label: 'Description', type: 'richText' },
+          { key: 'price', label: 'Price', type: 'number', required: true },
+          { key: 'currency', label: 'Currency', type: 'text', required: true },
+          { key: 'featured', label: 'Featured', type: 'boolean' },
+          { key: 'category', label: 'Category', type: 'text' },
+          { key: 'tags', label: 'Tags', type: 'tags', options: ['Contract'] },
+          { key: 'vendor', label: 'Vendor', type: 'text' },
+          { key: 'productType', label: 'Product type', type: 'select', options: ['physical', 'digital', 'service'] },
+          { key: 'inventory', label: 'Inventory', type: 'number' },
+          { key: 'lowStockThreshold', label: 'Low stock threshold', type: 'number' },
+          { key: 'inventoryPolicy', label: 'Inventory policy', type: 'select', options: ['deny', 'continue'] },
+          { key: 'checkoutUrl', label: 'Checkout URL', type: 'url' },
+        ],
+        permissions: {
+          publicRead: true,
+          publicCreate: false,
+          publicUpdate: false,
+          publicDelete: false,
+        },
+      }),
+    });
+    assert(createProductsCollection.response.status === 201, `${createProductsCollection.url} expected 201, got ${createProductsCollection.response.status}`);
+    assert(createProductsCollection.json?.data?.collection?.slug === 'products', `${createProductsCollection.url} returned wrong products collection slug`);
+    commerceProductsCollectionId = createProductsCollection.json.data.collection.id;
+
+    const createFutureProduct = await request(`/api/admin/sites/${createdSiteId}/collections/${commerceProductsCollectionId}/records`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        slug: futureProductSlug,
+        status: 'scheduled',
+        scheduledAt: futureScheduledAt,
+        values: {
+          title: 'Future Contract Product',
+          sku: `FUTURE-${unique}`,
+          description: 'Future scheduled commerce item',
+          price: 49,
+          currency: 'USD',
+          featured: true,
+          category: 'Contract',
+          tags: ['Contract'],
+          vendor: 'Backy',
+          productType: 'physical',
+          inventory: 10,
+          lowStockThreshold: 2,
+          inventoryPolicy: 'deny',
+          checkoutUrl: 'https://example.test/checkout/future',
+        },
+      }),
+    });
+    assert(createFutureProduct.response.status === 201, `${createFutureProduct.url} expected 201, got ${createFutureProduct.response.status}`);
+    commerceFutureProductRecordId = createFutureProduct.json.data.record.id;
+
+    const hiddenFutureProduct = await request(`/api/sites/${createdSiteId}/commerce/catalog?slug=${futureProductSlug}`);
+    assert(hiddenFutureProduct.response.status === 404, `${hiddenFutureProduct.url} expected future scheduled product to be hidden`);
+    assert(hiddenFutureProduct.json?.error?.code === 'PRODUCT_NOT_FOUND', `${hiddenFutureProduct.url} expected PRODUCT_NOT_FOUND`);
+
+    const createPastProduct = await request(`/api/admin/sites/${createdSiteId}/collections/${commerceProductsCollectionId}/records`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        slug: pastProductSlug,
+        status: 'scheduled',
+        scheduledAt: pastScheduledAt,
+        values: {
+          title: 'Past Contract Product',
+          sku: `PAST-${unique}`,
+          description: 'Past scheduled commerce item',
+          price: 79,
+          currency: 'USD',
+          featured: true,
+          category: 'Contract',
+          tags: ['Contract'],
+          vendor: 'Backy',
+          productType: 'physical',
+          inventory: 4,
+          lowStockThreshold: 5,
+          inventoryPolicy: 'deny',
+          checkoutUrl: 'https://example.test/checkout/past',
+        },
+      }),
+    });
+    assert(createPastProduct.response.status === 201, `${createPastProduct.url} expected 201, got ${createPastProduct.response.status}`);
+    commercePastProductRecordId = createPastProduct.json.data.record.id;
+
+    const visiblePastProduct = await request(`/api/sites/${createdSiteId}/commerce/catalog?slug=${pastProductSlug}`);
+    assert(visiblePastProduct.response.status === 200, `${visiblePastProduct.url} expected 200, got ${visiblePastProduct.response.status}`);
+    assertBackyContract(visiblePastProduct, 'discovery');
+    assert(visiblePastProduct.json?.data?.products?.[0]?.slug === pastProductSlug, `${visiblePastProduct.url} returned wrong scheduled product`);
+    assert(visiblePastProduct.json?.data?.products?.[0]?.status === 'scheduled', `${visiblePastProduct.url} expected scheduled product status`);
+    assert(visiblePastProduct.json?.data?.products?.[0]?.inventory?.lowStock === true, `${visiblePastProduct.url} expected low-stock signal`);
+
+    const visibleCatalog = await request(`/api/sites/${createdSiteId}/commerce/catalog?limit=100`);
+    assert(visibleCatalog.response.status === 200, `${visibleCatalog.url} expected 200, got ${visibleCatalog.response.status}`);
+    assert(visibleCatalog.json?.data?.products?.some((product) => product.slug === pastProductSlug), `${visibleCatalog.url} missing past scheduled product`);
+    assert(!visibleCatalog.json?.data?.products?.some((product) => product.slug === futureProductSlug), `${visibleCatalog.url} exposed future scheduled product`);
+    assert(visibleCatalog.json?.data?.readiness?.publishedProducts >= 1, `${visibleCatalog.url} expected catalog readiness to count visible scheduled product`);
+
+    const removeFutureProduct = await request(`/api/admin/sites/${createdSiteId}/collections/${commerceProductsCollectionId}/records/${commerceFutureProductRecordId}`, { method: 'DELETE' });
+    assert(removeFutureProduct.response.status === 200, `${removeFutureProduct.url} expected 200, got ${removeFutureProduct.response.status}`);
+    commerceFutureProductRecordId = null;
+
+    const removePastProduct = await request(`/api/admin/sites/${createdSiteId}/collections/${commerceProductsCollectionId}/records/${commercePastProductRecordId}`, { method: 'DELETE' });
+    assert(removePastProduct.response.status === 200, `${removePastProduct.url} expected 200, got ${removePastProduct.response.status}`);
+    commercePastProductRecordId = null;
+
+    const removeProductsCollection = await request(`/api/admin/sites/${createdSiteId}/collections/${commerceProductsCollectionId}`, { method: 'DELETE' });
+    assert(removeProductsCollection.response.status === 200, `${removeProductsCollection.url} expected 200, got ${removeProductsCollection.response.status}`);
+    commerceProductsCollectionId = null;
 
     const invalidRecord = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records`, {
       method: 'POST',
