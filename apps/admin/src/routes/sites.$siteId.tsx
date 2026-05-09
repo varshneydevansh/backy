@@ -560,6 +560,7 @@ function EditSitePage() {
   const [contactNoteDrafts, setContactNoteDrafts] = useState<Record<string, string>>({});
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const isSiteSettingsBusy = isLoading;
 
   useEffect(() => {
     if (site) {
@@ -1779,6 +1780,8 @@ function EditSitePage() {
   const siteWorkspaceHandoffText = useMemo(() => JSON.stringify(siteWorkspaceHandoff, null, 2), [siteWorkspaceHandoff]);
 
   const copySiteHandoffText = async (value: string, label: string) => {
+    if (isSiteSettingsBusy) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setSiteSettingsError(null);
@@ -1790,6 +1793,8 @@ function EditSitePage() {
   };
 
   const downloadSiteHandoff = () => {
+    if (isSiteSettingsBusy) return;
+
     downloadBlob(
       `${formData.slug || site?.slug || siteId}-backy-site-workspace-handoff.json`,
       new Blob([siteWorkspaceHandoffText], { type: 'application/json;charset=utf-8' }),
@@ -1800,6 +1805,9 @@ function EditSitePage() {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (isSiteSettingsBusy) return;
+
     setIsLoading(true);
     setSiteSettingsError(null);
 
@@ -1828,6 +1836,8 @@ function EditSitePage() {
   };
 
   const handleDelete = async () => {
+    if (isSiteSettingsBusy) return;
+
     setIsLoading(true);
     setSiteSettingsError(null);
 
@@ -1859,8 +1869,14 @@ function EditSitePage() {
       description="Manage site settings and connected workflow."
       action={
         <button
-          onClick={() => navigate({ to: '/sites' })}
-          className="p-2 rounded-lg hover:bg-accent text-muted-foreground"
+          type="button"
+          onClick={() => {
+            if (!isSiteSettingsBusy) {
+              void navigate({ to: '/sites' });
+            }
+          }}
+          disabled={isSiteSettingsBusy}
+          className="p-2 rounded-lg hover:bg-accent text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
@@ -1882,7 +1898,16 @@ function EditSitePage() {
                 href={publicSiteUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 mt-1"
+                aria-disabled={isSiteSettingsBusy}
+                onClick={(event) => {
+                  if (isSiteSettingsBusy) {
+                    event.preventDefault();
+                  }
+                }}
+                className={cn(
+                  'text-sm text-muted-foreground hover:text-primary flex items-center gap-1 mt-1',
+                  isSiteSettingsBusy && 'pointer-events-none opacity-60',
+                )}
               >
                 {formData.customDomain || site.customDomain || `${formData.slug || site.slug}.backy.app`}
                 <ExternalLink className="w-3 h-3" />
@@ -1893,7 +1918,16 @@ function EditSitePage() {
             href={publicSiteUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent hover:bg-accent/80 font-medium text-sm"
+            aria-disabled={isSiteSettingsBusy}
+            onClick={(event) => {
+              if (isSiteSettingsBusy) {
+                event.preventDefault();
+              }
+            }}
+            className={cn(
+              'inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent hover:bg-accent/80 font-medium text-sm',
+              isSiteSettingsBusy && 'pointer-events-none opacity-60',
+            )}
           >
             <ExternalLink className="w-4 h-4" />
             Visit Site
@@ -1923,7 +1957,8 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void copySiteHandoffText(siteWorkspaceHandoffText, 'Site workspace handoff manifest')}
-                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+                disabled={isSiteSettingsBusy}
+                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Copy className="h-4 w-4" />
                 Copy handoff
@@ -1931,14 +1966,24 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={downloadSiteHandoff}
-                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+                disabled={isSiteSettingsBusy}
+                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Download className="h-4 w-4" />
                 Download JSON
               </button>
               <a
                 href="#site-settings"
-                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+                aria-disabled={isSiteSettingsBusy}
+                onClick={(event) => {
+                  if (isSiteSettingsBusy) {
+                    event.preventDefault();
+                  }
+                }}
+                className={cn(
+                  'inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent',
+                  isSiteSettingsBusy && 'pointer-events-none opacity-60',
+                )}
               >
                 <Save className="h-4 w-4" />
                 Site settings
@@ -1947,7 +1992,16 @@ function EditSitePage() {
                 href={publicSiteUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                aria-disabled={isSiteSettingsBusy}
+                onClick={(event) => {
+                  if (isSiteSettingsBusy) {
+                    event.preventDefault();
+                  }
+                }}
+                className={cn(
+                  'inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90',
+                  isSiteSettingsBusy && 'pointer-events-none opacity-60',
+                )}
               >
                 <ExternalLink className="h-4 w-4" />
                 Open public site
@@ -2047,7 +2101,8 @@ function EditSitePage() {
                 <button
                   type="button"
                   onClick={() => void copySiteHandoffText(adminSiteUrl, 'Site admin API URL')}
-                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+                  disabled={isSiteSettingsBusy}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Copy className="h-4 w-4" />
                   Copy API URL
@@ -2055,7 +2110,8 @@ function EditSitePage() {
                 <button
                   type="button"
                   onClick={() => void copySiteHandoffText(siteWorkspaceHandoffText, 'Site workspace handoff manifest')}
-                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+                  disabled={isSiteSettingsBusy}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Copy className="h-4 w-4" />
                   Copy handoff
@@ -2773,8 +2829,13 @@ function EditSitePage() {
               <input
                 type="text"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                disabled={isSiteSettingsBusy}
+                onChange={(e) => {
+                  if (isSiteSettingsBusy) return;
+
+                  setFormData({ ...formData, name: e.target.value });
+                }}
+                className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 required
               />
             </div>
@@ -2784,8 +2845,13 @@ function EditSitePage() {
                 <input
                   type="text"
                   value={formData.slug}
-                  onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                  disabled={isSiteSettingsBusy}
+                  onChange={(e) => {
+                    if (isSiteSettingsBusy) return;
+
+                    setFormData({ ...formData, slug: e.target.value });
+                  }}
+                  className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </div>
               <div>
@@ -2793,9 +2859,14 @@ function EditSitePage() {
                 <input
                   type="text"
                   value={formData.customDomain}
-                  onChange={(e) => setFormData({ ...formData, customDomain: e.target.value })}
+                  disabled={isSiteSettingsBusy}
+                  onChange={(e) => {
+                    if (isSiteSettingsBusy) return;
+
+                    setFormData({ ...formData, customDomain: e.target.value });
+                  }}
                   placeholder="e.g. mysite.com"
-                  className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </div>
             </div>
@@ -2803,17 +2874,27 @@ function EditSitePage() {
               <label className="block text-sm font-medium mb-2">Description</label>
               <textarea
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                disabled={isSiteSettingsBusy}
+                onChange={(e) => {
+                  if (isSiteSettingsBusy) return;
+
+                  setFormData({ ...formData, description: e.target.value });
+                }}
                 rows={3}
-                className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none disabled:cursor-not-allowed disabled:opacity-50"
               />
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">Visibility</label>
               <select
                 value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as SiteStatusFilter })}
-                className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                disabled={isSiteSettingsBusy}
+                onChange={(e) => {
+                  if (isSiteSettingsBusy) return;
+
+                  setFormData({ ...formData, status: e.target.value as SiteStatusFilter });
+                }}
+                className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <option value="draft">Draft (Private)</option>
                 <option value="published">Published (Public)</option>
@@ -2825,8 +2906,13 @@ function EditSitePage() {
           <div className="flex items-center justify-between pt-4">
             <button
               type="button"
-              onClick={() => setShowDeleteConfirm(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
+              onClick={() => {
+                if (!isSiteSettingsBusy) {
+                  setShowDeleteConfirm(true);
+                }
+              }}
+              disabled={isSiteSettingsBusy}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Trash2 className="w-4 h-4" />
               Delete Site
@@ -2834,8 +2920,13 @@ function EditSitePage() {
             <div className="flex gap-3">
               <button
                 type="button"
-                onClick={() => navigate({ to: '/sites' })}
-                className="px-6 py-2.5 rounded-lg border hover:bg-accent font-medium"
+                onClick={() => {
+                  if (!isSiteSettingsBusy) {
+                    void navigate({ to: '/sites' });
+                  }
+                }}
+                disabled={isSiteSettingsBusy}
+                className="px-6 py-2.5 rounded-lg border hover:bg-accent font-medium disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -2845,7 +2936,7 @@ function EditSitePage() {
                 className={cn(
                   'flex items-center gap-2 px-6 py-2.5 rounded-lg',
                   'bg-primary text-primary-foreground font-medium',
-                  'hover:bg-primary/90 disabled:opacity-50 transition-all shadow-md hover:shadow-lg',
+                  'hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 transition-all shadow-md hover:shadow-lg',
                 )}
               >
                 <Save className="w-4 h-4" />
@@ -3500,8 +3591,13 @@ function EditSitePage() {
               <div className="mt-5 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                  onClick={() => {
+                    if (!isSiteSettingsBusy) {
+                      setShowDeleteConfirm(false);
+                    }
+                  }}
+                  disabled={isSiteSettingsBusy}
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -3509,9 +3605,9 @@ function EditSitePage() {
                   type="button"
                   onClick={() => void handleDelete()}
                   disabled={isLoading}
-                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Delete site
+                  {isSiteSettingsBusy ? 'Deleting...' : 'Delete site'}
                 </button>
               </div>
             </div>
