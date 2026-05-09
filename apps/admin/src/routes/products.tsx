@@ -1175,6 +1175,11 @@ function ProductsRoute() {
       productId: undefined,
     });
   };
+  const openStorefrontPage = () => {
+    if (isProductsBusy) return;
+
+    navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'storefront' } });
+  };
   const selectProductsSite = (nextSiteId: string) => {
     if (isProductsBusy) return;
 
@@ -1257,18 +1262,9 @@ function ProductsRoute() {
             <Button variant="outline" onClick={exportProductsCsv} disabled={filteredProducts.length === 0 || isProductsBusy} iconStart={<Download className="size-4" />}>
               Export CSV
             </Button>
-            <Link
-              to="/pages/new"
-              search={{ siteId: activeSiteId, template: 'storefront' }}
-              aria-disabled={isProductsBusy}
-              className={cn(
-                'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
-                isProductsBusy && 'pointer-events-none opacity-60',
-              )}
-            >
-              <Sparkles className="size-4" />
+            <Button variant="outline" onClick={openStorefrontPage} disabled={isProductsBusy} iconStart={<Sparkles className="size-4" />}>
               Storefront page
-            </Link>
+            </Button>
             {!productCollection ? (
               <Button onClick={() => void createProductsCollection()} disabled={isProductsBusy} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set up products'}
@@ -1360,18 +1356,9 @@ function ProductsRoute() {
                 <Button onClick={() => void copyStorefrontApiUrl()} disabled={isProductsBusy} iconStart={<Copy className="size-4" />}>
                   Copy URL
                 </Button>
-                <Link
-                  to="/pages/new"
-                  search={{ siteId: activeSiteId, template: 'storefront' }}
-                  aria-disabled={isProductsBusy}
-                  className={cn(
-                    'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
-                    isProductsBusy && 'pointer-events-none opacity-60',
-                  )}
-                >
-                  <Sparkles className="size-4" />
+                <Button variant="outline" onClick={openStorefrontPage} disabled={isProductsBusy} iconStart={<Sparkles className="size-4" />}>
                   Storefront page
-                </Link>
+                </Button>
                 <a
                   href={storefrontApiUrl}
                   target="_blank"
@@ -1556,18 +1543,9 @@ function ProductsRoute() {
               <Button onClick={() => void createProductsCollection()} disabled={isProductsBusy} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set Up Products'}
               </Button>
-              <Link
-                to="/pages/new"
-                search={{ siteId: activeSiteId, template: 'storefront' }}
-                aria-disabled={isProductsBusy}
-                className={cn(
-                  'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
-                  isProductsBusy && 'pointer-events-none opacity-60',
-                )}
-              >
-                <Sparkles className="size-4" />
+              <Button variant="outline" onClick={openStorefrontPage} disabled={isProductsBusy} iconStart={<Sparkles className="size-4" />}>
                 Start storefront page
-              </Link>
+              </Button>
             </div>
           }
         />
