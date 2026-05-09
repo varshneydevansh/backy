@@ -131,6 +131,7 @@ function PageEditorRoute() {
   const [pendingRestoreRevision, setPendingRestoreRevision] = useState<ContentRevision | null>(null);
   const [isWorkspaceFocus, setIsWorkspaceFocus] = useState(routeSearch.focus === 'canvas');
   const isPageEditorWorkflowBusy = isWorkflowBusy || isPreviewBusy || readinessLoading;
+  const isPageEditorBusy = isLoadingPage || isPageEditorWorkflowBusy;
 
   useEffect(() => {
     let cancelled = false;
@@ -510,6 +511,8 @@ function PageEditorRoute() {
   const editorHandoffText = JSON.stringify(editorHandoff, null, 2);
 
   const copyEditorHandoffText = async (value: string, label: string) => {
+    if (isPageEditorBusy) return;
+
     try {
       await navigator.clipboard.writeText(value);
       setSaveWarning(null);
@@ -521,6 +524,8 @@ function PageEditorRoute() {
   };
 
   const downloadEditorHandoff = () => {
+    if (isPageEditorBusy) return;
+
     const blob = new Blob([editorHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -539,8 +544,8 @@ function PageEditorRoute() {
     settings: PageSettings,
     canvasSize: CanvasSize = initialCanvasSize
   ) => {
-    if (isWorkflowBusy || isPreviewBusy) {
-      const message = 'Wait for the current preview, publish, archive, or restore workflow before saving.';
+    if (isPageEditorBusy) {
+      const message = 'Wait for the page load, preview, readiness, publish, archive, or restore workflow before saving.';
       setSaveWarning(message);
       throw new Error(message);
     }
@@ -589,10 +594,14 @@ function PageEditorRoute() {
   };
 
   const handleBack = () => {
+    if (isPageEditorBusy) return;
+
     navigate({ to: '/pages', search: { siteId } });
   };
 
   const setWorkspaceFocusRoute = (focused: boolean) => {
+    if (isPageEditorBusy) return;
+
     setIsWorkspaceFocus(focused);
     navigate({
       to: '/pages/$pageId/edit',
@@ -606,7 +615,7 @@ function PageEditorRoute() {
   };
 
   const applyWorkflow = async (action: 'publish' | 'archive') => {
-    if (isPageEditorWorkflowBusy) return;
+    if (isPageEditorBusy) return;
 
     setIsWorkflowBusy(true);
     setSaveWarning(null);
@@ -642,7 +651,7 @@ function PageEditorRoute() {
   };
 
   const generatePreview = async () => {
-    if (isPageEditorWorkflowBusy) return;
+    if (isPageEditorBusy) return;
 
     setIsPreviewBusy(true);
     setSaveWarning(null);
@@ -666,7 +675,7 @@ function PageEditorRoute() {
   };
 
   const restoreRevision = async (revision: ContentRevision) => {
-    if (isPageEditorWorkflowBusy) return;
+    if (isPageEditorBusy) return;
 
     setIsWorkflowBusy(true);
     setSaveWarning(null);
@@ -698,7 +707,8 @@ function PageEditorRoute() {
           <button
             type="button"
             onClick={handleBack}
-            className="rounded-lg border border-border bg-background p-2 transition-colors hover:bg-accent"
+            disabled={isPageEditorBusy}
+            className="rounded-lg border border-border bg-background p-2 transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Back to pages"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -713,7 +723,7 @@ function PageEditorRoute() {
           type="button"
           variant="outline"
           onClick={() => setWorkspaceFocusRoute(!isWorkspaceFocus)}
-          disabled={isPageEditorWorkflowBusy}
+          disabled={isPageEditorBusy}
           iconStart={isWorkspaceFocus ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
         >
           {isWorkspaceFocus ? 'Show page panels' : 'Focus canvas'}
@@ -768,6 +778,7 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void copyEditorHandoffText(editorHandoffText, 'Page editor handoff manifest')}
+              disabled={isPageEditorBusy}
               iconStart={<Copy className="size-4" />}
             >
               Copy handoff
@@ -776,6 +787,7 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={downloadEditorHandoff}
+              disabled={isPageEditorBusy}
               iconStart={<Download className="size-4" />}
             >
               Download JSON
@@ -784,7 +796,7 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void generatePreview()}
-              disabled={isPageEditorWorkflowBusy || editorHasUnsavedChanges}
+              disabled={isPageEditorBusy || editorHasUnsavedChanges}
               iconStart={<Eye className="size-4" />}
               title={editorHasUnsavedChanges ? 'Save the canvas before generating a preview' : 'Preview page'}
             >
@@ -794,7 +806,7 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void loadPageReadiness()}
-              disabled={isPageEditorWorkflowBusy}
+              disabled={isPageEditorBusy}
               iconStart={<RefreshCw className={cn('size-4', readinessLoading && 'animate-spin')} />}
             >
               Refresh readiness
@@ -802,7 +814,7 @@ function PageEditorRoute() {
             <Button
               type="button"
               onClick={() => void applyWorkflow('publish')}
-              disabled={isPageEditorWorkflowBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
+              disabled={isPageEditorBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
               iconStart={<CheckCircle2 className="size-4" />}
               title={externalWorkflowDisabledReason || 'Publish page'}
             >
@@ -851,7 +863,14 @@ function PageEditorRoute() {
               <a
                 key={area.title}
                 href={area.href}
-                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                aria-disabled={isPageEditorBusy}
+                onClick={(event) => {
+                  if (isPageEditorBusy) event.preventDefault();
+                }}
+                className={cn(
+                  'rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5',
+                  isPageEditorBusy && 'pointer-events-none opacity-60',
+                )}
               >
                 <div className="text-sm font-semibold text-foreground">{area.title}</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
@@ -870,6 +889,7 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void copyEditorHandoffText(adminPageUrl, 'Page editor API URL')}
+              disabled={isPageEditorBusy}
               iconStart={<Copy className="size-4" />}
             >
               Copy API URL
@@ -878,6 +898,7 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void copyEditorHandoffText(editorHandoffText, 'Page editor handoff manifest')}
+              disabled={isPageEditorBusy}
               iconStart={<Copy className="size-4" />}
             >
               Copy handoff
@@ -901,7 +922,7 @@ function PageEditorRoute() {
               variant="outline"
               size="sm"
               onClick={() => setWorkspaceFocusRoute(false)}
-              disabled={isPageEditorWorkflowBusy}
+              disabled={isPageEditorBusy}
               iconStart={<Minimize2 className="size-4" />}
             >
               Show panels
@@ -993,7 +1014,7 @@ function PageEditorRoute() {
               <div className="grid gap-2">
                 <Button
                   onClick={() => void generatePreview()}
-                  disabled={isPageEditorWorkflowBusy || editorHasUnsavedChanges}
+                  disabled={isPageEditorBusy || editorHasUnsavedChanges}
                   variant="outline"
                   iconStart={<Eye className="size-4" />}
                   className="w-full"
@@ -1003,7 +1024,7 @@ function PageEditorRoute() {
                 </Button>
                 <Button
                   onClick={() => void applyWorkflow('publish')}
-                  disabled={isPageEditorWorkflowBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
+                  disabled={isPageEditorBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
                   variant="primary"
                   iconStart={<CheckCircle2 className="size-4" />}
                   className="w-full"
@@ -1013,7 +1034,7 @@ function PageEditorRoute() {
                 </Button>
                 <Button
                   onClick={() => void applyWorkflow('archive')}
-                  disabled={isPageEditorWorkflowBusy || page.status === 'archived' || editorHasUnsavedChanges}
+                  disabled={isPageEditorBusy || page.status === 'archived' || editorHasUnsavedChanges}
                   variant="outline"
                   iconStart={<Archive className="size-4" />}
                   className="w-full"
@@ -1028,7 +1049,14 @@ function PageEditorRoute() {
                   href={previewUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex max-w-full items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-disabled={isPageEditorBusy}
+                  onClick={(event) => {
+                    if (isPageEditorBusy) event.preventDefault();
+                  }}
+                  className={cn(
+                    'flex max-w-full items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground',
+                    isPageEditorBusy && 'pointer-events-none opacity-60',
+                  )}
                 >
                   <span className="truncate">
                     Preview expires {previewExpiresAt ? new Date(previewExpiresAt).toLocaleTimeString() : 'soon'}
@@ -1050,7 +1078,7 @@ function PageEditorRoute() {
                 <button
                   type="button"
                   onClick={() => void loadPageReadiness()}
-                  disabled={isPageEditorWorkflowBusy}
+                  disabled={isPageEditorBusy}
                   className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                   title="Refresh page readiness"
                 >
@@ -1130,7 +1158,7 @@ function PageEditorRoute() {
                         </div>
                         <button
                           type="button"
-                          disabled={isPageEditorWorkflowBusy || editorHasUnsavedChanges}
+                          disabled={isPageEditorBusy || editorHasUnsavedChanges}
                           onClick={() => setPendingRestoreRevision(revision)}
                           className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                           title={editorHasUnsavedChanges ? 'Save or reload the canvas before restoring' : 'Restore revision'}
@@ -1174,7 +1202,7 @@ function PageEditorRoute() {
               <button
                 type="button"
                 onClick={() => setPendingRestoreRevision(null)}
-                disabled={isPageEditorWorkflowBusy}
+                disabled={isPageEditorBusy}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -1182,7 +1210,7 @@ function PageEditorRoute() {
               <button
                 type="button"
                 onClick={() => void restoreRevision(pendingRestoreRevision)}
-                disabled={isPageEditorWorkflowBusy || editorHasUnsavedChanges}
+                disabled={isPageEditorBusy || editorHasUnsavedChanges}
                 className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isWorkflowBusy ? 'Restoring...' : 'Restore revision'}
