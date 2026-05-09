@@ -38,6 +38,7 @@ import { useStore } from '@/stores/mockStore';
 import {
   getSettings,
   listBlogPosts,
+  listAdminAuditLogs,
   listComments,
   listCollections,
   listCollectionRecords,
@@ -48,6 +49,7 @@ import {
   listPages,
   listSites,
   updateComments,
+  type AdminAuditLog,
   type AdminContact,
   type AdminComment,
   type FormDefinition,
@@ -65,6 +67,7 @@ interface HeaderProps {
 }
 
 type StaticToolRoute =
+  | '/'
   | '/sites'
   | '/forms'
   | '/comments'
@@ -90,6 +93,10 @@ const commentsNotificationsEnabled = (settings?: SiteSettingsInput): boolean => 
   settings?.integrations?.notifications?.inApp?.comments !== false
 );
 
+const activityNotificationsEnabled = (settings?: SiteSettingsInput): boolean => (
+  settings?.integrations?.notifications?.inApp?.activity !== false
+);
+
 type WorkflowNotificationTone = 'warning' | 'danger' | 'success' | 'info';
 
 interface WorkflowNotification {
@@ -105,6 +112,7 @@ interface WorkflowNotification {
     | { route: 'contacts' }
     | { route: 'orders' }
     | { route: 'site'; siteId: string }
+    | { route: 'dashboard' }
     | { route: 'settings' };
 }
 
@@ -137,6 +145,22 @@ const notificationToneClasses: Record<WorkflowNotificationTone, string> = {
 const readRecordValue = (values: Record<string, unknown>, key: string, fallback = '') => (
   values[key] ?? values[key.toLowerCase()] ?? values[key.replace(/([A-Z])/g, '').toLowerCase()] ?? fallback
 );
+
+const auditNotificationTitle = (log: AdminAuditLog): string => {
+  const action = log.action
+    .split(/[._-]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+
+  return action || 'Backend activity recorded';
+};
+
+const auditNotificationDetail = (log: AdminAuditLog): string => {
+  const entity = log.entity.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+  const actor = log.actorId ? ` by ${log.actorId}` : '';
+  return `${entity || 'record'} ${log.entityId || 'updated'}${actor}`;
+};
 
 // ============================================
 // COMPONENT
@@ -220,9 +244,17 @@ export function Header({ onSidebarToggle }: HeaderProps) {
         icon: Globe2,
       },
       {
+        id: 'activity',
+        label: 'Activity',
+        detail: 'Audit trail',
+        count: routeCount('dashboard'),
+        to: '/',
+        icon: ClipboardList,
+      },
+      {
         id: 'settings',
         label: 'Settings',
-        detail: 'Routing',
+        detail: 'Notifications',
         count: commentsAlertsDisabled ? 1 : routeCount('settings'),
         to: '/settings',
         icon: SlidersHorizontal,
@@ -275,15 +307,19 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     try {
       const settings = await getSettings().catch(() => undefined);
       const commentsEnabled = commentsNotificationsEnabled(settings);
+      const activityEnabled = activityNotificationsEnabled(settings);
       setCommentsAlertsDisabled(!commentsEnabled);
 
-      const [commentResult, forms, readiness, collections] = await Promise.all([
+      const [commentResult, forms, readiness, collections, auditResult] = await Promise.all([
         commentsEnabled
           ? listComments(activeSiteId, { status: 'pending', limit: 5, sort: 'newest' }).catch(() => ({ comments: [] }))
           : Promise.resolve({ comments: [] }),
         listForms(activeSiteId).catch(() => []),
         getSiteReadiness(activeSiteId).catch(() => null),
         listCollections(activeSiteId).catch(() => []),
+        activityEnabled
+          ? listAdminAuditLogs({ limit: 3 }).catch(() => ({ logs: [] }))
+          : Promise.resolve({ logs: [] }),
       ]);
 
       const formWork = await Promise.all(
@@ -328,6 +364,15 @@ export function Header({ onSidebarToggle }: HeaderProps) {
           actionLabel: 'Open site',
           action: { route: 'site' as const, siteId: activeSiteRouteId },
         }] : []),
+        ...(auditResult.logs || []).slice(0, 3).map((log) => ({
+          id: `activity:${log.id}`,
+          tone: 'info' as const,
+          title: auditNotificationTitle(log),
+          detail: auditNotificationDetail(log),
+          meta: getRelativeTime(log.createdAt),
+          actionLabel: 'Open activity',
+          action: { route: 'dashboard' as const },
+        })),
         ...pendingSubmissions.slice(0, 4).map(({ form, submission }) => ({
           id: `form-submission:${submission.id}`,
           tone: 'warning' as const,
@@ -412,6 +457,10 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     }
     if (notification.action.route === 'site') {
       navigate({ to: '/sites/$siteId', params: { siteId: notification.action.siteId } });
+      return;
+    }
+    if (notification.action.route === 'dashboard') {
+      navigate({ to: '/' });
       return;
     }
     navigate({ to: '/settings' });
@@ -705,7 +754,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-muted-foreground">Moderation, leads, forms, orders, and readiness for this site.</div>
+                    <div className="text-xs text-muted-foreground">Moderation, leads, forms, orders, activity, and readiness for this site.</div>
                   </div>
                   <button
                     type="button"
@@ -767,7 +816,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                     <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center">
                       <CheckCircle2 className="mx-auto size-5 text-success" />
                       <p className="mt-2 text-sm font-medium">No active notifications</p>
-                      <p className="mt-1 text-xs text-muted-foreground">New moderation, lead, order, and readiness tasks will appear here.</p>
+                      <p className="mt-1 text-xs text-muted-foreground">New moderation, lead, order, activity, and readiness tasks will appear here.</p>
                       {commentsAlertsDisabled && (
                         <p className="mt-2 inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
                           <ShieldAlert className="size-3" />
