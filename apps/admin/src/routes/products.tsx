@@ -1,5 +1,5 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import {
   AlertTriangle,
   Archive,
@@ -811,6 +811,14 @@ function ProductsRoute() {
             <Button variant="outline" onClick={exportProductsCsv} disabled={filteredProducts.length === 0} iconStart={<Download className="size-4" />}>
               Export CSV
             </Button>
+            <Link
+              to="/pages/new"
+              search={{ siteId: activeSiteId, template: 'storefront' }}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              <Sparkles className="size-4" />
+              Storefront page
+            </Link>
             {!productCollection ? (
               <Button onClick={() => void createProductsCollection()} disabled={isSaving} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set up products'}
@@ -902,6 +910,14 @@ function ProductsRoute() {
                 <Button onClick={() => void copyStorefrontApiUrl()} iconStart={<Copy className="size-4" />}>
                   Copy URL
                 </Button>
+                <Link
+                  to="/pages/new"
+                  search={{ siteId: activeSiteId, template: 'storefront' }}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+                >
+                  <Sparkles className="size-4" />
+                  Storefront page
+                </Link>
                 <a
                   href={storefrontApiUrl}
                   target="_blank"
@@ -1013,9 +1029,19 @@ function ProductsRoute() {
           title="Products are not set up"
           description="Create a products collection with pricing, SKU, inventory, image, and publishing fields."
           action={
-            <Button className="mt-2" onClick={() => void createProductsCollection()} disabled={isSaving} iconStart={<Sparkles className="size-4" />}>
-              {isSaving ? 'Setting up...' : 'Set Up Products'}
-            </Button>
+            <div className="mt-2 flex flex-wrap justify-center gap-2">
+              <Button onClick={() => void createProductsCollection()} disabled={isSaving} iconStart={<Sparkles className="size-4" />}>
+                {isSaving ? 'Setting up...' : 'Set Up Products'}
+              </Button>
+              <Link
+                to="/pages/new"
+                search={{ siteId: activeSiteId, template: 'storefront' }}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                <Sparkles className="size-4" />
+                Start storefront page
+              </Link>
+            </div>
           }
         />
       ) : (
