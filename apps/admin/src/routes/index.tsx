@@ -161,7 +161,7 @@ const frontendContracts = [
   { label: 'Navigation', key: 'navigation', detail: 'Primary, footer, and reusable menus' },
   { label: 'Media', key: 'media', detail: 'Public assets, fonts, files' },
   { label: 'Collections', key: 'collections', detail: 'Structured records for custom UI' },
-  { label: 'Products', key: 'products', detail: 'Sellable catalog data for storefronts' },
+  { label: 'Commerce', key: 'products', detail: 'Normalized product catalog, facets, inventory, delivery, and checkout handoff' },
   { label: 'Forms', key: 'forms', detail: 'Definitions and submission endpoints' },
   { label: 'Comments', key: 'comments', detail: 'Moderation-ready public discussions' },
   { label: 'SEO', key: 'seo', detail: 'Sitemap, robots, metadata, route index' },
@@ -631,7 +631,7 @@ function Index() {
     navigation: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/navigation`,
     media: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/media`,
     collections: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections`,
-    products: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/collections/products/records?status=published`,
+    products: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/catalog?limit=24&sortBy=title`,
     forms: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms`,
     comments: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments`,
     seo: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/seo?format=sitemap`,
@@ -669,6 +669,15 @@ function Index() {
     },
     publicEndpoints: frontendContractUrls,
     adminEndpoints: adminContractUrls,
+    commerce: {
+      catalogEndpoint: frontendContractUrls.products,
+      productsCollection: productsCollection
+        ? { id: productsCollection.id, status: productsCollection.status, publicRead: productsCollection.permissions.publicRead }
+        : null,
+      ordersCollection: ordersCollection
+        ? { id: ordersCollection.id, status: ordersCollection.status, publicRead: ordersCollection.permissions.publicRead }
+        : null,
+    },
     modules: DASHBOARD_MODULES.map((module) => ({
       title: module.title,
       status: module.status,
@@ -701,6 +710,8 @@ function Index() {
     dashboard.sites.length,
     database,
     frontendContractUrls,
+    ordersCollection,
+    productsCollection,
     readinessErrors,
     readinessWarnings,
     storage,
