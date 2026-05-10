@@ -227,6 +227,7 @@ async function cleanup() {
       method: 'PATCH',
       headers: {
         'content-type': 'application/json',
+        'x-request-id': 'contract-page-comment-clear-reports',
       },
       body: JSON.stringify({
         deliveryMode: originalDeliveryMode,
@@ -1698,7 +1699,28 @@ try {
     assert(reportedComment.json?.success === true, `${reportedComment.url} expected success envelope`);
     assert(reportedComment.json?.requestId === 'contract-page-comment-report', `${reportedComment.url} expected request id`);
     assert(reportedComment.json?.data?.comment?.id === pageCommentId, `${reportedComment.url} missing reported comment in data envelope`);
+    assert(reportedComment.json?.data?.comment?.reportCount >= 1, `${reportedComment.url} did not increment report count`);
     assert(reportedComment.json?.comment?.id === pageCommentId, `${reportedComment.url} missing legacy reported comment`);
+
+    const clearCommentReports = await request(`/api/sites/${createdSiteId}/comments`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        ids: [pageCommentId],
+        action: 'clearReports',
+        actor: 'contract-smoke',
+        requestId: 'contract-page-comment-clear-reports',
+      }),
+    });
+    assert(clearCommentReports.response.status === 200, `${clearCommentReports.url} expected 200, got ${clearCommentReports.response.status}`);
+    assertBackyContract(clearCommentReports, 'private');
+    assert(clearCommentReports.json?.success === true, `${clearCommentReports.url} expected success envelope`);
+    assert(clearCommentReports.json?.data?.updated?.[0]?.id === pageCommentId, `${clearCommentReports.url} missing cleared comment`);
+    assert(clearCommentReports.json?.data?.updated?.[0]?.reportCount === 0, `${clearCommentReports.url} did not clear report count`);
+    assert(Array.isArray(clearCommentReports.json?.data?.updated?.[0]?.reportReasons) && clearCommentReports.json.data.updated[0].reportReasons.length === 0, `${clearCommentReports.url} did not clear report reasons`);
+    assert(clearCommentReports.json?.data?.updated?.[0]?.status === 'approved', `${clearCommentReports.url} changed comment status while clearing reports`);
 
     const commentReportEvents = await request(`/api/sites/${createdSiteId}/events?kind=comment-reported&requestId=contract-page-comment-report`);
     assert(commentReportEvents.response.status === 200, `${commentReportEvents.url} expected 200, got ${commentReportEvents.response.status}`);
@@ -3618,6 +3640,8 @@ try {
       assert(publicOpenApi.json?.components?.schemas?.Comment?.properties?.parentId, `${publicOpenApi.url} missing comment parent id schema`);
       assert(publicOpenApi.json?.components?.schemas?.Comment?.properties?.commentThreadId, `${publicOpenApi.url} missing comment thread id schema`);
       assert(publicOpenApi.json?.components?.schemas?.CommentSubmitRequest?.properties?.body, `${publicOpenApi.url} missing comment body alias schema`);
+      assert(publicOpenApi.json?.components?.schemas?.CommentBulkUpdateRequest?.properties?.clearReports, `${publicOpenApi.url} missing comment clear reports schema`);
+      assert(publicOpenApi.json?.components?.schemas?.CommentBulkUpdateRequest?.properties?.ids, `${publicOpenApi.url} missing comment ids alias schema`);
       assert(publicOpenApi.json?.components?.schemas?.CommentsEnvelope?.properties?.data?.properties?.comments?.items?.$ref === '#/components/schemas/Comment', `${publicOpenApi.url} missing typed comment list schema`);
       assert(publicOpenApi.json?.components?.schemas?.CommentReportEnvelope, `${publicOpenApi.url} missing comment report schema`);
       assert(publicOpenApi.json?.components?.schemas?.EventsEnvelope, `${publicOpenApi.url} missing interaction event schema`);

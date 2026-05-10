@@ -602,6 +602,19 @@ export interface BackyCommentListOptions extends BackyListOptions {
   sort?: 'newest' | 'oldest';
 }
 
+export interface BackyCommentBulkUpdateInput {
+  commentIds?: string[];
+  ids?: string[];
+  status?: 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked';
+  action?: 'clearReports';
+  clearReports?: boolean;
+  reviewedBy?: string;
+  actor?: string;
+  rejectionReason?: string;
+  blockReason?: string;
+  requestId?: string;
+}
+
 export interface BackyEventListOptions extends BackyListOptions {
   kind?: string;
 }
@@ -1129,6 +1142,22 @@ export class BackyClient {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments`, {
       query,
       requestId,
+    });
+  }
+
+  updateComments(input: BackyCommentBulkUpdateInput): Promise<BackyEnvelope<{ siteId?: string; updated: BackyComment[]; updatedCount?: number; missingIds?: string[] }>> {
+    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments`, {
+      method: 'PATCH',
+      body: input,
+      requestId: input.requestId,
+    });
+  }
+
+  clearCommentReports(commentIds: string[], input: Omit<BackyCommentBulkUpdateInput, 'commentIds' | 'ids' | 'action' | 'clearReports' | 'status'> = {}): Promise<BackyEnvelope<{ siteId?: string; updated: BackyComment[]; updatedCount?: number; missingIds?: string[] }>> {
+    return this.updateComments({
+      ...input,
+      commentIds,
+      action: 'clearReports',
     });
   }
 

@@ -95,7 +95,9 @@ function parsePatchPayload(raw: unknown) {
     ? ((raw as { status: string }).status)
     : null);
 
-  const commentIds = parseCommentIds((raw as { commentIds?: unknown }).commentIds);
+  const commentIds = parseCommentIds(
+    (raw as { commentIds?: unknown }).commentIds ?? (raw as { ids?: unknown }).ids,
+  );
   const reviewedBy = typeof (raw as { reviewedBy?: unknown }).reviewedBy === 'string'
     ? (raw as { reviewedBy: string }).reviewedBy.trim()
     : undefined;

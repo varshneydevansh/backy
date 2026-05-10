@@ -1082,14 +1082,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               required: true,
               content: {
                 'application/json': {
-                  schema: {
-                    type: 'object',
-                    properties: {
-                      ids: { type: 'array', items: { type: 'string' } },
-                      status: { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam', 'blocked'] },
-                    },
-                    required: ['ids', 'status'],
-                  },
+                  schema: { $ref: '#/components/schemas/CommentBulkUpdateRequest' },
                 },
               },
             },
@@ -1699,6 +1692,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               startedAt: { type: ['string', 'number'] },
               honeypot: { type: 'string' },
               rateLimitBypass: { type: 'boolean' },
+            },
+          },
+          CommentBulkUpdateRequest: {
+            type: 'object',
+            additionalProperties: false,
+            description: 'Bulk comment moderation request. Provide commentIds or ids plus either status, clearReports: true, or action: "clearReports".',
+            properties: {
+              commentIds: { type: 'array', items: { type: 'string' } },
+              ids: { type: 'array', items: { type: 'string' }, description: 'Alias for commentIds.' },
+              status: { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam', 'blocked'] },
+              action: { type: 'string', enum: ['clearReports'] },
+              clearReports: { type: 'boolean' },
+              reviewedBy: { type: 'string' },
+              actor: { type: 'string' },
+              rejectionReason: { type: 'string' },
+              blockReason: { type: 'string' },
+              requestId: { type: 'string' },
             },
           },
           Comment: {
