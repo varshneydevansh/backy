@@ -18,6 +18,7 @@
     "test:contacts": "node scripts/contacts-smoke.mjs",
     "test:comments": "node scripts/comments-smoke.mjs",
     "test:users": "node scripts/users-smoke.mjs",
+    "test:sites": "node scripts/sites-smoke.mjs",
     "test:settings": "node scripts/settings-smoke.mjs",
     "clean": "rm -rf dist"
   },
