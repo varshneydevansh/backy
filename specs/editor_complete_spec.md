@@ -458,7 +458,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Reusable-section restore now lets admins restore an older saved-section version with slug conflict checks and restore provenance.
   - Reusable-section instance registry/propagation now discovers synced page/blog instances, reports stale source timestamps, and bulk-refreshes synced instances while preserving root placement.
   - Reusable-section create/update/delete/restore/import/instance-propagation now emits queryable admin audit logs with request-id correlation.
-  - Still missing RBAC enforcement for section management operations.
+  - Section management operations now enforce content permissions; broader non-section admin RBAC remains a platform-wide gap.
 
 ## Priority Order
 **Phase 1: Critical Fixes (Immediate)**

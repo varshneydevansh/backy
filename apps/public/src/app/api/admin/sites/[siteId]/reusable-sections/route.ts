@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   createReusableSection,
@@ -77,6 +78,8 @@ const parseTags = (value: unknown): string[] => {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.view' });
+  if (access instanceof NextResponse) return access;
 
   try {
     const { siteId } = await params;
@@ -146,6 +149,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.edit' });
+  if (access instanceof NextResponse) return access;
 
   try {
     const { siteId } = await params;

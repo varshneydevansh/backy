@@ -1480,6 +1480,11 @@ try {
   });
 
   await record('admin reusable sections create/list/detail/update/delete works for temporary site', async () => {
+    const unauthReusableSections = await fetch(`${baseUrl}/api/admin/sites/${createdSiteId}/reusable-sections`);
+    const unauthReusableSectionsJson = await unauthReusableSections.json().catch(() => ({}));
+    assert(unauthReusableSections.status === 401, `Reusable sections API should reject missing auth, got ${unauthReusableSections.status}`);
+    assert(unauthReusableSectionsJson?.success === false && unauthReusableSectionsJson?.error?.code === 'UNAUTHORIZED', `Reusable sections API missing auth envelope: ${JSON.stringify(unauthReusableSectionsJson).slice(0, 500)}`);
+
     const create = await request(`/api/admin/sites/${createdSiteId}/reusable-sections`, {
       method: 'POST',
       headers: {

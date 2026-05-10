@@ -5,6 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   createReusableSection,
@@ -123,6 +124,8 @@ const normalizeImportSection = (value: unknown): ImportSection | null => {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.edit' });
+  if (access instanceof NextResponse) return access;
 
   try {
     const { siteId } = await params;
