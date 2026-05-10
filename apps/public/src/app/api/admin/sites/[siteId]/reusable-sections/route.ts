@@ -14,6 +14,7 @@ import {
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
+import { buildInitialReusableSectionMetadata } from '@/lib/reusableSectionVersions';
 import type { BackyJsonObject } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
@@ -175,6 +176,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(409, 'SLUG_CONFLICT', 'A reusable section with this slug already exists', requestId);
       }
 
+      const createdBy = typeof body.createdBy === 'string' ? body.createdBy.trim() || 'admin' : 'admin';
+      const updatedBy = typeof body.updatedBy === 'string' ? body.updatedBy.trim() || createdBy : createdBy;
+      const metadata = buildInitialReusableSectionMetadata(parseMetadata(body.metadata), {
+        actor: updatedBy,
+        requestId,
+      }) as BackyJsonObject;
       const section = (await repositories.reusableSections.create({
         siteId: site.id,
         name,
@@ -184,10 +191,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         status: body.status === 'archived' ? 'archived' : 'active',
         tags: parseTags(body.tags),
         content: parseContent(body.content),
-        metadata: parseMetadata(body.metadata),
+        metadata,
         sourceElementId: typeof body.sourceElementId === 'string' ? body.sourceElementId.trim() || null : null,
-        createdBy: typeof body.createdBy === 'string' ? body.createdBy.trim() || 'admin' : 'admin',
-        updatedBy: typeof body.updatedBy === 'string' ? body.updatedBy.trim() || 'admin' : 'admin',
+        createdBy,
+        updatedBy,
       })).item;
       const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
         siteId: site.id,
@@ -230,10 +237,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(409, 'SLUG_CONFLICT', 'A reusable section with this slug already exists', requestId);
     }
 
+    const createdBy = typeof body.createdBy === 'string' ? body.createdBy.trim() || 'admin' : 'admin';
+    const updatedBy = typeof body.updatedBy === 'string' ? body.updatedBy.trim() || createdBy : createdBy;
     const section = createReusableSection(site.id, {
       ...body,
       name,
       slug,
+      metadata: buildInitialReusableSectionMetadata(parseMetadata(body.metadata), {
+        actor: updatedBy,
+        requestId,
+      }),
+      createdBy,
+      updatedBy,
     });
 
     return NextResponse.json(

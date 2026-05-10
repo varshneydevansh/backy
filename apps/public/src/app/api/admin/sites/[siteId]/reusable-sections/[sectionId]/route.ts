@@ -15,6 +15,11 @@ import {
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
+import {
+  buildReusableSectionUpdateMetadata,
+  reusableSectionConflict,
+  reusableSectionVersionFromMetadata,
+} from '@/lib/reusableSectionVersions';
 import type { BackyJsonObject } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
@@ -152,6 +157,29 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         }
       }
 
+      const versionConflict = reusableSectionConflict(section, body);
+      if (versionConflict) {
+        return NextResponse.json({
+          success: false,
+          requestId,
+          error: {
+            code: 'REUSABLE_SECTION_VERSION_CONFLICT',
+            message: 'Reusable section has changed since the client loaded it',
+            details: {
+              ...versionConflict,
+              section,
+            },
+          },
+        }, { status: 409 });
+      }
+
+      const updatedBy = body.updatedBy !== undefined
+        ? typeof body.updatedBy === 'string' ? body.updatedBy.trim() || null : null
+        : section.updatedBy || null;
+      const metadata = buildReusableSectionUpdateMetadata(section, body.metadata === undefined ? undefined : parseMetadata(body.metadata), {
+        actor: updatedBy,
+        requestId,
+      }) as BackyJsonObject;
       const updated = (await repositories.reusableSections.update(site.id, section.id, {
         ...(typeof body.name === 'string' && body.name.trim() ? { name: body.name.trim() } : {}),
         ...(nextSlug ? { slug: nextSlug } : {}),
@@ -160,9 +188,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ...(body.status === 'active' || body.status === 'archived' ? { status: body.status } : {}),
         ...(body.tags !== undefined ? { tags: parseTags(body.tags) } : {}),
         ...(body.content !== undefined ? { content: parseContent(body.content) } : {}),
-        ...(body.metadata !== undefined ? { metadata: parseMetadata(body.metadata) || {} } : {}),
+        metadata,
         ...(body.sourceElementId !== undefined ? { sourceElementId: typeof body.sourceElementId === 'string' ? body.sourceElementId.trim() || null : null } : {}),
-        ...(body.updatedBy !== undefined ? { updatedBy: typeof body.updatedBy === 'string' ? body.updatedBy.trim() || null : null } : {}),
+        ...(body.updatedBy !== undefined ? { updatedBy } : {}),
       })).item;
       const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
         siteId: site.id,
@@ -173,7 +201,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         requestId,
       });
 
-      return NextResponse.json({ success: true, requestId, data: { section: updated, cacheInvalidation } });
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          section: updated,
+          version: reusableSectionVersionFromMetadata(updated.metadata),
+          cacheInvalidation,
+        },
+      });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -205,16 +241,47 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    const versionConflict = reusableSectionConflict(section, body);
+    if (versionConflict) {
+      return NextResponse.json({
+        success: false,
+        requestId,
+        error: {
+          code: 'REUSABLE_SECTION_VERSION_CONFLICT',
+          message: 'Reusable section has changed since the client loaded it',
+          details: {
+            ...versionConflict,
+            section,
+          },
+        },
+      }, { status: 409 });
+    }
+
+    const updatedBy = body.updatedBy !== undefined
+      ? typeof body.updatedBy === 'string' ? body.updatedBy.trim() || null : null
+      : section.updatedBy || null;
     const updated = updateReusableSection(site.id, section.id, {
       ...body,
       ...(nextSlug ? { slug: nextSlug } : {}),
+      metadata: buildReusableSectionUpdateMetadata(section, body.metadata, {
+        actor: updatedBy,
+        requestId,
+      }),
+      ...(body.updatedBy !== undefined ? { updatedBy } : {}),
     });
 
     if (!updated) {
       return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
     }
 
-    return NextResponse.json({ success: true, requestId, data: { section: updated } });
+    return NextResponse.json({
+      success: true,
+      requestId,
+      data: {
+        section: updated,
+        version: reusableSectionVersionFromMetadata(updated.metadata),
+      },
+    });
   } catch (error) {
     console.error('Admin reusable section update API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);

@@ -1528,6 +1528,7 @@ try {
     assert(create.json?.success === true, `${create.url} expected success envelope`);
     assert(create.json?.data?.section?.slug === `admin-contract-hero-${unique}`, `${create.url} returned wrong section slug`);
     assert(create.json?.data?.section?.content?.elements?.[0]?.children?.[0]?.id === 'contract-section-heading', `${create.url} did not preserve nested section content`);
+    assert(create.json?.data?.section?.metadata?.reusableSection?.version === 1, `${create.url} missing initial reusable section version`);
     createdReusableSectionId = create.json.data.section.id;
 
     const duplicate = await request(`/api/admin/sites/${createdSiteId}/reusable-sections`, {
@@ -1596,6 +1597,27 @@ try {
     assert(update.json?.data?.section?.name === 'Updated Contract Hero Section', `${update.url} did not update section name`);
     assert(update.json?.data?.section?.tags?.includes('updated'), `${update.url} did not update section tags`);
     assert(update.json?.data?.section?.status === 'archived', `${update.url} did not archive section`);
+    assert(update.json?.data?.version === 2, `${update.url} did not return incremented reusable section version`);
+    assert(update.json?.data?.section?.metadata?.reusableSection?.history?.some((entry) => entry.version === 1 && entry.name === 'Admin Contract Hero Section'), `${update.url} did not preserve previous reusable section revision`);
+
+    const staleUpdate = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        expectedVersion: 1,
+        name: 'Stale Contract Hero Section',
+      }),
+    });
+    assert(staleUpdate.response.status === 409, `${staleUpdate.url} expected 409 for stale reusable section version, got ${staleUpdate.response.status}`);
+    assert(staleUpdate.json?.error?.code === 'REUSABLE_SECTION_VERSION_CONFLICT', `${staleUpdate.url} expected reusable section version conflict`);
+
+    const versions = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}/versions`);
+    assert(versions.response.status === 200, `${versions.url} expected 200, got ${versions.response.status}`);
+    assert(versions.json?.data?.currentVersion === 2, `${versions.url} did not expose current reusable section version`);
+    assert(versions.json?.data?.versions?.some((entry) => entry.current === true && entry.version === 2), `${versions.url} missing current reusable section version entry`);
+    assert(versions.json?.data?.versions?.some((entry) => entry.version === 1 && entry.name === 'Admin Contract Hero Section'), `${versions.url} missing previous reusable section version entry`);
 
     const activeList = await request(`/api/admin/sites/${createdSiteId}/reusable-sections`);
     assert(!activeList.json?.data?.sections?.some((section) => section.id === createdReusableSectionId), `${activeList.url} included archived section in active default list`);
