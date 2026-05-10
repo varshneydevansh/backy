@@ -1200,7 +1200,10 @@ function NewBlogPostPage() {
                     </section>
                     )}
 
-                    <div className={cn('grid gap-5', !isWorkspaceFocus && '2xl:grid-cols-[minmax(0,1fr)_380px]')}>
+                    <div
+                        className={cn('grid gap-5', !isWorkspaceFocus && '2xl:grid-cols-[minmax(0,1fr)_380px]')}
+                        data-testid="blog-create-workspace-grid"
+                    >
                     <div className="min-w-0 space-y-6">
                         {!isWorkspaceFocus && (
                         <>
@@ -1391,7 +1394,7 @@ function NewBlogPostPage() {
                         </>
                         )}
 
-                        <div id="blog-create-canvas" className="scroll-mt-24">
+                        <div id="blog-create-canvas" className="scroll-mt-24" data-testid="blog-create-canvas-shell">
                             <EditorWorkspaceFrame
                                 title="Post design canvas"
                                 description={isWorkspaceFocus

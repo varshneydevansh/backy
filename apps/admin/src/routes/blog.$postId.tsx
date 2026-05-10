@@ -1279,6 +1279,7 @@ function EditBlogPostPage() {
                         'grid gap-5',
                         !isWorkspaceFocus && '[@media(min-width:2200px)]:grid-cols-[minmax(0,1fr)_360px] [@media(min-width:2200px)]:items-start',
                     )}
+                    data-testid="blog-editor-workspace-grid"
                 >
                     <div className="min-w-0 space-y-6">
                         {!isWorkspaceFocus && (
@@ -1474,7 +1475,7 @@ function EditBlogPostPage() {
                         </Panel>
                         )}
 
-                        <div id="blog-editor-canvas" className="min-w-0 scroll-mt-24">
+                        <div id="blog-editor-canvas" className="min-w-0 scroll-mt-24" data-testid="blog-editor-canvas-shell">
                             <EditorWorkspaceFrame
                                 title="Post design canvas"
                                 description={isWorkspaceFocus

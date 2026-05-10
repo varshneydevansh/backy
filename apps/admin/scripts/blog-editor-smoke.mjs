@@ -1,0 +1,398 @@
+#!/usr/bin/env node
+
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+const ADMIN_BASE_URL = process.env.BACKY_ADMIN_BASE_URL || 'http://localhost:5173';
+const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+const SITE_ID = process.env.BACKY_BLOG_EDITOR_SMOKE_SITE_ID || 'site-demo';
+const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const PORT = Number(process.env.BACKY_BLOG_EDITOR_CDP_PORT || 9378);
+const SCREENSHOT_PATH = process.env.BACKY_BLOG_EDITOR_SCREENSHOT || path.join(os.tmpdir(), 'backy-blog-editor-smoke.png');
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const assert = (condition, message) => {
+  if (!condition) {
+    throw new Error(message);
+  }
+};
+
+const requestApi = async (endpoint, options = {}) => {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'content-type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.success === false) {
+    throw new Error(`${endpoint} returned ${response.status}: ${JSON.stringify(payload.error || payload).slice(0, 400)}`);
+  }
+
+  return payload;
+};
+
+const fetchJson = async (endpoint) => {
+  const response = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
+  if (!response.ok) {
+    throw new Error(`${endpoint} returned ${response.status}`);
+  }
+  return response.json();
+};
+
+const waitForCdp = async () => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    try {
+      return await fetchJson('/json/list');
+    } catch {
+      await sleep(100);
+    }
+  }
+
+  throw new Error(`Chrome DevTools did not start on port ${PORT}`);
+};
+
+const connectCdp = (webSocketDebuggerUrl) => {
+  const socket = new WebSocket(webSocketDebuggerUrl);
+  let id = 0;
+  const pending = new Map();
+  const events = [];
+
+  socket.addEventListener('message', (event) => {
+    const message = JSON.parse(event.data);
+
+    if (message.id && pending.has(message.id)) {
+      const request = pending.get(message.id);
+      pending.delete(message.id);
+
+      if (message.error) {
+        request.reject(new Error(JSON.stringify(message.error)));
+      } else {
+        request.resolve(message.result);
+      }
+      return;
+    }
+
+    events.push(message);
+  });
+
+  const opened = new Promise((resolve, reject) => {
+    socket.addEventListener('open', resolve, { once: true });
+    socket.addEventListener('error', reject, { once: true });
+  });
+
+  return {
+    events,
+    opened,
+    close: () => socket.close(),
+    send: (method, params = {}) => {
+      const messageId = id += 1;
+      socket.send(JSON.stringify({ id: messageId, method, params }));
+      return new Promise((resolve, reject) => {
+        pending.set(messageId, { resolve, reject });
+      });
+    },
+  };
+};
+
+const AUTH_STORAGE_SCRIPT = `
+localStorage.setItem('backy-auth-storage', JSON.stringify({ state: { user: { id: '1', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' } }, version: 0 }));
+`;
+
+const evaluate = async (client, expression) => {
+  const result = await client.send('Runtime.evaluate', {
+    expression,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+
+  if (result.exceptionDetails) {
+    throw new Error(`Runtime evaluation failed: ${JSON.stringify(result.exceptionDetails)}`);
+  }
+
+  return result.result.value;
+};
+
+const createBlogPost = async (slug) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/blog`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title: 'Smoke Blog Editor',
+      slug,
+      excerpt: 'Temporary blog editor smoke excerpt for editor layout, focus mode, handoff, and publishing controls.',
+      status: 'draft',
+      authorId: 'admin',
+      categoryIds: [],
+      tagIds: [],
+      meta: {
+        title: 'Smoke Blog Editor SEO',
+        description: 'Temporary SEO description long enough to validate the blog editor readiness and frontend handoff contract.',
+        canonical: `/blog/${slug}`,
+        noIndex: true,
+      },
+      content: {
+        elements: [
+          {
+            id: `smoke-editor-heading-${slug}`,
+            type: 'heading',
+            x: 72,
+            y: 72,
+            width: 820,
+            height: 96,
+            content: {
+              text: 'Smoke Blog Editor',
+              level: 1,
+            },
+          },
+          {
+            id: `smoke-editor-text-${slug}`,
+            type: 'text',
+            x: 72,
+            y: 192,
+            width: 780,
+            height: 140,
+            content: {
+              text: 'This post verifies the editable blog canvas and focus workspace.',
+            },
+          },
+        ],
+        canvasSize: {
+          width: 1200,
+          height: 800,
+        },
+      },
+    }),
+  });
+  const post = payload.data?.post || payload.post;
+  assert(post?.id, `Create post did not return a post: ${JSON.stringify(payload).slice(0, 500)}`);
+  return post;
+};
+
+const deleteBlogPost = async (postId) => {
+  if (!postId) return;
+  await requestApi(`/api/admin/sites/${SITE_ID}/blog/${postId}`, { method: 'DELETE' });
+};
+
+const launchChrome = () => {
+  const userDataDir = path.join(os.tmpdir(), `backy-blog-editor-${Date.now()}`);
+  const childProcess = spawn(CHROME_BIN, [
+    '--headless=new',
+    `--remote-debugging-port=${PORT}`,
+    `--user-data-dir=${userDataDir}`,
+    '--disable-gpu',
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--window-size=1680,1180',
+    'about:blank',
+  ], { stdio: 'ignore' });
+
+  return { childProcess, userDataDir };
+};
+
+const waitForEditor = async (client, postId) => {
+  await client.send('Page.navigate', {
+    url: `${ADMIN_BASE_URL}/blog/${encodeURIComponent(postId)}?siteId=${encodeURIComponent(SITE_ID)}`,
+  });
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const grid = document.querySelector('[data-testid="blog-editor-workspace-grid"]');
+      const canvasShell = document.querySelector('[data-testid="blog-editor-canvas-shell"]');
+      const canvas = document.querySelector('[data-testid="editor-canvas"]');
+      const rect = canvasShell?.getBoundingClientRect();
+      return {
+        ready: Boolean(document.querySelector('[data-testid="blog-editor-command-center"]')),
+        grid: Boolean(grid),
+        canvasShell: Boolean(canvasShell),
+        canvas: Boolean(canvas),
+        draft: Boolean(document.querySelector('#blog-editor-draft')),
+        seo: Boolean(document.querySelector('#blog-editor-seo')),
+        publish: Boolean(document.querySelector('#blog-editor-publish')),
+        media: Boolean(document.querySelector('#blog-editor-media')),
+        comments: Boolean(document.querySelector('#blog-editor-comments')),
+        handoff: Boolean(document.querySelector('#blog-editor-handoff')),
+        taxonomy: Boolean(document.querySelector('#blog-editor-taxonomy')),
+        revisions: Boolean(document.querySelector('#blog-editor-revisions')),
+        focusButton: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Focus canvas'),
+        width: rect?.width || 0,
+        height: rect?.height || 0,
+        body: document.body?.innerText?.slice(0, 1200) || '',
+      };
+    })()`);
+
+    if (
+      state.ready &&
+      state.grid &&
+      state.canvasShell &&
+      state.canvas &&
+      state.draft &&
+      state.seo &&
+      state.publish &&
+      state.media &&
+      state.comments &&
+      state.handoff &&
+      state.taxonomy &&
+      state.revisions &&
+      state.focusButton &&
+      state.width >= 900 &&
+      state.height >= 760
+    ) {
+      return state;
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Blog editor did not render the complete workspace: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(200);
+  }
+
+  return null;
+};
+
+const assertFocusMode = async (client) => {
+  const clicked = await evaluate(client, `(() => {
+    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+      (candidate.textContent || '').trim() === 'Focus canvas'
+    ));
+    if (!(button instanceof HTMLButtonElement) || button.disabled) {
+      return { ok: false, label: button?.textContent || null, disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+    }
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clicked.ok, `Focus canvas button was not ready: ${JSON.stringify(clicked)}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const canvasShell = document.querySelector('[data-testid="blog-editor-canvas-shell"]');
+      const rect = canvasShell?.getBoundingClientRect();
+      return {
+        path: window.location.pathname,
+        search: window.location.search,
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        banner: Boolean(document.querySelector('[data-testid="blog-editor-focus-banner"]')),
+        commandCenter: Boolean(document.querySelector('[data-testid="blog-editor-command-center"]')),
+        draftPanel: Boolean(document.querySelector('#blog-editor-draft')),
+        publishPanel: Boolean(document.querySelector('#blog-editor-publish')),
+        adminSidebar: Boolean(document.querySelector('[data-testid="admin-sidebar-shell"]')),
+        adminHeader: Boolean(document.querySelector('[data-testid="admin-header-shell"]')),
+        canvas: Boolean(document.querySelector('[data-testid="editor-canvas"]')),
+        showPanels: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Show panels'),
+        canvasShellWidth: rect?.width || 0,
+        canvasShellHeight: rect?.height || 0,
+        horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      };
+    })()`);
+
+    if (
+      state.banner &&
+      state.canvas &&
+      state.showPanels &&
+      !state.commandCenter &&
+      !state.draftPanel &&
+      !state.publishPanel &&
+      !state.adminSidebar &&
+      !state.adminHeader &&
+      state.search.includes('focus=canvas') &&
+      state.canvasShellWidth >= state.viewport.width - 48 &&
+      state.canvasShellHeight >= state.viewport.height - 140 &&
+      state.horizontalOverflow <= 4
+    ) {
+      return state;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Blog editor focus mode did not expose a full-width canvas: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(200);
+  }
+
+  return null;
+};
+
+const captureScreenshot = async (client, screenshotPath) => {
+  const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
+  fs.writeFileSync(screenshotPath, Buffer.from(screenshot.data, 'base64'));
+  return screenshotPath;
+};
+
+const cleanup = async ({ client, childProcess, userDataDir, postId }) => {
+  if (client) {
+    try {
+      await client.send('Browser.close');
+    } catch {
+      // Chrome may already be closed.
+    }
+  }
+
+  if (childProcess && childProcess.exitCode === null && childProcess.signalCode === null) {
+    childProcess.kill('SIGTERM');
+  }
+
+  if (postId) {
+    try {
+      await deleteBlogPost(postId);
+    } catch (error) {
+      console.warn(`Unable to delete smoke post ${postId}:`, error instanceof Error ? error.message : error);
+    }
+  }
+
+  fs.rmSync(userDataDir, { recursive: true, force: true });
+};
+
+const main = async () => {
+  const slug = `blog-editor-smoke-${Date.now().toString(36)}`;
+  const post = await createBlogPost(slug);
+  const { childProcess, userDataDir } = launchChrome();
+  let client;
+
+  try {
+    await waitForCdp();
+    const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
+    assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
+
+    client = connectCdp(page.webSocketDebuggerUrl);
+    await client.opened;
+    await client.send('Runtime.enable');
+    await client.send('Page.enable');
+    await client.send('DOM.enable');
+    await client.send('Log.enable');
+    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: AUTH_STORAGE_SCRIPT });
+
+    const editorState = await waitForEditor(client, post.id);
+    const focusState = await assertFocusMode(client);
+    const screenshotPath = await captureScreenshot(client, SCREENSHOT_PATH);
+
+    const browserErrors = client.events
+      .filter((event) => (
+        event.method === 'Runtime.exceptionThrown'
+        || (event.method === 'Log.entryAdded' && event.params?.entry?.level === 'error')
+      ))
+      .map((event) => event.params);
+
+    assert(browserErrors.length === 0, `Browser emitted errors: ${JSON.stringify(browserErrors.slice(0, 3))}`);
+
+    console.log(JSON.stringify({
+      ok: true,
+      postId: post.id,
+      slug,
+      editorState,
+      focusState,
+      screenshotPath,
+    }, null, 2));
+  } finally {
+    await cleanup({ client, childProcess, userDataDir, postId: post.id });
+  }
+};
+
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

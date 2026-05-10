@@ -15,6 +15,7 @@
     "test:pages-list": "node scripts/pages-list-smoke.mjs",
     "test:page-create": "node scripts/page-create-smoke.mjs",
     "test:blog-create": "node scripts/blog-create-smoke.mjs",
+    "test:blog-editor": "node scripts/blog-editor-smoke.mjs",
     "test:blog-list": "node scripts/blog-list-smoke.mjs",
     "test:commerce": "node scripts/commerce-smoke.mjs",
     "test:orders": "node scripts/orders-smoke.mjs",

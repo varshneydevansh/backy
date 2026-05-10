@@ -990,7 +990,7 @@ export function normalizeSavedCanvasContent(raw?: string | null): SavedCanvasPay
 
     if (Array.isArray(parsed)) {
       return {
-        elements: parsed as CanvasElement[],
+        elements: normalizeSavedCanvasElements(parsed),
         canvasSize: DEFAULT_CANVAS_SIZE,
         contentDocument,
       };
@@ -999,9 +999,9 @@ export function normalizeSavedCanvasContent(raw?: string | null): SavedCanvasPay
     if (isRecord(parsed) && (Array.isArray(parsed.elements) || contentDocument)) {
       return {
         elements: Array.isArray(parsed.elements)
-          ? parsed.elements as CanvasElement[]
+          ? normalizeSavedCanvasElements(parsed.elements)
           : contentDocument
-            ? contentDocument.elements as unknown as CanvasElement[]
+            ? normalizeSavedCanvasElements(contentDocument.elements)
             : [],
         canvasSize: normalizeCanvasSize(isRecord(parsed.canvasSize) ? parsed.canvasSize : documentCanvasSize),
         customCSS: typeof parsed.customCSS === 'string'
@@ -1020,6 +1020,40 @@ export function normalizeSavedCanvasContent(raw?: string | null): SavedCanvasPay
     elements: [],
     canvasSize: DEFAULT_CANVAS_SIZE,
   };
+}
+
+function normalizeSavedCanvasElements(input: unknown): CanvasElement[] {
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .filter(isRecord)
+    .map((rawElement, index) => {
+      const props = isRecord(rawElement.props)
+        ? rawElement.props
+        : isRecord(rawElement.content)
+          ? rawElement.content
+          : {};
+      const styles = isRecord(rawElement.styles)
+        ? rawElement.styles as CSSProperties
+        : undefined;
+      const children = Array.isArray(rawElement.children)
+        ? normalizeSavedCanvasElements(rawElement.children)
+        : undefined;
+
+      return {
+        ...rawElement,
+        id: typeof rawElement.id === 'string' ? rawElement.id : generateId(),
+        type: typeof rawElement.type === 'string' ? rawElement.type as ElementType : 'text',
+        x: typeof rawElement.x === 'number' ? rawElement.x : 0,
+        y: typeof rawElement.y === 'number' ? rawElement.y : 0,
+        width: typeof rawElement.width === 'number' ? rawElement.width : 320,
+        height: typeof rawElement.height === 'number' ? rawElement.height : 120,
+        zIndex: typeof rawElement.zIndex === 'number' ? rawElement.zIndex : index + 1,
+        props,
+        styles,
+        ...(children ? { children } : {}),
+      } as CanvasElement;
+    });
 }
 
 function normalizeCanvasSize(input?: Partial<CanvasSize>): CanvasSize {
