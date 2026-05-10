@@ -550,6 +550,11 @@ try {
     });
     assert(publicUpdate.response.status === 200, `${publicUpdate.url} expected 200, got ${publicUpdate.response.status}`);
 
+    const unauthAuditLogs = await fetch(`${baseUrl}/api/admin/audit-logs?siteId=${createdSiteId}&entity=media`);
+    const unauthAuditLogsJson = await unauthAuditLogs.json().catch(() => ({}));
+    assert(unauthAuditLogs.status === 401, `Audit logs admin API should reject missing auth, got ${unauthAuditLogs.status}`);
+    assert(unauthAuditLogsJson?.success === false && unauthAuditLogsJson?.error?.code === 'UNAUTHORIZED', `Audit logs admin API missing auth envelope: ${JSON.stringify(unauthAuditLogsJson).slice(0, 500)}`);
+
     const createAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=media&entityId=${createdMediaId}&action=create&requestId=${upload.json.requestId}`);
     assert(createAudit.response.status === 200, `${createAudit.url} expected media create audit read`);
     assert(createAudit.json?.data?.logs?.some((entry) => (
@@ -1055,6 +1060,11 @@ try {
     assert(visibleScheduledPageResolve.json?.data?.route?.type === 'page', `${visibleScheduledPageResolve.url} expected page route type`);
     assert(visibleScheduledPageResolve.json?.data?.route?.resource?.id === createdPageId, `${visibleScheduledPageResolve.url} returned wrong resolved page`);
 
+    const unauthNavigation = await fetch(`${baseUrl}/api/admin/sites/${createdSiteId}/navigation`);
+    const unauthNavigationJson = await unauthNavigation.json().catch(() => ({}));
+    assert(unauthNavigation.status === 401, `Navigation admin API should reject missing auth, got ${unauthNavigation.status}`);
+    assert(unauthNavigationJson?.success === false && unauthNavigationJson?.error?.code === 'UNAUTHORIZED', `Navigation admin API missing auth envelope: ${JSON.stringify(unauthNavigationJson).slice(0, 500)}`);
+
     const update = await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, {
       method: 'PATCH',
       headers: {
@@ -1222,6 +1232,11 @@ try {
 
     const redirectSourcePath = `/old-${pageSlug}`;
     const goneSourcePath = `/retired-${pageSlug}`;
+    const unauthRedirects = await fetch(`${baseUrl}/api/admin/sites/${createdSiteId}/redirects`);
+    const unauthRedirectsJson = await unauthRedirects.json().catch(() => ({}));
+    assert(unauthRedirects.status === 401, `Redirects admin API should reject missing auth, got ${unauthRedirects.status}`);
+    assert(unauthRedirectsJson?.success === false && unauthRedirectsJson?.error?.code === 'UNAUTHORIZED', `Redirects admin API missing auth envelope: ${JSON.stringify(unauthRedirectsJson).slice(0, 500)}`);
+
     const invalidRedirectSettings = await request(`/api/admin/sites/${createdSiteId}/redirects`, {
       method: 'PATCH',
       headers: {
@@ -2905,6 +2920,11 @@ try {
       assert(publicReusableSection.json?.data?.section?.metadata?.frontendDesignTemplateName === 'Contract Section Template', `${publicReusableSection.url} missing reusable section detail frontend metadata`);
       assert(publicReusableSection.json?.data?.section?.frontendDesign?.routePattern === '/contract-section', `${publicReusableSection.url} missing reusable section detail normalized frontend route`);
 
+      const unauthSeo = await fetch(`${baseUrl}/api/admin/sites/${createdSiteId}/seo`);
+      const unauthSeoJson = await unauthSeo.json().catch(() => ({}));
+      assert(unauthSeo.status === 401, `SEO admin API should reject missing auth, got ${unauthSeo.status}`);
+      assert(unauthSeoJson?.success === false && unauthSeoJson?.error?.code === 'UNAUTHORIZED', `SEO admin API missing auth envelope: ${JSON.stringify(unauthSeoJson).slice(0, 500)}`);
+
       const invalidSeoSettings = await request(`/api/admin/sites/${createdSiteId}/seo`, {
         method: 'PATCH',
         headers: {
@@ -3959,6 +3979,11 @@ try {
   });
 
   await record('admin settings read returns delivery mode and keys', async () => {
+    const unauthSettings = await fetch(`${baseUrl}/api/admin/settings`);
+    const unauthSettingsJson = await unauthSettings.json().catch(() => ({}));
+    assert(unauthSettings.status === 401, `Settings admin API should reject missing auth, got ${unauthSettings.status}`);
+    assert(unauthSettingsJson?.success === false && unauthSettingsJson?.error?.code === 'UNAUTHORIZED', `Settings admin API missing auth envelope: ${JSON.stringify(unauthSettingsJson).slice(0, 500)}`);
+
     const { response, json, url } = await request('/api/admin/settings');
     assert(response.status === 200, `${url} expected 200, got ${response.status}`);
     assert(json?.success === true, `${url} expected success envelope`);
@@ -4131,6 +4156,7 @@ try {
     assert(json?.success === true, `${url} expected success envelope`);
     assert(json?.data?.settings?.apiKeys?.publicApiKey !== oldPublicKey, `${url} public key did not rotate`);
     assert(json?.data?.settings?.apiKeys?.adminApiKey !== oldAdminKey, `${url} admin key did not rotate`);
+    adminRequestApiKey = json.data.settings.apiKeys.adminApiKey;
 
     const audit = await request(`/api/admin/audit-logs?entity=settings&entityId=platform&action=${encodeURIComponent('settings.api_keys.regenerate')}&requestId=${json.requestId}`);
     assert(audit.response.status === 200, `${audit.url} expected key regeneration audit read`);

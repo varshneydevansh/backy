@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { getAdminSettings, regenerateAdminApiKeys, updateAdminSettings } from '@/lib/backyStore';
 import { getMediaStorageConfigSummary } from '@/lib/mediaStorage';
@@ -430,6 +431,10 @@ const sanitizeSettingsAuditSnapshot = (settings: unknown): BackyJsonObject | und
 
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'settings.view' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     if (!shouldUseDemoStoreFallback()) {
@@ -466,6 +471,10 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'settings.configure' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const body = await parseJsonBody(request);
@@ -565,6 +574,10 @@ export async function PATCH(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'settings.configure' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const body = await parseJsonBody(request);

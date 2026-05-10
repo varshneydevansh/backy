@@ -5,6 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { listAdminAudit } from '@/lib/adminAudit';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import type { BackyAuditLogListInput, BackyRepositoryEntity } from '@backy-cms/core';
@@ -71,6 +72,10 @@ const parseEntity = (value: string | null): BackyRepositoryEntity | undefined =>
 
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'activity.export' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { searchParams } = new URL(request.url);
