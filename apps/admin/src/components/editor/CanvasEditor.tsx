@@ -133,17 +133,119 @@ const formatSavedTime = (value: Date | null) => {
   });
 };
 
-const RESPONSIVE_LAYOUT_FIELDS = ['x', 'y', 'width', 'height', 'zIndex', 'rotation', 'visible', 'locked'] as const;
+const RESPONSIVE_GEOMETRY_FIELDS = ['x', 'y', 'width', 'height', 'zIndex', 'rotation'] as const;
+const RESPONSIVE_LAYER_STATE_FIELDS = ['visible', 'locked'] as const;
+const RESPONSIVE_LAYOUT_FIELDS = [...RESPONSIVE_GEOMETRY_FIELDS, ...RESPONSIVE_LAYER_STATE_FIELDS] as const;
+type BreakpointOverrideGroup = 'layout' | 'layer' | 'content' | 'style';
+
+const BREAKPOINT_OVERRIDE_GROUPS: Array<{
+  id: BreakpointOverrideGroup;
+  label: string;
+  description: string;
+}> = [
+  { id: 'layout', label: 'Layout', description: 'Position and size' },
+  { id: 'layer', label: 'Layer', description: 'Visibility and lock' },
+  { id: 'content', label: 'Content', description: 'Element props' },
+  { id: 'style', label: 'Style', description: 'Visual styling' },
+];
 
 const isResponsiveLayoutField = (key: string): key is typeof RESPONSIVE_LAYOUT_FIELDS[number] => (
   (RESPONSIVE_LAYOUT_FIELDS as readonly string[]).includes(key)
 );
+
+const normalizeResponsiveFieldValue = (
+  key: typeof RESPONSIVE_LAYOUT_FIELDS[number],
+  value: unknown,
+) => {
+  if (key === 'visible') {
+    return value === false ? false : true;
+  }
+
+  if (key === 'locked') {
+    return value === true;
+  }
+
+  return value;
+};
 
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
 
 const jsonEqual = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+const hasResponsiveOverrideGroup = (
+  override: ResponsiveElementOverride | undefined,
+  group: BreakpointOverrideGroup,
+  baseElement?: CanvasElement | null,
+) => {
+  if (!override) {
+    return false;
+  }
+
+  if (group === 'layout') {
+    return RESPONSIVE_GEOMETRY_FIELDS.some((key) => (
+      override[key] !== undefined
+      && (!baseElement || override[key] !== baseElement[key])
+    ));
+  }
+
+  if (group === 'layer') {
+    return RESPONSIVE_LAYER_STATE_FIELDS.some((key) => (
+      override[key] !== undefined
+      && (
+        !baseElement
+        || normalizeResponsiveFieldValue(key, override[key]) !== normalizeResponsiveFieldValue(key, baseElement[key])
+      )
+    ));
+  }
+
+  if (group === 'content') {
+    return Boolean(
+      override.props &&
+      Object.keys(override.props).length > 0 &&
+      (!baseElement || !jsonEqual(override.props, baseElement.props)),
+    );
+  }
+
+  return Boolean(
+    override.styles &&
+    Object.keys(override.styles).length > 0 &&
+    (!baseElement || !jsonEqual(override.styles, baseElement.styles || {})),
+  );
+};
+
+const getResponsiveOverrideGroups = (
+  override: ResponsiveElementOverride | undefined,
+  baseElement?: CanvasElement | null,
+): BreakpointOverrideGroup[] => (
+  BREAKPOINT_OVERRIDE_GROUPS
+    .filter((group) => hasResponsiveOverrideGroup(override, group.id, baseElement))
+    .map((group) => group.id)
+);
+
+const clearResponsiveOverrideGroup = (
+  override: ResponsiveElementOverride,
+  group: BreakpointOverrideGroup,
+): ResponsiveElementOverride => {
+  const nextOverride: ResponsiveElementOverride = { ...override };
+
+  if (group === 'layout') {
+    RESPONSIVE_GEOMETRY_FIELDS.forEach((key) => {
+      delete (nextOverride as Record<string, unknown>)[key];
+    });
+  } else if (group === 'layer') {
+    RESPONSIVE_LAYER_STATE_FIELDS.forEach((key) => {
+      delete (nextOverride as Record<string, unknown>)[key];
+    });
+  } else if (group === 'content') {
+    delete nextOverride.props;
+  } else {
+    delete nextOverride.styles;
+  }
+
+  return nextOverride;
+};
 
 const pruneResponsiveOverrides = (
   responsive: CanvasElement['responsive'] | undefined,
@@ -251,7 +353,7 @@ const mergeDisplayedElementsIntoBreakpoint = (
     const nextOverride: ResponsiveElementOverride = { ...(base.responsive?.[breakpoint] || {}) };
 
     RESPONSIVE_LAYOUT_FIELDS.forEach((key) => {
-      if (displayed[key] !== base[key]) {
+      if (normalizeResponsiveFieldValue(key, displayed[key]) !== normalizeResponsiveFieldValue(key, base[key])) {
         (nextOverride as Record<string, unknown>)[key] = displayed[key];
       } else {
         delete (nextOverride as Record<string, unknown>)[key];
@@ -301,7 +403,11 @@ const applyUpdatesForBreakpoint = (
 
   Object.entries(updates).forEach(([key, value]) => {
     if (isResponsiveLayoutField(key)) {
-      (override as Record<string, unknown>)[key] = value;
+      if (normalizeResponsiveFieldValue(key, value) === normalizeResponsiveFieldValue(key, element[key])) {
+        delete (override as Record<string, unknown>)[key];
+      } else {
+        (override as Record<string, unknown>)[key] = value;
+      }
       return;
     }
 
@@ -1637,10 +1743,12 @@ export function CanvasEditor({
   // Get selected element
   const baseSelectedElement = selectedId ? findElementById(elements, selectedId) : null;
   const selectedElement = selectedId ? findElementById(displayedElements, selectedId) : null;
+  const selectedBreakpointOverride = breakpoint !== 'desktop'
+    ? baseSelectedElement?.responsive?.[breakpoint]
+    : undefined;
+  const selectedBreakpointOverrideGroups = getResponsiveOverrideGroups(selectedBreakpointOverride, baseSelectedElement);
   const selectedElementHasBreakpointOverride = Boolean(
-    breakpoint !== 'desktop'
-    && baseSelectedElement?.responsive?.[breakpoint]
-    && Object.keys(baseSelectedElement.responsive[breakpoint] || {}).length > 0,
+    selectedBreakpointOverrideGroups.length > 0,
   );
   const selectedEntries = useMemo(
     () => selectedIds
@@ -1801,6 +1909,30 @@ export function CanvasEditor({
         }
 
         return nextElement;
+      });
+
+      return result.updated ? result.elements : currentElements;
+    }, selectedElementId);
+  }, [breakpoint, selectedId, updateElementsWithHistory]);
+
+  const handleClearSelectedBreakpointOverrideGroup = useCallback((group: BreakpointOverrideGroup) => {
+    if (!selectedId || breakpoint === 'desktop') {
+      return;
+    }
+
+    const selectedElementId = selectedId;
+    updateElementsWithHistory((currentElements) => {
+      const result = updateElementById(currentElements, selectedElementId, (element) => {
+        const override = element.responsive?.[breakpoint];
+        if (!override || !hasResponsiveOverrideGroup(override, group, element)) {
+          return element;
+        }
+
+        return setResponsiveOverride(
+          element,
+          breakpoint,
+          clearResponsiveOverrideGroup(override, group),
+        );
       });
 
       return result.updated ? result.elements : currentElements;
@@ -3500,11 +3632,34 @@ export function CanvasEditor({
                               disabled={isCanvasMutationDisabled || !selectedElementHasBreakpointOverride}
                               className="rounded border border-sky-200 bg-white px-2 py-1 font-semibold text-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              Reset
+                              Reset all
                             </button>
                           </div>
+                          <div className="mt-2 flex flex-wrap gap-1" data-testid="editor-breakpoint-override-groups">
+                            {BREAKPOINT_OVERRIDE_GROUPS.map((group) => {
+                              const isActive = selectedBreakpointOverrideGroups.includes(group.id);
+                              return (
+                                <button
+                                  key={group.id}
+                                  type="button"
+                                  onClick={() => handleClearSelectedBreakpointOverrideGroup(group.id)}
+                                  disabled={isCanvasMutationDisabled || !isActive}
+                                  data-testid={`editor-breakpoint-reset-${group.id}`}
+                                  title={isActive ? `Reset ${group.description.toLowerCase()} override` : `${group.description} inherits desktop`}
+                                  className={cn(
+                                    'rounded border px-2 py-1 font-semibold transition-colors disabled:cursor-not-allowed',
+                                    isActive
+                                      ? 'border-sky-200 bg-white text-sky-700 hover:bg-sky-100'
+                                      : 'border-transparent bg-sky-100 text-sky-400 opacity-70',
+                                  )}
+                                >
+                                  {group.label}
+                                </button>
+                              );
+                            })}
+                          </div>
                           <p className="mt-1 text-sky-700">
-                            Layout, content, and styling changes made in this mode are saved only for this breakpoint.
+                            Active groups stay local to this breakpoint; inactive groups inherit desktop.
                           </p>
                         </div>
                       )}

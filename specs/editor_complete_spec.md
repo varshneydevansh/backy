@@ -160,10 +160,10 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Desktop edits update the base element model
 - Tablet/mobile layout, content, prop, and style edits persist into `element.responsive` overrides
 - Tablet/mobile layer hide/show and lock/unlock edits persist into `element.responsive` overrides
+- Active breakpoint override groups show which element areas inherit desktop, and layout/layer/content/style groups can be reset independently
 - Public rendering applies responsive overrides from the rendered container width
-- `test:editor-drag` verifies mobile layout plus layer visibility/lock override persistence, desktop layout preservation, breakpoint switching, and reload hydration
+- `test:editor-drag` verifies mobile layout plus layer visibility/lock override persistence, group-level reset/inheritance controls, desktop layout preservation, breakpoint switching, and reload hydration
 - **Remaining Improvements Needed:**
-    - Add clearer inheritance/reset controls for each field group
     - Add tablet-specific smoke coverage and broader visual regression snapshots
 - **Implemented Contract:**
     ```typescript
@@ -445,7 +445,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ❌ Zoom controls
 - ⚠️ Responsive breakpoint editing
   - Desktop/tablet/mobile layout/content/style and layer visibility/lock overrides now persist and render publicly.
-  - Still needs clearer inheritance UI, tablet smoke coverage, and visual regression thresholds.
+  - Group-level breakpoint reset controls now make desktop inheritance explicit for layout, layer, content, and style.
+  - Still needs tablet smoke coverage and visual regression thresholds.
 - ❌ Media upload modal
 - ❌ Element locking
 - ⚠️ Page templates

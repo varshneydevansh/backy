@@ -811,6 +811,46 @@ const setLayerLockedState = async (client, elementId, locked) => {
   return nextState;
 };
 
+const readBreakpointOverrideControls = async (client) => {
+  const controls = await evaluate(client, `(() => {
+    const panel = document.querySelector('[data-testid="editor-breakpoint-override"]');
+    const groups = Object.fromEntries(
+      ['layout', 'layer', 'content', 'style'].map((group) => {
+        const button = document.querySelector('[data-testid="editor-breakpoint-reset-' + group + '"]');
+        return [group, button instanceof HTMLButtonElement
+          ? {
+              exists: true,
+              disabled: button.disabled,
+              text: button.textContent || '',
+              title: button.getAttribute('title') || '',
+            }
+          : { exists: false }];
+      }),
+    );
+    return {
+      panelText: panel?.textContent || '',
+      groups,
+    };
+  })()`);
+
+  assert(controls?.panelText, `Unable to read breakpoint override controls: ${JSON.stringify(controls)}`);
+  return controls;
+};
+
+const clickBreakpointResetGroup = async (client, group) => {
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="editor-breakpoint-reset-${group}"]');
+    if (!(button instanceof HTMLButtonElement) || button.disabled) {
+      return false;
+    }
+    button.click();
+    return true;
+  })()`);
+
+  assert(clicked, `Unable to click breakpoint ${group} reset control`);
+  await sleep(250);
+};
+
 const waitForElementState = async (client, elementId, predicate, label) => {
   let lastState = null;
   for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -829,7 +869,7 @@ const readPersistedElement = async (pageId, elementId) => {
   return findCanvasElement(elements, elementId);
 };
 
-const assertResponsiveBreakpointEditing = async (client, pageId, elementId) => {
+const assertResponsiveBreakpointEditing = async (client, pageId, elementId, options = {}) => {
   await selectLayerById(client, elementId);
   await clickButtonByAriaLabel(client, 'Desktop canvas');
   await selectLayerById(client, elementId);
@@ -866,8 +906,48 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId) => {
     `Responsive override panel did not appear: ${JSON.stringify(overridePanel)}`,
   );
 
+  const layoutControls = await readBreakpointOverrideControls(client);
+  assert(
+    layoutControls.groups.layout.exists &&
+      layoutControls.groups.layout.disabled === false &&
+      layoutControls.groups.layer.exists &&
+      layoutControls.groups.layer.disabled === Boolean(!options.expectExistingLayerOverride),
+    `Breakpoint override controls did not expose active layout inheritance state: ${JSON.stringify(layoutControls)}`,
+  );
+
+  await clickBreakpointResetGroup(client, 'layout');
+  await waitForElementState(
+    client,
+    elementId,
+    (state) => state.x === Math.round(desktopBefore.x) && state.width === Math.round(desktopBefore.width),
+    'Layout reset control did not restore inherited desktop layout',
+  );
+  await setLayoutNumberInput(client, 'X', expectedMobileX);
+  await setLayoutNumberInput(client, 'Width', expectedMobileWidth);
+  await waitForElementState(
+    client,
+    elementId,
+    (state) => state.x === expectedMobileX && state.width === expectedMobileWidth,
+    'Mobile override did not reapply after layout reset',
+  );
+
   const mobileLayerHidden = await setLayerHiddenState(client, elementId, true);
   const mobileLayerLocked = await setLayerLockedState(client, elementId, true);
+  const layerControls = await readBreakpointOverrideControls(client);
+  assert(
+    layerControls.groups.layout.disabled === false &&
+      layerControls.groups.layer.disabled === false,
+    `Breakpoint override controls did not expose active layout and layer state: ${JSON.stringify(layerControls)}`,
+  );
+
+  await clickBreakpointResetGroup(client, 'layer');
+  const resetLayerState = await readLayerActionState(client, elementId);
+  assert(
+    resetLayerState.hidden === false && resetLayerState.locked === false,
+    `Layer reset control did not restore inherited desktop layer state: ${JSON.stringify(resetLayerState)}`,
+  );
+  await setLayerHiddenState(client, elementId, true);
+  await setLayerLockedState(client, elementId, true);
 
   await clickSave(client);
 
@@ -1921,7 +2001,12 @@ const main = async () => {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
         await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-form']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
-        reloadedResponsiveEditing = await assertResponsiveBreakpointEditing(reloadClient, tempPageId, 'smoke-heading');
+        reloadedResponsiveEditing = await assertResponsiveBreakpointEditing(
+          reloadClient,
+          tempPageId,
+          'smoke-heading',
+          { expectExistingLayerOverride: true },
+        );
       } finally {
         if (reloadClient) {
           try {
