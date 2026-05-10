@@ -2219,17 +2219,18 @@ function mergeById<T extends { id: string }>(persisted: T[] | undefined, current
   return Array.from(merged.values());
 }
 
-function persistInteractionStore() {
+function persistInteractionStore(options: { mergePersisted?: boolean } = {}) {
   try {
     mkdirSync(dirname(INTERACTION_STORE_PATH), { recursive: true });
+    const mergePersisted = options.mergePersisted !== false;
     const persisted = existsSync(INTERACTION_STORE_PATH)
       ? JSON.parse(readFileSync(INTERACTION_STORE_PATH, 'utf8')) as InteractionStoreSnapshot
       : {};
     const nextSnapshot: InteractionStoreSnapshot = {
-      comments: mergeById(persisted.comments, commentStore),
-      formSubmissions: mergeById(persisted.formSubmissions, formSubmissions),
-      contacts: mergeById(persisted.contacts, contactStore),
-      auditEvents: mergeById(persisted.auditEvents, auditEvents),
+      comments: mergePersisted ? mergeById(persisted.comments, commentStore) : commentStore,
+      formSubmissions: mergePersisted ? mergeById(persisted.formSubmissions, formSubmissions) : formSubmissions,
+      contacts: mergePersisted ? mergeById(persisted.contacts, contactStore) : contactStore,
+      auditEvents: mergePersisted ? mergeById(persisted.auditEvents, auditEvents) : auditEvents,
     };
 
     setCommentStore(nextSnapshot.comments || []);
@@ -4989,6 +4990,12 @@ export function deleteAdminPage(siteId: string, pageId: string): boolean {
   PAGE_LIST.splice(index, 1);
   removeMediaReferencesForTarget(siteId, 'page', pageId);
   removePreviewTokensForTarget(siteId, 'page', pageId);
+  refreshPersistedInteractionStore();
+  setCommentStore(commentStore.filter((comment) => !(
+    comment.siteId === siteId &&
+    comment.targetType === 'page' &&
+    comment.targetId === pageId
+  )));
 
   for (let revisionIndex = CONTENT_REVISIONS.length - 1; revisionIndex >= 0; revisionIndex -= 1) {
     const revision = CONTENT_REVISIONS[revisionIndex];
@@ -4998,6 +5005,7 @@ export function deleteAdminPage(siteId: string, pageId: string): boolean {
   }
 
   persistAdminContent();
+  persistInteractionStore({ mergePersisted: false });
   return true;
 }
 
@@ -6179,10 +6187,11 @@ export function deleteAdminForm(siteId: string, formId: string): FormDefinition 
   }
 
   const [removed] = FORM_LIBRARY.splice(index, 1);
+  refreshPersistedInteractionStore();
   setFormSubmissions(formSubmissions.filter((submission) => submission.formId !== removed.id));
   setContactStore(contactStore.filter((contact) => contact.formId !== removed.id));
   persistAdminContent();
-  persistInteractionStore();
+  persistInteractionStore({ mergePersisted: false });
   recordAdminAuditLog({
     siteId: site.id,
     actorId: 'admin',

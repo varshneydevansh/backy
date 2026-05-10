@@ -16,6 +16,7 @@
     "test:commerce": "node scripts/commerce-smoke.mjs",
     "test:forms": "node scripts/forms-smoke.mjs",
     "test:contacts": "node scripts/contacts-smoke.mjs",
+    "test:comments": "node scripts/comments-smoke.mjs",
     "test:settings": "node scripts/settings-smoke.mjs",
     "clean": "rm -rf dist"
   },
