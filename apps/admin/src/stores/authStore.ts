@@ -13,7 +13,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { fetchAdminSession, loginAdmin, logoutAdmin, type AdminSession } from '@/lib/adminAuthApi';
+import { acceptAdminInvite, fetchAdminSession, loginAdmin, logoutAdmin, type AdminSession } from '@/lib/adminAuthApi';
 
 // ============================================
 // TYPES
@@ -36,6 +36,7 @@ interface AuthState {
 
 interface AuthActions {
   signIn: (email: string, password: string) => Promise<void>;
+  acceptInvite: (token: string) => Promise<void>;
   signOut: () => void;
   refreshSession: () => Promise<void>;
   clearError: () => void;
@@ -75,6 +76,29 @@ export const useAuthStore = create<AuthStore>()(
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Invalid email or password';
+          set({
+            error: message,
+            isLoading: false,
+            user: null,
+            session: null,
+          });
+          throw error;
+        }
+      },
+
+      acceptInvite: async (token: string) => {
+        set({ isLoading: true, error: null });
+
+        try {
+          const data = await acceptAdminInvite(token);
+          set({
+            user: data.user,
+            session: data.session,
+            isLoading: false,
+            error: null,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unable to accept invite';
           set({
             error: message,
             isLoading: false,

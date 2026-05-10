@@ -711,6 +711,7 @@ const generateUserDetailInviteLink = async (client, email) => {
         hasInviteUrl: text.includes('/accept-invite?token=bit_'),
         hasTokenId: text.includes('invite_'),
         hasCopyControls: text.includes('Copy invite URL') && text.includes('Copy invite token'),
+        token: text.match(/bit_[a-z0-9]+/)?.[0] || '',
         text: text.slice(0, 1800),
       };
     })()`);
@@ -724,6 +725,21 @@ const generateUserDetailInviteLink = async (client, email) => {
   }
 
   return null;
+};
+
+const acceptUserInviteToken = async (token, userId) => {
+  assert(token, 'Invite token was not captured from the detail page');
+  const payload = await requestApi('/api/admin/auth/accept-invite', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+
+  assert(payload.data?.accepted === true, `Invite accept endpoint did not accept token: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(payload.data?.session?.token, `Invite accept endpoint did not return a session: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(payload.data?.user?.id === userId, `Invite accept returned the wrong user: ${JSON.stringify(payload.data?.user).slice(0, 500)}`);
+
+  const acceptedUser = await getUser(userId);
+  assert(acceptedUser.status === 'active', `Invite acceptance did not activate user: ${JSON.stringify(acceptedUser).slice(0, 500)}`);
 };
 
 const generateUserDetailResetToken = async (client, email) => {
@@ -984,9 +1000,14 @@ const main = async () => {
     await openUserDetail(client, fullName);
     await waitForUserDetailPermissionMatrix(client);
     await setUserDetailPermissionOverride(client, createdUserId);
-    await generateUserDetailInviteLink(client, email);
+    const inviteState = await generateUserDetailInviteLink(client, email);
+    await acceptUserInviteToken(inviteState?.token, createdUserId);
     await generateUserDetailResetToken(client, email);
     const recoveryAuditLogs = await listUserAuditLogs(createdUserId);
+    assert(
+      recoveryAuditLogs.some((log) => log.action === 'user.invite.accept'),
+      `User invite acceptance audit log was not recorded: ${JSON.stringify(recoveryAuditLogs).slice(0, 500)}`,
+    );
     assert(
       recoveryAuditLogs.some((log) => log.action === 'user.permission_overrides.update'),
       `User permission override audit log was not recorded: ${JSON.stringify(recoveryAuditLogs).slice(0, 500)}`,

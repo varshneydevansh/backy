@@ -55,6 +55,26 @@ interface AdminAuthResponse {
   };
 }
 
+interface AdminInviteAcceptResponse {
+  success: boolean;
+  data?: {
+    accepted: boolean;
+    user: User;
+    session: AdminSession;
+    invite: {
+      id: string;
+      email: string;
+      createdAt: string;
+      expiresAt: string;
+      requestedById?: string | null;
+      deliveryConfigured: false;
+    };
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 interface AdminSessionListResponse {
   success: boolean;
   data?: {
@@ -229,6 +249,23 @@ export async function createAdminInviteToken(token: string, userId: string) {
   }
 
   return payload.data.invite;
+}
+
+export async function acceptAdminInvite(token: string) {
+  const response = await fetch(`${getAdminApiBase()}/auth/accept-invite`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ token }),
+  });
+  const payload = await readJson<AdminInviteAcceptResponse>(response);
+
+  if (!response.ok || !payload?.success || !payload.data) {
+    throw new Error(payload?.error?.message || 'Unable to accept invite');
+  }
+
+  return payload.data;
 }
 
 export async function requestAdminPasswordRecovery(email: string) {

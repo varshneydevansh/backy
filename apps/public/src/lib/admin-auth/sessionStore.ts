@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { getAdminSettings, getAdminUserByEmail, getAdminUserById } from '@/lib/backyStore';
+import { getAdminSettings, getAdminUserByEmail, getAdminUserById, updateAdminUser } from '@/lib/backyStore';
 
 export interface AdminAuthUser {
   id: string;
@@ -50,6 +50,20 @@ export interface AdminInviteToken {
   deliveryConfigured: false;
   inviteUrl: string;
 }
+
+export type AdminInviteAcceptResult =
+  | {
+      accepted: true;
+      invite: AdminInviteToken;
+      user: AdminAuthUser;
+      session: AdminSession;
+      previousStatus: AdminAuthUser['status'];
+    }
+  | {
+      accepted: false;
+      reason: 'missing' | 'expired' | 'user-not-found' | 'email-mismatch' | 'not-invited';
+      invite?: AdminInviteToken;
+    };
 
 type StoredSession = AdminSession & {
   lastSeenAt: string;
@@ -114,6 +128,28 @@ const getSessionTimeoutMinutes = () => {
   return Math.min(Math.max(raw, 15), 10080);
 };
 
+const createAdminSessionForUser = (user: AdminAuthUser): AdminSession => {
+  const issuedAt = new Date();
+  const expiresAt = new Date(issuedAt.getTime() + getSessionTimeoutMinutes() * 60 * 1000);
+  const session: StoredSession = {
+    token: `bas_${randomUUID().replace(/-/g, '')}`,
+    user,
+    issuedAt: issuedAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    authMode: 'local-demo',
+    lastSeenAt: issuedAt.toISOString(),
+  };
+
+  ADMIN_SESSIONS.set(session.token, session);
+  return {
+    token: session.token,
+    user: session.user,
+    issuedAt: session.issuedAt,
+    expiresAt: session.expiresAt,
+    authMode: session.authMode,
+  };
+};
+
 const pruneExpiredSessions = () => {
   const now = Date.now();
   for (const [token, session] of ADMIN_SESSIONS.entries()) {
@@ -137,25 +173,7 @@ export function authenticateAdminCredentials(email: string, password: string): A
     return null;
   }
 
-  const issuedAt = new Date();
-  const expiresAt = new Date(issuedAt.getTime() + getSessionTimeoutMinutes() * 60 * 1000);
-  const session: StoredSession = {
-    token: `bas_${randomUUID().replace(/-/g, '')}`,
-    user,
-    issuedAt: issuedAt.toISOString(),
-    expiresAt: expiresAt.toISOString(),
-    authMode: 'local-demo',
-    lastSeenAt: issuedAt.toISOString(),
-  };
-
-  ADMIN_SESSIONS.set(session.token, session);
-  return {
-    token: session.token,
-    user: session.user,
-    issuedAt: session.issuedAt,
-    expiresAt: session.expiresAt,
-    authMode: session.authMode,
-  };
+  return createAdminSessionForUser(user);
 }
 
 export function getAdminSession(token: string | null | undefined): AdminSession | null {
@@ -309,6 +327,52 @@ export function createAdminInviteToken(input: {
 
   INVITE_TOKENS.set(token, inviteToken);
   return inviteToken;
+}
+
+export function acceptAdminInviteToken(token: string | null | undefined): AdminInviteAcceptResult {
+  pruneExpiredSessions();
+
+  const normalizedToken = token?.trim() || '';
+  const invite = normalizedToken ? INVITE_TOKENS.get(normalizedToken) : null;
+  if (!invite) {
+    return { accepted: false, reason: 'missing' };
+  }
+
+  if (Date.parse(invite.expiresAt) <= Date.now()) {
+    INVITE_TOKENS.delete(normalizedToken);
+    return { accepted: false, reason: 'expired', invite };
+  }
+
+  const currentUser = getAdminUserById(invite.userId);
+  if (!currentUser) {
+    INVITE_TOKENS.delete(normalizedToken);
+    return { accepted: false, reason: 'user-not-found', invite };
+  }
+
+  if (currentUser.email.toLowerCase() !== invite.email.toLowerCase()) {
+    return { accepted: false, reason: 'email-mismatch', invite };
+  }
+
+  if (currentUser.status !== 'invited') {
+    return { accepted: false, reason: 'not-invited', invite };
+  }
+
+  const previousStatus = currentUser.status;
+  const updated = updateAdminUser(currentUser.id, { status: 'active' });
+  const user = toAuthUser(updated);
+  if (!user) {
+    return { accepted: false, reason: 'user-not-found', invite };
+  }
+
+  INVITE_TOKENS.delete(normalizedToken);
+  const session = createAdminSessionForUser(user);
+  return {
+    accepted: true,
+    invite,
+    user,
+    session,
+    previousStatus,
+  };
 }
 
 export function getLocalRecoveryAccount(email: string) {

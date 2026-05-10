@@ -45,7 +45,7 @@ function RootComponent() {
   const validatedSessionRef = useRef(false);
 
   // Routes that should NOT have the main layout
-  const publicRoutes = ['/login', '/forgot-password', '/reset-password'];
+  const publicRoutes = ['/login', '/forgot-password', '/reset-password', '/accept-invite'];
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
 
   useEffect(() => {
