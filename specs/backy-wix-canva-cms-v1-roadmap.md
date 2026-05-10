@@ -149,6 +149,7 @@ It explicitly excludes:
 17. `/products`: backend-backed product catalog workspace with schema setup/sync, public catalog API readiness, product editor, pricing, variants, inventory, delivery/checkout URLs, merchandising, SEO fields, CSV/handoff export, and smoke coverage through `test:commerce`; remaining work is payment providers, taxes, shipping, discounts, subscriptions, product page templates, customer linkage, and analytics
 18. `/orders`: backend-backed private order operations workspace with schema setup/sync, private order permissions, public checkout-intake contract, payment/fulfillment/tracking/refund/address fields, CSV/handoff export, and smoke coverage through `test:commerce`; remaining work is provider reconciliation, fulfillment integrations, notifications, fraud/risk controls, returns, and analytics
 19. `/forms`: backend-backed forms command center with direct template-to-form creation, standalone form-builder editing, public definition/submission APIs, inbox moderation, contact-share context, and smoke coverage through `test:forms`; remaining work is reusable embed blocks, advanced validation-rule editing, delivery webhooks/email, consent exports, analytics, RBAC, and DB persistence
+20. `/contacts`: backend-backed lead pipeline for form contact-share records with all-form/source-form filtering, lifecycle status, notes, private API handoff, CSV export, and smoke coverage through `test:contacts`; remaining work is bulk lifecycle actions, contact import/merge, promote-to-user/customer, delivery sync, consent/retention controls, segmentation, analytics, RBAC, and DB persistence
 
 ## 6) Public-route completion checklist
 
@@ -158,7 +159,7 @@ It explicitly excludes:
 4. `/api/sites/[siteId]/pages`: status-filtered page resolve
 5. `/api/sites/[siteId]/media`: metadata + signed URL access contract
 6. `/api/sites/[siteId]/blog`: public feed with pagination cursor
-7. `/api/sites/[siteId]/forms/...`: public definition and submit endpoints with validation/moderation coverage plus admin create/update/delete coverage; remaining work is delivery execution, consent export, analytics, DB persistence, and broader canvas-bound form-builder coverage
+7. `/api/sites/[siteId]/forms/...`: public definition and submit endpoints with validation/moderation/contact-share coverage plus admin create/update/delete/contact lifecycle coverage; remaining work is delivery execution, consent export, analytics, DB persistence, and broader canvas-bound form-builder coverage
 8. `/api/sites/[siteId]/comments`: moderation-aware public read and create
 9. `PageRenderer.tsx`: single shared rendering contract with editor schema
 10. `/api/sites/[siteId]/commerce/catalog`: public product catalog and product detail contract for custom storefronts
@@ -180,6 +181,7 @@ It explicitly excludes:
    1. review list with filters
    2. change status and add notes
    3. direct template-to-form creation and standalone form-builder editing are covered by `test:forms`
+   4. contact-share list, notes, and lifecycle status are covered by `test:contacts`
 7. integration:
    1. webhook or email trigger
 
