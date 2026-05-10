@@ -375,6 +375,7 @@ interface ApiBlogPost {
   excerpt?: string | null;
   content?: unknown;
   status?: AdminSiteStatus;
+  featuredImageId?: string | null;
   authorId?: string | null;
   meta?: Record<string, unknown>;
   categoryIds?: string[];
@@ -1546,7 +1547,9 @@ const toStorePost = (post: ApiBlogPost): BlogPost => ({
   content: stringifyContent(post.content),
   status: toContentStatus(post.status, post.status === 'published'),
   scheduledAt: post.scheduledAt || null,
+  featuredImageId: post.featuredImageId || null,
   author: post.authorId || 'admin',
+  meta: post.meta || {},
   categoryIds: post.categoryIds || [],
   tagIds: post.tagIds || [],
   publishedAt: post.publishedAt || post.updatedAt || post.createdAt || new Date().toISOString(),

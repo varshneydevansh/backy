@@ -49,7 +49,9 @@ export interface BlogPost {
     content: string;
     status: ContentStatus;
     scheduledAt?: string | null;
+    featuredImageId?: string | null;
     author: string;
+    meta?: Record<string, any>;
     categoryIds?: string[];
     tagIds?: string[];
     publishedAt: string;

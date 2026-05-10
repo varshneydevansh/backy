@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Globe, History, Maximize2, Minimize2, PenLine, RefreshCw, RotateCcw, Save, Tags, Trash2, UserRound } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Globe, History, Maximize2, Minimize2, PenLine, RefreshCw, RotateCcw, Save, SearchCheck, Tags, Trash2, UserRound } from 'lucide-react';
 import {
     archiveBlogPost,
     createBlogPostPreview,
@@ -82,6 +82,11 @@ const BLOG_EDITOR_CONTROL_AREAS = [
         href: '#blog-editor-publish',
     },
     {
+        title: 'SEO',
+        detail: 'Canonical path, search title, description, Open Graph image, and robots flags.',
+        href: '#blog-editor-seo',
+    },
+    {
         title: 'Taxonomy',
         detail: 'Assign author, categories, and tags for lists, feeds, and frontend filters.',
         href: '#blog-editor-taxonomy',
@@ -97,6 +102,16 @@ const BLOG_EDITOR_CONTROL_AREAS = [
         href: '#blog-editor-handoff',
     },
 ] as const;
+
+const getMetaString = (meta: Record<string, any> | undefined, key: string): string => {
+    const value = meta?.[key];
+    return typeof value === 'string' ? value : '';
+};
+
+const getMetaBoolean = (meta: Record<string, any> | undefined, key: string): boolean => {
+    const value = meta?.[key];
+    return typeof value === 'boolean' ? value : false;
+};
 
 function EditBlogPostPage() {
     const navigate = useNavigate();
@@ -151,6 +166,12 @@ function EditBlogPostPage() {
     const [excerpt, setExcerpt] = useState(post?.excerpt || '');
     const [status, setStatus] = useState<ContentStatus>(post?.status || 'draft');
     const [scheduledAt, setScheduledAt] = useState<string | null>(post?.scheduledAt || null);
+    const [seoTitle, setSeoTitle] = useState(getMetaString(post?.meta, 'title') || post?.title || '');
+    const [seoDescription, setSeoDescription] = useState(getMetaString(post?.meta, 'description') || post?.excerpt || '');
+    const [canonicalPath, setCanonicalPath] = useState(getMetaString(post?.meta, 'canonical') || (post?.slug ? `/blog/${post.slug}` : ''));
+    const [ogImage, setOgImage] = useState(getMetaString(post?.meta, 'ogImage'));
+    const [noIndex, setNoIndex] = useState(getMetaBoolean(post?.meta, 'noIndex'));
+    const [noFollow, setNoFollow] = useState(getMetaBoolean(post?.meta, 'noFollow'));
     const [selectedAuthorId, setSelectedAuthorId] = useState(post?.author || 'admin');
     const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(post?.categoryIds || []);
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>(post?.tagIds || []);
@@ -182,6 +203,12 @@ function EditBlogPostPage() {
                     setExcerpt(backendPost.excerpt);
                     setStatus(backendPost.status);
                     setScheduledAt(backendPost.scheduledAt || null);
+                    setSeoTitle(getMetaString(backendPost.meta, 'title') || backendPost.title);
+                    setSeoDescription(getMetaString(backendPost.meta, 'description') || backendPost.excerpt);
+                    setCanonicalPath(getMetaString(backendPost.meta, 'canonical') || `/blog/${backendPost.slug}`);
+                    setOgImage(getMetaString(backendPost.meta, 'ogImage'));
+                    setNoIndex(getMetaBoolean(backendPost.meta, 'noIndex'));
+                    setNoFollow(getMetaBoolean(backendPost.meta, 'noFollow'));
                     setSelectedAuthorId(backendPost.author || 'admin');
                     setSelectedCategoryIds(backendPost.categoryIds || []);
                     setSelectedTagIds(backendPost.tagIds || []);
@@ -191,6 +218,12 @@ function EditBlogPostPage() {
                     if (localFallbackPost) {
                         setPost(localFallbackPost);
                         setScheduledAt(localFallbackPost.scheduledAt || null);
+                        setSeoTitle(getMetaString(localFallbackPost.meta, 'title') || localFallbackPost.title);
+                        setSeoDescription(getMetaString(localFallbackPost.meta, 'description') || localFallbackPost.excerpt);
+                        setCanonicalPath(getMetaString(localFallbackPost.meta, 'canonical') || `/blog/${localFallbackPost.slug}`);
+                        setOgImage(getMetaString(localFallbackPost.meta, 'ogImage'));
+                        setNoIndex(getMetaBoolean(localFallbackPost.meta, 'noIndex'));
+                        setNoFollow(getMetaBoolean(localFallbackPost.meta, 'noFollow'));
                         setSelectedAuthorId(localFallbackPost.author || 'admin');
                         setSelectedCategoryIds(localFallbackPost.categoryIds || []);
                         setSelectedTagIds(localFallbackPost.tagIds || []);
@@ -398,7 +431,7 @@ function EditBlogPostPage() {
         slug,
         status,
         scheduledAt,
-        meta: { title, description: excerpt },
+        meta: { title: seoTitle || title, description: seoDescription || excerpt },
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -411,9 +444,11 @@ function EditBlogPostPage() {
                         ? 'Backy could not verify existing blog routes for this site. Retry the route check before saving.'
                         : routeConflict
                             ? `The ${publicPath} route is already used by "${routeConflict.title}". Choose another slug or edit that post first.`
-                            : status === 'scheduled' && !scheduledAt
-                                ? 'Choose a publish date before scheduling changes.'
-                                : 'Add a title and URL slug before saving.',
+                            : !canonicalValid
+                                ? 'Canonical path must start with / before saving.'
+                                : status === 'scheduled' && !scheduledAt
+                                    ? 'Choose a publish date before scheduling changes.'
+                                    : 'Add a title and URL slug before saving.',
             );
             setWorkflowNotice(null);
             return;
@@ -441,8 +476,12 @@ function EditBlogPostPage() {
                 scheduledAt: status === 'scheduled' ? scheduledAt : null,
                 content: JSON.parse(content),
                 meta: {
-                    title,
-                    description: excerpt,
+                    title: seoTitle.trim() || title,
+                    description: seoDescription.trim() || excerpt,
+                    canonical: normalizedCanonicalPath,
+                    ogImage: ogImage.trim() || null,
+                    noIndex,
+                    noFollow,
                 },
                 authorId: selectedAuthorId || 'admin',
                 categoryIds: selectedCategoryIds,
@@ -450,8 +489,7 @@ function EditBlogPostPage() {
                 revisionNote: 'Before blog editor save',
                 updatedBy: 'admin',
             });
-            setPost(savedPost);
-            updatePost(postId, savedPost);
+            syncPostState(savedPost);
             setWorkflowNotice('Post saved and revision snapshot recorded.');
             void loadPostReadiness();
         } catch (error) {
@@ -471,6 +509,12 @@ function EditBlogPostPage() {
         setExcerpt(nextPost.excerpt);
         setStatus(nextPost.status);
         setScheduledAt(nextPost.scheduledAt || null);
+        setSeoTitle(getMetaString(nextPost.meta, 'title') || nextPost.title);
+        setSeoDescription(getMetaString(nextPost.meta, 'description') || nextPost.excerpt);
+        setCanonicalPath(getMetaString(nextPost.meta, 'canonical') || `/blog/${nextPost.slug}`);
+        setOgImage(getMetaString(nextPost.meta, 'ogImage'));
+        setNoIndex(getMetaBoolean(nextPost.meta, 'noIndex'));
+        setNoFollow(getMetaBoolean(nextPost.meta, 'noFollow'));
         setSelectedAuthorId(nextPost.author || 'admin');
         setSelectedCategoryIds(nextPost.categoryIds || []);
         setSelectedTagIds(nextPost.tagIds || []);
@@ -615,6 +659,8 @@ function EditBlogPostPage() {
 
     const normalizedSlug = slugify(slug || post.slug || postId);
     const publicPath = `/blog/${normalizedSlug || 'post-slug'}`;
+    const normalizedCanonicalPath = normalizeCanonicalPath(canonicalPath || publicPath);
+    const canonicalValid = normalizedCanonicalPath.startsWith('/');
     const routeConflict = normalizedSlug
         ? existingBlogPosts.find((existingPost) => existingPost.id !== postId && slugify(existingPost.slug) === normalizedSlug) || null
         : null;
@@ -638,11 +684,12 @@ function EditBlogPostPage() {
         { label: 'Slug', complete: slug.trim().length > 0 },
         { label: 'Route', complete: !routeBlocked },
         { label: 'Summary', complete: excerpt.trim().length >= 24 },
+        { label: 'SEO', complete: seoTitle.trim().length > 0 && seoDescription.trim().length >= 50 && canonicalValid },
         { label: 'Design', complete: canvasElements.length > 0 },
         { label: 'Schedule', complete: status !== 'scheduled' || Boolean(scheduledAt) },
     ];
     const localReadyCount = localReadinessChecks.filter((check) => check.complete).length;
-    const canSave = title.trim().length > 0 && normalizedSlug.length > 0 && !routeBlocked && (status !== 'scheduled' || Boolean(scheduledAt));
+    const canSave = title.trim().length > 0 && normalizedSlug.length > 0 && !routeBlocked && canonicalValid && (status !== 'scheduled' || Boolean(scheduledAt));
     const editorBusy = isLoadingPost || isLoading || isWorkflowBusy;
     const editorActionBusy = editorBusy || isPreviewBusy || readinessLoading || isCheckingRoutes;
     const submitLabel = status === 'published' ? 'Save published post' : status === 'scheduled' ? 'Schedule changes' : status === 'archived' ? 'Save archived post' : 'Save draft';
@@ -672,6 +719,11 @@ function EditBlogPostPage() {
             label: 'Excerpt',
             detail: excerpt.trim().length >= 24 ? `${excerpt.length} characters for feeds and SEO.` : 'Add a stronger summary for blog lists and previews.',
             ready: excerpt.trim().length >= 24,
+        },
+        {
+            label: 'SEO controls',
+            detail: `${seoTitle.trim().length || title.length} title chars, ${seoDescription.trim().length || excerpt.length} description chars, canonical ${normalizedCanonicalPath}.`,
+            ready: seoTitle.trim().length > 0 && seoDescription.trim().length >= 50 && canonicalValid,
         },
         {
             label: 'Canvas content',
@@ -725,7 +777,18 @@ function EditBlogPostPage() {
         route: {
             path: publicPath,
             slug: normalizedSlug || post.slug,
+            canonical: normalizedCanonicalPath,
             availability: routeAvailability,
+        },
+        seo: {
+            title: seoTitle.trim() || title,
+            description: seoDescription.trim() || excerpt,
+            canonical: normalizedCanonicalPath,
+            ogImage: ogImage.trim() || null,
+            robots: {
+                index: !noIndex,
+                follow: !noFollow,
+            },
         },
         site: {
             id: activeSiteId,
@@ -802,6 +865,7 @@ function EditBlogPostPage() {
             : null,
         guardrails: [
             'Publish is blocked when backend readiness reports blocking errors.',
+            'Canonical paths are stored on post meta and drive hosted route SEO, sitemap discovery, resolve payloads, and custom frontend render contracts.',
             'Saving records a revision snapshot before editor changes are persisted.',
             'Frontend renderers should use public blog, resolve, or render endpoints and keep admin endpoints private.',
             'Taxonomy IDs are site-scoped and should be refreshed before rendering filters, feeds, or bylines.',
@@ -1006,8 +1070,9 @@ function EditBlogPostPage() {
                                 </a>
                             ))}
                         </div>
-                        <div className="mt-4 grid gap-3 md:grid-cols-4">
+                        <div className="mt-4 grid gap-3 md:grid-cols-5">
                             <BlogEditorMetaTile label="Route" value={normalizedSlug ? publicPath : 'No slug'} />
+                            <BlogEditorMetaTile label="Canonical" value={normalizedCanonicalPath} />
                             <BlogEditorMetaTile label="Canvas" value={`${canvasSize.width} x ${canvasSize.height}px`} />
                             <BlogEditorMetaTile label="Elements" value={`${canvasElements.length}`} />
                             <BlogEditorMetaTile label="Status" value={status} />
@@ -1155,6 +1220,118 @@ function EditBlogPostPage() {
                                         placeholder="Short summary for blog lists, feeds, and SEO previews."
                                     />
                                     <div className="text-xs text-muted-foreground">{excerpt.length} characters</div>
+                                </div>
+                            </PanelContent>
+                        </Panel>
+                        )}
+
+                        {!isWorkspaceFocus && (
+                        <Panel id="blog-editor-seo" className="overflow-hidden scroll-mt-24">
+                            <PanelHeader
+                                title="SEO and discovery"
+                                description="Search metadata, canonical path, Open Graph image, and robots controls for hosted pages and external frontends."
+                                icon={<SearchCheck className="size-4" />}
+                            />
+                            <PanelContent className="space-y-5">
+                                <div className="grid gap-4 xl:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-medium text-muted-foreground">Search title</label>
+                                        <input
+                                            type="text"
+                                            value={seoTitle}
+                                            onChange={(e) => {
+                                                clearEditorFeedback();
+                                                setSeoTitle(e.target.value);
+                                            }}
+                                            disabled={editorBusy}
+                                            className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                                            placeholder={title || 'Search result title'}
+                                        />
+                                        <div className="text-xs text-muted-foreground">{seoTitle.trim().length || title.length} characters</div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-medium text-muted-foreground">Canonical path</label>
+                                        <input
+                                            type="text"
+                                            value={canonicalPath}
+                                            onChange={(e) => {
+                                                clearEditorFeedback();
+                                                setCanonicalPath(e.target.value);
+                                            }}
+                                            disabled={editorBusy}
+                                            className="w-full rounded-lg border bg-background px-3 py-2.5 font-mono text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                                            placeholder={publicPath}
+                                        />
+                                        <div className="text-xs text-muted-foreground">{normalizedCanonicalPath}</div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium text-muted-foreground">Search description</label>
+                                    <textarea
+                                        value={seoDescription}
+                                        onChange={(e) => {
+                                            clearEditorFeedback();
+                                            setSeoDescription(e.target.value);
+                                        }}
+                                        rows={3}
+                                        disabled={editorBusy}
+                                        className="w-full resize-none rounded-lg border bg-background px-4 py-3 text-sm leading-6 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                                        placeholder={excerpt || 'Describe the article for search, social previews, feeds, and generated frontends.'}
+                                    />
+                                    <div className={cn('text-xs', seoDescription.trim().length >= 50 ? 'text-muted-foreground' : 'text-amber-700')}>
+                                        {seoDescription.trim().length || excerpt.length} characters. Aim for at least 50.
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium text-muted-foreground">Open Graph image URL</label>
+                                    <input
+                                        type="url"
+                                        value={ogImage}
+                                        onChange={(e) => {
+                                            clearEditorFeedback();
+                                            setOgImage(e.target.value);
+                                        }}
+                                        disabled={editorBusy}
+                                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                                        placeholder="https://..."
+                                    />
+                                </div>
+
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    <label className="flex items-start gap-3 rounded-lg border border-border bg-background px-4 py-3">
+                                        <input
+                                            type="checkbox"
+                                            checked={noIndex}
+                                            onChange={(e) => {
+                                                clearEditorFeedback();
+                                                setNoIndex(e.target.checked);
+                                            }}
+                                            disabled={editorBusy}
+                                            className="mt-1"
+                                        />
+                                        <span>
+                                            <span className="block text-sm font-medium text-foreground">No index</span>
+                                            <span className="mt-1 block text-xs leading-5 text-muted-foreground">Ask crawlers to keep this post out of search indexes.</span>
+                                        </span>
+                                    </label>
+                                    <label className="flex items-start gap-3 rounded-lg border border-border bg-background px-4 py-3">
+                                        <input
+                                            type="checkbox"
+                                            checked={noFollow}
+                                            onChange={(e) => {
+                                                clearEditorFeedback();
+                                                setNoFollow(e.target.checked);
+                                            }}
+                                            disabled={editorBusy}
+                                            className="mt-1"
+                                        />
+                                        <span>
+                                            <span className="block text-sm font-medium text-foreground">No follow</span>
+                                            <span className="mt-1 block text-xs leading-5 text-muted-foreground">Ask crawlers not to follow links from this post.</span>
+                                        </span>
+                                    </label>
                                 </div>
                             </PanelContent>
                         </Panel>
@@ -1397,9 +1574,9 @@ function EditBlogPostPage() {
                                 </div>
                                 <div className="grid grid-cols-2 gap-2 text-xs">
                                     <BlogEditorContractTile label="Route" value={publicPath} />
+                                    <BlogEditorContractTile label="Canonical" value={normalizedCanonicalPath} />
                                     <BlogEditorContractTile label="Route check" value={routeAvailability.status} />
                                     <BlogEditorContractTile label="Canvas" value={`${canvasSize.width} x ${canvasSize.height}`} />
-                                    <BlogEditorContractTile label="Elements" value={`${canvasElements.length}`} />
                                 </div>
                                 <pre className="max-h-72 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
 {JSON.stringify({
@@ -1409,6 +1586,16 @@ function EditBlogPostPage() {
     authorId: selectedAuthorId,
     categoryIds: selectedCategoryIds,
     tagIds: selectedTagIds,
+    seo: {
+        title: seoTitle.trim() || title,
+        description: seoDescription.trim() || excerpt,
+        canonical: normalizedCanonicalPath,
+        ogImage: ogImage.trim() || null,
+        robots: {
+            index: !noIndex,
+            follow: !noFollow,
+        },
+    },
     endpoints: {
         publicPostBySlug: publicPostBySlugUrl,
         publicRender: publicRenderUrl,
@@ -1622,6 +1809,12 @@ const slugify = (value: string) => (
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)/g, '')
 );
+
+const normalizeCanonicalPath = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return '/';
+    return trimmed.startsWith('/') ? trimmed : `/${trimmed.replace(/^\/+/, '')}`;
+};
 
 function BlogEditorMetaTile({ label, value }: { label: string; value: string }) {
     return (
