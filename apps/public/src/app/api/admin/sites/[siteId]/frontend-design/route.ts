@@ -8,11 +8,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import type { Site, SiteSettings } from '@backy-cms/core';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   getPageSummary,
   getSiteByIdOrSlug,
   updateAdminSite,
 } from '@/lib/backyStore';
+import { recordSiteCacheInvalidation, type PublicCacheInvalidation } from '@/lib/cacheInvalidation';
 import {
   buildSiteDefaultFrontendDesignContract,
   emptyFrontendDesignContract,
@@ -61,6 +63,9 @@ const toPageTemplates = (pages: Array<{ id: string; title: string; slug: string 
 const responseForSite = (
   requestId: string,
   site: Pick<Site, 'id' | 'slug' | 'name' | 'customDomain' | 'theme' | 'settings'>,
+  options: {
+    cacheInvalidation?: PublicCacheInvalidation | null;
+  } = {},
 ) => {
   const frontendDesign = site.settings?.frontendDesign || emptyFrontendDesignContract();
 
@@ -84,6 +89,7 @@ const responseForSite = (
         'Use capture-site-defaults to snapshot current Backy navigation, theme tokens, and page templates.',
         'New page, blog, form, product, and section generation can use this contract as its site design source.',
       ],
+      ...(options.cacheInvalidation ? { cacheInvalidation: options.cacheInvalidation } : {}),
     },
   });
 };
@@ -155,7 +161,32 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         updatedAt,
       });
       const updated = await persistRepositoryFrontendDesign(site, site.settings, frontendDesign);
-      return responseForSite(requestId, updated);
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'settings',
+        entity: 'site',
+        entityId: site.id,
+        reason: 'site-frontend-design-updated',
+        requestId,
+      });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'site',
+        entityId: site.id,
+        action: 'frontendDesign.update',
+        before: site.settings.frontendDesign || emptyFrontendDesignContract(),
+        after: frontendDesign,
+        metadata: {
+          status: frontendDesign.status,
+          sourceType: frontendDesign.source.type,
+          sourceLabel: frontendDesign.source.label || null,
+          templateCount: frontendDesign.templates.length,
+          editableBindingCount: frontendDesign.editableMap.length,
+        },
+        requestId,
+      });
+      return responseForSite(requestId, updated, { cacheInvalidation });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -178,6 +209,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'site',
+      entityId: site.id,
+      action: 'frontendDesign.update',
+      before: site.settings?.frontendDesign || emptyFrontendDesignContract(),
+      after: frontendDesign,
+      metadata: {
+        status: frontendDesign.status,
+        sourceType: frontendDesign.source.type,
+        sourceLabel: frontendDesign.source.label || null,
+        templateCount: frontendDesign.templates.length,
+        editableBindingCount: frontendDesign.editableMap.length,
+      },
+      requestId,
+    });
 
     return responseForSite(requestId, updated as unknown as Site);
   } catch (error) {
@@ -215,7 +262,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         updatedAt,
       });
       const updated = await persistRepositoryFrontendDesign(site, site.settings, frontendDesign);
-      return responseForSite(requestId, updated);
+      const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+        siteId: site.id,
+        scope: 'settings',
+        entity: 'site',
+        entityId: site.id,
+        reason: 'site-frontend-design-captured',
+        requestId,
+      });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'site',
+        entityId: site.id,
+        action: 'frontendDesign.capture',
+        before: site.settings.frontendDesign || emptyFrontendDesignContract(),
+        after: frontendDesign,
+        metadata: {
+          action,
+          status: frontendDesign.status,
+          sourceType: frontendDesign.source.type,
+          templateCount: frontendDesign.templates.length,
+          editableBindingCount: frontendDesign.editableMap.length,
+        },
+        requestId,
+      });
+      return responseForSite(requestId, updated, { cacheInvalidation });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -239,6 +311,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'site',
+      entityId: site.id,
+      action: 'frontendDesign.capture',
+      before: site.settings?.frontendDesign || emptyFrontendDesignContract(),
+      after: frontendDesign,
+      metadata: {
+        action,
+        status: frontendDesign.status,
+        sourceType: frontendDesign.source.type,
+        templateCount: frontendDesign.templates.length,
+        editableBindingCount: frontendDesign.editableMap.length,
+      },
+      requestId,
+    });
 
     return responseForSite(requestId, updated as unknown as Site);
   } catch (error) {

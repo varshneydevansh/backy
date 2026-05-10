@@ -54,7 +54,19 @@ const captureSiteDefaults = async () => {
   assert(captured?.status === 'captured', `Capture did not mark contract captured: ${JSON.stringify(payload).slice(0, 500)}`);
   assert(captured.source?.type === 'managed-site', `Capture did not preserve managed-site source: ${JSON.stringify(captured).slice(0, 500)}`);
   assert(Array.isArray(captured.editableMap) && captured.editableMap.length >= 3, 'Capture did not include editable map defaults');
-  return captured;
+  return { captured, payload };
+};
+
+const assertFrontendDesignAudit = async (action, requestId, predicate, message) => {
+  const payload = await requestApi(`/api/admin/audit-logs?siteId=${SITE_ID}&entity=site&entityId=${SITE_ID}&action=${encodeURIComponent(action)}&requestId=${encodeURIComponent(requestId)}`);
+  const match = payload.data?.logs?.some((entry) => (
+    entry.entity === 'site' &&
+    entry.entityId === SITE_ID &&
+    entry.action === action &&
+    entry.requestId === requestId &&
+    predicate(entry)
+  ));
+  assert(match, `${message}: ${JSON.stringify(payload).slice(0, 1000)}`);
 };
 
 const getManifest = async () => {
@@ -150,11 +162,26 @@ const main = async () => {
   let createdPostId = null;
 
   try {
-    const patched = await patchFrontendDesign(smokeContract());
+    const patchPayload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`, {
+      method: 'PATCH',
+      body: JSON.stringify({ frontendDesign: smokeContract() }),
+    });
+    const patched = patchPayload.data?.frontendDesign;
     assert(patched.status === 'synced', `Patched status was not synced: ${patched.status}`);
     assert(patched.source?.type === 'custom-frontend', `Patched source type was not custom frontend: ${patched.source?.type}`);
     assert(patched.templates?.length === 2, `Patched template count was unexpected: ${patched.templates?.length}`);
     assert(patched.chrome?.header?.component === 'SiteHeader', 'Patched chrome header was not preserved');
+    await assertFrontendDesignAudit(
+      'frontendDesign.update',
+      patchPayload.requestId,
+      (entry) => (
+        entry.before?.schemaVersion === 'backy.frontend-design.v1' &&
+        entry.after?.status === 'synced' &&
+        entry.metadata?.sourceType === 'custom-frontend' &&
+        entry.metadata?.templateCount === 2
+      ),
+      'Frontend design update audit log was not recorded',
+    );
 
     const afterPatch = await getFrontendDesign();
     assert(afterPatch.tokens?.colors?.primary === '#0f766e', 'GET did not persist patched color token');
@@ -196,8 +223,19 @@ const main = async () => {
     assert(seededPost.data?.post?.meta?.frontendDesignChrome?.header?.component === 'SiteHeader', 'Template-seeded post did not preserve frontend chrome');
     assert(Array.isArray(seededPost.data?.post?.content?.elements) && seededPost.data.post.content.elements.length > 0, 'Template-seeded post did not create editable content');
 
-    const captured = await captureSiteDefaults();
+    const { captured, payload: capturePayload } = await captureSiteDefaults();
     assert(captured.chrome?.navigation, 'Capture did not include navigation chrome');
+    await assertFrontendDesignAudit(
+      'frontendDesign.capture',
+      capturePayload.requestId,
+      (entry) => (
+        entry.before?.status === 'synced' &&
+        entry.after?.status === 'captured' &&
+        entry.metadata?.sourceType === 'managed-site' &&
+        entry.metadata?.editableBindingCount >= 3
+      ),
+      'Frontend design capture audit log was not recorded',
+    );
 
     const manifestAfterCapture = await getManifest();
     validateAiFrontendManifest({ success: true, requestId: 'frontend-design-smoke', data: manifestAfterCapture }, 'frontend design manifest after capture');

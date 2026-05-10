@@ -45,6 +45,12 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Published manifest responses include `Cache-Control: public, max-age=60, stale-while-revalidate=300`, `ETag`/`If-None-Match` 304 support, `x-backy-cache-scope: discovery`, `x-backy-contract-version`, `x-backy-schema-version`, `x-backy-request-id`, and `x-backy-site-id`.
   - Draft/unpublished sites are hidden from the public manifest.
 
+- `GET/PATCH/POST /api/admin/sites/:siteId/frontend-design`
+  - Reads and writes the site-level frontend design contract used to preserve custom frontend chrome, navigation, footer, font/color/spacing tokens, template registries, editable bindings, and content-generation provenance.
+  - `PATCH` accepts either the contract directly or `{ frontendDesign }`, normalizes it to `backy.frontend-design.v1`, persists it to site settings, and emits `frontendDesign.update` audit logs with before/after snapshots plus source/template/editable-map counts.
+  - `POST` with `{ action: "capture-site-defaults" }` snapshots Backy-managed site defaults into a frontend design contract and emits `frontendDesign.capture` audit logs.
+  - Database mode frontend-design mutations record `settings` cache invalidation events so public discovery/manifest consumers can revalidate the changed design contract.
+
 - `GET /api/sites/:siteId/openapi`
   - Site-scoped OpenAPI 3.1 document for public frontend integrations.
   - Describes discovery, route resolution, render payload, navigation, media list, collection list/records/create, form detail/submission/contact operations, page/blog/site comment operations, comment reports, report reasons, and interaction events for the selected site.
