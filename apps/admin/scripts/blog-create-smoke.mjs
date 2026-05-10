@@ -227,6 +227,100 @@ const fillBlogCreateForm = async (client, slug) => {
   return result;
 };
 
+const assertCanvasFocusMode = async (client) => {
+  let clicked = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    clicked = await evaluate(client, `(() => {
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.textContent || '').trim() === 'Focus canvas'
+      ));
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return { ok: false, label: button?.textContent || null, disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+      }
+      button.click();
+      return { ok: true };
+    })()`);
+
+    if (clicked.ok) {
+      break;
+    }
+
+    await sleep(200);
+  }
+  assert(clicked.ok, `Focus canvas button was not ready: ${JSON.stringify(clicked)}`);
+
+  let focused = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    focused = await evaluate(client, `(() => ({
+      path: window.location.pathname,
+      search: window.location.search,
+      banner: Boolean(document.querySelector('[data-testid="blog-create-focus-banner"]')),
+      commandCenter: Boolean(document.querySelector('[data-testid="blog-create-command-center"]')),
+      draftPanel: Boolean(document.querySelector('#blog-create-draft')),
+      publishPanel: Boolean(document.querySelector('#blog-create-publish')),
+      canvas: Boolean(document.querySelector('[data-testid="editor-canvas"]')),
+      showPanels: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Show panels'),
+    }))()`);
+
+    if (focused.banner && focused.canvas && focused.showPanels && !focused.commandCenter && !focused.draftPanel && !focused.publishPanel && focused.search.includes('focus=canvas')) {
+      break;
+    }
+
+    if (attempt === 59) {
+      throw new Error(`Canvas focus mode did not hide create panels: ${JSON.stringify(focused)}`);
+    }
+
+    await sleep(200);
+  }
+
+  let restored = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    restored = await evaluate(client, `(() => {
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.textContent || '').trim() === 'Show panels'
+      ));
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return { ok: false, label: button?.textContent || null, disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+      }
+      button.click();
+      return { ok: true };
+    })()`);
+
+    if (restored.ok) {
+      break;
+    }
+
+    await sleep(200);
+  }
+  assert(restored.ok, `Show panels button was not ready: ${JSON.stringify(restored)}`);
+
+  let normal = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    normal = await evaluate(client, `(() => ({
+      search: window.location.search,
+      banner: Boolean(document.querySelector('[data-testid="blog-create-focus-banner"]')),
+      commandCenter: Boolean(document.querySelector('[data-testid="blog-create-command-center"]')),
+      draftPanel: Boolean(document.querySelector('#blog-create-draft')),
+      publishPanel: Boolean(document.querySelector('#blog-create-publish')),
+    }))()`);
+
+    if (!normal.banner && normal.commandCenter && normal.draftPanel && normal.publishPanel && !normal.search.includes('focus=canvas')) {
+      break;
+    }
+
+    if (attempt === 59) {
+      throw new Error(`Show panels did not restore create workspace: ${JSON.stringify(normal)}`);
+    }
+
+    await sleep(200);
+  }
+
+  return {
+    focused,
+    normal,
+  };
+};
+
 const assertAutosaveWritten = async (client, slug) => {
   let state = null;
 
@@ -466,6 +560,7 @@ const main = async () => {
     });
 
     const initialRender = await navigateToBlogCreate(client);
+    const focusMode = await assertCanvasFocusMode(client);
     const filled = await fillBlogCreateForm(client, slug);
     const mediaPicker = await assertFeaturedMediaPicker(client);
     const autosave = await assertAutosaveWritten(client, slug);
@@ -489,6 +584,7 @@ const main = async () => {
       ok: true,
       url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}`,
       initialRender,
+      focusMode,
       filled,
       mediaPicker,
       autosave,

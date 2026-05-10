@@ -4,7 +4,7 @@
 
 import { useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, Eye, FileText, Globe, Image as ImageIcon, PenLine, RefreshCw, Save, SearchCheck, Tags, UserRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, Eye, FileText, Globe, Image as ImageIcon, Maximize2, Minimize2, PenLine, RefreshCw, Save, SearchCheck, Tags, UserRound, X } from 'lucide-react';
 import {
     createBlogPost,
     createBlogPostPreview,
@@ -43,6 +43,7 @@ import {
 
 interface BlogNewSearch {
     siteId?: string;
+    focus?: 'canvas';
 }
 
 interface BlogCreateAutosaveDraft {
@@ -71,6 +72,7 @@ interface BlogCreateAutosaveDraft {
 export const Route = createFileRoute('/blog/new')({
     validateSearch: (search: Record<string, unknown>): BlogNewSearch => ({
         siteId: typeof search.siteId === 'string' ? search.siteId : undefined,
+        focus: search.focus === 'canvas' ? 'canvas' : undefined,
     }),
     component: NewBlogPostPage,
 });
@@ -227,6 +229,7 @@ function NewBlogPostPage() {
         : undefined;
     const requestedSiteId = requestedSite?.publicSiteId || requestedSite?.id || defaultSiteId;
     const [activeSiteId, setActiveSiteId] = useState(requestedSiteId);
+    const isWorkspaceFocus = search.focus === 'canvas';
 
     // Form State
     const [title, setTitle] = useState('');
@@ -327,9 +330,13 @@ function NewBlogPostPage() {
         if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, activeSiteId))) {
             const fallbackSiteId = sites[0].publicSiteId || sites[0].id;
             setActiveSiteId(fallbackSiteId);
-            navigate({ to: '/blog/new', search: { siteId: fallbackSiteId }, replace: true });
+            navigate({
+                to: '/blog/new',
+                search: { siteId: fallbackSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}) },
+                replace: true,
+            });
         }
-    }, [activeSiteId, navigate, sites]);
+    }, [activeSiteId, isWorkspaceFocus, navigate, sites]);
 
     useEffect(() => {
         const nextRequestedSite = search.siteId
@@ -354,7 +361,11 @@ function NewBlogPostPage() {
         setFeaturedImageId(null);
         setOgImage('');
         clearCreationFeedback();
-        navigate({ to: '/blog/new', search: { siteId: nextSiteId }, replace: true });
+        navigate({
+            to: '/blog/new',
+            search: { siteId: nextSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}) },
+            replace: true,
+        });
     };
 
     const toggleSelection = (
@@ -792,7 +803,11 @@ function NewBlogPostPage() {
         setAutosaveStatus('Recovered draft restored');
         setError(null);
         setNotice('Recovered local blog draft.');
-        navigate({ to: '/blog/new', search: { siteId: recoveredSiteId }, replace: true });
+        navigate({
+            to: '/blog/new',
+            search: { siteId: recoveredSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}) },
+            replace: true,
+        });
     };
 
     const discardRecoveredDraft = () => {
@@ -801,6 +816,17 @@ function NewBlogPostPage() {
         clearAutosavedDraft();
         setError(null);
         setNotice('Recovered draft discarded.');
+    };
+
+    const setWorkspaceFocusRoute = (focused: boolean) => {
+        navigate({
+            to: '/blog/new',
+            search: {
+                siteId: activeSiteId,
+                ...(focused ? { focus: 'canvas' as const } : {}),
+            },
+            replace: true,
+        });
     };
 
     const autosaveLabel = draftRecovery
@@ -984,6 +1010,17 @@ function NewBlogPostPage() {
                 </div>
             }
             description="Create a post and design its public page from the same workspace."
+            action={
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setWorkspaceFocusRoute(!isWorkspaceFocus)}
+                    disabled={isCreateBusy}
+                    iconStart={isWorkspaceFocus ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                >
+                    {isWorkspaceFocus ? 'Show blog panels' : 'Focus canvas'}
+                </Button>
+            }
         >
             <div className="w-full pb-24">
                 {error && (
@@ -1042,7 +1079,52 @@ function NewBlogPostPage() {
                     </Notice>
                 )}
 
-                <form onSubmit={handleSubmit} className="grid gap-5">
+                {isWorkspaceFocus && (
+                    <div className="rounded-lg border border-border bg-card px-4 py-3 shadow-sm" data-testid="blog-create-focus-banner">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <div className="text-sm font-semibold text-foreground">Canvas focus mode</div>
+                                <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                                    Draft, SEO, taxonomy, and publish panels are hidden so the new article design can use the full workspace.
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={isCreateBusy || !canCreateDraft}
+                                    onClick={() => void handleCreatePreview()}
+                                    iconStart={<Eye className="size-4" />}
+                                >
+                                    {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    form="blog-create-form"
+                                    size="sm"
+                                    disabled={isCreateBusy || !canSubmit}
+                                    iconStart={<Save className="size-4" />}
+                                >
+                                    {isLoading ? 'Saving...' : submitLabel}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setWorkspaceFocusRoute(false)}
+                                    disabled={isCreateBusy}
+                                    iconStart={<Minimize2 className="size-4" />}
+                                >
+                                    Show panels
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <form id="blog-create-form" onSubmit={handleSubmit} className="grid gap-5">
+                    {!isWorkspaceFocus && (
                     <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="blog-create-command-center">
                         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                             <div>
@@ -1154,9 +1236,12 @@ function NewBlogPostPage() {
                             </div>
                         </div>
                     </section>
+                    )}
 
-                    <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_380px]">
+                    <div className={cn('grid gap-5', !isWorkspaceFocus && '2xl:grid-cols-[minmax(0,1fr)_380px]')}>
                     <div className="min-w-0 space-y-6">
+                        {!isWorkspaceFocus && (
+                        <>
                         <Panel id="blog-create-draft" className="overflow-hidden scroll-mt-24">
                             <PanelHeader
                                 title="Editorial draft"
@@ -1341,11 +1426,15 @@ function NewBlogPostPage() {
                                 </div>
                             </PanelContent>
                         </Panel>
+                        </>
+                        )}
 
                         <div id="blog-create-canvas" className="scroll-mt-24">
                             <EditorWorkspaceFrame
                                 title="Post design canvas"
-                                description="Use components, layers, grouping, resizing, reusable sections, and data bindings to design the public post page."
+                                description={isWorkspaceFocus
+                                    ? 'Focused article design workspace with the same component, layer, media, grouping, and data-binding controls used by pages.'
+                                    : 'Use components, layers, grouping, resizing, reusable sections, and data bindings to design the public post page.'}
                                 meta={
                                     <>
                                         <span className="rounded bg-muted px-2 py-1 tabular-nums">
@@ -1363,9 +1452,19 @@ function NewBlogPostPage() {
                                         <span className="rounded bg-muted px-2 py-1">
                                             Cmd/Ctrl+A siblings
                                         </span>
+                                        {isWorkspaceFocus && (
+                                            <span className="rounded bg-primary/10 px-2 py-1 font-medium text-primary">
+                                                Focused
+                                            </span>
+                                        )}
                                     </>
                                 }
-                                className="relative min-h-[780px] xl:h-[calc(100vh-120px)] xl:min-h-[900px]"
+                                className={cn(
+                                    'relative',
+                                    isWorkspaceFocus
+                                        ? 'min-h-[calc(100vh-180px)] xl:h-[calc(100vh-180px)] xl:min-h-[calc(100vh-180px)]'
+                                        : 'min-h-[780px] xl:h-[calc(100vh-120px)] xl:min-h-[900px]',
+                                )}
                             >
                                 <CanvasEditor
                                     mode="blog"
@@ -1395,6 +1494,7 @@ function NewBlogPostPage() {
                         </div>
                     </div>
 
+                    {!isWorkspaceFocus && (
                     <aside className="grid gap-4 xl:grid-cols-3 2xl:sticky 2xl:top-5 2xl:block 2xl:self-start 2xl:space-y-4">
                         <Panel id="blog-create-publish" className="scroll-mt-24">
                             <PanelHeader
@@ -1693,6 +1793,7 @@ function NewBlogPostPage() {
                             </PanelContent>
                         </Panel>
                     </aside>
+                    )}
                     </div>
 
                 </form>
