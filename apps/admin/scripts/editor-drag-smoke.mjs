@@ -574,6 +574,8 @@ const pressKey = async (client, key, options = {}) => {
     ArrowRight: 'ArrowRight',
     ArrowUp: 'ArrowUp',
     ArrowDown: 'ArrowDown',
+    a: 'KeyA',
+    g: 'KeyG',
     z: 'KeyZ',
   };
   const virtualKeyByKey = {
@@ -581,6 +583,8 @@ const pressKey = async (client, key, options = {}) => {
     ArrowRight: 39,
     ArrowUp: 38,
     ArrowDown: 40,
+    a: 65,
+    g: 71,
     z: 90,
   };
   const modifiers =
@@ -1530,7 +1534,7 @@ const testLayerGrouping = async (client, elementIds) => {
   assert(ready.hasMultiSelection, `Layer multi-selection did not reach inspector: ${JSON.stringify(ready)}`);
   assert(ready.groupDisabled === false, `Group button did not enable for sibling layers: ${JSON.stringify(ready)}`);
 
-  await evaluate(client, `document.querySelector('[data-testid="editor-group-selection"]')?.click()`);
+  await pressKey(client, 'g', { ctrlKey: true });
   await sleep(250);
   const grouped = await evaluate(client, `(() => {
     const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
@@ -1545,7 +1549,7 @@ const testLayerGrouping = async (client, elementIds) => {
   assert(grouped.hasSelection, `Grouped selection was not shown in inspector: ${JSON.stringify(grouped)}`);
   assert(grouped.ungroupDisabled === false, `Ungroup button did not enable after grouping: ${JSON.stringify(grouped)}`);
 
-  await evaluate(client, `document.querySelector('[data-testid="editor-ungroup-selection"]')?.click()`);
+  await pressKey(client, 'g', { ctrlKey: true, shiftKey: true });
   await sleep(250);
   const after = await readEditorElementState(client, [firstId, secondId]);
   assertElementState(after, before, 'group/ungroup roundtrip');
