@@ -441,6 +441,27 @@ const assertRecoveryRestore = async (client, slug, title, navLabel, seo, parentP
   return state;
 };
 
+const normalizeCreatedContent = (content) => {
+  if (typeof content === 'string') {
+    return JSON.parse(content);
+  }
+  return content || {};
+};
+
+const flattenElements = (elements = []) => {
+  const flattened = [];
+  const walk = (nodes) => {
+    for (const node of nodes || []) {
+      flattened.push(node);
+      if (Array.isArray(node.children)) {
+        walk(node.children);
+      }
+    }
+  };
+  walk(elements);
+  return flattened;
+};
+
 const assertCreatedPageSeo = async (pageId, seo, parentPage) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
   const page = payload.data?.page;
@@ -457,7 +478,59 @@ const assertCreatedPageSeo = async (pageId, seo, parentPage) => {
   assert(page.meta?.parentPageId === parentPage.id, `Created page meta parent id mismatch: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.parentPageTitle === parentPage.title, `Created page meta parent title mismatch: ${JSON.stringify(page.meta)}`);
 
-  return { parentId: page.parentId, meta: page.meta };
+  const content = normalizeCreatedContent(page.content);
+  const elements = Array.isArray(content.elements) ? content.elements : [];
+  const allElements = flattenElements(elements);
+  const byId = new Map(allElements.map((element) => [element.id, element]));
+  const contentDocument = content.contentDocument || null;
+  const canvasSize = content.canvasSize || contentDocument?.metadata?.canvasSize || {};
+  const requiredElementIds = [
+    'about-site-header',
+    'about-site-navigation',
+    'about-site-footer',
+    'about-heading',
+    'about-story-copy',
+    'about-values-section',
+    'about-value-0',
+    'about-value-1',
+    'about-value-2',
+  ];
+  const missingElementIds = requiredElementIds.filter((id) => !byId.has(id));
+  const headerNavigation = byId.get('about-site-navigation');
+  const footerNavigation = byId.get('about-footer-navigation');
+  const heading = byId.get('about-heading');
+  const valuesSection = byId.get('about-values-section');
+  const valueCards = (valuesSection?.children || []).filter((element) => element.type === 'box');
+
+  assert(elements.length >= 5, `Created about template should have root canvas elements: ${JSON.stringify({ rootCount: elements.length, ids: elements.map((element) => element.id) })}`);
+  assert(allElements.length >= 16, `Created about template should include nested editable elements: ${JSON.stringify({ count: allElements.length, ids: allElements.map((element) => element.id).slice(0, 30) })}`);
+  assert(missingElementIds.length === 0, `Created about template is missing expected editable elements: ${JSON.stringify({ missingElementIds, availableIds: allElements.map((element) => element.id).slice(0, 40) })}`);
+  assert(canvasSize.width === 1200 && canvasSize.height >= 1000, `Created about canvas size mismatch: ${JSON.stringify(canvasSize)}`);
+  assert(heading?.props?.content === page.title, `Created about heading does not use page title: ${JSON.stringify(heading?.props)}`);
+  assert(Array.isArray(headerNavigation?.props?.navItems) && headerNavigation.props.navItems.includes('About'), `Created about header navigation missing About item: ${JSON.stringify(headerNavigation?.props)}`);
+  assert(Array.isArray(footerNavigation?.props?.navItems) && footerNavigation.props.navItems.includes('Contact'), `Created about footer navigation missing Contact item: ${JSON.stringify(footerNavigation?.props)}`);
+  assert(valueCards.length === 3, `Created about values section should contain 3 editable value cards: ${JSON.stringify(valuesSection)}`);
+  assert(contentDocument?.kind === 'page', `Created about contentDocument kind mismatch: ${JSON.stringify(contentDocument)}`);
+  assert(contentDocument?.slug === page.slug, `Created about contentDocument slug mismatch: ${JSON.stringify({ slug: page.slug, contentDocumentSlug: contentDocument?.slug })}`);
+  assert(contentDocument?.status === page.status, `Created about contentDocument status mismatch: ${JSON.stringify({ status: page.status, contentDocumentStatus: contentDocument?.status })}`);
+  assert(contentDocument?.metadata?.canvasSize?.height === canvasSize.height, `Created about contentDocument canvas size mismatch: ${JSON.stringify(contentDocument?.metadata)}`);
+
+  return {
+    parentId: page.parentId,
+    meta: page.meta,
+    content: {
+      rootElementCount: elements.length,
+      totalElementCount: allElements.length,
+      canvasSize,
+      requiredElementIds,
+      contentDocument: {
+        id: contentDocument?.id,
+        kind: contentDocument?.kind,
+        slug: contentDocument?.slug,
+        status: contentDocument?.status,
+      },
+    },
+  };
 };
 
 const createPageFromUi = async (client) => {
@@ -488,10 +561,12 @@ const createPageFromUi = async (client) => {
       path: window.location.pathname,
       search: window.location.search,
       storedDraft: localStorage.getItem('backy:page-new:draft:v1'),
+      editorLoaded: document.body?.innerText?.includes('Page editor command center') || false,
+      backendFallbackVisible: document.body?.innerText?.includes('Using the local page copy.') || false,
       body: document.body?.innerText?.slice(0, 260) || '',
     }))()`);
 
-    if (editState.path.startsWith('/pages/') && editState.path.endsWith('/edit')) {
+    if (editState.path.startsWith('/pages/') && editState.path.endsWith('/edit') && editState.editorLoaded && !editState.backendFallbackVisible) {
       assert(editState.storedDraft === null, `Autosave draft was not cleared after create: ${JSON.stringify(editState)}`);
       return editState;
     }

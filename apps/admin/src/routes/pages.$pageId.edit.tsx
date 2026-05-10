@@ -96,6 +96,8 @@ const getPagePublicPath = (page: Pick<Page, 'slug' | 'isHomepage'>) => (
     : `/${slugify(page.slug)}`
 );
 
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
 function PageEditorRoute() {
   const navigate = useNavigate();
   const { pageId } = Route.useParams();
@@ -144,7 +146,29 @@ function PageEditorRoute() {
       setLoadError(null);
 
       try {
-        const backendPage = await getPage(nextSiteId, pageId);
+        let backendPage: Page | null = null;
+        let lastError: unknown = null;
+
+        for (const delayMs of [0, 200, 600]) {
+          if (delayMs > 0) {
+            await sleep(delayMs);
+          }
+          if (cancelled) {
+            return;
+          }
+
+          try {
+            backendPage = await getPage(nextSiteId, pageId);
+            break;
+          } catch (error) {
+            lastError = error;
+          }
+        }
+
+        if (!backendPage) {
+          throw lastError || new Error('Unable to load page.');
+        }
+
         if (!cancelled) {
           setPage(backendPage);
           updatePage(pageId, backendPage);
