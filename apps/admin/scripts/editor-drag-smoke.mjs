@@ -713,6 +713,20 @@ const clickSave = async (client) => {
   assert(clicked, 'Unable to find Save button in editor');
 };
 
+const readEditorSaveStatus = async (client) => {
+  const status = await evaluate(client, `(() => {
+    const node = document.querySelector('[data-testid="editor-save-status"]');
+    return {
+      exists: Boolean(node),
+      text: node?.textContent || '',
+      title: node?.getAttribute('title') || '',
+    };
+  })()`);
+
+  assert(status.exists, `Editor save status is missing: ${JSON.stringify(status)}`);
+  return status;
+};
+
 const waitForPersistedCanvasState = async (pageId, expectedState) => {
   let lastState = null;
 
@@ -1533,6 +1547,11 @@ const main = async () => {
           ],
         };
     const inspector = await assertInspectorSelection(client, EDITOR_PATH ? 'home-heading' : 'smoke-heading');
+    const dirtySaveStatus = await readEditorSaveStatus(client);
+    assert(
+      /Unsaved|Autosaving|Saving|Saved|Save failed/.test(dirtySaveStatus.text),
+      `Editor save status did not expose a known state: ${JSON.stringify(dirtySaveStatus)}`,
+    );
     const fontPicker = await assertFontMediaPicker(client);
     const groupingControls = await assertGroupingControls(client);
     const siblingScopeSelection = await testSiblingScopeSelectionShortcut(
@@ -1551,10 +1570,16 @@ const main = async () => {
     let persistedState = null;
     let reloadedState = null;
     let postSaveInspector = null;
+    let savedStatus = null;
     if (tempPageId) {
       const elementIds = ['smoke-heading', 'smoke-image', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form'];
       const expectedState = await readEditorElementState(client, elementIds);
       await clickSave(client);
+      savedStatus = await readEditorSaveStatus(client);
+      assert(
+        /Saved|Saving|Autosaving/.test(savedStatus.text),
+        `Editor save status did not update after save: ${JSON.stringify(savedStatus)}`,
+      );
       postSaveInspector = await readInspectorState(client);
       assert(
         postSaveInspector?.hasSelection && !postSaveInspector.hasEmpty,
@@ -1624,6 +1649,7 @@ const main = async () => {
       resizes,
       keyboard,
       inspector,
+      dirtySaveStatus,
       fontPicker,
       groupingControls,
       siblingScopeSelection,
@@ -1631,6 +1657,7 @@ const main = async () => {
       multiSelectionDrag,
       grouping,
       postSaveInspector,
+      savedStatus,
       persistedState,
       reloadedState,
       invalidInputWarnings: invalidInputWarnings.length,

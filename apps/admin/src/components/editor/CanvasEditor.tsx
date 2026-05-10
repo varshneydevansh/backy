@@ -107,6 +107,7 @@ const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
 ];
 
 type CanvasAlignment = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
+type EditorSaveStatus = 'saved' | 'dirty' | 'saving' | 'autosaving' | 'error';
 type EditorHistoryEntry = {
   elements: CanvasElement[];
   selectedId: string | null;
@@ -118,6 +119,17 @@ const RULER_MAJOR_STEP = 100;
 const RULER_MINOR_STEP = 50;
 const MIN_CANVAS_DIMENSION = 320;
 const MAX_CANVAS_DIMENSION = 3840;
+
+const formatSavedTime = (value: Date | null) => {
+  if (!value) {
+    return 'Not saved this session';
+  }
+
+  return value.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
 
 const CANVAS_SIZE_PRESETS = [
   { id: 'desktop', label: 'Desktop', width: 1200, height: 800, breakpoint: 'desktop' as const },
@@ -368,6 +380,8 @@ export function CanvasEditor({
   const [isCanvasFocusMode, setIsCanvasFocusMode] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<EditorSaveStatus>('saved');
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const isCanvasMutationDisabled = isSaving || isPreview;
   const [showReloadConfirm, setShowReloadConfirm] = useState(false);
   const autosaveTimeoutRef = useRef<number | null>(null);
@@ -407,6 +421,45 @@ export function CanvasEditor({
     () => buildRulerTicks(size.height, activeCanvasScale),
     [activeCanvasScale, size.height],
   );
+  const saveStatusMeta = useMemo(() => {
+    if (isSaving && saveStatus !== 'autosaving') {
+      return {
+        label: 'Saving',
+        detail: 'Writing to backend',
+        className: 'border-sky-200 bg-sky-50 text-sky-700',
+      };
+    }
+
+    if (saveStatus === 'autosaving') {
+      return {
+        label: 'Autosaving',
+        detail: 'Writing to backend',
+        className: 'border-sky-200 bg-sky-50 text-sky-700',
+      };
+    }
+
+    if (saveStatus === 'error') {
+      return {
+        label: 'Save failed',
+        detail: 'Retry from the toolbar',
+        className: 'border-red-200 bg-red-50 text-red-700',
+      };
+    }
+
+    if (hasUnsavedChanges || saveStatus === 'dirty') {
+      return {
+        label: 'Unsaved',
+        detail: 'Autosave pending',
+        className: 'border-amber-200 bg-amber-50 text-amber-700',
+      };
+    }
+
+    return {
+      label: 'Saved',
+      detail: formatSavedTime(lastSavedAt),
+      className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    };
+  }, [hasUnsavedChanges, isSaving, lastSavedAt, saveStatus]);
 
   const clampCanvasZoom = useCallback((value: number) => {
     if (!Number.isFinite(value)) {
@@ -428,6 +481,7 @@ export function CanvasEditor({
   const markChanges = useCallback(() => {
     changeSequenceRef.current += 1;
     setHasUnsavedChanges(true);
+    setSaveStatus('dirty');
   }, []);
 
   const applyFitCanvas = useCallback(() => {
@@ -2023,6 +2077,7 @@ export function CanvasEditor({
     const validationMessage = validateSettings?.(nextSettings) || null;
     if (validationMessage) {
       setHasUnsavedChanges(true);
+      setSaveStatus('error');
       if (!silent) {
         setEditorNotice(validationMessage);
       }
@@ -2030,14 +2085,20 @@ export function CanvasEditor({
     }
 
     setIsSaving(true);
+    setSaveStatus(silent ? 'autosaving' : 'saving');
     try {
       await Promise.resolve(onSave(elements, nextSettings, size));
       if (changeSequenceRef.current === saveSequence) {
         setHasUnsavedChanges(false);
+        setSaveStatus('saved');
+        setLastSavedAt(new Date());
+      } else {
+        setSaveStatus('dirty');
       }
       return true;
     } catch {
       setHasUnsavedChanges(true);
+      setSaveStatus('error');
       if (!silent) {
         setEditorNotice('Unable to save page. Please try again.');
       } else {
@@ -2094,6 +2155,7 @@ export function CanvasEditor({
     setHistory([{ elements: nextElements, selectedId: null, selectedIds: [] }]);
     setHistoryIndex(0);
     setHasUnsavedChanges(false);
+    setSaveStatus('saved');
     changeSequenceRef.current += 1;
     setShowReloadConfirm(false);
     if (onChange) {
@@ -2401,8 +2463,32 @@ export function CanvasEditor({
                   Unsaved changes
                 </span>
               )}
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-semibold',
+                  saveStatusMeta.className,
+                )}
+                data-testid="editor-save-status"
+                title={saveStatusMeta.detail}
+              >
+                <span className={cn('size-1.5 rounded-full bg-current', (isSaving || saveStatus === 'autosaving') && 'animate-pulse')} aria-hidden="true" />
+                {saveStatusMeta.label}
+              </span>
             </div>
-          ) : <div className="w-4 shrink-0" />}
+          ) : (
+            <div
+              className={cn(
+                'flex shrink-0 items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold shadow-sm',
+                saveStatusMeta.className,
+              )}
+              data-testid="editor-save-status"
+              title={saveStatusMeta.detail}
+            >
+              <span className={cn('size-2 rounded-full bg-current', (isSaving || saveStatus === 'autosaving') && 'animate-pulse')} aria-hidden="true" />
+              <span>{saveStatusMeta.label}</span>
+              <span className="hidden font-medium opacity-75 xl:inline">{saveStatusMeta.detail}</span>
+            </div>
+          )}
 
           {/* Center - Canvas controls */}
           <div className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1">
