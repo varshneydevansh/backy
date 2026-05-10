@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
+import { createFileRoute, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -56,32 +56,32 @@ const SITE_CONTROL_AREAS = [
   {
     title: 'Pages and navigation',
     detail: 'Build routes, reusable headers, footers, and page sections.',
-    href: '/pages',
+    route: '/pages',
   },
   {
     title: 'Blog and editorial',
     detail: 'Publish posts, taxonomy, SEO, revisions, and public article pages.',
-    href: '/blog',
+    route: '/blog',
   },
   {
     title: 'Products and orders',
     detail: 'Prepare sellable objects, catalog data, order flow, and frontend listings.',
-    href: '/products',
+    route: '/products',
   },
   {
     title: 'Forms and leads',
     detail: 'Capture registrations, contact requests, submissions, and CRM pipeline data.',
-    href: '/forms',
+    route: '/forms',
   },
   {
     title: 'Media and files',
     detail: 'Host public or private files for pages, products, downloads, and APIs.',
-    href: '/media',
+    route: '/media',
   },
   {
     title: 'Delivery settings',
     detail: 'Control API keys, Supabase/Vercel readiness, security, and hosting mode.',
-    href: '/settings',
+    route: '/settings',
   },
 ] as const;
 
@@ -689,23 +689,96 @@ function SitesListView() {
     setStatusFilter('all');
     setCurrentPage(1);
   };
+  const openNewSite = () => {
+    if (isSitesBusy) return;
+
+    void navigate({ to: '/sites/new' });
+  };
+  const openSiteControlArea = (area: typeof SITE_CONTROL_AREAS[number]) => {
+    if (isSitesBusy) return;
+
+    if (area.route === '/pages') {
+      void navigate(selectedSiteRouteSearch ? { to: '/pages', search: selectedSiteRouteSearch } : { to: '/pages' });
+      return;
+    }
+
+    if (area.route === '/blog') {
+      void navigate(selectedSiteRouteSearch ? { to: '/blog', search: selectedSiteRouteSearch } : { to: '/blog' });
+      return;
+    }
+
+    if (area.route === '/products') {
+      void navigate(selectedSiteRouteSearch ? { to: '/products', search: selectedSiteRouteSearch } : { to: '/products' });
+      return;
+    }
+
+    if (area.route === '/forms') {
+      void navigate(selectedSiteRouteSearch ? { to: '/forms', search: selectedSiteRouteSearch } : { to: '/forms' });
+      return;
+    }
+
+    if (area.route === '/media') {
+      void navigate(selectedSiteRouteSearch ? { to: '/media', search: selectedSiteRouteSearch } : { to: '/media' });
+      return;
+    }
+
+    void navigate({ to: '/settings', search: { tab: 'infrastructure' } });
+  };
+  const openSiteFeatureSystem = (system: typeof SITE_FEATURE_SYSTEMS[number]) => {
+    if (isSitesBusy) return;
+
+    if (system.adminPath === '/pages') {
+      void navigate(selectedSiteRouteSearch ? { to: '/pages', search: selectedSiteRouteSearch } : { to: '/pages' });
+      return;
+    }
+
+    if (system.adminPath === '/blog') {
+      void navigate(selectedSiteRouteSearch ? { to: '/blog', search: selectedSiteRouteSearch } : { to: '/blog' });
+      return;
+    }
+
+    if (system.adminPath === '/products') {
+      void navigate(selectedSiteRouteSearch ? { to: '/products', search: selectedSiteRouteSearch } : { to: '/products' });
+      return;
+    }
+
+    if (system.adminPath === '/forms') {
+      void navigate(selectedSiteRouteSearch ? { to: '/forms', search: selectedSiteRouteSearch } : { to: '/forms' });
+      return;
+    }
+
+    if (system.adminPath === '/media') {
+      void navigate(selectedSiteRouteSearch ? { to: '/media', search: selectedSiteRouteSearch } : { to: '/media' });
+      return;
+    }
+
+    if (system.adminPath === '/collections') {
+      void navigate(selectedSiteRouteSearch ? { to: '/collections', search: selectedSiteRouteSearch } : { to: '/collections' });
+      return;
+    }
+
+    if (system.adminPath === '/users') {
+      void navigate({ to: '/users' });
+      return;
+    }
+
+    void navigate({ to: '/settings', search: { tab: 'infrastructure' } });
+  };
 
   return (
     <PageShell
       title="Sites"
       description="Create, publish, preview, and manage every frontend workspace Backy controls."
       action={
-        <Link
-          to="/sites/new"
-          aria-disabled={isSitesBusy}
-          className={cn(
-            'inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring',
-            isSitesBusy && 'pointer-events-none opacity-60',
-          )}
+        <button
+          type="button"
+          onClick={openNewSite}
+          disabled={isSitesBusy}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Plus className="h-4 w-4" />
           New site
-        </Link>
+        </button>
       }
       className="w-full"
     >
@@ -736,17 +809,15 @@ function SitesListView() {
               <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />
               Refresh sites
             </button>
-            <Link
-              to="/sites/new"
-              aria-disabled={isSitesBusy}
-              className={cn(
-                'inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90',
-                isSitesBusy && 'pointer-events-none opacity-60',
-              )}
+            <button
+              type="button"
+              onClick={openNewSite}
+              disabled={isSitesBusy}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Plus className="size-4" />
               New site
-            </Link>
+            </button>
           </div>
         </div>
 
@@ -918,25 +989,32 @@ function SitesListView() {
                   The site workspace should own every frontend system a Wix-style build needs: structure, content, commerce, leads, files, and delivery.
                 </p>
               </div>
-              <Link
-                to="/settings"
-                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent"
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isSitesBusy) {
+                    void navigate({ to: '/settings', search: { tab: 'infrastructure' } });
+                  }
+                }}
+                disabled={isSitesBusy}
+                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Server className="h-4 w-4" />
                 Delivery setup
-              </Link>
+              </button>
             </div>
             <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
               {SITE_CONTROL_AREAS.map((area) => (
-                <Link
+                <button
                   key={area.title}
-                  to={area.href}
-                  search={selectedSiteRouteSearch}
-                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                  type="button"
+                  onClick={() => openSiteControlArea(area)}
+                  disabled={isSitesBusy}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <div className="text-sm font-semibold text-foreground">{area.title}</div>
                   <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
-                </Link>
+                </button>
               ))}
             </div>
           </div>
@@ -971,11 +1049,12 @@ function SitesListView() {
               </div>
               <div className="mt-4 grid gap-2 md:grid-cols-2">
                 {SITE_FEATURE_SYSTEMS.map((system) => (
-                  <Link
+                  <button
                     key={system.key}
-                    to={system.adminPath}
-                    search={selectedSiteRouteSearch}
-                    className="rounded-lg border border-border bg-card p-3 transition hover:border-primary/40 hover:bg-primary/5"
+                    type="button"
+                    onClick={() => openSiteFeatureSystem(system)}
+                    disabled={isSitesBusy}
+                    className="rounded-lg border border-border bg-card p-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -989,7 +1068,7 @@ function SitesListView() {
                     <div className="mt-3 rounded-md bg-muted/50 px-2.5 py-2 font-mono text-[11px] text-muted-foreground">
                       {system.endpoint}
                     </div>
-                  </Link>
+                  </button>
                 ))}
               </div>
             </div>
@@ -1113,17 +1192,15 @@ function SitesListView() {
                     Clear filters
                   </button>
                 ) : (
-                  <Link
-                    to="/sites/new"
-                    aria-disabled={isSitesBusy}
-                    className={cn(
-                      'mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90',
-                      isSitesBusy && 'pointer-events-none opacity-60',
-                    )}
+                  <button
+                    type="button"
+                    onClick={openNewSite}
+                    disabled={isSitesBusy}
+                    className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Plus className="h-4 w-4" />
                     Create site
-                  </Link>
+                  </button>
                 )
               }
             />
