@@ -20,6 +20,18 @@ export interface AdminSessionSummary {
   current: boolean;
 }
 
+export interface AdminPasswordResetToken {
+  id: string;
+  token: string;
+  userId: string;
+  email: string;
+  createdAt: string;
+  expiresAt: string;
+  requestedById?: string | null;
+  deliveryConfigured: false;
+  resetUrl: string;
+}
+
 interface AdminAuthResponse {
   success: boolean;
   data?: {
@@ -45,6 +57,16 @@ interface AdminSessionRevokeResponse {
   success: boolean;
   data?: {
     revoked: boolean;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface AdminPasswordResetTokenResponse {
+  success: boolean;
+  data?: {
+    reset: AdminPasswordResetToken;
   };
   error?: {
     message?: string;
@@ -151,6 +173,23 @@ export async function revokeAdminAuthSession(token: string, sessionId: string) {
   }
 
   return payload.data;
+}
+
+export async function createAdminPasswordResetToken(token: string, userId: string) {
+  const response = await fetch(`${getAdminApiBase()}/users/${encodeURIComponent(userId)}/password-reset`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+  });
+  const payload = await readJson<AdminPasswordResetTokenResponse>(response);
+
+  if (!response.ok || !payload?.success || !payload.data) {
+    throw new Error(payload?.error?.message || 'Unable to create password reset token');
+  }
+
+  return payload.data.reset;
 }
 
 export async function requestAdminPasswordRecovery(email: string) {

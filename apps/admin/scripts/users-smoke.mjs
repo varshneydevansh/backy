@@ -535,6 +535,58 @@ const waitForUserDetailSessions = async (client) => {
   throw new Error('User detail sessions panel did not show the protected current session');
 };
 
+const generateUserDetailResetToken = async (client, email) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="user-detail-recovery"]');
+      const text = panel?.textContent || '';
+      const button = Array.from(panel?.querySelectorAll('button') || []).find((candidate) => (
+        (candidate.textContent || '').trim() === 'Generate reset token'
+      ));
+      return {
+        ready: Boolean(panel),
+        hasPanel: text.includes('Account recovery'),
+        hasEmail: document.body?.innerText?.includes(${JSON.stringify(email)}) || false,
+        buttonEnabled: button instanceof HTMLButtonElement && !button.disabled,
+        text: text.slice(0, 1600),
+      };
+    })()`);
+    if (state.ready && state.hasPanel && state.hasEmail && state.buttonEnabled) {
+      break;
+    }
+    if (attempt === 79) {
+      throw new Error(`User detail recovery panel was not ready: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  await clickButton(client, 'Generate reset token');
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="user-detail-recovery"]');
+      const text = panel?.textContent || '';
+      return {
+        ready: Boolean(panel),
+        hasNotice: text.includes('Local reset token generated') || text.includes('Password reset delivery was queued'),
+        hasResetUrl: text.includes('/reset-password?token=bpr_'),
+        hasTokenId: text.includes('reset_'),
+        hasCopyControls: text.includes('Copy reset URL') && text.includes('Copy token'),
+        text: text.slice(0, 1800),
+      };
+    })()`);
+    if (state.ready && state.hasNotice && state.hasResetUrl && state.hasTokenId && state.hasCopyControls) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Reset token UI did not render generated token: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const setUserDetailLifecycle = async (client, label) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
@@ -732,6 +784,16 @@ const main = async () => {
     await openUserDetail(client, 'Admin User');
     await waitForUserDetailSelfProtection(client);
     await waitForUserDetailSessions(client);
+    await navigateToUsers(client);
+    await waitForUsersPageUser(client, email);
+
+    await openUserDetail(client, fullName);
+    await generateUserDetailResetToken(client, email);
+    const resetAuditLogs = await listUserAuditLogs(createdUserId);
+    assert(
+      resetAuditLogs.some((log) => log.action === 'user.password_reset_token.create'),
+      `User reset token audit log was not recorded: ${JSON.stringify(resetAuditLogs).slice(0, 500)}`,
+    );
     await navigateToUsers(client);
     await waitForUsersPageUser(client, email);
 

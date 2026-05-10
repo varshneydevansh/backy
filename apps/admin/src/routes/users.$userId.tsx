@@ -38,8 +38,10 @@ import {
   type AdminAuditLog,
 } from '@/lib/adminContentApi';
 import {
+  createAdminPasswordResetToken,
   listAdminAuthSessions,
   revokeAdminAuthSession,
+  type AdminPasswordResetToken,
   type AdminSessionSummary,
 } from '@/lib/adminAuthApi';
 import { useAuthStore } from '@/stores/authStore';
@@ -115,6 +117,11 @@ const USER_DETAIL_CONTROL_AREAS = [
     href: '#user-detail-activity',
   },
   {
+    title: 'Recovery',
+    detail: 'Password reset token, email handoff, and lifecycle actions.',
+    href: '#user-detail-recovery',
+  },
+  {
     title: 'Danger zone',
     detail: 'Removal guardrails and destructive access controls.',
     href: '#user-detail-danger',
@@ -151,6 +158,9 @@ function EditUserPage() {
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
+  const [passwordResetToken, setPasswordResetToken] = useState<AdminPasswordResetToken | null>(null);
+  const [isCreatingResetToken, setIsCreatingResetToken] = useState(false);
+  const [resetTokenNotice, setResetTokenNotice] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formData, setFormData] = useState<{
     fullName: string;
@@ -285,6 +295,13 @@ function EditUserPage() {
     formData.role !== user.role ||
     formData.status !== user.status
   ));
+  const canCreateResetToken = Boolean(
+    currentSessionToken &&
+    !isUserDetailBusy &&
+    !isCreatingResetToken &&
+    formData.status !== 'inactive' &&
+    formData.status !== 'suspended',
+  );
   const canSaveUserDetail = canSubmit && hasUnsavedChanges && !hasSelfAccessChanges;
   const accessReadiness = useMemo(() => {
     const enabledCapabilities = ROLE_CAPABILITIES.filter((capability) => capability.roles.includes(formData.role));
@@ -496,6 +513,15 @@ function EditUserPage() {
     },
     recovery: {
       resetMailTo,
+      resetTokenEndpoint: `${userDetailUrl}/password-reset`,
+      latestResetToken: passwordResetToken
+        ? {
+            id: passwordResetToken.id,
+            expiresAt: passwordResetToken.expiresAt,
+            deliveryConfigured: passwordResetToken.deliveryConfigured,
+            resetUrl: passwordResetToken.resetUrl,
+          }
+        : null,
       lifecycleActions: LIFECYCLE_ACTIONS.map((action) => ({
         status: action.status,
         label: action.label,
@@ -554,6 +580,30 @@ function EditUserPage() {
       setSessionNotice(error instanceof Error ? error.message : 'Unable to revoke admin session.');
     } finally {
       setRevokingSessionId(null);
+    }
+  };
+
+  const createResetToken = async () => {
+    if (!currentSessionToken || isCreatingResetToken) {
+      setResetTokenNotice('Sign in with a valid admin session to generate reset tokens.');
+      return;
+    }
+
+    setIsCreatingResetToken(true);
+    setResetTokenNotice(null);
+
+    try {
+      const reset = await createAdminPasswordResetToken(currentSessionToken, user.id);
+      setPasswordResetToken(reset);
+      setResetTokenNotice(reset.deliveryConfigured
+        ? 'Password reset delivery was queued.'
+        : 'Local reset token generated. Copy the reset URL for manual delivery.');
+      await loadUserAuditLogs();
+    } catch (error) {
+      setPasswordResetToken(null);
+      setResetTokenNotice(error instanceof Error ? error.message : 'Unable to generate password reset token.');
+    } finally {
+      setIsCreatingResetToken(false);
     }
   };
 
@@ -1013,30 +1063,103 @@ function EditUserPage() {
             )}
           </section>
 
-          <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+          <section id="user-detail-recovery" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24" data-testid="user-detail-recovery">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
                 <ShieldAlert className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-sm font-semibold text-foreground">Account help</h2>
+                <h2 className="text-sm font-semibold text-foreground">Account recovery</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Until the auth/email pass lands, reset help opens a prefilled email to this user.
+                  Generate a temporary reset handoff, then copy the URL or send manual reset instructions until email delivery is wired.
                 </p>
               </div>
             </div>
-            <a
-              href={resetMailTo}
-              aria-disabled={isUserDetailBusy}
-              className={cn(
-                'mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring',
-                isUserDetailBusy && 'pointer-events-none opacity-60',
-              )}
-            >
-              <Mail className="h-4 w-4" />
-              Email reset instructions
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
+            {resetTokenNotice && (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {resetTokenNotice}
+              </div>
+            )}
+            <div className="mt-4 grid gap-2">
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => void createResetToken()}
+                disabled={!canCreateResetToken}
+                iconStart={<KeyRound className="size-4" />}
+              >
+                {isCreatingResetToken ? 'Generating...' : 'Generate reset token'}
+              </Button>
+              <a
+                href={resetMailTo}
+                aria-disabled={isUserDetailBusy}
+                className={cn(
+                  'inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring',
+                  isUserDetailBusy && 'pointer-events-none opacity-60',
+                )}
+              >
+                <Mail className="h-4 w-4" />
+                Email reset instructions
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </div>
+            {passwordResetToken ? (
+              <div className="mt-4 rounded-lg border border-border bg-background p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-xs font-medium uppercase text-muted-foreground">Latest reset token</div>
+                    <div className="mt-1 font-mono text-xs font-semibold text-foreground">{passwordResetToken.id}</div>
+                  </div>
+                  <span className="rounded bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                    Manual delivery
+                  </span>
+                </div>
+                <dl className="mt-3 grid gap-2 text-xs text-muted-foreground">
+                  <div className="flex justify-between gap-3">
+                    <dt>Expires</dt>
+                    <dd className="font-medium text-foreground">{formatAuditDate(passwordResetToken.expiresAt)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt>Email</dt>
+                    <dd className="truncate font-medium text-foreground">{passwordResetToken.email}</dd>
+                  </div>
+                </dl>
+                <div className="mt-3 rounded-lg border border-border bg-muted/40 p-2 font-mono text-[11px] leading-5 text-muted-foreground break-all">
+                  {passwordResetToken.resetUrl}
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void copyUserDetailText(passwordResetToken.resetUrl, 'Reset URL')}
+                    disabled={isUserDetailBusy}
+                    iconStart={<Copy className="size-3.5" />}
+                  >
+                    Copy reset URL
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void copyUserDetailText(passwordResetToken.token, 'Reset token')}
+                    disabled={isUserDetailBusy}
+                    iconStart={<Copy className="size-3.5" />}
+                  >
+                    Copy token
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
+                No reset token has been generated in this session.
+              </div>
+            )}
+            {(formData.status === 'inactive' || formData.status === 'suspended') && (
+              <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                Activate or invite this account before issuing a new reset token.
+              </div>
+            )}
             <div className="mt-4 grid gap-2">
               {LIFECYCLE_ACTIONS.map((action) => {
                 const active = action.status === formData.status;
@@ -1174,7 +1297,16 @@ function UserDetailAuditEvent({ log }: { log: AdminAuditLog }) {
       ? 'Removed'
       : log.action === 'update'
         ? 'Updated'
-        : log.action;
+        : log.action === 'user.password_reset_token.create'
+          ? 'Reset token'
+          : log.action;
+  const actionTone = log.action === 'delete'
+    ? 'bg-red-50 text-red-700'
+    : log.action === 'create'
+      ? 'bg-emerald-50 text-emerald-700'
+      : log.action === 'user.password_reset_token.create'
+        ? 'bg-amber-50 text-amber-700'
+        : 'bg-sky-50 text-sky-700';
 
   return (
     <article className="rounded-lg border border-border bg-background p-3">
@@ -1183,11 +1315,7 @@ function UserDetailAuditEvent({ log }: { log: AdminAuditLog }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className={cn(
               'rounded px-2 py-0.5 text-[11px] font-semibold',
-              log.action === 'delete'
-                ? 'bg-red-50 text-red-700'
-                : log.action === 'create'
-                  ? 'bg-emerald-50 text-emerald-700'
-                  : 'bg-sky-50 text-sky-700',
+              actionTone,
             )}
             >
               {actionLabel}

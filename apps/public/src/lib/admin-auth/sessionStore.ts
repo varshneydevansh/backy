@@ -27,16 +27,32 @@ export interface AdminSessionSummary {
   current: boolean;
 }
 
+export interface AdminPasswordResetToken {
+  id: string;
+  token: string;
+  userId: string;
+  email: string;
+  createdAt: string;
+  expiresAt: string;
+  requestedById?: string | null;
+  deliveryConfigured: false;
+  resetUrl: string;
+}
+
 type StoredSession = AdminSession & {
   lastSeenAt: string;
 };
 
 const globalAdminSessionStore = globalThis as typeof globalThis & {
   __BACKY_ADMIN_SESSIONS__?: Map<string, StoredSession>;
+  __BACKY_ADMIN_PASSWORD_RESET_TOKENS__?: Map<string, AdminPasswordResetToken>;
 };
 
 const ADMIN_SESSIONS = globalAdminSessionStore.__BACKY_ADMIN_SESSIONS__ ?? new Map<string, StoredSession>();
 globalAdminSessionStore.__BACKY_ADMIN_SESSIONS__ = ADMIN_SESSIONS;
+
+const PASSWORD_RESET_TOKENS = globalAdminSessionStore.__BACKY_ADMIN_PASSWORD_RESET_TOKENS__ ?? new Map<string, AdminPasswordResetToken>();
+globalAdminSessionStore.__BACKY_ADMIN_PASSWORD_RESET_TOKENS__ = PASSWORD_RESET_TOKENS;
 
 const DEMO_CREDENTIALS: Record<string, { password: string; userEmail: string; label: string }> = {
   'admin@backy.io': {
@@ -219,6 +235,35 @@ export function revokeAdminSessionById(sessionId: string, currentToken?: string 
   }
 
   return { revoked: false, current: false };
+}
+
+export function createAdminPasswordResetToken(input: {
+  user: Pick<AdminAuthUser, 'id' | 'email'>;
+  requestedById?: string | null;
+  origin?: string;
+  expiresInMinutes?: number;
+}): AdminPasswordResetToken {
+  const createdAt = new Date();
+  const expiresInMinutes = Number.isFinite(input.expiresInMinutes)
+    ? Math.min(Math.max(input.expiresInMinutes || 60, 5), 1440)
+    : 60;
+  const expiresAt = new Date(createdAt.getTime() + expiresInMinutes * 60 * 1000);
+  const token = `bpr_${randomUUID().replace(/-/g, '')}`;
+  const origin = input.origin?.replace(/\/$/, '') || '';
+  const resetToken: AdminPasswordResetToken = {
+    id: `reset_${token.slice(-12)}`,
+    token,
+    userId: input.user.id,
+    email: input.user.email,
+    createdAt: createdAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    requestedById: input.requestedById || null,
+    deliveryConfigured: false,
+    resetUrl: `${origin || '/admin'}/reset-password?token=${encodeURIComponent(token)}`,
+  };
+
+  PASSWORD_RESET_TOKENS.set(token, resetToken);
+  return resetToken;
 }
 
 export function getLocalRecoveryAccount(email: string) {
