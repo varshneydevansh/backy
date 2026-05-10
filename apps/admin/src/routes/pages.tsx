@@ -16,8 +16,10 @@ import {
   getPageReadiness,
   getPageRevisionSummary,
   getSiteReadiness,
+  listCollections,
   listPages,
   publishPage,
+  type Collection,
   type ContentRevisionSummary,
   type PageReadiness,
 } from '@/lib/adminContentApi';
@@ -338,6 +340,7 @@ function PagesListView() {
   const [isBulkBusy, setIsBulkBusy] = useState(false);
   const [readinessMap, setReadinessMap] = useState<Record<string, PageReadiness>>({});
   const [revisionSummaryMap, setRevisionSummaryMap] = useState<Record<string, ContentRevisionSummary>>({});
+  const [routeCollections, setRouteCollections] = useState<Collection[]>([]);
   const [isLoadingRevisions, setIsLoadingRevisions] = useState(false);
   const [previewingPageId, setPreviewingPageId] = useState<string | null>(null);
   const [mutatingPageId, setMutatingPageId] = useState<string | null>(null);
@@ -365,9 +368,16 @@ function PagesListView() {
     () => new Map(activeSitePages.map((page) => [page.id, page])),
     [activeSitePages],
   );
+  const activeSiteCollections = useMemo(() => (
+    routeCollections.filter((collection) => (
+      collection.siteId === activeSiteId
+      || collection.siteId === activeSite?.id
+      || collection.siteId === activeSite?.publicSiteId
+    ))
+  ), [activeSite?.id, activeSite?.publicSiteId, activeSiteId, routeCollections]);
   const pageRouteDiagnostics = useMemo(
-    () => buildPageRouteDiagnostics(activeSitePages),
-    [activeSitePages],
+    () => buildPageRouteDiagnostics(activeSitePages, activeSiteCollections),
+    [activeSiteCollections, activeSitePages],
   );
   const pageChildCountMap = useMemo(() => {
     const counts = new Map<string, number>();
@@ -488,8 +498,8 @@ function PagesListView() {
       {
         label: 'Route conflicts',
         detail: pageMetrics.routeConflicts === 0
-          ? 'No duplicate, invalid, or reserved page routes found.'
-          : `${pageMetrics.routeConflicts} page${pageMetrics.routeConflicts === 1 ? '' : 's'} need route cleanup before publishing.`,
+          ? 'No duplicate, invalid, reserved, or collection-shadowed page routes found.'
+          : `${pageMetrics.routeConflicts} page${pageMetrics.routeConflicts === 1 ? '' : 's'} need page or collection route cleanup before publishing.`,
         ready: pageMetrics.routeConflicts === 0,
       },
     ];
@@ -668,8 +678,10 @@ function PagesListView() {
           listPages(siteId),
           getSiteReadiness(siteId).catch(() => null),
         ]);
+        const collections = await listCollections(siteId).catch(() => []);
         const revisionSummaries = await loadPageRevisionSummaries(siteId, backendPages);
         setPages(backendPages);
+        setRouteCollections(collections);
         setSelectedPageIds((current) => new Set(backendPages.filter((page) => current.has(page.id)).map((page) => page.id)));
         setReadinessMap(Object.fromEntries((readiness?.pages || []).map((page) => [page.id, page])));
         setRevisionSummaryMap(revisionSummaries);
@@ -698,9 +710,11 @@ function PagesListView() {
           listPages(activeSiteId),
           getSiteReadiness(activeSiteId).catch(() => null),
         ]);
+        const collections = await listCollections(activeSiteId).catch(() => []);
         const revisionSummaries = await loadPageRevisionSummaries(activeSiteId, backendPages);
         if (!cancelled) {
           setPages(backendPages);
+          setRouteCollections(collections);
           setSelectedPageIds((current) => new Set(backendPages.filter((page) => current.has(page.id)).map((page) => page.id)));
           setReadinessMap(Object.fromEntries((readiness?.pages || []).map((page) => [page.id, page])));
           setRevisionSummaryMap(revisionSummaries);
@@ -2424,6 +2438,42 @@ const firstPagePathSegment = (path: string): string => (
   path.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean)[0] || ''
 );
 
+const compactRoutePattern = (value: string): string => {
+  const withLeadingSlash = value.startsWith('/') ? value : `/${value}`;
+  return withLeadingSlash.replace(/\/{2,}/g, '/').replace(/\/$/, '') || '/';
+};
+
+const normalizeCollectionListPattern = (collection: Collection): string => {
+  const raw = collection.listRoutePattern?.trim() || '';
+  if (!raw) return `/${collection.slug}`;
+
+  const compact = compactRoutePattern(raw);
+  return compact !== '/' && !compact.split('/').includes(':recordSlug') ? compact : `/${collection.slug}`;
+};
+
+const normalizeCollectionItemPattern = (collection: Collection): string => {
+  const raw = collection.routePattern?.trim() || '';
+  if (!raw) return `/${collection.slug}/:recordSlug`;
+
+  const compact = compactRoutePattern(raw);
+  return compact.split('/').includes(':recordSlug') ? compact : `/${collection.slug}/:recordSlug`;
+};
+
+const matchCollectionPattern = (path: string, pattern: string, collection: Collection): boolean => {
+  const pathSegments = path.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+  const patternSegments = pattern.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+
+  if (pathSegments.length !== patternSegments.length) return false;
+
+  return patternSegments.every((segment, index) => {
+    const pathSegment = decodeURIComponent(pathSegments[index] || '');
+
+    if (segment === ':collectionSlug') return pathSegment === collection.slug;
+    if (segment.startsWith(':')) return pathSegment.length > 0;
+    return pathSegment === segment;
+  });
+};
+
 const pageSlugIsValid = (page: Page): boolean => {
   if (page.isHomepage) return true;
 
@@ -2433,7 +2483,21 @@ const pageSlugIsValid = (page: Page): boolean => {
   return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
 };
 
-const buildPageRouteDiagnostics = (pages: Page[]): Record<string, PageRouteDiagnostic> => {
+const findCollectionRouteMatch = (path: string, collections: Collection[]): { collection: Collection; kind: 'list' | 'item' } | null => {
+  for (const collection of collections) {
+    if (matchCollectionPattern(path, normalizeCollectionListPattern(collection), collection)) {
+      return { collection, kind: 'list' };
+    }
+
+    if (matchCollectionPattern(path, normalizeCollectionItemPattern(collection), collection)) {
+      return { collection, kind: 'item' };
+    }
+  }
+
+  return null;
+};
+
+const buildPageRouteDiagnostics = (pages: Page[], collections: Collection[]): Record<string, PageRouteDiagnostic> => {
   const pagesByPath = new Map<string, Page[]>();
   pages.forEach((page) => {
     const path = pagePublicPath(page);
@@ -2469,6 +2533,16 @@ const buildPageRouteDiagnostics = (pages: Page[]): Record<string, PageRouteDiagn
         status: 'conflict',
         message: `Route also used by ${siblingPages.map((candidate) => candidate.title || candidate.slug).join(', ')}.`,
         conflictIds: siblingPages.map((candidate) => candidate.id),
+      }];
+    }
+
+    const collectionMatch = findCollectionRouteMatch(path, collections);
+    if (collectionMatch) {
+      return [page.id, {
+        path,
+        status: 'conflict',
+        message: `Conflicts with "${collectionMatch.collection.name || collectionMatch.collection.slug}" collection ${collectionMatch.kind} route.`,
+        conflictIds: [collectionMatch.collection.id],
       }];
     }
 

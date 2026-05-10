@@ -698,6 +698,8 @@ interface ApiCollection {
   siteId: string;
   name: string;
   slug: string;
+  routePattern?: string | null;
+  listRoutePattern?: string | null;
   description?: string | null;
   status: 'draft' | 'published' | 'archived';
   fields: ApiCollectionField[];
@@ -1653,6 +1655,8 @@ const toCollection = (collection: ApiCollection): Collection => ({
   siteId: collection.siteId,
   name: collection.name,
   slug: collection.slug,
+  routePattern: collection.routePattern || null,
+  listRoutePattern: collection.listRoutePattern || null,
   description: collection.description || null,
   status: collection.status || 'draft',
   fields: (collection.fields || []).map(toCollectionField),
