@@ -226,6 +226,8 @@ const PAGE_EXPORT_COLUMNS = [
   'route_issue',
   'route_conflict_ids',
   'delivery_status',
+  'delivery_health',
+  'delivery_health_message',
   'preview_endpoint',
   'parent_id',
   'parent_title',
@@ -260,6 +262,15 @@ type PageRouteDiagnostic = {
 };
 
 type PageDeliveryStatus = 'published' | 'preview-only' | 'scheduled' | 'archived' | 'blocked';
+
+type PageDeliveryHealth = {
+  status: 'checking' | 'healthy' | 'warning' | 'error';
+  message: string;
+  checkedAt?: string;
+  publicStatus?: number | null;
+  renderStatus?: number | null;
+  resolveStatus?: number | null;
+};
 
 const PAGE_CREATION_SHORTCUTS: Array<{
   key: PageCreationTemplate;
@@ -344,6 +355,7 @@ function PagesListView() {
   const [isBulkBusy, setIsBulkBusy] = useState(false);
   const [readinessMap, setReadinessMap] = useState<Record<string, PageReadiness>>({});
   const [revisionSummaryMap, setRevisionSummaryMap] = useState<Record<string, ContentRevisionSummary>>({});
+  const [deliveryHealthMap, setDeliveryHealthMap] = useState<Record<string, PageDeliveryHealth>>({});
   const [routeCollections, setRouteCollections] = useState<Collection[]>([]);
   const [isLoadingRevisions, setIsLoadingRevisions] = useState(false);
   const [previewingPageId, setPreviewingPageId] = useState<string | null>(null);
@@ -582,6 +594,7 @@ function PagesListView() {
       const readiness = readinessMap[page.id];
       const routeDiagnostic = pageRouteDiagnostics[page.id];
       const deliveryStatus = getPageDeliveryStatus(page, readiness, routeDiagnostic);
+      const deliveryHealth = deliveryHealthMap[page.id];
 
       return [
         page.id,
@@ -596,6 +609,8 @@ function PagesListView() {
         pageRouteDiagnostics[page.id]?.message || '',
         pageRouteDiagnostics[page.id]?.conflictIds.join('; ') || '',
         deliveryStatus,
+        deliveryHealth?.status || '',
+        deliveryHealth?.message || '',
         `${adminBaseUrl}/sites/${encodedSiteId}/pages/${encodedPageId}/preview`,
         page.parentId || '',
         getParentPageTitle(page, activeSitePageMap),
@@ -752,6 +767,70 @@ function PagesListView() {
   const publicPageUrl = (page: Page) => (
     `${publicBaseUrl}/sites/${encodeURIComponent(siteSlug)}${pagePublicPath(page)}`
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    const probeTargets = activeSitePages
+      .filter((page) => (
+        page.status === 'published'
+        && getPageDeliveryStatus(page, readinessMap[page.id], pageRouteDiagnostics[page.id]) === 'published'
+      ))
+      .slice(0, 24);
+
+    if (probeTargets.length === 0) {
+      setDeliveryHealthMap({});
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setDeliveryHealthMap((current) => {
+      const targetIds = new Set(probeTargets.map((page) => page.id));
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([pageId]) => targetIds.has(pageId)),
+      ) as Record<string, PageDeliveryHealth>;
+
+      probeTargets.forEach((page) => {
+        next[page.id] = next[page.id] || {
+          status: 'checking',
+          message: 'Checking public, render, and resolve endpoints.',
+        };
+      });
+
+      return next;
+    });
+
+    void Promise.allSettled(probeTargets.map(async (page) => {
+      const pageSiteId = page.siteId || activeSiteId;
+      const pagePath = pagePublicPath(page);
+      const encodedSiteId = encodeURIComponent(pageSiteId);
+      const encodedPath = encodeURIComponent(pagePath);
+
+      return [
+        page.id,
+        await probePageDeliveryHealth({
+          publicUrl: publicPageUrl(page),
+          renderUrl: `${publicBaseUrl}/api/sites/${encodedSiteId}/render?path=${encodedPath}`,
+          resolveUrl: `${publicBaseUrl}/api/sites/${encodedSiteId}/resolve?path=${encodedPath}`,
+        }),
+      ] as const;
+    })).then((results) => {
+      if (cancelled) return;
+
+      setDeliveryHealthMap((current) => ({
+        ...current,
+        ...Object.fromEntries(
+          results
+            .filter((result): result is PromiseFulfilledResult<readonly [string, PageDeliveryHealth]> => result.status === 'fulfilled')
+            .map((result) => result.value),
+        ),
+      }));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSiteId, activeSitePages, pageRouteDiagnostics, publicBaseUrl, readinessMap, siteSlug]);
 
   const handlePreviewPage = async (page: Page) => {
     if (isPageLibraryBusy) return;
@@ -1079,6 +1158,7 @@ function PagesListView() {
           <PageDeliveryCell
             page={page}
             status={getPageDeliveryStatus(page, readinessMap[page.id], pageRouteDiagnostics[page.id])}
+            health={deliveryHealthMap[page.id]}
             routeDiagnostic={pageRouteDiagnostics[page.id]}
             publicUrl={publicPageUrl(page)}
             renderUrl={`${publicBaseUrl}/api/sites/${encodedSiteId}/render?path=${encodedPath}`}
@@ -1356,6 +1436,7 @@ function PagesListView() {
         },
         delivery: {
           status: getPageDeliveryStatus(page, readinessMap[page.id], routeDiagnostic),
+          health: deliveryHealthMap[page.id] || null,
           publicUrl: page.status === 'published' ? publicPageUrl(page) : null,
           renderUrl: `${publicBaseUrl}/api/sites/${encodedSiteId}/render?path=${encodedPath}`,
           resolveUrl: `${publicBaseUrl}/api/sites/${encodedSiteId}/resolve?path=${encodedPath}`,
@@ -1424,6 +1505,7 @@ function PagesListView() {
     pageMetrics,
     pageChildCountMap,
     pageRouteDiagnostics,
+    deliveryHealthMap,
     filteredPages,
     publicPageBySlugUrl,
     publicPagesUrl,
@@ -2522,6 +2604,7 @@ function PageRevisionCell({
 function PageDeliveryCell({
   page,
   status,
+  health,
   routeDiagnostic,
   publicUrl,
   renderUrl,
@@ -2530,6 +2613,7 @@ function PageDeliveryCell({
 }: {
   page: Page;
   status: PageDeliveryStatus;
+  health: PageDeliveryHealth | undefined;
   routeDiagnostic: PageRouteDiagnostic | undefined;
   publicUrl: string;
   renderUrl: string;
@@ -2570,6 +2654,9 @@ function PageDeliveryCell({
       >
         {detailByStatus[status]}
       </div>
+      {status === 'published' && (
+        <PageDeliveryHealthSummary health={health} />
+      )}
       <div className="flex flex-wrap items-center gap-2 text-xs">
         {page.status === 'published' && status !== 'blocked' && (
           <a href={publicUrl} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
@@ -2586,6 +2673,37 @@ function PageDeliveryCell({
           preview POST
         </code>
       </div>
+    </div>
+  );
+}
+
+function PageDeliveryHealthSummary({ health }: { health: PageDeliveryHealth | undefined }) {
+  const effectiveHealth = health || {
+    status: 'checking' as const,
+    message: 'Health probe pending for public delivery endpoints.',
+  };
+  const healthType = effectiveHealth.status === 'healthy'
+    ? 'success'
+    : effectiveHealth.status === 'error'
+      ? 'error'
+      : effectiveHealth.status === 'warning'
+        ? 'warning'
+        : 'info';
+
+  return (
+    <div className="rounded-lg border border-border bg-background px-2.5 py-2 text-xs leading-5" data-testid="pages-delivery-health">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge status={`health ${effectiveHealth.status}`} type={healthType} />
+        {effectiveHealth.checkedAt && (
+          <span className="text-muted-foreground">{formatDate(effectiveHealth.checkedAt)}</span>
+        )}
+      </div>
+      <div className="mt-1 text-muted-foreground">{effectiveHealth.message}</div>
+      {(effectiveHealth.publicStatus || effectiveHealth.renderStatus || effectiveHealth.resolveStatus) && (
+        <div className="mt-1 font-mono text-[11px] text-muted-foreground">
+          public {effectiveHealth.publicStatus ?? 'n/a'} · render {effectiveHealth.renderStatus ?? 'n/a'} · resolve {effectiveHealth.resolveStatus ?? 'n/a'}
+        </div>
+      )}
     </div>
   );
 }
@@ -2989,6 +3107,96 @@ const getPagePublishDeliveryStatus = (
   }
 
   return 'published';
+};
+
+const fetchDeliveryStatus = async (url: string): Promise<number | null> => {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 3500);
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: controller.signal,
+      headers: {
+        accept: 'application/json,text/html;q=0.9,*/*;q=0.8',
+      },
+    });
+
+    return response.status;
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+};
+
+const canProbeUrlFromBrowser = (url: string): boolean => {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    return new URL(url, window.location.href).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+};
+
+const isHealthyStatus = (status: number | null | undefined): boolean => (
+  typeof status === 'number' && status >= 200 && status < 300
+);
+
+const probePageDeliveryHealth = async ({
+  publicUrl,
+  renderUrl,
+  resolveUrl,
+}: {
+  publicUrl: string;
+  renderUrl: string;
+  resolveUrl: string;
+}): Promise<PageDeliveryHealth> => {
+  const canProbePublicUrl = canProbeUrlFromBrowser(publicUrl);
+  const [publicStatus, renderStatus, resolveStatus] = await Promise.all([
+    canProbePublicUrl ? fetchDeliveryStatus(publicUrl) : Promise.resolve(null),
+    fetchDeliveryStatus(renderUrl),
+    fetchDeliveryStatus(resolveUrl),
+  ]);
+  const renderHealthy = isHealthyStatus(renderStatus);
+  const resolveHealthy = isHealthyStatus(resolveStatus);
+  const publicHealthy = isHealthyStatus(publicStatus);
+  const checkedAt = new Date().toISOString();
+
+  if (publicHealthy && renderHealthy && resolveHealthy) {
+    return {
+      status: 'healthy',
+      message: 'Published page, render API, and resolve API responded successfully.',
+      checkedAt,
+      publicStatus,
+      renderStatus,
+      resolveStatus,
+    };
+  }
+
+  if (renderHealthy && resolveHealthy) {
+    return {
+      status: 'warning',
+      message: canProbePublicUrl
+        ? 'Render and resolve APIs responded, but the hosted public page did not return a 2xx response.'
+        : 'Render and resolve APIs responded. Hosted public URL health is not browser-verifiable from this admin origin.',
+      checkedAt,
+      publicStatus,
+      renderStatus,
+      resolveStatus,
+    };
+  }
+
+  return {
+    status: 'error',
+    message: 'One or more public delivery endpoints failed the latest probe.',
+    checkedAt,
+    publicStatus,
+    renderStatus,
+    resolveStatus,
+  };
 };
 
 const getBulkActionLabel = (

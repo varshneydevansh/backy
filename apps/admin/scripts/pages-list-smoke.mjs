@@ -569,6 +569,11 @@ const main = async () => {
       hierarchyPages.parentPage,
       '1 child page',
     );
+    const parentDeliveryHealth = await waitForDeliveryRow(
+      client,
+      hierarchyPages.parentPage,
+      'Health',
+    );
     const childRevisions = await waitForRevisionRow(
       client,
       hierarchyPages.childPage,
@@ -608,6 +613,7 @@ const main = async () => {
       registrationShortcut,
       childHierarchy,
       parentHierarchy,
+      parentDeliveryHealth,
       childRevisions,
       childRoute,
       childDelivery,
