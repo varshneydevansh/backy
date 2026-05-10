@@ -516,15 +516,6 @@ function PagesListView() {
   const adminPageReadinessUrl = `${adminPageDetailUrl}/readiness`;
   const adminPagePreviewUrl = `${adminPageDetailUrl}/preview`;
   const createPageSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
-  const firstPageSearch = useMemo(() => ({
-    ...createPageSearch,
-    template: 'landing' as const,
-    title: 'Home',
-    slug: 'home',
-    isHomepage: true,
-    nav: 'primary' as const,
-    navLabel: 'Home',
-  }), [createPageSearch]);
   const getCreatePageSearch = (template: PageCreationTemplate = 'blank') => (
     template === 'blank' ? createPageSearch : { ...createPageSearch, template }
   );
@@ -540,7 +531,7 @@ function PagesListView() {
         label: 'Page library',
         detail: activeSitePages.length > 0
           ? `${activeSitePages.length} page${activeSitePages.length === 1 ? '' : 's'} in this site`
-          : 'Create the first page for this site.',
+          : 'Create a page for this site.',
         ready: activeSitePages.length > 0,
       },
       {
@@ -592,7 +583,7 @@ function PagesListView() {
       total: checks.length,
       checks,
       workflow: [
-        { label: 'Create', detail: 'Start from New Page or the empty-state action for the active site.' },
+        { label: 'Create', detail: 'Start from New Page for the active site.' },
         { label: 'Design', detail: 'Open the visual editor and build reusable sections, headers, footers, and page content.' },
         { label: 'Check', detail: 'Run readiness to catch missing SEO, empty canvas, route, or publishing issues.' },
         { label: 'Deliver', detail: 'Use public page, resolve, and render APIs for any custom frontend.' },
@@ -2418,7 +2409,7 @@ function PagesListView() {
               description={
                 hasPages
                   ? 'No pages match the current search or status filter.'
-                  : 'Create the first page for this site, then open it in the visual editor.'
+                  : 'Create a page for this site, then open it in the visual editor.'
               }
               action={
                 <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
@@ -2434,48 +2425,18 @@ function PagesListView() {
                   )}
                   <Link
                     to="/pages/new"
-                    search={hasPages ? createPageSearch : firstPageSearch}
+                    search={createPageSearch}
                     aria-disabled={isPageLibraryBusy}
                     data-testid="pages-empty-create"
                     className={cn(
                       'inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90',
                       isPageLibraryBusy && 'pointer-events-none opacity-60',
                     )}
-                    aria-label={hasPages ? 'Create page after clearing filters' : 'Create first homepage for active site'}
+                    aria-label={hasPages ? 'Create page after clearing filters' : 'Create page for active site'}
                   >
                     <Plus className="w-4 h-4" />
-                    {hasPages ? 'New Page' : 'Create First Page'}
+                    New Page
                   </Link>
-                  {!hasPages && (
-                    <div className="mt-3 grid w-full max-w-3xl gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {PAGE_CREATION_SHORTCUTS.map((shortcut) => {
-                        const ShortcutIcon = shortcut.icon;
-
-                        return (
-                          <Link
-                            key={shortcut.key}
-                            to="/pages/new"
-                            search={getCreatePageSearch(shortcut.key)}
-                            aria-disabled={isPageLibraryBusy}
-                            className={cn(
-                              'rounded-lg border border-border bg-background px-3 py-3 text-left transition hover:border-primary/50 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring',
-                              isPageLibraryBusy && 'pointer-events-none opacity-60',
-                            )}
-                            data-testid={`pages-empty-create-${shortcut.key}`}
-                            aria-label={`Create ${shortcut.title.toLowerCase()} for active site`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                <ShortcutIcon className="size-4" />
-                              </span>
-                              <span className="text-sm font-semibold text-foreground">{shortcut.title}</span>
-                            </div>
-                            <div className="mt-2 text-xs leading-5 text-muted-foreground">{shortcut.detail}</div>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  )}
                 </div>
               }
             />

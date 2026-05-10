@@ -19,6 +19,7 @@ const VISUAL_SCREENSHOT_PATHS = {
   bulkModal: path.join(VISUAL_SCREENSHOT_DIR, 'backy-pages-list-bulk-publish-modal.png'),
   postPublish: path.join(VISUAL_SCREENSHOT_DIR, 'backy-pages-list-post-publish-row.png'),
 };
+let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -29,12 +30,17 @@ const assert = (condition, message) => {
 };
 
 const requestApi = async (endpoint, options = {}) => {
+  const headers = new Headers(options.headers || {});
+  if (options.body && !headers.has('content-type')) {
+    headers.set('content-type', 'application/json');
+  }
+  if (endpoint.startsWith('/api/admin/') && apiAdminSessionToken && !headers.has('authorization')) {
+    headers.set('authorization', `Bearer ${apiAdminSessionToken}`);
+  }
+
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
-    headers: {
-      'content-type': 'application/json',
-      ...(options.headers || {}),
-    },
+    headers,
   });
   const payload = await response.json().catch(() => ({}));
 
@@ -43,6 +49,27 @@ const requestApi = async (endpoint, options = {}) => {
   }
 
   return payload;
+};
+
+const loginAdminApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.success === false || !payload.data?.session?.token) {
+    throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
+  }
+
+  apiAdminSessionToken = payload.data.session.token;
+  return payload.data;
 };
 
 const createHierarchyPages = async () => {
@@ -183,8 +210,19 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const AUTH_STORAGE_SCRIPT = `
-localStorage.setItem('backy-auth-storage', JSON.stringify({ state: { user: { id: '1', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' } }, version: 0 }));
+const authStorageScript = (sessionToken) => `
+localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
+  state: {
+    user: { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
+    session: {
+      token: sessionToken,
+      issuedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      authMode: 'local-demo',
+    },
+  },
+  version: 0,
+}))});
 `;
 
 const evaluate = async (client, expression) => {
@@ -248,7 +286,7 @@ const assertPagesVisualState = async (client, label, screenshotPath, options = {
   assert(!state.hasFrameworkOverlay, `${label} rendered a framework/runtime overlay: ${JSON.stringify(state)}`);
 
   if (options.empty) {
-    assert(state.emptyCreateVisible && /Create (First Page|the first page for this site)/.test(state.body), `${label} did not render the empty state controls: ${JSON.stringify(state)}`);
+    assert(state.emptyCreateVisible && state.body.includes('Create a page for this site.') && state.body.includes('New Page'), `${label} did not render the empty state controls: ${JSON.stringify(state)}`);
   }
 
   if (options.table) {
@@ -344,7 +382,7 @@ const clickEmptyCreate = async (client, testId, expectedSearch, expectedCreate =
       && (!expectedCreate.template || state.template === expectedCreate.template)
       && (typeof expectedCreate.homepage !== 'boolean' || state.homepage === expectedCreate.homepage)
       && state.createButton
-      && state.createDisabled === false
+      && (expectedCreate.allowDisabled === true || state.createDisabled === false)
     ) {
       return { clicked, state };
     }
@@ -1017,6 +1055,7 @@ const cleanup = async ({ client, childProcess, userDataDir, hierarchyPages }) =>
 };
 
 const main = async () => {
+  await loginAdminApi();
   const { childProcess, userDataDir } = launchChrome();
   let client;
   let hierarchyPages = null;
@@ -1034,24 +1073,24 @@ const main = async () => {
     await client.send('DOM.enable');
     await client.send('Log.enable');
     await client.send('Page.addScriptToEvaluateOnNewDocument', {
-      source: AUTH_STORAGE_SCRIPT,
+      source: authStorageScript(apiAdminSessionToken),
     });
 
     const initialRender = await waitForPagesEmptyState(client);
     const emptyVisual = await assertPagesVisualState(client, 'pages empty state', VISUAL_SCREENSHOT_PATHS.empty, {
       empty: true,
-      expectedText: 'Create the first page for this site.',
+      expectedText: 'Create a page for this site.',
     });
     const emptyCreate = await clickEmptyCreate(
       client,
       'pages-empty-create',
-      ['template=landing', 'title=Home', 'slug=home', 'isHomepage=true', 'nav=primary', 'navLabel=Home'],
-      { title: 'Home', slug: 'home', template: 'landing', homepage: true },
+      [],
+      { template: 'blank', homepage: false, allowDisabled: true },
     );
     await waitForPagesEmptyState(client);
     const registrationShortcut = await clickEmptyCreate(
       client,
-      'pages-empty-create-registration',
+      'pages-create-registration',
       ['template=registration'],
       { title: 'Member registration', slug: 'register', template: 'registration', homepage: false },
     );
