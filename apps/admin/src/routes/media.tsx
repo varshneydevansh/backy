@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, CheckCircle2, CheckSquare, Code2, Copy, Download, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Music, Save, Trash2, Type, Upload, Video, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CheckSquare, Cloud, Code2, Copy, Download, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Music, RefreshCw, Save, Trash2, Type, Upload, Video, X } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
@@ -16,8 +16,10 @@ import {
   listAdminAuditLogs,
   listBlogPosts,
   listPages,
+  validateSettingsInfrastructure,
   type AdminAuditLog,
   type SiteSettingsInput,
+  type SettingsInfrastructureDiagnostic,
 } from '@/lib/adminContentApi';
 import {
   bindMediaToTarget,
@@ -250,6 +252,11 @@ function MediaPage() {
   const [signedUrl, setSignedUrl] = useState<SignedMediaUrl | null>(null);
   const [mediaQuota, setMediaQuota] = useState<MediaQuota | undefined>();
   const [runtimeStorage, setRuntimeStorage] = useState<SiteSettingsInput['runtimeStorage']>();
+  const [runtimeSupabase, setRuntimeSupabase] = useState<SiteSettingsInput['runtimeSupabase']>();
+  const [settingsInfrastructureInput, setSettingsInfrastructureInput] = useState<Pick<SiteSettingsInput, 'deliveryMode' | 'integrations'> | null>(null);
+  const [storageDiagnostics, setStorageDiagnostics] = useState<SettingsInfrastructureDiagnostic[] | null>(null);
+  const [isCheckingStorage, setIsCheckingStorage] = useState(false);
+  const [storageCheckError, setStorageCheckError] = useState<string | null>(null);
   const [signedUrlSeconds, setSignedUrlSeconds] = useState(900);
   const [signedUrlDisposition, setSignedUrlDisposition] = useState<'inline' | 'attachment'>('inline');
   const [transformWidth, setTransformWidth] = useState(1200);
@@ -676,6 +683,16 @@ function MediaPage() {
           missing: runtimeStorage.missing || [],
         }
       : null,
+    supabase: runtimeSupabase
+      ? {
+          configured: runtimeSupabase.configured,
+          projectRef: runtimeSupabase.projectRef,
+          storageBucket: runtimeSupabase.storageBucket,
+          anonKeyConfigured: runtimeSupabase.anonKeyConfigured,
+          serviceRoleConfigured: runtimeSupabase.serviceRoleConfigured,
+          missing: runtimeSupabase.missing || [],
+        }
+      : null,
     quota: mediaQuota
       ? {
           usedBytes: mediaQuota.usedBytes,
@@ -781,6 +798,7 @@ function MediaPage() {
     publicMediaTransformUrl,
     quotaUsagePercent,
     runtimeStorage,
+    runtimeSupabase,
     siteId,
   ]);
   const mediaHandoffText = useMemo(() => JSON.stringify(mediaHandoff, null, 2), [mediaHandoff]);
@@ -824,10 +842,17 @@ function MediaPage() {
         const settings = await getSettings();
         if (!cancelled) {
           setRuntimeStorage(settings.runtimeStorage);
+          setRuntimeSupabase(settings.runtimeSupabase);
+          setSettingsInfrastructureInput({
+            deliveryMode: settings.deliveryMode,
+            integrations: settings.integrations,
+          });
         }
       } catch {
         if (!cancelled) {
           setRuntimeStorage(undefined);
+          setRuntimeSupabase(undefined);
+          setSettingsInfrastructureInput(null);
         }
       }
     };
@@ -838,6 +863,24 @@ function MediaPage() {
       cancelled = true;
     };
   }, []);
+
+  const runStorageInfrastructureCheck = useCallback(async () => {
+    if (isCheckingStorage || !settingsInfrastructureInput) return;
+
+    setIsCheckingStorage(true);
+    setStorageCheckError(null);
+    try {
+      const result = await validateSettingsInfrastructure(settingsInfrastructureInput);
+      setStorageDiagnostics(result.diagnostics.filter((diagnostic) => (
+        diagnostic.area === 'storage' || diagnostic.area === 'supabase'
+      )));
+    } catch (checkError) {
+      setStorageDiagnostics(null);
+      setStorageCheckError(checkError instanceof Error ? checkError.message : 'Unable to run storage check.');
+    } finally {
+      setIsCheckingStorage(false);
+    }
+  }, [isCheckingStorage, settingsInfrastructureInput]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2032,22 +2075,42 @@ function MediaPage() {
       <Panel className="mb-6 scroll-mt-24" id="media-storage">
         <PanelHeader
           title="Storage health"
-          description="Runtime provider and site quota for files served to custom frontends."
-          icon={<Folder className="size-4" />}
+          description="Runtime provider, Supabase storage capability, and site quota for files served to custom frontends."
+          icon={<Cloud className="size-4" />}
           action={
-            runtimeStorage && (
-              <span
-                className={cn(
-                  'inline-flex items-center rounded px-2.5 py-1 text-xs font-medium',
-                  runtimeStorage.configured ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
-                )}
+            <div className="flex flex-wrap items-center gap-2">
+              {runtimeStorage && (
+                <span
+                  className={cn(
+                    'inline-flex items-center rounded px-2.5 py-1 text-xs font-medium',
+                    runtimeStorage.configured ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                  )}
+                >
+                  {runtimeStorage.configured ? 'Configured' : 'Needs config'}
+                </span>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void runStorageInfrastructureCheck()}
+                disabled={isCheckingStorage || !settingsInfrastructureInput}
+                iconStart={<RefreshCw className={cn('size-3.5', isCheckingStorage && 'animate-spin')} />}
               >
-                {runtimeStorage.configured ? 'Configured' : 'Needs config'}
-              </span>
-            )
+                {isCheckingStorage ? 'Checking...' : 'Run check'}
+              </Button>
+              <Link
+                to="/settings"
+                search={{ tab: 'infrastructure' }}
+                className="inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent focus-ring"
+              >
+                Configure
+              </Link>
+            </div>
           }
         />
         <PanelContent>
+          <div data-testid="media-storage-operations">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
             <div className="rounded-lg border border-border bg-muted/30 p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
@@ -2101,11 +2164,23 @@ function MediaPage() {
             </div>
 
             <div className="rounded-lg border border-border bg-muted/30 p-4">
-              <div className="mb-3">
-                <p className="text-sm font-medium">Storage provider</p>
-                <p className="text-xs text-muted-foreground">
-                  Current upload target reported by admin settings.
-                </p>
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Storage provider</p>
+                  <p className="text-xs text-muted-foreground">
+                    Current upload target reported by admin settings.
+                  </p>
+                </div>
+                {runtimeSupabase && (
+                  <span
+                    className={cn(
+                      'rounded px-2 py-0.5 text-[11px] font-semibold',
+                      runtimeSupabase.configured ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                    )}
+                  >
+                    Supabase {runtimeSupabase.configured ? 'ready' : 'needs env'}
+                  </span>
+                )}
               </div>
               {runtimeStorage ? (
                 <dl className="grid gap-3 text-sm sm:grid-cols-2">
@@ -2125,6 +2200,18 @@ function MediaPage() {
                       <dd className="break-all font-mono text-xs">{runtimeStorage.publicUrl}</dd>
                     </div>
                   )}
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Supabase bucket</dt>
+                    <dd className="break-all font-mono text-xs">
+                      {runtimeSupabase?.storageBucket || 'not set'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Project ref</dt>
+                    <dd className="break-all font-mono text-xs">
+                      {runtimeSupabase?.projectRef || 'not detected'}
+                    </dd>
+                  </div>
                 </dl>
               ) : (
                 <p className="rounded-lg border border-dashed border-border bg-background px-3 py-3 text-sm text-muted-foreground">
@@ -2136,7 +2223,38 @@ function MediaPage() {
                   Missing configuration: {runtimeStorage.missing.join(', ')}
                 </p>
               )}
+              {runtimeSupabase?.missing && runtimeSupabase.missing.length > 0 && (
+                <p className="mt-2 text-sm text-warning">
+                  Supabase missing: {runtimeSupabase.missing.join(', ')}
+                </p>
+              )}
             </div>
+          </div>
+          {storageCheckError && (
+            <Notice tone="warning" title="Storage check failed" className="mt-4">
+              {storageCheckError}
+            </Notice>
+          )}
+          {storageDiagnostics && (
+            <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="media-storage-check-results">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Storage check results</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    These checks reuse Settings infrastructure validation so uploads and frontend delivery can be verified from the media workspace.
+                  </p>
+                </div>
+                <span className="rounded bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                  {storageDiagnostics.filter((diagnostic) => diagnostic.status === 'blocked').length} blocked
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                {storageDiagnostics.map((diagnostic) => (
+                  <MediaStorageDiagnosticCard key={diagnostic.area} diagnostic={diagnostic} />
+                ))}
+              </div>
+            </div>
+          )}
           </div>
         </PanelContent>
       </Panel>
@@ -3909,6 +4027,52 @@ function MediaApiSnippet({ label, value }: { label: string; value: string }) {
         {value}
       </code>
     </div>
+  );
+}
+
+function MediaStorageDiagnosticCard({ diagnostic }: { diagnostic: SettingsInfrastructureDiagnostic }) {
+  return (
+    <article className="rounded-lg border border-border bg-card p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h4 className="text-sm font-semibold text-foreground">{diagnostic.label}</h4>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{diagnostic.summary}</p>
+        </div>
+        <span
+          className={cn(
+            'shrink-0 rounded px-2 py-0.5 text-[11px] font-semibold capitalize',
+            diagnostic.status === 'ready' && 'bg-emerald-50 text-emerald-700',
+            diagnostic.status === 'warning' && 'bg-amber-50 text-amber-700',
+            diagnostic.status === 'blocked' && 'bg-red-50 text-red-700',
+          )}
+        >
+          {diagnostic.status}
+        </span>
+      </div>
+      {diagnostic.missing.length > 0 && (
+        <p className="mt-2 break-words text-xs text-warning">
+          Missing: {diagnostic.missing.join(', ')}
+        </p>
+      )}
+      <div className="mt-3 grid gap-2">
+        {diagnostic.checks.map((check) => (
+          <div key={check.label} className="rounded-md border border-border bg-background px-2.5 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-foreground">{check.label}</span>
+              <span
+                className={cn(
+                  'text-[11px] font-semibold',
+                  check.ready ? 'text-emerald-700' : check.required ? 'text-red-700' : 'text-amber-700',
+                )}
+              >
+                {check.ready ? 'Ready' : check.required ? 'Required' : 'Optional'}
+              </span>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p>
+          </div>
+        ))}
+      </div>
+    </article>
   );
 }
 

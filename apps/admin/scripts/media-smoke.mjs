@@ -285,6 +285,7 @@ const assertMediaLayout = async (client, expectedText) => {
     hasDropzone: Boolean(document.querySelector('[data-testid="media-upload-dropzone"]')),
     hasApi: document.body?.innerText?.includes('Frontend media API') || false,
     hasStorage: document.body?.innerText?.includes('Storage runtime') || document.body?.innerText?.includes('Media storage runtime') || false,
+    hasStorageOperations: Boolean(document.querySelector('[data-testid="media-storage-operations"]')),
     hasFolders: document.body?.innerText?.includes('Folders') || false,
     hasBulk: document.body?.innerText?.includes('Bulk organize') || document.body?.innerText?.includes('Select visible assets') || false,
     hasAsset: document.body?.innerText?.includes(${JSON.stringify(expectedText)}) || false,
@@ -292,10 +293,51 @@ const assertMediaLayout = async (client, expectedText) => {
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Media page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasDropzone && layout.hasApi && layout.hasFolders && layout.hasBulk && layout.hasAsset && layout.hasSearch,
+    layout.hasCommandCenter && layout.hasDropzone && layout.hasApi && layout.hasStorageOperations && layout.hasFolders && layout.hasBulk && layout.hasAsset && layout.hasSearch,
     `Media page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
+};
+
+const runMediaStorageCheck = async (client) => {
+  let clicked = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    clicked = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="media-storage-operations"]');
+      if (!(panel instanceof HTMLElement)) return { ok: false, reason: 'panel-not-found' };
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        /Run check|Checking/.test(candidate.textContent || '')
+      ));
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'button-not-found', buttons: Array.from(document.querySelectorAll('button')).map((item) => item.textContent?.trim()).slice(0, 80) };
+      }
+      if (button.disabled) return { ok: false, reason: 'button-disabled', text: button.textContent || '' };
+      button.click();
+      return { ok: true };
+    })()`);
+    if (clicked.ok) break;
+    await sleep(250);
+  }
+  assert(clicked.ok, `Unable to start media storage check: ${JSON.stringify(clicked)}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      ready: Boolean(document.querySelector('[data-testid="media-storage-check-results"]')) ||
+        document.body?.innerText?.includes('Storage check failed'),
+      hasResults: Boolean(document.querySelector('[data-testid="media-storage-check-results"]')),
+      body: document.body?.innerText?.slice(0, 1400) || '',
+    }))()`);
+    if (state.ready) {
+      assert(state.hasResults, `Media storage check failed instead of rendering diagnostics: ${JSON.stringify(state)}`);
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`Media storage check did not finish: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
 };
 
 const openMediaDetails = async (client, assetName) => {
@@ -677,6 +719,7 @@ const main = async () => {
     await waitForMediaPageAsset(client, imageName);
     await waitForMediaPageAsset(client, privateName);
     await assertMediaLayout(client, imageName);
+    await runMediaStorageCheck(client);
 
     await openMediaDetails(client, imageName);
     await replaceAssetThroughDetails(client, replacementPath, replacementName);
