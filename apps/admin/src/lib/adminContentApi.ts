@@ -369,6 +369,20 @@ interface ApiUserResponse {
   };
 }
 
+interface ApiBulkUsersResponse {
+  success: boolean;
+  data?: {
+    action: 'delete' | 'updateStatus';
+    updated: number;
+    deleted: number;
+    userIds: string[];
+    users: ApiUser[];
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 export type AdminPermissionCapability =
   | 'view'
   | 'create'
@@ -921,6 +935,25 @@ export interface UserUpdateInput {
   email?: string;
   role?: User['role'];
   status?: User['status'];
+}
+
+export type UserBulkInput =
+  | {
+      action: 'updateStatus';
+      userIds: string[];
+      status: User['status'];
+    }
+  | {
+      action: 'delete';
+      userIds: string[];
+    };
+
+export interface UserBulkResult {
+  action: 'delete' | 'updateStatus';
+  updated: number;
+  deleted: number;
+  userIds: string[];
+  users: User[];
 }
 
 export interface SiteSettingsInput {
@@ -2161,6 +2194,26 @@ export async function deleteUser(userId: string): Promise<void> {
   if (!response.ok || !payload.success || !payload.data?.deleted) {
     throw new Error(payload.error?.message || 'Unable to delete user');
   }
+}
+
+export async function bulkUpdateUsers(input: UserBulkInput): Promise<UserBulkResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/users/bulk`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiBulkUsersResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to update selected users');
+  }
+
+  return {
+    ...payload.data,
+    users: payload.data.users.map(toStoreUser),
+  };
 }
 
 export async function getSettings(): Promise<SiteSettingsInput> {

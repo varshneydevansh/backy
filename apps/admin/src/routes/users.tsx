@@ -41,6 +41,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useDataTable, type Column } from '@/hooks/useDataTable';
 import { cn } from '@/lib/utils';
 import {
+  bulkUpdateUsers,
   deleteUser as deleteBackendUser,
   listAdminAuditLogs,
   listUsers,
@@ -249,10 +250,14 @@ function UsersListView() {
   const [reviewFilter, setReviewFilter] = useState<UserReviewFilter>('all');
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<UserType | null>(null);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<UserStatus>('inactive');
+  const [isBulkActionBusy, setIsBulkActionBusy] = useState(false);
+  const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [userAuditLogs, setUserAuditLogs] = useState<AdminAuditLog[]>([]);
   const [isLoadingUserAudit, setIsLoadingUserAudit] = useState(false);
   const [userAuditError, setUserAuditError] = useState<string | null>(null);
-  const isUserMutationBusy = updatingUserId !== null;
+  const isUserMutationBusy = updatingUserId !== null || isBulkActionBusy;
   const isUsersBusy = isLoading || isUserMutationBusy;
   const adminBaseUrl = useMemo(() => getAdminBaseUrl(), []);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
@@ -411,6 +416,24 @@ function UsersListView() {
       return roleMatches && statusMatches && reviewMatches;
     })
   ), [reviewFilter, roleFilter, statusFilter, users]);
+  const selectedUsers = useMemo(() => (
+    users.filter((user) => selectedUserIds.includes(user.id))
+  ), [selectedUserIds, users]);
+  const selectedActionableUsers = useMemo(() => (
+    selectedUsers.filter((user) => !isCurrentUser(user))
+  ), [isCurrentUser, selectedUsers]);
+
+  const toggleUserSelection = (user: UserType, checked: boolean) => {
+    if (isUsersBusy || isCurrentUser(user)) return;
+
+    setSelectedUserIds((current) => {
+      if (checked) {
+        return current.includes(user.id) ? current : [...current, user.id];
+      }
+
+      return current.filter((id) => id !== user.id);
+    });
+  };
 
   const handlePatchUser = async (user: UserType, updates: Partial<Pick<UserType, 'role' | 'status'>>) => {
     if (isUsersBusy) return;
@@ -454,6 +477,58 @@ function UsersListView() {
       setNotice(error instanceof Error ? error.message : 'Backend delete failed. The user was not removed.');
     } finally {
       setUpdatingUserId(null);
+    }
+  };
+
+  const handleBulkStatusUpdate = async () => {
+    if (isUsersBusy) return;
+    const userIds = selectedActionableUsers.map((user) => user.id);
+    if (userIds.length === 0) {
+      setNotice('Select at least one non-current user before running a bulk action.');
+      return;
+    }
+
+    setIsBulkActionBusy(true);
+    setNotice(null);
+
+    try {
+      const result = await bulkUpdateUsers({ action: 'updateStatus', userIds, status: bulkStatus });
+      const updatedById = new Map(result.users.map((user) => [user.id, user]));
+      setUsers(users.map((user) => updatedById.get(user.id) || user));
+      setSelectedUserIds([]);
+      setNotice(`${result.updated} user${result.updated === 1 ? '' : 's'} moved to ${bulkStatus}.`);
+      void loadUserAuditLogs();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Bulk status update failed.');
+    } finally {
+      setIsBulkActionBusy(false);
+    }
+  };
+
+  const handleBulkDeleteUsers = async () => {
+    if (isUsersBusy) return;
+    const userIds = selectedActionableUsers.map((user) => user.id);
+    if (userIds.length === 0) {
+      setNotice('Select at least one non-current user before running a bulk action.');
+      setPendingBulkDelete(false);
+      return;
+    }
+
+    setIsBulkActionBusy(true);
+    setNotice(null);
+
+    try {
+      const result = await bulkUpdateUsers({ action: 'delete', userIds });
+      const deletedIds = new Set(result.userIds);
+      setUsers(users.filter((user) => !deletedIds.has(user.id)));
+      setSelectedUserIds([]);
+      setPendingBulkDelete(false);
+      setNotice(`${result.deleted} user${result.deleted === 1 ? '' : 's'} removed.`);
+      void loadUserAuditLogs();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Bulk delete failed.');
+    } finally {
+      setIsBulkActionBusy(false);
     }
   };
 
@@ -502,6 +577,25 @@ function UsersListView() {
   };
 
   const columns: Column<UserType>[] = [
+    {
+      key: 'id',
+      label: 'Select',
+      render: (user) => {
+        const locked = isCurrentUser(user);
+
+        return (
+          <input
+            type="checkbox"
+            checked={selectedUserIds.includes(user.id)}
+            disabled={isUsersBusy || locked}
+            onChange={(event) => toggleUserSelection(user, event.target.checked)}
+            aria-label={locked ? `Self selection locked for ${user.fullName}` : `Select ${user.fullName}`}
+            data-testid={`select-user-${user.id}`}
+            className="size-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          />
+        );
+      },
+    },
     {
       key: 'fullName',
       label: 'Person',
@@ -651,6 +745,23 @@ function UsersListView() {
     initialSort: { key: 'fullName', direction: 'asc' },
     pageSize: 10,
   });
+  const visibleSelectableUsers = useMemo(() => (
+    data.filter((user) => !isCurrentUser(user))
+  ), [data, isCurrentUser]);
+  const allVisibleSelected = visibleSelectableUsers.length > 0
+    && visibleSelectableUsers.every((user) => selectedUserIds.includes(user.id));
+  const toggleVisibleSelection = (checked: boolean) => {
+    if (isUsersBusy) return;
+
+    setSelectedUserIds((current) => {
+      const visibleIds = visibleSelectableUsers.map((user) => user.id);
+      if (checked) {
+        return Array.from(new Set([...current, ...visibleIds]));
+      }
+
+      return current.filter((id) => !visibleIds.includes(id));
+    });
+  };
   const openInviteUser = () => {
     if (isUsersBusy) return;
 
@@ -1169,6 +1280,70 @@ function UsersListView() {
                 {notice}
               </div>
             )}
+
+            <div className="mt-4 rounded-lg border border-border bg-background p-3" data-testid="users-bulk-actions">
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="inline-flex items-center gap-2 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      disabled={isUsersBusy || visibleSelectableUsers.length === 0}
+                      onChange={(event) => toggleVisibleSelection(event.target.checked)}
+                      className="size-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Select visible non-current users"
+                    />
+                    Select visible
+                  </label>
+                  <span className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
+                    {selectedActionableUsers.length} selected
+                  </span>
+                  {selectedUserIds.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={isUsersBusy}
+                      onClick={() => setSelectedUserIds([])}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <select
+                    value={bulkStatus}
+                    disabled={isUsersBusy || selectedActionableUsers.length === 0}
+                    onChange={(event) => setBulkStatus(event.target.value as UserStatus)}
+                    className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Bulk status"
+                  >
+                    {STATUS_OPTIONS.map((status) => (
+                      <option key={status.value} value={status.value}>{status.label}</option>
+                    ))}
+                  </select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isUsersBusy || selectedActionableUsers.length === 0}
+                    onClick={() => void handleBulkStatusUpdate()}
+                    iconStart={<Check className="size-4" />}
+                  >
+                    Apply status
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    disabled={isUsersBusy || selectedActionableUsers.length === 0}
+                    onClick={() => setPendingBulkDelete(true)}
+                    iconStart={<Trash2 className="size-4" />}
+                  >
+                    Delete selected
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div id="users-directory" className="scroll-mt-24">
@@ -1451,6 +1626,46 @@ function UsersListView() {
           </Panel>
         </aside>
       </div>
+
+      {pendingBulkDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Remove selected users?</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This revokes admin access for {selectedActionableUsers.length} selected account{selectedActionableUsers.length === 1 ? '' : 's'}. Current-session users stay locked.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isUserMutationBusy) {
+                    setPendingBulkDelete(false);
+                  }
+                }}
+                disabled={isUserMutationBusy}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkDeleteUsers()}
+                disabled={isUserMutationBusy || selectedActionableUsers.length === 0}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isUserMutationBusy ? 'Removing...' : 'Remove selected'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pendingDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">

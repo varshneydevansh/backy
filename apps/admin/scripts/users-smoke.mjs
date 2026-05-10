@@ -147,6 +147,14 @@ const createUser = async ({ fullName, email, role = 'admin', status = 'invited' 
   return user;
 };
 
+const bulkUpdateUsers = async (input) => {
+  const payload = await requestApi('/api/admin/users/bulk', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return payload.data;
+};
+
 const getUser = async (userId) => {
   const payload = await requestApi(`/api/admin/users/${userId}`);
   return payload.data?.user || payload.user;
@@ -874,6 +882,54 @@ const removeUserFromDirectory = async (client, fullName) => {
   assert(confirmResult.ok, `Unable to confirm user deletion: ${JSON.stringify(confirmResult)}`);
 };
 
+const setUsersBulkStatus = async (client, fullNames, status) => {
+  await navigateToUsers(client);
+  for (const fullName of fullNames) {
+    await waitForUsersPageUser(client, fullName);
+  }
+
+  const result = await evaluate(client, `(() => {
+    const names = ${JSON.stringify(fullNames)};
+    for (const name of names) {
+      const row = Array.from(document.querySelectorAll('tbody tr')).find((candidate) => (
+        (candidate.textContent || '').includes(name)
+      ));
+      const checkbox = row?.querySelector('input[type="checkbox"]');
+      if (!(checkbox instanceof HTMLInputElement)) {
+        return { ok: false, reason: 'checkbox-missing', name };
+      }
+      if (checkbox.disabled) {
+        return { ok: false, reason: 'checkbox-disabled', name };
+      }
+      if (!checkbox.checked) {
+        checkbox.click();
+      }
+    }
+
+    const panel = document.querySelector('[data-testid="users-bulk-actions"]');
+    const select = panel?.querySelector('select[aria-label="Bulk status"]');
+    if (!(select instanceof HTMLSelectElement)) {
+      return { ok: false, reason: 'bulk-select-missing' };
+    }
+    select.value = ${JSON.stringify(status)};
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+
+    const button = Array.from(panel?.querySelectorAll('button') || []).find((candidate) => (
+      (candidate.textContent || '').includes('Apply status')
+    ));
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'apply-button-missing', panel: panel?.textContent?.slice(0, 500) || '' };
+    }
+    if (button.disabled) {
+      return { ok: false, reason: 'apply-button-disabled', panel: panel?.textContent?.slice(0, 500) || '' };
+    }
+    button.click();
+    return { ok: true };
+  })()`);
+
+  assert(result.ok, `Unable to run users bulk status action: ${JSON.stringify(result)}`);
+};
+
 const assertLayout = async (client, expectedName) => {
   const layout = await evaluate(client, `(() => ({
     width: window.innerWidth,
@@ -980,9 +1036,12 @@ const main = async () => {
   let childProcess;
   let userDataDir;
   let createdUserId;
+  let bulkUserId;
   const suffix = Date.now().toString(36);
   const fullName = `Users Smoke ${suffix}`;
   const email = `users-smoke-${suffix}@example.com`;
+  const bulkFullName = `Users Bulk ${suffix}`;
+  const bulkEmail = `users-bulk-${suffix}@example.com`;
 
   try {
     await loginAdminApi();
@@ -994,6 +1053,8 @@ const main = async () => {
     const created = await createUser({ fullName, email });
     createdUserId = created.id;
     assert(created.role === 'admin' && created.status === 'invited', `Unexpected created user state: ${JSON.stringify(created)}`);
+    const bulkCreated = await createUser({ fullName: bulkFullName, email: bulkEmail, role: 'viewer', status: 'active' });
+    bulkUserId = bulkCreated.id;
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
@@ -1013,6 +1074,7 @@ const main = async () => {
     await fillInviteForm(client, { fullName: `${fullName} Preview`, email: `preview-${email}` });
     await navigateToUsers(client);
     await waitForUsersPageUser(client, email);
+    await waitForUsersPageUser(client, bulkEmail);
     await waitForUsersSelfProtection(client);
     await openUserDetail(client, 'Admin User');
     await waitForUserDetailSelfProtection(client);
@@ -1066,6 +1128,19 @@ const main = async () => {
 
     await navigateToUsers(client, fullName);
     await waitForUsersPageUser(client, fullName);
+    await setUsersBulkStatus(client, [fullName, bulkFullName], 'inactive');
+    await waitForUser(email, (user) => user.status === 'inactive');
+    await waitForUser(bulkEmail, (user) => user.status === 'inactive');
+    const bulkAuditLogs = await listUserAuditLogs('bulk');
+    assert(
+      bulkAuditLogs.some((log) => log.action === 'user.bulk.status.update'),
+      `Bulk status audit log was not recorded: ${JSON.stringify(bulkAuditLogs).slice(0, 500)}`,
+    );
+
+    await bulkUpdateUsers({ action: 'delete', userIds: [bulkUserId] });
+    await waitForUserMissing(bulkEmail);
+    bulkUserId = null;
+
     await waitForUserActivity(client, email);
     await assertLayout(client, fullName);
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
@@ -1084,6 +1159,9 @@ const main = async () => {
     }, null, 2));
   } finally {
     await cleanup({ client, childProcess, userDataDir, userId: createdUserId });
+    if (bulkUserId) {
+      await deleteUser(bulkUserId).catch(() => undefined);
+    }
   }
 };
 
