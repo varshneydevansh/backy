@@ -1413,19 +1413,27 @@ const assertGroupingControls = async (client) => {
     const groupButton = document.querySelector('[data-testid="editor-group-selection"]');
     const ungroupButton = document.querySelector('[data-testid="editor-ungroup-selection"]');
     const selectSiblingsButton = document.querySelector('[data-testid="editor-select-sibling-layers"]');
+    const distributeHorizontalButton = document.querySelector('[data-testid="editor-distribute-horizontal"]');
+    const distributeVerticalButton = document.querySelector('[data-testid="editor-distribute-vertical"]');
     return {
       hasGroupButton: Boolean(groupButton),
       hasUngroupButton: Boolean(ungroupButton),
       hasSelectSiblingsButton: Boolean(selectSiblingsButton),
+      hasDistributeHorizontalButton: Boolean(distributeHorizontalButton),
+      hasDistributeVerticalButton: Boolean(distributeVerticalButton),
       groupDisabled: groupButton instanceof HTMLButtonElement ? groupButton.disabled : null,
       ungroupDisabled: ungroupButton instanceof HTMLButtonElement ? ungroupButton.disabled : null,
       selectSiblingsDisabled: selectSiblingsButton instanceof HTMLButtonElement ? selectSiblingsButton.disabled : null,
+      distributeHorizontalDisabled: distributeHorizontalButton instanceof HTMLButtonElement ? distributeHorizontalButton.disabled : null,
+      distributeVerticalDisabled: distributeVerticalButton instanceof HTMLButtonElement ? distributeVerticalButton.disabled : null,
     };
   })()`);
 
   assert(state?.hasGroupButton, `Group control missing from editor toolbar: ${JSON.stringify(state)}`);
   assert(state?.hasUngroupButton, `Ungroup control missing from editor toolbar: ${JSON.stringify(state)}`);
   assert(state?.hasSelectSiblingsButton, `Select sibling layers control missing from editor toolbar: ${JSON.stringify(state)}`);
+  assert(state?.hasDistributeHorizontalButton, `Horizontal distribute control missing from editor toolbar: ${JSON.stringify(state)}`);
+  assert(state?.hasDistributeVerticalButton, `Vertical distribute control missing from editor toolbar: ${JSON.stringify(state)}`);
   return state;
 };
 
@@ -1647,6 +1655,75 @@ const testMultiSelectionCanvasDrag = async (client, elementIds) => {
     drag,
     before,
     after,
+  };
+};
+
+const centerGaps = (state, axis) => {
+  const entries = Object.values(state).sort((left, right) => (
+    axis === 'horizontal'
+      ? (left.x + left.width / 2) - (right.x + right.width / 2)
+      : (left.y + left.height / 2) - (right.y + right.height / 2)
+  ));
+
+  return entries.slice(0, -1).map((entry, index) => {
+    const next = entries[index + 1];
+    return axis === 'horizontal'
+      ? Math.round((next.x + next.width / 2) - (entry.x + entry.width / 2))
+      : Math.round((next.y + next.height / 2) - (entry.y + entry.height / 2));
+  });
+};
+
+const assertEvenSpacing = (state, axis, label) => {
+  const gaps = centerGaps(state, axis);
+  const min = Math.min(...gaps);
+  const max = Math.max(...gaps);
+  assert(
+    gaps.length >= 2 && Math.abs(max - min) <= 2,
+    `${label}: expected even ${axis} center spacing, got ${JSON.stringify({ gaps, state })}`,
+  );
+  return gaps;
+};
+
+const testMultiSelectionDistribution = async (client, elementIds) => {
+  assert(elementIds.length >= 3, 'Multi-selection distribution test needs at least three sibling elements');
+  await selectLayerIds(client, elementIds);
+
+  const ready = await evaluate(client, `(() => {
+    const horizontal = document.querySelector('[data-testid="editor-distribute-horizontal"]');
+    const vertical = document.querySelector('[data-testid="editor-distribute-vertical"]');
+    const inspectorHorizontal = document.querySelector('[data-testid="editor-inspector-distribute-horizontal"]');
+    const inspectorVertical = document.querySelector('[data-testid="editor-inspector-distribute-vertical"]');
+    return {
+      selectedLayers: Array.from(document.querySelectorAll('[data-layer-selected="true"]')).map((node) => node.getAttribute('data-layer-id')),
+      horizontalDisabled: horizontal instanceof HTMLButtonElement ? horizontal.disabled : null,
+      verticalDisabled: vertical instanceof HTMLButtonElement ? vertical.disabled : null,
+      inspectorHorizontalDisabled: inspectorHorizontal instanceof HTMLButtonElement ? inspectorHorizontal.disabled : null,
+      inspectorVerticalDisabled: inspectorVertical instanceof HTMLButtonElement ? inspectorVertical.disabled : null,
+      inspectorText: document.querySelector('[data-testid="editor-inspector-multi-selection"]')?.textContent || '',
+    };
+  })()`);
+
+  assert(ready.horizontalDisabled === false, `Horizontal distribute did not enable for three selected layers: ${JSON.stringify(ready)}`);
+  assert(ready.verticalDisabled === false, `Vertical distribute did not enable for three selected layers: ${JSON.stringify(ready)}`);
+  assert(ready.inspectorHorizontalDisabled === false, `Inspector horizontal distribute did not enable: ${JSON.stringify(ready)}`);
+  assert(ready.inspectorVerticalDisabled === false, `Inspector vertical distribute did not enable: ${JSON.stringify(ready)}`);
+
+  await clickButtonByAriaLabel(client, 'Distribute horizontal spacing');
+  await sleep(200);
+  const afterHorizontal = await readEditorElementState(client, elementIds);
+  const horizontalGaps = assertEvenSpacing(afterHorizontal, 'horizontal', 'horizontal distribution');
+
+  await clickButtonByAriaLabel(client, 'Distribute vertical spacing');
+  await sleep(200);
+  const afterVertical = await readEditorElementState(client, elementIds);
+  const verticalGaps = assertEvenSpacing(afterVertical, 'vertical', 'vertical distribution');
+
+  return {
+    ready,
+    afterHorizontal,
+    afterVertical,
+    horizontalGaps,
+    verticalGaps,
   };
 };
 
@@ -1978,6 +2055,9 @@ const main = async () => {
       client,
       EDITOR_PATH ? ['home-heading', 'home-cta'] : ['smoke-heading', 'smoke-image'],
     );
+    const multiSelectionDistribution = EDITOR_PATH
+      ? null
+      : await testMultiSelectionDistribution(client, ['smoke-heading', 'smoke-image', 'smoke-box']);
     const grouping = await testLayerGrouping(
       client,
       EDITOR_PATH ? ['home-heading', 'home-cta'] : ['smoke-heading', 'smoke-image'],
@@ -2119,6 +2199,7 @@ const main = async () => {
       siblingScopeSelection,
       clickAdd,
       multiSelectionDrag,
+      multiSelectionDistribution,
       grouping,
       responsiveEditing,
       reloadedResponsiveEditing,

@@ -16,9 +16,11 @@ import {
   AlignHorizontalJustifyCenter,
   AlignHorizontalJustifyEnd,
   AlignHorizontalJustifyStart,
+  AlignHorizontalDistributeCenter,
   AlignVerticalJustifyCenter,
   AlignVerticalJustifyEnd,
   AlignVerticalJustifyStart,
+  AlignVerticalDistributeCenter,
   ArrowLeft,
   CheckSquare,
   ClipboardPaste,
@@ -109,6 +111,7 @@ const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
 ];
 
 type CanvasAlignment = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
+type CanvasDistribution = 'horizontal' | 'vertical';
 type EditorSaveStatus = 'saved' | 'dirty' | 'saving' | 'autosaving' | 'error';
 type EditorHistoryEntry = {
   elements: CanvasElement[];
@@ -1775,6 +1778,12 @@ export function CanvasEditor({
     && canAcceptNestedDrop(selectedEntries[0].element.type)
     && Boolean(selectedEntries[0].element.children?.length);
   const canAlignSelected = !!selectedElement && !selectedElement.locked;
+  const canDistributeSelected = selectedEntries.length >= 3
+    && selectedEntries.every((entry) => (
+      entry.parentId === selectedParentId &&
+      !entry.element.locked &&
+      entry.element.visible !== false
+    ));
   const selectedElementLabel = selectedElement
     ? normalizeElementType(selectedElement.type)
     : null;
@@ -2091,6 +2100,75 @@ export function CanvasEditor({
       return nextElements;
     }, selectedId);
   }, [findElementEntry, selectedId, selectedIds, size.height, size.width, updateElementsWithHistory]);
+
+  const distributeSelectedElements = useCallback((axis: CanvasDistribution) => {
+    if (!selectedId) {
+      return;
+    }
+
+    updateElementsWithHistory((currentElements) => {
+      const primaryEntry = findElementEntry(currentElements, selectedId);
+      if (!primaryEntry) {
+        return currentElements;
+      }
+
+      const distributeEntries = selectedIds
+        .map((id) => findElementEntry(currentElements, id))
+        .filter((entry): entry is { element: CanvasElement; parentId: string | null } => (
+          !!entry &&
+          entry.parentId === primaryEntry.parentId &&
+          !entry.element.locked &&
+          entry.element.visible !== false
+        ));
+
+      if (distributeEntries.length < 3) {
+        return currentElements;
+      }
+
+      const sortedEntries = [...distributeEntries].sort((left, right) => (
+        axis === 'horizontal'
+          ? (left.element.x + left.element.width / 2) - (right.element.x + right.element.width / 2)
+          : (left.element.y + left.element.height / 2) - (right.element.y + right.element.height / 2)
+      ));
+      const first = sortedEntries[0].element;
+      const last = sortedEntries[sortedEntries.length - 1].element;
+      const startCenter = axis === 'horizontal'
+        ? first.x + first.width / 2
+        : first.y + first.height / 2;
+      const endCenter = axis === 'horizontal'
+        ? last.x + last.width / 2
+        : last.y + last.height / 2;
+      const centerStep = (endCenter - startCenter) / (sortedEntries.length - 1);
+
+      if (!Number.isFinite(centerStep)) {
+        return currentElements;
+      }
+
+      let didMove = false;
+      let nextElements = currentElements;
+
+      sortedEntries.forEach((entry, index) => {
+        const sizeForAxis = axis === 'horizontal' ? entry.element.width : entry.element.height;
+        const nextCenter = startCenter + centerStep * index;
+        const nextPosition = Math.round(nextCenter - sizeForAxis / 2);
+
+        const currentPosition = axis === 'horizontal' ? entry.element.x : entry.element.y;
+        if (Math.abs(nextPosition - currentPosition) <= 0.5) {
+          return;
+        }
+
+        didMove = true;
+        const result = updateElementById(nextElements, entry.element.id, (element) => (
+          axis === 'horizontal'
+            ? { ...element, x: nextPosition }
+            : { ...element, y: nextPosition }
+        ));
+        nextElements = result.updated ? result.elements : nextElements;
+      });
+
+      return didMove ? nextElements : currentElements;
+    }, selectedId, selectedIds);
+  }, [findElementEntry, selectedId, selectedIds, updateElementsWithHistory]);
 
   /**
    * Handle drag start from component library
@@ -3119,6 +3197,29 @@ export function CanvasEditor({
               >
                 <AlignVerticalJustifyEnd className="h-4 w-4" />
               </button>
+              <span className="mx-1 h-5 w-px bg-slate-200" aria-hidden="true" />
+              <button
+                type="button"
+                onClick={() => distributeSelectedElements('horizontal')}
+                disabled={isCanvasMutationDisabled || !canDistributeSelected}
+                className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                title="Distribute horizontal spacing"
+                aria-label="Distribute horizontal spacing"
+                data-testid="editor-distribute-horizontal"
+              >
+                <AlignHorizontalDistributeCenter className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => distributeSelectedElements('vertical')}
+                disabled={isCanvasMutationDisabled || !canDistributeSelected}
+                className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                title="Distribute vertical spacing"
+                aria-label="Distribute vertical spacing"
+                data-testid="editor-distribute-vertical"
+              >
+                <AlignVerticalDistributeCenter className="h-4 w-4" />
+              </button>
             </div>
 
             <button
@@ -3572,6 +3673,28 @@ export function CanvasEditor({
                         >
                           <Group className="h-3.5 w-3.5" />
                           Group
+                        </button>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => distributeSelectedElements('horizontal')}
+                          disabled={isCanvasMutationDisabled || !canDistributeSelected}
+                          className="inline-flex items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          data-testid="editor-inspector-distribute-horizontal"
+                        >
+                          <AlignHorizontalDistributeCenter className="h-3.5 w-3.5" />
+                          Space H
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => distributeSelectedElements('vertical')}
+                          disabled={isCanvasMutationDisabled || !canDistributeSelected}
+                          className="inline-flex items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          data-testid="editor-inspector-distribute-vertical"
+                        >
+                          <AlignVerticalDistributeCenter className="h-3.5 w-3.5" />
+                          Space V
                         </button>
                       </div>
                       {!canGroupSelected && (
