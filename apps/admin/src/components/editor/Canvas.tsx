@@ -114,6 +114,8 @@ interface DragBounds {
   boundsHeight: number;
 }
 
+type ResizeHandlePosition = 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w';
+
 const getDragSnapCandidates = (
   x: number,
   y: number,
@@ -201,6 +203,59 @@ const resolveSmartDragSnap = (
       ...(verticalSnap ? [{ orientation: 'vertical' as const, position: verticalSnap.position }] : []),
       ...(horizontalSnap ? [{ orientation: 'horizontal' as const, position: horizontalSnap.position }] : []),
     ],
+  };
+};
+
+const resizeBoundsFromHandle = (
+  bounds: DragBounds,
+  handle: ResizeHandlePosition,
+  deltaX: number,
+  deltaY: number,
+) => {
+  let nextX = bounds.x;
+  let nextY = bounds.y;
+  let nextWidth = bounds.width;
+  let nextHeight = bounds.height;
+  const minWidth = 50;
+  const minHeight = 30;
+
+  switch (handle) {
+    case 'se':
+      nextWidth = Math.max(minWidth, bounds.width + deltaX);
+      nextHeight = Math.max(minHeight, bounds.height + deltaY);
+      break;
+    case 'sw':
+      nextWidth = Math.max(minWidth, bounds.width - deltaX);
+      nextX = bounds.x + bounds.width - nextWidth;
+      nextHeight = Math.max(minHeight, bounds.height + deltaY);
+      break;
+    case 'ne':
+      nextWidth = Math.max(minWidth, bounds.width + deltaX);
+      nextHeight = Math.max(minHeight, bounds.height - deltaY);
+      nextY = bounds.y + bounds.height - nextHeight;
+      break;
+    case 'nw':
+      nextWidth = Math.max(minWidth, bounds.width - deltaX);
+      nextX = bounds.x + bounds.width - nextWidth;
+      nextHeight = Math.max(minHeight, bounds.height - deltaY);
+      nextY = bounds.y + bounds.height - nextHeight;
+      break;
+    default:
+      break;
+  }
+
+  nextWidth = Math.min(nextWidth, bounds.boundsWidth);
+  nextHeight = Math.min(nextHeight, bounds.boundsHeight);
+  nextX = clampToCanvas(nextX, nextWidth, bounds.boundsWidth);
+  nextY = clampToCanvas(nextY, nextHeight, bounds.boundsHeight);
+
+  return {
+    x: snapToGrid(nextX),
+    y: snapToGrid(nextY),
+    width: Math.max(minWidth, snapToGrid(nextWidth)),
+    height: Math.max(minHeight, snapToGrid(nextHeight)),
+    boundsWidth: bounds.boundsWidth,
+    boundsHeight: bounds.boundsHeight,
   };
 };
 
@@ -691,7 +746,10 @@ type DragInteraction = {
 
 type ResizeInteraction = {
   elementId: string;
-  handle: 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w';
+  elementIds: string[];
+  snapshots: DragSnapshot[];
+  bounds: DragBounds;
+  handle: ResizeHandlePosition;
   inputType: 'pointer' | 'mouse';
   pointerId?: number;
   startX: number;
@@ -1035,10 +1093,41 @@ export function Canvas({
       if (resizeStateRef.current || dragStateRef.current) return;
 
       const element = findElementById(elements, elementId);
-      if (!element) return;
+      if (!element || element.locked) return;
+
+      const selectedSet = new Set(selectedIds);
+      const allSelectedSnapshots = selectedSet.has(elementId) && selectedIds.length > 1
+        ? collectDragSnapshots(elementsRef.current, selectedSet, { width: size.width, height: size.height })
+        : [];
+      const activeSnapshot = allSelectedSnapshots.find((snapshot) => snapshot.id === elementId);
+      const resizeSnapshots = activeSnapshot
+        ? allSelectedSnapshots.filter((snapshot) => {
+            const snapshotElement = findElementById(elementsRef.current, snapshot.id);
+            return (
+              snapshotElement &&
+              !snapshotElement.locked &&
+              snapshot.parentId === activeSnapshot.parentId &&
+              snapshot.boundsWidth === activeSnapshot.boundsWidth &&
+              snapshot.boundsHeight === activeSnapshot.boundsHeight
+            );
+          })
+        : [{
+            id: element.id,
+            x: element.x,
+            y: element.y,
+            width: element.width,
+            height: element.height,
+            zIndex: element.zIndex || 1,
+            parentId: null,
+            boundsWidth: size.width,
+            boundsHeight: size.height,
+          }];
 
       const nextResizeState: ResizeInteraction = {
         elementId,
+        elementIds: resizeSnapshots.map((snapshot) => snapshot.id),
+        snapshots: resizeSnapshots,
+        bounds: getDragBounds(resizeSnapshots),
         handle,
         ...getPointerDetails(e),
         startX: e.clientX,
@@ -1053,12 +1142,13 @@ export function Canvas({
       dragStateRef.current = null;
       setResizeState(nextResizeState);
       setDragState(null);
+      exitTextEditingForTransform();
 
       if ('pointerId' in e && e.pointerId !== undefined) {
         e.currentTarget.setPointerCapture?.(e.pointerId);
       }
     },
-    [disabled, elements, isPreview]
+    [disabled, elements, exitTextEditingForTransform, isPreview, selectedIds, size.height, size.width]
   );
 
   const handleGlobalElementMove = useCallback((event: MouseEvent | PointerEvent) => {
@@ -1078,45 +1168,64 @@ export function Canvas({
       const deltaX = toCanvasDelta(event.clientX - activeResizeState.startX);
       const deltaY = toCanvasDelta(event.clientY - activeResizeState.startY);
 
-      let newX = activeResizeState.initialX;
-      let newY = activeResizeState.initialY;
-      let newWidth = activeResizeState.initialWidth;
-      let newHeight = activeResizeState.initialHeight;
+      let nextElements = elementsRef.current;
+      if (activeResizeState.snapshots.length > 1) {
+        const nextBounds = resizeBoundsFromHandle(
+          activeResizeState.bounds,
+          activeResizeState.handle,
+          deltaX,
+          deltaY,
+        );
+        const scaleX = nextBounds.width / Math.max(1, activeResizeState.bounds.width);
+        const scaleY = nextBounds.height / Math.max(1, activeResizeState.bounds.height);
 
-      switch (activeResizeState.handle) {
-        case 'se':
-          newWidth = Math.max(50, activeResizeState.initialWidth + deltaX);
-          newHeight = Math.max(30, activeResizeState.initialHeight + deltaY);
-          break;
-        case 'sw':
-          newX = activeResizeState.initialX + deltaX;
-          newWidth = Math.max(50, activeResizeState.initialWidth - deltaX);
-          newHeight = Math.max(30, activeResizeState.initialHeight + deltaY);
-          break;
-        case 'ne':
-          newWidth = Math.max(50, activeResizeState.initialWidth + deltaX);
-          newY = activeResizeState.initialY + deltaY;
-          newHeight = Math.max(30, activeResizeState.initialHeight - deltaY);
-          break;
-        case 'nw':
-          newX = activeResizeState.initialX + deltaX;
-          newY = activeResizeState.initialY + deltaY;
-          newWidth = Math.max(50, activeResizeState.initialWidth - deltaX);
-          newHeight = Math.max(30, activeResizeState.initialHeight - deltaY);
-          break;
+        for (const snapshot of activeResizeState.snapshots) {
+          const relativeX = snapshot.x - activeResizeState.bounds.x;
+          const relativeY = snapshot.y - activeResizeState.bounds.y;
+          const nextWidth = Math.max(20, snapToGrid(snapshot.width * scaleX));
+          const nextHeight = Math.max(20, snapToGrid(snapshot.height * scaleY));
+          const nextX = snapToGrid(nextBounds.x + relativeX * scaleX);
+          const nextY = snapToGrid(nextBounds.y + relativeY * scaleY);
+
+          const result = updateElementById(nextElements, snapshot.id, (element) => ({
+            ...element,
+            x: clampToCanvas(nextX, nextWidth, snapshot.boundsWidth),
+            y: clampToCanvas(nextY, nextHeight, snapshot.boundsHeight),
+            width: nextWidth,
+            height: nextHeight,
+          }));
+
+          nextElements = result.elements;
+        }
+      } else {
+        const nextBounds = resizeBoundsFromHandle(
+          {
+            x: activeResizeState.initialX,
+            y: activeResizeState.initialY,
+            width: activeResizeState.initialWidth,
+            height: activeResizeState.initialHeight,
+            boundsWidth: size.width,
+            boundsHeight: size.height,
+          },
+          activeResizeState.handle,
+          deltaX,
+          deltaY,
+        );
+
+        const result = updateElementById(nextElements, activeResizeState.elementId, (element) => ({
+          ...element,
+          x: nextBounds.x,
+          y: nextBounds.y,
+          width: nextBounds.width,
+          height: nextBounds.height,
+        }));
+
+        nextElements = result.elements;
       }
 
-      const result = updateElementById(elementsRef.current, activeResizeState.elementId, (element) => ({
-        ...element,
-        x: snapToGrid(clampToCanvas(newX, newWidth, size.width)),
-        y: snapToGrid(clampToCanvas(newY, newHeight, size.height)),
-        width: snapToGrid(newWidth),
-        height: snapToGrid(newHeight),
-      }));
-
-      elementsRef.current = result.elements;
+      elementsRef.current = nextElements;
       onElementsChange(
-        result.elements,
+        nextElements,
         { transient: true, selectedId: activeResizeState.elementId },
       );
       return;
@@ -2998,6 +3107,7 @@ function ResizeHandle({ position, onMouseDown }: ResizeHandleProps) {
       className="absolute z-[80] h-3 w-3 rounded-[3px] border border-sky-600 bg-white shadow-sm transition-transform hover:scale-110"
       style={positionStyles[position]}
       data-role="canvas-resize-handle"
+      data-resize-handle={position}
       onPointerDown={onMouseDown}
       onMouseDown={onMouseDown}
     />

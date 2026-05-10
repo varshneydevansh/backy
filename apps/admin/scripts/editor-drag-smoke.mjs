@@ -1743,6 +1743,116 @@ const testMultiSelectionCanvasDrag = async (client, elementIds) => {
   };
 };
 
+const getStateBounds = (state) => {
+  const entries = Object.values(state);
+  const minX = Math.min(...entries.map((entry) => entry.x));
+  const minY = Math.min(...entries.map((entry) => entry.y));
+  const maxX = Math.max(...entries.map((entry) => entry.x + entry.width));
+  const maxY = Math.max(...entries.map((entry) => entry.y + entry.height));
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
+};
+
+const testMultiSelectionResize = async (client, elementIds) => {
+  assert(elementIds.length >= 2, 'Multi-selection resize test needs at least two sibling elements');
+  const [activeElementId] = elementIds;
+
+  await selectLayerIds(client, elementIds);
+  await scrollElementIntoView(client, activeElementId);
+  const before = await readEditorElementState(client, elementIds);
+  const beforeBounds = getStateBounds(before);
+
+  const handle = await evaluate(client, `(() => {
+    const handle = document.querySelector('[data-element-id="${activeElementId}"] [data-role="canvas-resize-handle"][data-resize-handle="se"]');
+    if (!handle) {
+      return {
+        ok: false,
+        reason: 'missing-se-handle',
+        selected: Array.from(document.querySelectorAll('[data-layer-selected="true"]')).map((node) => node.getAttribute('data-layer-id')),
+        handles: Array.from(document.querySelectorAll('[data-role="canvas-resize-handle"]')).map((node) => ({
+          elementId: node.closest('[data-element-id]')?.getAttribute('data-element-id') || null,
+          position: node.getAttribute('data-resize-handle'),
+        })),
+      };
+    }
+    const rect = handle.getBoundingClientRect();
+    return {
+      ok: true,
+      x: Math.round(rect.x + rect.width / 2),
+      y: Math.round(rect.y + rect.height / 2),
+    };
+  })()`);
+
+  assert(handle?.ok, `Unable to find multi-selection resize handle: ${JSON.stringify(handle)}`);
+
+  const deltaX = 70;
+  const deltaY = 50;
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: handle.x,
+    y: handle.y,
+    button: 'none',
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: handle.x,
+    y: handle.y,
+    button: 'left',
+    buttons: 1,
+    clickCount: 1,
+  });
+
+  for (let step = 1; step <= 8; step += 1) {
+    await client.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x: Math.round(handle.x + (deltaX * step) / 8),
+      y: Math.round(handle.y + (deltaY * step) / 8),
+      button: 'left',
+      buttons: 1,
+    });
+    await sleep(30);
+  }
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: handle.x + deltaX,
+    y: handle.y + deltaY,
+    button: 'left',
+    buttons: 0,
+    clickCount: 1,
+  });
+  await sleep(300);
+
+  const after = await readEditorElementState(client, elementIds);
+  const afterBounds = getStateBounds(after);
+
+  for (const elementId of elementIds) {
+    assert(
+      after[elementId].width > before[elementId].width &&
+        after[elementId].height > before[elementId].height,
+      `${elementId} did not scale during multi-selection resize: before ${JSON.stringify(before[elementId])}, after ${JSON.stringify(after[elementId])}`,
+    );
+  }
+
+  assert(
+    afterBounds.width > beforeBounds.width && afterBounds.height > beforeBounds.height,
+    `Multi-selection bounds did not expand after resize: before ${JSON.stringify(beforeBounds)}, after ${JSON.stringify(afterBounds)}`,
+  );
+
+  return {
+    selected: elementIds,
+    before,
+    after,
+    beforeBounds,
+    afterBounds,
+  };
+};
+
 const centerGaps = (state, axis) => {
   const entries = Object.values(state).sort((left, right) => (
     axis === 'horizontal'
@@ -2198,6 +2308,9 @@ const main = async () => {
       client,
       EDITOR_PATH ? ['home-heading', 'home-cta'] : ['smoke-heading', 'smoke-image'],
     );
+    const multiSelectionResize = EDITOR_PATH
+      ? null
+      : await testMultiSelectionResize(client, ['smoke-heading', 'smoke-image']);
     const multiSelectionDistribution = EDITOR_PATH
       ? null
       : await testMultiSelectionDistribution(client, ['smoke-heading', 'smoke-image', 'smoke-box']);
@@ -2345,6 +2458,7 @@ const main = async () => {
       siblingScopeSelection,
       clickAdd,
       multiSelectionDrag,
+      multiSelectionResize,
       multiSelectionDistribution,
       grouping,
       layerHierarchy,
