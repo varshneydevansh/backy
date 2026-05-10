@@ -326,6 +326,18 @@ export interface BackyCommerceOrderContract {
   relatedEndpoints: Record<string, string>;
 }
 
+export interface BackyReusableSectionFrontendDesign {
+  templateId: string;
+  templateName?: string;
+  routePattern?: string;
+  source?: Record<string, unknown>;
+  chrome?: Record<string, unknown>;
+  tokens?: Record<string, unknown>;
+  customCss?: string;
+  bindingHints?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
 export interface BackyReusableSection {
   id: string;
   siteId?: string;
@@ -342,6 +354,8 @@ export interface BackyReusableSection {
     customJS?: string;
     [key: string]: unknown;
   };
+  metadata?: Record<string, unknown>;
+  frontendDesign?: BackyReusableSectionFrontendDesign;
   sourceElementId?: string | null;
   createdAt?: string;
   updatedAt?: string;

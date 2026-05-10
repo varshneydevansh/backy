@@ -195,6 +195,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Public reads require a published site and only expose reusable sections with `status: "active"`.
   - List filters: `category`, `tag`, and `search`.
   - Each section keeps normal canvas `content.elements` and `canvasSize`, so frontends can render or clone saved page sections without importing admin/editor internals.
+  - Sections created from a connected frontend design contract expose raw `metadata.frontendDesign*` provenance plus a normalized `frontendDesign` summary (`templateId`, `templateName`, `routePattern`, `source`, `chrome`, `tokens`, `customCss`, `bindingHints`) in public list/detail responses and manifest summaries.
   - The frontend manifest advertises `capabilities.reusableSections`, `endpoints.reusableSections`, `endpoints.reusableSectionDetail`, and `modules.reusableSections`; the site-scoped OpenAPI export includes reusable-section list/detail operations and `x-backy.reusableSectionIds`.
 
 ### 2.2 Render payload

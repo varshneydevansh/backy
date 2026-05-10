@@ -85,6 +85,24 @@ const collectionListRoutePattern = (collection: Pick<ManifestCollectionRoute, 's
   normalizeCollectionListRoutePattern(collection.listRoutePattern, collection.slug)
 );
 
+const reusableSectionFrontendDesign = (section: { metadata?: Record<string, unknown> }) => {
+  const metadata = section.metadata;
+  if (!metadata || typeof metadata.frontendDesignTemplateId !== 'string') {
+    return undefined;
+  }
+
+  return {
+    templateId: metadata.frontendDesignTemplateId,
+    templateName: typeof metadata.frontendDesignTemplateName === 'string' ? metadata.frontendDesignTemplateName : undefined,
+    routePattern: typeof metadata.frontendDesignRoutePattern === 'string' ? metadata.frontendDesignRoutePattern : undefined,
+    source: metadata.frontendDesignSource,
+    chrome: metadata.frontendDesignChrome,
+    tokens: metadata.frontendDesignTokens,
+    customCss: typeof metadata.frontendDesignCustomCss === 'string' ? metadata.frontendDesignCustomCss : undefined,
+    bindingHints: Array.isArray(metadata.frontendDesignBindingHints) ? metadata.frontendDesignBindingHints : [],
+  };
+};
+
 const dynamicCollectionRoutePatterns = (
   siteId: string,
   collections: ManifestCollectionRoute[],
@@ -344,6 +362,7 @@ const buildRepositoryManifest = (
             detailUrl: `/api/sites/${input.site.id}/reusable-sections/${section.id}`,
             canvasSize: section.content.canvasSize,
             elementCount: Array.isArray(section.content.elements) ? section.content.elements.length : 0,
+            frontendDesign: reusableSectionFrontendDesign(section),
           })),
         },
         forms: input.forms.map((form) => ({
@@ -651,6 +670,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               detailUrl: `/api/sites/${site.id}/reusable-sections/${section.id}`,
               canvasSize: section.content.canvasSize,
               elementCount: section.content.elements.length,
+              frontendDesign: reusableSectionFrontendDesign(section),
             })),
           },
           forms: forms.map((form) => ({

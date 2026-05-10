@@ -2355,6 +2355,29 @@ try {
           description: 'Temporary reusable section for frontend contract smoke',
           category: 'layout',
           tags: ['frontend-contract', 'template'],
+          metadata: {
+            frontendDesignTemplateId: 'contract-section-template',
+            frontendDesignTemplateName: 'Contract Section Template',
+            frontendDesignRoutePattern: '/contract-section',
+            frontendDesignSource: {
+              type: 'custom-frontend',
+              label: 'Contract smoke frontend',
+              repository: 'example/backy-contract-smoke',
+            },
+            frontendDesignChrome: {
+              header: { component: 'ContractHeader', source: 'site.navigation.primary' },
+              footer: { component: 'ContractFooter', source: 'site.navigation.footer' },
+            },
+            frontendDesignTokens: {
+              colors: { primary: '#0f766e', text: '#111827' },
+              fonts: { heading: 'Inter', body: 'Inter' },
+            },
+            frontendDesignCustomCss: ':root { --contract-section-primary: #0f766e; }',
+            frontendDesignBindingHints: [
+              { role: 'section.root', binding: 'sections.contract.root' },
+              { role: 'section.heading', binding: 'sections.contract.heading' },
+            ],
+          },
           content: {
             canvasSize: { width: 960, height: 320 },
             elements: [
@@ -2404,6 +2427,13 @@ try {
       assert(publicReusableSections.json?.success === true, `${publicReusableSections.url} expected success envelope`);
       assert(publicReusableSections.json?.data?.sections?.some((section) => section.id === manifestReusableSectionId), `${publicReusableSections.url} missing reusable section in data envelope`);
       assert(publicReusableSections.json?.sections?.some((section) => section.id === manifestReusableSectionId), `${publicReusableSections.url} missing legacy reusable sections`);
+      const listedReusableSection = publicReusableSections.json?.data?.sections?.find((section) => section.id === manifestReusableSectionId);
+      assert(listedReusableSection?.metadata?.frontendDesignTemplateId === 'contract-section-template', `${publicReusableSections.url} missing reusable section frontend metadata`);
+      assert(listedReusableSection?.frontendDesign?.templateId === 'contract-section-template', `${publicReusableSections.url} missing normalized reusable section frontend design`);
+      assert(listedReusableSection?.frontendDesign?.source?.label === 'Contract smoke frontend', `${publicReusableSections.url} missing normalized frontend source`);
+      assert(listedReusableSection?.frontendDesign?.chrome?.header?.component === 'ContractHeader', `${publicReusableSections.url} missing normalized frontend chrome`);
+      assert(listedReusableSection?.frontendDesign?.tokens?.fonts?.heading === 'Inter', `${publicReusableSections.url} missing normalized frontend tokens`);
+      assert(Array.isArray(listedReusableSection?.frontendDesign?.bindingHints) && listedReusableSection.frontendDesign.bindingHints.length === 2, `${publicReusableSections.url} missing normalized frontend binding hints`);
 
       const publicReusableSection = await request(`/api/sites/${createdSiteId}/reusable-sections/${manifestReusableSectionId}`);
       assert(publicReusableSection.response.status === 200, `${publicReusableSection.url} expected 200, got ${publicReusableSection.response.status}`);
@@ -2411,6 +2441,8 @@ try {
       assert(publicReusableSection.response.headers.get('x-backy-cache-revision'), `${publicReusableSection.url} missing reusable section cache revision`);
       assert(publicReusableSection.response.headers.get('etag')?.startsWith('"backy-'), `${publicReusableSection.url} missing reusable section etag`);
       assert(publicReusableSection.json?.data?.section?.content?.elements?.[0]?.id === 'frontend-contract-section-root', `${publicReusableSection.url} missing reusable section content`);
+      assert(publicReusableSection.json?.data?.section?.metadata?.frontendDesignTemplateName === 'Contract Section Template', `${publicReusableSection.url} missing reusable section detail frontend metadata`);
+      assert(publicReusableSection.json?.data?.section?.frontendDesign?.routePattern === '/contract-section', `${publicReusableSection.url} missing reusable section detail normalized frontend route`);
 
       const invalidSeoSettings = await request(`/api/admin/sites/${createdSiteId}/seo`, {
         method: 'PATCH',
@@ -2628,7 +2660,12 @@ try {
       assert(frontendManifest.json?.data?.modules?.reusableSections?.items?.some((section) => (
         section.id === manifestReusableSectionId &&
         section.detailUrl === `/api/sites/${createdSiteId}/reusable-sections/${manifestReusableSectionId}` &&
-        section.elementCount === 1
+        section.elementCount === 1 &&
+        section.frontendDesign?.templateId === 'contract-section-template' &&
+        section.frontendDesign?.source?.label === 'Contract smoke frontend' &&
+        section.frontendDesign?.tokens?.colors?.primary === '#0f766e' &&
+        Array.isArray(section.frontendDesign?.bindingHints) &&
+        section.frontendDesign.bindingHints.length === 2
       )), `${frontendManifest.url} missing reusable section manifest`);
       assert(frontendManifest.json?.data?.modules?.forms?.some((form) => (
         form.id === 'contract-form-write' &&
@@ -2686,6 +2723,9 @@ try {
       assert(publicOpenApi.json?.components?.schemas?.SeoDiscoveryEnvelope, `${publicOpenApi.url} missing SEO discovery schema`);
       assert(publicOpenApi.json?.components?.schemas?.MediaDetailEnvelope, `${publicOpenApi.url} missing media detail schema`);
       assert(publicOpenApi.json?.components?.schemas?.ReusableSectionListEnvelope, `${publicOpenApi.url} missing reusable section list schema`);
+      assert(publicOpenApi.json?.components?.schemas?.ReusableSection?.properties?.metadata, `${publicOpenApi.url} missing reusable section metadata schema`);
+      assert(publicOpenApi.json?.components?.schemas?.ReusableSection?.properties?.frontendDesign?.$ref === '#/components/schemas/ReusableSectionFrontendDesign', `${publicOpenApi.url} missing reusable section frontend design schema`);
+      assert(publicOpenApi.json?.components?.schemas?.ReusableSectionFrontendDesign?.properties?.bindingHints, `${publicOpenApi.url} missing reusable section binding hints schema`);
       assert(publicOpenApi.json?.components?.schemas?.CommentReportEnvelope, `${publicOpenApi.url} missing comment report schema`);
       assert(publicOpenApi.json?.components?.schemas?.EventsEnvelope, `${publicOpenApi.url} missing interaction event schema`);
       assert(publicOpenApi.json?.components?.schemas?.RedirectRoute, `${publicOpenApi.url} missing redirect route schema`);

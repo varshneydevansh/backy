@@ -191,7 +191,22 @@
                       "slug": { "type": "string", "minLength": 1 },
                       "name": { "type": "string", "minLength": 1 },
                       "detailUrl": { "type": "string", "minLength": 1 },
-                      "elementCount": { "type": "number", "minimum": 0 }
+                      "elementCount": { "type": "number", "minimum": 0 },
+                      "frontendDesign": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "templateId": { "type": "string", "minLength": 1 },
+                          "templateName": { "type": "string" },
+                          "routePattern": { "type": "string" },
+                          "source": { "type": "object", "additionalProperties": true },
+                          "chrome": { "type": "object", "additionalProperties": true },
+                          "tokens": { "type": "object", "additionalProperties": true },
+                          "customCss": { "type": "string" },
+                          "bindingHints": { "type": "array" }
+                        },
+                        "required": ["templateId"]
+                      }
                     },
                     "required": ["id", "slug", "name", "detailUrl", "elementCount"]
                   }

@@ -32,6 +32,29 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   )
 );
 
+const reusableSectionFrontendDesign = (section: { metadata?: Record<string, unknown> }) => {
+  const metadata = section.metadata;
+  if (!metadata || typeof metadata.frontendDesignTemplateId !== 'string') {
+    return undefined;
+  }
+
+  return {
+    templateId: metadata.frontendDesignTemplateId,
+    templateName: typeof metadata.frontendDesignTemplateName === 'string' ? metadata.frontendDesignTemplateName : undefined,
+    routePattern: typeof metadata.frontendDesignRoutePattern === 'string' ? metadata.frontendDesignRoutePattern : undefined,
+    source: metadata.frontendDesignSource,
+    chrome: metadata.frontendDesignChrome,
+    tokens: metadata.frontendDesignTokens,
+    customCss: typeof metadata.frontendDesignCustomCss === 'string' ? metadata.frontendDesignCustomCss : undefined,
+    bindingHints: Array.isArray(metadata.frontendDesignBindingHints) ? metadata.frontendDesignBindingHints : [],
+  };
+};
+
+const publicReusableSection = <TSection extends { metadata?: Record<string, unknown> }>(section: TSection) => ({
+  ...section,
+  frontendDesign: reusableSectionFrontendDesign(section),
+});
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
@@ -59,15 +82,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         siteId: site.id,
         scope: 'content',
       }) || undefined;
+      const sections = result.items.map(publicReusableSection);
 
       return publicContractJson({
         success: true,
         requestId,
         data: {
-          sections: result.items,
+          sections,
           pagination: result.pagination,
         },
-        sections: result.items,
+        sections,
         pagination: result.pagination,
       }, {
         requestId,
@@ -96,15 +120,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       offset: 0,
       hasMore: false,
     };
+    const publicSections = sections.map(publicReusableSection);
 
     return publicContractJson({
       success: true,
       requestId,
       data: {
-        sections,
+        sections: publicSections,
         pagination,
       },
-      sections,
+      sections: publicSections,
       pagination,
     }, {
       requestId,
