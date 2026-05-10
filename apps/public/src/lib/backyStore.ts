@@ -50,6 +50,10 @@ interface PageMeta {
   frontendDesignTemplateId?: string | null;
   frontendDesignTemplateName?: string | null;
   frontendDesignSource?: Record<string, unknown> | null;
+  frontendDesignRoutePattern?: string | null;
+  frontendDesignTokens?: Record<string, unknown> | null;
+  frontendDesignChrome?: Record<string, unknown> | null;
+  frontendDesignCustomCss?: string | null;
   frontendDesignBindingHints?: Array<Record<string, unknown>>;
 }
 
@@ -5026,6 +5030,14 @@ export function createAdminPage(siteId: string, input: Record<string, unknown>):
       frontendDesignSource: isObjectRecord(metaInput.frontendDesignSource)
         ? clone(metaInput.frontendDesignSource)
         : null,
+      frontendDesignRoutePattern: sanitizeString(metaInput.frontendDesignRoutePattern) || null,
+      frontendDesignTokens: isObjectRecord(metaInput.frontendDesignTokens)
+        ? clone(metaInput.frontendDesignTokens)
+        : null,
+      frontendDesignChrome: isObjectRecord(metaInput.frontendDesignChrome)
+        ? clone(metaInput.frontendDesignChrome)
+        : null,
+      frontendDesignCustomCss: sanitizeString(metaInput.frontendDesignCustomCss) || null,
       frontendDesignBindingHints: Array.isArray(metaInput.frontendDesignBindingHints)
         ? metaInput.frontendDesignBindingHints.filter(isObjectRecord).map(clone)
         : undefined,
@@ -5128,6 +5140,22 @@ export function updateAdminPage(
             : isObjectRecord(metaInput.frontendDesignSource)
               ? clone(metaInput.frontendDesignSource)
               : null,
+          frontendDesignRoutePattern: metaInput.frontendDesignRoutePattern === undefined
+            ? current.meta.frontendDesignRoutePattern
+            : sanitizeString(metaInput.frontendDesignRoutePattern) || null,
+          frontendDesignTokens: metaInput.frontendDesignTokens === undefined
+            ? current.meta.frontendDesignTokens
+            : isObjectRecord(metaInput.frontendDesignTokens)
+              ? clone(metaInput.frontendDesignTokens)
+              : null,
+          frontendDesignChrome: metaInput.frontendDesignChrome === undefined
+            ? current.meta.frontendDesignChrome
+            : isObjectRecord(metaInput.frontendDesignChrome)
+              ? clone(metaInput.frontendDesignChrome)
+              : null,
+          frontendDesignCustomCss: metaInput.frontendDesignCustomCss === undefined
+            ? current.meta.frontendDesignCustomCss
+            : sanitizeString(metaInput.frontendDesignCustomCss) || null,
           frontendDesignBindingHints: metaInput.frontendDesignBindingHints === undefined
             ? current.meta.frontendDesignBindingHints
             : Array.isArray(metaInput.frontendDesignBindingHints)
@@ -5566,6 +5594,14 @@ export function createAdminBlogPost(siteId: string, input: Record<string, unknow
       frontendDesignSource: isObjectRecord(metaInput.frontendDesignSource)
         ? clone(metaInput.frontendDesignSource)
         : null,
+      frontendDesignRoutePattern: sanitizeString(metaInput.frontendDesignRoutePattern) || null,
+      frontendDesignTokens: isObjectRecord(metaInput.frontendDesignTokens)
+        ? clone(metaInput.frontendDesignTokens)
+        : null,
+      frontendDesignChrome: isObjectRecord(metaInput.frontendDesignChrome)
+        ? clone(metaInput.frontendDesignChrome)
+        : null,
+      frontendDesignCustomCss: sanitizeString(metaInput.frontendDesignCustomCss) || null,
       frontendDesignBindingHints: Array.isArray(metaInput.frontendDesignBindingHints)
         ? metaInput.frontendDesignBindingHints.filter(isObjectRecord).map(clone)
         : undefined,
@@ -5647,6 +5683,22 @@ export function updateAdminBlogPost(
             : isObjectRecord(metaInput.frontendDesignSource)
               ? clone(metaInput.frontendDesignSource)
               : null,
+          frontendDesignRoutePattern: metaInput.frontendDesignRoutePattern === undefined
+            ? current.meta.frontendDesignRoutePattern
+            : sanitizeString(metaInput.frontendDesignRoutePattern) || null,
+          frontendDesignTokens: metaInput.frontendDesignTokens === undefined
+            ? current.meta.frontendDesignTokens
+            : isObjectRecord(metaInput.frontendDesignTokens)
+              ? clone(metaInput.frontendDesignTokens)
+              : null,
+          frontendDesignChrome: metaInput.frontendDesignChrome === undefined
+            ? current.meta.frontendDesignChrome
+            : isObjectRecord(metaInput.frontendDesignChrome)
+              ? clone(metaInput.frontendDesignChrome)
+              : null,
+          frontendDesignCustomCss: metaInput.frontendDesignCustomCss === undefined
+            ? current.meta.frontendDesignCustomCss
+            : sanitizeString(metaInput.frontendDesignCustomCss) || null,
           frontendDesignBindingHints: metaInput.frontendDesignBindingHints === undefined
             ? current.meta.frontendDesignBindingHints
             : Array.isArray(metaInput.frontendDesignBindingHints)

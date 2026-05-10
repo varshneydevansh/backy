@@ -103,6 +103,26 @@ const reusableSectionFrontendDesign = (section: { metadata?: Record<string, unkn
   };
 };
 
+const contentFrontendDesign = (item: { meta?: unknown }) => {
+  const metadata = item.meta && typeof item.meta === 'object' && !Array.isArray(item.meta)
+    ? item.meta as Record<string, unknown>
+    : {};
+  if (typeof metadata.frontendDesignTemplateId !== 'string') {
+    return undefined;
+  }
+
+  return {
+    templateId: metadata.frontendDesignTemplateId,
+    templateName: typeof metadata.frontendDesignTemplateName === 'string' ? metadata.frontendDesignTemplateName : undefined,
+    routePattern: typeof metadata.frontendDesignRoutePattern === 'string' ? metadata.frontendDesignRoutePattern : undefined,
+    source: metadata.frontendDesignSource,
+    chrome: metadata.frontendDesignChrome,
+    tokens: metadata.frontendDesignTokens,
+    customCss: typeof metadata.frontendDesignCustomCss === 'string' ? metadata.frontendDesignCustomCss : undefined,
+    bindingHints: Array.isArray(metadata.frontendDesignBindingHints) ? metadata.frontendDesignBindingHints : [],
+  };
+};
+
 const dynamicCollectionRoutePatterns = (
   siteId: string,
   collections: ManifestCollectionRoute[],
@@ -305,10 +325,20 @@ const buildRepositoryManifest = (
             path: pagePath(page),
             status: page.status,
             renderUrl: `/api/sites/${input.site.id}/render?path=${encodeURIComponent(pagePath(page))}`,
+            frontendDesign: contentFrontendDesign(page),
           })),
         },
         blog: {
           count: input.posts.length,
+          items: input.posts.map((post) => ({
+            id: post.id,
+            title: post.title,
+            slug: post.slug,
+            path: `/blog/${post.slug}`,
+            status: post.status,
+            renderUrl: `/api/sites/${input.site.id}/render?path=${encodeURIComponent(`/blog/${post.slug}`)}`,
+            frontendDesign: contentFrontendDesign(post),
+          })),
           categories: input.categories.map((category) => ({
             id: category.id,
             name: category.name,
@@ -607,10 +637,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               path: page.isHomepage || page.slug === 'index' ? '/' : `/${page.slug}`,
               status: page.status,
               renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(page.isHomepage || page.slug === 'index' ? '/' : `/${page.slug}`)}`,
+              frontendDesign: contentFrontendDesign(page),
             })),
           },
           blog: {
             count: posts.length,
+            items: posts.map((post) => ({
+              id: post.id,
+              title: post.title,
+              slug: post.slug,
+              path: `/blog/${post.slug}`,
+              status: post.status,
+              renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(`/blog/${post.slug}`)}`,
+              frontendDesign: contentFrontendDesign(post),
+            })),
             categories: categories.map((category) => ({
               id: category.id,
               slug: category.slug,

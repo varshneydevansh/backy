@@ -211,7 +211,36 @@
               "type": "object",
               "properties": {
                 "count": { "type": "number", "minimum": 0 },
-                "items": { "type": "array" }
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "id": { "type": "string", "minLength": 1 },
+                      "title": { "type": "string" },
+                      "slug": { "type": "string", "minLength": 1 },
+                      "path": { "type": "string", "minLength": 1 },
+                      "status": { "type": "string" },
+                      "renderUrl": { "type": "string", "minLength": 1 },
+                      "frontendDesign": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "templateId": { "type": "string", "minLength": 1 },
+                          "templateName": { "type": "string" },
+                          "routePattern": { "type": "string" },
+                          "source": { "type": "object", "additionalProperties": true },
+                          "chrome": { "type": "object", "additionalProperties": true },
+                          "tokens": { "type": "object", "additionalProperties": true },
+                          "customCss": { "type": "string" },
+                          "bindingHints": { "type": "array" }
+                        },
+                        "required": ["templateId"]
+                      }
+                    }
+                  }
+                }
               },
               "required": ["count", "items"]
             },
@@ -219,6 +248,36 @@
               "type": "object",
               "properties": {
                 "count": { "type": "number", "minimum": 0 },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "id": { "type": "string", "minLength": 1 },
+                      "title": { "type": "string" },
+                      "slug": { "type": "string", "minLength": 1 },
+                      "path": { "type": "string", "minLength": 1 },
+                      "status": { "type": "string" },
+                      "renderUrl": { "type": "string", "minLength": 1 },
+                      "frontendDesign": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "templateId": { "type": "string", "minLength": 1 },
+                          "templateName": { "type": "string" },
+                          "routePattern": { "type": "string" },
+                          "source": { "type": "object", "additionalProperties": true },
+                          "chrome": { "type": "object", "additionalProperties": true },
+                          "tokens": { "type": "object", "additionalProperties": true },
+                          "customCss": { "type": "string" },
+                          "bindingHints": { "type": "array" }
+                        },
+                        "required": ["templateId"]
+                      }
+                    }
+                  }
+                },
                 "categories": { "type": "array" },
                 "tags": { "type": "array" },
                 "authors": { "type": "array" }

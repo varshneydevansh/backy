@@ -714,6 +714,18 @@ export interface PageMeta {
   /** Frontend design source snapshot used to preserve custom frontend context */
   frontendDesignSource?: SiteFrontendDesignContract['source'];
 
+  /** Frontend design route pattern snapshot used when the content was seeded */
+  frontendDesignRoutePattern?: string;
+
+  /** Frontend design token snapshot used to preserve custom frontend styling */
+  frontendDesignTokens?: SiteFrontendDesignContract['tokens'];
+
+  /** Frontend design chrome snapshot used to preserve header/navigation/footer context */
+  frontendDesignChrome?: SiteFrontendDesignContract['chrome'];
+
+  /** Frontend design custom CSS snapshot used when the content was seeded */
+  frontendDesignCustomCss?: string;
+
   /** Editable binding hints captured from the frontend design template */
   frontendDesignBindingHints?: Array<Record<string, unknown>>;
 }

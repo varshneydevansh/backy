@@ -1215,6 +1215,10 @@ function NewBlogPostPage() {
                 frontendDesignTemplateId: selectedFrontendTemplate?.id,
                 frontendDesignTemplateName: selectedFrontendTemplate?.name,
                 frontendDesignSource: selectedFrontendTemplate ? frontendDesign?.source : undefined,
+                frontendDesignRoutePattern: selectedFrontendTemplate?.routePattern,
+                frontendDesignTokens: selectedFrontendTemplate ? frontendDesign?.tokens : undefined,
+                frontendDesignChrome: selectedFrontendTemplate ? frontendDesign?.chrome : undefined,
+                frontendDesignCustomCss: selectedFrontendTemplate ? frontendDesign?.tokens?.customCss : undefined,
                 frontendDesignBindingHints: selectedFrontendTemplate?.bindingHints,
             },
         };

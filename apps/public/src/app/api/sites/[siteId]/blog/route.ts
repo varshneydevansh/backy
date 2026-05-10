@@ -56,12 +56,35 @@ const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null 
     item.status === 'published' && (!item.scheduledAt || new Date(item.scheduledAt).getTime() <= Date.now())
 );
 
+const frontendDesignFromMeta = (value: unknown) => {
+    const meta = isRecord(value) ? value : {};
+    if (typeof meta.frontendDesignTemplateId !== 'string') {
+        return undefined;
+    }
+
+    return {
+        templateId: meta.frontendDesignTemplateId,
+        templateName: typeof meta.frontendDesignTemplateName === 'string' ? meta.frontendDesignTemplateName : undefined,
+        routePattern: typeof meta.frontendDesignRoutePattern === 'string' ? meta.frontendDesignRoutePattern : undefined,
+        source: meta.frontendDesignSource,
+        chrome: meta.frontendDesignChrome,
+        tokens: meta.frontendDesignTokens,
+        customCss: typeof meta.frontendDesignCustomCss === 'string' ? meta.frontendDesignCustomCss : undefined,
+        bindingHints: Array.isArray(meta.frontendDesignBindingHints) ? meta.frontendDesignBindingHints : [],
+    };
+};
+
+const publicPost = <TPost extends { meta?: unknown }>(post: TPost) => ({
+    ...post,
+    frontendDesign: frontendDesignFromMeta(post.meta),
+});
+
 const publicPostFromRepositoryPost = (post: BackyPost) => {
     const canvasSize = isRecord(post.content.metadata?.canvasSize)
         ? post.content.metadata.canvasSize
         : { width: 1200, height: 900 };
 
-    return {
+    return publicPost({
         ...post,
         content: {
             elements: post.content.elements,
@@ -69,7 +92,7 @@ const publicPostFromRepositoryPost = (post: BackyPost) => {
             customCSS: typeof post.content.metadata?.customCSS === 'string' ? post.content.metadata.customCSS : undefined,
             contentDocument: post.content,
         },
-    };
+    });
 };
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -198,13 +221,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
             }
 
+            const responsePost = publicPost(post);
+
             return publicContractJson({
                 success: true,
                 requestId,
                 data: {
-                    post,
+                    post: responsePost,
                 },
-                post,
+                post: responsePost,
             }, {
                 requestId,
                 request,
@@ -224,11 +249,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             authorId: searchParams.get('authorId') || undefined,
             authorSlug: searchParams.get('authorSlug') || undefined,
         });
+        const posts = data.posts.map(publicPost);
         return publicContractJson({
             success: true,
             requestId,
-            data,
+            data: {
+                ...data,
+                posts,
+            },
             ...data,
+            posts,
         }, {
             requestId,
             request,

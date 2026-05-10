@@ -52,12 +52,35 @@ const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null 
     item.status === 'published' && (!item.scheduledAt || new Date(item.scheduledAt).getTime() <= Date.now())
 );
 
+const frontendDesignFromMeta = (value: unknown) => {
+    const meta = isRecord(value) ? value : {};
+    if (typeof meta.frontendDesignTemplateId !== 'string') {
+        return undefined;
+    }
+
+    return {
+        templateId: meta.frontendDesignTemplateId,
+        templateName: typeof meta.frontendDesignTemplateName === 'string' ? meta.frontendDesignTemplateName : undefined,
+        routePattern: typeof meta.frontendDesignRoutePattern === 'string' ? meta.frontendDesignRoutePattern : undefined,
+        source: meta.frontendDesignSource,
+        chrome: meta.frontendDesignChrome,
+        tokens: meta.frontendDesignTokens,
+        customCss: typeof meta.frontendDesignCustomCss === 'string' ? meta.frontendDesignCustomCss : undefined,
+        bindingHints: Array.isArray(meta.frontendDesignBindingHints) ? meta.frontendDesignBindingHints : [],
+    };
+};
+
+const publicPage = <TPage extends { meta?: unknown }>(page: TPage) => ({
+    ...page,
+    frontendDesign: frontendDesignFromMeta(page.meta),
+});
+
 const publicPageFromRepositoryPage = (page: BackyPage) => {
     const canvasSize = isRecord(page.content.metadata?.canvasSize)
         ? page.content.metadata.canvasSize
         : { width: 1200, height: 900 };
 
-    return {
+    return publicPage({
         ...page,
         content: {
             elements: page.content.elements,
@@ -65,7 +88,7 @@ const publicPageFromRepositoryPage = (page: BackyPage) => {
             customCSS: typeof page.content.metadata?.customCSS === 'string' ? page.content.metadata.customCSS : undefined,
             contentDocument: page.content,
         },
-    };
+    });
 };
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -180,13 +203,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
             }
 
+            const responsePage = publicPage(page);
+
             return publicContractJson({
                 success: true,
                 requestId,
                 data: {
-                    page,
+                    page: responsePage,
                 },
-                page,
+                page: responsePage,
             }, {
                 requestId,
                 request,
@@ -196,7 +221,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         }
 
         const pages = getPageSummary(site.id);
-        const paginated = pages.slice(offset, offset + limit);
+        const paginated = pages.slice(offset, offset + limit).map(publicPage);
 
         return publicContractJson({
             success: true,

@@ -57,6 +57,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/public/sites/:siteId/pages?path=/about` (optional alias)
   - Path-based page fetch for public rendering.
   - Response uses `{ success, requestId, data: { page } }` for detail and `{ success, requestId, data: { pages, pagination } }` for list; legacy top-level `page`, `pages`, and `pagination` remain for compatibility.
+  - Pages created from a connected frontend design template expose raw `meta.frontendDesign*` provenance plus a normalized `frontendDesign` summary (`templateId`, `templateName`, `routePattern`, `source`, `chrome`, `tokens`, `customCss`, `bindingHints`) in public page list/detail responses and manifest page summaries.
   - Must return only published content.
   - Draft access requires `previewToken` created by the admin preview endpoint for that exact page.
 
@@ -72,6 +73,9 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Collection dynamic list paths resolve after normal pages and blog posts using `/:collectionSlug` by default and return a generated `dynamicList` content document with a hydrated collection dataset. Collection dynamic item paths use `/:collectionSlug/:recordSlug` by default and return a generated `dynamicItem` content document backed by the selected public record.
   - Current implementation is backed by the public seed adapter; production implementation must use the durable service layer.
   - Draft render access requires `previewToken` created by the admin preview endpoint for that exact page or post.
+
+- `GET /api/sites/:siteId/blog`
+  - Blog posts created from a connected frontend design template expose raw `meta.frontendDesign*` provenance plus a normalized `frontendDesign` summary (`templateId`, `templateName`, `routePattern`, `source`, `chrome`, `tokens`, `customCss`, `bindingHints`) in public blog list/detail responses and manifest blog summaries.
 
 - `GET /api/sites/:siteId/resolve?path=/about`
 - `GET /api/public/sites/:siteId/resolve?path=/about` (future stable alias)

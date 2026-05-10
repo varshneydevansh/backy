@@ -384,7 +384,7 @@ export interface BackyCommerceOrderContract {
   relatedEndpoints: Record<string, string>;
 }
 
-export interface BackyReusableSectionFrontendDesign {
+export interface BackyFrontendDesignProvenance {
   templateId: string;
   templateName?: string;
   routePattern?: string;
@@ -393,6 +393,35 @@ export interface BackyReusableSectionFrontendDesign {
   tokens?: Record<string, unknown>;
   customCss?: string;
   bindingHints?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export interface BackyReusableSectionFrontendDesign extends BackyFrontendDesignProvenance {}
+
+export interface BackyPageResource {
+  id: string;
+  siteId?: string;
+  title: string;
+  slug: string;
+  description?: string | null;
+  status?: string;
+  path?: string;
+  meta?: Record<string, unknown>;
+  content?: Record<string, unknown>;
+  frontendDesign?: BackyFrontendDesignProvenance;
+  [key: string]: unknown;
+}
+
+export interface BackyPostResource {
+  id: string;
+  siteId?: string;
+  title: string;
+  slug: string;
+  excerpt?: string | null;
+  status?: string;
+  meta?: Record<string, unknown>;
+  content?: Record<string, unknown>;
+  frontendDesign?: BackyFrontendDesignProvenance;
   [key: string]: unknown;
 }
 
@@ -668,8 +697,8 @@ export interface BackyFrontendManifest {
       };
       [key: string]: unknown;
     };
-    pages?: { count: number; items: Array<Record<string, unknown>> };
-    blog?: Record<string, unknown>;
+    pages?: { count: number; items: BackyPageResource[] };
+    blog?: Record<string, unknown> & { count?: number; items?: BackyPostResource[] };
     collections?: BackyCollectionSchema[];
     reusableSections?: {
       count?: number;
@@ -823,13 +852,13 @@ export class BackyClient {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/seo`);
   }
 
-  pages(options: { path?: string; previewToken?: string; siteId?: string } = {}): Promise<BackyEnvelope<Record<string, unknown>>> {
+  pages(options: { path?: string; previewToken?: string; siteId?: string } = {}): Promise<BackyEnvelope<{ page?: BackyPageResource; pages?: BackyPageResource[]; pagination?: BackyPagination } & Record<string, unknown>>> {
     return this.request(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/pages`, {
       query: { path: options.path, previewToken: options.previewToken },
     });
   }
 
-  blog(options: Record<string, string | number | boolean | undefined> = {}): Promise<BackyEnvelope<Record<string, unknown>>> {
+  blog(options: Record<string, string | number | boolean | undefined> = {}): Promise<BackyEnvelope<{ post?: BackyPostResource; posts?: BackyPostResource[]; pagination?: BackyPagination } & Record<string, unknown>>> {
     const siteId = typeof options.siteId === 'string' ? options.siteId : this.requireSiteId();
     const { siteId: _siteId, ...query } = options;
     void _siteId;

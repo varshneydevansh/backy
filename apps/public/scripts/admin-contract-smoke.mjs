@@ -777,6 +777,27 @@ try {
               name: 'Admin Contract Page',
             },
           ],
+          frontendDesignTemplateId: 'contract-page-template',
+          frontendDesignTemplateName: 'Contract Page Template',
+          frontendDesignRoutePattern: '/contract-page/{slug}',
+          frontendDesignSource: {
+            type: 'custom-frontend',
+            label: 'Contract page frontend',
+            repository: 'example/backy-page-contract',
+          },
+          frontendDesignChrome: {
+            header: { component: 'ContractPageHeader', source: 'site.navigation.primary' },
+            footer: { component: 'ContractPageFooter', source: 'site.navigation.footer' },
+          },
+          frontendDesignTokens: {
+            colors: { primary: '#2563eb', text: '#111827' },
+            fonts: { heading: 'Inter', body: 'Inter' },
+          },
+          frontendDesignCustomCss: ':root { --contract-page-primary: #2563eb; }',
+          frontendDesignBindingHints: [
+            { role: 'page.title', binding: 'page.title' },
+            { role: 'page.body', binding: 'page.content' },
+          ],
         },
         content: {
           elements: [
@@ -973,7 +994,23 @@ try {
     assert(revalidatedVisibleScheduledPage.response.headers.get('etag') === visibleScheduledPageEtag, `${revalidatedVisibleScheduledPage.url} expected matching page etag`);
     assert(visibleScheduledPage.json?.success === true, `${visibleScheduledPage.url} expected success envelope`);
     assert(visibleScheduledPage.json?.data?.page?.id === createdPageId, `${visibleScheduledPage.url} returned wrong scheduled page in data envelope`);
+    assert(visibleScheduledPage.json?.data?.page?.meta?.frontendDesignTemplateId === 'contract-page-template', `${visibleScheduledPage.url} missing page frontend metadata`);
+    assert(visibleScheduledPage.json?.data?.page?.frontendDesign?.templateId === 'contract-page-template', `${visibleScheduledPage.url} missing normalized page frontend design`);
+    assert(visibleScheduledPage.json?.data?.page?.frontendDesign?.routePattern === '/contract-page/{slug}', `${visibleScheduledPage.url} missing normalized page route pattern`);
+    assert(visibleScheduledPage.json?.data?.page?.frontendDesign?.chrome?.header?.component === 'ContractPageHeader', `${visibleScheduledPage.url} missing normalized page chrome`);
+    assert(visibleScheduledPage.json?.data?.page?.frontendDesign?.tokens?.colors?.primary === '#2563eb', `${visibleScheduledPage.url} missing normalized page tokens`);
+    assert(Array.isArray(visibleScheduledPage.json?.data?.page?.frontendDesign?.bindingHints) && visibleScheduledPage.json.data.page.frontendDesign.bindingHints.length === 2, `${visibleScheduledPage.url} missing normalized page binding hints`);
     assert(visibleScheduledPage.json?.page?.id === createdPageId, `${visibleScheduledPage.url} returned wrong scheduled page`);
+
+    const pageFrontendManifest = await request(`/api/sites/${createdSiteId}/manifest`);
+    assert(pageFrontendManifest.response.status === 200, `${pageFrontendManifest.url} expected 200, got ${pageFrontendManifest.response.status}`);
+    validateAiFrontendManifest(pageFrontendManifest.json, 'page frontend design manifest');
+    assert(pageFrontendManifest.json?.data?.modules?.pages?.items?.some((page) => (
+      page.id === createdPageId &&
+      page.frontendDesign?.templateId === 'contract-page-template' &&
+      page.frontendDesign?.tokens?.colors?.primary === '#2563eb' &&
+      page.frontendDesign?.chrome?.header?.component === 'ContractPageHeader'
+    )), `${pageFrontendManifest.url} missing page frontend design manifest`);
 
     const visibleScheduledPageResolve = await request(`/api/sites/${createdSiteId}/resolve?path=/${pageSlug}`);
     assert(visibleScheduledPageResolve.response.status === 200, `${visibleScheduledPageResolve.url} expected past scheduled page route to be visible`);
@@ -1685,6 +1722,29 @@ try {
         authorId: 'user-admin',
         categoryIds: [createdCategoryId],
         tagIds: [createdTagId],
+        meta: {
+          frontendDesignTemplateId: 'contract-blog-template',
+          frontendDesignTemplateName: 'Contract Blog Template',
+          frontendDesignRoutePattern: '/journal/{slug}',
+          frontendDesignSource: {
+            type: 'custom-frontend',
+            label: 'Contract blog frontend',
+            repository: 'example/backy-blog-contract',
+          },
+          frontendDesignChrome: {
+            header: { component: 'ContractBlogHeader', source: 'site.navigation.primary' },
+            footer: { component: 'ContractBlogFooter', source: 'site.navigation.footer' },
+          },
+          frontendDesignTokens: {
+            colors: { primary: '#7c3aed', text: '#111827' },
+            fonts: { heading: 'Newsreader', body: 'Inter' },
+          },
+          frontendDesignCustomCss: ':root { --contract-blog-primary: #7c3aed; }',
+          frontendDesignBindingHints: [
+            { role: 'post.title', binding: 'post.title' },
+            { role: 'post.body', binding: 'post.content' },
+          ],
+        },
         content: {
           elements: [],
           canvasSize: { width: 900, height: 720 },
@@ -1821,7 +1881,23 @@ try {
     assert(revalidatedVisibleScheduledPost.response.headers.get('etag') === visibleScheduledPostEtag, `${revalidatedVisibleScheduledPost.url} expected matching post etag`);
     assert(visibleScheduledPost.json?.success === true, `${visibleScheduledPost.url} expected success envelope`);
     assert(visibleScheduledPost.json?.data?.post?.id === createdPostId, `${visibleScheduledPost.url} returned wrong scheduled post in data envelope`);
+    assert(visibleScheduledPost.json?.data?.post?.meta?.frontendDesignTemplateId === 'contract-blog-template', `${visibleScheduledPost.url} missing blog frontend metadata`);
+    assert(visibleScheduledPost.json?.data?.post?.frontendDesign?.templateId === 'contract-blog-template', `${visibleScheduledPost.url} missing normalized blog frontend design`);
+    assert(visibleScheduledPost.json?.data?.post?.frontendDesign?.routePattern === '/journal/{slug}', `${visibleScheduledPost.url} missing normalized blog route pattern`);
+    assert(visibleScheduledPost.json?.data?.post?.frontendDesign?.chrome?.header?.component === 'ContractBlogHeader', `${visibleScheduledPost.url} missing normalized blog chrome`);
+    assert(visibleScheduledPost.json?.data?.post?.frontendDesign?.tokens?.fonts?.heading === 'Newsreader', `${visibleScheduledPost.url} missing normalized blog tokens`);
+    assert(Array.isArray(visibleScheduledPost.json?.data?.post?.frontendDesign?.bindingHints) && visibleScheduledPost.json.data.post.frontendDesign.bindingHints.length === 2, `${visibleScheduledPost.url} missing normalized blog binding hints`);
     assert(visibleScheduledPost.json?.post?.id === createdPostId, `${visibleScheduledPost.url} returned wrong scheduled post`);
+
+    const blogFrontendManifest = await request(`/api/sites/${createdSiteId}/manifest`);
+    assert(blogFrontendManifest.response.status === 200, `${blogFrontendManifest.url} expected 200, got ${blogFrontendManifest.response.status}`);
+    validateAiFrontendManifest(blogFrontendManifest.json, 'blog frontend design manifest');
+    assert(blogFrontendManifest.json?.data?.modules?.blog?.items?.some((post) => (
+      post.id === createdPostId &&
+      post.frontendDesign?.templateId === 'contract-blog-template' &&
+      post.frontendDesign?.tokens?.fonts?.heading === 'Newsreader' &&
+      post.frontendDesign?.chrome?.header?.component === 'ContractBlogHeader'
+    )), `${blogFrontendManifest.url} missing blog frontend design manifest`);
 
     const visibleScheduledPostResolve = await request(`/api/sites/${createdSiteId}/resolve?path=/blog/${postSlug}`);
     assert(visibleScheduledPostResolve.response.status === 200, `${visibleScheduledPostResolve.url} expected past scheduled post route to be visible`);
