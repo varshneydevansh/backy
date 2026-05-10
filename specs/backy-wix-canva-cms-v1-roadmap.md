@@ -26,11 +26,12 @@ This roadmap covers backend CMS parity for:
 5. auth/RBAC + audit + activity
 6. two-app deployment topology (`backy-admin`, `backy-public`)
 7. public API consumption by any frontend
+8. sellable product catalog and private order-intake primitives
 
 It explicitly excludes:
 
 1. design-specific pixel-perfect WYSIWYG visual polish (governed by editor UX stories)
-2. heavy e-commerce checkout workflows (unless integrated later via plugin modules)
+2. heavy e-commerce provider operations such as payment reconciliation, taxes, shipping labels, refunds, subscriptions, and provider-specific fulfillment automation until those modules are explicitly prioritized
 
 ## 2) What is currently present vs missing
 
@@ -145,6 +146,8 @@ It explicitly excludes:
 14. `/users.new`: invite token and provisioning states
 15. `/users.$userId`: active session and permission display
 16. `/settings`: backend-backed delivery mode, API keys, security policy, notification routing, theme/SEO defaults, handoff manifest, and Supabase/Vercel/storage metadata; remaining work is full auth/RBAC, secret lifecycle, deployment/domain history, billing/storage limits, and provider execution workflows
+17. `/products`: backend-backed product catalog workspace with schema setup/sync, public catalog API readiness, product editor, pricing, variants, inventory, delivery/checkout URLs, merchandising, SEO fields, CSV/handoff export, and smoke coverage through `test:commerce`; remaining work is payment providers, taxes, shipping, discounts, subscriptions, product page templates, customer linkage, and analytics
+18. `/orders`: backend-backed private order operations workspace with schema setup/sync, private order permissions, public checkout-intake contract, payment/fulfillment/tracking/refund/address fields, CSV/handoff export, and smoke coverage through `test:commerce`; remaining work is provider reconciliation, fulfillment integrations, notifications, fraud/risk controls, returns, and analytics
 
 ## 6) Public-route completion checklist
 
@@ -157,6 +160,8 @@ It explicitly excludes:
 7. `/api/sites/[siteId]/forms/...`: production form submit endpoint
 8. `/api/sites/[siteId]/comments`: moderation-aware public read and create
 9. `PageRenderer.tsx`: single shared rendering contract with editor schema
+10. `/api/sites/[siteId]/commerce/catalog`: public product catalog and product detail contract for custom storefronts
+11. `/api/sites/[siteId]/commerce/orders`: public checkout-intake contract that writes private Backy orders and reserves inventory
 
 ## 7) Forms + Contact Share + Comments next-pass contract
 
