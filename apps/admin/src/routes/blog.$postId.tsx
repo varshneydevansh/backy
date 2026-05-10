@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Globe, History, Image as ImageIcon, Maximize2, Minimize2, PenLine, RefreshCw, RotateCcw, Save, SearchCheck, Tags, Trash2, UserRound, X } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Flag, Globe, History, Image as ImageIcon, Maximize2, MessageSquare, Minimize2, PenLine, RefreshCw, RotateCcw, Save, SearchCheck, Tags, Trash2, UserRound, X, XCircle } from 'lucide-react';
 import {
     archiveBlogPost,
     createBlogPostPreview,
@@ -12,6 +12,7 @@ import {
     getAdminApiBase,
     getBlogPost,
     getBlogPostReadiness,
+    listComments,
     listBlogAuthors,
     listBlogCategories,
     listBlogPosts,
@@ -20,10 +21,13 @@ import {
     publishBlogPost,
     rollbackBlogPost,
     updateBlogPost,
+    updateComments,
+    type AdminComment,
     type BlogAuthor,
     type BlogCategory,
     type BlogPostReadiness,
     type BlogTag,
+    type CommentModerationStatus,
     type ContentRevision,
 } from '@/lib/adminContentApi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
@@ -99,6 +103,11 @@ const BLOG_EDITOR_CONTROL_AREAS = [
         href: '#blog-editor-taxonomy',
     },
     {
+        title: 'Comments',
+        detail: 'Review pending, approved, reported, spam, and blocked public discussion state.',
+        href: '#blog-editor-comments',
+    },
+    {
         title: 'Revisions',
         detail: 'Restore saved post snapshots when the article design needs rollback.',
         href: '#blog-editor-revisions',
@@ -160,6 +169,11 @@ function EditBlogPostPage() {
     const [authors, setAuthors] = useState<BlogAuthor[]>([]);
     const [categories, setCategories] = useState<BlogCategory[]>([]);
     const [tags, setTags] = useState<BlogTag[]>([]);
+    const [postComments, setPostComments] = useState<AdminComment[]>([]);
+    const [postCommentCount, setPostCommentCount] = useState(0);
+    const [isCommentsLoading, setIsCommentsLoading] = useState(false);
+    const [commentError, setCommentError] = useState<string | null>(null);
+    const [updatingCommentIds, setUpdatingCommentIds] = useState<string[]>([]);
     const [postReadiness, setPostReadiness] = useState<BlogPostReadiness | null>(null);
     const [readinessLoading, setReadinessLoading] = useState(false);
     const [readinessError, setReadinessError] = useState<string | null>(null);
@@ -372,6 +386,29 @@ function EditBlogPostPage() {
       }
     }, [activeSiteId, postId]);
 
+    const loadPostComments = useCallback(async () => {
+      setIsCommentsLoading(true);
+      setCommentError(null);
+
+      try {
+        const result = await listComments(activeSiteId, {
+          targetType: 'post',
+          targetId: postId,
+          status: 'all',
+          limit: 100,
+          sort: 'newest',
+        });
+        setPostComments(result.comments);
+        setPostCommentCount(result.count);
+      } catch (error) {
+        setPostComments([]);
+        setPostCommentCount(0);
+        setCommentError(error instanceof Error ? error.message : 'Unable to load post comments.');
+      } finally {
+        setIsCommentsLoading(false);
+      }
+    }, [activeSiteId, postId]);
+
     useEffect(() => {
       setCanvasElements(initialElements);
       setCanvasSize(savedCanvasSize);
@@ -385,6 +422,16 @@ function EditBlogPostPage() {
 
       void loadPostReadiness();
     }, [loadPostReadiness, post]);
+
+    useEffect(() => {
+      if (!post) {
+        setPostComments([]);
+        setPostCommentCount(0);
+        return;
+      }
+
+      void loadPostComments();
+    }, [loadPostComments, post]);
 
     useEffect(() => {
         setIsWorkspaceFocus(routeSearch.focus === 'canvas');
@@ -637,6 +684,39 @@ function EditBlogPostPage() {
         }
     };
 
+    const moderatePostComments = async (
+        commentIds: string[],
+        nextStatus: CommentModerationStatus,
+        reason?: string,
+    ) => {
+        if (commentIds.length === 0 || updatingCommentIds.length > 0) return;
+
+        setUpdatingCommentIds(commentIds);
+        setCommentError(null);
+        setWorkflowNotice(null);
+
+        try {
+            const result = await updateComments(activeSiteId, {
+                commentIds,
+                status: nextStatus,
+                actor: 'admin',
+                reviewedBy: 'admin',
+                ...(nextStatus === 'rejected' ? { rejectionReason: reason || 'Rejected from blog post editor.' } : {}),
+                ...(nextStatus === 'spam' ? { rejectionReason: reason || 'Marked as spam from blog post editor.' } : {}),
+                ...(nextStatus === 'blocked' ? { blockReason: reason || 'Blocked from blog post editor.' } : {}),
+            });
+            setPostComments((current) => current.map((comment) => (
+                result.updated.find((updated) => updated.id === comment.id) || comment
+            )));
+            setWorkflowNotice(`${result.updatedCount} comment${result.updatedCount === 1 ? '' : 's'} updated.`);
+            void loadPostComments();
+        } catch (error) {
+            setCommentError(error instanceof Error ? error.message : 'Unable to update post comments.');
+        } finally {
+            setUpdatingCommentIds([]);
+        }
+    };
+
     const handleDelete = async () => {
         if (editorActionBusy) return;
 
@@ -698,6 +778,23 @@ function EditBlogPostPage() {
     const selectedFeaturedImageUrl = selectedFeaturedImage
         ? selectedFeaturedImage.url || getPublicMediaFileUrl(selectedFeaturedImage.id, activeSiteId)
         : null;
+    const isCommentMutationBusy = updatingCommentIds.length > 0;
+    const commentsBusy = isCommentsLoading || isCommentMutationBusy;
+    const commentMetrics = {
+        total: postCommentCount || postComments.length,
+        loaded: postComments.length,
+        pending: postComments.filter((comment) => comment.status === 'pending').length,
+        approved: postComments.filter((comment) => comment.status === 'approved').length,
+        rejected: postComments.filter((comment) => comment.status === 'rejected').length,
+        spam: postComments.filter((comment) => comment.status === 'spam').length,
+        blocked: postComments.filter((comment) => comment.status === 'blocked').length,
+        reported: postComments.filter((comment) => (comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length)).length,
+    };
+    const flaggedCommentCount = commentMetrics.reported + commentMetrics.spam + commentMetrics.blocked;
+    const pendingPostCommentIds = postComments
+        .filter((comment) => comment.status === 'pending')
+        .map((comment) => comment.id);
+    const commentsModerated = !commentError && commentMetrics.pending === 0 && flaggedCommentCount === 0;
     const localReadinessChecks = [
         { label: 'Title', complete: title.trim().length > 0 },
         { label: 'Slug', complete: slug.trim().length > 0 },
@@ -705,6 +802,7 @@ function EditBlogPostPage() {
         { label: 'Summary', complete: excerpt.trim().length >= 24 },
         { label: 'SEO', complete: seoTitle.trim().length > 0 && seoDescription.trim().length >= 50 && canonicalValid },
         { label: 'Featured image', complete: Boolean(featuredImageId) },
+        { label: 'Comments', complete: commentsModerated },
         { label: 'Design', complete: canvasElements.length > 0 },
         { label: 'Schedule', complete: status !== 'scheduled' || Boolean(scheduledAt) },
     ];
@@ -755,6 +853,15 @@ function EditBlogPostPage() {
             ready: Boolean(featuredImageId),
         },
         {
+            label: 'Comments',
+            detail: commentError
+                ? 'Comment moderation state could not be loaded.'
+                : commentMetrics.total === 0
+                    ? 'No public comments exist for this post yet.'
+                    : `${commentMetrics.pending} pending, ${commentMetrics.approved} approved, ${flaggedCommentCount} flagged/spam/blocked.`,
+            ready: commentsModerated,
+        },
+        {
             label: 'Canvas content',
             detail: canvasElements.length > 0 ? `${canvasElements.length} root layer${canvasElements.length === 1 ? '' : 's'} ready.` : 'Add article layout elements.',
             ready: canvasElements.length > 0,
@@ -792,6 +899,8 @@ function EditBlogPostPage() {
     const publicPostBySlugUrl = `${publicBlogUrl}?slug=${encodeURIComponent(normalizedSlug || post.slug || postId)}`;
     const publicRenderUrl = `${publicApiBase}/sites/${encodeURIComponent(activeSiteId)}/render?path=${encodeURIComponent(publicPath)}`;
     const publicResolveUrl = `${publicApiBase}/sites/${encodeURIComponent(activeSiteId)}/resolve?path=${encodeURIComponent(publicPath)}`;
+    const publicPostCommentsUrl = `${publicApiBase}/sites/${encodeURIComponent(activeSiteId)}/blog/${encodeURIComponent(postId)}/comments`;
+    const moderationCommentsUrl = `${publicApiBase}/sites/${encodeURIComponent(activeSiteId)}/comments?targetType=post&targetId=${encodeURIComponent(postId)}&limit=100&sort=newest`;
     const editorHandoff = {
         generatedAt: new Date().toISOString(),
         post: {
@@ -848,6 +957,8 @@ function EditBlogPostPage() {
             publicPostBySlug: publicPostBySlugUrl,
             publicRender: publicRenderUrl,
             publicResolve: publicResolveUrl,
+            publicComments: publicPostCommentsUrl,
+            moderationComments: moderationCommentsUrl,
         },
         editorial: {
             author: selectedAuthor
@@ -861,6 +972,24 @@ function EditBlogPostPage() {
             tags: tags
                 .filter((tag) => selectedTagIds.includes(tag.id))
                 .map((tag) => ({ id: tag.id, name: tag.name, slug: tag.slug })),
+        },
+        comments: {
+            total: commentMetrics.total,
+            loaded: commentMetrics.loaded,
+            pending: commentMetrics.pending,
+            approved: commentMetrics.approved,
+            rejected: commentMetrics.rejected,
+            spam: commentMetrics.spam,
+            blocked: commentMetrics.blocked,
+            reported: commentMetrics.reported,
+            latest: postComments.slice(0, 5).map((comment) => ({
+                id: comment.id,
+                status: comment.status,
+                authorName: comment.authorName || null,
+                reportCount: comment.reportCount || 0,
+                createdAt: comment.createdAt,
+                reviewedAt: comment.reviewedAt || null,
+            })),
         },
         canvas: {
             width: canvasSize.width,
@@ -910,6 +1039,7 @@ function EditBlogPostPage() {
             'Saving records a revision snapshot before editor changes are persisted.',
             'Frontend renderers should use public blog, resolve, or render endpoints and keep admin endpoints private.',
             'Taxonomy IDs are site-scoped and should be refreshed before rendering filters, feeds, or bylines.',
+            'Public frontends should serve approved comments only; moderation state is private and available through the site comments endpoint.',
         ],
     };
     const editorHandoffText = JSON.stringify(editorHandoff, null, 2);
@@ -1659,6 +1789,103 @@ function EditBlogPostPage() {
                             </PanelContent>
                         </Panel>
 
+                        <Panel id="blog-editor-comments" className="scroll-mt-24">
+                            <PanelHeader
+                                title="Comments"
+                                description="Post-specific moderation state and quick review actions."
+                                icon={<MessageSquare className="size-4" />}
+                                action={
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => void loadPostComments()}
+                                        disabled={commentsBusy}
+                                        iconStart={<RefreshCw className={cn('size-3.5', isCommentsLoading && 'animate-spin')} />}
+                                    >
+                                        Refresh
+                                    </Button>
+                                }
+                            />
+                            <PanelContent className="space-y-4">
+                                {commentError && (
+                                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                        {commentError}
+                                    </div>
+                                )}
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <BlogEditorContractTile label="Total" value={`${commentMetrics.total}`} />
+                                    <BlogEditorContractTile label="Pending" value={`${commentMetrics.pending}`} />
+                                    <BlogEditorContractTile label="Approved" value={`${commentMetrics.approved}`} />
+                                    <BlogEditorContractTile label="Flagged" value={`${flaggedCommentCount}`} />
+                                </div>
+                                {pendingPostCommentIds.length > 0 && (
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            onClick={() => void moderatePostComments(pendingPostCommentIds, 'approved')}
+                                            disabled={commentsBusy}
+                                            iconStart={<CheckCircle2 className="size-4" />}
+                                        >
+                                            Approve pending
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => void moderatePostComments(pendingPostCommentIds, 'rejected', 'Rejected from blog post editor.')}
+                                            disabled={commentsBusy}
+                                            iconStart={<XCircle className="size-4" />}
+                                        >
+                                            Reject pending
+                                        </Button>
+                                    </div>
+                                )}
+                                <div className="grid gap-2">
+                                    {isCommentsLoading && postComments.length === 0 ? (
+                                        <div className="rounded-lg border border-border bg-muted/30 px-3 py-4 text-sm text-muted-foreground">
+                                            Loading post comments...
+                                        </div>
+                                    ) : postComments.length === 0 ? (
+                                        <div className="rounded-lg border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
+                                            No comments have been submitted for this post yet.
+                                        </div>
+                                    ) : postComments.slice(0, 4).map((comment) => (
+                                        <BlogCommentModerationItem
+                                            key={comment.id}
+                                            comment={comment}
+                                            busy={commentsBusy || updatingCommentIds.includes(comment.id)}
+                                            onApprove={() => void moderatePostComments([comment.id], 'approved')}
+                                            onReject={() => void moderatePostComments([comment.id], 'rejected', 'Rejected from blog post editor.')}
+                                        />
+                                    ))}
+                                </div>
+                                <div className="grid gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => navigate({ to: '/comments', search: { siteId: activeSiteId } })}
+                                        disabled={editorBusy}
+                                        iconStart={<ExternalLink className="size-4" />}
+                                        className="w-full"
+                                    >
+                                        Open full queue
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => void copyEditorHandoffText(moderationCommentsUrl, 'Post comments moderation URL')}
+                                        disabled={editorActionBusy}
+                                        iconStart={<Copy className="size-4" />}
+                                        className="w-full"
+                                    >
+                                        Copy comments API
+                                    </Button>
+                                </div>
+                            </PanelContent>
+                        </Panel>
+
                         <Panel id="blog-editor-handoff" className="scroll-mt-24">
                             <PanelHeader
                                 title="Frontend handoff"
@@ -1689,6 +1916,14 @@ function EditBlogPostPage() {
     categoryIds: selectedCategoryIds,
     tagIds: selectedTagIds,
     featuredImageId,
+    comments: {
+        total: commentMetrics.total,
+        pending: commentMetrics.pending,
+        approved: commentMetrics.approved,
+        flagged: flaggedCommentCount,
+        moderationUrl: moderationCommentsUrl,
+        publicThreadUrl: publicPostCommentsUrl,
+    },
     seo: {
         title: seoTitle.trim() || title,
         description: seoDescription.trim() || excerpt,
@@ -1712,6 +1947,8 @@ function EditBlogPostPage() {
     endpoints: {
         publicPostBySlug: publicPostBySlugUrl,
         publicRender: publicRenderUrl,
+        publicComments: publicPostCommentsUrl,
+        moderationComments: moderationCommentsUrl,
         readiness: `${adminBlogPostUrl}/readiness`,
     },
 }, null, 2)}
@@ -2003,6 +2240,82 @@ function BlogEditorWorkflowStep({ index, label, detail }: { index: number; label
             </div>
         </div>
     );
+}
+
+function BlogCommentModerationItem({
+    comment,
+    busy,
+    onApprove,
+    onReject,
+}: {
+    comment: AdminComment;
+    busy: boolean;
+    onApprove: () => void;
+    onReject: () => void;
+}) {
+    const reported = (comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length);
+
+    return (
+        <article className="rounded-lg border border-border bg-background px-3 py-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="truncate text-sm font-semibold text-foreground">
+                            {comment.authorName || comment.authorEmail || 'Anonymous'}
+                        </span>
+                        <StatusBadge status={comment.status} type={commentStatusType(comment.status)} />
+                        {reported && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                                <Flag className="size-3" />
+                                {comment.reportCount || comment.reportReasons?.length || 1}
+                            </span>
+                        )}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                        {new Date(comment.createdAt).toLocaleString()}
+                    </div>
+                </div>
+            </div>
+            <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-sm leading-6 text-foreground">
+                {comment.content}
+            </p>
+            {(comment.rejectionReason || comment.blockReason || comment.reportReasons?.length) && (
+                <div className="mt-2 rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
+                    {comment.reportReasons?.length ? <div>Reports: {comment.reportReasons.join(', ')}</div> : null}
+                    {comment.rejectionReason ? <div>Rejection: {comment.rejectionReason}</div> : null}
+                    {comment.blockReason ? <div>Block: {comment.blockReason}</div> : null}
+                </div>
+            )}
+            <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                    type="button"
+                    size="sm"
+                    onClick={onApprove}
+                    disabled={busy || comment.status === 'approved'}
+                    iconStart={<CheckCircle2 className="size-4" />}
+                >
+                    Approve
+                </Button>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={onReject}
+                    disabled={busy || comment.status === 'rejected'}
+                    iconStart={<XCircle className="size-4" />}
+                >
+                    Reject
+                </Button>
+            </div>
+        </article>
+    );
+}
+
+function commentStatusType(status: CommentModerationStatus) {
+    if (status === 'approved') return 'success';
+    if (status === 'pending') return 'warning';
+    if (status === 'rejected' || status === 'spam' || status === 'blocked') return 'error';
+    return 'neutral';
 }
 
 interface TaxonomyPickerProps {
