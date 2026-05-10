@@ -5,6 +5,7 @@
  * PATCH /api/admin/sites/[siteId]/frontend-design
  * POST  /api/admin/sites/[siteId]/frontend-design with { action: "capture-site-defaults" }
  *       or { action: "capture-content-template", resourceType, resourceId }
+ *       or { action: "import-frontend-contract", frontendDesign|contract|manifest }
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -70,6 +71,7 @@ const toPageTemplates = (pages: Array<{ id: string; title: string; slug: string 
 );
 
 type TemplateCaptureResourceType = 'page' | 'blogPost' | 'form' | 'product' | 'collection' | 'section';
+type FrontendDesignPostAction = 'capture-site-defaults' | 'capture-content-template' | 'import-frontend-contract';
 
 type TemplateCaptureResource = {
   id: string;
@@ -131,6 +133,12 @@ const recordArray = (value: unknown): Array<Record<string, unknown>> | undefined
     ? value.filter((item): item is Record<string, unknown> => (
         typeof item === 'object' && item !== null && !Array.isArray(item)
       ))
+    : undefined
+);
+
+const recordValue = (value: unknown): Record<string, unknown> | undefined => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
     : undefined
 );
 
@@ -247,6 +255,37 @@ const recordEditableMap = (collection: CollectionLike): Array<Record<string, unk
 const stringBodyValue = (body: Record<string, unknown>, key: string): string | undefined => (
   typeof body[key] === 'string' && body[key].trim() ? body[key].trim() : undefined
 );
+
+const frontendDesignAction = (value: unknown): FrontendDesignPostAction | null => {
+  if (value === 'capture-site-defaults' || value === 'capture-content-template' || value === 'import-frontend-contract') {
+    return value;
+  }
+  if (value === 'import' || value === 'connect-frontend' || value === 'connect-custom-frontend') {
+    return 'import-frontend-contract';
+  }
+  return null;
+};
+
+const frontendDesignImportPayload = (
+  body: Record<string, unknown>,
+): { input: Record<string, unknown>; source: string } | null => {
+  const direct = recordValue(body.frontendDesign);
+  if (direct) return { input: direct, source: 'frontendDesign' };
+
+  const contract = recordValue(body.contract);
+  if (contract) return { input: contract, source: 'contract' };
+
+  const design = recordValue(body.design);
+  if (design) return { input: design, source: 'design' };
+
+  const manifest = recordValue(body.manifest) || body;
+  const manifestData = recordValue(manifest.data);
+  const manifestSite = recordValue(manifestData?.site) || recordValue(manifest.site);
+  const manifestFrontendDesign = recordValue(manifestSite?.frontendDesign);
+  if (manifestFrontendDesign) return { input: manifestFrontendDesign, source: 'manifest.site.frontendDesign' };
+
+  return null;
+};
 
 const repositoryTemplateResource = async (
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
@@ -657,9 +696,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const body = await parseJsonBody(request);
-    const action = body.action === 'capture-site-defaults' || body.action === 'capture-content-template'
-      ? body.action
-      : null;
+    const action = frontendDesignAction(body.action);
 
     if (!action) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Unsupported frontend design action', requestId);
@@ -673,6 +710,47 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       if (!site) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      if (action === 'import-frontend-contract') {
+        const imported = frontendDesignImportPayload(body);
+        if (!imported) {
+          return errorResponse(400, 'VALIDATION_ERROR', 'frontendDesign, contract, design, or manifest.site.frontendDesign is required for frontend contract import', requestId);
+        }
+
+        const frontendDesign = normalizeFrontendDesignContract(imported.input, {
+          fallback: site.settings.frontendDesign,
+          updatedAt,
+        });
+        const updated = await persistRepositoryFrontendDesign(site, site.settings, frontendDesign);
+        const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
+          siteId: site.id,
+          scope: 'settings',
+          entity: 'site',
+          entityId: site.id,
+          reason: 'site-frontend-design-imported',
+          requestId,
+        });
+        await recordAdminAudit({
+          repositories,
+          siteId: site.id,
+          entity: 'site',
+          entityId: site.id,
+          action: 'frontendDesign.import',
+          before: site.settings.frontendDesign || emptyFrontendDesignContract(),
+          after: frontendDesign,
+          metadata: {
+            action,
+            importSource: imported.source,
+            status: frontendDesign.status,
+            sourceType: frontendDesign.source.type,
+            sourceLabel: frontendDesign.source.label || null,
+            templateCount: frontendDesign.templates.length,
+            editableBindingCount: frontendDesign.editableMap.length,
+          },
+          requestId,
+        });
+        return responseForSite(requestId, updated, { cacheInvalidation });
       }
 
       if (action === 'capture-content-template') {
@@ -771,6 +849,48 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
+    if (action === 'import-frontend-contract') {
+      const imported = frontendDesignImportPayload(body);
+      if (!imported) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'frontendDesign, contract, design, or manifest.site.frontendDesign is required for frontend contract import', requestId);
+      }
+
+      const frontendDesign = normalizeFrontendDesignContract(imported.input, {
+        fallback: site.settings?.frontendDesign,
+        updatedAt,
+      });
+      const updated = updateAdminSite(site.id, {
+        settings: {
+          ...(site.settings || {}),
+          frontendDesign,
+        },
+      });
+
+      if (!updated) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+      await recordAdminAudit({
+        siteId: site.id,
+        entity: 'site',
+        entityId: site.id,
+        action: 'frontendDesign.import',
+        before: site.settings?.frontendDesign || emptyFrontendDesignContract(),
+        after: frontendDesign,
+        metadata: {
+          action,
+          importSource: imported.source,
+          status: frontendDesign.status,
+          sourceType: frontendDesign.source.type,
+          sourceLabel: frontendDesign.source.label || null,
+          templateCount: frontendDesign.templates.length,
+          editableBindingCount: frontendDesign.editableMap.length,
+        },
+        requestId,
+      });
+
+      return responseForSite(requestId, updated as unknown as Site);
     }
 
     if (action === 'capture-content-template') {

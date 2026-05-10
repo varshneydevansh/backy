@@ -394,6 +394,134 @@ try {
     assert(publicSiteList.json?.data?.sites?.some((site) => site.id === createdSiteId), `${publicSiteList.url} missing published temporary site`);
   });
 
+  await record('admin frontend design import connects external template', async () => {
+    let importedTemplatePageId = null;
+    try {
+      const importDesign = await request(`/api/admin/sites/${createdSiteId}/frontend-design`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'import-frontend-contract',
+          manifest: {
+            data: {
+              site: {
+                frontendDesign: {
+                  schemaVersion: 'backy.frontend-design.v1',
+                  status: 'captured',
+                  source: {
+                    type: 'custom-frontend',
+                    label: 'Imported external frontend',
+                    url: 'https://example.test/imported-front',
+                    repository: 'example/imported-front',
+                    branch: 'main',
+                  },
+                  tokens: {
+                    colors: { primary: '#155e75', text: '#0f172a' },
+                    fonts: { heading: 'Imported Display', body: 'Imported Text' },
+                    customCss: ':root { --imported-primary: #155e75; }',
+                  },
+                  chrome: {
+                    header: { component: 'ImportedHeader', navBinding: 'site.navigation.primary' },
+                    footer: { component: 'ImportedFooter', navBinding: 'site.navigation.footer' },
+                  },
+                  templates: [
+                    {
+                      id: 'imported-external-page-template',
+                      type: 'page',
+                      name: 'Imported External Page',
+                      routePattern: '/imported/{slug}',
+                      canvasSize: { width: 1200, height: 760 },
+                      content: {
+                        elements: [
+                          {
+                            id: 'imported-external-root',
+                            type: 'section',
+                            x: 0,
+                            y: 0,
+                            width: 1200,
+                            height: 480,
+                            zIndex: 1,
+                            props: { backgroundColor: '#ecfeff' },
+                            children: [
+                              {
+                                id: 'imported-external-heading',
+                                type: 'heading',
+                                x: 80,
+                                y: 96,
+                                width: 720,
+                                height: 96,
+                                zIndex: 1,
+                                props: {
+                                  content: 'Imported frontend page',
+                                  level: 'h1',
+                                  binding: 'page.title',
+                                },
+                              },
+                            ],
+                          },
+                        ],
+                        canvasSize: { width: 1200, height: 760 },
+                        customCSS: ':root { --imported-page-accent: #0891b2; }',
+                      },
+                      bindingHints: [
+                        { role: 'page.title', binding: 'page.title', fields: ['title'] },
+                      ],
+                    },
+                  ],
+                  editableMap: [
+                    { elementId: 'imported-external-heading', role: 'heading', binding: 'page.title', fields: ['title'] },
+                  ],
+                },
+              },
+            },
+          },
+        }),
+      });
+      assert(importDesign.response.status === 200, `${importDesign.url} expected imported frontend contract`);
+      assert(importDesign.json?.data?.frontendDesign?.source?.label === 'Imported external frontend', `${importDesign.url} missing imported source label`);
+      assert(importDesign.json?.data?.frontendDesign?.templates?.some((template) => template.id === 'imported-external-page-template'), `${importDesign.url} missing imported template`);
+
+      const importAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=site&entityId=${createdSiteId}&action=frontendDesign.import&requestId=${importDesign.json.requestId}`);
+      assert(importAudit.response.status === 200, `${importAudit.url} expected imported frontend audit read`);
+      assert(importAudit.json?.data?.logs?.some((entry) => (
+        entry.action === 'frontendDesign.import' &&
+        entry.metadata?.importSource === 'manifest.site.frontendDesign' &&
+        entry.metadata?.templateCount === 1
+      )), `${importAudit.url} missing imported frontend audit log`);
+
+      const importedTemplatePageSlug = `${pageSlug}-imported-template`;
+      const createImportedTemplatePage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: 'Imported External Template Page',
+          slug: importedTemplatePageSlug,
+          status: 'published',
+          frontendDesignTemplateId: 'imported-external-page-template',
+        }),
+      });
+      assert(createImportedTemplatePage.response.status === 201, `${createImportedTemplatePage.url} expected page from imported template`);
+      importedTemplatePageId = createImportedTemplatePage.json?.data?.page?.id;
+      assert(importedTemplatePageId, `${createImportedTemplatePage.url} missing imported template page id`);
+      assert(createImportedTemplatePage.json?.data?.page?.meta?.frontendDesignTemplateId === 'imported-external-page-template', `${createImportedTemplatePage.url} missing imported template provenance`);
+      assert(createImportedTemplatePage.json?.data?.page?.content?.elements?.[0]?.id === 'imported-external-root', `${createImportedTemplatePage.url} did not seed imported template elements`);
+
+      const publicImportedTemplatePage = await request(`/api/sites/${createdSiteId}/pages?slug=${importedTemplatePageSlug}`);
+      assert(publicImportedTemplatePage.response.status === 200, `${publicImportedTemplatePage.url} expected public imported template page`);
+      assert(publicImportedTemplatePage.json?.data?.page?.frontendDesign?.templateId === 'imported-external-page-template', `${publicImportedTemplatePage.url} missing normalized imported frontend design`);
+      assert(publicImportedTemplatePage.json?.data?.page?.frontendDesign?.chrome?.header?.component === 'ImportedHeader', `${publicImportedTemplatePage.url} missing imported frontend chrome`);
+      assert(publicImportedTemplatePage.json?.data?.page?.frontendDesign?.tokens?.fonts?.heading === 'Imported Display', `${publicImportedTemplatePage.url} missing imported frontend tokens`);
+    } finally {
+      if (importedTemplatePageId) {
+        await request(`/api/admin/sites/${createdSiteId}/pages/${importedTemplatePageId}`, { method: 'DELETE' }).catch(() => {});
+      }
+    }
+  });
+
   await record('admin media font upload registers public font asset', async () => {
     const unauthMediaList = await fetch(`${baseUrl}/api/admin/sites/${createdSiteId}/media`);
     const unauthMediaListJson = await unauthMediaList.json().catch(() => ({}));
