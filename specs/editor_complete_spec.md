@@ -155,20 +155,23 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ### 8. Breakpoint Toggle (Desktop/Tablet/Mobile)
 **File:** `pages.$pageId.edit.tsx`
-**Current State:** ⚠️ UI Only
-- Buttons exist, change canvas size
-- Does NOT store separate layouts per breakpoint
-- **What It Should Do:**
-    - Store separate element positions for each breakpoint
-    - Allow hiding elements on specific breakpoints
-    - Default to inheriting from larger breakpoint
-- **Required Implementation:**
+**Current State:** ✅ Partial working
+- Buttons change canvas size and active authoring breakpoint
+- Desktop edits update the base element model
+- Tablet/mobile layout, content, prop, and style edits persist into `element.responsive` overrides
+- Public rendering applies responsive overrides from the rendered container width
+- `test:editor-drag` verifies mobile override persistence, desktop layout preservation, breakpoint switching, and reload hydration
+- **Remaining Improvements Needed:**
+    - Add dedicated per-breakpoint hide/lock layer controls
+    - Add clearer inheritance/reset controls for each field group
+    - Add tablet-specific smoke coverage and broader visual regression snapshots
+- **Implemented Contract:**
     ```typescript
     interface CanvasElement {
       // ... existing props
-      breakpointOverrides?: {
-        tablet?: { x?: number; y?: number; width?: number; height?: number; hidden?: boolean };
-        mobile?: { x?: number; y?: number; width?: number; height?: number; hidden?: boolean };
+      responsive?: {
+        tablet?: { x?: number; y?: number; width?: number; height?: number; props?: Record<string, unknown>; styles?: Record<string, unknown> };
+        mobile?: { x?: number; y?: number; width?: number; height?: number; props?: Record<string, unknown>; styles?: Record<string, unknown> };
       };
     }
     ```
@@ -440,7 +443,9 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ❌ Copy/Paste
 - ❌ Alignment guides
 - ❌ Zoom controls
-- ❌ Responsive breakpoint editing
+- ⚠️ Responsive breakpoint editing
+  - Desktop/tablet/mobile layout/content/style overrides now persist and render publicly.
+  - Still needs per-breakpoint layer visibility/lock controls, clearer inheritance UI, tablet smoke coverage, and visual regression thresholds.
 - ❌ Media upload modal
 - ❌ Element locking
 - ⚠️ Page templates

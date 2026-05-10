@@ -64,6 +64,8 @@ import type {
   CanvasElement,
   CanvasSize,
   ComponentLibraryItem,
+  EditorBreakpoint,
+  ResponsiveElementOverride,
 } from '@/types/editor';
 import { useStore } from '@/stores/mockStore';
 import { listMedia } from '@/lib/mediaApi';
@@ -129,6 +131,201 @@ const formatSavedTime = (value: Date | null) => {
     hour: '2-digit',
     minute: '2-digit',
   });
+};
+
+const RESPONSIVE_LAYOUT_FIELDS = ['x', 'y', 'width', 'height', 'zIndex', 'rotation', 'visible', 'locked'] as const;
+
+const isResponsiveLayoutField = (key: string): key is typeof RESPONSIVE_LAYOUT_FIELDS[number] => (
+  (RESPONSIVE_LAYOUT_FIELDS as readonly string[]).includes(key)
+);
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const jsonEqual = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+const pruneResponsiveOverrides = (
+  responsive: CanvasElement['responsive'] | undefined,
+): CanvasElement['responsive'] | undefined => {
+  if (!responsive) {
+    return undefined;
+  }
+
+  const pruned = (Object.entries(responsive) as Array<[EditorBreakpoint, ResponsiveElementOverride]>)
+    .reduce<Partial<Record<EditorBreakpoint, ResponsiveElementOverride>>>((acc, [breakpoint, override]) => {
+      if (!override || Object.keys(override).length === 0) {
+        return acc;
+      }
+
+      acc[breakpoint] = override;
+      return acc;
+    }, {});
+
+  return pruned && Object.keys(pruned).length > 0 ? pruned : undefined;
+};
+
+const setResponsiveOverride = (
+  element: CanvasElement,
+  breakpoint: EditorBreakpoint,
+  override: ResponsiveElementOverride,
+): CanvasElement => {
+  const responsive = {
+    ...(element.responsive || {}),
+    [breakpoint]: override,
+  };
+  const nextResponsive = pruneResponsiveOverrides(responsive);
+  const nextElement: CanvasElement = {
+    ...element,
+    responsive: nextResponsive,
+  };
+
+  if (!nextResponsive) {
+    delete nextElement.responsive;
+  }
+
+  return nextElement;
+};
+
+const applyResponsiveOverrideToElement = (
+  element: CanvasElement,
+  breakpoint: EditorBreakpoint,
+): CanvasElement => {
+  const children = element.children?.map((child) => applyResponsiveOverrideToElement(child, breakpoint));
+
+  if (breakpoint === 'desktop') {
+    return children ? { ...element, children } : element;
+  }
+
+  const override = element.responsive?.[breakpoint];
+  if (!override) {
+    return children ? { ...element, children } : element;
+  }
+
+  return {
+    ...element,
+    ...RESPONSIVE_LAYOUT_FIELDS.reduce<Partial<CanvasElement>>((acc, key) => {
+      if (override[key] !== undefined) {
+        (acc as Record<string, unknown>)[key] = override[key];
+      }
+      return acc;
+    }, {}),
+    props: override.props ? { ...element.props, ...override.props } : element.props,
+    styles: override.styles ? { ...(element.styles || {}), ...override.styles } : element.styles,
+    ...(children ? { children } : {}),
+  };
+};
+
+const applyResponsiveOverridesToElements = (
+  elements: CanvasElement[],
+  breakpoint: EditorBreakpoint,
+): CanvasElement[] => elements.map((element) => applyResponsiveOverrideToElement(element, breakpoint));
+
+const mapElementsById = (elements: CanvasElement[], map = new Map<string, CanvasElement>()) => {
+  elements.forEach((element) => {
+    map.set(element.id, element);
+    if (element.children?.length) {
+      mapElementsById(element.children, map);
+    }
+  });
+  return map;
+};
+
+const mergeDisplayedElementsIntoBreakpoint = (
+  baseElements: CanvasElement[],
+  displayedElements: CanvasElement[],
+  breakpoint: EditorBreakpoint,
+): CanvasElement[] => {
+  if (breakpoint === 'desktop') {
+    return displayedElements;
+  }
+
+  const baseById = mapElementsById(baseElements);
+
+  const mergeNode = (displayed: CanvasElement): CanvasElement => {
+    const base = baseById.get(displayed.id);
+    if (!base) {
+      return displayed;
+    }
+
+    const nextOverride: ResponsiveElementOverride = { ...(base.responsive?.[breakpoint] || {}) };
+
+    RESPONSIVE_LAYOUT_FIELDS.forEach((key) => {
+      if (displayed[key] !== base[key]) {
+        (nextOverride as Record<string, unknown>)[key] = displayed[key];
+      } else {
+        delete (nextOverride as Record<string, unknown>)[key];
+      }
+    });
+
+    if (!jsonEqual(displayed.props, base.props)) {
+      nextOverride.props = displayed.props;
+    } else {
+      delete nextOverride.props;
+    }
+
+    if (!jsonEqual(displayed.styles || {}, base.styles || {})) {
+      nextOverride.styles = displayed.styles;
+    } else {
+      delete nextOverride.styles;
+    }
+
+    const nextChildren = displayed.children?.map(mergeNode);
+    return setResponsiveOverride(
+      {
+        ...base,
+        ...(nextChildren ? { children: nextChildren } : { children: undefined }),
+      },
+      breakpoint,
+      nextOverride,
+    );
+  };
+
+  return displayedElements.map(mergeNode);
+};
+
+const applyUpdatesForBreakpoint = (
+  element: CanvasElement,
+  updates: { [key: string]: unknown },
+  breakpoint: EditorBreakpoint,
+): CanvasElement => {
+  if (breakpoint === 'desktop') {
+    return {
+      ...element,
+      ...updates,
+    };
+  }
+
+  const baseUpdates: { [key: string]: unknown } = {};
+  const override: ResponsiveElementOverride = { ...(element.responsive?.[breakpoint] || {}) };
+
+  Object.entries(updates).forEach(([key, value]) => {
+    if (isResponsiveLayoutField(key)) {
+      (override as Record<string, unknown>)[key] = value;
+      return;
+    }
+
+    if (key === 'props' && isPlainRecord(value)) {
+      override.props = value;
+      return;
+    }
+
+    if (key === 'styles' && isPlainRecord(value)) {
+      override.styles = value as ResponsiveElementOverride['styles'];
+      return;
+    }
+
+    baseUpdates[key] = value;
+  });
+
+  return setResponsiveOverride(
+    {
+      ...element,
+      ...baseUpdates,
+    },
+    breakpoint,
+    override,
+  );
 };
 
 const CANVAS_SIZE_PRESETS = [
@@ -372,7 +569,7 @@ export function CanvasEditor({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [size, setSize] = useState<CanvasSize>(initialSize || DEFAULT_CANVAS_SIZE);
-  const [breakpoint, setBreakpoint] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
+  const [breakpoint, setBreakpoint] = useState<EditorBreakpoint>('desktop');
   const [rightPanel, setRightPanel] = useState<'properties' | 'layers'>('properties');
   const [isPreview, setIsPreview] = useState(false);
   const [showComponentPanel, setShowComponentPanel] = useState(true);
@@ -420,6 +617,10 @@ export function CanvasEditor({
   const verticalRulerTicks = useMemo(
     () => buildRulerTicks(size.height, activeCanvasScale),
     [activeCanvasScale, size.height],
+  );
+  const displayedElements = useMemo(
+    () => applyResponsiveOverridesToElements(elements, breakpoint),
+    [breakpoint, elements],
   );
   const saveStatusMeta = useMemo(() => {
     if (isSaving && saveStatus !== 'autosaving') {
@@ -1430,7 +1631,13 @@ export function CanvasEditor({
   }, [elements, findElementEntry, selectedId, updateElementsWithHistory]);
 
   // Get selected element
-  const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
+  const baseSelectedElement = selectedId ? findElementById(elements, selectedId) : null;
+  const selectedElement = selectedId ? findElementById(displayedElements, selectedId) : null;
+  const selectedElementHasBreakpointOverride = Boolean(
+    breakpoint !== 'desktop'
+    && baseSelectedElement?.responsive?.[breakpoint]
+    && Object.keys(baseSelectedElement.responsive[breakpoint] || {}).length > 0,
+  );
   const selectedEntries = useMemo(
     () => selectedIds
       .map((id) => findElementEntry(elements, id))
@@ -1511,13 +1718,15 @@ export function CanvasEditor({
       return;
     }
 
+    const nextBaseElements = mergeDisplayedElementsIntoBreakpoint(elements, newElements, breakpoint);
+
     if (options?.transient) {
       pendingTransformRef.current = {
-        elements: newElements,
+        elements: nextBaseElements,
         selectedId: options.selectedId ?? selectedId,
         selectedIds,
       };
-      setElements(newElements);
+      setElements(nextBaseElements);
       markChanges();
       return;
     }
@@ -1538,8 +1747,8 @@ export function CanvasEditor({
     }
 
     pendingTransformRef.current = null;
-    updateElementsWithHistory(newElements);
-  }, [addToHistory, isCanvasMutationDisabled, markChanges, selectedId, selectedIds, updateElementsWithHistory]);
+    updateElementsWithHistory(nextBaseElements);
+  }, [addToHistory, breakpoint, elements, isCanvasMutationDisabled, markChanges, selectedId, selectedIds, updateElementsWithHistory]);
 
   /**
    * Handle element update from property panel
@@ -1549,10 +1758,9 @@ export function CanvasEditor({
       if (!selectedId) return;
       const selectedElementId = selectedId;
       updateElementsWithHistory((currentElements) => {
-        const result = updateElementById(currentElements, selectedElementId, (element) => ({
-          ...element,
-          ...updates,
-        }));
+        const result = updateElementById(currentElements, selectedElementId, (element) => (
+          applyUpdatesForBreakpoint(element, updates, breakpoint)
+        ));
 
         if (!result.updated) {
           return currentElements;
@@ -1561,8 +1769,39 @@ export function CanvasEditor({
         return result.elements;
       }, selectedElementId);
     },
-    [selectedId, updateElementsWithHistory]
+    [breakpoint, selectedId, updateElementsWithHistory]
   );
+
+  const handleClearSelectedBreakpointOverride = useCallback(() => {
+    if (!selectedId || breakpoint === 'desktop') {
+      return;
+    }
+
+    const selectedElementId = selectedId;
+    updateElementsWithHistory((currentElements) => {
+      const result = updateElementById(currentElements, selectedElementId, (element) => {
+        if (!element.responsive?.[breakpoint]) {
+          return element;
+        }
+
+        const responsive = { ...element.responsive };
+        delete responsive[breakpoint];
+        const nextResponsive = pruneResponsiveOverrides(responsive);
+        const nextElement: CanvasElement = {
+          ...element,
+          responsive: nextResponsive,
+        };
+
+        if (!nextResponsive) {
+          delete nextElement.responsive;
+        }
+
+        return nextElement;
+      });
+
+      return result.updated ? result.elements : currentElements;
+    }, selectedElementId);
+  }, [breakpoint, selectedId, updateElementsWithHistory]);
 
   const nudgeSelectedElement = useCallback((deltaX: number, deltaY: number) => {
     if (!selectedId) {
@@ -2320,7 +2559,7 @@ export function CanvasEditor({
    * Handle breakpoint change
    */
   const handleBreakpointChange = useCallback(
-    (bp: 'desktop' | 'tablet' | 'mobile') => {
+    (bp: EditorBreakpoint) => {
       applyCanvasSize(BREAKPOINT_CANVAS_SIZE[bp], bp);
     },
     [applyCanvasSize]
@@ -2993,7 +3232,7 @@ export function CanvasEditor({
                     }}
                   >
                     <Canvas
-                      elements={elements}
+                      elements={displayedElements}
                       onElementsChange={handleElementsChange}
                       selectedId={selectedId}
                       selectedIds={selectedIds}
@@ -3065,7 +3304,7 @@ export function CanvasEditor({
                         }}
                       >
                         <Canvas
-                          elements={elements}
+                          elements={displayedElements}
                           onElementsChange={handleElementsChange}
                           selectedId={selectedId}
                           selectedIds={selectedIds}
@@ -3145,6 +3384,7 @@ export function CanvasEditor({
                   <button
                     type="button"
                     onClick={() => setRightPanel('properties')}
+                    data-testid="editor-tab-properties"
                     className={cn(
                       'flex items-center justify-center gap-2 rounded-md px-3 py-1.5 transition-colors',
                       rightPanel === 'properties'
@@ -3159,6 +3399,7 @@ export function CanvasEditor({
                   <button
                     type="button"
                     onClick={() => setRightPanel('layers')}
+                    data-testid="editor-tab-layers"
                     className={cn(
                       'flex items-center justify-center gap-2 rounded-md px-3 py-1.5 transition-colors',
                       rightPanel === 'layers'
@@ -3242,6 +3483,27 @@ export function CanvasEditor({
                         <span className="rounded bg-white px-2 py-1 tabular-nums">W {Math.round(selectedElement.width)}</span>
                         <span className="rounded bg-white px-2 py-1 tabular-nums">H {Math.round(selectedElement.height)}</span>
                       </div>
+                      {breakpoint !== 'desktop' && (
+                        <div
+                          className="mt-2 rounded-md border border-sky-100 bg-sky-50 px-2.5 py-2 text-[11px] leading-4 text-sky-800"
+                          data-testid="editor-breakpoint-override"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-semibold capitalize">{breakpoint} override</span>
+                            <button
+                              type="button"
+                              onClick={handleClearSelectedBreakpointOverride}
+                              disabled={isCanvasMutationDisabled || !selectedElementHasBreakpointOverride}
+                              className="rounded border border-sky-200 bg-white px-2 py-1 font-semibold text-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Reset
+                            </button>
+                          </div>
+                          <p className="mt-1 text-sky-700">
+                            Layout, content, and styling changes made in this mode are saved only for this breakpoint.
+                          </p>
+                        </div>
+                      )}
                     </>
                   ) : (
                     <div className="flex items-center justify-between gap-3 text-sm">
@@ -3255,7 +3517,7 @@ export function CanvasEditor({
               <div className="min-h-0 flex-1 overflow-hidden">
                 {rightPanel === 'layers' ? (
                   <LayersPanel
-                    elements={elements}
+                    elements={displayedElements}
                     selectedIds={selectedIds}
                     onSelect={handleLayerSelect}
                     onReorder={handleLayerReorder}

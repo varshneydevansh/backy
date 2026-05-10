@@ -26,6 +26,21 @@ export interface CanvasSize {
   maxHeight?: number;
 }
 
+export type EditorBreakpoint = 'desktop' | 'tablet' | 'mobile';
+
+export interface ResponsiveElementOverride {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  zIndex?: number;
+  rotation?: number;
+  visible?: boolean;
+  locked?: boolean;
+  props?: Record<string, unknown>;
+  styles?: CSSProperties;
+}
+
 /** Supported element types in the canvas */
 export type ElementType =
   | 'text'
@@ -84,6 +99,9 @@ export interface CanvasElement {
 
   // CSS styles (optional)
   styles?: CSSProperties;
+
+  // Optional breakpoint-specific layout/content/style overrides.
+  responsive?: Partial<Record<EditorBreakpoint, ResponsiveElementOverride>>;
 
   // Parent element ID (for grouped/nested elements)
   parentId?: string;

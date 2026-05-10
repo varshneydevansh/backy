@@ -70,7 +70,7 @@ It explicitly excludes:
 
 ### 3.2 Editor parity features
 
-1. full breakpoint editor model (desktop/tablet/mobile with per-breakpoint overrides)
+1. full breakpoint editor model (desktop/tablet/mobile with per-breakpoint overrides; first persisted layout/content/style override path is implemented, with per-breakpoint layer visibility/lock controls and fuller QA still remaining)
 2. layer stacking operations (bring forward/send backward)
 3. true copy/paste, duplicate, delete with undo safety
 4. keyboard and multiselect editing

@@ -2081,12 +2081,14 @@ function LayoutProperties({ element, onChange }: LayoutPropertiesProps) {
           value={element.x}
           onChange={(value) => onChange({ x: value })}
           suffix="px"
+          testId="editor-layout-x"
         />
         <NumberInput
           label="Y"
           value={element.y}
           onChange={(value) => onChange({ y: value })}
           suffix="px"
+          testId="editor-layout-y"
         />
       </div>
 
@@ -2097,12 +2099,14 @@ function LayoutProperties({ element, onChange }: LayoutPropertiesProps) {
           value={element.width}
           onChange={(value) => onChange({ width: value })}
           suffix="px"
+          testId="editor-layout-width"
         />
         <NumberInput
           label="Height"
           value={element.height}
           onChange={(value) => onChange({ height: value })}
           suffix="px"
+          testId="editor-layout-height"
         />
       </div>
 
@@ -2111,6 +2115,7 @@ function LayoutProperties({ element, onChange }: LayoutPropertiesProps) {
         label="Z-Index"
         value={element.zIndex}
         onChange={(value) => onChange({ zIndex: value })}
+        testId="editor-layout-z-index"
       />
 
       {/* Rotation */}
@@ -2119,6 +2124,7 @@ function LayoutProperties({ element, onChange }: LayoutPropertiesProps) {
         value={element.rotation || 0}
         onChange={(value) => onChange({ rotation: value })}
         suffix="°"
+        testId="editor-layout-rotation"
       />
     </div>
   );
@@ -2819,9 +2825,11 @@ interface NumberInputProps {
   value: unknown;
   onChange: (value: number) => void;
   suffix?: string;
+  ariaLabel?: string;
+  testId?: string;
 }
 
-function NumberInput({ label, value, onChange, suffix }: NumberInputProps) {
+function NumberInput({ label, value, onChange, suffix, ariaLabel, testId }: NumberInputProps) {
   const numericValue = toNumber(value);
 
   return (
@@ -2836,6 +2844,8 @@ function NumberInput({ label, value, onChange, suffix }: NumberInputProps) {
           type="number"
           value={numericValue}
           onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+          aria-label={ariaLabel || label}
+          data-testid={testId}
           className={cn(
             'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
             'focus:outline-none focus:ring-2 focus:ring-ring'

@@ -607,6 +607,223 @@ const pressKey = async (client, key, options = {}) => {
   await sleep(150);
 };
 
+const clickButtonByAriaLabel = async (client, ariaLabel) => {
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector('button[aria-label="${ariaLabel}"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return false;
+    }
+    button.click();
+    return true;
+  })()`);
+
+  assert(clicked, `Unable to click button with aria-label ${ariaLabel}`);
+  await sleep(250);
+};
+
+const setLayoutNumberInput = async (client, label, value) => {
+  const testIdByLabel = {
+    X: 'editor-layout-x',
+    Y: 'editor-layout-y',
+    Width: 'editor-layout-width',
+    Height: 'editor-layout-height',
+    'Z-Index': 'editor-layout-z-index',
+    Rotation: 'editor-layout-rotation',
+  };
+  const testId = testIdByLabel[label];
+  assert(testId, `Unknown layout label ${label}`);
+
+  const focused = await evaluate(client, `(() => {
+    const input = document.querySelector('[data-testid="${testId}"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return {
+        ok: false,
+        testId: ${JSON.stringify(testId)},
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    }
+    input.focus();
+    input.select();
+    return { ok: true, testId: ${JSON.stringify(testId)} };
+  })()`);
+
+  assert(focused?.ok, `Unable to focus ${label} layout input: ${JSON.stringify(focused)}`);
+  const changed = await evaluate(client, `(() => {
+    const input = document.querySelector('[data-testid="${testId}"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return false;
+    }
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, ${JSON.stringify(String(value))});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return input.value === ${JSON.stringify(String(value))};
+  })()`);
+
+  assert(changed, `Unable to change ${label} layout input to ${value}`);
+  await sleep(250);
+};
+
+const switchToPropertiesPanel = async (client) => {
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="editor-tab-properties"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return false;
+    }
+    button.click();
+    return true;
+  })()`);
+
+  assert(clicked, 'Unable to switch editor inspector to Properties panel');
+  await sleep(250);
+};
+
+const selectLayerById = async (client, elementId) => {
+  const layerSelector = `[data-layer-id="${elementId}"]`;
+  const layersReady = await evaluate(client, `(() => {
+    const layersButton = document.querySelector('[data-testid="editor-tab-layers"]');
+    if (!(layersButton instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        reason: 'missing-layers-tab',
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    }
+    layersButton.click();
+    return { ok: true };
+  })()`);
+
+  assert(layersReady?.ok, `Unable to open Layers panel: ${JSON.stringify(layersReady)}`);
+  await sleep(150);
+
+  let clicked = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    clicked = await evaluate(client, `(() => {
+    const layer = document.querySelector(${JSON.stringify(layerSelector)});
+    if (!(layer instanceof HTMLElement)) {
+      return {
+        ok: false,
+        availableLayerIds: Array.from(document.querySelectorAll('[data-layer-id]'))
+          .map((node) => node.getAttribute('data-layer-id')),
+        panelText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    }
+    layer.click();
+    return { ok: true };
+  })()`);
+
+    if (clicked?.ok) {
+      break;
+    }
+    await sleep(100);
+  }
+
+  assert(clicked?.ok, `Unable to select layer ${elementId}: ${JSON.stringify(clicked)}`);
+  await sleep(250);
+  await switchToPropertiesPanel(client);
+};
+
+const waitForElementState = async (client, elementId, predicate, label) => {
+  let lastState = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    lastState = (await readEditorElementState(client, [elementId]))[elementId];
+    if (predicate(lastState)) {
+      return lastState;
+    }
+    await sleep(100);
+  }
+  throw new Error(`${label}: ${JSON.stringify(lastState)}`);
+};
+
+const readPersistedElement = async (pageId, elementId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  return findCanvasElement(elements, elementId);
+};
+
+const assertResponsiveBreakpointEditing = async (client, pageId, elementId) => {
+  await selectLayerById(client, elementId);
+  await clickButtonByAriaLabel(client, 'Desktop canvas');
+  await selectLayerById(client, elementId);
+  const desktopBefore = (await readEditorElementState(client, [elementId]))[elementId];
+  assert(desktopBefore, `Unable to read current desktop editor state before responsive edit: ${elementId}`);
+  await clickButtonByAriaLabel(client, 'Mobile canvas');
+  await selectLayerById(client, elementId);
+  const expectedMobileX = 24;
+  const expectedMobileWidth = 300;
+  await setLayoutNumberInput(client, 'X', expectedMobileX);
+  await setLayoutNumberInput(client, 'Width', expectedMobileWidth);
+
+  const mobileStateForElement = await waitForElementState(
+    client,
+    elementId,
+    (state) => state.x === expectedMobileX && state.width === expectedMobileWidth,
+    'Mobile override did not update editor element state',
+  );
+  const mobileState = { [elementId]: mobileStateForElement };
+  assert(
+    mobileState[elementId].x === expectedMobileX && mobileState[elementId].width === expectedMobileWidth,
+    `Mobile override did not update editor element state: ${JSON.stringify(mobileState[elementId])}`,
+  );
+
+  const overridePanel = await evaluate(client, `(() => {
+    const panel = document.querySelector('[data-testid="editor-breakpoint-override"]');
+    return {
+      exists: Boolean(panel),
+      text: panel?.textContent || '',
+    };
+  })()`);
+  assert(
+    overridePanel.exists && /mobile override/i.test(overridePanel.text),
+    `Responsive override panel did not appear: ${JSON.stringify(overridePanel)}`,
+  );
+
+  await clickSave(client);
+
+  let persistedElement = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    persistedElement = await readPersistedElement(pageId, elementId);
+    if (
+      persistedElement?.responsive?.mobile?.x === expectedMobileX &&
+      persistedElement?.responsive?.mobile?.width === expectedMobileWidth
+    ) {
+      break;
+    }
+    await sleep(250);
+  }
+
+  assert(
+    persistedElement?.x === desktopBefore.x &&
+      persistedElement?.width === desktopBefore.width &&
+      persistedElement?.responsive?.mobile?.x === expectedMobileX &&
+      persistedElement?.responsive?.mobile?.width === expectedMobileWidth,
+    `Responsive override was not persisted without changing desktop layout: ${JSON.stringify({ desktopBefore, persistedElement })}`,
+  );
+
+  await clickButtonByAriaLabel(client, 'Desktop canvas');
+  const desktopAfter = await readEditorElementState(client, [elementId]);
+  assert(
+    desktopAfter[elementId].x === Math.round(desktopBefore.x) &&
+      desktopAfter[elementId].width === Math.round(desktopBefore.width),
+    `Desktop canvas did not retain base layout after mobile override: ${JSON.stringify({ desktopBefore, desktopAfter })}`,
+  );
+
+  await clickButtonByAriaLabel(client, 'Mobile canvas');
+  const mobileAfter = await readEditorElementState(client, [elementId]);
+  assertElementState(mobileAfter, mobileState, `${elementId} mobile override after switching breakpoints`);
+
+  return {
+    elementId,
+    desktopBefore: {
+      x: desktopBefore.x,
+      width: desktopBefore.width,
+    },
+    mobileOverride: persistedElement.responsive.mobile,
+    desktopAfter: desktopAfter[elementId],
+    mobileAfter: mobileAfter[elementId],
+  };
+};
+
 const testKeyboardNudge = async (client, elementId) => {
   await selectElement(client, elementId);
   const before = await readEditorElementState(client, [elementId]);
@@ -1543,7 +1760,7 @@ const main = async () => {
             await testKeyboardNudge(client, 'smoke-child-button'),
           ],
           undoRedo: [
-            await testUndoRedoAfterDrag(client, 'smoke-heading'),
+            await testUndoRedoAfterDrag(client, 'smoke-box'),
           ],
         };
     const inspector = await assertInspectorSelection(client, EDITOR_PATH ? 'home-heading' : 'smoke-heading');
@@ -1569,10 +1786,14 @@ const main = async () => {
 
     let persistedState = null;
     let reloadedState = null;
+    let responsiveEditing = null;
+    let reloadedResponsiveEditing = null;
     let postSaveInspector = null;
     let savedStatus = null;
     if (tempPageId) {
       const elementIds = ['smoke-heading', 'smoke-image', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form'];
+      responsiveEditing = await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading');
+      await clickButtonByAriaLabel(client, 'Desktop canvas');
       const expectedState = await readEditorElementState(client, elementIds);
       await clickSave(client);
       savedStatus = await readEditorSaveStatus(client);
@@ -1596,6 +1817,7 @@ const main = async () => {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
         await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-form']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
+        reloadedResponsiveEditing = await assertResponsiveBreakpointEditing(reloadClient, tempPageId, 'smoke-heading');
       } finally {
         if (reloadClient) {
           try {
@@ -1617,6 +1839,13 @@ const main = async () => {
             Math.abs(reloaded.height - expected.height) <= 1;
         }),
         `Reloaded canvas state did not match saved state. Expected ${JSON.stringify(expectedState)}, got ${JSON.stringify(reloadedState)}`,
+      );
+      assert(
+        reloadedResponsiveEditing &&
+          responsiveEditing &&
+          reloadedResponsiveEditing.mobileAfter.x === responsiveEditing.mobileAfter.x &&
+          reloadedResponsiveEditing.mobileAfter.width === responsiveEditing.mobileAfter.width,
+        `Reloaded editor did not hydrate saved mobile override: ${JSON.stringify({ responsiveEditing, reloadedResponsiveEditing })}`,
       );
     }
 
@@ -1656,6 +1885,8 @@ const main = async () => {
       clickAdd,
       multiSelectionDrag,
       grouping,
+      responsiveEditing,
+      reloadedResponsiveEditing,
       postSaveInspector,
       savedStatus,
       persistedState,

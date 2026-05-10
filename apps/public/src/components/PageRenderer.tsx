@@ -12,7 +12,7 @@
 'use client';
 
 import type { BackyContentDocument } from '@backy-cms/core';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 // ============================================================================
 // TYPES (matching page builder editor types)
@@ -67,8 +67,24 @@ export interface CanvasElement {
   locked?: boolean;
   props: Record<string, unknown>;
   styles?: React.CSSProperties;
+  responsive?: Partial<Record<RenderBreakpoint, ResponsiveElementOverride>>;
   children?: CanvasElement[];
   animation?: AnimationConfig;
+}
+
+type RenderBreakpoint = 'desktop' | 'tablet' | 'mobile';
+
+interface ResponsiveElementOverride {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  rotation?: number;
+  zIndex?: number;
+  visible?: boolean;
+  locked?: boolean;
+  props?: Record<string, unknown>;
+  styles?: React.CSSProperties;
 }
 
 /** Animation configuration for GSAP */
@@ -165,6 +181,52 @@ const toRenderableElements = (elements: CanvasElement[]): CanvasElement[] => (
     children: element.children ? toRenderableElements(element.children) : undefined,
   }))
 );
+
+const resolveBreakpoint = (width: number): RenderBreakpoint => {
+  if (width <= 639) {
+    return 'mobile';
+  }
+  if (width <= 1023) {
+    return 'tablet';
+  }
+  return 'desktop';
+};
+
+const RESPONSIVE_LAYOUT_FIELDS = ['x', 'y', 'width', 'height', 'rotation', 'zIndex', 'visible', 'locked'] as const;
+
+const applyResponsiveOverride = (
+  element: CanvasElement,
+  breakpoint: RenderBreakpoint,
+): CanvasElement => {
+  const children = element.children?.map((child) => applyResponsiveOverride(child, breakpoint));
+
+  if (breakpoint === 'desktop') {
+    return children ? { ...element, children } : element;
+  }
+
+  const override = element.responsive?.[breakpoint];
+  if (!override) {
+    return children ? { ...element, children } : element;
+  }
+
+  return {
+    ...element,
+    ...RESPONSIVE_LAYOUT_FIELDS.reduce<Partial<CanvasElement>>((acc, key) => {
+      if (override[key] !== undefined) {
+        (acc as Record<string, unknown>)[key] = override[key];
+      }
+      return acc;
+    }, {}),
+    props: override.props ? { ...element.props, ...override.props } : element.props,
+    styles: override.styles ? { ...(element.styles || {}), ...override.styles } : element.styles,
+    ...(children ? { children } : {}),
+  };
+};
+
+const applyResponsiveOverrides = (
+  elements: CanvasElement[],
+  breakpoint: RenderBreakpoint,
+): CanvasElement[] => elements.map((element) => applyResponsiveOverride(element, breakpoint));
 
 interface CommentItem {
   id: string;
@@ -2416,12 +2478,15 @@ export function PageRenderer({
   const documentCanvasSize = isRecord(content.contentDocument?.metadata?.canvasSize)
     ? content.contentDocument.metadata.canvasSize
     : null;
-  const elements = toRenderableElements(
-    content.elements.length > 0
-      ? content.elements
-      : content.contentDocument
-        ? content.contentDocument.elements as unknown as CanvasElement[]
-        : [],
+  const sourceElements = useMemo(
+    () => toRenderableElements(
+      content.elements.length > 0
+        ? content.elements
+        : content.contentDocument
+          ? content.contentDocument.elements as unknown as CanvasElement[]
+          : [],
+    ),
+    [content.contentDocument, content.elements],
   );
   const canvasSize = {
     width: content.canvasSize?.width || Number(documentCanvasSize?.width) || 1200,
@@ -2433,7 +2498,12 @@ export function PageRenderer({
       : undefined
   );
   const [scale, setScale] = useState(1);
+  const [activeBreakpoint, setActiveBreakpoint] = useState<RenderBreakpoint>('desktop');
   const viewportRef = useRef<HTMLDivElement>(null);
+  const elements = useMemo(
+    () => applyResponsiveOverrides(sourceElements, activeBreakpoint),
+    [activeBreakpoint, sourceElements],
+  );
 
   useEffect(() => {
     const container = viewportRef.current;
@@ -2443,6 +2513,7 @@ export function PageRenderer({
 
     const calculateScale = () => {
       const availableWidth = Math.max(320, container.clientWidth - 24);
+      setActiveBreakpoint(resolveBreakpoint(availableWidth));
       const ratio = availableWidth / Math.max(canvasSize.width, 1);
       const nextScale = Math.max(0.32, Math.min(1, ratio));
       setScale(nextScale);
