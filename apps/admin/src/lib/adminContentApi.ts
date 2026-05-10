@@ -1023,6 +1023,7 @@ export interface BlogPostInput {
   excerpt?: string;
   status?: BlogPost['status'];
   scheduledAt?: string | null;
+  featuredImageId?: string | null;
   content?: unknown;
   meta?: Record<string, unknown>;
   authorId?: string | null;
@@ -1036,6 +1037,7 @@ export interface BlogPostUpdateInput {
   excerpt?: string;
   status?: BlogPost['status'];
   scheduledAt?: string | null;
+  featuredImageId?: string | null;
   content?: unknown;
   meta?: Record<string, unknown>;
   authorId?: string | null;

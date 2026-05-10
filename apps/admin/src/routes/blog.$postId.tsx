@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Globe, History, Maximize2, Minimize2, PenLine, RefreshCw, RotateCcw, Save, SearchCheck, Tags, Trash2, UserRound } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Globe, History, Image as ImageIcon, Maximize2, Minimize2, PenLine, RefreshCw, RotateCcw, Save, SearchCheck, Tags, Trash2, UserRound, X } from 'lucide-react';
 import {
     archiveBlogPost,
     createBlogPostPreview,
@@ -31,12 +31,14 @@ import { useStore, type BlogPost, type ContentStatus } from '@/stores/mockStore'
 import { PageShell } from '@/components/layout/PageShell';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
 import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
+import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
 import { cn } from '@/lib/utils';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getPublicMediaFileUrl } from '@/lib/mediaApi';
 import type { CanvasElement } from '@/types/editor';
 import type { CanvasSize } from '@/types/editor';
 import type { PageSettings } from '@/components/editor/PageSettingsModal';
@@ -87,6 +89,11 @@ const BLOG_EDITOR_CONTROL_AREAS = [
         href: '#blog-editor-seo',
     },
     {
+        title: 'Featured media',
+        detail: 'Choose the post image used by listings, social previews, feeds, and custom frontend cards.',
+        href: '#blog-editor-media',
+    },
+    {
         title: 'Taxonomy',
         detail: 'Assign author, categories, and tags for lists, feeds, and frontend filters.',
         href: '#blog-editor-taxonomy',
@@ -117,7 +124,7 @@ function EditBlogPostPage() {
     const navigate = useNavigate();
     const { postId } = Route.useParams();
     const routeSearch = Route.useSearch();
-    const { sites, posts, updatePost, deletePost } = useStore();
+    const { sites, posts, media, updatePost, deletePost } = useStore();
     const storePost = posts.find((p) => p.id === postId);
     const storePostId = storePost?.id;
     const storePostSiteId = storePost?.siteId;
@@ -158,6 +165,7 @@ function EditBlogPostPage() {
     const [readinessError, setReadinessError] = useState<string | null>(null);
     const [pendingRestoreRevision, setPendingRestoreRevision] = useState<ContentRevision | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [isFeaturedMediaOpen, setIsFeaturedMediaOpen] = useState(false);
     const [isWorkspaceFocus, setIsWorkspaceFocus] = useState(routeSearch.focus === 'canvas');
 
     // Initialize State from Post
@@ -172,6 +180,7 @@ function EditBlogPostPage() {
     const [ogImage, setOgImage] = useState(getMetaString(post?.meta, 'ogImage'));
     const [noIndex, setNoIndex] = useState(getMetaBoolean(post?.meta, 'noIndex'));
     const [noFollow, setNoFollow] = useState(getMetaBoolean(post?.meta, 'noFollow'));
+    const [featuredImageId, setFeaturedImageId] = useState<string | null>(post?.featuredImageId || null);
     const [selectedAuthorId, setSelectedAuthorId] = useState(post?.author || 'admin');
     const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(post?.categoryIds || []);
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>(post?.tagIds || []);
@@ -209,6 +218,7 @@ function EditBlogPostPage() {
                     setOgImage(getMetaString(backendPost.meta, 'ogImage'));
                     setNoIndex(getMetaBoolean(backendPost.meta, 'noIndex'));
                     setNoFollow(getMetaBoolean(backendPost.meta, 'noFollow'));
+                    setFeaturedImageId(backendPost.featuredImageId || null);
                     setSelectedAuthorId(backendPost.author || 'admin');
                     setSelectedCategoryIds(backendPost.categoryIds || []);
                     setSelectedTagIds(backendPost.tagIds || []);
@@ -224,6 +234,7 @@ function EditBlogPostPage() {
                         setOgImage(getMetaString(localFallbackPost.meta, 'ogImage'));
                         setNoIndex(getMetaBoolean(localFallbackPost.meta, 'noIndex'));
                         setNoFollow(getMetaBoolean(localFallbackPost.meta, 'noFollow'));
+                        setFeaturedImageId(localFallbackPost.featuredImageId || null);
                         setSelectedAuthorId(localFallbackPost.author || 'admin');
                         setSelectedCategoryIds(localFallbackPost.categoryIds || []);
                         setSelectedTagIds(localFallbackPost.tagIds || []);
@@ -474,6 +485,7 @@ function EditBlogPostPage() {
                 excerpt,
                 status,
                 scheduledAt: status === 'scheduled' ? scheduledAt : null,
+                featuredImageId,
                 content: JSON.parse(content),
                 meta: {
                     title: seoTitle.trim() || title,
@@ -515,6 +527,7 @@ function EditBlogPostPage() {
         setOgImage(getMetaString(nextPost.meta, 'ogImage'));
         setNoIndex(getMetaBoolean(nextPost.meta, 'noIndex'));
         setNoFollow(getMetaBoolean(nextPost.meta, 'noFollow'));
+        setFeaturedImageId(nextPost.featuredImageId || null);
         setSelectedAuthorId(nextPost.author || 'admin');
         setSelectedCategoryIds(nextPost.categoryIds || []);
         setSelectedTagIds(nextPost.tagIds || []);
@@ -679,12 +692,19 @@ function EditBlogPostPage() {
             : 'border-amber-200 bg-amber-50 text-amber-900';
     const selectedAuthor = authors.find((author) => author.id === selectedAuthorId);
     const selectedSite = activeSite;
+    const selectedFeaturedImage = featuredImageId
+        ? media.find((asset) => asset.id === featuredImageId) || null
+        : null;
+    const selectedFeaturedImageUrl = selectedFeaturedImage
+        ? selectedFeaturedImage.url || getPublicMediaFileUrl(selectedFeaturedImage.id, activeSiteId)
+        : null;
     const localReadinessChecks = [
         { label: 'Title', complete: title.trim().length > 0 },
         { label: 'Slug', complete: slug.trim().length > 0 },
         { label: 'Route', complete: !routeBlocked },
         { label: 'Summary', complete: excerpt.trim().length >= 24 },
         { label: 'SEO', complete: seoTitle.trim().length > 0 && seoDescription.trim().length >= 50 && canonicalValid },
+        { label: 'Featured image', complete: Boolean(featuredImageId) },
         { label: 'Design', complete: canvasElements.length > 0 },
         { label: 'Schedule', complete: status !== 'scheduled' || Boolean(scheduledAt) },
     ];
@@ -724,6 +744,15 @@ function EditBlogPostPage() {
             label: 'SEO controls',
             detail: `${seoTitle.trim().length || title.length} title chars, ${seoDescription.trim().length || excerpt.length} description chars, canonical ${normalizedCanonicalPath}.`,
             ready: seoTitle.trim().length > 0 && seoDescription.trim().length >= 50 && canonicalValid,
+        },
+        {
+            label: 'Featured media',
+            detail: featuredImageId
+                ? selectedFeaturedImage
+                    ? `${selectedFeaturedImage.name} selected for cards, feeds, and social previews.`
+                    : `${featuredImageId} selected. Save keeps the backend reference even if the library preview is not loaded.`
+                : 'Choose a featured image for blog lists, Open Graph previews, and generated frontends.',
+            ready: Boolean(featuredImageId),
         },
         {
             label: 'Canvas content',
@@ -773,6 +802,7 @@ function EditBlogPostPage() {
             status,
             scheduledAt: status === 'scheduled' ? scheduledAt : null,
             excerpt,
+            featuredImageId,
         },
         route: {
             path: publicPath,
@@ -785,6 +815,17 @@ function EditBlogPostPage() {
             description: seoDescription.trim() || excerpt,
             canonical: normalizedCanonicalPath,
             ogImage: ogImage.trim() || null,
+            featuredImage: selectedFeaturedImage
+                ? {
+                    id: selectedFeaturedImage.id,
+                    name: selectedFeaturedImage.name,
+                    url: selectedFeaturedImageUrl,
+                    altText: selectedFeaturedImage.altText || null,
+                    responsive: selectedFeaturedImage.responsive || null,
+                }
+                : featuredImageId
+                    ? { id: featuredImageId, name: null, url: null, altText: null, responsive: null }
+                    : null,
             robots: {
                 index: !noIndex,
                 follow: !noFollow,
@@ -1073,8 +1114,8 @@ function EditBlogPostPage() {
                         <div className="mt-4 grid gap-3 md:grid-cols-5">
                             <BlogEditorMetaTile label="Route" value={normalizedSlug ? publicPath : 'No slug'} />
                             <BlogEditorMetaTile label="Canonical" value={normalizedCanonicalPath} />
+                            <BlogEditorMetaTile label="Image" value={selectedFeaturedImage?.name || (featuredImageId ? 'Selected' : 'None')} />
                             <BlogEditorMetaTile label="Canvas" value={`${canvasSize.width} x ${canvasSize.height}px`} />
-                            <BlogEditorMetaTile label="Elements" value={`${canvasElements.length}`} />
                             <BlogEditorMetaTile label="Status" value={status} />
                         </div>
                         <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -1557,6 +1598,67 @@ function EditBlogPostPage() {
                             </PanelContent>
                         </Panel>
 
+                        <Panel id="blog-editor-media" className="scroll-mt-24">
+                            <PanelHeader
+                                title="Featured media"
+                                description="Image used by blog cards, feeds, Open Graph previews, and custom frontend lists."
+                                icon={<ImageIcon className="size-4" />}
+                            />
+                            <PanelContent className="space-y-4">
+                                <div className="overflow-hidden rounded-lg border border-border bg-background">
+                                    {selectedFeaturedImageUrl ? (
+                                        <img
+                                            src={selectedFeaturedImageUrl}
+                                            alt={selectedFeaturedImage?.altText || selectedFeaturedImage?.name || 'Featured post image'}
+                                            className="aspect-video w-full object-cover"
+                                        />
+                                    ) : (
+                                        <div className="flex aspect-video w-full items-center justify-center bg-muted text-muted-foreground">
+                                            <ImageIcon className="size-8" />
+                                        </div>
+                                    )}
+                                    <div className="space-y-1 px-3 py-3">
+                                        <div className="truncate text-sm font-semibold text-foreground">
+                                            {selectedFeaturedImage?.name || (featuredImageId ? featuredImageId : 'No featured image selected')}
+                                        </div>
+                                        <div className="text-xs leading-5 text-muted-foreground">
+                                            {selectedFeaturedImage
+                                                ? `${selectedFeaturedImage.type} · ${selectedFeaturedImage.visibility || 'public'} · ${selectedFeaturedImage.size}`
+                                                : 'Select or upload an image scoped to this post.'}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => setIsFeaturedMediaOpen(true)}
+                                        disabled={editorBusy}
+                                        iconStart={<ImageIcon className="size-4" />}
+                                    >
+                                        {featuredImageId ? 'Replace image' : 'Select image'}
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => {
+                                            clearEditorFeedback();
+                                            setFeaturedImageId(null);
+                                        }}
+                                        disabled={editorBusy || !featuredImageId}
+                                        iconStart={<X className="size-4" />}
+                                    >
+                                        Clear image
+                                    </Button>
+                                </div>
+                                {featuredImageId && (
+                                    <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 font-mono text-xs text-muted-foreground">
+                                        featuredImageId: {featuredImageId}
+                                    </div>
+                                )}
+                            </PanelContent>
+                        </Panel>
+
                         <Panel id="blog-editor-handoff" className="scroll-mt-24">
                             <PanelHeader
                                 title="Frontend handoff"
@@ -1586,11 +1688,22 @@ function EditBlogPostPage() {
     authorId: selectedAuthorId,
     categoryIds: selectedCategoryIds,
     tagIds: selectedTagIds,
+    featuredImageId,
     seo: {
         title: seoTitle.trim() || title,
         description: seoDescription.trim() || excerpt,
         canonical: normalizedCanonicalPath,
         ogImage: ogImage.trim() || null,
+        featuredImage: selectedFeaturedImage
+            ? {
+                id: selectedFeaturedImage.id,
+                name: selectedFeaturedImage.name,
+                url: selectedFeaturedImageUrl,
+                altText: selectedFeaturedImage.altText || null,
+            }
+            : featuredImageId
+                ? { id: featuredImageId, name: null, url: null, altText: null }
+                : null,
         robots: {
             index: !noIndex,
             follow: !noFollow,
@@ -1714,6 +1827,36 @@ function EditBlogPostPage() {
                     </aside>
                     )}
                 </form>
+
+                <MediaLibraryModal
+                    isOpen={isFeaturedMediaOpen}
+                    onClose={() => {
+                        if (!editorBusy) {
+                            setIsFeaturedMediaOpen(false);
+                        }
+                    }}
+                    onSelect={(asset) => {
+                        if (editorBusy) return;
+
+                        const deliveryUrl = asset.url || getPublicMediaFileUrl(asset.id, activeSiteId);
+                        clearEditorFeedback();
+                        setFeaturedImageId(asset.id);
+                        if (!ogImage.trim()) {
+                            setOgImage(deliveryUrl);
+                        }
+                        setWorkflowNotice(`Selected ${asset.name} as the featured image. Save to persist the post reference.`);
+                        setIsFeaturedMediaOpen(false);
+                    }}
+                    allowedTypes="image"
+                    initialUploadFilter="image"
+                    mediaContext={{
+                        siteId: activeSiteId,
+                        scope: 'post',
+                        targetId: postId,
+                        targetLabel: title || post.title,
+                    }}
+                    allowScopeSwitcher={true}
+                />
 
                 {pendingRestoreRevision && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
