@@ -147,6 +147,29 @@ const CONTACT_WORKFLOW_SURFACES = [
   },
 ] as const;
 
+const CONTACT_PROMOTION_REQUIREMENTS = [
+  {
+    key: 'identity',
+    title: 'Identity ready',
+    detail: 'A promotable lead needs at least an email or phone plus consent/source values from the originating form.',
+  },
+  {
+    key: 'qualification',
+    title: 'Qualified lifecycle',
+    detail: 'Use qualified status when a contact is ready for membership, sales follow-up, or collaborator review.',
+  },
+  {
+    key: 'destination',
+    title: 'Destination chosen',
+    detail: 'Promote through Users for workspace access, Contacts for CRM follow-up, or Collections for public member profiles.',
+  },
+  {
+    key: 'auth',
+    title: 'Auth provider pending',
+    detail: 'Credentialed member sessions, password reset, and protected portal APIs still belong to the Users/Auth integration pass.',
+  },
+] as const;
+
 interface ContactInbox {
   form: FormDefinition;
   contacts: AdminContact[];
@@ -457,6 +480,18 @@ function ContactsRoute() {
       registrationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
       users: `/users?siteId=${encodeURIComponent(activeSiteId)}`,
       settings: '/settings',
+    },
+    promotion: {
+      model: 'Contacts are the review layer between public registration/contact forms and private users, CRM follow-up, or member profile collections.',
+      requirements: CONTACT_PROMOTION_REQUIREMENTS,
+      readyToPromote: allContacts.filter((contact) => contact.status === 'qualified' && Boolean(normalizeContactEmail(contact.email))).length,
+      duplicateEmailGroups: duplicateEmailGroups.length,
+      nextActions: [
+        'Mark high-intent contacts as qualified.',
+        'Merge duplicate email groups before exporting or promoting a record.',
+        'Use Users for Backy workspace access; use Collections for public/member profile data.',
+        'Connect Supabase/Auth infrastructure before issuing credentialed member sessions.',
+      ],
     },
     readiness: {
       score: commandReadiness.score,
@@ -1288,6 +1323,41 @@ function ContactsRoute() {
                 <div className="text-sm font-semibold text-foreground">{surface.title}</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
               </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="contacts-promotion-contract">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <UserPlus className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold">Lead promotion contract</h3>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Contacts sit between public forms and private systems: qualify leads, merge duplicates, then promote them into Users for workspace access, Contacts for follow-up, or Collections for member/profile data.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={openUsersWorkspace} disabled={isContactsBusy} iconStart={<UserCheck className="size-4" />}>
+                Users
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => openLeadCapturePage('registration')} disabled={isContactsBusy} iconStart={<UserPlus className="size-4" />}>
+                Registration page
+              </Button>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            {CONTACT_PROMOTION_REQUIREMENTS.map((requirement, index) => (
+              <div key={requirement.key} className="rounded-lg border border-border bg-card p-3">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-[11px] font-semibold text-primary">
+                    {index + 1}
+                  </span>
+                  <div className="text-sm font-semibold text-foreground">{requirement.title}</div>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">{requirement.detail}</p>
+              </div>
             ))}
           </div>
         </div>

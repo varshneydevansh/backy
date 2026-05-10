@@ -523,6 +523,9 @@ const assertLayout = async (client) => {
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
       hasCommandCenter: Boolean(document.querySelector('[data-testid="contacts-command-center"]')),
+      hasPromotionContract: Boolean(document.querySelector('[data-testid="contacts-promotion-contract"]')) &&
+        document.body?.innerText?.includes('Lead promotion contract') &&
+        document.body?.innerText?.includes('Registration page'),
       hasBulkActions: Boolean(document.querySelector('[data-testid="contacts-bulk-actions"]')),
       hasCreateContact: Boolean(document.querySelector('[data-testid="contacts-create-contact"]')),
       hasImportCsv: Boolean(document.querySelector('[data-testid="contacts-import-csv"]')),
@@ -535,6 +538,7 @@ const assertLayout = async (client) => {
   assert(layout.scrollWidth <= layout.width + 8, `Contacts page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
     layout.hasCommandCenter
+    && layout.hasPromotionContract
     && layout.hasBulkActions
     && layout.hasCreateContact
     && layout.hasImportCsv
