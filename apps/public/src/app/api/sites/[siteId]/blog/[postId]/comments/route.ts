@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import type { Comment } from '@backy-cms/core';
+import { resolveCommentSubmissionPolicy } from '@/lib/commentPolicy';
 import {
   createComment,
   getCommentById,
@@ -39,10 +40,6 @@ function parseStatus(raw: string | null) {
 
 function parseSort(raw: string | null) {
   return raw === 'oldest' ? 'oldest' : 'newest';
-}
-
-function parseModerationMode(raw: unknown): 'manual' | 'auto-approve' {
-  return raw === 'auto-approve' ? 'auto-approve' : 'manual';
 }
 
 function parseTextInput(raw: unknown) {
@@ -277,22 +274,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const moderation = parseModerationMode(
-        (body as { commentModerationMode?: unknown }).commentModerationMode ??
-        (body as { moderationMode?: unknown }).moderationMode ??
-        body.mode,
-      );
-      const allowGuests = parseBoolean((body as { commentAllowGuests?: unknown }).commentAllowGuests);
-      const allowReplies = parseBoolean((body as { commentAllowReplies?: unknown }).commentAllowReplies);
-      const requireName = parseBoolean((body as { commentRequireName?: unknown }).commentRequireName);
-      const requireEmail = parseBoolean((body as { commentRequireEmail?: unknown }).commentRequireEmail);
+      const policy = resolveCommentSubmissionPolicy(site.settings?.commentPolicy, body);
       const userId = parseTextInput(
         (body as { userId?: unknown }).userId || (body as { commentUserId?: unknown }).commentUserId,
       );
-      const finalAllowGuests = allowGuests !== false;
-      const finalAllowReplies = allowReplies !== false;
-      const finalRequireName = requireName !== false;
-      const finalRequireEmail = requireEmail === true;
 
       const authorName = parseTextInput(body.authorName);
       const authorEmail = parseTextInput(body.authorEmail);
@@ -307,7 +292,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const rateLimitBypass = parseBoolean(body.rateLimitBypass) === true;
       const ipHash = extractIpHash(request);
 
-      if (!finalAllowGuests && !userId) {
+      if (!policy.enabled) {
+        return contractResponse(
+          {
+            success: false,
+            requestId: responseRequestId,
+            error: 'Comments closed',
+            details: { content: policy.closedMessage },
+          },
+          responseRequestId,
+          403,
+        );
+      }
+
+      if (!policy.allowGuests && !userId) {
         return contractResponse(
           {
             success: false,
@@ -320,7 +318,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      if (finalRequireName && authorName.length === 0) {
+      if (policy.requireName && authorName.length === 0) {
         return contractResponse(
           {
             success: false,
@@ -333,7 +331,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      if (finalRequireEmail && authorEmail.length === 0) {
+      if (policy.requireEmail && authorEmail.length === 0) {
         return contractResponse(
           {
             success: false,
@@ -346,7 +344,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      if (parentId && !finalAllowReplies) {
+      if (parentId && !policy.allowReplies) {
         return contractResponse(
           {
             success: false,
@@ -397,12 +395,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         targetId: postId,
         content,
         authorEmail,
-        moderationMode: moderation,
+        moderationMode: policy.moderationMode,
         honeypot,
         ipHash,
         requestId,
         startedAt,
         rateLimitBypass,
+        blockedTerms: policy.blockedTerms,
       });
 
       if (!classification.ok) {
@@ -505,22 +504,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const moderation = parseModerationMode(
-      (body as { commentModerationMode?: unknown }).commentModerationMode ??
-      (body as { moderationMode?: unknown }).moderationMode ??
-      body.mode,
-    );
-    const allowGuests = parseBoolean((body as { commentAllowGuests?: unknown }).commentAllowGuests);
-    const allowReplies = parseBoolean((body as { commentAllowReplies?: unknown }).commentAllowReplies);
-    const requireName = parseBoolean((body as { commentRequireName?: unknown }).commentRequireName);
-    const requireEmail = parseBoolean((body as { commentRequireEmail?: unknown }).commentRequireEmail);
+    const policy = resolveCommentSubmissionPolicy(site.settings?.commentPolicy, body);
     const userId = parseTextInput(
       (body as { userId?: unknown }).userId || (body as { commentUserId?: unknown }).commentUserId,
     );
-    const finalAllowGuests = allowGuests !== false;
-    const finalAllowReplies = allowReplies !== false;
-    const finalRequireName = requireName !== false;
-    const finalRequireEmail = requireEmail === true;
 
     const authorName = parseTextInput(body.authorName);
     const authorEmail = parseTextInput(body.authorEmail);
@@ -535,7 +522,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const rateLimitBypass = parseBoolean(body.rateLimitBypass) === true;
     const ipHash = extractIpHash(request);
 
-    if (!finalAllowGuests && !userId) {
+    if (!policy.enabled) {
+      return contractResponse(
+        {
+          success: false,
+          requestId: responseRequestId,
+          error: 'Comments closed',
+          details: { content: policy.closedMessage },
+        },
+        responseRequestId,
+        403,
+      );
+    }
+
+    if (!policy.allowGuests && !userId) {
       return contractResponse(
         {
           success: false,
@@ -548,7 +548,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    if (finalRequireName && authorName.length === 0) {
+    if (policy.requireName && authorName.length === 0) {
       return contractResponse(
         {
           success: false,
@@ -561,7 +561,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    if (finalRequireEmail && authorEmail.length === 0) {
+    if (policy.requireEmail && authorEmail.length === 0) {
       return contractResponse(
         {
           success: false,
@@ -574,7 +574,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    if (parentId && !finalAllowReplies) {
+    if (parentId && !policy.allowReplies) {
       return contractResponse(
         {
           success: false,
@@ -625,12 +625,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       targetId: postId,
       content,
       authorEmail,
-      moderationMode: moderation,
+      moderationMode: policy.moderationMode,
       honeypot,
       ipHash,
       requestId,
       startedAt,
       rateLimitBypass,
+      blockedTerms: policy.blockedTerms,
     });
 
     if (!classification.ok) {

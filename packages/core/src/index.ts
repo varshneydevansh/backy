@@ -75,6 +75,18 @@ export const DEFAULT_SITE_SETTINGS = {
   },
   analytics: {},
   social: {},
+  commentPolicy: {
+    enabled: true,
+    moderationMode: 'manual',
+    allowGuests: true,
+    requireName: true,
+    requireEmail: false,
+    allowReplies: true,
+    enableReports: true,
+    blockedTerms: [] as string[],
+    closedMessage: 'Comments are closed for this site.',
+    sort: 'newest',
+  },
   redirectRules: [],
   navigation: {
     primary: [],

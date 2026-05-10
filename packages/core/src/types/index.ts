@@ -295,11 +295,46 @@ export interface SiteSettings {
     [key: string]: string | undefined;
   };
 
+  /** Site-wide public comment policy used as the default guard for page/blog comment blocks */
+  commentPolicy?: SiteCommentPolicy;
+
   /** Site-level redirects and retired routes */
   redirectRules: SiteRedirectRule[];
 
   /** Site-level navigation menus for default and custom frontends */
   navigation: SiteNavigationConfig;
+}
+
+export interface SiteCommentPolicy {
+  /** Whether public comment submission is enabled for the site */
+  enabled?: boolean;
+
+  /** Default moderation behavior when a comment block does not override it */
+  moderationMode?: 'manual' | 'auto-approve';
+
+  /** Whether anonymous visitors can submit comments */
+  allowGuests?: boolean;
+
+  /** Whether commenter name is required */
+  requireName?: boolean;
+
+  /** Whether commenter email is required */
+  requireEmail?: boolean;
+
+  /** Whether replies to existing comments are allowed */
+  allowReplies?: boolean;
+
+  /** Whether public report endpoints are enabled */
+  enableReports?: boolean;
+
+  /** Lowercase-insensitive content terms that are rejected as spam */
+  blockedTerms?: string[];
+
+  /** Public message returned when comments are disabled */
+  closedMessage?: string;
+
+  /** Default public sort order */
+  sort?: 'newest' | 'oldest';
 }
 
 /**

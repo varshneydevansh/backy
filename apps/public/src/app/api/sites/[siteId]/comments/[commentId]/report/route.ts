@@ -9,6 +9,7 @@ import {
   reportRepositoryComment,
   resolveRepositorySite,
 } from '@/lib/commentRepositorySupport';
+import { normalizeSiteCommentPolicy } from '@/lib/commentPolicy';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -155,6 +156,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', baseRequestId);
       }
 
+      if (!normalizeSiteCommentPolicy(site.settings?.commentPolicy).enableReports) {
+        return errorResponse(403, 'COMMENT_REPORTS_DISABLED', 'Comment reporting is disabled for this site.', baseRequestId);
+      }
+
       const payload = parseBody(await request.json().catch(() => null));
       if (!payload) {
         return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. reason is required.', baseRequestId);
@@ -185,6 +190,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const comment = getCommentById(commentId);
     if (!comment || comment.siteId !== site.id) {
       return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', baseRequestId);
+    }
+
+    if (!normalizeSiteCommentPolicy(site.settings?.commentPolicy).enableReports) {
+      return errorResponse(403, 'COMMENT_REPORTS_DISABLED', 'Comment reporting is disabled for this site.', baseRequestId);
     }
 
     const payload = parseBody(await request.json().catch(() => null));

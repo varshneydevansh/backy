@@ -13,7 +13,7 @@ import type {
 
 type AdminSiteStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 
-interface ApiSite {
+export interface ApiSite {
   id: string;
   name: string;
   slug: string;
@@ -21,6 +21,7 @@ interface ApiSite {
   customDomain?: string | null;
   status?: AdminSiteStatus;
   isPublished?: boolean;
+  settings?: SiteSettings;
   updatedAt?: string;
   createdAt?: string;
 }
@@ -949,6 +950,7 @@ export interface SiteCreateInput {
   description?: string;
   customDomain?: string | null;
   status?: Site['status'];
+  settings?: Partial<SiteSettings>;
 }
 
 export interface UserInput {
@@ -1973,6 +1975,17 @@ export async function createSite(input: SiteCreateInput): Promise<Site> {
   }
 
   return toStoreSite(payload.data.site);
+}
+
+export async function getAdminSite(siteId: string): Promise<ApiSite> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}`);
+  const payload = await readJson<ApiSiteResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.site) {
+    throw new Error(payload.error?.message || 'Unable to load site');
+  }
+
+  return payload.data.site;
 }
 
 export async function deleteSite(siteId: string): Promise<void> {

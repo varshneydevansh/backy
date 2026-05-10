@@ -17,14 +17,17 @@ import {
   XCircle,
 } from 'lucide-react';
 import {
+  getAdminSite,
   listBlogPosts,
   listComments,
   listPages,
+  updateSite,
   updateComments,
   type AdminComment,
   type CommentModerationStatus,
   type CommentModerationTarget,
 } from '@/lib/adminContentApi';
+import type { SiteCommentPolicy } from '@backy-cms/core';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
@@ -141,6 +144,32 @@ interface CommentTargetSummary {
   path: string;
 }
 
+type CommentPolicyDraft = Required<Omit<SiteCommentPolicy, 'blockedTerms'>> & {
+  blockedTerms: string[];
+};
+
+const DEFAULT_COMMENT_POLICY: CommentPolicyDraft = {
+  enabled: true,
+  moderationMode: 'manual',
+  allowGuests: true,
+  requireName: true,
+  requireEmail: false,
+  allowReplies: true,
+  enableReports: true,
+  blockedTerms: [],
+  closedMessage: 'Comments are closed for this site.',
+  sort: 'newest',
+};
+
+const normalizeCommentPolicyDraft = (policy?: SiteCommentPolicy | null): CommentPolicyDraft => ({
+  ...DEFAULT_COMMENT_POLICY,
+  ...(policy || {}),
+  blockedTerms: Array.isArray(policy?.blockedTerms) ? policy.blockedTerms.filter(Boolean) : [],
+  moderationMode: policy?.moderationMode === 'auto-approve' ? 'auto-approve' : 'manual',
+  sort: policy?.sort === 'oldest' ? 'oldest' : 'newest',
+  closedMessage: policy?.closedMessage?.trim() || DEFAULT_COMMENT_POLICY.closedMessage,
+});
+
 function CommentsRoute() {
   const { sites } = useStore();
   const navigate = useNavigate();
@@ -155,12 +184,15 @@ function CommentsRoute() {
   const [sortFilter, setSortFilter] = useState<CommentSortFilter>('newest');
   const [searchQuery, setSearchQuery] = useState('');
   const [moderationReason, setModerationReason] = useState('');
+  const [commentPolicyDraft, setCommentPolicyDraft] = useState<CommentPolicyDraft>(DEFAULT_COMMENT_POLICY);
+  const [savedCommentPolicy, setSavedCommentPolicy] = useState<CommentPolicyDraft>(DEFAULT_COMMENT_POLICY);
   const [isLoading, setIsLoading] = useState(false);
   const [updatingIds, setUpdatingIds] = useState<string[]>([]);
+  const [isSavingPolicy, setIsSavingPolicy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const isCommentMutationBusy = updatingIds.length > 0;
-  const isCommentsBusy = isLoading || isCommentMutationBusy;
+  const isCommentsBusy = isLoading || isCommentMutationBusy || isSavingPolicy;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -252,6 +284,8 @@ function CommentsRoute() {
     .filter((comment) => selectedSet.has(comment.id) && ((comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length)))
     .map((comment) => comment.id), [comments, selectedSet]);
   const allVisibleSelected = filteredComments.length > 0 && filteredComments.every((comment) => selectedSet.has(comment.id));
+  const commentPolicyDirty = JSON.stringify(commentPolicyDraft) !== JSON.stringify(savedCommentPolicy);
+  const commentPolicyBlockedTermsText = commentPolicyDraft.blockedTerms.join('\n');
   const moderationReadiness = useMemo(() => {
     const reviewComplete = metrics.pending === 0;
     const safetyClean = metrics.flagged === 0;
@@ -281,6 +315,13 @@ function CommentsRoute() {
         ready: safetyClean,
       },
       {
+        label: 'Site policy',
+        detail: commentPolicyDraft.enabled
+          ? `${commentPolicyDraft.moderationMode === 'auto-approve' ? 'Auto-approve' : 'Manual review'} with ${commentPolicyDraft.blockedTerms.length} blocked term${commentPolicyDraft.blockedTerms.length === 1 ? '' : 's'}.`
+          : 'Public comment submission is closed at the site level.',
+        ready: commentPolicyDraft.enabled && !commentPolicyDirty,
+      },
+      {
         label: 'Bulk controls',
         detail: hasSelection ? `${selectedIds.length} selected for moderation.` : 'Approve, reject, spam, block, and export actions are available.',
         ready: true,
@@ -303,7 +344,7 @@ function CommentsRoute() {
         { label: 'Serve', detail: 'Only approved comments should reach public frontend comment feeds.' },
       ],
     };
-  }, [activeSite, hasSelection, metrics.flagged, metrics.pending, selectedIds.length, targets.length]);
+  }, [activeSite, commentPolicyDirty, commentPolicyDraft.blockedTerms.length, commentPolicyDraft.enabled, commentPolicyDraft.moderationMode, hasSelection, metrics.flagged, metrics.pending, selectedIds.length, targets.length]);
   const moderationHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -342,6 +383,10 @@ function CommentsRoute() {
       total: comments.length,
     },
     moderationStates: ['pending', 'approved', 'rejected', 'spam', 'blocked'],
+    sitePolicy: {
+      ...commentPolicyDraft,
+      dirty: commentPolicyDirty,
+    },
     selectedCommentIds: selectedIds,
     targets: targets.map((target) => ({
       id: target.id,
@@ -399,6 +444,8 @@ function CommentsRoute() {
     activeSite?.status,
     activeSiteId,
     allVisibleSelected,
+    commentPolicyDirty,
+    commentPolicyDraft,
     comments,
     filteredComments,
     metrics,
@@ -431,13 +478,17 @@ function CommentsRoute() {
     setNotice(null);
 
     try {
-      const [commentResult, pages, posts] = await Promise.all([
+      const [commentResult, pages, posts, siteDetail] = await Promise.all([
         listComments(activeSiteId, { status: 'all', limit: 100, sort: 'newest' }),
         listPages(activeSiteId).catch(() => []),
         listBlogPosts(activeSiteId).catch(() => []),
+        getAdminSite(activeSiteId).catch(() => null),
       ]);
+      const nextPolicy = normalizeCommentPolicyDraft(siteDetail?.settings?.commentPolicy);
 
       setComments(commentResult.comments);
+      setCommentPolicyDraft(nextPolicy);
+      setSavedCommentPolicy(nextPolicy);
       setTargets([
         ...pages.map((page) => ({
           id: page.id,
@@ -525,6 +576,48 @@ function CommentsRoute() {
       setError(updateError instanceof Error ? updateError.message : 'Unable to update comments');
     } finally {
       setUpdatingIds([]);
+    }
+  };
+
+  const patchCommentPolicyDraft = (patch: Partial<CommentPolicyDraft>) => {
+    setCommentPolicyDraft((current) => ({
+      ...current,
+      ...patch,
+      blockedTerms: patch.blockedTerms || current.blockedTerms,
+    }));
+  };
+
+  const handleBlockedTermsChange = (value: string) => {
+    patchCommentPolicyDraft({
+      blockedTerms: value
+        .split(/\r?\n|,/)
+        .map((term) => term.trim())
+        .filter(Boolean),
+    });
+  };
+
+  const saveCommentPolicy = async () => {
+    if (isCommentsBusy || !activeSiteId) return;
+
+    setIsSavingPolicy(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      await updateSite(activeSiteId, {
+        settings: {
+          commentPolicy: commentPolicyDraft,
+        },
+      });
+      const site = await getAdminSite(activeSiteId).catch(() => null);
+      const nextPolicy = normalizeCommentPolicyDraft(site?.settings?.commentPolicy || commentPolicyDraft);
+      setCommentPolicyDraft(nextPolicy);
+      setSavedCommentPolicy(nextPolicy);
+      setNotice('Comment policy saved.');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save comment policy');
+    } finally {
+      setIsSavingPolicy(false);
     }
   };
 
@@ -856,6 +949,147 @@ function CommentsRoute() {
         </span>
       </div>
 
+      <section id="comments-policy" className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24" data-testid="comments-policy-panel">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <ShieldAlert className="size-4 text-primary" />
+              <h2 className="text-base font-semibold">Site comment policy</h2>
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                commentPolicyDraft.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700',
+              )}
+              >
+                {commentPolicyDraft.enabled ? 'open' : 'closed'}
+              </span>
+              {commentPolicyDirty && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">unsaved</span>}
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Set the default discussion rules custom frontends must respect before public page or blog comments enter the moderation queue.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              disabled={isCommentsBusy || !commentPolicyDirty}
+              onClick={() => setCommentPolicyDraft(savedCommentPolicy)}
+            >
+              Reset policy
+            </Button>
+            <Button
+              disabled={isCommentsBusy || !commentPolicyDirty}
+              onClick={() => void saveCommentPolicy()}
+              iconStart={<ShieldAlert className="size-4" />}
+            >
+              Save policy
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.7fr)]">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <label className="flex min-h-12 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={commentPolicyDraft.enabled}
+                onChange={(event) => patchCommentPolicyDraft({ enabled: event.target.checked })}
+              />
+              Accept public comments
+            </label>
+            <label className="flex min-h-12 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={commentPolicyDraft.allowGuests}
+                onChange={(event) => patchCommentPolicyDraft({ allowGuests: event.target.checked })}
+              />
+              Allow guests
+            </label>
+            <label className="flex min-h-12 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={commentPolicyDraft.requireName}
+                onChange={(event) => patchCommentPolicyDraft({ requireName: event.target.checked })}
+              />
+              Require name
+            </label>
+            <label className="flex min-h-12 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={commentPolicyDraft.requireEmail}
+                onChange={(event) => patchCommentPolicyDraft({ requireEmail: event.target.checked })}
+              />
+              Require email
+            </label>
+            <label className="flex min-h-12 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={commentPolicyDraft.allowReplies}
+                onChange={(event) => patchCommentPolicyDraft({ allowReplies: event.target.checked })}
+              />
+              Allow replies
+            </label>
+            <label className="flex min-h-12 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={commentPolicyDraft.enableReports}
+                onChange={(event) => patchCommentPolicyDraft({ enableReports: event.target.checked })}
+              />
+              Enable reports
+            </label>
+          </div>
+
+          <div className="grid gap-3">
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Default moderation
+              <select
+                value={commentPolicyDraft.moderationMode}
+                onChange={(event) => patchCommentPolicyDraft({ moderationMode: event.target.value as CommentPolicyDraft['moderationMode'] })}
+                className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
+                aria-label="Default comment moderation"
+              >
+                <option value="manual">Manual review</option>
+                <option value="auto-approve">Auto approve</option>
+              </select>
+            </label>
+            <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+              Public sort
+              <select
+                value={commentPolicyDraft.sort}
+                onChange={(event) => patchCommentPolicyDraft({ sort: event.target.value as CommentPolicyDraft['sort'] })}
+                className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
+                aria-label="Default comment sort"
+              >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)]">
+          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+            Closed message
+            <input
+              value={commentPolicyDraft.closedMessage}
+              onChange={(event) => patchCommentPolicyDraft({ closedMessage: event.target.value })}
+              className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
+              aria-label="Comment closed message"
+            />
+          </label>
+          <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+            Blocked terms
+            <textarea
+              value={commentPolicyBlockedTermsText}
+              onChange={(event) => handleBlockedTermsChange(event.target.value)}
+              rows={3}
+              className="min-h-24 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
+              aria-label="Comment blocked terms"
+              placeholder="One term per line"
+            />
+          </label>
+        </div>
+      </section>
+
       <div id="comments-metrics" className="mb-6 grid gap-3 scroll-mt-24 md:grid-cols-4">
         <Metric label="Comments" value={metrics.total} icon={<MessageSquare className="size-4" />} />
         <Metric label="Pending" value={metrics.pending} icon={<ShieldAlert className="size-4" />} />
@@ -1059,6 +1293,7 @@ function CommentsRoute() {
                   rows={2}
                   className="mt-2 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                   placeholder="Explain why selected comments are rejected, marked spam, or blocked."
+                  aria-label="Comment moderation reason"
                 />
               </label>
               <div className="flex flex-wrap items-end gap-2">

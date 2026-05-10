@@ -97,6 +97,15 @@ const mergeSiteSettings = (current: SiteSettings, input: unknown): SiteSettings 
       ...current.social,
       ...toStringRecord(input.social),
     },
+    commentPolicy: input.commentPolicy === undefined
+      ? current.commentPolicy
+      : {
+          ...(current.commentPolicy || {}),
+          ...(isRecord(input.commentPolicy) ? input.commentPolicy : {}),
+          blockedTerms: Array.isArray((input.commentPolicy as { blockedTerms?: unknown } | undefined)?.blockedTerms)
+            ? (input.commentPolicy as { blockedTerms: unknown[] }).blockedTerms.filter((term): term is string => typeof term === 'string')
+            : current.commentPolicy?.blockedTerms || [],
+        },
     redirectRules: input.redirectRules === undefined
       ? current.redirectRules
       : normalizeRedirectRules(input.redirectRules),

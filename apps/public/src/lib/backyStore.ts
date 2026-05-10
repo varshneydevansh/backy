@@ -23,6 +23,7 @@ import type {
   Contact,
   CommentReportReason,
   CommentStatus,
+  SiteCommentPolicy,
   SiteSettings,
 } from '@backy-cms/core';
 import {
@@ -365,6 +366,31 @@ interface CommentSpamResult {
   errors?: string;
 }
 
+const normalizeCommentPolicy = (value: unknown, current?: SiteCommentPolicy): SiteCommentPolicy => {
+  const input = toRecord(value);
+  const base = current || createDefaultSiteSettings().commentPolicy || {};
+  const blockedTerms = Array.isArray(input.blockedTerms)
+    ? input.blockedTerms.map(sanitizeString).filter(Boolean).slice(0, 100)
+    : base.blockedTerms || [];
+  const moderationMode = sanitizeString(input.moderationMode);
+  const sort = sanitizeString(input.sort);
+
+  return {
+    enabled: input.enabled === undefined ? base.enabled !== false : parseBooleanInput(input.enabled, true),
+    moderationMode: moderationMode === 'auto-approve' ? 'auto-approve' : moderationMode === 'manual' ? 'manual' : base.moderationMode || 'manual',
+    allowGuests: input.allowGuests === undefined ? base.allowGuests !== false : parseBooleanInput(input.allowGuests, true),
+    requireName: input.requireName === undefined ? base.requireName !== false : parseBooleanInput(input.requireName, true),
+    requireEmail: input.requireEmail === undefined ? base.requireEmail === true : parseBooleanInput(input.requireEmail, false),
+    allowReplies: input.allowReplies === undefined ? base.allowReplies !== false : parseBooleanInput(input.allowReplies, true),
+    enableReports: input.enableReports === undefined ? base.enableReports !== false : parseBooleanInput(input.enableReports, true),
+    blockedTerms,
+    closedMessage: input.closedMessage === undefined
+      ? base.closedMessage || 'Comments are closed for this site.'
+      : sanitizeString(input.closedMessage) || 'Comments are closed for this site.',
+    sort: sort === 'oldest' ? 'oldest' : sort === 'newest' ? 'newest' : base.sort || 'newest',
+  };
+};
+
 const AUDIT_EVENT_STATUSES = ['queued', 'succeeded', 'failed', 'received'] as const;
 type AuditEventStatus = (typeof AUDIT_EVENT_STATUSES)[number];
 type WebhookEventKind =
@@ -425,6 +451,7 @@ const createDefaultSiteSettings = (): SiteSettings => ({
   seo: { ...DEFAULT_SITE_SETTINGS.seo },
   analytics: {},
   social: {},
+  commentPolicy: { ...DEFAULT_SITE_SETTINGS.commentPolicy, blockedTerms: [] },
   redirectRules: [],
   navigation: {
     primary: [],
@@ -3465,6 +3492,7 @@ function checkCommentSpamSignals(
     ipHash?: string | null;
     startedAt?: string | number | null;
     rateLimitBypass?: boolean;
+    blockedTerms?: string[];
   },
 ): CommentSpamResult {
   const flags: string[] = [];
@@ -3500,6 +3528,20 @@ function checkCommentSpamSignals(
       status: 'rejected',
       flags: ['validation'],
       errors: 'Comment content is too long.',
+    };
+  }
+
+  const normalizedContentForTerms = normalizedContent.toLowerCase();
+  const blockedTerm = (params.blockedTerms || [])
+    .map((term) => sanitizeString(term).toLowerCase())
+    .filter(Boolean)
+    .find((term) => normalizedContentForTerms.includes(term));
+  if (blockedTerm) {
+    return {
+      ok: false,
+      status: 'spam',
+      flags: ['blocked-term'],
+      errors: `Comment contains a blocked term: ${blockedTerm}`,
     };
   }
 
@@ -3674,6 +3716,9 @@ function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): Sit
       ...base.social,
       ...toStringRecord(settingsInput.social),
     },
+    commentPolicy: settingsInput.commentPolicy === undefined
+      ? normalizeCommentPolicy(base.commentPolicy)
+      : normalizeCommentPolicy(settingsInput.commentPolicy, base.commentPolicy),
     redirectRules: settingsInput.redirectRules === undefined
       ? [...base.redirectRules]
       : normalizeRedirectRules(settingsInput.redirectRules),
@@ -6353,6 +6398,7 @@ export function validateAndClassifyComment(params: {
   requestId?: string;
   startedAt?: string | number | null;
   rateLimitBypass?: boolean;
+  blockedTerms?: string[];
 }): {
   ok: boolean;
   status: Comment['status'];
@@ -6369,6 +6415,7 @@ export function validateAndClassifyComment(params: {
     ipHash: params.ipHash,
     startedAt: params.startedAt,
     rateLimitBypass: params.rateLimitBypass,
+    blockedTerms: params.blockedTerms,
   });
 
   return {

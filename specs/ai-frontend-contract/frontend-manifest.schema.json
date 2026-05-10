@@ -21,7 +21,8 @@
             "slug": { "type": "string", "minLength": 1 },
             "name": { "type": "string", "minLength": 1 },
             "status": { "type": "string" },
-            "themeTokens": { "type": "object" }
+            "themeTokens": { "type": "object" },
+            "commentPolicy": { "type": "object" }
           },
           "required": ["id", "slug", "name", "status", "themeTokens"]
         },

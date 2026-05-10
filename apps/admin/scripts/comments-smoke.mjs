@@ -87,6 +87,42 @@ const submitComment = async ({ pageId, authorName, authorEmail, content, request
   return comment;
 };
 
+const submitCommentExpectFailure = async ({ pageId, authorName, authorEmail, content, requestId }) => {
+  const response = await fetch(`${API_BASE_URL}/api/sites/${SITE_ID}/pages/${pageId}/comments`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      content,
+      authorName,
+      authorEmail,
+      requestId,
+      honeypot: '',
+      rateLimitBypass: true,
+      startedAt: Date.now() - 3000,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  assert(!response.ok || payload.success === false, `Expected comment failure, received ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+  return { status: response.status, payload };
+};
+
+const getAdminSite = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}`);
+  return payload.data?.site || payload.site;
+};
+
+const patchSiteCommentPolicy = async (policy) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      settings: {
+        commentPolicy: policy,
+      },
+    }),
+  });
+  return payload.data?.site || payload.site;
+};
+
 const listComments = async (requestId) => {
   const query = new URLSearchParams({
     status: 'all',
@@ -137,6 +173,21 @@ const reportComment = async ({ commentId, reason, requestId }) => {
   assert(comment?.id, `Comment report did not return a comment: ${JSON.stringify(payload).slice(0, 500)}`);
   assert((comment.reportCount || 0) > 0, `Reported comment did not increment report count: ${JSON.stringify(comment)}`);
   return comment;
+};
+
+const reportCommentExpectFailure = async ({ commentId, reason, requestId }) => {
+  const response = await fetch(`${API_BASE_URL}/api/sites/${SITE_ID}/comments/${commentId}/report`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      reason,
+      actor: 'comments-smoke',
+      requestId,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  assert(!response.ok || payload.success === false, `Expected report failure, received ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+  return { status: response.status, payload };
 };
 
 const waitForCommentsDeleted = async (requestIds) => {
@@ -294,7 +345,7 @@ const moderateCommentInUi = async (client, authorName, action, reason = '') => {
       ));
       if (!card) return { ok: false, reason: 'card-missing', body: document.body?.innerText?.slice(0, 900) || '' };
       if (${JSON.stringify(reason)}.length > 0) {
-        const textarea = document.querySelector('textarea');
+        const textarea = document.querySelector('textarea[aria-label="Comment moderation reason"]');
         if (textarea instanceof HTMLTextAreaElement) {
           setTextareaValue(textarea, ${JSON.stringify(reason)});
         }
@@ -361,6 +412,49 @@ const resolveReportsInUi = async (client, authorName) => {
 
     if (attempt === 79) {
       throw new Error(`Unable to resolve reports for ${authorName}: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+};
+
+const savePolicyInUi = async (client, blockedTermsText) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const setInputValue = (input, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value');
+        descriptor?.set?.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const policy = document.querySelector('[data-testid="comments-policy-panel"]');
+      if (!policy) return { ok: false, reason: 'policy-panel-missing', body: document.body?.innerText?.slice(0, 900) || '' };
+      const requireEmailLabel = Array.from(policy.querySelectorAll('label')).find((label) => (label.textContent || '').includes('Require email'));
+      const reportsLabel = Array.from(policy.querySelectorAll('label')).find((label) => (label.textContent || '').includes('Enable reports'));
+      const requireEmail = requireEmailLabel?.querySelector('input[type="checkbox"]');
+      const reports = reportsLabel?.querySelector('input[type="checkbox"]');
+      const moderation = policy.querySelector('select[aria-label="Default comment moderation"]');
+      const blockedTerms = policy.querySelector('textarea[aria-label="Comment blocked terms"]');
+      if (!(requireEmail instanceof HTMLInputElement) || !(reports instanceof HTMLInputElement) || !(moderation instanceof HTMLSelectElement) || !(blockedTerms instanceof HTMLTextAreaElement)) {
+        return { ok: false, reason: 'policy-controls-missing' };
+      }
+      if (!requireEmail.checked) requireEmail.click();
+      if (reports.checked) reports.click();
+      moderation.value = 'auto-approve';
+      moderation.dispatchEvent(new Event('input', { bubbles: true }));
+      moderation.dispatchEvent(new Event('change', { bubbles: true }));
+      setInputValue(blockedTerms, ${JSON.stringify(blockedTermsText)});
+      const save = Array.from(policy.querySelectorAll('button')).find((button) => (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Save policy');
+      if (!(save instanceof HTMLButtonElement)) return { ok: false, reason: 'save-missing' };
+      if (save.disabled) return { ok: false, reason: 'save-disabled', text: policy.textContent || '' };
+      save.click();
+      return { ok: true };
+    })()`);
+
+    if (result.ok) return;
+
+    if (attempt === 79) {
+      throw new Error(`Unable to save comment policy in UI: ${JSON.stringify(result)}`);
     }
 
     await sleep(250);
@@ -434,6 +528,7 @@ const main = async () => {
   let userDataDir;
   let page;
   const requestIds = [];
+  let restoredPolicy = false;
 
   try {
     page = await createPage();
@@ -486,6 +581,48 @@ const main = async () => {
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: AUTH_STORAGE_SCRIPT });
 
     await navigateToComments(client, ['Comments Smoke Approve', 'Comments Smoke Reject', 'Comments Smoke Report']);
+    await savePolicyInUi(client, 'bannedphrase');
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      const site = await getAdminSite();
+      const policy = site?.settings?.commentPolicy;
+      if (
+        policy?.requireEmail === true &&
+        policy?.enableReports === false &&
+        policy?.moderationMode === 'auto-approve' &&
+        policy?.blockedTerms?.includes('bannedphrase')
+      ) {
+        break;
+      }
+      if (attempt === 79) {
+        throw new Error(`Comment policy did not persist: ${JSON.stringify(policy)}`);
+      }
+      await sleep(250);
+    }
+    const blockedTerm = await submitCommentExpectFailure({
+      pageId: page.id,
+      authorName: 'Comments Smoke Policy',
+      authorEmail: 'comments-policy@example.com',
+      content: 'This temporary comment contains bannedphrase and should be blocked.',
+      requestId: `comments-smoke-policy-${suffix}`,
+    });
+    assert(blockedTerm.status === 422, `Blocked-term policy should reject with 422: ${JSON.stringify(blockedTerm)}`);
+
+    const reportDisabledRequestId = `comments-smoke-report-disabled-${suffix}`;
+    requestIds.push(reportDisabledRequestId);
+    const reportDisabledComment = await submitComment({
+      pageId: page.id,
+      authorName: 'Comments Smoke Reports Disabled',
+      authorEmail: 'comments-policy-report@example.com',
+      content: 'Please keep this temporary comment clean so report policy can be tested.',
+      requestId: reportDisabledRequestId,
+    });
+    const reportDisabled = await reportCommentExpectFailure({
+      commentId: reportDisabledComment.id,
+      reason: 'harassment',
+      requestId: reportDisabledRequestId,
+    });
+    assert(reportDisabled.status === 403, `Reports-disabled policy should reject with 403: ${JSON.stringify(reportDisabled)}`);
+
     await moderateCommentInUi(client, 'Comments Smoke Approve', 'approved');
     const approved = await waitForCommentStatus(approveComment.id, approveRequestId, 'approved');
     assert(approved.reviewedBy, `Approved comment did not record reviewer: ${JSON.stringify(approved)}`);
@@ -506,16 +643,51 @@ const main = async () => {
     await deletePage(page.id);
     page = null;
     await waitForCommentsDeleted(requestIds);
+    await patchSiteCommentPolicy({
+      enabled: true,
+      moderationMode: 'manual',
+      allowGuests: true,
+      requireName: true,
+      requireEmail: false,
+      allowReplies: true,
+      enableReports: true,
+      blockedTerms: [],
+      closedMessage: 'Comments are closed for this site.',
+      sort: 'newest',
+    });
+    restoredPolicy = true;
 
     console.log(JSON.stringify({
       ok: true,
       siteId: SITE_ID,
+      policy: {
+        requireEmail: true,
+        reportsDisabled: true,
+        reportsDisabledStatus: 403,
+        blockedTerms: ['bannedphrase'],
+      },
       approvedCommentId: approveComment.id,
       rejectedCommentId: rejectComment.id,
       resolvedReportCommentId: reportedComment.id,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
+    if (!restoredPolicy) {
+      await patchSiteCommentPolicy({
+        enabled: true,
+        moderationMode: 'manual',
+        allowGuests: true,
+        requireName: true,
+        requireEmail: false,
+        allowReplies: true,
+        enableReports: true,
+        blockedTerms: [],
+        closedMessage: 'Comments are closed for this site.',
+        sort: 'newest',
+      }).catch((error) => {
+        console.warn('Unable to restore comment policy:', error instanceof Error ? error.message : error);
+      });
+    }
     await cleanup({ client, childProcess, userDataDir, pageId: page?.id });
   }
 };

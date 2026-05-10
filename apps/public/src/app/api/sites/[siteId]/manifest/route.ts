@@ -24,6 +24,7 @@ import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeCollectionListRoutePattern, normalizeCollectionRoutePattern } from '@/lib/collectionRoutes';
 import { PRODUCT_COLLECTION_SLUG, buildCommerceStorefrontContract } from '@/lib/commerceCatalog';
+import { normalizeSiteCommentPolicy } from '@/lib/commentPolicy';
 import { buildSiteNavigation } from '@/lib/navigation';
 import { normalizeRedirectRules } from '@/lib/redirectRules';
 
@@ -173,6 +174,7 @@ const buildRepositoryManifest = (
         customDomain: input.site.customDomain,
         status: input.site.isPublished ? 'published' : 'draft',
         themeTokens: input.site.theme,
+        commentPolicy: normalizeSiteCommentPolicy(input.site.settings?.commentPolicy),
       },
       contract: {
         version: 'backy.ai-frontend.v1',
@@ -470,6 +472,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           customDomain: site.customDomain,
           status: site.status,
           themeTokens: site.theme,
+          commentPolicy: normalizeSiteCommentPolicy(site.settings?.commentPolicy),
         },
         contract: {
           version: 'backy.ai-frontend.v1',
