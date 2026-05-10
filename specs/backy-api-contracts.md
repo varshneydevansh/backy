@@ -401,6 +401,16 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - Every successful update increments `data.version` and stores the previous reusable section snapshot in `section.metadata.reusableSection.history` for bounded version history.
   - Emits `reusableSection.update` admin audit logs with before/after snapshots, changed keys, and the resulting version.
 
+- `GET /api/admin/sites/:siteId/reusable-sections/:sectionId/metadata`
+  - Returns structured library metadata stored under `section.metadata.reusableSection.library` plus the current reusable-section version.
+  - Returns `{ success, requestId, data: { sectionId, metadata, library, version } }`.
+
+- `PATCH /api/admin/sites/:siteId/reusable-sections/:sectionId/metadata`
+  - Body accepts top-level fields or `{ metadata }`/`{ metadata: { reusableSection: { library } } }`.
+  - Supports `displayName`, `summary`, `usageNotes`, `thumbnailMediaId`, `previewPath`, `labels`, `frontendDesignTemplateId`, `designSystem`, and `owner`.
+  - Normalizes duplicate labels, validates preview paths, supports optimistic conflict guards, preserves existing version history, and increments the reusable-section version for every successful metadata edit.
+  - Emits `reusableSection.metadata.update` admin audit logs with changed keys and resulting version.
+
 - `DELETE /api/admin/sites/:siteId/reusable-sections/:sectionId`
   - Deletes the saved section from the current runtime adapter.
   - Emits `reusableSection.delete` admin audit logs with the deleted section snapshot.
@@ -440,7 +450,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - Emits `reusableSection.import` admin audit logs with created/updated counts, slugs, section IDs, and upsert metadata.
   - Returns `{ success, requestId, data: { import: { created, updated, total }, sections } }`.
 
-Current reusable-section endpoints persist to `data/backy/admin-content.json` in demo mode and to the configured repository adapter otherwise. The editor library can load active sections, save the selected element tree, rename/delete saved entries, insert saved sections as synced canvas instances with source metadata, refresh selected instances from the saved source, detach instances into independent editable copies, and keep storing concrete canvas trees for public rendering. Backend instance registry/propagation can now discover and refresh synced section copies across pages and blog posts. Active sections are also exposed through the public reusable-section endpoints, manifest, OpenAPI document, and SDK for custom frontends. Production completion still requires richer metadata management and RBAC enforcement.
+Current reusable-section endpoints persist to `data/backy/admin-content.json` in demo mode and to the configured repository adapter otherwise. The editor library can load active sections, save the selected element tree, rename/delete saved entries, insert saved sections as synced canvas instances with source metadata, refresh selected instances from the saved source, detach instances into independent editable copies, and keep storing concrete canvas trees for public rendering. Backend instance registry/propagation can now discover and refresh synced section copies across pages and blog posts. Active sections are also exposed through the public reusable-section endpoints, manifest, OpenAPI document, and SDK for custom frontends. Production completion still requires RBAC enforcement.
 
 ### 3.5 Forms
 - `POST /api/admin/sites/:siteId/forms`

@@ -1854,6 +1854,46 @@ try {
       entry.metadata?.upsert === true
     )), `${importReusableSectionAudit.url} missing reusable section import audit log`);
 
+    const metadataUpdate = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}/metadata`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        expectedVersion: 5,
+        displayName: 'Contract Library Hero',
+        summary: 'Reusable section metadata smoke',
+        usageNotes: 'Use on marketing landing pages.',
+        thumbnailMediaId: createdMediaId,
+        previewPath: '/contract-preview',
+        labels: ['hero', 'Marketing', 'hero'],
+        frontendDesignTemplateId: 'contract-front-end-template',
+        designSystem: { tokenSet: 'contract', componentRole: 'hero' },
+        owner: { team: 'content' },
+        updatedBy: 'contract-smoke',
+      }),
+    });
+    assert(metadataUpdate.response.status === 200, `${metadataUpdate.url} expected 200, got ${metadataUpdate.response.status}`);
+    assert(metadataUpdate.json?.data?.version === 6, `${metadataUpdate.url} did not increment reusable section version for metadata`);
+    assert(metadataUpdate.json?.data?.library?.displayName === 'Contract Library Hero', `${metadataUpdate.url} missing library display name`);
+    assert(metadataUpdate.json?.data?.library?.thumbnailMediaId === createdMediaId, `${metadataUpdate.url} missing thumbnail media id`);
+    assert(metadataUpdate.json?.data?.library?.labels?.length === 2, `${metadataUpdate.url} did not normalize duplicate labels`);
+    assert(metadataUpdate.json?.data?.section?.metadata?.reusableSection?.library?.designSystem?.tokenSet === 'contract', `${metadataUpdate.url} missing design-system metadata`);
+    const metadataRead = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}/metadata`);
+    assert(metadataRead.response.status === 200, `${metadataRead.url} expected 200, got ${metadataRead.response.status}`);
+    assert(metadataRead.json?.data?.library?.displayName === 'Contract Library Hero', `${metadataRead.url} did not read structured metadata`);
+    assert(metadataRead.json?.data?.version === 6, `${metadataRead.url} did not expose metadata version`);
+    const metadataUpdateAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=reusableSection&entityId=${createdReusableSectionId}&action=reusableSection.metadata.update&requestId=${metadataUpdate.json.requestId}`);
+    assert(metadataUpdateAudit.response.status === 200, `${metadataUpdateAudit.url} expected reusable section metadata audit read`);
+    assert(metadataUpdateAudit.json?.data?.logs?.some((entry) => (
+      entry.entity === 'reusableSection' &&
+      entry.entityId === createdReusableSectionId &&
+      entry.action === 'reusableSection.metadata.update' &&
+      entry.requestId === metadataUpdate.json.requestId &&
+      entry.metadata?.changedKeys?.includes('displayName') &&
+      entry.metadata?.version === 6
+    )), `${metadataUpdateAudit.url} missing reusable section metadata audit log`);
+
     const activeList = await request(`/api/admin/sites/${createdSiteId}/reusable-sections`);
     assert(!activeList.json?.data?.sections?.some((section) => section.id === createdReusableSectionId), `${activeList.url} included archived section in active default list`);
 
