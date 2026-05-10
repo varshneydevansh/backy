@@ -203,6 +203,7 @@ export async function POST(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const { searchParams } = new URL(request.url);
   const mode = normalizeImportMode(searchParams.get('mode'));
+  const dryRun = searchParams.get('dryRun') === 'true';
   const access = requireAdminAccess(request, requestId, { permission: 'users.create' });
   if (access instanceof NextResponse) {
     return access;
@@ -263,6 +264,11 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
+        if (dryRun) {
+          updatedUsers.push(nextUser);
+          continue;
+        }
+
         const updated = repositories
           ? (await repositories.users.update(existing.id, {
               fullName: row.fullName,
@@ -282,6 +288,21 @@ export async function POST(request: NextRequest) {
         }
         continue;
       }
+      if (dryRun) {
+        createdUsers.push({
+          id: `preview_${row.email.replace(/[^a-z0-9]+/gi, '_')}`,
+          fullName: row.fullName,
+          email: row.email,
+          role: row.role,
+          status: row.status,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          lastActiveAt: row.status === 'active' ? new Date().toISOString() : null,
+          invitedAt: row.status === 'invited' ? new Date().toISOString() : null,
+        });
+        continue;
+      }
+
       const user = repositories
         ? (await repositories.users.create({
             fullName: row.fullName,
@@ -296,29 +317,31 @@ export async function POST(request: NextRequest) {
 
     const changedUsers = [...createdUsers, ...updatedUsers];
 
-    await recordAdminAudit({
-      repositories,
-      entity: 'user',
-      entityId: 'import',
-      action: mode === 'upsert' ? 'user.import.upsert' : 'user.import.create',
-      after: {
-        created: createdUsers.length,
-        updated: updatedUsers.length,
-        skipped,
-        errors: errors.length,
-      },
-      metadata: {
-        mode,
-        created: createdUsers.length,
-        updated: updatedUsers.length,
-        skipped,
-        errors: errors.length,
-        userIds: changedUsers.map((user) => user.id),
-        emails: changedUsers.map((user) => user.email),
-        requestedById: access.session?.user.id || null,
-      },
-      requestId,
-    });
+    if (!dryRun) {
+      await recordAdminAudit({
+        repositories,
+        entity: 'user',
+        entityId: 'import',
+        action: mode === 'upsert' ? 'user.import.upsert' : 'user.import.create',
+        after: {
+          created: createdUsers.length,
+          updated: updatedUsers.length,
+          skipped,
+          errors: errors.length,
+        },
+        metadata: {
+          mode,
+          created: createdUsers.length,
+          updated: updatedUsers.length,
+          skipped,
+          errors: errors.length,
+          userIds: changedUsers.map((user) => user.id),
+          emails: changedUsers.map((user) => user.email),
+          requestedById: access.session?.user.id || null,
+        },
+        requestId,
+      });
+    }
 
     return NextResponse.json({
       success: true,
@@ -327,6 +350,7 @@ export async function POST(request: NextRequest) {
         users: changedUsers,
         import: {
           mode,
+          dryRun,
           created: createdUsers.length,
           updated: updatedUsers.length,
           skipped,

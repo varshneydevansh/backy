@@ -976,6 +976,7 @@ export interface UserImportError {
 
 export interface UserImportResult {
   mode?: 'create' | 'upsert';
+  dryRun?: boolean;
   created: number;
   updated: number;
   skipped: number;
@@ -2244,10 +2245,11 @@ export async function bulkUpdateUsers(input: UserBulkInput): Promise<UserBulkRes
 
 export async function importUsersCsv(
   csv: string,
-  options: { mode?: 'create' | 'upsert' } = {},
+  options: { mode?: 'create' | 'upsert'; dryRun?: boolean } = {},
 ): Promise<UserImportResult> {
   const query = new URLSearchParams();
   if (options.mode === 'upsert') query.set('mode', 'upsert');
+  if (options.dryRun) query.set('dryRun', 'true');
 
   const response = await adminFetch(`${getAdminApiBase()}/users/import?${query.toString()}`, {
     method: 'POST',

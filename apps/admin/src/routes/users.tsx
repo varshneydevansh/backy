@@ -260,11 +260,12 @@ function UsersListView() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importMode, setImportMode] = useState<'create' | 'upsert'>('create');
   const [isImportingUsers, setIsImportingUsers] = useState(false);
+  const [isPreviewingImport, setIsPreviewingImport] = useState(false);
   const [importResult, setImportResult] = useState<UserImportResult | null>(null);
   const [userAuditLogs, setUserAuditLogs] = useState<AdminAuditLog[]>([]);
   const [isLoadingUserAudit, setIsLoadingUserAudit] = useState(false);
   const [userAuditError, setUserAuditError] = useState<string | null>(null);
-  const isUserMutationBusy = updatingUserId !== null || isBulkActionBusy || isImportingUsers;
+  const isUserMutationBusy = updatingUserId !== null || isBulkActionBusy || isImportingUsers || isPreviewingImport;
   const isUsersBusy = isLoading || isUserMutationBusy;
   const adminBaseUrl = useMemo(() => getAdminBaseUrl(), []);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
@@ -601,20 +602,33 @@ function UsersListView() {
     URL.revokeObjectURL(url);
   };
 
-  const handleImportUsers = async (file: File | null | undefined) => {
+  const openImportFile = (dryRun: boolean) => {
+    if (isUsersBusy || !importInputRef.current) return;
+
+    importInputRef.current.dataset.importDryRun = dryRun ? 'true' : 'false';
+    importInputRef.current.click();
+  };
+
+  const handleImportUsers = async (file: File | null | undefined, dryRun: boolean) => {
     if (!file || isUsersBusy) return;
 
-    setIsImportingUsers(true);
+    if (dryRun) {
+      setIsPreviewingImport(true);
+    } else {
+      setIsImportingUsers(true);
+    }
     setImportResult(null);
     setNotice(null);
 
     try {
       const csv = await file.text();
-      const result = await importUsersCsv(csv, { mode: importMode });
+      const result = await importUsersCsv(csv, { mode: importMode, dryRun });
       setImportResult(result);
-      setNotice(`Imported ${result.created} user${result.created === 1 ? '' : 's'}; updated ${result.updated}; skipped ${result.skipped}; ${result.errors.length} row issue${result.errors.length === 1 ? '' : 's'}.`);
-      await loadUsers();
-      await loadUserAuditLogs();
+      setNotice(`${dryRun ? 'Previewed' : 'Imported'} ${result.created} user${result.created === 1 ? '' : 's'}; updated ${result.updated}; skipped ${result.skipped}; ${result.errors.length} row issue${result.errors.length === 1 ? '' : 's'}.`);
+      if (!dryRun) {
+        await loadUsers();
+        await loadUserAuditLogs();
+      }
     } catch (error) {
       const details = error && typeof error === 'object' && 'details' in error
         ? (error as { details?: unknown }).details
@@ -625,11 +639,12 @@ function UsersListView() {
           ))
         : [];
       if (errors.length > 0) {
-        setImportResult({ mode: importMode, created: 0, updated: 0, skipped: 0, errors });
+        setImportResult({ mode: importMode, dryRun, created: 0, updated: 0, skipped: 0, errors });
       }
       setNotice(error instanceof Error ? error.message : 'Unable to import users from CSV.');
     } finally {
       setIsImportingUsers(false);
+      setIsPreviewingImport(false);
       if (importInputRef.current) {
         importInputRef.current.value = '';
       }
@@ -1012,7 +1027,10 @@ function UsersListView() {
         accept=".csv,text/csv"
         className="hidden"
         aria-label="Import users CSV"
-        onChange={(event) => void handleImportUsers(event.currentTarget.files?.[0])}
+        onChange={(event) => void handleImportUsers(
+          event.currentTarget.files?.[0],
+          event.currentTarget.dataset.importDryRun === 'true',
+        )}
       />
       <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="users-command-center">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -1082,7 +1100,16 @@ function UsersListView() {
               type="button"
               variant="outline"
               disabled={isUsersBusy}
-              onClick={() => importInputRef.current?.click()}
+              onClick={() => openImportFile(true)}
+              iconStart={<ClipboardList className="size-4" />}
+            >
+              {isPreviewingImport ? 'Previewing...' : 'Preview CSV'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isUsersBusy}
+              onClick={() => openImportFile(false)}
               iconStart={<Upload className="size-4" />}
             >
               {isImportingUsers ? 'Importing...' : 'Import CSV'}
@@ -1191,7 +1218,16 @@ function UsersListView() {
                     type="button"
                     variant="outline"
                     disabled={isUsersBusy}
-                    onClick={() => importInputRef.current?.click()}
+                    onClick={() => openImportFile(true)}
+                    iconStart={<ClipboardList className="size-4" />}
+                  >
+                    Preview CSV
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isUsersBusy}
+                    onClick={() => openImportFile(false)}
                     iconStart={<Upload className="size-4" />}
                   >
                     Import CSV
@@ -1401,7 +1437,14 @@ function UsersListView() {
             {importResult && (
               <div className="mt-4 rounded-lg border border-border bg-background p-3 text-sm" data-testid="users-import-result">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold text-foreground">Import result</span>
+                  <span className="font-semibold text-foreground">
+                    {importResult.dryRun ? 'Import preview' : 'Import result'}
+                  </span>
+                  {importResult.dryRun && (
+                    <span className="rounded-full bg-purple-50 px-2 py-0.5 text-xs font-semibold text-purple-700">
+                      No changes applied
+                    </span>
+                  )}
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
                     {importResult.created} created
                   </span>

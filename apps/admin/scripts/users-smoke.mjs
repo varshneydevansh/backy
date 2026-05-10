@@ -957,6 +957,7 @@ const setUsersBulkStatus = async (client, fullNames, status) => {
 const importUsersThroughUi = async (client, csvPath, expectedName, options = {}) => {
   const {
     mode = 'create',
+    dryRun = false,
     created = 1,
     updated = 0,
     skipped = 1,
@@ -980,6 +981,7 @@ const importUsersThroughUi = async (client, csvPath, expectedName, options = {})
       };
     }
     input.setAttribute('data-users-smoke-import-input', 'true');
+    input.setAttribute('data-import-dry-run', ${JSON.stringify(dryRun ? 'true' : 'false')});
     return { ok: true };
   })()`);
   assert(markResult.ok, `Unable to find users import input: ${JSON.stringify(markResult)}`);
@@ -1002,14 +1004,15 @@ const importUsersThroughUi = async (client, csvPath, expectedName, options = {})
       const text = result?.textContent || '';
       return {
         hasResult: Boolean(result),
+        hasPreview: ${JSON.stringify(dryRun)} ? text.includes('Import preview') && text.includes('No changes applied') : text.includes('Import result'),
         hasCreated: text.includes(${JSON.stringify(`${created} created`)}),
         hasUpdated: text.includes(${JSON.stringify(`${updated} updated`)}),
         hasSkipped: text.includes(${JSON.stringify(`${skipped} skipped`)}),
-        hasUser: document.body?.innerText?.includes(${JSON.stringify(expectedName)}) || false,
+        hasUser: ${JSON.stringify(dryRun)} ? true : (document.body?.innerText?.includes(${JSON.stringify(expectedName)}) || false),
         text: text.slice(0, 800),
       };
     })()`);
-    if (state.hasResult && state.hasCreated && state.hasUpdated && state.hasSkipped && state.hasUser) {
+    if (state.hasResult && state.hasPreview && state.hasCreated && state.hasUpdated && state.hasSkipped && state.hasUser) {
       return state;
     }
     if (attempt === 119) {
@@ -1180,6 +1183,9 @@ const main = async () => {
       ].join('\n'),
       'utf8',
     );
+    await importUsersThroughUi(client, importCsvPath, importedFullName, { dryRun: true });
+    const previewOnlyUser = await findUserByEmail(importedEmail);
+    assert(!previewOnlyUser, `Dry-run import should not create users: ${JSON.stringify(previewOnlyUser).slice(0, 500)}`);
     await importUsersThroughUi(client, importCsvPath, importedFullName);
     const importedUser = await waitForUser(importedEmail, (user) => user.fullName === importedFullName && user.role === 'editor' && user.status === 'invited');
     importedUserId = importedUser.id;
