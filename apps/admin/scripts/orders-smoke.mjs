@@ -130,6 +130,11 @@ const deleteCollectionRecord = async (collectionId, recordId) => {
   });
 };
 
+const csvEscape = (value) => {
+  const text = value === null || value === undefined ? '' : String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
 const waitForOrderValue = async (collectionId, slug, predicate, description) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const order = await getCollectionRecordBySlug(collectionId, slug);
@@ -460,10 +465,121 @@ const assertOrdersLayout = async (client) => {
     editor: Boolean(document.querySelector('#orders-editor')),
     checkout: document.body?.innerText?.includes('/commerce/orders') || false,
     privateContract: document.body?.innerText?.includes('Private order backend contract') || false,
+    hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.command && layout.api && layout.metrics && layout.queue && layout.editor && layout.checkout && layout.privateContract, `Orders page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.command && layout.api && layout.metrics && layout.queue && layout.editor && layout.checkout && layout.privateContract && layout.hasImportControls, `Orders page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
+};
+
+const assertOrderCsvImport = async ({ collectionId, suffix }) => {
+  const orderNumber = `ORD-IMPORT-${suffix.toUpperCase()}`;
+  const slug = orderNumber.toLowerCase();
+  const lineItems = [{
+    id: 'csv-order-item',
+    productId: '',
+    slug: 'imported-order-product',
+    title: `Imported Order Product ${suffix}`,
+    sku: `IMP-${suffix.toUpperCase()}`,
+    variant: {
+      title: 'CSV',
+      option: 'CSV',
+      sku: `IMP-${suffix.toUpperCase()}-CSV`,
+    },
+    quantity: 3,
+    price: 20,
+    currency: 'USD',
+    lineTotal: 60,
+  }];
+  const headers = [
+    'slug',
+    'status',
+    'ordernumber',
+    'customername',
+    'email',
+    'phone',
+    'total',
+    'subtotal',
+    'taxamount',
+    'shippingamount',
+    'discountamount',
+    'currency',
+    'items',
+    'ordersource',
+    'checkoutsessionid',
+    'customerid',
+    'orderstatus',
+    'paymentstatus',
+    'paymentprovider',
+    'paymentreference',
+    'paidat',
+    'fulfillmentstatus',
+    'fulfillmentcarrier',
+    'trackingnumber',
+    'trackingurl',
+    'fulfilledat',
+    'shippingaddress',
+    'billingaddress',
+    'refundamount',
+    'refundreason',
+    'notes',
+  ];
+  const row = [
+    slug,
+    'published',
+    orderNumber,
+    'Imported Order Buyer',
+    'imported-order@example.com',
+    '+1 555 0303',
+    '65',
+    '60',
+    '4',
+    '6',
+    '5',
+    'USD',
+    JSON.stringify(lineItems),
+    'import',
+    `cs_import_${suffix}`,
+    `cus_import_${suffix}`,
+    'paid',
+    'paid',
+    'manual',
+    `pi_import_${suffix}`,
+    '2026-05-10T10:00:00.000Z',
+    'processing',
+    'UPS',
+    `1ZIMPORT${suffix.toUpperCase()}`,
+    `https://carrier.example/import/${suffix}`,
+    '',
+    'Imported shipping address',
+    'Imported billing address',
+    '0',
+    '',
+    'Imported order through CSV smoke.',
+  ];
+  const csv = `${headers.join(',')}\n${row.map(csvEscape).join(',')}\n`;
+  const result = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records/import?upsert=true`, {
+    method: 'POST',
+    headers: { 'content-type': 'text/csv; charset=utf-8' },
+    body: csv,
+  });
+  const summary = result.data?.import;
+  assert(summary?.created === 1 || summary?.updated === 1, `Order CSV import did not save a record: ${JSON.stringify(summary)}`);
+  assert(summary.skipped === 0, `Order CSV import skipped rows: ${JSON.stringify(summary)}`);
+
+  const record = await getCollectionRecordBySlug(collectionId, slug);
+  assert(record?.id, `Imported order was not found by slug ${slug}`);
+  assert(record.values?.ordernumber === orderNumber, `Imported order number did not persist: ${JSON.stringify(record.values)}`);
+  assert(record.values?.total === 65, `Imported total did not stay numeric: ${JSON.stringify(record.values?.total)}`);
+  assert(record.values?.taxamount === 4, `Imported tax did not stay numeric: ${JSON.stringify(record.values?.taxamount)}`);
+  assert(record.values?.shippingamount === 6, `Imported shipping did not stay numeric: ${JSON.stringify(record.values?.shippingamount)}`);
+  assert(record.values?.discountamount === 5, `Imported discount did not stay numeric: ${JSON.stringify(record.values?.discountamount)}`);
+  assert(record.values?.ordersource === 'import', `Imported source was unexpected: ${JSON.stringify(record.values?.ordersource)}`);
+  assert(record.values?.paymentstatus === 'paid', `Imported payment status was unexpected: ${JSON.stringify(record.values?.paymentstatus)}`);
+  assert(record.values?.fulfillmentstatus === 'processing', `Imported fulfillment status was unexpected: ${JSON.stringify(record.values?.fulfillmentstatus)}`);
+  assert(JSON.parse(record.values?.items || '[]')?.[0]?.quantity === 3, `Imported items JSON was unexpected: ${JSON.stringify(record.values?.items)}`);
+
+  return record;
 };
 
 const fillOrderEditor = async (client, suffix) => {
@@ -647,7 +763,7 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, collectionId, orderRecordId, originalOrdersCollection }) => {
+const cleanup = async ({ client, childProcess, userDataDir, collectionId, orderRecordId, importedOrderRecordId, originalOrdersCollection }) => {
   if (client) {
     try {
       await client.send('Browser.close');
@@ -676,6 +792,14 @@ const cleanup = async ({ client, childProcess, userDataDir, collectionId, orderR
     }
   }
 
+  if (collectionId && importedOrderRecordId) {
+    try {
+      await deleteCollectionRecord(collectionId, importedOrderRecordId);
+    } catch {
+      // The smoke deletes imported records after assertion; this is only a fallback.
+    }
+  }
+
   try {
     const current = await findCollection(ORDERS_COLLECTION_SLUG);
     await restoreCollection(originalOrdersCollection, current);
@@ -690,6 +814,7 @@ const main = async () => {
   let userDataDir;
   let collectionId;
   let orderRecordId;
+  let importedOrderRecordId;
   const originalOrdersCollection = snapshotCollection(await findCollection(ORDERS_COLLECTION_SLUG));
   const suffix = Date.now().toString(36);
 
@@ -712,6 +837,11 @@ const main = async () => {
     const ordersCollection = await findCollection(ORDERS_COLLECTION_SLUG);
     collectionId = ordersCollection?.id;
     assert(collectionId, 'Orders collection was not available after setup');
+
+    const importedOrder = await assertOrderCsvImport({ collectionId, suffix });
+    importedOrderRecordId = importedOrder.id;
+    await deleteCollectionRecord(collectionId, importedOrderRecordId);
+    importedOrderRecordId = null;
 
     await assertOrdersLayout(client);
     const { orderNumber, slug } = await fillOrderEditor(client, suffix);
@@ -770,7 +900,7 @@ const main = async () => {
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
-    await cleanup({ client, childProcess, userDataDir, collectionId, orderRecordId, originalOrdersCollection });
+    await cleanup({ client, childProcess, userDataDir, collectionId, orderRecordId, importedOrderRecordId, originalOrdersCollection });
   }
 };
 

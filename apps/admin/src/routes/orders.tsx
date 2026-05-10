@@ -1,4 +1,4 @@
-import { FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
@@ -11,6 +11,7 @@ import {
   Download,
   Clock3,
   ExternalLink,
+  FileText,
   PackageCheck,
   Plus,
   Receipt,
@@ -22,11 +23,13 @@ import {
   Sparkles,
   Trash2,
   Truck,
+  Upload,
 } from 'lucide-react';
 import {
   createCollection,
   createCollectionRecord,
   deleteCollectionRecord,
+  importCollectionRecordsCsv,
   listCollectionRecords,
   listCollections,
   updateCollection,
@@ -264,6 +267,40 @@ const ORDER_EXPORT_COLUMNS = [
   'updated_at',
 ] as const;
 
+const ORDER_IMPORT_COLUMNS = [
+  'slug',
+  'status',
+  'ordernumber',
+  'customername',
+  'email',
+  'phone',
+  'total',
+  'subtotal',
+  'taxamount',
+  'shippingamount',
+  'discountamount',
+  'currency',
+  'items',
+  'ordersource',
+  'checkoutsessionid',
+  'customerid',
+  'orderstatus',
+  'paymentstatus',
+  'paymentprovider',
+  'paymentreference',
+  'paidat',
+  'fulfillmentstatus',
+  'fulfillmentcarrier',
+  'trackingnumber',
+  'trackingurl',
+  'fulfilledat',
+  'shippingaddress',
+  'billingaddress',
+  'refundamount',
+  'refundreason',
+  'notes',
+] as const;
+
 const ORDER_BACKEND_SYSTEMS = [
   {
     key: 'capture',
@@ -353,7 +390,9 @@ function OrdersRoute() {
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const isOrdersBusy = isLoading || isSaving;
+  const [isImportingOrders, setIsImportingOrders] = useState(false);
+  const isOrdersBusy = isLoading || isSaving || isImportingOrders;
+  const orderImportInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingDeleteOrder, setPendingDeleteOrder] = useState<CollectionRecord | null>(null);
@@ -1136,6 +1175,53 @@ function OrdersRoute() {
     URL.revokeObjectURL(url);
     setNotice(`${filteredOrders.length} visible order${filteredOrders.length === 1 ? '' : 's'} exported.`);
   };
+  const downloadOrderImportTemplate = () => {
+    if (isOrdersBusy) return;
+
+    const csv = `${ORDER_IMPORT_COLUMNS.join(',')}\n`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSite?.slug || activeSiteId}-orders-import-template.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice('Order import template downloaded.');
+  };
+  const importOrdersCsv = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (!ordersCollection) return;
+    if (isOrdersBusy) return;
+
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImportingOrders(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const csv = await file.text();
+      const result = await importCollectionRecordsCsv(activeSiteId, ordersCollection.id, csv, { upsert: true });
+      const refreshed = await listCollectionRecords(activeSiteId, ordersCollection.id, {
+        limit: 100,
+        sortBy: 'updatedAt',
+        sortDirection: 'desc',
+      });
+      setOrders(refreshed.records);
+      setNotice(`${result.created} created, ${result.updated} updated, ${result.skipped} skipped from ${file.name}.`);
+      if (result.errors.length > 0) {
+        const firstError = result.errors[0];
+        setError(`Row ${firstError.row} skipped: ${firstError.message}`);
+      }
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : 'Unable to import orders');
+    } finally {
+      setIsImportingOrders(false);
+      event.target.value = '';
+    }
+  };
   const clearOrderFilters = () => {
     if (isOrdersBusy) return;
 
@@ -1216,6 +1302,14 @@ function OrdersRoute() {
           {notice}
         </div>
       )}
+      <input
+        ref={orderImportInputRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        aria-label="Import orders CSV"
+        onChange={(event) => void importOrdersCsv(event)}
+      />
 
       <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="orders-command-center">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -1243,6 +1337,12 @@ function OrdersRoute() {
             </Button>
             <Button variant="outline" onClick={exportOrdersCsv} disabled={isOrdersBusy || filteredOrders.length === 0} iconStart={<Download className="size-4" />}>
               Export CSV
+            </Button>
+            <Button variant="outline" onClick={downloadOrderImportTemplate} disabled={!ordersCollection || isOrdersBusy} iconStart={<FileText className="size-4" />}>
+              CSV template
+            </Button>
+            <Button variant="outline" onClick={() => orderImportInputRef.current?.click()} disabled={!ordersCollection || isOrdersBusy} iconStart={<Upload className="size-4" />}>
+              {isImportingOrders ? 'Importing...' : 'Import CSV'}
             </Button>
             <Button variant="outline" onClick={openProductsWorkspace} disabled={isOrdersBusy} iconStart={<ShoppingCart className="size-4" />}>
               Products
@@ -1337,6 +1437,12 @@ function OrdersRoute() {
                 </Button>
                 <Button onClick={exportOrdersCsv} disabled={isOrdersBusy || filteredOrders.length === 0} iconStart={<Download className="size-4" />}>
                   Export CSV
+                </Button>
+                <Button variant="outline" onClick={downloadOrderImportTemplate} disabled={isOrdersBusy} iconStart={<FileText className="size-4" />}>
+                  CSV template
+                </Button>
+                <Button variant="outline" onClick={() => orderImportInputRef.current?.click()} disabled={isOrdersBusy} iconStart={<Upload className="size-4" />}>
+                  {isImportingOrders ? 'Importing...' : 'Import CSV'}
                 </Button>
                 <Button onClick={() => void copyOrdersApiUrl(adminOrdersApiUrl, 'Internal orders API URL')} disabled={isOrdersBusy} iconStart={<Copy className="size-4" />}>
                   Copy admin API
