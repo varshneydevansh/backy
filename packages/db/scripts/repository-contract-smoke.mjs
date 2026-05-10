@@ -1113,6 +1113,30 @@ const reusableSection = (await reusableSectionRepository.create({
 assert(reusableSection.id === 'reusableSections_1', 'Expected fake reusable section id');
 assert((await reusableSectionRepository.getBySlug(site.id, 'saved-hero'))?.id === reusableSection.id, 'Expected reusable section getBySlug');
 assert((await reusableSectionRepository.list({ siteId: site.id, category: 'hero', tag: 'landing', search: 'saved' })).items.length === 1, 'Expected reusable section filters');
+const reusableSectionAuditEntry = await auditLogRepository.record({
+  siteId: site.id,
+  teamId: site.teamId,
+  actorId: 'user_admin',
+  entity: 'reusableSection',
+  entityId: reusableSection.id,
+  action: 'reusableSection.create',
+  after: {
+    id: reusableSection.id,
+    slug: reusableSection.slug,
+  },
+  metadata: {
+    requestId: 'req_reusable_section_contract',
+  },
+  requestId: 'req_reusable_section_contract',
+});
+assert(reusableSectionAuditEntry.entity === 'reusableSection', 'Expected reusable section audit entity mapping');
+assert((await auditLogRepository.list({
+  siteId: site.id,
+  entity: 'reusableSection',
+  entityId: reusableSection.id,
+  action: 'reusableSection.create',
+  requestId: 'req_reusable_section_contract',
+})).items.length === 1, 'Expected reusable section audit log filters');
 const archivedReusableSection = (await reusableSectionRepository.update(site.id, reusableSection.id, {
   status: 'archived',
   tags: ['archived'],

@@ -5,6 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   createReusableSection,
   getReusableSectionByIdOrSlug,
@@ -150,6 +151,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const imported = [];
       let created = 0;
       let updated = 0;
+      const beforeSections = new Map<string, unknown>();
       for (const section of sections) {
         const existing = await repositories.reusableSections.getBySlug(site.id, section.slug);
         if (existing && !upsert) {
@@ -157,6 +159,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }
 
         if (existing) {
+          beforeSections.set(existing.id, existing);
           const result = (await repositories.reusableSections.update(site.id, existing.id, {
             name: section.name,
             description: section.description ?? null,
@@ -197,6 +200,30 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         reason: 'reusable-section-imported',
         requestId,
       });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'reusableSection',
+        entityId: imported.length === 1 ? imported[0].id : 'bulk',
+        action: 'reusableSection.import',
+        before: {
+          sections: imported
+            .map((section) => beforeSections.get(section.id))
+            .filter(Boolean),
+        },
+        after: {
+          sections: imported,
+        },
+        metadata: {
+          created,
+          updated,
+          total: imported.length,
+          upsert,
+          sectionIds: imported.map((section) => section.id),
+          slugs: imported.map((section) => section.slug),
+        },
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -217,6 +244,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const imported = [];
     let created = 0;
     let updated = 0;
+    const beforeSections = new Map<string, unknown>();
     for (const section of sections) {
       const existing = getReusableSectionByIdOrSlug(site.id, section.slug);
       if (existing && !upsert) {
@@ -224,6 +252,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       if (existing) {
+        beforeSections.set(existing.id, existing);
         const result = updateReusableSection(site.id, existing.id, {
           name: section.name,
           description: section.description ?? null,
@@ -256,6 +285,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         created += 1;
       }
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'reusableSection',
+      entityId: imported.length === 1 ? imported[0].id : 'bulk',
+      action: 'reusableSection.import',
+      before: {
+        sections: imported
+          .map((section) => beforeSections.get(section.id))
+          .filter(Boolean),
+      },
+      after: {
+        sections: imported,
+      },
+      metadata: {
+        created,
+        updated,
+        total: imported.length,
+        upsert,
+        sectionIds: imported.map((section) => section.id),
+        slugs: imported.map((section) => section.slug),
+      },
+      requestId,
+    });
 
     return NextResponse.json({
       success: true,

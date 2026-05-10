@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   createReusableSection,
   getReusableSectionByIdOrSlug,
@@ -204,6 +205,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         reason: 'reusable-section-created',
         requestId,
       });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'reusableSection',
+        entityId: section.id,
+        action: 'reusableSection.create',
+        after: section,
+        metadata: {
+          slug: section.slug,
+          category: section.category,
+          status: section.status,
+        },
+        requestId,
+      });
 
       return NextResponse.json(
         { success: true, requestId, data: { section, cacheInvalidation } },
@@ -249,6 +264,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }),
       createdBy,
       updatedBy,
+    });
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'reusableSection',
+      entityId: section.id,
+      action: 'reusableSection.create',
+      after: section,
+      metadata: {
+        slug: section.slug,
+        category: section.category,
+        status: section.status,
+      },
+      requestId,
     });
 
     return NextResponse.json(

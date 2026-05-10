@@ -457,7 +457,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Reusable-section export/import now supports JSON portability across sites, duplicate-slug protection, and upsert imports that increment version history.
   - Reusable-section restore now lets admins restore an older saved-section version with slug conflict checks and restore provenance.
   - Reusable-section instance registry/propagation now discovers synced page/blog instances, reports stale source timestamps, and bulk-refreshes synced instances while preserving root placement.
-  - Still missing richer saved-section metadata editing plus RBAC/audit hardening for section management operations.
+  - Reusable-section create/update/delete/restore/import/instance-propagation now emits queryable admin audit logs with request-id correlation.
+  - Still missing richer saved-section metadata editing plus RBAC enforcement for section management operations.
 
 ## Priority Order
 **Phase 1: Critical Fixes (Immediate)**

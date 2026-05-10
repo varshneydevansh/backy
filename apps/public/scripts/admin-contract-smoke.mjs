@@ -1536,6 +1536,15 @@ try {
     assert(create.json?.data?.section?.metadata?.reusableSection?.version === 1, `${create.url} missing initial reusable section version`);
     createdReusableSectionId = create.json.data.section.id;
     const initialReusableSectionUpdatedAt = create.json.data.section.updatedAt;
+    const createReusableSectionAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=reusableSection&entityId=${createdReusableSectionId}&action=reusableSection.create&requestId=${create.json.requestId}`);
+    assert(createReusableSectionAudit.response.status === 200, `${createReusableSectionAudit.url} expected reusable section create audit read`);
+    assert(createReusableSectionAudit.json?.data?.logs?.some((entry) => (
+      entry.entity === 'reusableSection' &&
+      entry.entityId === createdReusableSectionId &&
+      entry.action === 'reusableSection.create' &&
+      entry.requestId === create.json.requestId &&
+      entry.after?.id === createdReusableSectionId
+    )), `${createReusableSectionAudit.url} missing reusable section create audit log`);
 
     const instanceRoot = JSON.parse(JSON.stringify(create.json.data.section.content.elements[0]));
     instanceRoot.id = 'contract-section-instance-root';
@@ -1672,6 +1681,17 @@ try {
     assert(update.json?.data?.section?.status === 'archived', `${update.url} did not archive section`);
     assert(update.json?.data?.version === 2, `${update.url} did not return incremented reusable section version`);
     assert(update.json?.data?.section?.metadata?.reusableSection?.history?.some((entry) => entry.version === 1 && entry.name === 'Admin Contract Hero Section'), `${update.url} did not preserve previous reusable section revision`);
+    const updateReusableSectionAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=reusableSection&entityId=${createdReusableSectionId}&action=reusableSection.update&requestId=${update.json.requestId}`);
+    assert(updateReusableSectionAudit.response.status === 200, `${updateReusableSectionAudit.url} expected reusable section update audit read`);
+    assert(updateReusableSectionAudit.json?.data?.logs?.some((entry) => (
+      entry.entity === 'reusableSection' &&
+      entry.entityId === createdReusableSectionId &&
+      entry.action === 'reusableSection.update' &&
+      entry.requestId === update.json.requestId &&
+      entry.before?.id === createdReusableSectionId &&
+      entry.after?.id === createdReusableSectionId &&
+      entry.metadata?.changedKeys?.includes('content')
+    )), `${updateReusableSectionAudit.url} missing reusable section update audit log`);
 
     const staleUpdate = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}`, {
       method: 'PATCH',
@@ -1727,6 +1747,15 @@ try {
     assert(refreshInstances.response.status === 200, `${refreshInstances.url} expected 200, got ${refreshInstances.response.status}`);
     assert(refreshInstances.json?.data?.totals?.targets === 1, `${refreshInstances.url} expected one reusable section refresh target`);
     assert(refreshInstances.json?.data?.totals?.instances === 1, `${refreshInstances.url} expected one reusable section instance refresh`);
+    const refreshInstancesAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=reusableSection&entityId=${createdReusableSectionId}&action=reusableSection.instances.refresh&requestId=${refreshInstances.json.requestId}`);
+    assert(refreshInstancesAudit.response.status === 200, `${refreshInstancesAudit.url} expected reusable section instance refresh audit read`);
+    assert(refreshInstancesAudit.json?.data?.logs?.some((entry) => (
+      entry.entity === 'reusableSection' &&
+      entry.entityId === createdReusableSectionId &&
+      entry.action === 'reusableSection.instances.refresh' &&
+      entry.requestId === refreshInstances.json.requestId &&
+      entry.metadata?.instances === 1
+    )), `${refreshInstancesAudit.url} missing reusable section instance refresh audit log`);
     const refreshedInstancePage = await request(`/api/admin/sites/${createdSiteId}/pages/${createdReusableInstancePageId}`);
     assert(refreshedInstancePage.response.status === 200, `${refreshedInstancePage.url} expected 200, got ${refreshedInstancePage.response.status}`);
     assert(refreshedInstancePage.json?.data?.page?.content?.elements?.[0]?.id === 'contract-section-instance-root', `${refreshedInstancePage.url} did not preserve reusable instance root id`);
@@ -1754,6 +1783,16 @@ try {
     assert(restore.json?.data?.section?.status === 'active', `${restore.url} did not restore section status`);
     assert(restore.json?.data?.section?.metadata?.reusableSection?.restoredFromVersion === 1, `${restore.url} missing restore provenance`);
     assert(restore.json?.data?.section?.metadata?.reusableSection?.history?.some((entry) => entry.version === 2 && entry.name === 'Updated Contract Hero Section'), `${restore.url} did not preserve pre-restore section revision`);
+    const restoreReusableSectionAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=reusableSection&entityId=${createdReusableSectionId}&action=reusableSection.restore&requestId=${restore.json.requestId}`);
+    assert(restoreReusableSectionAudit.response.status === 200, `${restoreReusableSectionAudit.url} expected reusable section restore audit read`);
+    assert(restoreReusableSectionAudit.json?.data?.logs?.some((entry) => (
+      entry.entity === 'reusableSection' &&
+      entry.entityId === createdReusableSectionId &&
+      entry.action === 'reusableSection.restore' &&
+      entry.requestId === restore.json.requestId &&
+      entry.metadata?.restoredFromVersion === 1 &&
+      entry.after?.id === createdReusableSectionId
+    )), `${restoreReusableSectionAudit.url} missing reusable section restore audit log`);
 
     const rearchive = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}`, {
       method: 'PATCH',
@@ -1804,6 +1843,16 @@ try {
     assert(importUpsert.response.status === 200, `${importUpsert.url} expected 200, got ${importUpsert.response.status}`);
     assert(importUpsert.json?.data?.import?.updated === 1, `${importUpsert.url} expected one upserted reusable section`);
     assert(importUpsert.json?.data?.sections?.[0]?.metadata?.reusableSection?.version === 5, `${importUpsert.url} did not increment reusable section version on upsert import`);
+    const importReusableSectionAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=reusableSection&entityId=${createdReusableSectionId}&action=reusableSection.import&requestId=${importUpsert.json.requestId}`);
+    assert(importReusableSectionAudit.response.status === 200, `${importReusableSectionAudit.url} expected reusable section import audit read`);
+    assert(importReusableSectionAudit.json?.data?.logs?.some((entry) => (
+      entry.entity === 'reusableSection' &&
+      entry.entityId === createdReusableSectionId &&
+      entry.action === 'reusableSection.import' &&
+      entry.requestId === importUpsert.json.requestId &&
+      entry.metadata?.updated === 1 &&
+      entry.metadata?.upsert === true
+    )), `${importReusableSectionAudit.url} missing reusable section import audit log`);
 
     const activeList = await request(`/api/admin/sites/${createdSiteId}/reusable-sections`);
     assert(!activeList.json?.data?.sections?.some((section) => section.id === createdReusableSectionId), `${activeList.url} included archived section in active default list`);
@@ -1819,6 +1868,15 @@ try {
     const remove = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}`, { method: 'DELETE' });
     assert(remove.response.status === 200, `${remove.url} expected 200, got ${remove.response.status}`);
     assert(remove.json?.data?.deleted === true, `${remove.url} expected deleted true`);
+    const deleteReusableSectionAudit = await request(`/api/admin/audit-logs?siteId=${createdSiteId}&entity=reusableSection&entityId=${createdReusableSectionId}&action=reusableSection.delete&requestId=${remove.json.requestId}`);
+    assert(deleteReusableSectionAudit.response.status === 200, `${deleteReusableSectionAudit.url} expected reusable section delete audit read`);
+    assert(deleteReusableSectionAudit.json?.data?.logs?.some((entry) => (
+      entry.entity === 'reusableSection' &&
+      entry.entityId === createdReusableSectionId &&
+      entry.action === 'reusableSection.delete' &&
+      entry.requestId === remove.json.requestId &&
+      entry.before?.id === createdReusableSectionId
+    )), `${deleteReusableSectionAudit.url} missing reusable section delete audit log`);
     createdReusableSectionId = null;
   });
 

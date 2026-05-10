@@ -5,6 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   getReusableSectionByIdOrSlug,
   getSiteByIdOrSlug,
@@ -147,6 +148,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         reason: 'reusable-section-restored',
         requestId,
       });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'reusableSection',
+        entityId: updated.id,
+        action: 'reusableSection.restore',
+        before: section,
+        after: updated,
+        metadata: {
+          restoredFromVersion: target.version,
+          restoredFromUpdatedAt: target.updatedAt,
+          version: reusableSectionVersionFromMetadata(updated.metadata),
+        },
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -207,6 +223,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'reusableSection',
+      entityId: updated.id,
+      action: 'reusableSection.restore',
+      before: section,
+      after: updated,
+      metadata: {
+        restoredFromVersion: target.version,
+        restoredFromUpdatedAt: target.updatedAt,
+        version: reusableSectionVersionFromMetadata(updated.metadata),
+      },
+      requestId,
+    });
 
     return NextResponse.json({
       success: true,

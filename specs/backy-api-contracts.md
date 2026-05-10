@@ -382,6 +382,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - Body: `{ name, slug?, description?, category?, status?, tags?, content, sourceElementId?, createdBy?, updatedBy? }`.
   - Validates site existence, required name, required non-empty `content.elements`, and per-site slug conflicts.
   - Stores normal canvas `content.elements` plus `canvasSize`, so saved sections can be inserted back into the same editor/rendering model.
+  - Emits `reusableSection.create` admin audit logs with request-id correlation and the created section snapshot.
   - Returns `{ success, requestId, data: { section } }`.
 
 - `GET /api/admin/sites/:siteId/reusable-sections/:sectionId`
@@ -392,9 +393,11 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - Validates duplicate slugs against other sections in the same site.
   - Supports optimistic conflict guards with `expectedVersion` or `expectedUpdatedAt`; stale clients receive `409 REUSABLE_SECTION_VERSION_CONFLICT` with the current section in `error.details.section`.
   - Every successful update increments `data.version` and stores the previous reusable section snapshot in `section.metadata.reusableSection.history` for bounded version history.
+  - Emits `reusableSection.update` admin audit logs with before/after snapshots, changed keys, and the resulting version.
 
 - `DELETE /api/admin/sites/:siteId/reusable-sections/:sectionId`
   - Deletes the saved section from the current runtime adapter.
+  - Emits `reusableSection.delete` admin audit logs with the deleted section snapshot.
 
 - `GET /api/admin/sites/:siteId/reusable-sections/:sectionId/versions`
   - Lists the current reusable section version plus bounded historical snapshots from `metadata.reusableSection.history`.
@@ -404,6 +407,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - Restores a saved reusable-section version through the normal update path, preserving the pre-restore section as the next history entry.
   - Supports `expectedVersion` / `expectedUpdatedAt` conflict guards and returns `409 REUSABLE_SECTION_VERSION_CONFLICT` for stale clients.
   - Validates restored slugs against other sections and returns `409 SLUG_CONFLICT` if the historical slug is no longer available.
+  - Emits `reusableSection.restore` admin audit logs with before/after snapshots and restored-version metadata.
   - Returns `{ success, requestId, data: { restored, restoredFromVersion, version, section } }` and records restore provenance in `section.metadata.reusableSection.restoredFromVersion`.
 
 - `GET /api/admin/sites/:siteId/reusable-sections/:sectionId/instances`
@@ -415,6 +419,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - Bulk-refreshes synced reusable-section instances from the saved section source.
   - Body supports `{ targetType?, targetId?, dryRun?, updatedBy? }`.
   - Preserves instance root IDs/position/z-index, replaces the nested section tree from the saved source, stamps `props.reusableSection.sourceUpdatedAt`, and writes page/post revisions through normal update paths.
+  - Emits `reusableSection.instances.refresh` admin audit logs for non-dry-run propagation with refreshed target/instance counts.
   - Returns `{ success, requestId, data: { dryRun, sectionId, sourceUpdatedAt, refreshedTargets, totals } }`.
 
 - `GET /api/admin/sites/:siteId/reusable-sections/export`
@@ -426,9 +431,10 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - Imports exported reusable section JSON from `{ sections }`, `{ data: { sections } }`, or `{ section }`.
   - Without `upsert=true`, duplicate slugs return `409 SLUG_CONFLICT`.
   - With `upsert=true`, matching slugs update existing reusable sections, increment version metadata, and preserve prior snapshots.
+  - Emits `reusableSection.import` admin audit logs with created/updated counts, slugs, section IDs, and upsert metadata.
   - Returns `{ success, requestId, data: { import: { created, updated, total }, sections } }`.
 
-Current reusable-section endpoints persist to `data/backy/admin-content.json` in demo mode and to the configured repository adapter otherwise. The editor library can load active sections, save the selected element tree, rename/delete saved entries, insert saved sections as synced canvas instances with source metadata, refresh selected instances from the saved source, detach instances into independent editable copies, and keep storing concrete canvas trees for public rendering. Backend instance registry/propagation can now discover and refresh synced section copies across pages and blog posts. Active sections are also exposed through the public reusable-section endpoints, manifest, OpenAPI document, and SDK for custom frontends. Production completion still requires richer metadata management, RBAC, and broader audit events.
+Current reusable-section endpoints persist to `data/backy/admin-content.json` in demo mode and to the configured repository adapter otherwise. The editor library can load active sections, save the selected element tree, rename/delete saved entries, insert saved sections as synced canvas instances with source metadata, refresh selected instances from the saved source, detach instances into independent editable copies, and keep storing concrete canvas trees for public rendering. Backend instance registry/propagation can now discover and refresh synced section copies across pages and blog posts. Active sections are also exposed through the public reusable-section endpoints, manifest, OpenAPI document, and SDK for custom frontends. Production completion still requires richer metadata management and RBAC enforcement.
 
 ### 3.5 Forms
 - `POST /api/admin/sites/:siteId/forms`
@@ -514,9 +520,9 @@ Current blog admin endpoints are local file-backed through `data/backy/admin-con
 - `GET /api/admin/audit-logs`
   - Filters: `siteId`, `teamId`, `actorId`, `entity`, `entityId`, `action`, `requestId`, `limit`, and `offset`.
   - Returns `{ success, requestId, data: { logs, count, pagination } }`; legacy top-level `logs/count/pagination` remain for compatibility.
-  - Supported entity filters include site, page, post, collection, collectionRecord, media, mediaFolder, form, formSubmission, contact, comment, user, settings, and auditLog.
+  - Supported entity filters include site, page, post, blogCategory, blogTag, collection, collectionRecord, media, mediaFolder, form, formSubmission, reusableSection, contact, comment, user, settings, auditLog, and cacheInvalidation.
   - Current local runtime persists audit logs in `data/backy/admin-content.json` with a bounded recent-log history; database mode uses the shared `auditLogs` repository backed by the activity log table.
-  - Settings delivery/API-key changes emit `settings.update` and `settings.api_keys.regenerate` audit events with redacted key snapshots. Media create/update/delete emits `create`, `update`, and `delete` audit events for uploaded assets.
+  - Settings delivery/API-key changes emit `settings.update` and `settings.api_keys.regenerate` audit events with redacted key snapshots. Media create/update/delete emits `create`, `update`, and `delete` audit events for uploaded assets. Reusable-section create/update/delete/restore/import/instance-propagation emits `reusableSection.*` audit events with request-id correlation.
 
 ---
 

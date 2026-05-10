@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   deleteReusableSection,
   getReusableSectionByIdOrSlug,
@@ -200,6 +201,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         reason: 'reusable-section-updated',
         requestId,
       });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'reusableSection',
+        entityId: updated.id,
+        action: 'reusableSection.update',
+        before: section,
+        after: updated,
+        metadata: {
+          changedKeys: Object.keys(body).filter((key) => key !== 'expectedVersion' && key !== 'expectedUpdatedAt'),
+          version: reusableSectionVersionFromMetadata(updated.metadata),
+        },
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -273,6 +288,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'reusableSection',
+      entityId: updated.id,
+      action: 'reusableSection.update',
+      before: section,
+      after: updated,
+      metadata: {
+        changedKeys: Object.keys(body).filter((key) => key !== 'expectedVersion' && key !== 'expectedUpdatedAt'),
+        version: reusableSectionVersionFromMetadata(updated.metadata),
+      },
+      requestId,
+    });
 
     return NextResponse.json({
       success: true,
@@ -319,6 +347,20 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         reason: 'reusable-section-deleted',
         requestId,
       });
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: 'reusableSection',
+        entityId: section.id,
+        action: 'reusableSection.delete',
+        before: section,
+        metadata: {
+          slug: section.slug,
+          category: section.category,
+          status: section.status,
+        },
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -346,6 +388,19 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (!deleted) {
       return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
     }
+    await recordAdminAudit({
+      siteId: site.id,
+      entity: 'reusableSection',
+      entityId: section.id,
+      action: 'reusableSection.delete',
+      before: section,
+      metadata: {
+        slug: section.slug,
+        category: section.category,
+        status: section.status,
+      },
+      requestId,
+    });
 
     return NextResponse.json({
       success: true,

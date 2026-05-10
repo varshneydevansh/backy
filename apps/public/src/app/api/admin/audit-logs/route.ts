@@ -47,17 +47,21 @@ const parseEntity = (value: string | null): BackyRepositoryEntity | undefined =>
     value === 'site' ||
     value === 'page' ||
     value === 'post' ||
+    value === 'blogCategory' ||
+    value === 'blogTag' ||
     value === 'collection' ||
     value === 'collectionRecord' ||
     value === 'media' ||
     value === 'mediaFolder' ||
     value === 'form' ||
     value === 'formSubmission' ||
+    value === 'reusableSection' ||
     value === 'contact' ||
     value === 'comment' ||
     value === 'user' ||
     value === 'settings' ||
-    value === 'auditLog'
+    value === 'auditLog' ||
+    value === 'cacheInvalidation'
   ) {
     return value;
   }

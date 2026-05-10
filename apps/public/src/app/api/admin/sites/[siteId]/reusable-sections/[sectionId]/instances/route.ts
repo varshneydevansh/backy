@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   getAdminBlogPostById,
   getAdminPageById,
@@ -322,6 +323,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         reason: 'reusable-section-instances-refreshed',
         requestId,
       });
+      if (!dryRun) {
+        await recordAdminAudit({
+          repositories,
+          siteId: site.id,
+          entity: 'reusableSection',
+          entityId: section.id,
+          action: 'reusableSection.instances.refresh',
+          after: {
+            refreshedTargets,
+          },
+          metadata: {
+            targetType,
+            targetId: targetId || null,
+            updatedBy,
+            targets: refreshedTargets.length,
+            instances: refreshedTargets.reduce((total, target) => total + target.refreshed, 0),
+          },
+          requestId,
+        });
+      }
 
       return NextResponse.json({
         success: true,
@@ -400,6 +421,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           revisionNote: `Refresh reusable section ${section.name}`,
         });
       }
+    }
+    if (!dryRun) {
+      await recordAdminAudit({
+        siteId: site.id,
+        entity: 'reusableSection',
+        entityId: section.id,
+        action: 'reusableSection.instances.refresh',
+        after: {
+          refreshedTargets,
+        },
+        metadata: {
+          targetType,
+          targetId: targetId || null,
+          updatedBy,
+          targets: refreshedTargets.length,
+          instances: refreshedTargets.reduce((total, target) => total + target.refreshed, 0),
+        },
+        requestId,
+      });
     }
 
     return NextResponse.json({
