@@ -121,6 +121,9 @@ export function ComponentLibrary({
             ...section.content,
             sectionId: section.id,
             slug: section.slug,
+            name: section.name,
+            sourceUpdatedAt: section.updatedAt,
+            syncMode: 'synced',
           },
         } satisfies ComponentLibraryItem];
       })

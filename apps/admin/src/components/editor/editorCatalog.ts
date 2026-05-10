@@ -860,10 +860,21 @@ const cloneReusableElement = (
     targetX: number;
     targetY: number;
     zIndex: number;
+    reusableMeta?: {
+      sectionId: string;
+      slug?: string;
+      name?: string;
+      sourceUpdatedAt?: string;
+      mode: 'synced' | 'detached';
+    };
   },
 ): CanvasElement => {
   const rest: CanvasElement = { ...element };
   delete rest.parentId;
+  const nextProps = cloneDefaultProps(element.props || {});
+  if (options.root && options.reusableMeta) {
+    nextProps.reusableSection = options.reusableMeta;
+  }
 
   return {
     ...rest,
@@ -871,7 +882,7 @@ const cloneReusableElement = (
     x: options.root ? options.targetX + (element.x - options.originX) : element.x,
     y: options.root ? options.targetY + (element.y - options.originY) : element.y,
     zIndex: options.root ? options.zIndex : element.zIndex,
-    props: cloneDefaultProps(element.props || {}),
+    props: nextProps,
     styles: cloneDefaultStyles(element.styles),
     children: element.children?.map((child) => cloneReusableElement(child, {
       ...options,
@@ -894,6 +905,15 @@ export function createCanvasElementsFromReusableContent(
 
   const originX = Math.min(...roots.map((element) => element.x || 0));
   const originY = Math.min(...roots.map((element) => element.y || 0));
+  const reusableMeta = content?.sectionId
+    ? {
+        sectionId: content.sectionId,
+        slug: content.slug,
+        name: content.name,
+        sourceUpdatedAt: content.sourceUpdatedAt,
+        mode: content.syncMode || 'synced',
+      }
+    : undefined;
 
   return roots.map((element, index) => cloneReusableElement(element, {
     root: true,
@@ -902,6 +922,7 @@ export function createCanvasElementsFromReusableContent(
     targetX: x,
     targetY: y,
     zIndex: zIndexStart + index,
+    reusableMeta,
   }));
 }
 

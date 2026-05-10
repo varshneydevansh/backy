@@ -451,8 +451,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ❌ Element locking
 - ⚠️ Page templates
   - Static composed library presets now exist for hero, feature-grid, and lead-capture form sections.
-  - Backend reusable-section APIs now persist saved canvas section patterns, the editor library can load active saved sections, save the selected element tree, and insert saved sections as cloned editable canvas elements, and active sections are discoverable through public APIs, manifest/OpenAPI, and the SDK.
-  - Still missing persisted site/page/blog template registry, synced reusable blocks, richer saved-section metadata editing, and import/export.
+  - Backend reusable-section APIs now persist saved canvas section patterns, the editor library can load active saved sections, save the selected element tree, insert saved sections as synced canvas instances, refresh a selected synced instance from its saved source, detach an instance into an independent editable copy, and expose active sections through public APIs, manifest/OpenAPI, and the SDK.
+  - Still missing persisted site/page/blog template registry, richer saved-section metadata editing, instance registry/bulk propagation, conflict/version history for synced section sources, and import/export.
 
 ## Priority Order
 **Phase 1: Critical Fixes (Immediate)**

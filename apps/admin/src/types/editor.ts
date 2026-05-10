@@ -142,6 +142,9 @@ export interface ReusableSectionContent {
   customJS?: string;
   sectionId?: string;
   slug?: string;
+  name?: string;
+  sourceUpdatedAt?: string;
+  syncMode?: 'synced' | 'detached';
 }
 
 /** Nested child in a composed component preset */

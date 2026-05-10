@@ -192,6 +192,76 @@ const deleteSmokePage = async (pageId) => {
   }
 };
 
+const createSmokeReusableSection = async () => {
+  const slug = `editor-smoke-synced-section-${Date.now().toString(36)}`;
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/reusable-sections`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Editor Smoke Synced Section',
+      slug,
+      category: 'saved',
+      status: 'active',
+      tags: ['editor-smoke', 'synced'],
+      sourceElementId: 'editor-smoke-source',
+      content: {
+        canvasSize: { width: 240, height: 90 },
+        elements: [
+          {
+            id: 'editor-smoke-reusable-root',
+            type: 'box',
+            x: 0,
+            y: 0,
+            width: 240,
+            height: 90,
+            zIndex: 1,
+            props: {
+              backgroundColor: '#eef2ff',
+              borderColor: '#818cf8',
+              borderWidth: 1,
+              borderRadius: 10,
+            },
+            children: [
+              {
+                id: 'editor-smoke-reusable-label',
+                type: 'heading',
+                x: 20,
+                y: 20,
+                width: 180,
+                height: 40,
+                zIndex: 1,
+                props: {
+                  content: 'Reusable v1',
+                  level: 'h2',
+                  fontSize: 24,
+                  color: '#312e81',
+                },
+              },
+            ],
+          },
+        ],
+      },
+      createdBy: 'admin',
+      updatedBy: 'admin',
+    }),
+  });
+
+  const sectionId = payload.data?.section?.id;
+  assert(sectionId, `Unable to create smoke reusable section: ${JSON.stringify(payload).slice(0, 300)}`);
+  return sectionId;
+};
+
+const deleteSmokeReusableSection = async (sectionId) => {
+  if (!sectionId) {
+    return;
+  }
+
+  try {
+    await requestApi(`/api/admin/sites/${SITE_ID}/reusable-sections/${sectionId}`, { method: 'DELETE' });
+  } catch (error) {
+    console.warn(`Unable to delete smoke reusable section ${sectionId}:`, error instanceof Error ? error.message : error);
+  }
+};
+
 const fetchJson = async (endpoint) => {
   const response = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
   if (!response.ok) {
@@ -1228,6 +1298,33 @@ const readEditorSaveStatus = async (client) => {
   return status;
 };
 
+const waitForEditorMutationReady = async (client, label = 'editor mutation readiness') => {
+  let lastState = null;
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    lastState = await evaluate(client, `(() => {
+      const status = document.querySelector('[data-testid="editor-save-status"]');
+      const saveButton = Array.from(document.querySelectorAll('button')).find((candidate) => {
+        const label = (candidate.textContent || '').trim();
+        return label === 'Save' || label === 'Saving...';
+      });
+      return {
+        statusText: status?.textContent || '',
+        statusTitle: status?.getAttribute('title') || '',
+        saveDisabled: saveButton instanceof HTMLButtonElement ? saveButton.disabled : null,
+      };
+    })()`);
+
+    if (!/Saving|Writing to backend/i.test(lastState.statusText) && lastState.saveDisabled !== true) {
+      return lastState;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`${label}: editor stayed busy too long: ${JSON.stringify(lastState)}`);
+};
+
 const waitForPersistedCanvasState = async (pageId, expectedState) => {
   let lastState = null;
 
@@ -1980,6 +2077,157 @@ const testLayerHierarchyControls = async (client) => {
   };
 };
 
+const testSyncedReusableSectionInstance = async (client, sectionId) => {
+  await selectElement(client, 'smoke-heading');
+
+  const added = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-component-add="reusable-section:${sectionId}"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        reason: 'missing-add-button',
+        reusableItems: Array.from(document.querySelectorAll('[data-component-library-item^="reusable-section:"]')).map((node) => ({
+          item: node.getAttribute('data-component-library-item'),
+          text: node.textContent?.trim?.().slice(0, 120) || '',
+        })),
+      };
+    }
+
+    button.click();
+    return { ok: true, label: button.getAttribute('aria-label') || '' };
+  })()`);
+  assert(added?.ok, `Unable to add synced reusable section: ${JSON.stringify(added)}`);
+  await sleep(350);
+
+  const inserted = await evaluate(client, `(() => {
+    const selectedElement = Array.from(document.querySelectorAll('[data-element-id]')).find((node) => (
+      node.querySelector('[data-role="canvas-move-handle"]')
+    ));
+    const panel = document.querySelector('[data-testid="editor-reusable-instance"]');
+    const refresh = document.querySelector('[data-testid="editor-refresh-reusable-instance"]');
+    const detach = document.querySelector('[data-testid="editor-detach-reusable-instance"]');
+    return {
+      selectedElementId: selectedElement?.getAttribute('data-element-id') || null,
+      panelText: panel?.textContent || '',
+      refreshDisabled: refresh instanceof HTMLButtonElement ? refresh.disabled : null,
+      detachDisabled: detach instanceof HTMLButtonElement ? detach.disabled : null,
+      body: document.body?.innerText?.slice(0, 300) || '',
+    };
+  })()`);
+
+  assert(inserted.selectedElementId, `Synced reusable insertion did not select the inserted root: ${JSON.stringify(inserted)}`);
+  assert(/Synced section/i.test(inserted.panelText), `Synced reusable inspector card missing: ${JSON.stringify(inserted)}`);
+  assert(inserted.refreshDisabled === false, `Synced reusable refresh control disabled: ${JSON.stringify(inserted)}`);
+  assert(inserted.detachDisabled === false, `Synced reusable detach control disabled: ${JSON.stringify(inserted)}`);
+
+  const beforeRefresh = await readEditorElementState(client, [inserted.selectedElementId]);
+
+  await requestApi(`/api/admin/sites/${SITE_ID}/reusable-sections/${sectionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      content: {
+        canvasSize: { width: 360, height: 120 },
+        elements: [
+          {
+            id: 'editor-smoke-reusable-root-updated',
+            type: 'box',
+            x: 0,
+            y: 0,
+            width: 360,
+            height: 120,
+            zIndex: 1,
+            props: {
+              backgroundColor: '#ecfeff',
+              borderColor: '#0891b2',
+              borderWidth: 1,
+              borderRadius: 12,
+            },
+            children: [
+              {
+                id: 'editor-smoke-reusable-label-updated',
+                type: 'heading',
+                x: 24,
+                y: 28,
+                width: 260,
+                height: 44,
+                zIndex: 1,
+                props: {
+                  content: 'Reusable v2',
+                  level: 'h2',
+                  fontSize: 28,
+                  color: '#155e75',
+                },
+              },
+            ],
+          },
+        ],
+      },
+      updatedBy: 'admin',
+    }),
+  });
+
+  const refreshedList = await evaluate(client, `(() => {
+    const button = document.querySelector('button[title="Refresh saved sections"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return false;
+    }
+    button.click();
+    return true;
+  })()`);
+  assert(refreshedList, 'Unable to refresh saved section library after source update');
+  await sleep(600);
+
+  const refreshClicked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="editor-refresh-reusable-instance"]');
+    if (!(button instanceof HTMLButtonElement) || button.disabled) {
+      return false;
+    }
+    button.click();
+    return true;
+  })()`);
+  assert(refreshClicked, 'Unable to refresh selected synced reusable instance');
+  await sleep(350);
+
+  const afterRefresh = await readEditorElementState(client, [inserted.selectedElementId]);
+  const refreshedText = await evaluate(client, `(() => {
+    const node = document.querySelector('[data-element-id="${inserted.selectedElementId}"]');
+    return node?.textContent || '';
+  })()`);
+  assert(
+    afterRefresh[inserted.selectedElementId].width > beforeRefresh[inserted.selectedElementId].width &&
+      afterRefresh[inserted.selectedElementId].height > beforeRefresh[inserted.selectedElementId].height,
+    `Synced reusable refresh did not apply source dimensions: before ${JSON.stringify(beforeRefresh)}, after ${JSON.stringify(afterRefresh)}`,
+  );
+  assert(/Reusable v2/i.test(refreshedText), `Synced reusable refresh did not apply source content: ${JSON.stringify(refreshedText)}`);
+
+  const detachClicked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="editor-detach-reusable-instance"]');
+    if (!(button instanceof HTMLButtonElement) || button.disabled) {
+      return false;
+    }
+    button.click();
+    return true;
+  })()`);
+  assert(detachClicked, 'Unable to detach synced reusable instance');
+  await sleep(250);
+
+  const afterDetach = await evaluate(client, `(() => ({
+    hasPanel: Boolean(document.querySelector('[data-testid="editor-reusable-instance"]')),
+    selectedElementId: Array.from(document.querySelectorAll('[data-element-id]')).find((node) => (
+      node.querySelector('[data-role="canvas-move-handle"]')
+    ))?.getAttribute('data-element-id') || null,
+  }))()`);
+  assert(afterDetach.hasPanel === false, `Reusable section detach did not remove sync card: ${JSON.stringify(afterDetach)}`);
+
+  return {
+    sectionId,
+    inserted,
+    beforeRefresh,
+    afterRefresh,
+    afterDetach,
+  };
+};
+
 const dragSelectionHandle = async (client, elementId, deltaX, deltaY, options = {}) => {
   await scrollElementIntoView(client, elementId);
   if (options.selectFirst !== false) {
@@ -2218,6 +2466,7 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 
 const main = async () => {
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
+  const tempReusableSectionId = EDITOR_PATH ? null : await createSmokeReusableSection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
   const { childProcess, userDataDir } = launchChrome();
   let client;
@@ -2321,6 +2570,12 @@ const main = async () => {
     const layerHierarchy = EDITOR_PATH
       ? null
       : await testLayerHierarchyControls(client);
+    const syncedReusableSection = tempReusableSectionId
+      ? await testSyncedReusableSectionInstance(client, tempReusableSectionId)
+      : null;
+    const afterReusableMutationReady = tempReusableSectionId
+      ? await waitForEditorMutationReady(client, 'after synced reusable section actions')
+      : null;
 
     let persistedState = null;
     let reloadedState = null;
@@ -2462,6 +2717,8 @@ const main = async () => {
       multiSelectionDistribution,
       grouping,
       layerHierarchy,
+      syncedReusableSection,
+      afterReusableMutationReady,
       responsiveEditing,
       reloadedResponsiveEditing,
       postSaveInspector,
@@ -2476,6 +2733,7 @@ const main = async () => {
   } finally {
     await cleanup({ client, childProcess, userDataDir });
     await deleteSmokePage(tempPageId);
+    await deleteSmokeReusableSection(tempReusableSectionId);
   }
 };
 

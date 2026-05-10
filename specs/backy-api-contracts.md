@@ -379,7 +379,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 - `DELETE /api/admin/sites/:siteId/reusable-sections/:sectionId`
   - Deletes the saved section from the current runtime adapter.
 
-Current reusable-section endpoints persist to `data/backy/admin-content.json`. The editor library can load active sections, save the selected element tree, rename/delete saved entries, and insert saved sections as cloned editable canvas elements. Active sections are also exposed through the public reusable-section endpoints, manifest, OpenAPI document, and SDK for custom frontends. Production completion still requires synced reusable block instances, richer metadata management, import/export, DB persistence, RBAC, and audit events.
+Current reusable-section endpoints persist to `data/backy/admin-content.json`. The editor library can load active sections, save the selected element tree, rename/delete saved entries, insert saved sections as synced canvas instances with source metadata, refresh selected instances from the saved source, detach instances into independent editable copies, and keep storing concrete canvas trees for public rendering. Active sections are also exposed through the public reusable-section endpoints, manifest, OpenAPI document, and SDK for custom frontends. Production completion still requires richer metadata management, conflict/version history, import/export, DB persistence, RBAC, and audit events.
 
 ### 3.5 Forms
 - `POST /api/admin/sites/:siteId/forms`

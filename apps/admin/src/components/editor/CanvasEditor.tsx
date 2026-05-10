@@ -113,6 +113,13 @@ const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
 type CanvasAlignment = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
 type CanvasDistribution = 'horizontal' | 'vertical';
 type EditorSaveStatus = 'saved' | 'dirty' | 'saving' | 'autosaving' | 'error';
+type ReusableSectionInstanceMeta = {
+  mode: 'synced' | 'detached';
+  sectionId: string;
+  slug?: string;
+  name?: string;
+  sourceUpdatedAt?: string;
+};
 type EditorHistoryEntry = {
   elements: CanvasElement[];
   selectedId: string | null;
@@ -176,6 +183,25 @@ const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
 );
 
 const jsonEqual = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+const getReusableSectionInstanceMeta = (value: unknown): ReusableSectionInstanceMeta | null => {
+  if (!isPlainRecord(value)) {
+    return null;
+  }
+
+  const sectionId = typeof value.sectionId === 'string' ? value.sectionId : '';
+  if (!sectionId) {
+    return null;
+  }
+
+  return {
+    mode: value.mode === 'detached' ? 'detached' : 'synced',
+    sectionId,
+    slug: typeof value.slug === 'string' ? value.slug : undefined,
+    name: typeof value.name === 'string' ? value.name : undefined,
+    sourceUpdatedAt: typeof value.sourceUpdatedAt === 'string' ? value.sourceUpdatedAt : undefined,
+  };
+};
 
 const hasResponsiveOverrideGroup = (
   override: ResponsiveElementOverride | undefined,
@@ -964,6 +990,55 @@ export function CanvasEditor({
       child.id === targetId || elementContainsId(child, targetId)
     )))
   ), []);
+
+  const cloneReusableSectionInstanceTree = useCallback((
+    sourceElement: CanvasElement,
+    section: ReusableSection,
+    options: {
+      rootId: string;
+      parentId: string | null;
+      x: number;
+      y: number;
+      zIndex: number;
+    },
+  ): CanvasElement => {
+    const cloneNode = (node: CanvasElement, nextParentId: string | null, isRoot = false): CanvasElement => {
+      const clone = JSON.parse(JSON.stringify(node)) as CanvasElement;
+      const nextId = isRoot ? options.rootId : generateId();
+      const nextProps = { ...(clone.props || {}) };
+
+      if (isRoot) {
+        nextProps.reusableSection = {
+          mode: 'synced',
+          sectionId: section.id,
+          slug: section.slug,
+          name: section.name,
+          sourceUpdatedAt: section.updatedAt,
+        };
+      }
+
+      const nextNode: CanvasElement = {
+        ...clone,
+        id: nextId,
+        type: normalizeElementType(clone.type),
+        x: isRoot ? options.x : clone.x,
+        y: isRoot ? options.y : clone.y,
+        zIndex: isRoot ? options.zIndex : clone.zIndex,
+        props: nextProps,
+        children: clone.children?.map((child) => cloneNode(child, nextId)),
+      };
+
+      if (nextParentId) {
+        nextNode.parentId = nextParentId;
+      } else {
+        delete nextNode.parentId;
+      }
+
+      return nextNode;
+    };
+
+    return cloneNode(sourceElement, options.parentId, true);
+  }, []);
 
   const toReusableTemplateElement = useCallback((
     element: CanvasElement,
@@ -2053,6 +2128,10 @@ export function CanvasEditor({
   const selectedBreakpointOverride = breakpoint !== 'desktop'
     ? baseSelectedElement?.responsive?.[breakpoint]
     : undefined;
+  const selectedReusableSectionMeta = getReusableSectionInstanceMeta(baseSelectedElement?.props?.reusableSection);
+  const selectedReusableSectionSource = selectedReusableSectionMeta
+    ? reusableSections.find((section) => section.id === selectedReusableSectionMeta.sectionId)
+    : undefined;
   const selectedBreakpointOverrideGroups = getResponsiveOverrideGroups(selectedBreakpointOverride, baseSelectedElement);
   const selectedElementHasBreakpointOverride = Boolean(
     selectedBreakpointOverrideGroups.length > 0,
@@ -2120,6 +2199,73 @@ export function CanvasEditor({
       return nextIds;
     });
   }, [elements, findElementById]);
+
+  const handleRefreshSelectedReusableSection = useCallback(() => {
+    if (
+      isCanvasMutationDisabled ||
+      !selectedId ||
+      !baseSelectedElement ||
+      !selectedReusableSectionSource ||
+      !selectedReusableSectionSource.content.elements.length
+    ) {
+      return;
+    }
+
+    const selectedEntry = findElementEntry(elements, selectedId);
+    if (!selectedEntry || selectedEntry.element.locked) {
+      return;
+    }
+
+    const nextElement = cloneReusableSectionInstanceTree(
+      selectedReusableSectionSource.content.elements[0],
+      selectedReusableSectionSource,
+      {
+        rootId: selectedEntry.element.id,
+        parentId: selectedEntry.parentId,
+        x: selectedEntry.element.x,
+        y: selectedEntry.element.y,
+        zIndex: selectedEntry.element.zIndex || 1,
+      },
+    );
+
+    updateElementsWithHistory((currentElements) => {
+      const result = updateElementById(currentElements, selectedEntry.element.id, () => nextElement);
+      return result.updated ? result.elements : currentElements;
+    }, selectedEntry.element.id, [selectedEntry.element.id]);
+    setSelectedId(selectedEntry.element.id);
+    setSelectedIds([selectedEntry.element.id]);
+    setEditorNotice(`Synced ${selectedReusableSectionSource.name} from the saved section source.`);
+  }, [
+    baseSelectedElement,
+    cloneReusableSectionInstanceTree,
+    elements,
+    findElementEntry,
+    isCanvasMutationDisabled,
+    selectedId,
+    selectedReusableSectionSource,
+    updateElementsWithHistory,
+  ]);
+
+  const handleDetachSelectedReusableSection = useCallback(() => {
+    if (isCanvasMutationDisabled || !selectedId || !selectedReusableSectionMeta) {
+      return;
+    }
+
+    updateElementsWithHistory((currentElements) => {
+      const result = updateElementById(currentElements, selectedId, (element) => {
+        const nextProps = { ...(element.props || {}) };
+        delete nextProps.reusableSection;
+        return {
+          ...element,
+          props: nextProps,
+        };
+      });
+      return result.updated ? result.elements : currentElements;
+    }, selectedId, [selectedId]);
+    setSelectedId(selectedId);
+    setSelectedIds([selectedId]);
+    setEditorNotice('Reusable section instance detached. This copy can now be edited independently.');
+  }, [isCanvasMutationDisabled, selectedId, selectedReusableSectionMeta, updateElementsWithHistory]);
 
   const handleSelectSiblingScope = useCallback(() => {
     if (selectableSiblingIds.length === 0) {
@@ -4039,6 +4185,48 @@ export function CanvasEditor({
                           <Ungroup className="h-3.5 w-3.5" />
                           Ungroup
                         </button>
+                      )}
+                      {selectedReusableSectionMeta && (
+                        <div
+                          className="mt-2 rounded-md border border-violet-100 bg-violet-50 px-2.5 py-2 text-[11px] leading-4 text-violet-800"
+                          data-testid="editor-reusable-instance"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="truncate font-semibold">
+                                Synced section
+                              </div>
+                              <div className="truncate text-violet-700">
+                                {selectedReusableSectionSource?.name || selectedReusableSectionMeta.name || selectedReusableSectionMeta.sectionId}
+                              </div>
+                            </div>
+                            <span className="shrink-0 rounded bg-white/80 px-1.5 py-0.5 font-semibold uppercase text-violet-700">
+                              {selectedReusableSectionSource ? 'linked' : 'missing'}
+                            </span>
+                          </div>
+                          <div className="mt-2 grid grid-cols-2 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={handleRefreshSelectedReusableSection}
+                              disabled={isCanvasMutationDisabled || !selectedReusableSectionSource || selectedElement.locked}
+                              className="inline-flex items-center justify-center gap-1 rounded border border-violet-200 bg-white px-2 py-1 font-semibold text-violet-700 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              data-testid="editor-refresh-reusable-instance"
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                              Refresh
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleDetachSelectedReusableSection}
+                              disabled={isCanvasMutationDisabled || selectedElement.locked}
+                              className="inline-flex items-center justify-center gap-1 rounded border border-violet-200 bg-white px-2 py-1 font-semibold text-violet-700 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              data-testid="editor-detach-reusable-instance"
+                            >
+                              <X className="h-3 w-3" />
+                              Detach
+                            </button>
+                          </div>
+                        </div>
                       )}
                       <div className="mt-2 grid grid-cols-4 gap-1 text-[11px] font-medium text-slate-500">
                         <span className="rounded bg-white px-2 py-1 tabular-nums">X {Math.round(selectedElement.x)}</span>
