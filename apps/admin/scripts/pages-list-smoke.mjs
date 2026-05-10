@@ -397,6 +397,87 @@ const waitForDeliveryRow = async (client, page, expectedText, expectedSearch = p
   return null;
 };
 
+const assertPublishReviewModal = async (client, page, expectedSearch = page.title) => {
+  const url = `${ADMIN_BASE_URL}/pages?siteId=${encodeURIComponent(HIERARCHY_SITE_ID)}&q=${encodeURIComponent(expectedSearch)}`;
+  await client.send('Page.navigate', { url });
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="pages-publish-${page.id}"]');
+      return {
+        ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
+        hasButton: Boolean(button),
+        disabled: button?.disabled === true,
+        body: document.body?.innerText?.slice(0, 700) || '',
+      };
+    })()`);
+
+    if (state.ready && state.hasButton && !state.disabled) {
+      break;
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Publish button was not ready for review modal: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  const opened = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="pages-publish-${page.id}"]');
+    button?.click();
+    const modal = document.querySelector('[data-testid="pages-publish-modal"]');
+    return {
+      clicked: Boolean(button),
+      modalText: modal?.textContent || '',
+      confirm: Boolean(document.querySelector('[data-testid="pages-publish-confirm"]')),
+      cancel: Boolean(document.querySelector('[data-testid="pages-publish-cancel"]')),
+    };
+  })()`);
+
+  assert(opened.clicked, `Unable to click publish button: ${JSON.stringify(opened)}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const modal = document.querySelector('[data-testid="pages-publish-modal"]');
+      return {
+        modalText: modal?.textContent || '',
+        confirm: Boolean(document.querySelector('[data-testid="pages-publish-confirm"]')),
+        cancel: Boolean(document.querySelector('[data-testid="pages-publish-cancel"]')),
+      };
+    })()`);
+
+    if (
+      state.modalText.includes(`Publish ${page.title}?`)
+      && state.modalText.includes('Render API')
+      && state.modalText.includes('Resolve API')
+      && state.confirm
+      && state.cancel
+    ) {
+      await evaluate(client, `(() => {
+        document.querySelector('[data-testid="pages-publish-cancel"]')?.click();
+      })()`);
+      for (let cancelAttempt = 0; cancelAttempt < 40; cancelAttempt += 1) {
+        const cancelled = await evaluate(client, `(() => !document.querySelector('[data-testid="pages-publish-modal"]'))()`);
+        if (cancelled) {
+          return { url, opened, state, cancelled };
+        }
+        await sleep(100);
+      }
+
+      throw new Error('Publish review modal did not close after cancel.');
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Publish review modal did not render expected details: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -503,6 +584,10 @@ const main = async () => {
       hierarchyPages.childPage,
       'Preview Only',
     );
+    const publishReview = await assertPublishReviewModal(
+      client,
+      hierarchyPages.childPage,
+    );
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -526,6 +611,7 @@ const main = async () => {
       childRevisions,
       childRoute,
       childDelivery,
+      publishReview,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {

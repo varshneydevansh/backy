@@ -348,7 +348,9 @@ function PagesListView() {
   const [isLoadingRevisions, setIsLoadingRevisions] = useState(false);
   const [previewingPageId, setPreviewingPageId] = useState<string | null>(null);
   const [mutatingPageId, setMutatingPageId] = useState<string | null>(null);
+  const [pendingPublishPage, setPendingPublishPage] = useState<Page | null>(null);
   const [pendingDeletePage, setPendingDeletePage] = useState<Page | null>(null);
+  const [pendingBulkPublish, setPendingBulkPublish] = useState(false);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const isPageMutationBusy = isBulkBusy || mutatingPageId !== null || previewingPageId !== null;
@@ -793,6 +795,7 @@ function PagesListView() {
       const updated = await publishPage(page.siteId || activeSiteId, page.id);
       updatePage(page.id, updated);
       void refreshPageRevisionSummary(page.siteId || activeSiteId, page.id, setRevisionSummaryMap);
+      setPendingPublishPage(null);
       setNotice(`${updated.title || page.title} published.`);
     } catch (publishError) {
       setError(publishError instanceof Error ? publishError.message : 'Unable to publish page');
@@ -863,6 +866,11 @@ function PagesListView() {
       return;
     }
 
+    if (bulkAction === 'publish' && !pendingBulkPublish) {
+      setPendingBulkPublish(true);
+      return;
+    }
+
     if (bulkAction === 'delete' && !pendingBulkDelete) {
       setPendingBulkDelete(true);
       return;
@@ -879,6 +887,7 @@ function PagesListView() {
           .filter((result): result is { page: Page; route: PageRouteDiagnostic } => result.route?.status === 'conflict');
 
         if (routeBlockedPages.length > 0) {
+          setPendingBulkPublish(false);
           setError(`${routeBlockedPages.length} selected page${routeBlockedPages.length === 1 ? ' is' : 's are'} route-blocked: ${routeBlockedPages
             .slice(0, 3)
             .map(({ page, route }) => `${page.title} - ${route.message}`)
@@ -902,6 +911,7 @@ function PagesListView() {
           .filter((result): result is { page: Page; blocker: string } => Boolean(result.blocker));
 
         if (blockedPages.length > 0) {
+          setPendingBulkPublish(false);
           setError(`${blockedPages.length} selected page${blockedPages.length === 1 ? ' is' : 's are'} blocked: ${blockedPages
             .slice(0, 3)
             .map(({ page, blocker }) => `${page.title} - ${blocker}`)
@@ -913,6 +923,7 @@ function PagesListView() {
           selectedPages.map((page) => publishPage(page.siteId || activeSiteId, page.id)),
         );
         updatedPages.forEach((page) => updatePage(page.id, page));
+        setPendingBulkPublish(false);
         setNotice(`${updatedPages.length} page${updatedPages.length === 1 ? '' : 's'} published.`);
       }
 
@@ -936,6 +947,7 @@ function PagesListView() {
 
       setSelectedPageIds(new Set());
       setBulkAction('');
+      setPendingBulkPublish(false);
       await refreshPages(activeSiteId);
     } catch (bulkError) {
       setError(bulkError instanceof Error ? bulkError.message : 'Unable to apply bulk action');
@@ -1097,10 +1109,12 @@ function PagesListView() {
             {page.status !== 'published' && (
               <button
                 onClick={() => {
-                  void handlePublishPage(page);
+                  if (isPageLibraryBusy) return;
+                  setPendingPublishPage(page);
                 }}
                 disabled={isPageLibraryBusy || Boolean(routeBlocker || publishBlocker)}
                 title={routeBlocker ? `Resolve route before publishing: ${routeBlocker}` : publishBlocker ? `Resolve before publishing: ${publishBlocker}` : 'Publish page'}
+                data-testid={`pages-publish-${page.id}`}
                 className="p-2 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <CheckCircle2 className="w-4 h-4" />
@@ -1264,7 +1278,7 @@ function PagesListView() {
       .filter((result): result is { page: Page; blocker: string } => Boolean(result?.blocker)),
     [pageRouteDiagnostics, readinessMap, selectedPages],
   );
-  const bulkActionLabel = getBulkActionLabel(bulkAction, selectedPages.length, pendingBulkDelete);
+  const bulkActionLabel = getBulkActionLabel(bulkAction, selectedPages.length, pendingBulkDelete, pendingBulkPublish);
   const bulkBusyLabel = getBulkBusyLabel(bulkAction);
   const pageHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
@@ -1917,6 +1931,7 @@ function PagesListView() {
             onChange={(event) => {
               if (isPageLibraryBusy) return;
               setBulkAction(event.target.value as typeof bulkAction);
+              setPendingBulkPublish(false);
               setPendingBulkDelete(false);
             }}
             className="min-w-44 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
@@ -2157,6 +2172,146 @@ function PagesListView() {
           }
         />
       </div>
+
+      {pendingPublishPage && (() => {
+        const pageSiteId = pendingPublishPage.siteId || activeSiteId;
+        const pagePath = pagePublicPath(pendingPublishPage);
+        const encodedSiteId = encodeURIComponent(pageSiteId);
+        const encodedPath = encodeURIComponent(pagePath);
+        const encodedPageId = encodeURIComponent(pendingPublishPage.id);
+        const routeDiagnostic = pageRouteDiagnostics[pendingPublishPage.id];
+        const readiness = readinessMap[pendingPublishPage.id];
+        const deliveryStatus = getPagePublishDeliveryStatus(pendingPublishPage, readiness, routeDiagnostic);
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm" data-testid="pages-publish-modal">
+            <div className="w-full max-w-2xl rounded-lg border border-border bg-card p-5 shadow-xl">
+              <div className="flex items-start gap-3">
+                <span className="rounded-lg bg-emerald-50 p-2 text-emerald-700">
+                  <CheckCircle2 className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-lg font-semibold text-foreground">Publish {pendingPublishPage.title}?</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Review the route, readiness, and frontend delivery endpoints before this page becomes public.
+                  </p>
+                </div>
+              </div>
+
+              <PagePublishReviewDetails
+                page={pendingPublishPage}
+                readiness={readiness}
+                routeDiagnostic={routeDiagnostic}
+                deliveryStatus={deliveryStatus}
+                publicUrl={publicPageUrl(pendingPublishPage)}
+                renderUrl={`${publicBaseUrl}/api/sites/${encodedSiteId}/render?path=${encodedPath}`}
+                resolveUrl={`${publicBaseUrl}/api/sites/${encodedSiteId}/resolve?path=${encodedPath}`}
+                previewEndpoint={`${adminBaseUrl}/sites/${encodedSiteId}/pages/${encodedPageId}/preview`}
+              />
+
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handlePreviewPage(pendingPublishPage);
+                  }}
+                  disabled={isPageLibraryBusy}
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Preview first
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingPublishPage(null)}
+                  disabled={isPageLibraryBusy}
+                  data-testid="pages-publish-cancel"
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handlePublishPage(pendingPublishPage)}
+                  disabled={isPageLibraryBusy || deliveryStatus === 'blocked'}
+                  data-testid="pages-publish-confirm"
+                  className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {mutatingPageId === pendingPublishPage.id ? 'Publishing...' : 'Publish page'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {pendingBulkPublish && selectedPages.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm" data-testid="pages-bulk-publish-modal">
+          <div className="w-full max-w-2xl rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-emerald-50 p-2 text-emerald-700">
+                <CheckCircle2 className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold text-foreground">
+                  Publish {selectedPages.length} selected page{selectedPages.length === 1 ? '' : 's'}?
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Backy will run readiness again before publishing and skip the publish if a selected page becomes blocked.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 max-h-72 space-y-2 overflow-auto rounded-lg border border-border bg-background p-3">
+              {selectedPages.slice(0, 8).map((page) => {
+                const routeDiagnostic = pageRouteDiagnostics[page.id];
+                const readiness = readinessMap[page.id];
+                const deliveryStatus = getPagePublishDeliveryStatus(page, readiness, routeDiagnostic);
+
+                return (
+                  <div key={page.id} className="grid gap-2 rounded-lg border border-border bg-card px-3 py-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-foreground">{page.title}</div>
+                      <div className="font-mono text-xs text-muted-foreground">{pagePublicPath(page)}</div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={deliveryStatus} type={deliveryStatus === 'blocked' ? 'error' : deliveryStatus === 'published' ? 'success' : 'warning'} />
+                      {readiness && (
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                          {readiness.score}% ready
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {selectedPages.length > 8 && (
+                <div className="px-3 py-2 text-xs text-muted-foreground">
+                  {selectedPages.length - 8} more selected page{selectedPages.length - 8 === 1 ? '' : 's'} will be included.
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingBulkPublish(false)}
+                disabled={isPageLibraryBusy}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkAction()}
+                disabled={isPageLibraryBusy}
+                className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isBulkBusy ? 'Publishing...' : `Publish ${selectedPages.length} page${selectedPages.length === 1 ? '' : 's'}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pendingDeletePage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
@@ -2430,6 +2585,85 @@ function PageDeliveryCell({
         <code className="max-w-48 truncate rounded-md bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground" title={previewEndpoint}>
           preview POST
         </code>
+      </div>
+    </div>
+  );
+}
+
+function PagePublishReviewDetails({
+  page,
+  readiness,
+  routeDiagnostic,
+  deliveryStatus,
+  publicUrl,
+  renderUrl,
+  resolveUrl,
+  previewEndpoint,
+}: {
+  page: Page;
+  readiness: PageReadiness | undefined;
+  routeDiagnostic: PageRouteDiagnostic | undefined;
+  deliveryStatus: PageDeliveryStatus;
+  publicUrl: string;
+  renderUrl: string;
+  resolveUrl: string;
+  previewEndpoint: string;
+}) {
+  const routeStatus = routeDiagnostic?.status || 'available';
+  const routeMessage = routeDiagnostic?.message || 'Route is available.';
+
+  return (
+    <div className="mt-4 grid gap-3 md:grid-cols-2">
+      <div className="rounded-lg border border-border bg-background p-3">
+        <div className="text-xs font-medium text-muted-foreground">Public route</div>
+        <div className="mt-1 font-mono text-sm font-semibold text-foreground">{pagePublicPath(page)}</div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <StatusBadge status={routeStatus} type={routeStatus === 'conflict' ? 'error' : routeStatus === 'warning' ? 'warning' : 'success'} />
+          <span className="text-xs text-muted-foreground">{routeMessage}</span>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-background p-3">
+        <div className="text-xs font-medium text-muted-foreground">Readiness</div>
+        {readiness ? (
+          <>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <StatusBadge
+                status={readiness.statusLabel}
+                type={readiness.statusLabel === 'ready' ? 'success' : readiness.statusLabel === 'blocked' ? 'error' : 'warning'}
+              />
+              <span className="font-mono text-sm font-semibold text-foreground">{readiness.score}%</span>
+              <span className="text-xs text-muted-foreground">{readiness.elementCount} elements</span>
+            </div>
+            {readiness.checks.find((check) => check.status !== 'pass') && (
+              <div className="mt-2 text-xs leading-5 text-muted-foreground">
+                {readiness.checks.find((check) => check.status !== 'pass')?.message}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="mt-1 text-sm text-muted-foreground">Readiness will run again before publish.</div>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-border bg-background p-3 md:col-span-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-xs font-medium text-muted-foreground">Delivery after publish</div>
+            <div className="mt-1 text-sm text-foreground">
+              {deliveryStatus === 'blocked'
+                ? 'Publishing is blocked until route/readiness issues are fixed.'
+                : 'This page will be available through hosted, render, and resolve delivery paths.'}
+            </div>
+          </div>
+          <StatusBadge status={deliveryStatus} type={deliveryStatus === 'blocked' ? 'error' : deliveryStatus === 'published' ? 'success' : 'warning'} />
+        </div>
+        <div className="mt-3 grid gap-2 text-xs md:grid-cols-2">
+          <PageApiSnippet label="Published URL" value={publicUrl} />
+          <PageApiSnippet label="Render API" value={renderUrl} />
+          <PageApiSnippet label="Resolve API" value={resolveUrl} />
+          <PageApiSnippet label="Preview endpoint" value={previewEndpoint} />
+        </div>
       </div>
     </div>
   );
@@ -2741,11 +2975,36 @@ const getPageDeliveryStatus = (
   return 'preview-only';
 };
 
-const getBulkActionLabel = (action: 'publish' | 'archive' | 'delete' | '', count: number, isConfirmingDelete: boolean): string => {
+const getPagePublishDeliveryStatus = (
+  page: Page,
+  readiness: PageReadiness | undefined,
+  routeDiagnostic: PageRouteDiagnostic | undefined,
+): PageDeliveryStatus => {
+  if (routeDiagnostic?.status === 'conflict' || readiness?.statusLabel === 'blocked') {
+    return 'blocked';
+  }
+
+  if (page.status === 'archived') {
+    return 'archived';
+  }
+
+  return 'published';
+};
+
+const getBulkActionLabel = (
+  action: 'publish' | 'archive' | 'delete' | '',
+  count: number,
+  isConfirmingDelete: boolean,
+  isConfirmingPublish: boolean,
+): string => {
   const pageLabel = `${count} page${count === 1 ? '' : 's'}`;
 
   if (action === 'publish') {
-    return count > 0 ? `Publish ${pageLabel}` : 'Publish selected';
+    if (isConfirmingPublish) {
+      return count > 0 ? `Publish ${pageLabel}` : 'Publish selected';
+    }
+
+    return count > 0 ? `Review publish for ${pageLabel}` : 'Publish selected';
   }
 
   if (action === 'archive') {
