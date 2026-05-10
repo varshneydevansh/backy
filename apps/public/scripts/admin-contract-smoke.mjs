@@ -3616,7 +3616,8 @@ try {
       assert(frontendManifest.json?.data?.endpoints?.openapi === `/api/sites/${createdSiteId}/openapi`, `${frontendManifest.url} missing OpenAPI endpoint`);
       assert(frontendManifest.json?.data?.endpoints?.seo === `/api/sites/${createdSiteId}/seo`, `${frontendManifest.url} missing SEO endpoint`);
       assert(frontendManifest.json?.data?.endpoints?.sitemap === `/api/sites/${createdSiteId}/seo?format=sitemap`, `${frontendManifest.url} missing sitemap endpoint`);
-      assert(frontendManifest.json?.data?.endpoints?.frontendDesign === `/api/sites/${createdSiteId}/manifest#data.site.frontendDesign`, `${frontendManifest.url} missing frontend design contract pointer`);
+      assert(frontendManifest.json?.data?.endpoints?.frontendDesign === `/api/sites/${createdSiteId}/frontend-design`, `${frontendManifest.url} missing frontend design endpoint`);
+      assert(frontendManifest.json?.data?.endpoints?.frontendDesignInManifest === `/api/sites/${createdSiteId}/manifest#data.site.frontendDesign`, `${frontendManifest.url} missing frontend design contract pointer`);
       assert(Object.prototype.hasOwnProperty.call(frontendManifest.json?.data?.site || {}, 'frontendDesign'), `${frontendManifest.url} missing site frontend design field`);
       assert(frontendManifest.json?.data?.site?.frontendDesign?.templates?.some((template) => template.id === 'captured-page-template' && template.type === 'page'), `${frontendManifest.url} missing captured page frontend template`);
       assert(frontendManifest.json?.data?.site?.frontendDesign?.templates?.some((template) => template.id === 'captured-form-template' && template.type === 'form'), `${frontendManifest.url} missing captured form frontend template`);
@@ -3680,6 +3681,23 @@ try {
         && route.pattern === '/directory'
       )), `${frontendManifest.url} missing dynamic list route pattern`);
 
+      const frontendDesignContract = await request(`/api/sites/${createdSiteId}/frontend-design`);
+      assert(frontendDesignContract.response.status === 200, `${frontendDesignContract.url} expected 200, got ${frontendDesignContract.response.status}`);
+      assertBackyContract(frontendDesignContract, 'discovery');
+      assert(frontendDesignContract.response.headers.get('x-backy-schema-version') === 'backy.frontend-design-response.v1', `${frontendDesignContract.url} missing frontend design schema version`);
+      const frontendDesignEtag = frontendDesignContract.response.headers.get('etag');
+      assert(frontendDesignEtag?.startsWith('"backy-'), `${frontendDesignContract.url} missing frontend design etag`);
+      assert(frontendDesignContract.json?.data?.capabilities?.hasContract === true, `${frontendDesignContract.url} missing frontend design capability`);
+      assert(frontendDesignContract.json?.data?.capabilities?.templateCount >= 3, `${frontendDesignContract.url} missing frontend design template count`);
+      assert(frontendDesignContract.json?.data?.frontendDesign?.templates?.some((template) => template.id === 'captured-page-template' && template.type === 'page'), `${frontendDesignContract.url} missing captured page design template`);
+      assert(frontendDesignContract.json?.data?.frontendDesign?.templates?.some((template) => template.id === 'captured-form-template' && template.type === 'form'), `${frontendDesignContract.url} missing captured form design template`);
+      assert(frontendDesignContract.json?.data?.endpoints?.manifest === `/api/sites/${createdSiteId}/manifest`, `${frontendDesignContract.url} missing manifest endpoint`);
+      const revalidatedFrontendDesign = await request(`/api/sites/${createdSiteId}/frontend-design`, {
+        headers: { 'if-none-match': frontendDesignEtag },
+      });
+      assert(revalidatedFrontendDesign.response.status === 304, `${revalidatedFrontendDesign.url} expected frontend design 304, got ${revalidatedFrontendDesign.response.status}`);
+      assert(revalidatedFrontendDesign.response.headers.get('etag') === frontendDesignEtag, `${revalidatedFrontendDesign.url} expected matching frontend design etag`);
+
       const publicOpenApi = await request(`/api/sites/${createdSiteId}/openapi`);
       assert(publicOpenApi.response.status === 200, `${publicOpenApi.url} expected 200, got ${publicOpenApi.response.status}`);
       assert(publicOpenApi.response.headers.get('cache-control')?.includes('max-age=60'), `${publicOpenApi.url} missing discovery cache header`);
@@ -3698,6 +3716,7 @@ try {
       assert(revalidatedOpenApi.response.headers.get('x-backy-cache-revision') === openApiCacheRevision, `${revalidatedOpenApi.url} expected matching OpenAPI cache revision`);
       assert(publicOpenApi.json?.openapi === '3.1.0', `${publicOpenApi.url} expected OpenAPI 3.1 document`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/manifest`]?.get, `${publicOpenApi.url} missing manifest operation`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/frontend-design`]?.get, `${publicOpenApi.url} missing frontend design operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/render`]?.get, `${publicOpenApi.url} missing render operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/seo`]?.get, `${publicOpenApi.url} missing SEO discovery operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/media/{mediaId}`]?.get, `${publicOpenApi.url} missing media detail operation`);
@@ -3721,6 +3740,8 @@ try {
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/events`]?.get, `${publicOpenApi.url} missing interaction events operation`);
       assert(publicOpenApi.json?.components?.schemas?.FormSubmissionEnvelope, `${publicOpenApi.url} missing form submission schema`);
       assert(publicOpenApi.json?.components?.schemas?.FormDefinitionEnvelope, `${publicOpenApi.url} missing form definition schema`);
+      assert(publicOpenApi.json?.components?.schemas?.FrontendDesignEnvelope?.properties?.data?.properties?.frontendDesign?.$ref === '#/components/schemas/FrontendDesignContract', `${publicOpenApi.url} missing frontend design envelope schema`);
+      assert(publicOpenApi.json?.components?.schemas?.FrontendDesignTemplate?.properties?.bindingHints, `${publicOpenApi.url} missing frontend design template binding schema`);
       assert(publicOpenApi.json?.components?.schemas?.SeoDiscoveryEnvelope, `${publicOpenApi.url} missing SEO discovery schema`);
       assert(publicOpenApi.json?.components?.schemas?.MediaDetailEnvelope, `${publicOpenApi.url} missing media detail schema`);
       assert(publicOpenApi.json?.components?.schemas?.ReusableSectionListEnvelope, `${publicOpenApi.url} missing reusable section list schema`);

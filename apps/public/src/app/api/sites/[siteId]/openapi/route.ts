@@ -156,6 +156,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
           },
         },
+        [`/api/sites/${site.id}/frontend-design`]: {
+          get: {
+            tags: ['Discovery'],
+            summary: 'Fetch the site frontend design contract',
+            operationId: 'getBackyFrontendDesignContract',
+            responses: {
+              '200': {
+                description: 'Frontend design contract and template inventory',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/FrontendDesignEnvelope' },
+                  },
+                },
+              },
+            },
+          },
+        },
         [`/api/sites/${site.id}/openapi`]: {
           get: {
             tags: ['Discovery'],
@@ -1447,6 +1464,78 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               navigation: { type: 'object', additionalProperties: true },
             },
           }),
+          FrontendDesignEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['schemaVersion', 'site', 'frontendDesign', 'capabilities', 'endpoints'],
+            properties: {
+              schemaVersion: { const: 'backy.frontend-design-response.v1' },
+              site: { type: 'object', additionalProperties: true },
+              frontendDesign: { $ref: '#/components/schemas/FrontendDesignContract' },
+              capabilities: {
+                type: 'object',
+                required: ['hasContract', 'templateCount', 'editableBindingCount'],
+                properties: {
+                  hasContract: { type: 'boolean' },
+                  templateCount: { type: 'integer', minimum: 0 },
+                  editableBindingCount: { type: 'integer', minimum: 0 },
+                  chrome: { type: 'boolean' },
+                  tokens: { type: 'boolean' },
+                },
+              },
+              endpoints: { type: 'object', additionalProperties: { type: 'string' } },
+            },
+          }),
+          FrontendDesignContract: {
+            type: 'object',
+            required: ['schemaVersion', 'status', 'source', 'templates', 'editableMap'],
+            additionalProperties: true,
+            properties: {
+              schemaVersion: { type: 'string' },
+              status: { type: 'string', enum: ['unconfigured', 'captured', 'synced', 'stale'] },
+              source: { type: 'object', additionalProperties: true },
+              tokens: { type: 'object', additionalProperties: true },
+              chrome: { type: 'object', additionalProperties: true },
+              templates: {
+                type: 'array',
+                items: { $ref: '#/components/schemas/FrontendDesignTemplate' },
+              },
+              editableMap: {
+                type: 'array',
+                items: { $ref: '#/components/schemas/FrontendEditableMapEntry' },
+              },
+              notes: { type: 'string' },
+              updatedAt: { type: 'string', format: 'date-time' },
+            },
+          },
+          FrontendDesignTemplate: {
+            type: 'object',
+            required: ['id', 'type', 'name'],
+            additionalProperties: true,
+            properties: {
+              id: { type: 'string' },
+              type: { type: 'string', enum: ['page', 'blogPost', 'form', 'product', 'collection', 'section'] },
+              name: { type: 'string' },
+              routePattern: { type: 'string' },
+              description: { type: 'string' },
+              canvasSize: { type: 'object', additionalProperties: true },
+              content: { type: 'object', additionalProperties: true },
+              bindingHints: {
+                type: 'array',
+                items: { type: 'object', additionalProperties: true },
+              },
+            },
+          },
+          FrontendEditableMapEntry: {
+            type: 'object',
+            additionalProperties: true,
+            properties: {
+              selector: { type: 'string' },
+              elementId: { type: 'string' },
+              role: { type: 'string' },
+              binding: { type: 'string' },
+              fields: { type: 'array', items: { type: 'string' } },
+            },
+          },
           SeoDiscoveryEnvelope: envelopeSchema({
             type: 'object',
             required: ['site', 'defaults', 'routes', 'sitemap', 'robots'],

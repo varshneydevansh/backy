@@ -155,6 +155,22 @@ export interface BackySiteSummary {
   [key: string]: unknown;
 }
 
+export interface BackyFrontendDesignResponse {
+  schemaVersion: 'backy.frontend-design-response.v1' | string;
+  site: BackySiteSummary;
+  frontendDesign: BackyFrontendDesignContract;
+  capabilities: {
+    hasContract: boolean;
+    templateCount: number;
+    editableBindingCount: number;
+    chrome?: boolean;
+    tokens?: boolean;
+    [key: string]: unknown;
+  };
+  endpoints?: Record<string, string>;
+  [key: string]: unknown;
+}
+
 export interface BackyNavigationItem {
   id?: string;
   type?: 'page' | 'route' | 'url' | string;
@@ -874,6 +890,17 @@ export class BackyClient {
 
   manifest(siteId = this.requireSiteId()): Promise<BackyEnvelope<BackyFrontendManifest>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/manifest`);
+  }
+
+  frontendDesign(siteId = this.requireSiteId()): Promise<BackyEnvelope<BackyFrontendDesignResponse>> {
+    return this.request(`/api/sites/${encodeURIComponent(siteId)}/frontend-design`);
+  }
+
+  frontendDesignCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<BackyFrontendDesignResponse>>> {
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/frontend-design`, {
+      ifNoneMatch: options.etag,
+      requestId: options.requestId,
+    });
   }
 
   manifestCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<BackyFrontendManifest>>> {
