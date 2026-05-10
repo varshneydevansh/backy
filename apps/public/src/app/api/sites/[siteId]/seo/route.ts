@@ -39,6 +39,15 @@ interface RouteParams {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+const getRequestedFormat = (request: NextRequest) => {
+  const headerFormat = request.headers.get('x-backy-seo-format');
+  if (headerFormat === 'sitemap' || headerFormat === 'robots') {
+    return headerFormat;
+  }
+
+  return new URL(request.url).searchParams.get('format');
+};
+
 const seoCacheRevision = (
   site: {
     id: string;
@@ -405,7 +414,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
       const discovery = await buildRepositorySeoDiscovery(site, repositories, origin);
       const cacheRevision = seoCacheRevision(site, discovery);
-      const format = new URL(request.url).searchParams.get('format');
+      const format = getRequestedFormat(request);
 
       if (format === 'sitemap') {
         return withPublicContractHeaders(
@@ -465,7 +474,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const discovery = buildSeoDiscovery(site, { origin });
     const cacheRevision = seoCacheRevision(site, discovery);
-    const format = new URL(request.url).searchParams.get('format');
+    const format = getRequestedFormat(request);
 
     if (format === 'sitemap') {
       return withPublicContractHeaders(

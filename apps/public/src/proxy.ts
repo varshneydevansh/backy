@@ -32,6 +32,8 @@ const isAllowedOrigin = (origin: string | null) => {
 
 const isAdminApiRequest = (request: NextRequest) => request.nextUrl.pathname.startsWith('/api/admin/');
 const isAdminAuthRequest = (request: NextRequest) => request.nextUrl.pathname.startsWith('/api/admin/auth/');
+const isUploadRequest = (request: NextRequest) => request.nextUrl.pathname.startsWith('/uploads/');
+const hostedSeoMatch = (pathname: string) => pathname.match(/^\/sites\/([^/]+)\/(sitemap\.xml|robots\.txt)$/);
 
 const shouldRequireAdminApiKey = () => (
   process.env.BACKY_REQUIRE_ADMIN_API_KEY === 'true'
@@ -100,6 +102,27 @@ export function proxy(request: NextRequest) {
   const origin = request.headers.get('origin');
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
+  if (isUploadRequest(request)) {
+    const url = request.nextUrl.clone();
+    url.pathname = `/api${url.pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
+  const seoMatch = hostedSeoMatch(request.nextUrl.pathname);
+  if (seoMatch) {
+    const [, siteId, file] = seoMatch;
+    const headers = new Headers(request.headers);
+    headers.set('x-backy-seo-format', file === 'sitemap.xml' ? 'sitemap' : 'robots');
+    const url = request.nextUrl.clone();
+    url.pathname = `/api/sites/${siteId}/seo`;
+    url.searchParams.set('format', file === 'sitemap.xml' ? 'sitemap' : 'robots');
+    return NextResponse.rewrite(url, {
+      request: {
+        headers,
+      },
+    });
+  }
+
   if (request.method === 'OPTIONS') {
     const response = new NextResponse(null, { status: 204 });
     applyCorsHeaders(response.headers, origin);
@@ -134,5 +157,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: '/api/:path*',
+  matcher: ['/api/:path*', '/uploads/:path*', '/sites/:path*'],
 };
