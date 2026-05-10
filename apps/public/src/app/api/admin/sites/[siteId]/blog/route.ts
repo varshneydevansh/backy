@@ -12,6 +12,7 @@ import {
   type BackyContentDocument,
   type BackyPost,
 } from '@backy-cms/core';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import {
   createAdminBlogPost,
   getBlogPosts,
@@ -135,6 +136,8 @@ const adminPostFromRepositoryPost = (post: BackyPost) => {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.view' });
+  if (access instanceof NextResponse) return access;
 
   try {
     const { siteId } = await params;
@@ -208,6 +211,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.edit' });
+  if (access instanceof NextResponse) return access;
 
   try {
     const { siteId } = await params;

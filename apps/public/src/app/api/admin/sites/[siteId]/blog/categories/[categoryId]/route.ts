@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import {
   deleteAdminBlogCategory,
   getBlogCategoryByIdOrSlug,
@@ -61,6 +62,8 @@ const normalizeSlug = (value: unknown): string => (
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.view' });
+  if (access instanceof NextResponse) return access;
 
   try {
     const { siteId, categoryId } = await params;
@@ -108,6 +111,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.edit' });
+  if (access instanceof NextResponse) return access;
 
   try {
     const { siteId, categoryId } = await params;
@@ -201,6 +206,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.delete' });
+  if (access instanceof NextResponse) return access;
 
   try {
     const { siteId, categoryId } = await params;

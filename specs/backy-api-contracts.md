@@ -471,6 +471,7 @@ Current reusable-section endpoints persist to `data/backy/admin-content.json` in
 ### 3.7 Blog
 - `GET /api/admin/sites/:siteId/blog?status=&limit=&offset=`
   - Current implementation returns `{ success, requestId, data: { posts, pagination } }` and includes unpublished posts for admin use.
+  - Admin blog list/detail/readiness/revision/author/taxonomy reads require `pages.view`; post/category/tag create and update plus archive/rollback require `pages.edit`; publish and preview-token creation require `pages.publish`; deletes require `pages.delete`.
 
 - `POST /api/admin/sites/:siteId/blog`
   - Body: `{ title, slug?, excerpt?, status?, content?, meta?, featuredImageId?, authorId?, categoryIds?, tagIds?, scheduledAt? }`
@@ -490,7 +491,7 @@ Current reusable-section endpoints persist to `data/backy/admin-content.json` in
 - `DELETE /api/admin/sites/:siteId/blog/:postId`
   - Deletes the post from the runtime adapter.
 
-Current blog admin endpoints are local file-backed through `data/backy/admin-content.json`. Production completion still requires authenticated database persistence, RBAC, author/category/tag APIs, preview tokens, cache invalidation, workflow audit events, and contract tests.
+Current blog admin endpoints are local file-backed through `data/backy/admin-content.json` in demo mode and enforce the existing content permission matrix. Production completion still requires authenticated database persistence, audit-event UI, and broader contract tests.
 
 ### 3.8 Publish and revisions
 - `GET /api/admin/sites/:siteId/pages/:pageId/revisions`

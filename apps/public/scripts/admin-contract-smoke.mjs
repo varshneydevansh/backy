@@ -1926,6 +1926,11 @@ try {
   });
 
   await record('admin blog categories create/list/detail/update works for temporary site', async () => {
+    const unauthBlog = await fetch(`${baseUrl}/api/admin/sites/${createdSiteId}/blog`);
+    const unauthBlogJson = await unauthBlog.json().catch(() => ({}));
+    assert(unauthBlog.status === 401, `Blog admin API should reject missing auth, got ${unauthBlog.status}`);
+    assert(unauthBlogJson?.success === false && unauthBlogJson?.error?.code === 'UNAUTHORIZED', `Blog admin API missing auth envelope: ${JSON.stringify(unauthBlogJson).slice(0, 500)}`);
+
     const create = await request(`/api/admin/sites/${createdSiteId}/blog/categories`, {
       method: 'POST',
       headers: {

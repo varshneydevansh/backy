@@ -13,6 +13,7 @@ import {
   type BackyContentDocument,
   type BackyPost,
 } from '@backy-cms/core';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import {
   deleteAdminBlogPost,
   getAdminBlogPostById,
@@ -126,6 +127,8 @@ const adminPostFromRepositoryPost = (post: BackyPost) => {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.view' });
+  if (access instanceof NextResponse) return access;
 
   try {
     const { siteId, postId } = await params;
@@ -179,6 +182,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.edit' });
+  if (access instanceof NextResponse) return access;
 
   try {
     const { siteId, postId } = await params;
@@ -312,6 +317,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.delete' });
+  if (access instanceof NextResponse) return access;
 
   try {
     const { siteId, postId } = await params;
