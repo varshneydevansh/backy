@@ -27,6 +27,7 @@ let createdReusableInstancePageId = null;
 let createdSafeguardUserId = null;
 let originalUserAdminRole = null;
 let originalUserAdminStatus = null;
+let capturedTemplatePageId = null;
 let routeConflictCleanupPageId = null;
 let originalDeliveryMode = null;
 let originalSettingsIntegrations = null;
@@ -133,6 +134,10 @@ async function cleanup() {
 
   if (createdSiteId && createdPageId) {
     await request(`/api/admin/sites/${createdSiteId}/pages/${createdPageId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (createdSiteId && capturedTemplatePageId) {
+    await request(`/api/admin/sites/${createdSiteId}/pages/${capturedTemplatePageId}`, { method: 'DELETE' }).catch(() => {});
   }
 
   if (createdSiteId && routeConflictCleanupPageId) {
@@ -1044,6 +1049,57 @@ try {
     assert(visibleScheduledPage.json?.data?.page?.frontendDesign?.tokens?.colors?.primary === '#2563eb', `${visibleScheduledPage.url} missing normalized page tokens`);
     assert(Array.isArray(visibleScheduledPage.json?.data?.page?.frontendDesign?.bindingHints) && visibleScheduledPage.json.data.page.frontendDesign.bindingHints.length === 2, `${visibleScheduledPage.url} missing normalized page binding hints`);
     assert(visibleScheduledPage.json?.page?.id === createdPageId, `${visibleScheduledPage.url} returned wrong scheduled page`);
+
+    const capturedPageTemplate = await request(`/api/admin/sites/${createdSiteId}/frontend-design`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'capture-content-template',
+        resourceType: 'page',
+        resourceId: createdPageId,
+        templateId: 'captured-page-template',
+        templateName: 'Captured Page Template',
+        routePattern: '/captured/{slug}',
+      }),
+    });
+    assert(capturedPageTemplate.response.status === 200, `${capturedPageTemplate.url} expected content template capture`);
+    const capturedTemplate = capturedPageTemplate.json?.data?.frontendDesign?.templates?.find((template) => template.id === 'captured-page-template');
+    assert(capturedTemplate?.type === 'page', `${capturedPageTemplate.url} missing captured page template type`);
+    assert(capturedTemplate?.routePattern === '/captured/{slug}', `${capturedPageTemplate.url} missing captured route pattern`);
+    assert(Array.isArray(capturedTemplate?.content?.elements) && capturedTemplate.content.elements.some((element) => element.id === 'contract-page-heading'), `${capturedPageTemplate.url} missing captured page elements`);
+    assert(capturedTemplate?.content?.canvasSize?.width === 1200, `${capturedPageTemplate.url} missing captured canvas size`);
+    assert(Array.isArray(capturedTemplate?.bindingHints) && capturedTemplate.bindingHints.length === 2, `${capturedPageTemplate.url} missing captured binding hints`);
+    if (capturedPageTemplate.json?.data?.cacheInvalidation) {
+      assert(capturedPageTemplate.json.data.cacheInvalidation.reason === 'site-frontend-design-template-captured', `${capturedPageTemplate.url} missing template capture cache invalidation`);
+    }
+
+    const capturedTemplatePage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Captured Design Page',
+        slug: `${pageSlug}-captured-design`,
+        status: 'published',
+        frontendDesignTemplateId: 'captured-page-template',
+      }),
+    });
+    assert(capturedTemplatePage.response.status === 201, `${capturedTemplatePage.url} expected page from captured template`);
+    capturedTemplatePageId = capturedTemplatePage.json?.data?.page?.id;
+    assert(capturedTemplatePageId, `${capturedTemplatePage.url} missing captured template page id`);
+    assert(capturedTemplatePage.json?.data?.page?.meta?.frontendDesignTemplateId === 'captured-page-template', `${capturedTemplatePage.url} missing captured template provenance`);
+    assert(capturedTemplatePage.json?.data?.page?.meta?.frontendDesignRoutePattern === '/captured/{slug}', `${capturedTemplatePage.url} missing captured route provenance`);
+    assert(Array.isArray(capturedTemplatePage.json?.data?.page?.content?.elements) && capturedTemplatePage.json.data.page.content.elements.some((element) => element.id === 'contract-page-heading'), `${capturedTemplatePage.url} did not seed captured design elements`);
+    const publicCapturedTemplatePage = await request(`/api/sites/${createdSiteId}/pages?slug=${pageSlug}-captured-design`);
+    assert(publicCapturedTemplatePage.response.status === 200, `${publicCapturedTemplatePage.url} expected public page from captured template`);
+    assert(publicCapturedTemplatePage.json?.data?.page?.frontendDesign?.templateId === 'captured-page-template', `${publicCapturedTemplatePage.url} missing normalized captured frontend design`);
+    assert(publicCapturedTemplatePage.json?.data?.page?.frontendDesign?.routePattern === '/captured/{slug}', `${publicCapturedTemplatePage.url} missing normalized captured route pattern`);
+    assert(Array.isArray(publicCapturedTemplatePage.json?.data?.page?.frontendDesign?.bindingHints) && publicCapturedTemplatePage.json.data.page.frontendDesign.bindingHints.length === 2, `${publicCapturedTemplatePage.url} missing normalized captured binding hints`);
+    await request(`/api/admin/sites/${createdSiteId}/pages/${capturedTemplatePageId}`, { method: 'DELETE' });
+    capturedTemplatePageId = null;
 
     const pageFrontendManifest = await request(`/api/sites/${createdSiteId}/manifest`);
     assert(pageFrontendManifest.response.status === 200, `${pageFrontendManifest.url} expected 200, got ${pageFrontendManifest.response.status}`);
@@ -3099,13 +3155,14 @@ try {
       assert(frontendManifest.json?.data?.capabilities?.dynamicListRoutes === true, `${frontendManifest.url} missing dynamic list route capability`);
       assert(frontendManifest.json?.data?.capabilities?.redirectRoutes === true, `${frontendManifest.url} missing redirect route capability`);
       assert(frontendManifest.json?.data?.capabilities?.reusableSections === true, `${frontendManifest.url} missing reusable sections capability`);
-      assert(frontendManifest.json?.data?.capabilities?.frontendDesignContract === false, `${frontendManifest.url} expected unset frontend design contract capability`);
+      assert(frontendManifest.json?.data?.capabilities?.frontendDesignContract === true, `${frontendManifest.url} missing frontend design contract capability`);
       assert(frontendManifest.json?.data?.contract?.schemas?.renderPayload?.includes('content-payload.schema.json'), `${frontendManifest.url} missing render schema reference`);
       assert(frontendManifest.json?.data?.endpoints?.openapi === `/api/sites/${createdSiteId}/openapi`, `${frontendManifest.url} missing OpenAPI endpoint`);
       assert(frontendManifest.json?.data?.endpoints?.seo === `/api/sites/${createdSiteId}/seo`, `${frontendManifest.url} missing SEO endpoint`);
       assert(frontendManifest.json?.data?.endpoints?.sitemap === `/api/sites/${createdSiteId}/seo?format=sitemap`, `${frontendManifest.url} missing sitemap endpoint`);
       assert(frontendManifest.json?.data?.endpoints?.frontendDesign === `/api/sites/${createdSiteId}/manifest#data.site.frontendDesign`, `${frontendManifest.url} missing frontend design contract pointer`);
       assert(Object.prototype.hasOwnProperty.call(frontendManifest.json?.data?.site || {}, 'frontendDesign'), `${frontendManifest.url} missing site frontend design field`);
+      assert(frontendManifest.json?.data?.site?.frontendDesign?.templates?.some((template) => template.id === 'captured-page-template' && template.type === 'page'), `${frontendManifest.url} missing captured page frontend template`);
       assert(frontendManifest.json?.data?.endpoints?.mediaDetail === `/api/sites/${createdSiteId}/media/{mediaId}`, `${frontendManifest.url} missing media detail endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.mediaFile === `/api/sites/${createdSiteId}/media/{mediaId}/file`, `${frontendManifest.url} missing media file endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.mediaTransform === `/api/sites/${createdSiteId}/media/{mediaId}/transform?width={width}`, `${frontendManifest.url} missing media transform endpoint template`);

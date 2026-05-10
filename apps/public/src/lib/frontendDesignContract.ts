@@ -3,6 +3,7 @@ import type { SiteSettings } from '@backy-cms/core';
 type FrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type FrontendDesignTemplate = FrontendDesignContract['templates'][number];
 type FrontendDesignTemplateType = FrontendDesignTemplate['type'];
+type FrontendDesignEditableMapEntry = FrontendDesignContract['editableMap'][number];
 
 const SCHEMA_VERSION = 'backy.frontend-design.v1';
 
@@ -35,6 +36,16 @@ const cloneRecord = (value: unknown): Record<string, unknown> | undefined => (
 const cloneArray = <T>(value: T[]): T[] => (
   JSON.parse(JSON.stringify(value)) as T[]
 );
+
+const mergeRecord = (
+  base: unknown,
+  next: unknown,
+): Record<string, unknown> | undefined => {
+  const baseRecord = cloneRecord(base) || {};
+  const nextRecord = cloneRecord(next) || {};
+  const merged = { ...baseRecord, ...nextRecord };
+  return Object.keys(merged).length > 0 ? merged : undefined;
+};
 
 const normalizeStatus = (value: unknown): FrontendDesignContract['status'] => (
   value === 'captured' || value === 'synced' || value === 'stale' || value === 'unconfigured'
@@ -197,6 +208,204 @@ export const buildSiteDefaultFrontendDesignContract = (input: {
     ],
     notes: 'Captured from the current Backy site so new pages and posts can inherit the same chrome and design tokens.',
   }, { updatedAt });
+};
+
+const contentCanvasSize = (content: unknown): { width: number; height: number } | undefined => {
+  const contentRecord = isRecord(content) ? content : {};
+  const metadata = isRecord(contentRecord.metadata) ? contentRecord.metadata : {};
+  const canvasSize = isRecord(contentRecord.canvasSize)
+    ? contentRecord.canvasSize
+    : isRecord(metadata.canvasSize)
+      ? metadata.canvasSize
+      : undefined;
+
+  if (!canvasSize) return undefined;
+
+  return {
+    width: Number(canvasSize.width) || 1200,
+    height: Number(canvasSize.height) || 900,
+  };
+};
+
+const contentCustomCss = (content: unknown): string | undefined => {
+  const contentRecord = isRecord(content) ? content : {};
+  const metadata = isRecord(contentRecord.metadata) ? contentRecord.metadata : {};
+  return stringValue(contentRecord.customCSS)
+    || stringValue(contentRecord.customCss)
+    || stringValue(metadata.customCSS)
+    || stringValue(metadata.customCss);
+};
+
+const contentElements = (content: unknown): unknown[] => {
+  const contentRecord = isRecord(content) ? content : {};
+  if (Array.isArray(contentRecord.elements)) return cloneArray(contentRecord.elements);
+  const contentDocument = isRecord(contentRecord.contentDocument) ? contentRecord.contentDocument : undefined;
+  if (Array.isArray(contentDocument?.elements)) return cloneArray(contentDocument.elements);
+  return [];
+};
+
+const contentTemplatePayload = (content: unknown) => {
+  const contentRecord = isRecord(content) ? content : {};
+  const contentDocument = isRecord(contentRecord.contentDocument)
+    ? cloneRecord(contentRecord.contentDocument)
+    : isRecord(contentRecord) && Array.isArray(contentRecord.elements) && isRecord(contentRecord.metadata)
+      ? cloneRecord(contentRecord)
+      : undefined;
+  const canvasSize = contentCanvasSize(content) || { width: 1200, height: 900 };
+  const customCSS = contentCustomCss(content);
+
+  return {
+    elements: contentElements(content),
+    canvasSize,
+    ...(customCSS ? { customCSS } : {}),
+    ...(contentDocument ? { contentDocument } : {}),
+  };
+};
+
+const inferEditableMapFromElements = (
+  elements: unknown[],
+  entries: FrontendDesignEditableMapEntry[] = [],
+) => {
+  for (const element of elements) {
+    if (!isRecord(element)) continue;
+
+    const elementId = stringValue(element.id);
+    const elementType = stringValue(element.type);
+    const props = isRecord(element.props) ? element.props : {};
+    const binding = stringValue(props.binding);
+    if (binding) {
+      entries.push({
+        elementId,
+        role: elementType,
+        binding,
+        fields: [binding.split('.').filter(Boolean).at(-1)].filter((field): field is string => Boolean(field)),
+      });
+    }
+
+    if (Array.isArray(element.dataBindings)) {
+      for (const bindingEntry of element.dataBindings) {
+        if (!isRecord(bindingEntry)) continue;
+        const source = stringValue(bindingEntry.source);
+        entries.push({
+          elementId,
+          role: elementType,
+          binding: source,
+          fields: Array.isArray(bindingEntry.fields)
+            ? bindingEntry.fields.map(stringValue).filter((field): field is string => Boolean(field))
+            : undefined,
+        });
+      }
+    }
+
+    if (Array.isArray(element.children)) {
+      inferEditableMapFromElements(element.children, entries);
+    }
+  }
+
+  return entries;
+};
+
+const dedupeEditableMap = (entries: FrontendDesignEditableMapEntry[]) => {
+  const seen = new Set<string>();
+  return entries.filter((entry) => {
+    const key = [entry.selector || '', entry.elementId || '', entry.role || '', entry.binding || ''].join('|');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return Boolean(entry.selector || entry.elementId || entry.binding || entry.role);
+  });
+};
+
+export const buildFrontendDesignContractFromContentTemplate = (input: {
+  frontendDesign?: SiteSettings['frontendDesign'];
+  resource: {
+    id: string;
+    type: 'page' | 'blogPost';
+    title: string;
+    slug: string;
+    description?: string | null;
+    content: unknown;
+    meta?: Record<string, unknown>;
+  };
+  templateId?: string;
+  templateName?: string;
+  routePattern?: string;
+  source?: Record<string, unknown>;
+  bindingHints?: Array<Record<string, unknown>>;
+  editableMap?: Array<Record<string, unknown>>;
+  updatedAt?: string;
+}): FrontendDesignContract => {
+  const updatedAt = input.updatedAt || new Date().toISOString();
+  const current = normalizeFrontendDesignContract(input.frontendDesign || emptyFrontendDesignContract(), { updatedAt });
+  const meta = input.resource.meta || {};
+  const content = contentTemplatePayload(input.resource.content);
+  const templateId = input.templateId
+    || stringValue(meta.frontendDesignTemplateId)
+    || `${input.resource.type}-${input.resource.id}`;
+  const routePattern = input.routePattern
+    || stringValue(meta.frontendDesignRoutePattern)
+    || (input.resource.type === 'blogPost' ? `/blog/${input.resource.slug}` : `/${input.resource.slug}`);
+  const sourceInput = mergeRecord(current.source, meta.frontendDesignSource);
+  const normalizedSource = normalizeFrontendDesignContract({
+    source: mergeRecord(sourceInput, input.source) || {
+      type: 'custom-frontend',
+      label: 'Captured content template',
+    },
+  }, { updatedAt }).source;
+  const customCss = content.customCSS || stringValue(meta.frontendDesignCustomCss) || current.tokens.customCss;
+  const tokens = {
+    ...current.tokens,
+    ...(isRecord(meta.frontendDesignTokens) ? cloneRecord(meta.frontendDesignTokens) : {}),
+    ...(customCss ? { customCss } : {}),
+  };
+  const chrome = {
+    ...current.chrome,
+    ...(isRecord(meta.frontendDesignChrome) ? cloneRecord(meta.frontendDesignChrome) : {}),
+  };
+  const inferredEditableMap = inferEditableMapFromElements(content.elements);
+  const explicitEditableMap = Array.isArray(input.editableMap)
+    ? input.editableMap.filter(isRecord).map((entry) => ({ ...entry }))
+    : [];
+  const bindingHints = Array.isArray(input.bindingHints)
+    ? input.bindingHints.filter(isRecord).map((hint) => ({ ...hint }))
+    : Array.isArray(meta.frontendDesignBindingHints)
+      ? meta.frontendDesignBindingHints.filter(isRecord).map((hint) => ({ ...hint }))
+      : inferredEditableMap
+          .filter((entry) => entry.binding)
+          .map((entry) => ({
+            elementId: entry.elementId,
+            role: entry.role,
+            binding: entry.binding,
+            fields: entry.fields,
+          }));
+  const template: FrontendDesignTemplate = {
+    id: templateId,
+    type: input.resource.type,
+    name: input.templateName || stringValue(meta.frontendDesignTemplateName) || input.resource.title,
+    routePattern,
+    description: input.resource.description || `Captured from ${input.resource.title}.`,
+    canvasSize: content.canvasSize,
+    content,
+    bindingHints: bindingHints.length > 0 ? bindingHints : undefined,
+  };
+
+  return {
+    ...current,
+    status: 'captured',
+    source: normalizedSource,
+    tokens,
+    chrome,
+    templates: [
+      ...current.templates.filter((candidate) => candidate.id !== template.id),
+      template,
+    ],
+    editableMap: dedupeEditableMap([
+      ...current.editableMap,
+      ...inferredEditableMap,
+      ...explicitEditableMap,
+    ]),
+    notes: current.notes || 'Captured from content so new pages and posts can retain frontend design details.',
+    updatedAt,
+  };
 };
 
 const templateRequestId = (input: Record<string, unknown>): string | undefined => {
