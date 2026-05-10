@@ -28,10 +28,11 @@ import {
   Shield,
   SlidersHorizontal,
   Trash2,
+  Upload,
   User,
   Users,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DataGrid } from '@/components/ui/DataGrid';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageShell } from '@/components/layout/PageShell';
@@ -43,10 +44,12 @@ import { cn } from '@/lib/utils';
 import {
   bulkUpdateUsers,
   deleteUser as deleteBackendUser,
+  importUsersCsv,
   listAdminAuditLogs,
   listUsers,
   updateUser as updateBackendUser,
   type AdminAuditLog,
+  type UserImportResult,
 } from '@/lib/adminContentApi';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { useAuthStore } from '@/stores/authStore';
@@ -254,10 +257,13 @@ function UsersListView() {
   const [bulkStatus, setBulkStatus] = useState<UserStatus>('inactive');
   const [isBulkActionBusy, setIsBulkActionBusy] = useState(false);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [isImportingUsers, setIsImportingUsers] = useState(false);
+  const [importResult, setImportResult] = useState<UserImportResult | null>(null);
   const [userAuditLogs, setUserAuditLogs] = useState<AdminAuditLog[]>([]);
   const [isLoadingUserAudit, setIsLoadingUserAudit] = useState(false);
   const [userAuditError, setUserAuditError] = useState<string | null>(null);
-  const isUserMutationBusy = updatingUserId !== null || isBulkActionBusy;
+  const isUserMutationBusy = updatingUserId !== null || isBulkActionBusy || isImportingUsers;
   const isUsersBusy = isLoading || isUserMutationBusy;
   const adminBaseUrl = useMemo(() => getAdminBaseUrl(), []);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
@@ -576,6 +582,59 @@ function UsersListView() {
     URL.revokeObjectURL(url);
   };
 
+  const downloadUserImportTemplate = () => {
+    if (isUsersBusy) return;
+
+    const csv = [
+      ['full_name', 'email', 'role', 'status'].join(','),
+      ['Example Editor', 'editor@example.com', 'editor', 'invited'].join(','),
+    ].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'backy-users-import-template.csv';
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportUsers = async (file: File | null | undefined) => {
+    if (!file || isUsersBusy) return;
+
+    setIsImportingUsers(true);
+    setImportResult(null);
+    setNotice(null);
+
+    try {
+      const csv = await file.text();
+      const result = await importUsersCsv(csv);
+      setImportResult(result);
+      setNotice(`Imported ${result.created} user${result.created === 1 ? '' : 's'}; skipped ${result.skipped}; ${result.errors.length} row issue${result.errors.length === 1 ? '' : 's'}.`);
+      await loadUsers();
+      await loadUserAuditLogs();
+    } catch (error) {
+      const details = error && typeof error === 'object' && 'details' in error
+        ? (error as { details?: unknown }).details
+        : null;
+      const errors = Array.isArray(details)
+        ? details.filter((item): item is UserImportResult['errors'][number] => (
+            Boolean(item) && typeof item === 'object' && 'row' in item && 'message' in item
+          ))
+        : [];
+      if (errors.length > 0) {
+        setImportResult({ created: 0, skipped: 0, errors });
+      }
+      setNotice(error instanceof Error ? error.message : 'Unable to import users from CSV.');
+    } finally {
+      setIsImportingUsers(false);
+      if (importInputRef.current) {
+        importInputRef.current.value = '';
+      }
+    }
+  };
+
   const columns: Column<UserType>[] = [
     {
       key: 'id',
@@ -791,6 +850,7 @@ function UsersListView() {
     generatedAt: new Date().toISOString(),
     endpoints: {
       listAndInvite: usersListUrl,
+      csvImport: `${usersListUrl}/import`,
       detailUpdateDelete: userDetailUrl,
       publicRegistrationForms: publicFormsUrl,
       publicRegistrationDefinition: publicRegistrationDefinitionUrl,
@@ -870,6 +930,7 @@ function UsersListView() {
     guardrails: [
       'Backend blocks deleting or demoting the final active owner/admin.',
       'Invites and edits reject emails already attached to another user.',
+      'CSV import creates new users only and reports duplicate emails as skipped.',
       'CSV export is the explicit admin path for identity fields.',
     ],
     privacy: {
@@ -944,6 +1005,14 @@ function UsersListView() {
       }
       className="w-full"
     >
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        aria-label="Import users CSV"
+        onChange={(event) => void handleImportUsers(event.currentTarget.files?.[0])}
+      />
       <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="users-command-center">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
@@ -988,6 +1057,24 @@ function UsersListView() {
               iconStart={<Download className="size-4" />}
             >
               Export CSV
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isUsersBusy}
+              onClick={downloadUserImportTemplate}
+              iconStart={<Download className="size-4" />}
+            >
+              CSV template
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isUsersBusy}
+              onClick={() => importInputRef.current?.click()}
+              iconStart={<Upload className="size-4" />}
+            >
+              {isImportingUsers ? 'Importing...' : 'Import CSV'}
             </Button>
             <Button
               type="button"
@@ -1088,6 +1175,15 @@ function UsersListView() {
                     iconStart={<Download className="size-4" />}
                   >
                     Export CSV
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isUsersBusy}
+                    onClick={() => importInputRef.current?.click()}
+                    iconStart={<Upload className="size-4" />}
+                  >
+                    Import CSV
                   </Button>
                   <Button
                     type="button"
@@ -1278,6 +1374,39 @@ function UsersListView() {
             {notice && (
               <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 {notice}
+              </div>
+            )}
+
+            {importResult && (
+              <div className="mt-4 rounded-lg border border-border bg-background p-3 text-sm" data-testid="users-import-result">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-foreground">Import result</span>
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                    {importResult.created} created
+                  </span>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                    {importResult.skipped} skipped
+                  </span>
+                  <span className={cn(
+                    'rounded-full px-2 py-0.5 text-xs font-semibold',
+                    importResult.errors.length > 0 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700',
+                  )}
+                  >
+                    {importResult.errors.length} row issue{importResult.errors.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                {importResult.errors.length > 0 && (
+                  <ul className="mt-3 grid gap-1 text-xs text-muted-foreground">
+                    {importResult.errors.slice(0, 4).map((error) => (
+                      <li key={`${error.row}-${error.email || error.message}`}>
+                        Row {error.row}: {error.email ? `${error.email} - ` : ''}{error.message}
+                      </li>
+                    ))}
+                    {importResult.errors.length > 4 && (
+                      <li>{importResult.errors.length - 4} more row issue{importResult.errors.length - 4 === 1 ? '' : 's'} hidden.</li>
+                    )}
+                  </ul>
+                )}
               </div>
             )}
 

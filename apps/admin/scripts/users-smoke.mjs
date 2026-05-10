@@ -954,6 +954,59 @@ const setUsersBulkStatus = async (client, fullNames, status) => {
   assert(result.ok, `Unable to run users bulk status action: ${JSON.stringify(result)}`);
 };
 
+const importUsersThroughUi = async (client, csvPath, expectedName) => {
+  await navigateToUsers(client);
+
+  const markResult = await evaluate(client, `(() => {
+    const input = document.querySelector('input[aria-label="Import users CSV"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return {
+        ok: false,
+        reason: 'import-input-missing',
+        inputs: Array.from(document.querySelectorAll('input')).map((candidate) => candidate.getAttribute('aria-label') || candidate.type).slice(0, 40),
+      };
+    }
+    input.setAttribute('data-users-smoke-import-input', 'true');
+    return { ok: true };
+  })()`);
+  assert(markResult.ok, `Unable to find users import input: ${JSON.stringify(markResult)}`);
+
+  await client.send('DOM.enable');
+  const documentResult = await client.send('DOM.getDocument', { depth: 1 });
+  const queryResult = await client.send('DOM.querySelector', {
+    nodeId: documentResult.root.nodeId,
+    selector: 'input[data-users-smoke-import-input="true"]',
+  });
+  assert(queryResult.nodeId, `Unable to resolve users import input node: ${JSON.stringify(queryResult)}`);
+  await client.send('DOM.setFileInputFiles', {
+    nodeId: queryResult.nodeId,
+    files: [csvPath],
+  });
+
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const result = document.querySelector('[data-testid="users-import-result"]');
+      const text = result?.textContent || '';
+      return {
+        hasResult: Boolean(result),
+        hasCreated: text.includes('1 created'),
+        hasSkipped: text.includes('1 skipped'),
+        hasUser: document.body?.innerText?.includes(${JSON.stringify(expectedName)}) || false,
+        text: text.slice(0, 800),
+      };
+    })()`);
+    if (state.hasResult && state.hasCreated && state.hasSkipped && state.hasUser) {
+      return state;
+    }
+    if (attempt === 119) {
+      throw new Error(`Users import UI did not finish: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const assertLayout = async (client, expectedName) => {
   const layout = await evaluate(client, `(() => ({
     width: window.innerWidth,
@@ -1061,11 +1114,14 @@ const main = async () => {
   let userDataDir;
   let createdUserId;
   let bulkUserId;
+  let importedUserId;
   const suffix = Date.now().toString(36);
   const fullName = `Users Smoke ${suffix}`;
   const email = `users-smoke-${suffix}@example.com`;
   const bulkFullName = `Users Bulk ${suffix}`;
   const bulkEmail = `users-bulk-${suffix}@example.com`;
+  const importedFullName = `Users Import ${suffix}`;
+  const importedEmail = `users-import-${suffix}@example.com`;
 
   try {
     await loginAdminApi();
@@ -1099,6 +1155,24 @@ const main = async () => {
     await navigateToUsers(client);
     await waitForUsersPageUser(client, email);
     await waitForUsersPageUser(client, bulkEmail);
+    const importCsvPath = path.join(os.tmpdir(), `backy-users-import-${suffix}.csv`);
+    fs.writeFileSync(
+      importCsvPath,
+      [
+        'full_name,email,role,status',
+        `${importedFullName},${importedEmail},editor,invited`,
+        `Duplicate ${fullName},${email},viewer,invited`,
+      ].join('\n'),
+      'utf8',
+    );
+    await importUsersThroughUi(client, importCsvPath, importedFullName);
+    const importedUser = await waitForUser(importedEmail, (user) => user.fullName === importedFullName && user.role === 'editor' && user.status === 'invited');
+    importedUserId = importedUser.id;
+    const importAuditLogs = await listUserAuditLogs('import');
+    assert(
+      importAuditLogs.some((log) => log.action === 'user.import.create' && log.metadata?.created === 1 && log.metadata?.skipped === 1),
+      `User import audit log was not recorded: ${JSON.stringify(importAuditLogs).slice(0, 500)}`,
+    );
     await waitForUsersSelfProtection(client);
     await openUserDetail(client, 'Admin User');
     await waitForUserDetailSelfProtection(client);
@@ -1183,6 +1257,9 @@ const main = async () => {
     }, null, 2));
   } finally {
     await cleanup({ client, childProcess, userDataDir, userId: createdUserId });
+    if (importedUserId) {
+      await deleteUser(importedUserId).catch(() => undefined);
+    }
     if (bulkUserId) {
       await deleteUser(bulkUserId).catch(() => undefined);
     }

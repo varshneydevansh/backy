@@ -383,6 +383,18 @@ interface ApiBulkUsersResponse {
   };
 }
 
+interface ApiImportUsersResponse {
+  success: boolean;
+  data?: {
+    users: ApiUser[];
+    import: UserImportResult;
+  };
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
 export type AdminPermissionCapability =
   | 'view'
   | 'create'
@@ -954,6 +966,18 @@ export interface UserBulkResult {
   deleted: number;
   userIds: string[];
   users: User[];
+}
+
+export interface UserImportError {
+  row: number;
+  email?: string;
+  message: string;
+}
+
+export interface UserImportResult {
+  created: number;
+  skipped: number;
+  errors: UserImportError[];
 }
 
 export interface SiteSettingsInput {
@@ -2214,6 +2238,23 @@ export async function bulkUpdateUsers(input: UserBulkInput): Promise<UserBulkRes
     ...payload.data,
     users: payload.data.users.map(toStoreUser),
   };
+}
+
+export async function importUsersCsv(csv: string): Promise<UserImportResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/users/import`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+    },
+    body: csv,
+  });
+  const payload = await readJson<ApiImportUsersResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new AdminContentApiError(payload.error?.message || 'Unable to import users', payload.error?.details);
+  }
+
+  return payload.data.import;
 }
 
 export async function getSettings(): Promise<SiteSettingsInput> {
