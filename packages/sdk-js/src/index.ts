@@ -84,6 +84,63 @@ export interface BackyThemeTokens {
   [key: string]: unknown;
 }
 
+export interface BackyFrontendDesignSource {
+  type: 'managed-site' | 'custom-frontend' | 'manual' | string;
+  label?: string;
+  url?: string;
+  repository?: string;
+  branch?: string;
+  capturedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyFrontendDesignTemplate {
+  id: string;
+  type: 'page' | 'blogPost' | 'form' | 'product' | 'collection' | 'section' | string;
+  name: string;
+  routePattern?: string;
+  description?: string;
+  canvasSize?: {
+    width?: number;
+    height?: number;
+    [key: string]: unknown;
+  };
+  content?: Record<string, unknown>;
+  bindingHints?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export interface BackyFrontendEditableMapEntry {
+  selector?: string;
+  elementId?: string;
+  role?: string;
+  binding?: string;
+  fields?: string[];
+  [key: string]: unknown;
+}
+
+export interface BackyFrontendDesignContract {
+  schemaVersion: 'backy.frontend-design.v1' | string;
+  status: 'unconfigured' | 'captured' | 'synced' | 'stale' | string;
+  source: BackyFrontendDesignSource;
+  tokens?: BackyThemeTokens & {
+    customCss?: string;
+    radii?: Record<string, unknown>;
+    shadows?: Record<string, unknown>;
+  };
+  chrome?: {
+    header?: Record<string, unknown>;
+    navigation?: Record<string, unknown>;
+    footer?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  templates: BackyFrontendDesignTemplate[];
+  editableMap: BackyFrontendEditableMapEntry[];
+  notes?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
 export interface BackySiteSummary {
   id: string;
   slug: string;
@@ -94,6 +151,7 @@ export interface BackySiteSummary {
   isPublished?: boolean;
   theme?: BackyThemeTokens;
   themeTokens?: BackyThemeTokens;
+  frontendDesign?: BackyFrontendDesignContract | null;
   [key: string]: unknown;
 }
 

@@ -41,6 +41,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/sites/:siteId/manifest`
   - Site-level frontend discovery/bootstrap document described by `specs/ai-frontend-contract/frontend-manifest.schema.json`.
   - Returns site identity, theme tokens, schema references, capability flags, public endpoint URLs, route patterns, navigation, module summaries, collection field schemas, form submit/detail/submission/contact URLs, page/blog comment URL templates, comment report URLs, interaction event URLs, media/font counts, and form-to-collection target metadata.
+  - Exposes `data.site.frontendDesign` as the site-level design contract (`schemaVersion`, `status`, `source`, `tokens`, `chrome`, `templates`, `editableMap`) plus `capabilities.frontendDesignContract` and `endpoints.frontendDesign`, so custom frontends can preserve header/navigation/footer, fonts, colors, template provenance, and editable bindings when Backy creates new content.
   - Published manifest responses include `Cache-Control: public, max-age=60, stale-while-revalidate=300`, `ETag`/`If-None-Match` 304 support, `x-backy-cache-scope: discovery`, `x-backy-contract-version`, `x-backy-schema-version`, `x-backy-request-id`, and `x-backy-site-id`.
   - Draft/unpublished sites are hidden from the public manifest.
 

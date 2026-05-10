@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { validateAiFrontendManifest } from '../../public/scripts/validate-ai-render-payload.mjs';
+
 const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 const SITE_ID = process.env.BACKY_FRONTEND_DESIGN_SMOKE_SITE_ID || 'site-demo';
 
@@ -155,6 +157,7 @@ const main = async () => {
     assert(afterPatch.tokens?.colors?.primary === '#0f766e', 'GET did not persist patched color token');
 
     const manifestAfterPatch = await getManifest();
+    validateAiFrontendManifest({ success: true, requestId: 'frontend-design-smoke', data: manifestAfterPatch }, 'frontend design manifest after patch');
     assert(manifestAfterPatch.site?.frontendDesign?.status === 'synced', 'Manifest did not expose synced frontend design contract');
     assert(manifestAfterPatch.capabilities?.frontendDesignContract === true, 'Manifest did not advertise frontend design capability');
     assert(manifestAfterPatch.endpoints?.frontendDesign?.includes('#data.site.frontendDesign'), 'Manifest did not expose frontend design endpoint anchor');
@@ -163,6 +166,7 @@ const main = async () => {
     assert(captured.chrome?.navigation, 'Capture did not include navigation chrome');
 
     const manifestAfterCapture = await getManifest();
+    validateAiFrontendManifest({ success: true, requestId: 'frontend-design-smoke', data: manifestAfterCapture }, 'frontend design manifest after capture');
     assert(manifestAfterCapture.site?.frontendDesign?.status === 'captured', 'Manifest did not expose captured frontend design contract');
     assert(manifestAfterCapture.site?.frontendDesign?.source?.type === 'managed-site', 'Manifest did not expose managed-site source after capture');
   } finally {
