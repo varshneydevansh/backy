@@ -57,6 +57,10 @@ const normalizeSlug = (value: unknown, fallback: string): string => {
   return slug || fallback;
 };
 
+const normalizeFieldKey = (value: unknown): string => (
+  String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+);
+
 const parseStatus = (value: unknown): PublishStatus => (
   value === 'draft' || value === 'published' || value === 'scheduled' || value === 'archived'
     ? value
@@ -176,7 +180,10 @@ const importRows = async (
     ) => Promise<{ record: unknown | null; existing: boolean }>;
   },
 ) => {
-  const fieldsByKey = new Map(input.collection.fields.map((field) => [field.key, field]));
+  const fieldsByKey = new Map(input.collection.fields.flatMap((field) => [
+    [field.key, field] as const,
+    [normalizeFieldKey(field.key), field] as const,
+  ]));
   const records = [];
   const errors: ImportError[] = [];
   let created = 0;
@@ -189,7 +196,7 @@ const importRows = async (
     const values = Object.fromEntries(
       input.headers
         .filter((header) => !RESERVED_COLUMNS.has(header))
-        .map((header) => [header, parseImportedValue(fieldsByKey.get(header), rowData[header] ?? '')]),
+        .map((header) => [header, parseImportedValue(fieldsByKey.get(header) || fieldsByKey.get(normalizeFieldKey(header)), rowData[header] ?? '')]),
     );
     const slug = normalizeSlug(rowData.slug || values.title || values.name || `record-${rowNumber}`, `record-${rowNumber}`);
     const status = parseStatus(rowData.status);
@@ -343,7 +350,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, 'VALIDATION_ERROR', 'CSV import requires at least one column header', requestId);
     }
 
-    const fieldsByKey = new Map(collection.fields.map((field) => [field.key, field]));
+    const fieldsByKey = new Map(collection.fields.flatMap((field) => [
+      [field.key, field] as const,
+      [normalizeFieldKey(field.key), field] as const,
+    ]));
     const records = [];
     const errors: ImportError[] = [];
     let created = 0;
@@ -356,7 +366,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const values = Object.fromEntries(
         headers
           .filter((header) => !RESERVED_COLUMNS.has(header))
-          .map((header) => [header, parseImportedValue(fieldsByKey.get(header), rowData[header] ?? '')]),
+          .map((header) => [header, parseImportedValue(fieldsByKey.get(header) || fieldsByKey.get(normalizeFieldKey(header)), rowData[header] ?? '')]),
       );
       const slug = normalizeSlug(rowData.slug || values.title || values.name || `record-${rowNumber}`, `record-${rowNumber}`);
       const existing = getCollectionRecordByIdOrSlug(site.id, collection.id, slug, { includeUnpublished: true });
