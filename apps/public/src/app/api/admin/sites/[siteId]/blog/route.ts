@@ -18,6 +18,7 @@ import {
   getSiteByIdOrSlug,
 } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
+import { seedInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -81,6 +82,14 @@ const stringArrayFromInput = (value: unknown): string[] => (
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : []
 );
 
+const contentElementsFromInput = (rawContent: unknown): unknown[] => {
+  if (isRecord(rawContent) && Array.isArray(rawContent.elements)) {
+    return rawContent.elements;
+  }
+
+  return Array.isArray(rawContent) ? rawContent : [];
+};
+
 const contentDocumentFromInput = (
   rawContent: unknown,
   input: {
@@ -103,7 +112,7 @@ const contentDocumentFromInput = (
     title: input.title,
     slug: input.slug,
     status: input.status,
-    elements: isRecord(rawContent) ? rawContent : [],
+    elements: contentElementsFromInput(rawContent),
     canvasSize: isRecord(rawContent) ? rawContent.canvasSize : undefined,
     customCSS: isRecord(rawContent) && typeof rawContent.customCSS === 'string' ? rawContent.customCSS : undefined,
   });
@@ -228,20 +237,34 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(409, 'SLUG_CONFLICT', 'A post with this slug already exists', requestId);
       }
 
-      const postId = typeof body.id === 'string' && body.id.trim().length > 0 ? body.id.trim() : `post_${slug}`;
+      const seeded = seedInputFromFrontendDesignTemplate({
+        siteSettings: site.settings,
+        body,
+        templateType: 'blogPost',
+        kind: 'post',
+        title,
+        excerpt: typeof body.excerpt === 'string' ? body.excerpt : null,
+      });
+
+      if (!seeded.ok) {
+        return errorResponse(400, seeded.code, seeded.message, requestId);
+      }
+
+      const createBody = seeded.body;
+      const postId = typeof createBody.id === 'string' && createBody.id.trim().length > 0 ? createBody.id.trim() : `post_${slug}`;
       const created = await repositories.posts.create({
         siteId: site.id,
         title,
         slug,
-        excerpt: typeof body.excerpt === 'string' ? body.excerpt : null,
+        excerpt: typeof createBody.excerpt === 'string' ? createBody.excerpt : null,
         status,
-        scheduledAt: typeof body.scheduledAt === 'string' ? body.scheduledAt : null,
-        featuredImageId: typeof body.featuredImageId === 'string' ? body.featuredImageId : null,
-        authorId: typeof body.authorId === 'string' ? body.authorId : null,
-        categoryIds: stringArrayFromInput(body.categoryIds),
-        tagIds: stringArrayFromInput(body.tagIds),
-        content: contentDocumentFromInput(body.content, { id: postId, title, slug, status }),
-        meta: isRecord(body.meta) ? body.meta : undefined,
+        scheduledAt: typeof createBody.scheduledAt === 'string' ? createBody.scheduledAt : null,
+        featuredImageId: typeof createBody.featuredImageId === 'string' ? createBody.featuredImageId : null,
+        authorId: typeof createBody.authorId === 'string' ? createBody.authorId : null,
+        categoryIds: stringArrayFromInput(createBody.categoryIds),
+        tagIds: stringArrayFromInput(createBody.tagIds),
+        content: contentDocumentFromInput(createBody.content, { id: postId, title, slug, status }),
+        meta: isRecord(createBody.meta) ? createBody.meta : undefined,
       });
       const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
         siteId: site.id,
@@ -292,8 +315,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(409, 'SLUG_CONFLICT', 'A post with this slug already exists', requestId);
     }
 
+    const seeded = seedInputFromFrontendDesignTemplate({
+      siteSettings: site.settings,
+      body,
+      templateType: 'blogPost',
+      kind: 'post',
+      title,
+      excerpt: typeof body.excerpt === 'string' ? body.excerpt : null,
+    });
+
+    if (!seeded.ok) {
+      return errorResponse(400, seeded.code, seeded.message, requestId);
+    }
+
     const post = createAdminBlogPost(site.id, {
-      ...body,
+      ...seeded.body,
       title,
       slug,
     });

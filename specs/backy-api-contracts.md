@@ -61,6 +61,10 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Must return only published content.
   - Draft access requires `previewToken` created by the admin preview endpoint for that exact page.
 
+- `POST /api/admin/sites/:siteId/pages`
+  - Accepts top-level `frontendDesignTemplateId` or `designTemplateId` for connected frontend contracts.
+  - When a matching site frontend design template exists and no explicit content is provided, Backy seeds editable canvas content from the captured template, preserves site chrome/tokens/custom CSS/binding hints in `meta.frontendDesign*`, and returns the normal admin page resource.
+
 - `GET /api/sites/:siteId/render?path=/about`
 - `GET /api/sites/:siteId/render?path=/blog/:slug`
 - `GET /api/sites/:siteId/render?path=/:collectionSlug/:recordSlug`
@@ -76,6 +80,10 @@ This document defines how custom frontends, admin UI, and public renderer intera
 
 - `GET /api/sites/:siteId/blog`
   - Blog posts created from a connected frontend design template expose raw `meta.frontendDesign*` provenance plus a normalized `frontendDesign` summary (`templateId`, `templateName`, `routePattern`, `source`, `chrome`, `tokens`, `customCss`, `bindingHints`) in public blog list/detail responses and manifest blog summaries.
+
+- `POST /api/admin/sites/:siteId/blog`
+  - Accepts top-level `frontendDesignTemplateId` or `designTemplateId` for connected frontend contracts.
+  - When a matching `blogPost` frontend design template exists and no explicit content is provided, Backy seeds editable blog canvas content from the captured template, preserves design provenance in `meta.frontendDesign*`, and returns the normal admin post resource.
 
 - `GET /api/sites/:siteId/resolve?path=/about`
 - `GET /api/public/sites/:siteId/resolve?path=/about` (future stable alias)

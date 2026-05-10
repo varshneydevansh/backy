@@ -22,6 +22,7 @@ import {
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { findPageRouteConflict } from '@/lib/routeConflicts';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
+import { seedInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
 
 export const runtime = 'nodejs';
 
@@ -72,6 +73,14 @@ const statusFromInput = (value: unknown): 'draft' | 'published' | 'scheduled' | 
   value === 'published' || value === 'scheduled' || value === 'archived' ? value : 'draft'
 );
 
+const contentElementsFromInput = (rawContent: unknown): unknown[] => {
+  if (isRecord(rawContent) && Array.isArray(rawContent.elements)) {
+    return rawContent.elements;
+  }
+
+  return Array.isArray(rawContent) ? rawContent : [];
+};
+
 const contentDocumentFromInput = (
   rawContent: unknown,
   input: {
@@ -94,7 +103,7 @@ const contentDocumentFromInput = (
     title: input.title,
     slug: input.slug,
     status: input.status,
-    elements: isRecord(rawContent) ? rawContent : [],
+    elements: contentElementsFromInput(rawContent),
     canvasSize: isRecord(rawContent) ? rawContent.canvasSize : undefined,
     customCSS: isRecord(rawContent) && typeof rawContent.customCSS === 'string' ? rawContent.customCSS : undefined,
   });
@@ -225,18 +234,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
       }
 
-      const pageId = typeof body.id === 'string' && body.id.trim().length > 0 ? body.id.trim() : `page_${slug}`;
+      const seeded = seedInputFromFrontendDesignTemplate({
+        siteSettings: site.settings,
+        body,
+        templateType: 'page',
+        kind: 'page',
+        title,
+        description: typeof body.description === 'string' ? body.description : null,
+      });
+
+      if (!seeded.ok) {
+        return errorResponse(400, seeded.code, seeded.message, requestId);
+      }
+
+      const createBody = seeded.body;
+      const pageId = typeof createBody.id === 'string' && createBody.id.trim().length > 0 ? createBody.id.trim() : `page_${slug}`;
       const created = await repositories.pages.create({
         siteId: site.id,
         title,
         slug,
-        description: typeof body.description === 'string' ? body.description : null,
+        description: typeof createBody.description === 'string' ? createBody.description : null,
         status,
-        scheduledAt: typeof body.scheduledAt === 'string' ? body.scheduledAt : null,
-        isHomepage: typeof body.isHomepage === 'boolean' ? body.isHomepage : false,
-        parentId: typeof body.parentId === 'string' ? body.parentId : null,
-        content: contentDocumentFromInput(body.content, { id: pageId, title, slug, status }),
-        meta: isRecord(body.meta) ? body.meta : undefined,
+        scheduledAt: typeof createBody.scheduledAt === 'string' ? createBody.scheduledAt : null,
+        isHomepage: typeof createBody.isHomepage === 'boolean' ? createBody.isHomepage : false,
+        parentId: typeof createBody.parentId === 'string' ? createBody.parentId : null,
+        content: contentDocumentFromInput(createBody.content, { id: pageId, title, slug, status }),
+        meta: isRecord(createBody.meta) ? createBody.meta : undefined,
       });
       const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
         siteId: site.id,
@@ -287,8 +310,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(409, 'ROUTE_CONFLICT', routeConflict.message, requestId);
     }
 
+    const seeded = seedInputFromFrontendDesignTemplate({
+      siteSettings: site.settings,
+      body,
+      templateType: 'page',
+      kind: 'page',
+      title,
+      description: typeof body.description === 'string' ? body.description : null,
+    });
+
+    if (!seeded.ok) {
+      return errorResponse(400, seeded.code, seeded.message, requestId);
+    }
+
     const page = createAdminPage(site.id, {
-      ...body,
+      ...seeded.body,
       title,
       slug,
     });

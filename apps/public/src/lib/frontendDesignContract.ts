@@ -1,6 +1,8 @@
 import type { SiteSettings } from '@backy-cms/core';
 
 type FrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
+type FrontendDesignTemplate = FrontendDesignContract['templates'][number];
+type FrontendDesignTemplateType = FrontendDesignTemplate['type'];
 
 const SCHEMA_VERSION = 'backy.frontend-design.v1';
 
@@ -24,6 +26,14 @@ const stringRecord = (value: unknown): Record<string, string> | undefined => {
 
 const objectRecord = (value: unknown): Record<string, unknown> | undefined => (
   isRecord(value) ? { ...value } : undefined
+);
+
+const cloneRecord = (value: unknown): Record<string, unknown> | undefined => (
+  isRecord(value) ? JSON.parse(JSON.stringify(value)) as Record<string, unknown> : undefined
+);
+
+const cloneArray = <T>(value: T[]): T[] => (
+  JSON.parse(JSON.stringify(value)) as T[]
 );
 
 const normalizeStatus = (value: unknown): FrontendDesignContract['status'] => (
@@ -187,4 +197,239 @@ export const buildSiteDefaultFrontendDesignContract = (input: {
     ],
     notes: 'Captured from the current Backy site so new pages and posts can inherit the same chrome and design tokens.',
   }, { updatedAt });
+};
+
+const templateRequestId = (input: Record<string, unknown>): string | undefined => {
+  const meta = isRecord(input.meta) ? input.meta : {};
+  return stringValue(input.frontendDesignTemplateId)
+    || stringValue(input.designTemplateId)
+    || stringValue(meta.frontendDesignTemplateId);
+};
+
+export const findFrontendDesignTemplate = (
+  frontendDesign: SiteSettings['frontendDesign'] | undefined,
+  type: FrontendDesignTemplateType,
+  templateId: string,
+): FrontendDesignTemplate | undefined => (
+  frontendDesign?.templates?.find((template) => template.type === type && template.id === templateId)
+);
+
+const templateContent = (
+  frontendDesign: FrontendDesignContract,
+  template: FrontendDesignTemplate,
+  input: {
+    kind: 'page' | 'post';
+    title: string;
+    description?: string | null;
+    excerpt?: string | null;
+  },
+) => {
+  const content = cloneRecord(template.content) || {};
+  const contentDocument = cloneRecord(content.contentDocument);
+  const metadata = cloneRecord(contentDocument?.metadata);
+  const contentCanvasSize = cloneRecord(content.canvasSize);
+  const metadataCanvasSize = cloneRecord(metadata?.canvasSize);
+  const canvasSize = contentCanvasSize
+    || metadataCanvasSize
+    || (template.canvasSize ? { ...template.canvasSize } : undefined)
+    || { width: 1200, height: 900 };
+  const customCSS = stringValue(content.customCSS)
+    || stringValue(content.customCss)
+    || stringValue(metadata?.customCSS)
+    || frontendDesign.tokens.customCss;
+
+  if (Array.isArray(content.elements)) {
+    return {
+      elements: cloneArray(content.elements),
+      canvasSize,
+      customCSS,
+      contentDocument,
+    };
+  }
+
+  if (contentDocument && Array.isArray(contentDocument.elements)) {
+    return {
+      elements: cloneArray(contentDocument.elements),
+      canvasSize,
+      customCSS,
+      contentDocument,
+    };
+  }
+
+  const isPost = input.kind === 'post';
+  const titleBinding = isPost ? 'post.title' : 'page.title';
+  const bodyBinding = isPost ? 'post.content' : 'page.content';
+  const summaryBinding = isPost ? 'post.excerpt' : 'page.description';
+  const summary = stringValue(input.excerpt)
+    || stringValue(input.description)
+    || template.description
+    || (isPost
+      ? 'This article was seeded from the connected frontend design contract.'
+      : 'This page was seeded from the connected frontend design contract.');
+
+  return {
+    elements: [
+      {
+        id: `frontend-template-${template.id}`,
+        type: 'section',
+        x: 0,
+        y: 0,
+        width: Number(canvasSize.width) || 1200,
+        height: Math.max(620, Number(canvasSize.height) || 900),
+        props: {
+          backgroundColor: '#ffffff',
+          borderRadius: 0,
+          padding: 0,
+          frontendTemplateId: template.id,
+          frontendTemplateName: template.name,
+          routePattern: template.routePattern,
+        },
+        dataBindings: [
+          {
+            source: isPost ? 'blog' : 'page',
+            mode: 'current',
+            fields: isPost
+              ? ['title', 'excerpt', 'author', 'publishedAt', 'coverImage', 'content']
+              : ['title', 'description', 'content'],
+          },
+        ],
+        children: [
+          {
+            id: `frontend-template-${template.id}-title`,
+            type: 'heading',
+            x: 72,
+            y: 96,
+            width: Math.min(760, (Number(canvasSize.width) || 1200) - 144),
+            height: 112,
+            props: {
+              content: input.title || template.name,
+              level: 'h1',
+              fontSize: 52,
+              fontWeight: '800',
+              lineHeight: 1.08,
+              color: frontendDesign.tokens.colors?.text || '#111827',
+              binding: titleBinding,
+            },
+          },
+          {
+            id: `frontend-template-${template.id}-summary`,
+            type: 'paragraph',
+            x: 76,
+            y: 238,
+            width: Math.min(680, (Number(canvasSize.width) || 1200) - 152),
+            height: 92,
+            props: {
+              content: summary,
+              fontSize: 18,
+              lineHeight: 1.6,
+              color: '#4b5563',
+              binding: summaryBinding,
+            },
+          },
+          {
+            id: `frontend-template-${template.id}-body`,
+            type: 'box',
+            x: 76,
+            y: 388,
+            width: Math.min(860, (Number(canvasSize.width) || 1200) - 152),
+            height: 240,
+            props: {
+              backgroundColor: '#f8fafc',
+              borderColor: '#cbd5e1',
+              borderWidth: 1,
+              borderStyle: 'solid',
+              borderRadius: 8,
+              binding: bodyBinding,
+              bindingHints: template.bindingHints || [],
+            },
+            children: [
+              {
+                id: `frontend-template-${template.id}-body-copy`,
+                type: 'paragraph',
+                x: 28,
+                y: 30,
+                width: Math.min(760, (Number(canvasSize.width) || 1200) - 220),
+                height: 96,
+                props: {
+                  content: isPost
+                    ? 'Replace this placeholder with article content, embeds, or reusable frontend sections.'
+                    : 'Replace this placeholder with editable sections captured from your frontend design.',
+                  fontSize: 16,
+                  lineHeight: 1.5,
+                  color: '#334155',
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    canvasSize,
+    customCSS,
+  };
+};
+
+export const seedInputFromFrontendDesignTemplate = (
+  input: {
+    siteSettings?: SiteSettings;
+    body: Record<string, unknown>;
+    templateType: FrontendDesignTemplateType;
+    kind: 'page' | 'post';
+    title: string;
+    description?: string | null;
+    excerpt?: string | null;
+  },
+): { ok: true; body: Record<string, unknown>; template?: FrontendDesignTemplate } | { ok: false; code: string; message: string } => {
+  const requestedTemplateId = templateRequestId(input.body);
+  if (!requestedTemplateId) {
+    return { ok: true, body: input.body };
+  }
+
+  const frontendDesign = input.siteSettings?.frontendDesign;
+  const template = findFrontendDesignTemplate(frontendDesign, input.templateType, requestedTemplateId);
+  const explicitRequest = Boolean(
+    stringValue(input.body.frontendDesignTemplateId)
+    || stringValue(input.body.designTemplateId),
+  );
+
+  if (!frontendDesign || !template) {
+    if (explicitRequest) {
+      return {
+        ok: false,
+        code: 'FRONTEND_TEMPLATE_NOT_FOUND',
+        message: `Frontend design template "${requestedTemplateId}" is not configured for this site.`,
+      };
+    }
+
+    return { ok: true, body: input.body };
+  }
+
+  const existingMeta = isRecord(input.body.meta) ? input.body.meta : {};
+  const existingContent = isRecord(input.body.content) ? input.body.content : undefined;
+  const shouldSeedContent = !existingContent
+    || (!Array.isArray(existingContent.elements) && !isRecord(existingContent.contentDocument));
+
+  return {
+    ok: true,
+    template,
+    body: {
+      ...input.body,
+      content: shouldSeedContent
+        ? templateContent(frontendDesign, template, input)
+        : input.body.content,
+      meta: {
+        ...existingMeta,
+        frontendDesignTemplateId: stringValue(existingMeta.frontendDesignTemplateId) || template.id,
+        frontendDesignTemplateName: stringValue(existingMeta.frontendDesignTemplateName) || template.name,
+        frontendDesignRoutePattern: stringValue(existingMeta.frontendDesignRoutePattern) || template.routePattern,
+        frontendDesignSource: cloneRecord(existingMeta.frontendDesignSource) || cloneRecord(frontendDesign.source),
+        frontendDesignTokens: cloneRecord(existingMeta.frontendDesignTokens) || cloneRecord(frontendDesign.tokens),
+        frontendDesignChrome: cloneRecord(existingMeta.frontendDesignChrome) || cloneRecord(frontendDesign.chrome),
+        frontendDesignCustomCss: stringValue(existingMeta.frontendDesignCustomCss) || frontendDesign.tokens.customCss,
+        frontendDesignBindingHints: Array.isArray(existingMeta.frontendDesignBindingHints)
+          ? cloneArray(existingMeta.frontendDesignBindingHints)
+          : template.bindingHints ? cloneArray(template.bindingHints) : undefined,
+      },
+    },
+  };
 };
