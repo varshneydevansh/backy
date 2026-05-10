@@ -14,6 +14,7 @@ import {
     getBlogPostReadiness,
     listBlogAuthors,
     listBlogCategories,
+    listBlogPosts,
     listBlogPostRevisions,
     listBlogTags,
     publishBlogPost,
@@ -127,6 +128,10 @@ function EditBlogPostPage() {
     const [workflowNotice, setWorkflowNotice] = useState<string | null>(null);
     const [isWorkflowBusy, setIsWorkflowBusy] = useState(false);
     const [isPreviewBusy, setIsPreviewBusy] = useState(false);
+    const [isCheckingRoutes, setIsCheckingRoutes] = useState(false);
+    const [routeCheckError, setRouteCheckError] = useState<string | null>(null);
+    const [routeCheckRetry, setRouteCheckRetry] = useState(0);
+    const [existingBlogPosts, setExistingBlogPosts] = useState<BlogPost[]>([]);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [previewExpiresAt, setPreviewExpiresAt] = useState<string | null>(null);
     const [revisions, setRevisions] = useState<ContentRevision[]>([]);
@@ -238,6 +243,45 @@ function EditBlogPostPage() {
             cancelled = true;
         };
     }, [activeSiteId]);
+
+    useEffect(() => {
+        if (!post) {
+            setExistingBlogPosts([]);
+            setRouteCheckError(null);
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadExistingPosts = async () => {
+            setIsCheckingRoutes(true);
+            setRouteCheckError(null);
+
+            try {
+                const backendPosts = await listBlogPosts(activeSiteId);
+                if (!cancelled) {
+                    setExistingBlogPosts(backendPosts);
+                    setRouteCheckError(null);
+                }
+            } catch (loadError) {
+                if (!cancelled) {
+                    const message = loadError instanceof Error ? loadError.message : 'Unable to verify existing blog routes for this site.';
+                    setExistingBlogPosts([]);
+                    setRouteCheckError(message);
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsCheckingRoutes(false);
+                }
+            }
+        };
+
+        void loadExistingPosts();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeSiteId, post, routeCheckRetry]);
 
     // Canvas State (Content Body)
     const { elements: savedElements, canvasSize: savedCanvasSize } = useMemo(
@@ -360,9 +404,17 @@ function EditBlogPostPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!canSave) {
-            setSaveWarning(status === 'scheduled' && !scheduledAt
-                ? 'Choose a publish date before scheduling changes.'
-                : 'Add a title and URL slug before saving.');
+            setSaveWarning(
+                isCheckingRoutes
+                    ? 'Checking existing blog routes before saving.'
+                    : routeCheckError
+                        ? 'Backy could not verify existing blog routes for this site. Retry the route check before saving.'
+                        : routeConflict
+                            ? `The ${publicPath} route is already used by "${routeConflict.title}". Choose another slug or edit that post first.`
+                            : status === 'scheduled' && !scheduledAt
+                                ? 'Choose a publish date before scheduling changes.'
+                                : 'Add a title and URL slug before saving.',
+            );
             setWorkflowNotice(null);
             return;
         }
@@ -383,7 +435,7 @@ function EditBlogPostPage() {
         try {
             const savedPost = await updateBlogPost(activeSiteId, postId, {
                 title,
-                slug,
+                slug: normalizedSlug,
                 excerpt,
                 status,
                 scheduledAt: status === 'scheduled' ? scheduledAt : null,
@@ -438,7 +490,7 @@ function EditBlogPostPage() {
     };
 
     const applyWorkflow = async (action: 'publish' | 'archive') => {
-        if (editorActionBusy || (action === 'publish' && (readinessBlocked || status === 'published')) || (action === 'archive' && status === 'archived')) {
+        if (editorActionBusy || (action === 'publish' && (readinessBlocked || routeBlocked || status === 'published')) || (action === 'archive' && status === 'archived')) {
             return;
         }
 
@@ -448,6 +500,15 @@ function EditBlogPostPage() {
 
         try {
             if (action === 'publish') {
+                if (isCheckingRoutes || routeCheckError || routeConflict) {
+                    setSaveWarning(routeCheckError
+                        ? 'Backy could not verify existing blog routes for this site. Retry the route check before publishing.'
+                        : routeConflict
+                            ? `The ${publicPath} route is already used by "${routeConflict.title}". Choose another slug before publishing.`
+                            : 'Backy is still checking route availability. Wait for the route check before publishing.');
+                    return;
+                }
+
                 const readiness = await loadPostReadiness();
                 if (readiness?.statusLabel === 'blocked') {
                     setSaveWarning('Resolve post readiness errors before publishing.');
@@ -491,6 +552,12 @@ function EditBlogPostPage() {
         if (editorActionBusy) return;
 
         await loadPostReadiness();
+    };
+
+    const retryRouteCheck = () => {
+        if (editorActionBusy) return;
+
+        setRouteCheckRetry((value) => value + 1);
     };
 
     const restoreRevision = async (revision: ContentRevision) => {
@@ -546,6 +613,17 @@ function EditBlogPostPage() {
         });
     };
 
+    const normalizedSlug = slugify(slug || post.slug || postId);
+    const publicPath = `/blog/${normalizedSlug || 'post-slug'}`;
+    const routeConflict = normalizedSlug
+        ? existingBlogPosts.find((existingPost) => existingPost.id !== postId && slugify(existingPost.slug) === normalizedSlug) || null
+        : null;
+    const routeBlocked = isCheckingRoutes || Boolean(routeCheckError) || Boolean(routeConflict);
+    const routeAvailability = routeCheckError
+        ? { status: 'unverified' as const, message: routeCheckError }
+        : routeConflict
+            ? { status: 'conflict' as const, postId: routeConflict.id, title: routeConflict.title, path: `/blog/${slugify(routeConflict.slug)}` }
+            : { status: 'available' as const, checkedPosts: existingBlogPosts.length };
     const readinessFindings = postReadiness?.checks.filter((check) => check.status !== 'pass') || [];
     const readinessBlocked = postReadiness?.statusLabel === 'blocked';
     const readinessTone = postReadiness?.statusLabel === 'ready'
@@ -558,14 +636,15 @@ function EditBlogPostPage() {
     const localReadinessChecks = [
         { label: 'Title', complete: title.trim().length > 0 },
         { label: 'Slug', complete: slug.trim().length > 0 },
+        { label: 'Route', complete: !routeBlocked },
         { label: 'Summary', complete: excerpt.trim().length >= 24 },
         { label: 'Design', complete: canvasElements.length > 0 },
         { label: 'Schedule', complete: status !== 'scheduled' || Boolean(scheduledAt) },
     ];
     const localReadyCount = localReadinessChecks.filter((check) => check.complete).length;
-    const canSave = title.trim().length > 0 && slug.trim().length > 0 && (status !== 'scheduled' || Boolean(scheduledAt));
+    const canSave = title.trim().length > 0 && normalizedSlug.length > 0 && !routeBlocked && (status !== 'scheduled' || Boolean(scheduledAt));
     const editorBusy = isLoadingPost || isLoading || isWorkflowBusy;
-    const editorActionBusy = editorBusy || isPreviewBusy || readinessLoading;
+    const editorActionBusy = editorBusy || isPreviewBusy || readinessLoading || isCheckingRoutes;
     const submitLabel = status === 'published' ? 'Save published post' : status === 'scheduled' ? 'Schedule changes' : status === 'archived' ? 'Save archived post' : 'Save draft';
     const backendReadinessDetail = postReadiness
         ? `${postReadiness.score}% ${postReadiness.statusLabel.replace('-', ' ')}.`
@@ -578,8 +657,16 @@ function EditBlogPostPage() {
         },
         {
             label: 'Route',
-            detail: slug.trim() ? `/blog/${slug}` : 'Add a slug so public frontends can resolve the post.',
-            ready: slug.trim().length > 0,
+            detail: routeCheckError
+                ? 'Route check failed. Retry before saving or publishing.'
+                : routeConflict
+                    ? `${publicPath} is already used by "${routeConflict.title}".`
+                    : isCheckingRoutes
+                        ? 'Checking route availability.'
+                        : normalizedSlug
+                            ? `${publicPath} is available in the current site.`
+                            : 'Add a slug so public frontends can resolve the post.',
+            ready: normalizedSlug.length > 0 && !routeBlocked,
         },
         {
             label: 'Excerpt',
@@ -620,9 +707,8 @@ function EditBlogPostPage() {
     };
     const adminBlogPostUrl = `${getAdminApiBase()}/sites/${encodeURIComponent(activeSiteId)}/blog/${encodeURIComponent(postId)}`;
     const publicApiBase = getAdminApiBase().replace(/\/api\/admin$/, '/api');
-    const publicPath = `/blog/${slug || post.slug || postId}`;
     const publicBlogUrl = `${publicApiBase}/sites/${encodeURIComponent(activeSiteId)}/blog`;
-    const publicPostBySlugUrl = `${publicBlogUrl}?slug=${encodeURIComponent(slug || post.slug || postId)}`;
+    const publicPostBySlugUrl = `${publicBlogUrl}?slug=${encodeURIComponent(normalizedSlug || post.slug || postId)}`;
     const publicRenderUrl = `${publicApiBase}/sites/${encodeURIComponent(activeSiteId)}/render?path=${encodeURIComponent(publicPath)}`;
     const publicResolveUrl = `${publicApiBase}/sites/${encodeURIComponent(activeSiteId)}/resolve?path=${encodeURIComponent(publicPath)}`;
     const editorHandoff = {
@@ -630,11 +716,16 @@ function EditBlogPostPage() {
         post: {
             id: post.id,
             title: title || post.title,
-            slug: slug || post.slug,
+            slug: normalizedSlug || post.slug,
             path: publicPath,
             status,
             scheduledAt: status === 'scheduled' ? scheduledAt : null,
             excerpt,
+        },
+        route: {
+            path: publicPath,
+            slug: normalizedSlug || post.slug,
+            availability: routeAvailability,
         },
         site: {
             id: activeSiteId,
@@ -775,9 +866,23 @@ function EditBlogPostPage() {
             }
         >
             <div className="w-full pb-24">
-                {(loadError || saveWarning) && (
+                {(loadError || saveWarning || routeCheckError) && (
                     <Notice tone="warning" className="mb-4">
-                        {saveWarning || `${loadError} Using the local post copy.`}
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <span>{saveWarning || routeCheckError || `${loadError} Using the local post copy.`}</span>
+                            {routeCheckError && (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={editorActionBusy}
+                                    onClick={retryRouteCheck}
+                                    iconStart={<RefreshCw className={cn('size-3.5', isCheckingRoutes && 'animate-spin')} />}
+                                >
+                                    Retry route check
+                                </Button>
+                            )}
+                        </div>
                     </Notice>
                 )}
                 {workflowNotice && (
@@ -902,7 +1007,7 @@ function EditBlogPostPage() {
                             ))}
                         </div>
                         <div className="mt-4 grid gap-3 md:grid-cols-4">
-                            <BlogEditorMetaTile label="Route" value={slug ? `/blog/${slug}` : 'No slug'} />
+                            <BlogEditorMetaTile label="Route" value={normalizedSlug ? publicPath : 'No slug'} />
                             <BlogEditorMetaTile label="Canvas" value={`${canvasSize.width} x ${canvasSize.height}px`} />
                             <BlogEditorMetaTile label="Elements" value={`${canvasElements.length}`} />
                             <BlogEditorMetaTile label="Status" value={status} />
@@ -1005,13 +1110,36 @@ function EditBlogPostPage() {
                                         value={slug}
                                         onChange={(e) => {
                                             clearEditorFeedback();
-                                            setSlug(e.target.value);
+                                            setSlug(slugify(e.target.value));
                                         }}
                                         disabled={editorBusy}
                                         className="min-w-48 flex-1 border-0 bg-transparent p-0 font-mono text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
                                         placeholder="post-slug"
                                     />
                                 </div>
+                                {(routeConflict || routeCheckError) && (
+                                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <span>
+                                                {routeCheckError
+                                                    ? 'Backy could not verify existing blog routes for this site. Retry before saving or publishing.'
+                                                    : `${publicPath} is already used by "${routeConflict?.title}". Choose another slug or edit that post first.`}
+                                            </span>
+                                            {routeCheckError && (
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={editorActionBusy}
+                                                    onClick={retryRouteCheck}
+                                                    iconStart={<RefreshCw className={cn('size-3.5', isCheckingRoutes && 'animate-spin')} />}
+                                                >
+                                                    Retry
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div className="space-y-2">
                                     <label className="text-xs font-medium text-muted-foreground">Excerpt</label>
@@ -1210,10 +1338,10 @@ function EditBlogPostPage() {
                                         </Button>
                                         <Button
                                             onClick={() => void applyWorkflow('publish')}
-                                            disabled={editorActionBusy || readinessBlocked || status === 'published'}
+                                            disabled={editorActionBusy || readinessBlocked || routeBlocked || status === 'published'}
                                             variant="secondary"
                                             iconStart={<CheckCircle2 className="size-4" />}
-                                            title={readinessBlocked ? 'Resolve post readiness errors before publishing' : 'Publish post'}
+                                            title={routeBlocked ? 'Verify route availability before publishing' : readinessBlocked ? 'Resolve post readiness errors before publishing' : 'Publish post'}
                                         >
                                             Publish
                                         </Button>
@@ -1269,9 +1397,9 @@ function EditBlogPostPage() {
                                 </div>
                                 <div className="grid grid-cols-2 gap-2 text-xs">
                                     <BlogEditorContractTile label="Route" value={publicPath} />
+                                    <BlogEditorContractTile label="Route check" value={routeAvailability.status} />
                                     <BlogEditorContractTile label="Canvas" value={`${canvasSize.width} x ${canvasSize.height}`} />
                                     <BlogEditorContractTile label="Elements" value={`${canvasElements.length}`} />
-                                    <BlogEditorContractTile label="Revisions" value={`${revisions.length}`} />
                                 </div>
                                 <pre className="max-h-72 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
 {JSON.stringify({
@@ -1486,6 +1614,14 @@ function EditBlogPostPage() {
         </PageShell>
     );
 }
+
+const slugify = (value: string) => (
+    value
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '')
+);
 
 function BlogEditorMetaTile({ label, value }: { label: string; value: string }) {
     return (
