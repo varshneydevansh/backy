@@ -173,7 +173,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const requestId = parseRequestId(searchParams.get('requestId'));
       const q = parseSearchQuery(searchParams.get('q'));
       const parentId = searchParams.get('parentId');
-      const parentOnly = parseBoolean(searchParams.get('parentOnly'));
+      const parentOnly = parseBoolean(searchParams.get('parentOnly')) || Boolean(parentId);
+      const commentThreadId = parseSearchQuery(searchParams.get('commentThreadId'));
       const sort = parseSort(searchParams.get('sort'));
       const limit = parseInt(searchParams.get('limit') || '20', 10);
       const offset = parseInt(searchParams.get('offset') || '0', 10);
@@ -187,6 +188,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         q,
         parentOnly,
         parentId: parentId || null,
+        commentThreadId,
         sort,
         limit: Number.isFinite(limit) ? limit : 20,
         offset: Number.isFinite(offset) ? offset : 0,
@@ -220,7 +222,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const requestId = parseRequestId(searchParams.get('requestId'));
     const q = parseSearchQuery(searchParams.get('q'));
     const parentId = searchParams.get('parentId');
-    const parentOnly = parseBoolean(searchParams.get('parentOnly'));
+    const parentOnly = parseBoolean(searchParams.get('parentOnly')) || Boolean(parentId);
+    const commentThreadId = parseSearchQuery(searchParams.get('commentThreadId'));
     const sort = parseSort(searchParams.get('sort'));
     const limit = parseInt(searchParams.get('limit') || '20', 10);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
@@ -233,6 +236,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       q,
       parentOnly,
       parentId: parentId || null,
+      commentThreadId,
       sort,
       limit: Number.isFinite(limit) ? limit : 20,
       offset: Number.isFinite(offset) ? offset : 0,

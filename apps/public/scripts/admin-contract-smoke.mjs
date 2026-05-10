@@ -1568,6 +1568,33 @@ try {
     assert(pageComment.json?.comment?.id === pageComment.json?.data?.comment?.id, `${pageComment.url} expected legacy comment to match data envelope`);
     const pageCommentId = pageComment.json.data.comment.id;
 
+    const pageCommentReply = await request(`/api/sites/${createdSiteId}/pages/${createdPageId}/comments`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        body: 'This reply verifies comment body aliases and threaded replies.',
+        authorName: 'Contract Reply',
+        parentId: pageCommentId,
+        threadId: 'contract-comment-thread',
+        moderationMode: 'auto-approve',
+        requestId: 'contract-page-comment-reply',
+        rateLimitBypass: true,
+      }),
+    });
+    assert(pageCommentReply.response.status === 201, `${pageCommentReply.url} expected reply 201, got ${pageCommentReply.response.status}`);
+    assertBackyContract(pageCommentReply, 'private');
+    assert(pageCommentReply.json?.data?.comment?.parentId === pageCommentId, `${pageCommentReply.url} missing reply parent id`);
+    assert(pageCommentReply.json?.data?.comment?.commentThreadId === 'contract-comment-thread', `${pageCommentReply.url} missing reply thread id`);
+    assert(pageCommentReply.json?.data?.comment?.content === 'This reply verifies comment body aliases and threaded replies.', `${pageCommentReply.url} did not accept body alias`);
+    const pageCommentReplyId = pageCommentReply.json.data.comment.id;
+
+    const pageCommentReplies = await request(`/api/sites/${createdSiteId}/pages/${createdPageId}/comments?status=approved&parentId=${pageCommentId}`);
+    assert(pageCommentReplies.response.status === 200, `${pageCommentReplies.url} expected 200, got ${pageCommentReplies.response.status}`);
+    assert(pageCommentReplies.json?.data?.comments?.some((comment) => comment.id === pageCommentReplyId), `${pageCommentReplies.url} missing threaded reply in data envelope`);
+    assert(!pageCommentReplies.json?.data?.comments?.some((comment) => comment.id === pageCommentId), `${pageCommentReplies.url} included parent in reply list`);
+
     const pageComments = await request(`/api/sites/${createdSiteId}/pages/${createdPageId}/comments?status=approved&requestId=contract-page-comment`);
     assert(pageComments.response.status === 200, `${pageComments.url} expected 200, got ${pageComments.response.status}`);
     assertBackyContract(pageComments, 'private');
@@ -3588,6 +3615,10 @@ try {
       assert(publicOpenApi.json?.components?.schemas?.CommerceProduct?.properties?.design?.$ref === '#/components/schemas/CommerceProductDesign', `${publicOpenApi.url} missing commerce product design schema`);
       assert(publicOpenApi.json?.components?.schemas?.CommerceProductDesign?.properties?.templateId, `${publicOpenApi.url} missing commerce product template id schema`);
       assert(publicOpenApi.json?.components?.schemas?.CommerceProductDesign?.properties?.frontendDesignTemplateId, `${publicOpenApi.url} missing commerce product legacy template id schema`);
+      assert(publicOpenApi.json?.components?.schemas?.Comment?.properties?.parentId, `${publicOpenApi.url} missing comment parent id schema`);
+      assert(publicOpenApi.json?.components?.schemas?.Comment?.properties?.commentThreadId, `${publicOpenApi.url} missing comment thread id schema`);
+      assert(publicOpenApi.json?.components?.schemas?.CommentSubmitRequest?.properties?.body, `${publicOpenApi.url} missing comment body alias schema`);
+      assert(publicOpenApi.json?.components?.schemas?.CommentsEnvelope?.properties?.data?.properties?.comments?.items?.$ref === '#/components/schemas/Comment', `${publicOpenApi.url} missing typed comment list schema`);
       assert(publicOpenApi.json?.components?.schemas?.CommentReportEnvelope, `${publicOpenApi.url} missing comment report schema`);
       assert(publicOpenApi.json?.components?.schemas?.EventsEnvelope, `${publicOpenApi.url} missing interaction event schema`);
       assert(publicOpenApi.json?.components?.schemas?.RedirectRoute, `${publicOpenApi.url} missing redirect route schema`);

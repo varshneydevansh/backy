@@ -852,8 +852,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             operationId: 'listBackyPageComments',
             parameters: [
               pathParameter('pageId', 'Page id'),
-              queryParameter('status', { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam'] }),
+              queryParameter('status', { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam', 'blocked', 'all'] }),
               queryParameter('requestId'),
+              queryParameter('parentId', { type: 'string' }, 'Return replies for a specific parent comment.'),
+              queryParameter('parentOnly', { type: 'boolean' }, 'Return only top-level comments when true.'),
+              queryParameter('commentThreadId', { type: 'string' }, 'Filter comments to a specific frontend comment thread widget.'),
+              queryParameter('sort', { type: 'string', enum: ['newest', 'oldest'] }),
               queryParameter('limit', { type: 'integer', minimum: 1 }),
               queryParameter('offset', { type: 'integer', minimum: 0 }),
             ],
@@ -873,6 +877,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             summary: 'Submit a page comment',
             operationId: 'submitBackyPageComment',
             parameters: [pathParameter('pageId', 'Page id')],
+            requestBody: {
+              required: true,
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/CommentSubmitRequest' },
+                },
+              },
+            },
             responses: {
               '201': {
                 description: 'Comment accepted',
@@ -940,8 +952,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             operationId: 'listBackyBlogComments',
             parameters: [
               pathParameter('postId', 'Blog post id'),
-              queryParameter('status', { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam'] }),
+              queryParameter('status', { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam', 'blocked', 'all'] }),
               queryParameter('requestId'),
+              queryParameter('parentId', { type: 'string' }, 'Return replies for a specific parent comment.'),
+              queryParameter('parentOnly', { type: 'boolean' }, 'Return only top-level comments when true.'),
+              queryParameter('commentThreadId', { type: 'string' }, 'Filter comments to a specific frontend comment thread widget.'),
+              queryParameter('sort', { type: 'string', enum: ['newest', 'oldest'] }),
               queryParameter('limit', { type: 'integer', minimum: 1 }),
               queryParameter('offset', { type: 'integer', minimum: 0 }),
             ],
@@ -961,6 +977,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             summary: 'Submit a blog post comment',
             operationId: 'submitBackyBlogComment',
             parameters: [pathParameter('postId', 'Blog post id')],
+            requestBody: {
+              required: true,
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/CommentSubmitRequest' },
+                },
+              },
+            },
             responses: {
               '201': {
                 description: 'Comment accepted',
@@ -1029,8 +1053,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             parameters: [
               queryParameter('targetType', { type: 'string', enum: ['page', 'post'] }),
               queryParameter('targetId'),
-              queryParameter('status', { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam'] }),
+              queryParameter('status', { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam', 'blocked', 'all'] }),
               queryParameter('requestId'),
+              queryParameter('parentId', { type: 'string' }, 'Return replies for a specific parent comment.'),
+              queryParameter('parentOnly', { type: 'boolean' }, 'Return only top-level comments when true.'),
+              queryParameter('commentThreadId', { type: 'string' }, 'Filter comments to a specific frontend comment thread widget.'),
+              queryParameter('q', { type: 'string' }, 'Search comment content and author fields.'),
+              queryParameter('sort', { type: 'string', enum: ['newest', 'oldest'] }),
               queryParameter('limit', { type: 'integer', minimum: 1 }),
               queryParameter('offset', { type: 'integer', minimum: 0 }),
             ],
@@ -1057,7 +1086,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     type: 'object',
                     properties: {
                       ids: { type: 'array', items: { type: 'string' } },
-                      status: { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam'] },
+                      status: { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam', 'blocked'] },
                     },
                     required: ['ids', 'status'],
                   },
@@ -1646,17 +1675,67 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           CommentUpdateRequest: {
             type: 'object',
             properties: {
-              status: { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam'] },
+              status: { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam', 'blocked'] },
               moderationNote: { type: 'string' },
               requestId: { type: 'string' },
             },
             required: ['status'],
           },
+          CommentSubmitRequest: {
+            type: 'object',
+            additionalProperties: true,
+            properties: {
+              content: { type: 'string', description: 'Preferred comment body field.' },
+              body: { type: 'string', description: 'Alias accepted for SDK and simple form integrations.' },
+              authorName: { type: 'string' },
+              authorEmail: { type: 'string', format: 'email' },
+              authorWebsite: { type: 'string' },
+              userId: { type: 'string' },
+              parentId: { type: 'string', description: 'Parent comment id when submitting a reply.' },
+              commentThreadId: { type: 'string', description: 'Optional thread id for grouped comment widgets.' },
+              threadId: { type: 'string', description: 'Alias for commentThreadId.' },
+              requestId: { type: 'string' },
+              moderationMode: { type: 'string', enum: ['manual', 'auto-approve'] },
+              startedAt: { type: ['string', 'number'] },
+              honeypot: { type: 'string' },
+              rateLimitBypass: { type: 'boolean' },
+            },
+          },
+          Comment: {
+            type: 'object',
+            additionalProperties: true,
+            required: ['id', 'siteId', 'targetType', 'targetId', 'content', 'status', 'createdAt', 'updatedAt'],
+            properties: {
+              id: { type: 'string' },
+              siteId: { type: 'string' },
+              targetType: { type: 'string', enum: ['page', 'post'] },
+              targetId: { type: 'string' },
+              commentThreadId: { type: 'string' },
+              authorName: { type: ['string', 'null'] },
+              authorEmail: { type: ['string', 'null'] },
+              authorWebsite: { type: ['string', 'null'] },
+              userId: { type: ['string', 'null'] },
+              content: { type: 'string' },
+              status: { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam', 'blocked'] },
+              parentId: { type: ['string', 'null'], description: 'Parent comment id for replies; null for top-level comments.' },
+              reviewedBy: { type: ['string', 'null'] },
+              reviewedAt: { type: ['string', 'null'], format: 'date-time' },
+              rejectionReason: { type: ['string', 'null'] },
+              blockReason: { type: ['string', 'null'] },
+              blockedBy: { type: ['string', 'null'] },
+              blockedAt: { type: ['string', 'null'], format: 'date-time' },
+              reportCount: { type: 'integer', minimum: 0 },
+              reportReasons: { type: 'array', items: { type: 'string' } },
+              requestId: { type: ['string', 'null'] },
+              createdAt: { type: 'string', format: 'date-time' },
+              updatedAt: { type: 'string', format: 'date-time' },
+            },
+          },
           CommentsEnvelope: envelopeSchema({
             type: 'object',
             required: ['comments', 'count', 'pagination'],
             properties: {
-              comments: { type: 'array', items: { type: 'object', additionalProperties: true } },
+              comments: { type: 'array', items: { $ref: '#/components/schemas/Comment' } },
               count: { type: 'integer', minimum: 0 },
               pagination: { type: 'object', additionalProperties: true },
             },
@@ -1665,14 +1744,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             type: 'object',
             required: ['comment'],
             properties: {
-              comment: { type: 'object', additionalProperties: true },
+              comment: { $ref: '#/components/schemas/Comment' },
             },
           }),
           CommentBulkUpdateEnvelope: envelopeSchema({
             type: 'object',
             required: ['updated'],
             properties: {
-              updated: { type: 'array', items: { type: 'object', additionalProperties: true } },
+              updated: { type: 'array', items: { $ref: '#/components/schemas/Comment' } },
             },
           }),
           CommentReportReasonsEnvelope: envelopeSchema({
@@ -1686,7 +1765,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             type: 'object',
             required: ['comment', 'report'],
             properties: {
-              comment: { type: 'object', additionalProperties: true },
+              comment: { $ref: '#/components/schemas/Comment' },
               report: { type: 'object', additionalProperties: true },
             },
           }),

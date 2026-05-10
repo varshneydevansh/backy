@@ -513,12 +513,24 @@ export interface BackyComment {
   id: string;
   targetType?: 'page' | 'post';
   targetId?: string;
+  siteId?: string;
+  commentThreadId?: string;
   status?: string;
   content?: string;
   authorName?: string;
   authorEmail?: string;
+  authorWebsite?: string;
+  userId?: string | null;
   parentId?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  rejectionReason?: string | null;
+  blockReason?: string | null;
+  blockedBy?: string | null;
+  blockedAt?: string | null;
   reportCount?: number;
+  reportReasons?: string[];
+  requestId?: string | null;
   createdAt?: string;
   updatedAt?: string;
   [key: string]: unknown;
@@ -569,8 +581,11 @@ export interface BackyCommentInput {
   body?: string;
   authorName: string;
   authorEmail?: string;
+  authorWebsite?: string;
   requestId?: string;
   parentId?: string;
+  threadId?: string;
+  commentThreadId?: string;
   moderationMode?: 'manual' | 'auto-approve';
   rateLimitBypass?: boolean;
 }
@@ -578,7 +593,13 @@ export interface BackyCommentInput {
 export interface BackyCommentListOptions extends BackyListOptions {
   targetType?: 'page' | 'post';
   targetId?: string;
-  status?: 'pending' | 'approved' | 'rejected' | 'spam';
+  status?: 'pending' | 'approved' | 'rejected' | 'spam' | 'blocked' | 'all';
+  parentId?: string;
+  parentOnly?: boolean;
+  commentThreadId?: string;
+  requestId?: string;
+  q?: string;
+  sort?: 'newest' | 'oldest';
 }
 
 export interface BackyEventListOptions extends BackyListOptions {

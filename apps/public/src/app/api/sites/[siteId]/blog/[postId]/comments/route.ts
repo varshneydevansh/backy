@@ -143,8 +143,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { searchParams } = new URL(request.url);
 
     const status = parseStatus(searchParams.get('status'));
-    const parentOnly = searchParams.get('parentOnly') === 'true';
     const parentId = searchParams.get('parentId');
+    const parentOnly = searchParams.get('parentOnly') === 'true' || Boolean(parentId);
     const sort = parseSort(searchParams.get('sort'));
     const commentThreadId = parseTextInput(searchParams.get('commentThreadId'));
     const limit = parseInt(searchParams.get('limit') || '20', 10);
@@ -260,7 +260,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload', responseRequestId);
       }
 
-      const content = parseTextInput(body.content);
+      const content = parseTextInput(body.content || (body as { body?: unknown }).body);
       if (content.length === 0) {
         return contractResponse(
           {
@@ -490,7 +490,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload', responseRequestId);
     }
 
-    const content = parseTextInput(body.content);
+    const content = parseTextInput(body.content || (body as { body?: unknown }).body);
     if (content.length === 0) {
       return contractResponse(
         {
