@@ -212,6 +212,13 @@ interface StoreUser {
   invitedAt: string | null;
 }
 
+interface StoreUserPermissionOverride {
+  userId: string;
+  permissionKey: string;
+  value: 'allow' | 'deny';
+  updatedAt: string;
+}
+
 interface StoreBlogAuthor {
   id: string;
   siteId: string;
@@ -487,6 +494,8 @@ const USER_LIST: StoreUser[] = [
     invitedAt: null,
   },
 ];
+
+const USER_PERMISSION_OVERRIDES: StoreUserPermissionOverride[] = [];
 
 const createRuntimeApiKey = (kind: 'public' | 'admin') => (
   `${kind === 'public' ? 'pk' : 'sk'}_live_${randomUUID().replace(/-/g, '').slice(0, 24)}`
@@ -1704,6 +1713,7 @@ interface AdminContentSnapshot {
   collectionRecords?: StoreCollectionRecord[];
   reusableSections?: StoreReusableSection[];
   users?: StoreUser[];
+  userPermissionOverrides?: StoreUserPermissionOverride[];
   settings?: StoreSettings;
   revisions?: ContentRevision[];
   previewTokens?: PreviewToken[];
@@ -1849,6 +1859,10 @@ function refreshPersistedAdminContent() {
       USER_LIST.splice(0, USER_LIST.length, ...parsed.users);
     }
 
+    if (Array.isArray(parsed.userPermissionOverrides)) {
+      USER_PERMISSION_OVERRIDES.splice(0, USER_PERMISSION_OVERRIDES.length, ...parsed.userPermissionOverrides);
+    }
+
     if (parsed.settings && typeof parsed.settings === 'object') {
       SETTINGS = {
         ...SETTINGS,
@@ -1897,6 +1911,7 @@ function persistAdminContent() {
           collectionRecords: COLLECTION_RECORDS,
           reusableSections: REUSABLE_SECTIONS,
           users: USER_LIST,
+          userPermissionOverrides: USER_PERMISSION_OVERRIDES,
           settings: SETTINGS,
           revisions: CONTENT_REVISIONS,
           previewTokens: PREVIEW_TOKENS,
@@ -3891,6 +3906,56 @@ export function getAdminUserByEmail(email: string): StoreUser | undefined {
   return user ? clone(user) : undefined;
 }
 
+export function listAdminUserPermissionOverrides(userId: string): StoreUserPermissionOverride[] {
+  ensurePersistedAdminContentLoaded();
+  return clone(USER_PERMISSION_OVERRIDES.filter((override) => override.userId === userId));
+}
+
+export function updateAdminUserPermissionOverrides(
+  userId: string,
+  input: Record<string, unknown>,
+): StoreUserPermissionOverride[] {
+  ensurePersistedAdminContentLoaded();
+
+  const now = new Date().toISOString();
+  Object.entries(input).forEach(([permissionKey, rawValue]) => {
+    const key = sanitizeString(permissionKey);
+    const value = rawValue === 'allow' || rawValue === true
+      ? 'allow'
+      : rawValue === 'deny' || rawValue === false
+        ? 'deny'
+        : null;
+    const index = USER_PERMISSION_OVERRIDES.findIndex((override) => (
+      override.userId === userId && override.permissionKey === key
+    ));
+
+    if (!key) return;
+
+    if (!value) {
+      if (index !== -1) {
+        USER_PERMISSION_OVERRIDES.splice(index, 1);
+      }
+      return;
+    }
+
+    const override: StoreUserPermissionOverride = {
+      userId,
+      permissionKey: key,
+      value,
+      updatedAt: now,
+    };
+
+    if (index === -1) {
+      USER_PERMISSION_OVERRIDES.push(override);
+    } else {
+      USER_PERMISSION_OVERRIDES[index] = override;
+    }
+  });
+
+  persistAdminContent();
+  return listAdminUserPermissionOverrides(userId);
+}
+
 export function createAdminUser(input: Record<string, unknown>): StoreUser {
   ensurePersistedAdminContentLoaded();
 
@@ -3958,6 +4023,11 @@ export function deleteAdminUser(userId: string): boolean {
   }
 
   USER_LIST.splice(index, 1);
+  for (let overrideIndex = USER_PERMISSION_OVERRIDES.length - 1; overrideIndex >= 0; overrideIndex -= 1) {
+    if (USER_PERMISSION_OVERRIDES[overrideIndex]?.userId === userId) {
+      USER_PERMISSION_OVERRIDES.splice(overrideIndex, 1);
+    }
+  }
   persistAdminContent();
   return true;
 }
@@ -7246,4 +7316,5 @@ export {
   type StoreSettings,
   type StoreSite,
   type StoreUser,
+  type StoreUserPermissionOverride,
 };

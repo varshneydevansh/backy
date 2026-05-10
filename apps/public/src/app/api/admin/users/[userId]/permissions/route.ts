@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
-import { buildUserPermissionMatrix } from '@/lib/adminPermissions';
-import { getAdminUserById } from '@/lib/backyStore';
+import { recordAdminAudit } from '@/lib/adminAudit';
+import { buildUserPermissionMatrix, isAdminPermissionKey } from '@/lib/adminPermissions';
+import {
+  getAdminUserById,
+  listAdminUserPermissionOverrides,
+  updateAdminUserPermissionOverrides,
+} from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -22,6 +27,28 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   )
 );
 
+const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+  try {
+    const body = await request.json();
+    return body && typeof body === 'object' && !Array.isArray(body)
+      ? body as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+};
+
+const getUser = async (userId: string) => {
+  const repositories = !shouldUseDemoStoreFallback()
+    ? await getRequiredDatabaseRepositories()
+    : null;
+  const user = repositories
+    ? await repositories.users.getById(userId)
+    : getAdminUserById(userId);
+
+  return { repositories, user };
+};
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ userId: string }> },
@@ -34,16 +61,13 @@ export async function GET(
 
   try {
     const { userId } = await context.params;
-    const repositories = !shouldUseDemoStoreFallback()
-      ? await getRequiredDatabaseRepositories()
-      : null;
-    const user = repositories
-      ? await repositories.users.getById(userId)
-      : getAdminUserById(userId);
+    const { user } = await getUser(userId);
 
     if (!user) {
       return errorResponse(404, 'USER_NOT_FOUND', 'User not found', requestId);
     }
+
+    const overrides = listAdminUserPermissionOverrides(user.id);
 
     return NextResponse.json({
       success: true,
@@ -56,11 +80,90 @@ export async function GET(
           role: user.role,
           status: user.status,
         },
-        permissions: buildUserPermissionMatrix(user),
+        permissions: buildUserPermissionMatrix(user, overrides),
       },
     });
   } catch (error) {
     console.error('Admin user permissions API error:', error);
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ userId: string }> },
+) {
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId);
+  if (access instanceof NextResponse) {
+    return access;
+  }
+
+  try {
+    const { userId } = await context.params;
+    const { repositories, user } = await getUser(userId);
+
+    if (!user) {
+      return errorResponse(404, 'USER_NOT_FOUND', 'User not found', requestId);
+    }
+
+    const body = await parseJsonBody(request);
+    const rawOverrides = body.overrides;
+
+    if (!rawOverrides || typeof rawOverrides !== 'object' || Array.isArray(rawOverrides)) {
+      return errorResponse(400, 'INVALID_OVERRIDES', 'Provide an overrides object keyed by permission.', requestId);
+    }
+
+    const overrides: Record<string, 'allow' | 'deny' | null> = {};
+    for (const [permissionKey, value] of Object.entries(rawOverrides)) {
+      if (!isAdminPermissionKey(permissionKey)) {
+        return errorResponse(400, 'INVALID_PERMISSION_KEY', `Unknown permission key: ${permissionKey}`, requestId);
+      }
+
+      if (value !== 'allow' && value !== 'deny' && value !== null) {
+        return errorResponse(400, 'INVALID_PERMISSION_VALUE', 'Permission overrides must be allow, deny, or null.', requestId);
+      }
+
+      overrides[permissionKey] = value;
+    }
+
+    const before = listAdminUserPermissionOverrides(user.id);
+    const savedOverrides = updateAdminUserPermissionOverrides(user.id, overrides);
+    const permissions = buildUserPermissionMatrix(user, savedOverrides);
+
+    await recordAdminAudit({
+      repositories,
+      actorId: access.session?.user.id || null,
+      entity: 'user',
+      entityId: user.id,
+      action: 'user.permission_overrides.update',
+      before: { overrides: before },
+      after: { overrides: savedOverrides },
+      metadata: {
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        changedPermissionKeys: Object.keys(overrides),
+      },
+      requestId,
+    });
+
+    return NextResponse.json({
+      success: true,
+      requestId,
+      data: {
+        user: {
+          id: user.id,
+          fullName: user.fullName,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+        },
+        permissions,
+      },
+    });
+  } catch (error) {
+    console.error('Admin user permission override API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }

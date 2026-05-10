@@ -596,6 +596,44 @@ const waitForUserDetailPermissionMatrix = async (client) => {
   return null;
 };
 
+const setUserDetailPermissionOverride = async (client, userId) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="permission-activity.export-deny"]');
+      if (button instanceof HTMLButtonElement && !button.disabled) {
+        button.click();
+      }
+      const panel = document.querySelector('#user-detail-permissions');
+      const text = panel?.textContent || '';
+      const row = document.querySelector('[data-testid="permission-activity.export"]');
+      return {
+        clicked: button instanceof HTMLButtonElement,
+        saved: text.includes('Saved deny override for activity.export'),
+        hasOverride: (row?.textContent || '').includes('Override'),
+        text: text.slice(0, 1800),
+      };
+    })()`);
+
+    if (state.saved || state.hasOverride) {
+      break;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`User detail permission override did not save: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  const payload = await requestApi(`/api/admin/users/${userId}/permissions`);
+  const groups = payload.data?.permissions?.groups || [];
+  const rule = groups
+    .flatMap((group) => group.permissions || [])
+    .find((permission) => permission.key === 'activity.export');
+
+  assert(rule?.override === 'deny', `Permission override API did not persist deny: ${JSON.stringify(rule).slice(0, 500)}`);
+};
+
 const generateUserDetailInviteLink = async (client, email) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => {
@@ -904,9 +942,14 @@ const main = async () => {
 
     await openUserDetail(client, fullName);
     await waitForUserDetailPermissionMatrix(client);
+    await setUserDetailPermissionOverride(client, createdUserId);
     await generateUserDetailInviteLink(client, email);
     await generateUserDetailResetToken(client, email);
     const recoveryAuditLogs = await listUserAuditLogs(createdUserId);
+    assert(
+      recoveryAuditLogs.some((log) => log.action === 'user.permission_overrides.update'),
+      `User permission override audit log was not recorded: ${JSON.stringify(recoveryAuditLogs).slice(0, 500)}`,
+    );
     assert(
       recoveryAuditLogs.some((log) => log.action === 'user.invite_token.create'),
       `User invite token audit log was not recorded: ${JSON.stringify(recoveryAuditLogs).slice(0, 500)}`,

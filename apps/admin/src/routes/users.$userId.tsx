@@ -35,9 +35,11 @@ import {
   getUser as getBackendUser,
   getUserPermissions,
   listAdminAuditLogs,
+  updateUserPermissions,
   updateUser as updateBackendUser,
   type AdminPermissionGroup,
   type AdminAuditLog,
+  type AdminPermissionOverrideValue,
   type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
 import {
@@ -162,6 +164,8 @@ function EditUserPage() {
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
+  const [savingPermissionKey, setSavingPermissionKey] = useState<string | null>(null);
   const [userSessions, setUserSessions] = useState<AdminSessionSummary[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
@@ -266,6 +270,26 @@ function EditUserPage() {
   useEffect(() => {
     void loadPermissionMatrix();
   }, [loadPermissionMatrix]);
+
+  const savePermissionOverride = useCallback(async (
+    permissionKey: string,
+    value: AdminPermissionOverrideValue | null,
+  ) => {
+    setSavingPermissionKey(permissionKey);
+    setPermissionError(null);
+    setPermissionNotice(null);
+
+    try {
+      const matrix = await updateUserPermissions(userId, { [permissionKey]: value });
+      setPermissionMatrix(matrix);
+      setPermissionNotice(value ? `Saved ${value} override for ${permissionKey}.` : `Restored inherited access for ${permissionKey}.`);
+      void loadUserAuditLogs();
+    } catch (error) {
+      setPermissionError(error instanceof Error ? error.message : 'Unable to update permission override.');
+    } finally {
+      setSavingPermissionKey(null);
+    }
+  }, [loadUserAuditLogs, userId]);
 
   const loadUserSessions = useCallback(async () => {
     if (!user) {
@@ -945,7 +969,7 @@ function EditUserPage() {
                 <div>
                   <h2 className="text-base font-semibold text-foreground">Backend permission matrix</h2>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Role-derived permissions loaded from the users API, including status-based access blocking.
+                    Role defaults, status gates, and per-user overrides loaded from the users API.
                   </p>
                 </div>
               </div>
@@ -964,6 +988,12 @@ function EditUserPage() {
             {permissionError && (
               <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 {permissionError}
+              </div>
+            )}
+
+            {permissionNotice && (
+              <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                {permissionNotice}
               </div>
             )}
 
@@ -995,7 +1025,12 @@ function EditUserPage() {
                 </div>
                 <div className="mt-5 grid gap-3 xl:grid-cols-2">
                   {permissionMatrix.groups.map((group) => (
-                    <PermissionMatrixGroup key={group.key} group={group} />
+                    <PermissionMatrixGroup
+                      key={group.key}
+                      group={group}
+                      savingPermissionKey={savingPermissionKey}
+                      onOverrideChange={savePermissionOverride}
+                    />
                   ))}
                 </div>
               </>
@@ -1593,7 +1628,15 @@ function AdminSessionCard({
   );
 }
 
-function PermissionMatrixGroup({ group }: { group: AdminPermissionGroup }) {
+function PermissionMatrixGroup({
+  group,
+  savingPermissionKey,
+  onOverrideChange,
+}: {
+  group: AdminPermissionGroup;
+  savingPermissionKey: string | null;
+  onOverrideChange: (permissionKey: string, value: AdminPermissionOverrideValue | null) => void;
+}) {
   const allowedCount = group.permissions.filter((permission) => permission.allowed).length;
 
   return (
@@ -1615,27 +1658,81 @@ function PermissionMatrixGroup({ group }: { group: AdminPermissionGroup }) {
         {group.permissions.map((permission) => (
           <div
             key={permission.key}
+            data-testid={`permission-${permission.key}`}
             className={cn(
-              'flex items-start gap-2 rounded-lg border px-2.5 py-2 text-xs',
+              'grid gap-3 rounded-lg border px-2.5 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_auto]',
               permission.allowed
                 ? 'border-emerald-200 bg-emerald-50/50 text-emerald-950'
                 : 'border-border bg-muted/30 text-muted-foreground',
             )}
           >
-            {permission.allowed ? (
-              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
-            ) : (
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            )}
-            <div>
-              <div className="font-medium">{permission.label}</div>
-              <div className="mt-0.5 leading-5">{permission.reason}</div>
+            <div className="flex min-w-0 items-start gap-2">
+              {permission.allowed ? (
+                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+              ) : (
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              )}
+              <div className="min-w-0">
+                <div className="font-medium text-foreground">{permission.label}</div>
+                <div className="mt-0.5 leading-5">{permission.reason}</div>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  <span className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-normal text-muted-foreground">
+                    {permission.capability}
+                  </span>
+                  <span className={cn(
+                    'rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-normal',
+                    permission.source === 'override'
+                      ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
+                      : permission.source === 'status'
+                        ? 'border-amber-200 bg-amber-50 text-amber-700'
+                        : 'border-border bg-background text-muted-foreground',
+                  )}
+                  >
+                    {permissionSourceLabel(permission.source)}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="flex h-8 shrink-0 overflow-hidden rounded-lg border border-border bg-background">
+              {[
+                { label: 'Inherit', value: null, testId: 'inherit' },
+                { label: 'Allow', value: 'allow' as const, testId: 'allow' },
+                { label: 'Deny', value: 'deny' as const, testId: 'deny' },
+              ].map((option) => {
+                const selected = permission.override === option.value;
+                const isSaving = savingPermissionKey === permission.key;
+
+                return (
+                  <button
+                    key={option.testId}
+                    type="button"
+                    data-testid={`permission-${permission.key}-${option.testId}`}
+                    aria-pressed={selected}
+                    disabled={isSaving}
+                    onClick={() => onOverrideChange(permission.key, option.value)}
+                    className={cn(
+                      'min-w-14 px-2 text-[11px] font-semibold transition disabled:cursor-wait disabled:opacity-60',
+                      selected
+                        ? 'bg-foreground text-background'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         ))}
       </div>
     </article>
   );
+}
+
+function permissionSourceLabel(source: 'role' | 'status' | 'override') {
+  if (source === 'override') return 'Override';
+  if (source === 'status') return 'Status';
+  return 'Role';
 }
 
 function AccessReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {

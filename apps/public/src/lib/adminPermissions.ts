@@ -1,4 +1,4 @@
-import type { StoreUser } from '@/lib/backyStore';
+import type { StoreUser, StoreUserPermissionOverride } from '@/lib/backyStore';
 
 type UserRole = StoreUser['role'];
 type UserStatus = StoreUser['status'];
@@ -18,9 +18,12 @@ export interface AdminPermissionRule {
   label: string;
   capability: AdminPermissionCapability;
   allowed: boolean;
-  source: 'role' | 'status';
+  source: 'role' | 'status' | 'override';
+  override: AdminPermissionOverrideValue | null;
   reason: string;
 }
+
+export type AdminPermissionOverrideValue = 'allow' | 'deny';
 
 export interface AdminPermissionGroup {
   key: string;
@@ -162,27 +165,48 @@ const PERMISSION_GROUPS: PermissionGroupDefinition[] = [
 
 const canUserSignIn = (status: UserStatus) => status === 'active';
 
-export function buildUserPermissionMatrix(user: Pick<StoreUser, 'id' | 'role' | 'status'>): AdminUserPermissionMatrix {
+const PERMISSION_KEYS = new Set(PERMISSION_GROUPS.flatMap((group) => group.permissions.map((permission) => permission.key)));
+
+export function isAdminPermissionKey(value: string): boolean {
+  return PERMISSION_KEYS.has(value);
+}
+
+export function buildUserPermissionMatrix(
+  user: Pick<StoreUser, 'id' | 'role' | 'status'>,
+  overrides: StoreUserPermissionOverride[] = [],
+): AdminUserPermissionMatrix {
   const canSignIn = canUserSignIn(user.status);
+  const overrideByKey = new Map(overrides.map((override) => [override.permissionKey, override.value]));
   const groups = PERMISSION_GROUPS.map((group) => ({
     key: group.key,
     label: group.label,
     description: group.description,
     permissions: group.permissions.map((permission) => {
       const roleAllows = permission.roles.includes(user.role);
-      const allowed = canSignIn && roleAllows;
+      const override = overrideByKey.get(permission.key) || null;
+      const allowed = canSignIn && (override ? override === 'allow' : roleAllows);
+      const source = !canSignIn
+        ? 'status' as const
+        : override
+          ? 'override' as const
+          : 'role' as const;
 
       return {
         key: permission.key,
         label: permission.label,
         capability: permission.capability,
         allowed,
-        source: canSignIn ? 'role' as const : 'status' as const,
+        source,
+        override,
         reason: !canSignIn
           ? `${user.status} accounts cannot use admin permissions until activated.`
-          : roleAllows
-            ? `${user.role} role includes this capability.`
-            : `${user.role} role does not include this capability.`,
+          : override === 'allow'
+            ? 'Explicit override allows this capability.'
+            : override === 'deny'
+              ? 'Explicit override denies this capability.'
+              : roleAllows
+                ? `${user.role} role includes this capability.`
+                : `${user.role} role does not include this capability.`,
       };
     }),
   }));

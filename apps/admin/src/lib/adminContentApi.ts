@@ -384,9 +384,12 @@ export interface AdminPermissionRule {
   label: string;
   capability: AdminPermissionCapability;
   allowed: boolean;
-  source: 'role' | 'status';
+  source: 'role' | 'status' | 'override';
+  override: AdminPermissionOverrideValue | null;
   reason: string;
 }
+
+export type AdminPermissionOverrideValue = 'allow' | 'deny';
 
 export interface AdminPermissionGroup {
   key: string;
@@ -2090,6 +2093,26 @@ export async function getUserPermissions(userId: string): Promise<AdminUserPermi
 
   if (!response.ok || !payload.success || !payload.data) {
     throw new Error(payload.error?.message || 'Unable to load user permissions');
+  }
+
+  return payload.data.permissions;
+}
+
+export async function updateUserPermissions(
+  userId: string,
+  overrides: Record<string, AdminPermissionOverrideValue | null>,
+): Promise<AdminUserPermissionMatrix> {
+  const response = await adminFetch(`${getAdminApiBase()}/users/${userId}/permissions`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ overrides }),
+  });
+  const payload = await readJson<ApiUserPermissionsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to update user permissions');
   }
 
   return payload.data.permissions;
