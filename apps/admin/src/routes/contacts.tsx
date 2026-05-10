@@ -11,6 +11,7 @@ import {
   ExternalLink,
   FileText,
   Filter,
+  GitMerge,
   Mail,
   Phone,
   RefreshCw,
@@ -42,7 +43,7 @@ import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSel
 import { cn, formatDate } from '@/lib/utils';
 
 type ContactStatusFilter = ContactStatus | 'all';
-type ContactQualityFilter = 'all' | 'missing-email' | 'missing-phone' | 'needs-notes' | 'has-source-values' | 'ready-to-promote';
+type ContactQualityFilter = 'all' | 'missing-email' | 'missing-phone' | 'needs-notes' | 'has-source-values' | 'ready-to-promote' | 'duplicate-email';
 
 interface ContactsSearch {
   siteId?: string;
@@ -53,8 +54,10 @@ interface ContactsSearch {
 }
 
 const CONTACT_STATUS_FILTERS: ContactStatusFilter[] = ['all', 'new', 'contacted', 'qualified', 'archived'];
-const CONTACT_QUALITY_FILTERS: ContactQualityFilter[] = ['all', 'missing-email', 'missing-phone', 'needs-notes', 'has-source-values', 'ready-to-promote'];
+const CONTACT_QUALITY_FILTERS: ContactQualityFilter[] = ['all', 'missing-email', 'missing-phone', 'needs-notes', 'has-source-values', 'ready-to-promote', 'duplicate-email'];
 const CONTACT_IMPORT_COLUMNS = ['name', 'email', 'phone', 'status', 'notes', 'sourceValues'] as const;
+
+const normalizeContactEmail = (value?: string | null) => value?.trim().toLowerCase() || '';
 
 const isContactStatusFilter = (value: unknown): value is ContactStatusFilter => (
   typeof value === 'string' && CONTACT_STATUS_FILTERS.includes(value as ContactStatusFilter)
@@ -206,6 +209,20 @@ function ContactsRoute() {
     () => Object.values(contactsByForm).flatMap((inbox) => inbox.contacts),
     [contactsByForm],
   );
+  const duplicateEmailGroups = useMemo(() => {
+    const groups = new Map<string, AdminContact[]>();
+    allContacts.forEach((contact) => {
+      const email = normalizeContactEmail(contact.email);
+      if (!email || contact.status === 'archived') return;
+      groups.set(email, [...(groups.get(email) || []), contact]);
+    });
+
+    return Array.from(groups.entries())
+      .map(([email, contacts]) => ({ email, contacts }))
+      .filter((group) => group.contacts.length > 1)
+      .sort((left, right) => right.contacts.length - left.contacts.length || left.email.localeCompare(right.email));
+  }, [allContacts]);
+  const duplicateEmailSet = useMemo(() => new Set(duplicateEmailGroups.map((group) => group.email)), [duplicateEmailGroups]);
   const filteredContacts = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
 
@@ -225,6 +242,7 @@ function ContactsRoute() {
       if (qualityFilter === 'needs-notes' && hasNotes) return false;
       if (qualityFilter === 'has-source-values' && !hasSourceValues) return false;
       if (qualityFilter === 'ready-to-promote' && (contact.status !== 'qualified' || !hasEmail)) return false;
+      if (qualityFilter === 'duplicate-email' && !duplicateEmailSet.has(normalizeContactEmail(contact.email))) return false;
 
       const matchesSearch = !normalizedSearch || [
         contact.name,
@@ -238,7 +256,7 @@ function ContactsRoute() {
 
       return matchesSearch;
     });
-  }, [allContacts, formById, qualityFilter, searchQuery, selectedFormId, statusFilter]);
+  }, [allContacts, duplicateEmailSet, formById, qualityFilter, searchQuery, selectedFormId, statusFilter]);
   const hasActiveContactFilters = Boolean(
     searchQuery.trim() ||
     selectedFormId !== 'all' ||
@@ -249,6 +267,11 @@ function ContactsRoute() {
   const selectedContacts = useMemo(() => (
     allContacts.filter((contact) => selectedContactSet.has(contact.id))
   ), [allContacts, selectedContactSet]);
+  const selectedMergeEmail = useMemo(() => {
+    const emails = Array.from(new Set(selectedContacts.map((contact) => normalizeContactEmail(contact.email)).filter(Boolean)));
+    return emails.length === 1 && selectedContacts.length > 1 ? emails[0] : '';
+  }, [selectedContacts]);
+  const canMergeSelectedContacts = Boolean(selectedMergeEmail);
   const allVisibleContactsSelected = filteredContacts.length > 0
     && filteredContacts.every((contact) => selectedContactSet.has(contact.id));
   const exportSourceKeys = useMemo(() => (
@@ -304,6 +327,13 @@ function ContactsRoute() {
           : 'Archive stale or rejected leads to keep the inbox focused.',
         ready: true,
       },
+      {
+        label: 'Dedupe queue',
+        detail: duplicateEmailGroups.length > 0
+          ? `${duplicateEmailGroups.length} duplicate email group${duplicateEmailGroups.length === 1 ? '' : 's'} need merge review.`
+          : 'No duplicate email groups in the active lead pipeline.',
+        ready: duplicateEmailGroups.length === 0,
+      },
     ];
     const readyCount = checks.filter((check) => check.ready).length;
 
@@ -317,7 +347,7 @@ function ContactsRoute() {
         { label: 'Sync', detail: 'Export CSV or use the private contact API for custom systems.' },
       ],
     };
-  }, [apiForm, forms.length, metrics.archived, metrics.contacts, metrics.new, metrics.qualified]);
+  }, [apiForm, duplicateEmailGroups.length, forms.length, metrics.archived, metrics.contacts, metrics.new, metrics.qualified]);
   const apiFormReadiness = useMemo(() => {
     if (!apiForm) {
       return {
@@ -340,6 +370,7 @@ function ContactsRoute() {
     const hasIdentityMap = Boolean(emailField || phoneField);
     const hasContacts = formContacts.length > 0;
     const hasLifecycleProgress = formContacts.some((contact) => contact.status !== 'new');
+    const duplicateCount = duplicateEmailGroups.filter((group) => group.contacts.some((contact) => contact.formId === apiForm.id)).length;
     const checks = [
       {
         label: 'Form source',
@@ -376,6 +407,13 @@ function ContactsRoute() {
           : 'Use contacted, qualified, and archived to keep the pipeline clean.',
         ready: hasContacts ? hasLifecycleProgress : true,
       },
+      {
+        label: 'Dedupe',
+        detail: duplicateCount > 0
+          ? `${duplicateCount} duplicate group${duplicateCount === 1 ? '' : 's'} need merge review.`
+          : 'No duplicate email groups for this form.',
+        ready: duplicateCount === 0,
+      },
     ];
     const readyCount = checks.filter((check) => check.ready).length;
 
@@ -389,7 +427,7 @@ function ContactsRoute() {
         { label: 'Sync', detail: 'Use the contact API for custom CRM dashboards.' },
       ],
     };
-  }, [apiForm, contactsByForm]);
+  }, [apiForm, contactsByForm, duplicateEmailGroups]);
   const commandReadiness = pipelineReadiness || apiFormReadiness;
   const contactHandoff = useMemo(() => ({
     site: {
@@ -439,6 +477,8 @@ function ContactsRoute() {
       selectedIds: selectedContactIds,
       allVisibleSelected: allVisibleContactsSelected,
       bulkStatus: bulkContactStatus,
+      mergeEmail: selectedMergeEmail || null,
+      canMerge: canMergeSelectedContacts,
     },
     selectedSourceForm: apiForm ? {
       id: apiForm.id,
@@ -473,6 +513,12 @@ function ContactsRoute() {
         },
       };
     }),
+    duplicates: duplicateEmailGroups.map((group) => ({
+      email: group.email,
+      count: group.contacts.length,
+      contactIds: group.contacts.map((contact) => contact.id),
+      formIds: Array.from(new Set(group.contacts.map((contact) => contact.formId))),
+    })),
     contacts: allContacts.map((contact) => ({
       id: contact.id,
       formId: contact.formId,
@@ -503,6 +549,7 @@ function ContactsRoute() {
     allVisibleContactsSelected,
     apiForm,
     bulkContactStatus,
+    canMergeSelectedContacts,
     contactCreateUrl,
     contactImportUrl,
     commandReadiness.checks,
@@ -510,6 +557,7 @@ function ContactsRoute() {
     contactUpdateUrl,
     contactsByForm,
     contactsUrl,
+    duplicateEmailGroups,
     exportSourceKeys,
     filteredContacts.length,
     forms,
@@ -518,6 +566,7 @@ function ContactsRoute() {
     qualityFilter,
     searchQuery,
     selectedContactIds,
+    selectedMergeEmail,
     selectedFormId,
     statusFilter,
   ]);
@@ -712,6 +761,68 @@ function ContactsRoute() {
       setNotice(`${updatedContacts.length} contact${updatedContacts.length === 1 ? '' : 's'} moved to ${bulkContactStatus}.`);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'Unable to update selected contacts');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleMergeSelectedContacts = async () => {
+    if (isContactsBusy) return;
+
+    if (!canMergeSelectedContacts) {
+      setError(null);
+      setNotice('Select two or more contacts with the same email before merging.');
+      return;
+    }
+
+    const sortedContacts = [...selectedContacts].sort((left, right) => (
+      new Date(right.updatedAt || right.createdAt).getTime() - new Date(left.updatedAt || left.createdAt).getTime()
+    ));
+    const primary = sortedContacts[0];
+    const duplicates = sortedContacts.slice(1);
+    const duplicateIds = duplicates.map((contact) => contact.id);
+    const mergedNotes = Array.from(new Set([
+      ...sortedContacts.map((contact) => contact.notes?.trim()).filter(Boolean),
+      `Merged duplicate contacts into ${primary.id}: ${duplicateIds.join(', ')}`,
+    ])).join('\n');
+    const mergedSourceValues = sortedContacts.reduce<Record<string, unknown>>((values, contact) => ({
+      ...values,
+      ...(contact.sourceValues || {}),
+    }), {
+      mergedAt: new Date().toISOString(),
+      mergedPrimaryId: primary.id,
+      mergedDuplicateIds: duplicateIds,
+    });
+    const preferredName = primary.name || sortedContacts.find((contact) => contact.name)?.name || null;
+    const preferredPhone = primary.phone || sortedContacts.find((contact) => contact.phone)?.phone || null;
+
+    setUpdatingId('merge-contacts');
+    setError(null);
+    setNotice(null);
+
+    try {
+      const updatedPrimary = await updateContact(activeSiteId, primary.formId, primary.id, {
+        name: preferredName,
+        email: primary.email,
+        phone: preferredPhone,
+        notes: mergedNotes,
+        sourceValues: mergedSourceValues,
+      });
+      const archivedDuplicates = await Promise.all(
+        duplicates.map((contact) => updateContact(activeSiteId, contact.formId, contact.id, {
+          status: 'archived',
+          notes: Array.from(new Set([
+            contact.notes?.trim(),
+            `Merged into ${updatedPrimary.id} (${updatedPrimary.email || selectedMergeEmail}).`,
+          ].filter(Boolean))).join('\n'),
+        })),
+      );
+
+      [updatedPrimary, ...archivedDuplicates].forEach(updateContactInState);
+      setSelectedContactIds([]);
+      setNotice(`${archivedDuplicates.length + 1} duplicate contacts merged for ${selectedMergeEmail}.`);
+    } catch (mergeError) {
+      setError(mergeError instanceof Error ? mergeError.message : 'Unable to merge selected contacts');
     } finally {
       setUpdatingId(null);
     }
@@ -1526,6 +1637,7 @@ function ContactsRoute() {
               <option value="needs-notes">Needs notes</option>
               <option value="has-source-values">Has source values</option>
               <option value="ready-to-promote">Ready to promote</option>
+              <option value="duplicate-email">Duplicate email</option>
             </select>
             <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-muted p-1">
               <Filter className="ml-2 size-4 text-muted-foreground" />
@@ -1573,6 +1685,13 @@ function ContactsRoute() {
                 <span className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
                   {selectedContacts.length} selected
                 </span>
+                <span className={cn(
+                  'rounded-md px-2 py-1 text-xs font-semibold',
+                  duplicateEmailGroups.length > 0 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700',
+                )}
+                >
+                  {duplicateEmailGroups.length} duplicate group{duplicateEmailGroups.length === 1 ? '' : 's'}
+                </span>
                 {selectedContactIds.length > 0 && (
                   <Button
                     type="button"
@@ -1606,6 +1725,16 @@ function ContactsRoute() {
                   iconStart={<CheckCircle2 className="size-4" />}
                 >
                   Apply lifecycle
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isContactsBusy || !canMergeSelectedContacts}
+                  onClick={() => void handleMergeSelectedContacts()}
+                  iconStart={<GitMerge className="size-4" />}
+                  data-testid="contacts-merge-duplicates"
+                >
+                  Merge duplicates
                 </Button>
               </div>
             </div>

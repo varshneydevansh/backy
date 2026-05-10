@@ -7047,7 +7047,16 @@ export function updateContactStatus(
   contactId: string,
   updates: {
     status?: Contact['status'];
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
     notes?: string | null;
+    pageId?: string | null;
+    postId?: string | null;
+    sourceValues?: Record<string, unknown>;
+    sourceSubmissionId?: string;
+    requestId?: string | null;
+    sourceIpHash?: string | null;
   },
 ): Contact | undefined {
   refreshPersistedInteractionStore();
@@ -7058,8 +7067,35 @@ export function updateContactStatus(
   if (updates.status !== undefined) {
     contact.status = updates.status;
   }
+  if (updates.name !== undefined) {
+    contact.name = updates.name;
+  }
+  if (updates.email !== undefined) {
+    contact.email = updates.email;
+  }
+  if (updates.phone !== undefined) {
+    contact.phone = updates.phone;
+  }
   if (updates.notes !== undefined) {
     contact.notes = updates.notes;
+  }
+  if (updates.pageId !== undefined) {
+    contact.pageId = updates.pageId;
+  }
+  if (updates.postId !== undefined) {
+    contact.postId = updates.postId;
+  }
+  if (updates.sourceValues !== undefined) {
+    contact.sourceValues = updates.sourceValues;
+  }
+  if (updates.sourceSubmissionId !== undefined) {
+    contact.sourceSubmissionId = updates.sourceSubmissionId;
+  }
+  if (updates.requestId !== undefined) {
+    contact.requestId = updates.requestId;
+  }
+  if (updates.sourceIpHash !== undefined) {
+    contact.sourceIpHash = updates.sourceIpHash;
   }
   contact.updatedAt = new Date().toISOString();
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { Contact } from '@backy-cms/core';
 import {
   getContactById,
   getFormById,
@@ -34,6 +35,12 @@ const parseNullableString = (value: unknown): string | null | undefined => {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 };
 
+const parseSourceValues = (value: unknown): Record<string, unknown> | undefined => {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+};
+
 const parseBody = (value: unknown) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
@@ -41,15 +48,67 @@ const parseBody = (value: unknown) => {
 
   const record = value as Record<string, unknown>;
   const status = parseStatus(record.status);
+  const name = parseNullableString(record.name);
+  const email = parseNullableString(record.email);
+  const phone = parseNullableString(record.phone);
   const notes = parseNullableString(record.notes);
+  const pageId = parseNullableString(record.pageId);
+  const postId = parseNullableString(record.postId);
+  const requestId = parseNullableString(record.requestId);
+  const sourceIpHash = parseNullableString(record.sourceIpHash);
+  const sourceSubmissionId = parseNullableString(record.sourceSubmissionId);
+  const sourceValues = parseSourceValues(record.sourceValues);
 
-  if (!status && notes === undefined) {
+  if (
+    !status
+    && name === undefined
+    && email === undefined
+    && phone === undefined
+    && notes === undefined
+    && pageId === undefined
+    && postId === undefined
+    && requestId === undefined
+    && sourceIpHash === undefined
+    && sourceSubmissionId === undefined
+    && sourceValues === undefined
+  ) {
     return null;
   }
 
   return {
     ...(status ? { status } : {}),
+    ...(name !== undefined ? { name } : {}),
+    ...(email !== undefined ? { email } : {}),
+    ...(phone !== undefined ? { phone } : {}),
     ...(notes !== undefined ? { notes } : {}),
+    ...(pageId !== undefined ? { pageId } : {}),
+    ...(postId !== undefined ? { postId } : {}),
+    ...(requestId !== undefined ? { requestId } : {}),
+    ...(sourceIpHash !== undefined ? { sourceIpHash } : {}),
+    ...(sourceSubmissionId !== undefined ? { sourceSubmissionId } : {}),
+    ...(sourceValues !== undefined ? { sourceValues } : {}),
+  };
+};
+
+const toContactUpdate = (body: NonNullable<ReturnType<typeof parseBody>>) => {
+  const update: Partial<Contact> = {};
+  if (body.status !== undefined) update.status = body.status;
+  if (body.name !== undefined) update.name = body.name;
+  if (body.email !== undefined) update.email = body.email;
+  if (body.phone !== undefined) update.phone = body.phone;
+  if (body.notes !== undefined) update.notes = body.notes;
+  if (body.pageId !== undefined) update.pageId = body.pageId;
+  if (body.postId !== undefined) update.postId = body.postId;
+  if (body.requestId !== undefined) update.requestId = body.requestId;
+  if (body.sourceIpHash !== undefined) update.sourceIpHash = body.sourceIpHash;
+  if (body.sourceSubmissionId !== undefined) update.sourceSubmissionId = body.sourceSubmissionId || undefined;
+  if (body.sourceValues !== undefined) update.sourceValues = body.sourceValues;
+  return update;
+};
+
+const toFallbackUpdate = (body: NonNullable<ReturnType<typeof parseBody>>) => {
+  return {
+    ...toContactUpdate(body),
   };
 };
 
@@ -80,10 +139,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'CONTACT_NOT_FOUND', 'Contact not found', requestId);
       }
 
-      const updated = (await repositories.forms.updateContact(site.id, contact.id, {
-        status: body.status,
-        notes: body.notes,
-      })).item;
+      const updated = (await repositories.forms.updateContact(site.id, contact.id, toContactUpdate(body))).item;
 
       return NextResponse.json({
         success: true,
@@ -108,10 +164,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'CONTACT_NOT_FOUND', 'Contact not found', requestId);
     }
 
-    const updated = updateContactStatus(contact.id, {
-      status: body.status,
-      notes: body.notes,
-    });
+    const updated = updateContactStatus(contact.id, toFallbackUpdate(body));
 
     if (!updated) {
       return errorResponse(409, 'CONTACT_UPDATE_FAILED', 'Unable to update contact', requestId);
@@ -128,4 +181,3 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }
-

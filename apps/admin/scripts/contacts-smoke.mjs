@@ -143,6 +143,31 @@ const createContactDirectly = async (formId) => {
   return contact;
 };
 
+const createDuplicateContacts = async (formId) => {
+  const email = `contacts-duplicate-${Date.now().toString(36)}@example.com`;
+  const contacts = [];
+
+  for (const [index, name] of ['Duplicate Primary', 'Duplicate Secondary'].entries()) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/contacts`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+        email,
+        phone: index === 0 ? '+1 555 0193' : '+1 555 0194',
+        status: 'qualified',
+        notes: `${name} note.`,
+        sourceValues: { source: `duplicate-${index + 1}` },
+        upsertByEmail: false,
+      }),
+    });
+    const contact = payload.data?.contact || payload.contact;
+    assert(contact?.id, `Duplicate contact create did not return a contact: ${JSON.stringify(payload).slice(0, 500)}`);
+    contacts.push(contact);
+  }
+
+  return contacts;
+};
+
 const importContactsCsv = async (formId) => {
   const csv = [
     ['name', 'email', 'phone', 'status', 'notes', 'sourceValues'],
@@ -420,6 +445,79 @@ const archiveContactWithBulkAction = async (client, contactId) => {
   throw new Error(`Contact ${contactId.id} did not archive through bulk lifecycle controls`);
 };
 
+const mergeDuplicateContactsInUi = async (client, formId, duplicateContacts) => {
+  const duplicateEmail = duplicateContacts[0].email;
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const cards = Array.from(document.querySelectorAll('article')).filter((candidate) => (
+        (candidate.textContent || '').includes(${JSON.stringify(duplicateEmail)})
+      ));
+      const panel = document.querySelector('[data-testid="contacts-bulk-actions"]');
+      const merge = panel && Array.from(panel.querySelectorAll('button')).find((button) => (
+        (button.textContent || '').includes('Merge duplicates')
+      ));
+
+      if (cards.length < 2 || !(merge instanceof HTMLButtonElement)) {
+        return {
+          ok: false,
+          reason: 'merge-controls-missing',
+          cards: cards.length,
+          hasMerge: merge instanceof HTMLButtonElement,
+          body: document.body?.innerText?.slice(0, 1000) || '',
+        };
+      }
+
+      for (const card of cards.slice(0, 2)) {
+        const checkbox = card.querySelector('input[type="checkbox"][aria-label^="Select contact"]');
+        if (checkbox instanceof HTMLInputElement && !checkbox.checked) {
+          checkbox.click();
+        }
+      }
+
+      if (merge.disabled) {
+        return {
+          ok: false,
+          reason: 'merge-disabled',
+          selected: cards.slice(0, 2).map((card) => {
+            const checkbox = card.querySelector('input[type="checkbox"][aria-label^="Select contact"]');
+            return checkbox instanceof HTMLInputElement ? checkbox.checked : null;
+          }),
+        };
+      }
+
+      merge.click();
+      return { ok: true };
+    })()`);
+
+    if (result.ok) break;
+
+    if (attempt === 79) {
+      throw new Error(`Unable to merge duplicate contacts in UI: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const contacts = await listContacts(formId);
+    const mergedGroup = contacts.filter((contact) => contact.email === duplicateEmail);
+    const archived = mergedGroup.filter((contact) => contact.status === 'archived');
+    const active = mergedGroup.filter((contact) => contact.status !== 'archived');
+
+    if (archived.length === 1 && active.length === 1 && (active[0].notes || '').includes('Merged duplicate contacts')) {
+      return {
+        primary: active[0],
+        archived: archived[0],
+      };
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Duplicate contacts did not merge for ${duplicateEmail}`);
+};
+
 const assertLayout = async (client) => {
   const layout = await evaluate(client, `(() => ({
     width: window.innerWidth,
@@ -429,6 +527,7 @@ const assertLayout = async (client) => {
       hasCreateContact: Boolean(document.querySelector('[data-testid="contacts-create-contact"]')),
       hasImportCsv: Boolean(document.querySelector('[data-testid="contacts-import-csv"]')),
       hasImportTemplate: Boolean(document.querySelector('[data-testid="contacts-import-template"]')),
+      hasMergeDuplicates: Boolean(document.querySelector('[data-testid="contacts-merge-duplicates"]')),
       hasInbox: document.body?.innerText?.includes('Lead Inbox') || false,
       hasApi: document.body?.innerText?.includes('Contact pipeline API') || false,
       hasLead: document.body?.innerText?.includes('contacts-smoke@example.com') || false,
@@ -440,6 +539,7 @@ const assertLayout = async (client) => {
     && layout.hasCreateContact
     && layout.hasImportCsv
     && layout.hasImportTemplate
+    && layout.hasMergeDuplicates
     && layout.hasInbox
     && layout.hasApi
     && layout.hasLead,
@@ -497,6 +597,7 @@ const main = async () => {
   try {
     const directContact = await createContactDirectly(form.id);
     const importedContact = await importContactsCsv(form.id);
+    const duplicateContacts = await createDuplicateContacts(form.id);
     const submission = await submitLead(form.id);
     const contacts = await listContacts(form.id);
     const contact = contacts.find((item) => item.email === 'contacts-smoke@example.com');
@@ -504,6 +605,7 @@ const main = async () => {
     assert(contact.status === 'new', `New contact should start with new status: ${contact.status}`);
     assert(contacts.some((item) => item.id === directContact.id && item.status === 'contacted'), 'Direct contact create did not persist.');
     assert(contacts.some((item) => item.id === importedContact.id && item.status === 'qualified'), 'Imported contact did not persist.');
+    assert(duplicateContacts.every((duplicate) => contacts.some((item) => item.id === duplicate.id)), 'Duplicate contacts did not persist.');
 
     await waitForCdp();
     const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
@@ -520,6 +622,7 @@ const main = async () => {
     });
 
     await navigateToContacts(client, form.id);
+    const mergedDuplicateContacts = await mergeDuplicateContactsInUi(client, form.id, duplicateContacts);
     await updateContactInUi(client, { id: contact.id, formId: form.id });
     const updatedContact = await archiveContactWithBulkAction(client, { id: contact.id, formId: form.id });
     const layout = await assertLayout(client);
@@ -563,6 +666,10 @@ const main = async () => {
       importedContact: {
         id: importedContact.id,
         status: importedContact.status,
+      },
+      mergedDuplicateContacts: {
+        primaryId: mergedDuplicateContacts.primary.id,
+        archivedId: mergedDuplicateContacts.archived.id,
       },
       layout,
       cleaned,
