@@ -87,6 +87,46 @@ const assertUsersApiRequiresAuth = async () => {
   assert(payload?.success === false && payload?.error?.code === 'UNAUTHORIZED', `Users API missing auth envelope: ${JSON.stringify(payload).slice(0, 500)}`);
 };
 
+const assertUserPermissionOverridesAreEnforced = async () => {
+  await requestApi('/api/admin/users/user-admin/permissions', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      overrides: {
+        'users.create': 'deny',
+      },
+    }),
+  });
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/users`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: JSON.stringify({
+        fullName: 'Denied Permission Smoke',
+        email: `denied-${Date.now()}@example.com`,
+        role: 'viewer',
+        status: 'invited',
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    assert(response.status === 403, `Denied users.create override should reject user creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `Denied override should return FORBIDDEN_PERMISSION: ${JSON.stringify(payload).slice(0, 500)}`);
+  } finally {
+    await requestApi('/api/admin/users/user-admin/permissions', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        overrides: {
+          'users.create': null,
+        },
+      }),
+    });
+  }
+};
+
 const listUsers = async () => {
   const payload = await requestApi('/api/admin/users');
   return payload.data?.users || payload.users || [];
@@ -908,6 +948,7 @@ const main = async () => {
   try {
     await loginAdminApi();
     await assertUsersApiRequiresAuth();
+    await assertUserPermissionOverridesAreEnforced();
     const existing = await findUserByEmail(email);
     assert(!existing, `Temporary user already exists: ${email}`);
 

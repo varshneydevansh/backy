@@ -54,7 +54,7 @@ const normalizeStatus = (value: unknown): 'active' | 'inactive' | 'invited' | 's
 
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId);
+  const access = requireAdminAccess(request, requestId, { permission: 'users.view' });
   if (access instanceof NextResponse) {
     return access;
   }
@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId);
+  const access = requireAdminAccess(request, requestId, { permission: 'users.create' });
   if (access instanceof NextResponse) {
     return access;
   }

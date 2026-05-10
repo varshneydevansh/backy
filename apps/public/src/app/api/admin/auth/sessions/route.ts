@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import {
-  getAdminSession,
   listAdminSessions,
   revokeAdminSessionById,
 } from '@/lib/admin-auth/sessionStore';
@@ -43,9 +43,13 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const currentToken = getBearerToken(request);
-  const currentSession = getAdminSession(currentToken);
+  const access = requireAdminAccess(request, requestId, { permission: 'users.manage' });
 
-  if (!currentSession) {
+  if (access instanceof NextResponse) {
+    return access;
+  }
+
+  if (!access.session) {
     return errorResponse(401, 'UNAUTHORIZED', 'A valid admin session is required.', requestId);
   }
 
@@ -69,9 +73,13 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const currentToken = getBearerToken(request);
-  const currentSession = getAdminSession(currentToken);
+  const access = requireAdminAccess(request, requestId, { permission: 'users.manage' });
 
-  if (!currentSession) {
+  if (access instanceof NextResponse) {
+    return access;
+  }
+
+  if (!access.session) {
     return errorResponse(401, 'UNAUTHORIZED', 'A valid admin session is required.', requestId);
   }
 

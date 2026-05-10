@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession, type AdminSession } from '@/lib/admin-auth/sessionStore';
-import { getAdminSettings } from '@/lib/backyStore';
+import { buildUserPermissionMatrix, isAdminPermissionKey } from '@/lib/adminPermissions';
+import { getAdminSettings, listAdminUserPermissionOverrides } from '@/lib/backyStore';
 
 type AdminRole = AdminSession['user']['role'];
 
@@ -53,6 +54,7 @@ export function requireAdminAccess(
   requestId: string,
   options: {
     roles?: AdminRole[];
+    permission?: string;
   } = {},
 ): AdminAccessContext | NextResponse {
   const allowedRoles = options.roles || ['owner', 'admin'];
@@ -69,6 +71,27 @@ export function requireAdminAccess(
   const session = getAdminSession(getBearerToken(request));
   if (!session) {
     return adminAccessError(401, 'UNAUTHORIZED', 'A valid admin session or admin API key is required.', requestId);
+  }
+
+  if (options.permission) {
+    if (!isAdminPermissionKey(options.permission)) {
+      return adminAccessError(500, 'UNKNOWN_PERMISSION', `Unknown admin permission: ${options.permission}`, requestId);
+    }
+
+    const overrides = listAdminUserPermissionOverrides(session.user.id);
+    const matrix = buildUserPermissionMatrix(session.user, overrides);
+    const permission = matrix.groups
+      .flatMap((group) => group.permissions)
+      .find((candidate) => candidate.key === options.permission);
+
+    if (!permission?.allowed) {
+      return adminAccessError(403, 'FORBIDDEN_PERMISSION', 'This admin account does not have the required permission.', requestId);
+    }
+
+    return {
+      type: 'session',
+      session,
+    };
   }
 
   if (!hasRequiredRole(session.user.role, allowedRoles)) {

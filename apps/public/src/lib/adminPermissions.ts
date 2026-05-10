@@ -147,7 +147,7 @@ const PERMISSION_GROUPS: PermissionGroupDefinition[] = [
       { key: 'users.view', label: 'View users', capability: 'view', roles: adminRoles },
       { key: 'users.create', label: 'Invite or create users', capability: 'create', roles: adminRoles },
       { key: 'users.manage', label: 'Change roles, status, sessions, and recovery', capability: 'manage', roles: adminRoles },
-      { key: 'users.delete', label: 'Remove users', capability: 'delete', roles: ownerRoles },
+      { key: 'users.delete', label: 'Remove users', capability: 'delete', roles: adminRoles },
     ],
   },
   {

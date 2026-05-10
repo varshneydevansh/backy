@@ -1,21 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { getAdminUserById } from '@/lib/backyStore';
 import {
   createAdminPasswordResetToken,
-  getAdminSession,
 } from '@/lib/admin-auth/sessionStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-const getBearerToken = (request: NextRequest) => {
-  const authorization = request.headers.get('authorization') || '';
-  const match = authorization.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || request.headers.get('x-backy-admin-session')?.trim() || '';
-};
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
   NextResponse.json(
@@ -36,10 +30,9 @@ export async function POST(
   context: { params: Promise<{ userId: string }> },
 ) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const currentSession = getAdminSession(getBearerToken(request));
-
-  if (!currentSession) {
-    return errorResponse(401, 'UNAUTHORIZED', 'A valid admin session is required.', requestId);
+  const access = requireAdminAccess(request, requestId, { permission: 'users.manage' });
+  if (access instanceof NextResponse) {
+    return access;
   }
 
   try {
@@ -62,7 +55,7 @@ export async function POST(
     const origin = request.headers.get('origin') || request.nextUrl.origin;
     const reset = createAdminPasswordResetToken({
       user,
-      requestedById: currentSession.user.id,
+      requestedById: access.session?.user.id || null,
       origin,
       expiresInMinutes: 60,
     });
@@ -78,7 +71,7 @@ export async function POST(
         status: user.status,
         resetTokenId: reset.id,
         expiresAt: reset.expiresAt,
-        requestedById: currentSession.user.id,
+        requestedById: access.session?.user.id || null,
         deliveryConfigured: false,
       },
       requestId,
