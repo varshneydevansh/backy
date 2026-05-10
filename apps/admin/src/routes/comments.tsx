@@ -248,6 +248,9 @@ function CommentsRoute() {
   }), [comments]);
   const hasSelection = selectedIds.length > 0;
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const selectedReportedIds = useMemo(() => comments
+    .filter((comment) => selectedSet.has(comment.id) && ((comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length)))
+    .map((comment) => comment.id), [comments, selectedSet]);
   const allVisibleSelected = filteredComments.length > 0 && filteredComments.every((comment) => selectedSet.has(comment.id));
   const moderationReadiness = useMemo(() => {
     const reviewComplete = metrics.pending === 0;
@@ -520,6 +523,32 @@ function CommentsRoute() {
       setNotice(`${result.updatedCount} comment${result.updatedCount === 1 ? '' : 's'} marked ${status}.`);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'Unable to update comments');
+    } finally {
+      setUpdatingIds([]);
+    }
+  };
+
+  const handleClearReports = async (commentIds: string[]) => {
+    if (commentIds.length === 0 || isCommentsBusy) return;
+    setUpdatingIds(commentIds);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const result = await updateComments(activeSiteId, {
+        commentIds,
+        action: 'clearReports',
+        clearReports: true,
+        reviewedBy: 'admin',
+        actor: 'admin',
+      });
+      setComments((current) => current.map((comment) => (
+        result.updated.find((updated) => updated.id === comment.id) || comment
+      )));
+      setSelectedIds((current) => current.filter((id) => !commentIds.includes(id)));
+      setNotice(`${result.updatedCount} report flag${result.updatedCount === 1 ? '' : 's'} resolved.`);
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : 'Unable to resolve comment reports');
     } finally {
       setUpdatingIds([]);
     }
@@ -859,6 +888,15 @@ function CommentsRoute() {
               <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy} onClick={() => void handleModerate(selectedIds, 'spam', { rejectionReason: spamReason })} iconStart={<Trash2 className="size-4" />}>
                 Spam
               </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={selectedReportedIds.length === 0 || isCommentsBusy}
+                onClick={() => void handleClearReports(selectedReportedIds)}
+                iconStart={<Flag className="size-4" />}
+              >
+                Resolve reports
+              </Button>
             </div>
           }
         />
@@ -1108,6 +1146,7 @@ function CommentsRoute() {
                   onReject={() => void handleModerate([comment.id], 'rejected', { rejectionReason: rejectReason })}
                   onSpam={() => void handleModerate([comment.id], 'spam', { rejectionReason: spamReason })}
                   onBlock={() => void handleModerate([comment.id], 'blocked', { blockReason })}
+                  onClearReports={() => void handleClearReports([comment.id])}
                 />
               ))}
             </div>
@@ -1188,6 +1227,7 @@ function CommentCard({
   onReject,
   onSpam,
   onBlock,
+  onClearReports,
 }: {
   comment: AdminComment;
   target?: CommentTargetSummary;
@@ -1198,8 +1238,10 @@ function CommentCard({
   onReject: () => void;
   onSpam: () => void;
   onBlock: () => void;
+  onClearReports: () => void;
 }) {
   const reports = comment.reportReasons?.length ? comment.reportReasons.join(', ') : null;
+  const hasReports = (comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length);
 
   return (
     <article className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')}>
@@ -1303,6 +1345,18 @@ function CommentCard({
         >
           Block
         </Button>
+        {hasReports ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onClearReports}
+            disabled={disabled}
+            iconStart={<Flag className="size-4" />}
+            aria-label={`Resolve reports for comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
+          >
+            Resolve reports
+          </Button>
+        ) : null}
       </div>
     </article>
   );

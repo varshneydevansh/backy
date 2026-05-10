@@ -87,6 +87,7 @@ export async function updateRepositoryCommentStatus(
     blockReason?: string | null;
     requestId?: string | null;
     defaultReviewer?: string | null;
+    clearReports?: boolean;
   },
 ): Promise<Comment> {
   const reviewedBy = input.actor || input.reviewedBy || input.defaultReviewer || null;
@@ -101,6 +102,7 @@ export async function updateRepositoryCommentStatus(
     blockedBy: comment.blockedBy ?? null,
     blockedAt: comment.blockedAt ?? null,
     requestId: resolvedRequestId || null,
+    ...(input.clearReports ? { reportCount: 0, reportReasons: [] } : {}),
   };
 
   if (input.status === 'blocked') {
@@ -139,8 +141,51 @@ export async function updateRepositoryCommentStatus(
       targetId: nextComment.targetId,
       status: input.status,
       blockReason: nextComment.blockReason,
+      reportsCleared: input.clearReports === true,
     },
   });
+  return nextComment;
+}
+
+export async function clearRepositoryCommentReports(
+  repositories: PublicCommentRepositories,
+  siteId: string,
+  comment: Comment,
+  input: {
+    reviewedBy?: string | null;
+    actor?: string | null;
+    requestId?: string | null;
+    defaultReviewer?: string | null;
+  },
+): Promise<Comment> {
+  const reviewedBy = input.actor || input.reviewedBy || input.defaultReviewer || null;
+  const reviewedAt = new Date().toISOString();
+  const resolvedRequestId = input.requestId || comment.requestId || undefined;
+  const nextComment = (await repositories.comments.update(siteId, comment.id, {
+    reviewedBy,
+    reviewedAt,
+    reportCount: 0,
+    reportReasons: [],
+    requestId: resolvedRequestId || null,
+  })).item;
+
+  await recordRepositoryInteractionEvent(repositories, {
+    kind: 'comment-status',
+    siteId,
+    commentId: nextComment.id,
+    target: `comment:${nextComment.id}`,
+    status: 'succeeded',
+    requestId: resolvedRequestId,
+    reason: 'reports-cleared',
+    actor: reviewedBy,
+    metadata: {
+      targetType: nextComment.targetType,
+      targetId: nextComment.targetId,
+      reportCount: 0,
+      reportReasons: [],
+    },
+  });
+
   return nextComment;
 }
 

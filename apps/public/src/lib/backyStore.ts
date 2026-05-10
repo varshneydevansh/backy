@@ -6684,6 +6684,7 @@ export function bulkUpdateCommentStatus(params: {
   blockReason?: string | null;
   actor?: string | null;
   requestId?: string;
+  clearReports?: boolean;
 }): { updated: Comment[]; missingIds: string[] } {
   refreshPersistedInteractionStore();
 
@@ -6708,6 +6709,10 @@ export function bulkUpdateCommentStatus(params: {
     comment.reviewedAt = new Date().toISOString();
     comment.updatedAt = comment.reviewedAt;
     const resolvedRequestId = params.requestId || comment.requestId || undefined;
+    if (params.clearReports) {
+      comment.reportCount = 0;
+      comment.reportReasons = [];
+    }
 
     if (params.status === 'blocked') {
       comment.blockReason = normalizedBlockReason || 'manual-block';
@@ -6747,6 +6752,66 @@ export function bulkUpdateCommentStatus(params: {
         targetId: comment.targetId,
         status: params.status,
         blockReason: comment.blockReason,
+        reportsCleared: params.clearReports === true,
+      },
+    });
+
+    return comment;
+  }));
+  persistInteractionStore();
+
+  return {
+    updated: clone(updated),
+    missingIds: Array.from(missingIds),
+  };
+}
+
+export function bulkClearCommentReports(params: {
+  siteId: string;
+  commentIds: string[];
+  reviewedBy?: string | null;
+  actor?: string | null;
+  requestId?: string;
+}): { updated: Comment[]; missingIds: string[] } {
+  refreshPersistedInteractionStore();
+
+  const ids = Array.from(new Set(params.commentIds.map((id) => id.trim()).filter(Boolean)));
+  if (ids.length === 0) {
+    return { updated: [], missingIds: [] };
+  }
+
+  const missingIds = new Set(ids);
+  const reviewer = params.actor || params.reviewedBy || 'admin';
+  const updated: Comment[] = [];
+
+  setCommentStore(commentStore.map((comment) => {
+    if (comment.siteId !== params.siteId || !ids.includes(comment.id)) {
+      return comment;
+    }
+
+    missingIds.delete(comment.id);
+    comment.reportCount = 0;
+    comment.reportReasons = [];
+    comment.reviewedBy = reviewer;
+    comment.reviewedAt = new Date().toISOString();
+    comment.updatedAt = comment.reviewedAt;
+    const resolvedRequestId = params.requestId || comment.requestId || undefined;
+
+    updated.push(comment);
+    trackWebhookEvent({
+      kind: 'comment-status',
+      siteId: params.siteId,
+      commentId: comment.id,
+      target: `comment:${comment.id}`,
+      status: 'succeeded',
+      requestId: resolvedRequestId,
+      reason: 'reports-cleared',
+      actor: reviewer,
+      metadata: {
+        targetType: comment.targetType,
+        targetId: comment.targetId,
+        reportCount: 0,
+        reportReasons: [],
       },
     });
 
@@ -7241,6 +7306,7 @@ export function updateCommentStatus(
     blockReason?: string | null;
     actor?: string | null;
     requestId?: string;
+    clearReports?: boolean;
   },
 ): Comment | undefined {
   refreshPersistedInteractionStore();
@@ -7254,6 +7320,10 @@ export function updateCommentStatus(
   comment.rejectionReason = updates.rejectionReason ?? null;
   comment.reviewedAt = new Date().toISOString();
   comment.updatedAt = comment.reviewedAt;
+  if (updates.clearReports) {
+    comment.reportCount = 0;
+    comment.reportReasons = [];
+  }
 
   if (updates.status === 'blocked') {
     comment.blockReason = updates.blockReason

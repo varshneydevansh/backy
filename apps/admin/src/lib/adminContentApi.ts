@@ -1418,7 +1418,9 @@ export interface CommentListResult {
 
 export interface UpdateCommentsInput {
   commentIds: string[];
-  status: CommentStatus;
+  status?: CommentStatus;
+  action?: 'clearReports';
+  clearReports?: boolean;
   reviewedBy?: string | null;
   actor?: string | null;
   rejectionReason?: string | null;

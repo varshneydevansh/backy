@@ -1,10 +1,12 @@
 import { NextRequest } from 'next/server';
 import {
+  bulkClearCommentReports,
   bulkUpdateCommentStatus,
   getSiteByIdOrSlug,
   listComments,
 } from '@/lib/backyStore';
 import {
+  clearRepositoryCommentReports,
   resolveRepositorySite,
   updateRepositoryCommentStatus,
 } from '@/lib/commentRepositorySupport';
@@ -109,6 +111,10 @@ function parsePatchPayload(raw: unknown) {
   const requestId = parseRequestId(typeof (raw as { requestId?: unknown }).requestId === 'string'
     ? (raw as { requestId: string }).requestId
     : null);
+  const action = typeof (raw as { action?: unknown }).action === 'string'
+    ? (raw as { action: string }).action.trim()
+    : undefined;
+  const clearReports = (raw as { clearReports?: unknown }).clearReports === true || action === 'clearReports';
 
   return {
     status,
@@ -118,6 +124,7 @@ function parsePatchPayload(raw: unknown) {
     rejectionReason: rejectionReason || undefined,
     blockReason: blockReason || undefined,
     requestId,
+    clearReports,
   };
 }
 
@@ -265,8 +272,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const payload = parsePatchPayload(await request.json().catch(() => null));
-      if (!payload || !payload.status || payload.commentIds.length === 0) {
-        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status and commentIds are required.', responseRequestId);
+      if (!payload || (!payload.status && !payload.clearReports) || payload.commentIds.length === 0) {
+        return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status or clearReports plus commentIds are required.', responseRequestId);
       }
 
       const updated = [];
@@ -278,15 +285,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           continue;
         }
 
-        updated.push(await updateRepositoryCommentStatus(repositories, site.id, comment, {
-          status: payload.status,
-          reviewedBy: payload.reviewedBy,
-          actor: payload.actor,
-          rejectionReason: payload.rejectionReason,
-          blockReason: payload.blockReason,
-          requestId: payload.requestId,
-          defaultReviewer: 'admin',
-        }));
+        if (payload.status) {
+          updated.push(await updateRepositoryCommentStatus(repositories, site.id, comment, {
+            status: payload.status,
+            reviewedBy: payload.reviewedBy,
+            actor: payload.actor,
+            rejectionReason: payload.rejectionReason,
+            blockReason: payload.blockReason,
+            requestId: payload.requestId,
+            defaultReviewer: 'admin',
+            clearReports: payload.clearReports,
+          }));
+        } else {
+          updated.push(await clearRepositoryCommentReports(repositories, site.id, comment, {
+            reviewedBy: payload.reviewedBy,
+            actor: payload.actor,
+            requestId: payload.requestId,
+            defaultReviewer: 'admin',
+          }));
+        }
       }
 
       if (!updated.length) {
@@ -315,20 +332,29 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const payload = parsePatchPayload(await request.json().catch(() => null));
-    if (!payload || !payload.status || payload.commentIds.length === 0) {
-      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status and commentIds are required.', responseRequestId);
+    if (!payload || (!payload.status && !payload.clearReports) || payload.commentIds.length === 0) {
+      return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status or clearReports plus commentIds are required.', responseRequestId);
     }
 
-    const result = bulkUpdateCommentStatus({
-      siteId: site.id,
-      commentIds: payload.commentIds,
-      status: payload.status,
-      reviewedBy: payload.reviewedBy,
-      actor: payload.actor,
-      rejectionReason: payload.rejectionReason,
-      blockReason: payload.blockReason,
-      requestId: payload.requestId,
-    });
+    const result = payload.status
+      ? bulkUpdateCommentStatus({
+        siteId: site.id,
+        commentIds: payload.commentIds,
+        status: payload.status,
+        reviewedBy: payload.reviewedBy,
+        actor: payload.actor,
+        rejectionReason: payload.rejectionReason,
+        blockReason: payload.blockReason,
+        requestId: payload.requestId,
+        clearReports: payload.clearReports,
+      })
+      : bulkClearCommentReports({
+        siteId: site.id,
+        commentIds: payload.commentIds,
+        reviewedBy: payload.reviewedBy,
+        actor: payload.actor,
+        requestId: payload.requestId,
+      });
 
     if (!result.updated.length) {
       return errorResponse(404, 'COMMENTS_NOT_UPDATED', 'No comments were updated.', responseRequestId);

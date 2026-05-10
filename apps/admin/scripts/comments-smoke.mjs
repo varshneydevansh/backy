@@ -111,6 +111,34 @@ const waitForCommentStatus = async (commentId, requestId, status) => {
   throw new Error(`Comment ${commentId} did not become ${status}`);
 };
 
+const waitForCommentReports = async (commentId, requestId, expectedCount) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const comments = await listComments(requestId);
+    const comment = comments.find((item) => item.id === commentId);
+    if (comment && (comment.reportCount || 0) === expectedCount) {
+      return comment;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Comment ${commentId} did not reach report count ${expectedCount}`);
+};
+
+const reportComment = async ({ commentId, reason, requestId }) => {
+  const payload = await requestApi(`/api/sites/${SITE_ID}/comments/${commentId}/report`, {
+    method: 'POST',
+    body: JSON.stringify({
+      reason,
+      actor: 'comments-smoke',
+      requestId,
+    }),
+  });
+  const comment = payload.data?.comment || payload.comment;
+  assert(comment?.id, `Comment report did not return a comment: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert((comment.reportCount || 0) > 0, `Reported comment did not increment report count: ${JSON.stringify(comment)}`);
+  return comment;
+};
+
 const waitForCommentsDeleted = async (requestIds) => {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const remaining = [];
@@ -305,6 +333,40 @@ const moderateCommentInUi = async (client, authorName, action, reason = '') => {
   }
 };
 
+const resolveReportsInUi = async (client, authorName) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const card = Array.from(document.querySelectorAll('article')).find((candidate) => (
+        (candidate.textContent || '').includes(${JSON.stringify(authorName)})
+      ));
+      if (!card) return { ok: false, reason: 'card-missing', body: document.body?.innerText?.slice(0, 900) || '' };
+      const button = Array.from(card.querySelectorAll('button')).find((candidate) => (
+        (candidate.getAttribute('aria-label') || '').startsWith('Resolve reports for comment from ')
+      ));
+      if (!(button instanceof HTMLButtonElement)) {
+        return {
+          ok: false,
+          reason: 'button-missing',
+          buttons: Array.from(card.querySelectorAll('button')).map((candidate) => candidate.getAttribute('aria-label') || candidate.textContent || ''),
+        };
+      }
+      if (button.disabled) return { ok: false, reason: 'button-disabled' };
+      button.click();
+      return { ok: true };
+    })()`);
+
+    if (result.ok) {
+      return;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Unable to resolve reports for ${authorName}: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+};
+
 const assertLayout = async (client) => {
   const layout = await evaluate(client, `(() => ({
     width: window.innerWidth,
@@ -378,7 +440,8 @@ const main = async () => {
     const suffix = Date.now().toString(36);
     const approveRequestId = `comments-smoke-approve-${suffix}`;
     const rejectRequestId = `comments-smoke-reject-${suffix}`;
-    requestIds.push(approveRequestId, rejectRequestId);
+    const reportRequestId = `comments-smoke-report-${suffix}`;
+    requestIds.push(approveRequestId, rejectRequestId, reportRequestId);
 
     const approveComment = await submitComment({
       pageId: page.id,
@@ -394,6 +457,19 @@ const main = async () => {
       content: 'Please reject this temporary page comment from the moderation smoke.',
       requestId: rejectRequestId,
     });
+    const reportedComment = await submitComment({
+      pageId: page.id,
+      authorName: 'Comments Smoke Report',
+      authorEmail: 'comments-report@example.com',
+      content: 'Please resolve this temporary reported page comment from the moderation smoke.',
+      requestId: reportRequestId,
+    });
+    await reportComment({
+      commentId: reportedComment.id,
+      reason: 'harassment',
+      requestId: reportRequestId,
+    });
+    await waitForCommentReports(reportedComment.id, reportRequestId, 1);
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
@@ -409,7 +485,7 @@ const main = async () => {
     });
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: AUTH_STORAGE_SCRIPT });
 
-    await navigateToComments(client, ['Comments Smoke Approve', 'Comments Smoke Reject']);
+    await navigateToComments(client, ['Comments Smoke Approve', 'Comments Smoke Reject', 'Comments Smoke Report']);
     await moderateCommentInUi(client, 'Comments Smoke Approve', 'approved');
     const approved = await waitForCommentStatus(approveComment.id, approveRequestId, 'approved');
     assert(approved.reviewedBy, `Approved comment did not record reviewer: ${JSON.stringify(approved)}`);
@@ -417,6 +493,10 @@ const main = async () => {
     await moderateCommentInUi(client, 'Comments Smoke Reject', 'rejected', 'Rejected by comments smoke.');
     const rejected = await waitForCommentStatus(rejectComment.id, rejectRequestId, 'rejected');
     assert(rejected.rejectionReason === 'Rejected by comments smoke.', `Reject reason did not persist: ${JSON.stringify(rejected)}`);
+
+    await resolveReportsInUi(client, 'Comments Smoke Report');
+    const resolvedReport = await waitForCommentReports(reportedComment.id, reportRequestId, 0);
+    assert(!resolvedReport.reportReasons?.length, `Report reasons were not cleared: ${JSON.stringify(resolvedReport)}`);
 
     await assertLayout(client);
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
@@ -432,6 +512,7 @@ const main = async () => {
       siteId: SITE_ID,
       approvedCommentId: approveComment.id,
       rejectedCommentId: rejectComment.id,
+      resolvedReportCommentId: reportedComment.id,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
