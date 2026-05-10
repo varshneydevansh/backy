@@ -269,10 +269,49 @@ export interface BackyCommerceOrderSummary {
   [key: string]: unknown;
 }
 
+export interface BackyCommerceStorefrontContract {
+  schemaVersion: 'backy.commerce-settings.v1';
+  mode: 'catalog-only' | 'manual-orders' | 'checkout-provider';
+  currency: string;
+  paymentProvider: 'none' | 'stripe' | 'manual';
+  providerAccountId?: string | null;
+  capabilities: {
+    catalog: boolean;
+    orderIntake: boolean;
+    providerCheckout: boolean;
+    [key: string]: unknown;
+  };
+  checkout: {
+    catalogUrl: string;
+    orderIntakeUrl: string;
+    successPath: string;
+    cancelPath: string;
+    guestCheckout: boolean;
+    [key: string]: unknown;
+  };
+  pricing: {
+    taxes: boolean;
+    shipping: boolean;
+    discounts: boolean;
+    [key: string]: unknown;
+  };
+  inventory: {
+    reservations: boolean;
+    reservationMinutes: number;
+    [key: string]: unknown;
+  };
+  webhooks?: {
+    eventsEnabled: boolean;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface BackyCommerceCatalog {
   schemaVersion: 'backy.commerce-catalog.v1';
   collection?: BackyCollectionSchema;
   products: BackyCommerceProduct[];
+  commerce?: BackyCommerceStorefrontContract;
   facets?: Record<string, unknown>;
   filters?: Record<string, unknown>;
   readiness?: Record<string, unknown>;
@@ -570,6 +609,7 @@ export interface BackyFrontendManifest {
     };
     forms?: BackyFormDefinition[];
     media?: Record<string, unknown>;
+    commerce?: BackyCommerceStorefrontContract;
     [key: string]: unknown;
   };
   navigation: { primary?: BackyNavigationItem[]; [key: string]: unknown };

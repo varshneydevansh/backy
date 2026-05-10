@@ -10,11 +10,12 @@ import {
   PRODUCT_COLLECTION_SLUG,
   buildCommerceFacets,
   buildCommerceReadiness,
+  buildCommerceStorefrontContract,
   filterCommerceProducts,
   isCommerceSourceRecord,
   productRecordToCommerceProduct,
 } from '@/lib/commerceCatalog';
-import { getCollectionByIdOrSlug, getSiteByIdOrSlug, listCollectionRecords } from '@/lib/backyStore';
+import { getAdminSettings, getCollectionByIdOrSlug, getSiteByIdOrSlug, listCollectionRecords } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -74,10 +75,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const collection = await repositories.collections.getBySlug(site.id, PRODUCT_COLLECTION_SLUG);
+      const [collection, settings, ordersCollection] = await Promise.all([
+        repositories.collections.getBySlug(site.id, PRODUCT_COLLECTION_SLUG),
+        repositories.settings.get(),
+        repositories.collections.getBySlug(site.id, 'orders'),
+      ]);
       if (!collection || collection.status !== 'published' || !collection.permissions.publicRead) {
         return errorResponse(404, 'PRODUCT_CATALOG_NOT_FOUND', 'Product catalog not found', requestId);
       }
+      const commerce = buildCommerceStorefrontContract({
+        siteId: site.id,
+        settings: settings.integrations?.commerce,
+        hasCatalog: true,
+        hasOrderIntake: Boolean(
+          ordersCollection &&
+          ordersCollection.status === 'published' &&
+          !ordersCollection.permissions.publicRead &&
+          !ordersCollection.permissions.publicCreate
+        ),
+      });
 
       const recordsPayload = slug
         ? {
@@ -118,6 +134,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           schemaVersion: 'backy.commerce-catalog.v1',
           collection,
           products,
+          commerce,
           facets: buildCommerceFacets(allProducts),
           filters,
           readiness: buildCommerceReadiness(collection, allProducts),
@@ -125,6 +142,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
         collection,
         products,
+        commerce,
         facets: buildCommerceFacets(allProducts),
         pagination: paginationFor(filteredProducts.length, slug ? products.length || 1 : limit, slug ? 0 : offset),
       }, {
@@ -145,6 +163,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!collection || collection.status !== 'published' || !collection.permissions.publicRead) {
       return errorResponse(404, 'PRODUCT_CATALOG_NOT_FOUND', 'Product catalog not found', requestId);
     }
+    const ordersCollection = getCollectionByIdOrSlug(site.id, 'orders', { includeUnpublished: true });
+    const commerce = buildCommerceStorefrontContract({
+      siteId: site.id,
+      settings: getAdminSettings().integrations?.commerce,
+      hasCatalog: true,
+      hasOrderIntake: Boolean(
+        ordersCollection &&
+        ordersCollection.status === 'published' &&
+        !ordersCollection.permissions.publicRead &&
+        !ordersCollection.permissions.publicCreate
+      ),
+    });
 
     const recordsPayload = listCollectionRecords(site.id, collection.id, {
       slug,
@@ -169,6 +199,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         schemaVersion: 'backy.commerce-catalog.v1',
         collection,
         products,
+        commerce,
         facets: buildCommerceFacets(allProducts),
         filters,
         readiness: buildCommerceReadiness(collection, allProducts),
@@ -176,6 +207,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
       collection,
       products,
+      commerce,
       facets: buildCommerceFacets(allProducts),
       pagination: paginationFor(filteredProducts.length, slug ? products.length || 1 : limit, slug ? 0 : offset),
     }, {

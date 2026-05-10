@@ -650,6 +650,28 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           },
         },
         [`/api/sites/${site.id}/forms/{formId}/submissions`]: {
+          get: {
+            tags: ['Interactions'],
+            summary: 'List private form submissions for review workflows',
+            operationId: 'listBackyFormSubmissions',
+            parameters: [
+              pathParameter('formId', 'Form id', formIds),
+              queryParameter('status', { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam'] }),
+              queryParameter('requestId'),
+              queryParameter('limit', { type: 'integer', minimum: 1 }),
+              queryParameter('offset', { type: 'integer', minimum: 0 }),
+            ],
+            responses: {
+              '200': {
+                description: 'Form submission list',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/FormSubmissionsEnvelope' },
+                  },
+                },
+              },
+            },
+          },
           post: {
             tags: ['Interactions'],
             summary: 'Submit a Backy form',
@@ -685,6 +707,140 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               },
               '400': {
                 description: 'Validation error',
+              },
+            },
+          },
+        },
+        [`/api/sites/${site.id}/forms/{formId}/submissions/{submissionId}`]: {
+          get: {
+            tags: ['Interactions'],
+            summary: 'Fetch one private form submission',
+            operationId: 'getBackyFormSubmission',
+            parameters: [
+              pathParameter('formId', 'Form id', formIds),
+              pathParameter('submissionId', 'Submission id'),
+            ],
+            responses: {
+              '200': {
+                description: 'Form submission detail',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/FormSubmissionEnvelope' },
+                  },
+                },
+              },
+            },
+          },
+          patch: {
+            tags: ['Interactions'],
+            summary: 'Review or moderate a private form submission',
+            operationId: 'reviewBackyFormSubmission',
+            parameters: [
+              pathParameter('formId', 'Form id', formIds),
+              pathParameter('submissionId', 'Submission id'),
+            ],
+            requestBody: {
+              required: true,
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      status: { type: 'string', enum: ['pending', 'approved', 'rejected', 'spam'] },
+                      reviewedBy: { type: 'string' },
+                      adminNotes: { type: 'string' },
+                    },
+                    required: ['status'],
+                  },
+                },
+              },
+            },
+            responses: {
+              '200': {
+                description: 'Reviewed submission',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/FormSubmissionEnvelope' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        [`/api/sites/${site.id}/forms/{formId}/contacts`]: {
+          get: {
+            tags: ['Interactions'],
+            summary: 'List private contacts captured from form submissions',
+            operationId: 'listBackyFormContacts',
+            parameters: [
+              pathParameter('formId', 'Form id', formIds),
+              queryParameter('status', { type: 'string', enum: ['new', 'contacted', 'qualified', 'archived'] }),
+              queryParameter('requestId'),
+              queryParameter('limit', { type: 'integer', minimum: 1 }),
+              queryParameter('offset', { type: 'integer', minimum: 0 }),
+            ],
+            responses: {
+              '200': {
+                description: 'Form contact list',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/FormContactsEnvelope' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        [`/api/sites/${site.id}/forms/{formId}/contacts/{contactId}`]: {
+          get: {
+            tags: ['Interactions'],
+            summary: 'Fetch one private form contact',
+            operationId: 'getBackyFormContact',
+            parameters: [
+              pathParameter('formId', 'Form id', formIds),
+              pathParameter('contactId', 'Contact id'),
+            ],
+            responses: {
+              '200': {
+                description: 'Form contact detail',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/FormContactEnvelope' },
+                  },
+                },
+              },
+            },
+          },
+          patch: {
+            tags: ['Interactions'],
+            summary: 'Update a private form contact status or notes',
+            operationId: 'updateBackyFormContact',
+            parameters: [
+              pathParameter('formId', 'Form id', formIds),
+              pathParameter('contactId', 'Contact id'),
+            ],
+            requestBody: {
+              required: true,
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      status: { type: 'string', enum: ['new', 'contacted', 'qualified', 'archived'] },
+                      notes: { type: ['string', 'null'] },
+                    },
+                  },
+                },
+              },
+            },
+            responses: {
+              '200': {
+                description: 'Updated form contact',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/FormContactEnvelope' },
+                  },
+                },
               },
             },
           },
@@ -1391,6 +1547,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 properties: {
                   definition: { type: 'string' },
                   submissions: { type: 'string' },
+                  contacts: { type: 'string' },
                 },
               },
             },

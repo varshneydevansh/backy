@@ -20,6 +20,7 @@ const formEndpoints = (request: NextRequest, siteId: string, formId: string) => 
     return {
         definition: `${baseUrl.origin}/api/sites/${siteSegment}/forms/${formSegment}/definition`,
         submissions: `${baseUrl.origin}/api/sites/${siteSegment}/forms/${formSegment}/submissions`,
+        contacts: `${baseUrl.origin}/api/sites/${siteSegment}/forms/${formSegment}/contacts`,
     };
 };
 
@@ -70,7 +71,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
             }, {
               requestId,
               request: _request,
-              cache: 'discovery',
+              cache: 'private',
               siteId: site.id,
             });
         }
@@ -99,7 +100,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         }, {
           requestId,
           request: _request,
-          cache: 'discovery',
+          cache: 'private',
           siteId: site.id,
         });
     } catch (error) {

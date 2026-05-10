@@ -86,6 +86,38 @@ export interface CommerceCatalogFacets {
   productTypes: Array<{ value: string; count: number }>;
 }
 
+export interface CommerceStorefrontContract {
+  schemaVersion: 'backy.commerce-settings.v1';
+  mode: 'catalog-only' | 'manual-orders' | 'checkout-provider';
+  currency: string;
+  paymentProvider: 'none' | 'stripe' | 'manual';
+  providerAccountId: string | null;
+  capabilities: {
+    catalog: boolean;
+    orderIntake: boolean;
+    providerCheckout: boolean;
+  };
+  checkout: {
+    catalogUrl: string;
+    orderIntakeUrl: string;
+    successPath: string;
+    cancelPath: string;
+    guestCheckout: boolean;
+  };
+  pricing: {
+    taxes: boolean;
+    shipping: boolean;
+    discounts: boolean;
+  };
+  inventory: {
+    reservations: boolean;
+    reservationMinutes: number;
+  };
+  webhooks: {
+    eventsEnabled: boolean;
+  };
+}
+
 export const PRODUCT_COLLECTION_SLUG = 'products';
 
 const normalizeText = (value: unknown): string => (
@@ -104,6 +136,79 @@ const normalizeNumber = (value: unknown, fallback = 0): number => {
 const normalizeCurrency = (value: unknown): string => {
   const currency = normalizeText(value).toUpperCase();
   return /^[A-Z]{3}$/.test(currency) ? currency : 'USD';
+};
+
+const toRecord = (value: unknown): Record<string, unknown> => (
+  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+);
+
+const normalizeBoolean = (value: unknown, fallback = false): boolean => (
+  typeof value === 'boolean' ? value : fallback
+);
+
+const normalizeCommerceMode = (value: unknown): CommerceStorefrontContract['mode'] => {
+  const mode = normalizeIdentifier(value);
+  return mode === 'manual-orders' || mode === 'checkout-provider' ? mode : 'catalog-only';
+};
+
+const normalizePaymentProvider = (value: unknown): CommerceStorefrontContract['paymentProvider'] => {
+  const provider = normalizeIdentifier(value);
+  return provider === 'stripe' || provider === 'manual' ? provider : 'none';
+};
+
+const normalizeRelativePath = (value: unknown, fallback: string): string => {
+  const path = normalizeText(value);
+  return path.startsWith('/') ? path : fallback;
+};
+
+export const buildCommerceStorefrontContract = ({
+  siteId,
+  settings,
+  hasCatalog,
+  hasOrderIntake,
+}: {
+  siteId: string;
+  settings?: unknown;
+  hasCatalog: boolean;
+  hasOrderIntake: boolean;
+}): CommerceStorefrontContract => {
+  const commerce = toRecord(settings);
+  const mode = normalizeCommerceMode(commerce.mode);
+  const paymentProvider = normalizePaymentProvider(commerce.paymentProvider);
+  const providerCheckout = mode === 'checkout-provider' && paymentProvider !== 'none';
+  const reservationMinutes = Math.max(1, Math.min(1440, Math.round(normalizeNumber(commerce.reservationMinutes, 15))));
+
+  return {
+    schemaVersion: 'backy.commerce-settings.v1',
+    mode,
+    currency: normalizeCurrency(commerce.currency),
+    paymentProvider,
+    providerAccountId: normalizeText(commerce.providerAccountId) || null,
+    capabilities: {
+      catalog: hasCatalog,
+      orderIntake: hasOrderIntake,
+      providerCheckout,
+    },
+    checkout: {
+      catalogUrl: `/api/sites/${siteId}/commerce/catalog`,
+      orderIntakeUrl: `/api/sites/${siteId}/commerce/orders`,
+      successPath: normalizeRelativePath(commerce.checkoutSuccessPath, '/checkout/success'),
+      cancelPath: normalizeRelativePath(commerce.checkoutCancelPath, '/checkout/cancel'),
+      guestCheckout: normalizeBoolean(commerce.guestCheckout, true),
+    },
+    pricing: {
+      taxes: normalizeBoolean(commerce.taxEnabled),
+      shipping: normalizeBoolean(commerce.shippingEnabled),
+      discounts: normalizeBoolean(commerce.discountsEnabled),
+    },
+    inventory: {
+      reservations: normalizeBoolean(commerce.inventoryReservations, true),
+      reservationMinutes,
+    },
+    webhooks: {
+      eventsEnabled: normalizeBoolean(commerce.webhookEventsEnabled),
+    },
+  };
 };
 
 const normalizeTags = (value: unknown): string[] => {
@@ -359,6 +464,10 @@ export const buildCommerceReadiness = (
 
   return {
     score: Math.round((checks.filter((check) => check.ready).length / checks.length) * 100),
+    publishedProducts,
+    pricedProducts,
+    checkoutProducts,
+    imageProducts,
     checks,
   };
 };

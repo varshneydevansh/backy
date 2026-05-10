@@ -3488,6 +3488,21 @@ try {
         autoDeploy: false,
         previewDeployments: true,
       },
+      commerce: {
+        mode: 'checkout-provider',
+        currency: 'GBP',
+        paymentProvider: 'stripe',
+        providerAccountId: `acct_${unique}`,
+        checkoutSuccessPath: '/checkout/contract-success',
+        checkoutCancelPath: '/checkout/contract-cancel',
+        guestCheckout: true,
+        taxEnabled: true,
+        shippingEnabled: true,
+        discountsEnabled: true,
+        inventoryReservations: true,
+        reservationMinutes: 45,
+        webhookEventsEnabled: true,
+      },
     };
 
     const update = await request('/api/admin/settings', {
@@ -3502,11 +3517,45 @@ try {
     assert(update.json?.data?.settings?.integrations?.supabase?.projectRef === infrastructure.supabase.projectRef, `${update.url} did not persist Supabase project ref`);
     assert(update.json?.data?.settings?.integrations?.vercel?.projectId === infrastructure.vercel.projectId, `${update.url} did not persist Vercel project id`);
     assert(update.json?.data?.settings?.integrations?.vercel?.previewDeployments === true, `${update.url} did not persist Vercel preview toggle`);
+    assert(update.json?.data?.settings?.integrations?.commerce?.currency === infrastructure.commerce.currency, `${update.url} did not persist commerce currency`);
+    assert(update.json?.data?.settings?.integrations?.commerce?.paymentProvider === infrastructure.commerce.paymentProvider, `${update.url} did not persist commerce payment provider`);
 
     const readBack = await request('/api/admin/settings');
     assert(readBack.response.status === 200, `${readBack.url} expected 200, got ${readBack.response.status}`);
     assert(readBack.json?.data?.settings?.integrations?.supabase?.projectUrl === infrastructure.supabase.projectUrl, `${readBack.url} did not read back Supabase URL`);
     assert(readBack.json?.data?.settings?.integrations?.vercel?.productionDomain === infrastructure.vercel.productionDomain, `${readBack.url} did not read back Vercel domain`);
+    assert(readBack.json?.data?.settings?.integrations?.commerce?.checkoutSuccessPath === infrastructure.commerce.checkoutSuccessPath, `${readBack.url} did not read back commerce checkout success path`);
+
+    let settingsManifestSiteId = null;
+    try {
+      const siteForManifest = await request('/api/admin/sites', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Commerce Settings Manifest Site',
+          slug: `commerce-settings-${unique}`,
+          description: 'Temporary site for commerce settings manifest smoke',
+          status: 'published',
+        }),
+      });
+      assert(siteForManifest.response.status === 201, `${siteForManifest.url} expected 201, got ${siteForManifest.response.status}`);
+      settingsManifestSiteId = siteForManifest.json?.data?.site?.id;
+      assert(settingsManifestSiteId, `${siteForManifest.url} missing created site id`);
+
+      const manifest = await request(`/api/sites/${settingsManifestSiteId}/manifest`);
+      assert(manifest.response.status === 200, `${manifest.url} expected manifest read after commerce settings update`);
+      assert(manifest.json?.data?.modules?.commerce?.currency === infrastructure.commerce.currency, `${manifest.url} did not expose commerce currency`);
+      assert(manifest.json?.data?.modules?.commerce?.paymentProvider === infrastructure.commerce.paymentProvider, `${manifest.url} did not expose commerce payment provider`);
+      assert(manifest.json?.data?.modules?.commerce?.checkout?.successPath === infrastructure.commerce.checkoutSuccessPath, `${manifest.url} did not expose commerce success path`);
+      assert(manifest.json?.data?.modules?.commerce?.pricing?.taxes === true, `${manifest.url} did not expose commerce tax flag`);
+      assert(manifest.json?.data?.modules?.commerce?.inventory?.reservationMinutes === 45, `${manifest.url} did not expose commerce reservation window`);
+    } finally {
+      if (settingsManifestSiteId) {
+        await request(`/api/admin/sites/${settingsManifestSiteId}`, { method: 'DELETE' }).catch(() => {});
+      }
+    }
 
     const audit = await request(`/api/admin/audit-logs?entity=settings&entityId=platform&action=settings.update&requestId=${update.json.requestId}`);
     assert(audit.response.status === 200, `${audit.url} expected settings audit read`);

@@ -7,6 +7,7 @@
 import { NextRequest } from 'next/server';
 import type { BackyBlogAuthor, BackyBlogCategory, BackyBlogTag, BackyCollection, BackyPage, BackyPost, BackyReusableSection, FormDefinition, MediaItem, Site } from '@backy-cms/core';
 import {
+  getAdminSettings,
   getBlogPosts,
   getMediaList,
   getPageSummary,
@@ -22,7 +23,7 @@ import {
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeCollectionListRoutePattern, normalizeCollectionRoutePattern } from '@/lib/collectionRoutes';
-import { PRODUCT_COLLECTION_SLUG } from '@/lib/commerceCatalog';
+import { PRODUCT_COLLECTION_SLUG, buildCommerceStorefrontContract } from '@/lib/commerceCatalog';
 import { buildSiteNavigation } from '@/lib/navigation';
 import { normalizeRedirectRules } from '@/lib/redirectRules';
 
@@ -138,6 +139,7 @@ const buildRepositoryManifest = (
     reusableSections: BackyReusableSection[];
     forms: FormDefinition[];
     media: MediaItem[];
+    commerceSettings?: unknown;
   },
 ) => {
   const fonts = input.media.filter((item) => item.type === 'font');
@@ -150,6 +152,12 @@ const buildRepositoryManifest = (
     !collection.permissions.publicCreate
   ));
   const redirectRules = manifestRedirectRules(input.site.id, input.site.settings);
+  const commerce = buildCommerceStorefrontContract({
+    siteId: input.site.id,
+    settings: input.commerceSettings,
+    hasCatalog: hasCommerceCatalog,
+    hasOrderIntake: hasCommerceCatalog && hasPrivateOrders,
+  });
 
   return {
     success: true,
@@ -194,6 +202,7 @@ const buildRepositoryManifest = (
         collectionRecords: true,
         commerceCatalog: hasCommerceCatalog,
         commerceOrderIntake: hasCommerceCatalog && hasPrivateOrders,
+        commerceProviderCheckout: commerce.capabilities.providerCheckout,
         publicCollectionCreate: publicCollections.some((collection) => collection.permissions.publicCreate),
         collectionWriteForms: input.forms.some((form) => form.collectionTarget?.enabled),
         dynamicListRoutes: publicCollections.length > 0,
@@ -231,6 +240,7 @@ const buildRepositoryManifest = (
         formDetail: `/api/sites/${input.site.id}/forms/{formId}`,
         formDefinition: `/api/sites/${input.site.id}/forms/{formId}/definition`,
         formSubmissions: `/api/sites/${input.site.id}/forms/{formId}/submissions`,
+        formContacts: `/api/sites/${input.site.id}/forms/{formId}/contacts`,
         comments: `/api/sites/${input.site.id}/comments`,
         pageComments: `/api/sites/${input.site.id}/pages/{pageId}/comments`,
         pageComment: `/api/sites/${input.site.id}/pages/{pageId}/comments/{commentId}`,
@@ -343,6 +353,7 @@ const buildRepositoryManifest = (
           detailUrl: `/api/sites/${input.site.id}/forms/${form.id}`,
           definitionUrl: `/api/sites/${input.site.id}/forms/${form.id}/definition`,
           submissionsUrl: `/api/sites/${input.site.id}/forms/${form.id}/submissions`,
+          contactsUrl: `/api/sites/${input.site.id}/forms/${form.id}/contacts`,
           collectionTarget: form.collectionTarget || null,
         })),
         media: {
@@ -352,6 +363,7 @@ const buildRepositoryManifest = (
           types: Array.from(new Set(input.media.map((item) => item.type))).sort(),
           listUrl: `/api/sites/${input.site.id}/media`,
         },
+        commerce,
       },
       navigation: buildSiteNavigation(input.site.settings, input.pages.filter(isPubliclyReadable).map((page) => ({
         ...page,
@@ -377,7 +389,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const [pages, posts, categories, tags, authors, collections, reusableSections, forms, media] = await Promise.all([
+      const [pages, posts, categories, tags, authors, collections, reusableSections, forms, media, settings] = await Promise.all([
         repositories.pages.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
         repositories.posts.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
         repositories.blogTaxonomy.listCategories(site.id),
@@ -387,6 +399,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         repositories.reusableSections.list({ siteId: site.id, status: 'active', limit: 100, offset: 0 }),
         repositories.forms.list({ siteId: site.id, isActive: true, limit: 100, offset: 0 }),
         repositories.media.list({ siteId: site.id, visibility: 'public', limit: 1000, offset: 0 }),
+        repositories.settings.get(),
       ]);
       const manifest = buildRepositoryManifest({
         requestId,
@@ -400,6 +413,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         reusableSections: reusableSections.items,
         forms: forms.items,
         media: media.items,
+        commerceSettings: settings.integrations?.commerce,
       });
 
       return publicContractJson(manifest, {
@@ -435,6 +449,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       !collection.permissions.publicRead &&
       !collection.permissions.publicCreate
     ));
+    const commerce = buildCommerceStorefrontContract({
+      siteId: site.id,
+      settings: getAdminSettings().integrations?.commerce,
+      hasCatalog: hasCommerceCatalog,
+      hasOrderIntake: hasCommerceCatalog && hasPrivateOrders,
+    });
 
     const manifest = {
       success: true,
@@ -479,6 +499,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           collectionRecords: true,
           commerceCatalog: hasCommerceCatalog,
           commerceOrderIntake: hasCommerceCatalog && hasPrivateOrders,
+          commerceProviderCheckout: commerce.capabilities.providerCheckout,
           publicCollectionCreate: collections.some((collection) => collection.permissions.publicCreate),
           collectionWriteForms: forms.some((form) => form.collectionTarget?.enabled),
           dynamicListRoutes: collections.length > 0,
@@ -516,6 +537,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           formDetail: `/api/sites/${site.id}/forms/{formId}`,
           formDefinition: `/api/sites/${site.id}/forms/{formId}/definition`,
           formSubmissions: `/api/sites/${site.id}/forms/{formId}/submissions`,
+          formContacts: `/api/sites/${site.id}/forms/{formId}/contacts`,
           comments: `/api/sites/${site.id}/comments`,
           pageComments: `/api/sites/${site.id}/pages/{pageId}/comments`,
           pageComment: `/api/sites/${site.id}/pages/{pageId}/comments/{commentId}`,
@@ -634,6 +656,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             detailUrl: `/api/sites/${site.id}/forms/${form.id}`,
             definitionUrl: `/api/sites/${site.id}/forms/${form.id}/definition`,
             submissionsUrl: `/api/sites/${site.id}/forms/${form.id}/submissions`,
+            contactsUrl: `/api/sites/${site.id}/forms/${form.id}/contacts`,
             collectionTarget: form.collectionTarget || null,
           })),
           media: {
@@ -643,6 +666,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             types: Array.from(new Set(media.media.map((item) => item.type))).sort(),
             listUrl: `/api/sites/${site.id}/media`,
           },
+          commerce,
         },
         navigation: getSiteNavigation(site.id),
       },
