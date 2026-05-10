@@ -15,6 +15,7 @@ const TEMPLATE_DESKTOP_SCREENSHOT_PATH = process.env.BACKY_PAGE_CREATE_TEMPLATE_
   || path.join(os.tmpdir(), 'backy-page-create-templates-desktop.png');
 const TEMPLATE_MOBILE_SCREENSHOT_PATH = process.env.BACKY_PAGE_CREATE_TEMPLATE_MOBILE_SCREENSHOT
   || path.join(os.tmpdir(), 'backy-page-create-templates-mobile.png');
+const EDITOR_TEMPLATE_SCREENSHOT_DIR = process.env.BACKY_PAGE_CREATE_EDITOR_TEMPLATE_SCREENSHOT_DIR || os.tmpdir();
 
 const STARTER_TEMPLATE_BACKEND_CASES = [
   {
@@ -925,6 +926,81 @@ const assertStarterTemplatePageContent = async (pageId, testCase, slug) => {
   };
 };
 
+const assertStarterTemplateEditorRender = async (client, testCase) => {
+  const requiredElementIds = testCase.requiredElementIds;
+  let renderState = null;
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    renderState = await evaluate(client, `(() => {
+      document.querySelector('#page-editor-canvas')?.scrollIntoView({ block: 'start' });
+      const canvas = document.querySelector('[data-testid="editor-canvas"]');
+      const elements = Array.from(canvas?.querySelectorAll('[data-element-id]') || []);
+      const requiredElementIds = ${JSON.stringify(requiredElementIds)};
+      const byId = new Map(elements.map((element) => [element.getAttribute('data-element-id'), element]));
+      const requiredRects = requiredElementIds.map((id) => {
+        const element = byId.get(id);
+        const rect = element?.getBoundingClientRect();
+        return {
+          id,
+          present: Boolean(element),
+          width: Math.round(rect?.width || 0),
+          height: Math.round(rect?.height || 0),
+          left: Math.round(rect?.left || 0),
+          top: Math.round(rect?.top || 0),
+        };
+      });
+      const canvasRect = canvas?.getBoundingClientRect();
+      return {
+        editorLoaded: document.body?.innerText?.includes('Page editor command center') || false,
+        backendFallbackVisible: document.body?.innerText?.includes('Using the local page copy.') || false,
+        canvasPresent: Boolean(canvas),
+        canvasWidth: Math.round(canvasRect?.width || 0),
+        canvasHeight: Math.round(canvasRect?.height || 0),
+        canvasOffsetWidth: canvas?.clientWidth || 0,
+        canvasOffsetHeight: canvas?.clientHeight || 0,
+        renderedElementCount: elements.length,
+        renderedElementIds: elements.map((element) => element.getAttribute('data-element-id')).filter(Boolean),
+        missingElementIds: requiredRects.filter((rect) => !rect.present).map((rect) => rect.id),
+        collapsedElementIds: requiredRects.filter((rect) => rect.present && (rect.width <= 0 || rect.height <= 0)).map((rect) => rect.id),
+        requiredRects,
+        emptyStateVisible: document.body?.innerText?.includes('Drop components onto the canvas') || false,
+        horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
+        body: document.body?.innerText?.slice(0, 260) || '',
+      };
+    })()`);
+
+    if (
+      renderState.editorLoaded
+      && renderState.canvasPresent
+      && renderState.renderedElementCount >= testCase.minTotalElementCount
+      && renderState.missingElementIds.length === 0
+      && renderState.collapsedElementIds.length === 0
+      && !renderState.backendFallbackVisible
+      && !renderState.emptyStateVisible
+    ) {
+      break;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Created ${testCase.template} editor canvas did not render expected saved elements: ${JSON.stringify(renderState)}`);
+    }
+
+    await sleep(250);
+  }
+
+  assert(renderState.canvasOffsetWidth === 1200, `Created ${testCase.template} editor canvas width mismatch: ${JSON.stringify(renderState)}`);
+  assert(renderState.canvasOffsetHeight >= testCase.minCanvasHeight, `Created ${testCase.template} editor canvas height mismatch: ${JSON.stringify(renderState)}`);
+  assert(renderState.horizontalOverflow <= 4, `Created ${testCase.template} editor route has horizontal page overflow: ${JSON.stringify(renderState)}`);
+
+  const screenshotPath = path.join(EDITOR_TEMPLATE_SCREENSHOT_DIR, `backy-page-create-editor-${testCase.template}.png`);
+  await captureScreenshot(client, screenshotPath);
+
+  return {
+    ...renderState,
+    screenshotPath,
+  };
+};
+
 const createStarterTemplateBackends = async (client, createdPageIds) => {
   const summaries = [];
 
@@ -934,12 +1010,14 @@ const createStarterTemplateBackends = async (client, createdPageIds) => {
     const editState = await createPageFromUi(client);
     const pageId = editState.path.split('/').filter(Boolean).at(-2);
     createdPageIds.push(pageId);
+    const editorRender = await assertStarterTemplateEditorRender(client, testCase);
     const content = await assertStarterTemplatePageContent(pageId, testCase, slug);
 
     summaries.push({
       template: testCase.template,
       routeState: routeState.state,
       editState,
+      editorRender,
       pageId,
       content,
     });
