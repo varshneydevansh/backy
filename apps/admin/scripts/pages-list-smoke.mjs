@@ -397,6 +397,75 @@ const waitForDeliveryRow = async (client, page, expectedText, expectedSearch = p
   return null;
 };
 
+const assertDeliveryRefreshControl = async (client, page, expectedSearch = page.title) => {
+  const url = `${ADMIN_BASE_URL}/pages?siteId=${encodeURIComponent(HIERARCHY_SITE_ID)}&q=${encodeURIComponent(expectedSearch)}`;
+  await client.send('Page.navigate', { url });
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const globalRefresh = document.querySelector('[data-testid="pages-refresh-delivery-health"]');
+      const rowRefresh = document.querySelector('[data-testid="pages-delivery-refresh-${page.id}"]');
+      const delivery = document.querySelector('[data-testid="pages-delivery-${page.id}"]');
+      return {
+        ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
+        globalRefresh: Boolean(globalRefresh),
+        globalDisabled: globalRefresh?.disabled === true,
+        rowRefresh: Boolean(rowRefresh),
+        rowDisabled: rowRefresh?.disabled === true,
+        deliveryText: delivery?.textContent || '',
+        body: document.body?.innerText?.slice(0, 900) || '',
+      };
+    })()`);
+
+    if (
+      state.ready
+      && state.globalRefresh
+      && !state.globalDisabled
+      && state.rowRefresh
+      && !state.rowDisabled
+      && state.deliveryText.includes('Health')
+    ) {
+      const clicked = await evaluate(client, `(() => {
+        const rowRefresh = document.querySelector('[data-testid="pages-delivery-refresh-${page.id}"]');
+        rowRefresh?.click();
+        return { clicked: Boolean(rowRefresh) };
+      })()`);
+      assert(clicked.clicked, `Unable to click delivery refresh: ${JSON.stringify(clicked)}`);
+
+      for (let refreshAttempt = 0; refreshAttempt < 100; refreshAttempt += 1) {
+        const refreshed = await evaluate(client, `(() => {
+          const rowRefresh = document.querySelector('[data-testid="pages-delivery-refresh-${page.id}"]');
+          const delivery = document.querySelector('[data-testid="pages-delivery-${page.id}"]');
+          return {
+            rowDisabled: rowRefresh?.disabled === true,
+            deliveryText: delivery?.textContent || '',
+          };
+        })()`);
+
+        if (
+          !refreshed.rowDisabled
+          && refreshed.deliveryText.includes('Health')
+          && !refreshed.deliveryText.includes('Refreshing public, render, and resolve endpoint health.')
+        ) {
+          return { url, state, clicked, refreshed };
+        }
+
+        await sleep(250);
+      }
+
+      throw new Error('Delivery refresh control did not finish refreshing.');
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Delivery refresh controls did not render: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const assertPublishReviewModal = async (client, page, expectedSearch = page.title) => {
   const url = `${ADMIN_BASE_URL}/pages?siteId=${encodeURIComponent(HIERARCHY_SITE_ID)}&q=${encodeURIComponent(expectedSearch)}`;
   await client.send('Page.navigate', { url });
@@ -470,6 +539,123 @@ const assertPublishReviewModal = async (client, page, expectedSearch = page.titl
 
     if (attempt === 79) {
       throw new Error(`Publish review modal did not render expected details: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const assertBulkPublishReviewModal = async (client, page, expectedSearch = page.title) => {
+  const url = `${ADMIN_BASE_URL}/pages?siteId=${encodeURIComponent(HIERARCHY_SITE_ID)}&q=${encodeURIComponent(expectedSearch)}`;
+  await client.send('Page.navigate', { url });
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const checkbox = [...document.querySelectorAll('input[type="checkbox"]')]
+        .find((input) => input.getAttribute('aria-label') === ${JSON.stringify(`Select ${page.title}`)});
+      const select = [...document.querySelectorAll('select')]
+        .find((candidate) => [...candidate.options].some((option) => option.value === 'publish' && option.textContent.includes('Publish selected')));
+      return {
+        ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
+        checkbox: Boolean(checkbox),
+        checked: checkbox?.checked === true,
+        select: Boolean(select),
+        body: document.body?.innerText?.slice(0, 900) || '',
+      };
+    })()`);
+
+    if (state.ready && state.checkbox && state.select) {
+      break;
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Bulk publish controls were not ready: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  const prepared = await evaluate(client, `(() => {
+    const checkbox = [...document.querySelectorAll('input[type="checkbox"]')]
+      .find((input) => input.getAttribute('aria-label') === ${JSON.stringify(`Select ${page.title}`)});
+    if (checkbox && !checkbox.checked) {
+      checkbox.click();
+    }
+
+    const select = [...document.querySelectorAll('select')]
+      .find((candidate) => [...candidate.options].some((option) => option.value === 'publish' && option.textContent.includes('Publish selected')));
+    if (select) {
+      select.value = 'publish';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    return {
+      prepared: Boolean(checkbox && select),
+      checked: checkbox?.checked === true,
+    };
+  })()`);
+
+  assert(prepared.prepared, `Unable to prepare bulk publish controls: ${JSON.stringify(prepared)}`);
+
+  let openedState = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const opened = await evaluate(client, `(() => {
+      const applyButton = [...document.querySelectorAll('button')]
+        .find((button) => (
+          button.textContent.includes('Publish selected')
+          || button.textContent.includes('Review publish for 1 page')
+          || button.textContent.includes('Publish 1 page')
+        ));
+      if (applyButton && !applyButton.disabled) {
+        applyButton.click();
+      }
+      return {
+        hasButton: Boolean(applyButton),
+        disabled: applyButton?.disabled === true,
+        modalText: document.querySelector('[data-testid="pages-bulk-publish-modal"]')?.textContent || '',
+      };
+    })()`);
+
+    if (opened.hasButton && !opened.disabled) {
+      openedState = opened;
+      break;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Bulk publish apply button was not ready: ${JSON.stringify(opened)}`);
+    }
+
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const modal = document.querySelector('[data-testid="pages-bulk-publish-modal"]');
+      return {
+        modalText: modal?.textContent || '',
+        cancel: [...document.querySelectorAll('button')].some((button) => button.textContent.trim() === 'Cancel'),
+        confirm: [...document.querySelectorAll('button')].some((button) => button.textContent.includes('Publish 1 page')),
+      };
+    })()`);
+
+    if (
+      state.modalText.includes('Publish 1 selected page?')
+      && state.modalText.includes(page.title)
+      && state.cancel
+      && state.confirm
+    ) {
+      await evaluate(client, `(() => {
+        [...document.querySelectorAll('button')]
+          .find((button) => button.textContent.trim() === 'Cancel')
+          ?.click();
+      })()`);
+      return { url, prepared, opened: openedState, state };
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Bulk publish review modal did not render expected details: ${JSON.stringify(state)}`);
     }
 
     await sleep(250);
@@ -574,6 +760,10 @@ const main = async () => {
       hierarchyPages.parentPage,
       'Health',
     );
+    const deliveryRefresh = await assertDeliveryRefreshControl(
+      client,
+      hierarchyPages.parentPage,
+    );
     const childRevisions = await waitForRevisionRow(
       client,
       hierarchyPages.childPage,
@@ -592,6 +782,10 @@ const main = async () => {
     const publishReview = await assertPublishReviewModal(
       client,
       hierarchyPages.childPage,
+    );
+    const bulkPublishReview = await assertBulkPublishReviewModal(
+      client,
+      hierarchyPages.parentPage,
     );
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
@@ -614,10 +808,12 @@ const main = async () => {
       childHierarchy,
       parentHierarchy,
       parentDeliveryHealth,
+      deliveryRefresh,
       childRevisions,
       childRoute,
       childDelivery,
       publishReview,
+      bulkPublishReview,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {

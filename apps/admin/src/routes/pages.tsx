@@ -356,6 +356,8 @@ function PagesListView() {
   const [readinessMap, setReadinessMap] = useState<Record<string, PageReadiness>>({});
   const [revisionSummaryMap, setRevisionSummaryMap] = useState<Record<string, ContentRevisionSummary>>({});
   const [deliveryHealthMap, setDeliveryHealthMap] = useState<Record<string, PageDeliveryHealth>>({});
+  const [refreshingDeliveryPageIds, setRefreshingDeliveryPageIds] = useState<Set<string>>(() => new Set());
+  const [isRefreshingAllDeliveryHealth, setIsRefreshingAllDeliveryHealth] = useState(false);
   const [routeCollections, setRouteCollections] = useState<Collection[]>([]);
   const [isLoadingRevisions, setIsLoadingRevisions] = useState(false);
   const [previewingPageId, setPreviewingPageId] = useState<string | null>(null);
@@ -396,6 +398,15 @@ function PagesListView() {
   const pageRouteDiagnostics = useMemo(
     () => buildPageRouteDiagnostics(activeSitePages, activeSiteCollections),
     [activeSiteCollections, activeSitePages],
+  );
+  const deliveryProbeTargets = useMemo(
+    () => activeSitePages
+      .filter((page) => (
+        page.status === 'published'
+        && getPageDeliveryStatus(page, readinessMap[page.id], pageRouteDiagnostics[page.id]) === 'published'
+      ))
+      .slice(0, 24),
+    [activeSitePages, pageRouteDiagnostics, readinessMap],
   );
   const pageChildCountMap = useMemo(() => {
     const counts = new Map<string, number>();
@@ -770,12 +781,7 @@ function PagesListView() {
 
   useEffect(() => {
     let cancelled = false;
-    const probeTargets = activeSitePages
-      .filter((page) => (
-        page.status === 'published'
-        && getPageDeliveryStatus(page, readinessMap[page.id], pageRouteDiagnostics[page.id]) === 'published'
-      ))
-      .slice(0, 24);
+    const probeTargets = deliveryProbeTargets;
 
     if (probeTargets.length === 0) {
       setDeliveryHealthMap({});
@@ -830,7 +836,78 @@ function PagesListView() {
     return () => {
       cancelled = true;
     };
-  }, [activeSiteId, activeSitePages, pageRouteDiagnostics, publicBaseUrl, readinessMap, siteSlug]);
+  }, [activeSiteId, deliveryProbeTargets, publicBaseUrl, siteSlug]);
+
+  const handleRefreshDeliveryHealth = async (targetPages = deliveryProbeTargets) => {
+    if (isLoading || targetPages.length === 0 || isRefreshingAllDeliveryHealth) {
+      return;
+    }
+
+    const probeTargets = targetPages.filter((page) => (
+      page.status === 'published'
+      && getPageDeliveryStatus(page, readinessMap[page.id], pageRouteDiagnostics[page.id]) === 'published'
+    ));
+
+    if (probeTargets.length === 0) {
+      setNotice('No published pages are ready for delivery health checks.');
+      return;
+    }
+
+    const targetIds = probeTargets.map((page) => page.id);
+    setIsRefreshingAllDeliveryHealth(targetPages.length !== 1);
+    setRefreshingDeliveryPageIds((current) => new Set([...current, ...targetIds]));
+    setError(null);
+    setNotice(null);
+    setDeliveryHealthMap((current) => {
+      const next = { ...current };
+      probeTargets.forEach((page) => {
+        next[page.id] = {
+          status: 'checking',
+          message: 'Refreshing public, render, and resolve endpoint health.',
+        };
+      });
+      return next;
+    });
+
+    try {
+      const results = await Promise.allSettled(probeTargets.map(async (page) => {
+        const pageSiteId = page.siteId || activeSiteId;
+        const pagePath = pagePublicPath(page);
+        const encodedSiteId = encodeURIComponent(pageSiteId);
+        const encodedPath = encodeURIComponent(pagePath);
+
+        return [
+          page.id,
+          await probePageDeliveryHealth({
+            publicUrl: publicPageUrl(page),
+            renderUrl: `${publicBaseUrl}/api/sites/${encodedSiteId}/render?path=${encodedPath}`,
+            resolveUrl: `${publicBaseUrl}/api/sites/${encodedSiteId}/resolve?path=${encodedPath}`,
+          }),
+        ] as const;
+      }));
+
+      const nextHealth = Object.fromEntries(
+        results
+          .filter((result): result is PromiseFulfilledResult<readonly [string, PageDeliveryHealth]> => result.status === 'fulfilled')
+          .map((result) => result.value),
+      );
+
+      setDeliveryHealthMap((current) => ({
+        ...current,
+        ...nextHealth,
+      }));
+      setNotice(`Delivery health refreshed for ${Object.keys(nextHealth).length} published page${Object.keys(nextHealth).length === 1 ? '' : 's'}.`);
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : 'Unable to refresh delivery health.');
+    } finally {
+      setRefreshingDeliveryPageIds((current) => {
+        const next = new Set(current);
+        targetIds.forEach((pageId) => next.delete(pageId));
+        return next;
+      });
+      setIsRefreshingAllDeliveryHealth(false);
+    }
+  };
 
   const handlePreviewPage = async (page: Page) => {
     if (isPageLibraryBusy) return;
@@ -1159,6 +1236,8 @@ function PagesListView() {
             page={page}
             status={getPageDeliveryStatus(page, readinessMap[page.id], pageRouteDiagnostics[page.id])}
             health={deliveryHealthMap[page.id]}
+            isRefreshingHealth={refreshingDeliveryPageIds.has(page.id)}
+            onRefreshHealth={() => void handleRefreshDeliveryHealth([page])}
             routeDiagnostic={pageRouteDiagnostics[page.id]}
             publicUrl={publicPageUrl(page)}
             renderUrl={`${publicBaseUrl}/api/sites/${encodedSiteId}/render?path=${encodedPath}`}
@@ -1506,6 +1585,7 @@ function PagesListView() {
     pageChildCountMap,
     pageRouteDiagnostics,
     deliveryHealthMap,
+    refreshingDeliveryPageIds,
     filteredPages,
     publicPageBySlugUrl,
     publicPagesUrl,
@@ -1641,6 +1721,17 @@ function PagesListView() {
             >
               <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />
               Refresh pages
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleRefreshDeliveryHealth()}
+              disabled={isLoading || isRefreshingAllDeliveryHealth || deliveryProbeTargets.length === 0}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              data-testid="pages-refresh-delivery-health"
+              title={deliveryProbeTargets.length === 0 ? 'No published pages are ready for delivery health checks' : 'Refresh published page delivery health'}
+            >
+              <RefreshCw className={cn('size-4', isRefreshingAllDeliveryHealth && 'animate-spin')} />
+              Refresh delivery
             </button>
             <Link
               to="/pages/new"
@@ -2605,6 +2696,8 @@ function PageDeliveryCell({
   page,
   status,
   health,
+  isRefreshingHealth,
+  onRefreshHealth,
   routeDiagnostic,
   publicUrl,
   renderUrl,
@@ -2614,6 +2707,8 @@ function PageDeliveryCell({
   page: Page;
   status: PageDeliveryStatus;
   health: PageDeliveryHealth | undefined;
+  isRefreshingHealth: boolean;
+  onRefreshHealth: () => void;
   routeDiagnostic: PageRouteDiagnostic | undefined;
   publicUrl: string;
   renderUrl: string;
@@ -2655,7 +2750,12 @@ function PageDeliveryCell({
         {detailByStatus[status]}
       </div>
       {status === 'published' && (
-        <PageDeliveryHealthSummary health={health} />
+        <PageDeliveryHealthSummary
+          health={health}
+          isRefreshing={isRefreshingHealth}
+          onRefresh={onRefreshHealth}
+          pageId={page.id}
+        />
       )}
       <div className="flex flex-wrap items-center gap-2 text-xs">
         {page.status === 'published' && status !== 'blocked' && (
@@ -2677,7 +2777,17 @@ function PageDeliveryCell({
   );
 }
 
-function PageDeliveryHealthSummary({ health }: { health: PageDeliveryHealth | undefined }) {
+function PageDeliveryHealthSummary({
+  health,
+  isRefreshing,
+  onRefresh,
+  pageId,
+}: {
+  health: PageDeliveryHealth | undefined;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+  pageId: string;
+}) {
   const effectiveHealth = health || {
     status: 'checking' as const,
     message: 'Health probe pending for public delivery endpoints.',
@@ -2692,11 +2802,24 @@ function PageDeliveryHealthSummary({ health }: { health: PageDeliveryHealth | un
 
   return (
     <div className="rounded-lg border border-border bg-background px-2.5 py-2 text-xs leading-5" data-testid="pages-delivery-health">
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge status={`health ${effectiveHealth.status}`} type={healthType} />
-        {effectiveHealth.checkedAt && (
-          <span className="text-muted-foreground">{formatDate(effectiveHealth.checkedAt)}</span>
-        )}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={`health ${effectiveHealth.status}`} type={healthType} />
+          {effectiveHealth.checkedAt && (
+            <span className="text-muted-foreground">{formatDate(effectiveHealth.checkedAt)}</span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+          data-testid={`pages-delivery-refresh-${pageId}`}
+          aria-label="Refresh delivery health"
+        >
+          <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
+          Refresh
+        </button>
       </div>
       <div className="mt-1 text-muted-foreground">{effectiveHealth.message}</div>
       {(effectiveHealth.publicStatus || effectiveHealth.renderStatus || effectiveHealth.resolveStatus) && (
