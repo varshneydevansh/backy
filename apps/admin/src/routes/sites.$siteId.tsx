@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils';
 import {
   deleteSite as deleteSiteFromApi,
   getAdminSite,
+  getSiteFrontendDesign,
   getSiteNavigation,
   getSiteRedirects,
   getSiteReadiness,
@@ -48,9 +49,12 @@ import {
   updateSiteSeoSettings,
   updateContact,
   updateFormSubmission,
+  updateSiteFrontendDesign,
   updateSite as updateSiteFromApi,
+  captureSiteFrontendDesignDefaults,
 } from '@/lib/adminContentApi';
 import type {
+  AdminFrontendDesignResponse,
   AdminSiteRedirectConflict,
   AdminSiteSeoPreview,
   AdminSiteSeoSettings,
@@ -67,6 +71,7 @@ import type {
   SiteNavigationConfigItem,
   SiteNavigationLayoutConfig,
   SiteCommentPolicy,
+  SiteSettings,
   SiteRedirectRule,
 } from '@backy-cms/core';
 
@@ -96,6 +101,7 @@ type CommentStatusFilter = 'all' | 'pending' | 'approved' | 'rejected' | 'spam' 
 type SiteStatusFilter = 'published' | 'draft' | 'archived';
 type CommentTargetFilter = 'all' | 'page' | 'post';
 type NavigationMenuKey = 'primary' | 'footer';
+type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 
 const SITE_WORKSPACE_AREAS = [
   {
@@ -107,6 +113,11 @@ const SITE_WORKSPACE_AREAS = [
     title: 'Navigation',
     detail: 'Primary and footer menus exposed to hosted pages, manifests, and custom frontends.',
     href: '#site-navigation',
+  },
+  {
+    title: 'Frontend design',
+    detail: 'Capture custom frontend tokens, chrome, templates, and editable bindings for generated pages.',
+    href: '#site-frontend-design',
   },
   {
     title: 'Redirects',
@@ -160,6 +171,19 @@ interface SiteSeoEditorState {
   preview: AdminSiteSeoPreview;
   loading: boolean;
   saving: boolean;
+  errorMessage: string | null;
+  notice: string | null;
+}
+
+interface SiteFrontendDesignEditorState {
+  frontendDesign: SiteFrontendDesignContract;
+  tokensJson: string;
+  chromeJson: string;
+  templatesJson: string;
+  editableMapJson: string;
+  loading: boolean;
+  saving: boolean;
+  capturing: boolean;
   errorMessage: string | null;
   notice: string | null;
 }
@@ -283,6 +307,58 @@ const EMPTY_SEO_PREVIEW: AdminSiteSeoPreview = {
   supportedVariables: [],
   routes: [],
 };
+
+const EMPTY_FRONTEND_DESIGN: SiteFrontendDesignContract = {
+  schemaVersion: 'backy.frontend-design.v1',
+  status: 'unconfigured',
+  source: {
+    type: 'manual',
+    label: 'No custom frontend connected',
+  },
+  tokens: {},
+  chrome: {},
+  templates: [],
+  editableMap: [],
+  notes: 'Connect or import a frontend design contract so Backy can preserve site chrome, tokens, templates, and editable bindings for new content.',
+};
+
+const formatContractJson = (value: unknown): string => JSON.stringify(value ?? {}, null, 2);
+
+const parseObjectJson = (value: string, label: string): Record<string, unknown> => {
+  const parsed = JSON.parse(value || '{}') as unknown;
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`${label} must be a JSON object.`);
+  }
+  return parsed as Record<string, unknown>;
+};
+
+const parseArrayJson = (value: string, label: string): Array<Record<string, unknown>> => {
+  const parsed = JSON.parse(value || '[]') as unknown;
+  if (!Array.isArray(parsed)) {
+    throw new Error(`${label} must be a JSON array.`);
+  }
+  parsed.forEach((entry, index) => {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      throw new Error(`${label} entry ${index + 1} must be an object.`);
+    }
+  });
+  return parsed as Array<Record<string, unknown>>;
+};
+
+const createFrontendDesignState = (
+  frontendDesign: SiteFrontendDesignContract = EMPTY_FRONTEND_DESIGN,
+): SiteFrontendDesignEditorState => ({
+  frontendDesign,
+  tokensJson: formatContractJson(frontendDesign.tokens || {}),
+  chromeJson: formatContractJson(frontendDesign.chrome || {}),
+  templatesJson: JSON.stringify(frontendDesign.templates || [], null, 2),
+  editableMapJson: JSON.stringify(frontendDesign.editableMap || [], null, 2),
+  loading: false,
+  saving: false,
+  capturing: false,
+  errorMessage: null,
+  notice: null,
+});
 
 const formatJsonLd = (jsonLd: AdminSiteSeoSettings['jsonLd']): string => (
   Array.isArray(jsonLd) && jsonLd.length > 0 ? JSON.stringify(jsonLd, null, 2) : '[]'
@@ -591,6 +667,9 @@ function EditSitePage() {
     errorMessage: null,
     notice: null,
   });
+  const [frontendDesignState, setFrontendDesignState] = useState<SiteFrontendDesignEditorState>(
+    () => createFrontendDesignState(),
+  );
   const [submissionStatus, setSubmissionStatus] = useState<SubmissionStatusFilter>('pending');
   const [contactStatus, setContactStatus] = useState<ContactStatusFilter>('all');
   const [commentStatus, setCommentStatus] = useState<CommentStatusFilter>('pending');
@@ -889,6 +968,98 @@ function EditSitePage() {
         ...prev,
         loading: false,
         errorMessage: error instanceof Error ? error.message : 'Unable to load site SEO settings.',
+      }));
+    }
+  };
+
+  const applyFrontendDesignResponse = (
+    response: AdminFrontendDesignResponse,
+    notice: string | null = null,
+  ) => {
+    setFrontendDesignState({
+      ...createFrontendDesignState(response.frontendDesign),
+      notice,
+    });
+  };
+
+  const loadFrontendDesignEditor = async () => {
+    if (!siteApiId) return;
+    setFrontendDesignState((prev) => ({ ...prev, loading: true, errorMessage: null }));
+
+    try {
+      const response = await getSiteFrontendDesign(siteApiId);
+      applyFrontendDesignResponse(response);
+    } catch (error) {
+      setFrontendDesignState((prev) => ({
+        ...prev,
+        loading: false,
+        errorMessage: error instanceof Error ? error.message : 'Unable to load frontend design contract.',
+      }));
+    }
+  };
+
+  const patchFrontendDesign = (updates: Partial<SiteFrontendDesignContract>) => {
+    setFrontendDesignState((prev) => ({
+      ...prev,
+      notice: null,
+      errorMessage: null,
+      frontendDesign: {
+        ...prev.frontendDesign,
+        ...updates,
+      },
+    }));
+  };
+
+  const patchFrontendDesignSource = (updates: Partial<SiteFrontendDesignContract['source']>) => {
+    setFrontendDesignState((prev) => ({
+      ...prev,
+      notice: null,
+      errorMessage: null,
+      frontendDesign: {
+        ...prev.frontendDesign,
+        source: {
+          ...prev.frontendDesign.source,
+          ...updates,
+        },
+      },
+    }));
+  };
+
+  const handleSaveFrontendDesign = async () => {
+    if (!siteApiId) return;
+    setFrontendDesignState((prev) => ({ ...prev, saving: true, errorMessage: null, notice: null }));
+
+    try {
+      const nextContract: SiteFrontendDesignContract = {
+        ...frontendDesignState.frontendDesign,
+        tokens: parseObjectJson(frontendDesignState.tokensJson, 'Tokens') as SiteFrontendDesignContract['tokens'],
+        chrome: parseObjectJson(frontendDesignState.chromeJson, 'Chrome') as SiteFrontendDesignContract['chrome'],
+        templates: parseArrayJson(frontendDesignState.templatesJson, 'Templates') as SiteFrontendDesignContract['templates'],
+        editableMap: parseArrayJson(frontendDesignState.editableMapJson, 'Editable map') as SiteFrontendDesignContract['editableMap'],
+      };
+      const response = await updateSiteFrontendDesign(siteApiId, nextContract);
+      applyFrontendDesignResponse(response, 'Frontend design contract saved and exposed in the public manifest.');
+    } catch (error) {
+      setFrontendDesignState((prev) => ({
+        ...prev,
+        saving: false,
+        errorMessage: error instanceof Error ? error.message : 'Unable to save frontend design contract.',
+      }));
+    }
+  };
+
+  const handleCaptureFrontendDesignDefaults = async () => {
+    if (!siteApiId) return;
+    setFrontendDesignState((prev) => ({ ...prev, capturing: true, errorMessage: null, notice: null }));
+
+    try {
+      const response = await captureSiteFrontendDesignDefaults(siteApiId);
+      applyFrontendDesignResponse(response, 'Captured current Backy theme, navigation, and page templates as the site design contract.');
+    } catch (error) {
+      setFrontendDesignState((prev) => ({
+        ...prev,
+        capturing: false,
+        errorMessage: error instanceof Error ? error.message : 'Unable to capture current Backy design defaults.',
       }));
     }
   };
@@ -1598,6 +1769,7 @@ function EditSitePage() {
     if (siteApiId) {
       void loadReadiness();
       void loadNavigationEditor();
+      void loadFrontendDesignEditor();
       void loadRedirectEditor();
       void loadSeoEditor();
       void loadSiteCommentPolicy();
@@ -1674,6 +1846,7 @@ function EditSitePage() {
       seoState.seo.favicon ||
       seoState.seo.jsonLd?.length,
     );
+    const hasFrontendDesign = frontendDesignState.frontendDesign.status !== 'unconfigured';
     const hasAutomation = state.forms.length > 0 || state.submissionCount > 0 || state.contactCount > 0 || state.commentCount > 0 || commentPolicyDraft.enabled;
     const hasDomain = Boolean(formData.customDomain || site?.customDomain || site?.slug);
     const checks = [
@@ -1715,6 +1888,13 @@ function EditSitePage() {
         ready: hasSeoDefaults,
       },
       {
+        label: 'Frontend design contract',
+        detail: hasFrontendDesign
+          ? `${frontendDesignState.frontendDesign.source.type} design with ${frontendDesignState.frontendDesign.templates.length} templates and ${frontendDesignState.frontendDesign.editableMap.length} editable bindings.`
+          : 'Capture or import a frontend design contract before generating custom-designed pages.',
+        ready: hasFrontendDesign,
+      },
+      {
         label: 'Public address',
         detail: hasDomain
           ? formData.customDomain || `${formData.slug || site?.slug}.backy.app`
@@ -1746,6 +1926,10 @@ function EditSitePage() {
     formData.slug,
     commentPolicyDraft.enabled,
     commentPolicyDraft.moderationMode,
+    frontendDesignState.frontendDesign.editableMap.length,
+    frontendDesignState.frontendDesign.source.type,
+    frontendDesignState.frontendDesign.status,
+    frontendDesignState.frontendDesign.templates.length,
     navigationState.navigation.footer,
     navigationState.navigation.layout,
     navigationState.navigation.primary,
@@ -1795,6 +1979,21 @@ function EditSitePage() {
       publicResolve: `${publicSiteApiUrl}/resolve?path=/`,
       publicRender: `${publicSiteApiUrl}/render?path=/`,
       publicOpenApi: `${publicSiteApiUrl}/openapi`,
+      frontendDesign: `${adminSiteUrl}/frontend-design`,
+    },
+    frontendDesign: {
+      status: frontendDesignState.frontendDesign.status,
+      source: frontendDesignState.frontendDesign.source,
+      tokenKeys: Object.keys(frontendDesignState.frontendDesign.tokens || {}),
+      chromeKeys: Object.keys(frontendDesignState.frontendDesign.chrome || {}),
+      templates: frontendDesignState.frontendDesign.templates.map((template) => ({
+        id: template.id,
+        type: template.type,
+        name: template.name,
+        routePattern: template.routePattern,
+      })),
+      editableBindings: frontendDesignState.frontendDesign.editableMap,
+      notes: frontendDesignState.frontendDesign.notes || '',
     },
     navigation: {
       primaryItems: navigationState.navigation.primary.length,
@@ -1869,6 +2068,7 @@ function EditSitePage() {
     formData.name,
     formData.slug,
     formData.status,
+    frontendDesignState.frontendDesign,
     navigationState.navigation.footer,
     navigationState.navigation.primary,
     publicSiteApiUrl,
@@ -2493,6 +2693,212 @@ function EditSitePage() {
               onRemoveItem={handleRemoveNavigationItem}
               onMoveRootItem={handleMoveNavigationRootItem}
             />
+          </div>
+        </section>
+
+        <section id="site-frontend-design" className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24" data-testid="site-frontend-design-panel">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Link2 className="h-5 w-5 text-primary" />
+                <h2 className="text-xl font-semibold">Frontend design contract</h2>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Preserve custom frontend tokens, header/navigation/footer chrome, templates, and editable bindings for new Backy pages, posts, forms, and products.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void loadFrontendDesignEditor()}
+                disabled={!siteApiId || frontendDesignState.loading || frontendDesignState.saving || frontendDesignState.capturing}
+                className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RefreshCw className={cn('h-4 w-4', frontendDesignState.loading && 'animate-spin')} />
+                Refresh
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCaptureFrontendDesignDefaults()}
+                disabled={!siteApiId || frontendDesignState.loading || frontendDesignState.saving || frontendDesignState.capturing}
+                className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                {frontendDesignState.capturing ? 'Capturing...' : 'Capture current design'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveFrontendDesign()}
+                disabled={!siteApiId || frontendDesignState.loading || frontendDesignState.saving || frontendDesignState.capturing}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" />
+                {frontendDesignState.saving ? 'Saving...' : 'Save contract'}
+              </button>
+            </div>
+          </div>
+
+          {frontendDesignState.errorMessage && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {frontendDesignState.errorMessage}
+            </div>
+          )}
+          {frontendDesignState.notice && (
+            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              {frontendDesignState.notice}
+            </div>
+          )}
+
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
+            {[
+              { label: 'Status', value: frontendDesignState.frontendDesign.status },
+              { label: 'Source', value: frontendDesignState.frontendDesign.source.type },
+              { label: 'Templates', value: frontendDesignState.frontendDesign.templates.length.toString() },
+              { label: 'Editable bindings', value: frontendDesignState.frontendDesign.editableMap.length.toString() },
+            ].map((metric) => (
+              <div key={metric.label} className="rounded-lg border bg-muted/30 px-3 py-2">
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{metric.label}</div>
+                <div className="mt-1 truncate text-sm font-semibold">{metric.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Status</span>
+                  <select
+                    value={frontendDesignState.frontendDesign.status}
+                    onChange={(event) => patchFrontendDesign({ status: event.target.value as SiteFrontendDesignContract['status'] })}
+                    disabled={frontendDesignState.loading}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="unconfigured">Unconfigured</option>
+                    <option value="captured">Captured</option>
+                    <option value="synced">Synced</option>
+                    <option value="stale">Stale</option>
+                  </select>
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Source type</span>
+                  <select
+                    value={frontendDesignState.frontendDesign.source.type}
+                    onChange={(event) => patchFrontendDesignSource({ type: event.target.value as SiteFrontendDesignContract['source']['type'] })}
+                    disabled={frontendDesignState.loading}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="manual">Manual import</option>
+                    <option value="managed-site">Backy managed site</option>
+                    <option value="custom-frontend">Custom frontend</option>
+                  </select>
+                </label>
+              </div>
+
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">Source label</span>
+                <input
+                  value={frontendDesignState.frontendDesign.source.label || ''}
+                  onChange={(event) => patchFrontendDesignSource({ label: event.target.value })}
+                  disabled={frontendDesignState.loading}
+                  placeholder="Marketing frontend, storefront, portfolio..."
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                />
+              </label>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Frontend URL</span>
+                  <input
+                    value={frontendDesignState.frontendDesign.source.url || ''}
+                    onChange={(event) => patchFrontendDesignSource({ url: event.target.value })}
+                    disabled={frontendDesignState.loading}
+                    placeholder="https://example.com"
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">Branch</span>
+                  <input
+                    value={frontendDesignState.frontendDesign.source.branch || ''}
+                    onChange={(event) => patchFrontendDesignSource({ branch: event.target.value })}
+                    disabled={frontendDesignState.loading}
+                    placeholder="main"
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                  />
+                </label>
+              </div>
+
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">Repository</span>
+                <input
+                  value={frontendDesignState.frontendDesign.source.repository || ''}
+                  onChange={(event) => patchFrontendDesignSource({ repository: event.target.value })}
+                  disabled={frontendDesignState.loading}
+                  placeholder="owner/frontend"
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                />
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">Notes</span>
+                <textarea
+                  value={frontendDesignState.frontendDesign.notes || ''}
+                  onChange={(event) => patchFrontendDesign({ notes: event.target.value })}
+                  disabled={frontendDesignState.loading}
+                  rows={4}
+                  placeholder="Extraction notes, manual setup decisions, unsupported components..."
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">Tokens JSON</span>
+                <textarea
+                  value={frontendDesignState.tokensJson}
+                  onChange={(event) => setFrontendDesignState((prev) => ({ ...prev, tokensJson: event.target.value, notice: null, errorMessage: null }))}
+                  disabled={frontendDesignState.loading}
+                  rows={9}
+                  spellCheck={false}
+                  className="min-h-[220px] w-full resize-y rounded-lg border bg-background px-3 py-2 font-mono text-xs"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">Chrome JSON</span>
+                <textarea
+                  value={frontendDesignState.chromeJson}
+                  onChange={(event) => setFrontendDesignState((prev) => ({ ...prev, chromeJson: event.target.value, notice: null, errorMessage: null }))}
+                  disabled={frontendDesignState.loading}
+                  rows={9}
+                  spellCheck={false}
+                  className="min-h-[220px] w-full resize-y rounded-lg border bg-background px-3 py-2 font-mono text-xs"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">Templates JSON</span>
+                <textarea
+                  value={frontendDesignState.templatesJson}
+                  onChange={(event) => setFrontendDesignState((prev) => ({ ...prev, templatesJson: event.target.value, notice: null, errorMessage: null }))}
+                  disabled={frontendDesignState.loading}
+                  rows={9}
+                  spellCheck={false}
+                  className="min-h-[220px] w-full resize-y rounded-lg border bg-background px-3 py-2 font-mono text-xs"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">Editable map JSON</span>
+                <textarea
+                  value={frontendDesignState.editableMapJson}
+                  onChange={(event) => setFrontendDesignState((prev) => ({ ...prev, editableMapJson: event.target.value, notice: null, errorMessage: null }))}
+                  disabled={frontendDesignState.loading}
+                  rows={9}
+                  spellCheck={false}
+                  className="min-h-[220px] w-full resize-y rounded-lg border bg-background px-3 py-2 font-mono text-xs"
+                />
+              </label>
+            </div>
           </div>
         </section>
 

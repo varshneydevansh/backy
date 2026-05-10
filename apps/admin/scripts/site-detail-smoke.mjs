@@ -115,6 +115,11 @@ const getSeo = async (siteId) => {
   return payload.data?.seo || payload.seo;
 };
 
+const getFrontendDesign = async (siteId) => {
+  const payload = await requestApi(`/api/admin/sites/${siteId}/frontend-design`);
+  return payload.data?.frontendDesign || payload.frontendDesign;
+};
+
 const getSite = async (siteId) => {
   const payload = await requestApi(`/api/admin/sites/${siteId}`);
   return payload.data?.site || payload.site;
@@ -335,6 +340,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       hasCommandCenter: Boolean(document.querySelector('[data-testid="site-workspace-command-center"]')) && body.includes('Site command center'),
       hasReadiness: Boolean(document.querySelector('[data-testid="site-readiness-panel"]')) && body.includes('Publish readiness'),
       hasNavigation: Boolean(document.querySelector('[data-testid="site-navigation-panel"]')) && body.includes('Site navigation') && body.includes('Primary menu') && body.includes('Footer menu'),
+      hasFrontendDesign: Boolean(document.querySelector('[data-testid="site-frontend-design-panel"]')) && body.includes('Frontend design contract') && body.includes('Capture current design') && body.includes('Save contract'),
       hasRedirects: Boolean(document.querySelector('[data-testid="site-redirects-panel"]')) && body.includes('Redirects and retired routes'),
       hasSeo: Boolean(document.querySelector('[data-testid="site-seo-panel"]')) && body.includes('SEO defaults') && body.includes('JSON-LD defaults'),
       hasSettings: body.includes('Site Name') && body.includes('Custom Domain'),
@@ -351,6 +357,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.hasCommandCenter &&
       layout.hasReadiness &&
       layout.hasNavigation &&
+      layout.hasFrontendDesign &&
       layout.hasRedirects &&
       layout.hasSeo &&
       layout.hasSettings &&
@@ -501,6 +508,121 @@ const configureNavigationThroughUi = async (client, { routeLabel, routePath, foo
   );
 };
 
+const configureFrontendDesignThroughUi = async (client, { frontendLabel, frontendUrl, frontendRepository, frontendBranch }) => {
+  await clickButtonByText(client, '[data-testid="site-frontend-design-panel"]', 'Capture current design');
+  await waitForText(
+    client,
+    '[data-testid="site-frontend-design-panel"]',
+    'Captured current Backy theme, navigation, and page templates',
+    'Frontend design capture notice',
+  );
+
+  const result = await evaluate(client, `(() => {
+    ${setInputValue}
+    const section = document.querySelector('[data-testid="site-frontend-design-panel"]');
+    if (!section) return { ok: false, reason: 'section-missing' };
+
+    const status = Array.from(section.querySelectorAll('select')).find((select) => (
+      Array.from(select.options).some((option) => option.value === 'synced')
+    ));
+    const sourceType = Array.from(section.querySelectorAll('select')).find((select) => (
+      Array.from(select.options).some((option) => option.value === 'custom-frontend')
+    ));
+    const label = Array.from(section.querySelectorAll('input')).find((input) => input.getAttribute('placeholder')?.includes('Marketing frontend'));
+    const url = Array.from(section.querySelectorAll('input')).find((input) => input.getAttribute('placeholder') === 'https://example.com');
+    const branch = Array.from(section.querySelectorAll('input')).find((input) => input.getAttribute('placeholder') === 'main');
+    const repository = Array.from(section.querySelectorAll('input')).find((input) => input.getAttribute('placeholder') === 'owner/frontend');
+    const notes = Array.from(section.querySelectorAll('textarea')).find((textarea) => textarea.getAttribute('placeholder')?.includes('Extraction notes'));
+    const textareas = Array.from(section.querySelectorAll('textarea'));
+    const tokens = textareas.find((textarea) => textarea.previousElementSibling?.textContent?.includes('Tokens JSON'));
+    const chrome = textareas.find((textarea) => textarea.previousElementSibling?.textContent?.includes('Chrome JSON'));
+    const templates = textareas.find((textarea) => textarea.previousElementSibling?.textContent?.includes('Templates JSON'));
+    const editableMap = textareas.find((textarea) => textarea.previousElementSibling?.textContent?.includes('Editable map JSON'));
+
+    if (
+      !(status instanceof HTMLSelectElement) ||
+      !(sourceType instanceof HTMLSelectElement) ||
+      !(label instanceof HTMLInputElement) ||
+      !(url instanceof HTMLInputElement) ||
+      !(branch instanceof HTMLInputElement) ||
+      !(repository instanceof HTMLInputElement) ||
+      !(notes instanceof HTMLTextAreaElement) ||
+      !(tokens instanceof HTMLTextAreaElement) ||
+      !(chrome instanceof HTMLTextAreaElement) ||
+      !(templates instanceof HTMLTextAreaElement) ||
+      !(editableMap instanceof HTMLTextAreaElement)
+    ) {
+      return {
+        ok: false,
+        reason: 'controls-missing',
+        inputs: Array.from(section.querySelectorAll('input')).map((input) => ({ placeholder: input.getAttribute('placeholder'), value: input.value })),
+        selects: Array.from(section.querySelectorAll('select')).map((select) => select.value),
+        textareaLabels: textareas.map((textarea) => textarea.previousElementSibling?.textContent || ''),
+      };
+    }
+
+    setNativeValue(status, 'synced');
+    setNativeValue(sourceType, 'custom-frontend');
+    setNativeValue(label, ${JSON.stringify(frontendLabel)});
+    setNativeValue(url, ${JSON.stringify(frontendUrl)});
+    setNativeValue(branch, ${JSON.stringify(frontendBranch)});
+    setNativeValue(repository, ${JSON.stringify(frontendRepository)});
+    setNativeValue(notes, 'Site detail smoke captured and customized this design contract.');
+    setNativeValue(tokens, JSON.stringify({
+      colors: { primary: '#0f766e', text: '#111827' },
+      fonts: { heading: 'Inter', body: 'Inter' },
+      spacing: { sectionY: 96 },
+    }, null, 2));
+    setNativeValue(chrome, JSON.stringify({
+      header: { component: 'SmokeHeader' },
+      navigation: { source: 'site.navigation.primary' },
+      footer: { component: 'SmokeFooter' },
+    }, null, 2));
+    setNativeValue(templates, JSON.stringify([
+      {
+        id: 'smoke-page-contract',
+        type: 'page',
+        name: 'Smoke Page Contract',
+        routePattern: '/smoke-page',
+        canvasSize: { width: 1440, height: 1100 },
+      },
+      {
+        id: 'smoke-blog-contract',
+        type: 'blogPost',
+        name: 'Smoke Blog Contract',
+        routePattern: '/blog/{slug}',
+      },
+    ], null, 2));
+    setNativeValue(editableMap, JSON.stringify([
+      {
+        selector: '[data-backy-role="site-header"]',
+        role: 'site.header',
+        binding: 'site.navigation.primary',
+        fields: ['label', 'href'],
+      },
+    ], null, 2));
+
+    return {
+      ok: true,
+      status: status.value,
+      sourceType: sourceType.value,
+      label: label.value,
+      url: url.value,
+      repository: repository.value,
+      branch: branch.value,
+    };
+  })()`);
+  assert(result.ok, `Unable to configure frontend design through UI: ${JSON.stringify(result)}`);
+
+  await clickButtonByText(client, '[data-testid="site-frontend-design-panel"]', 'Save contract');
+  await waitForText(
+    client,
+    '[data-testid="site-frontend-design-panel"]',
+    'Frontend design contract saved and exposed in the public manifest.',
+    'Frontend design save notice',
+  );
+};
+
 const configureRedirectsThroughUi = async (client, { from, to }) => {
   await clickButtonByText(client, '[data-testid="site-redirects-panel"]', 'Add rule');
 
@@ -634,6 +756,7 @@ const assertApiReadback = async (siteId, expected) => {
   const navigation = await getNavigation(siteId);
   const redirects = await getRedirects(siteId);
   const seo = await getSeo(siteId);
+  const frontendDesign = await getFrontendDesign(siteId);
   const site = await getSite(siteId);
 
   assert(
@@ -669,8 +792,21 @@ const assertApiReadback = async (siteId, expected) => {
       site?.settings?.commentPolicy?.blockedTerms?.includes(expected.commentBlockedTerm),
     `Site API did not include saved comment policy: ${JSON.stringify(site?.settings?.commentPolicy).slice(0, 1000)}`,
   );
+  assert(
+    frontendDesign?.status === 'synced' &&
+      frontendDesign?.source?.type === 'custom-frontend' &&
+      frontendDesign?.source?.label === expected.frontendLabel &&
+      frontendDesign?.source?.url === expected.frontendUrl &&
+      frontendDesign?.source?.repository === expected.frontendRepository &&
+      frontendDesign?.source?.branch === expected.frontendBranch &&
+      frontendDesign?.tokens?.colors?.primary === '#0f766e' &&
+      frontendDesign?.chrome?.header?.component === 'SmokeHeader' &&
+      frontendDesign?.templates?.some((template) => template.id === 'smoke-page-contract' && template.type === 'page') &&
+      frontendDesign?.editableMap?.some((entry) => entry.role === 'site.header'),
+    `Frontend design API did not include saved contract: ${JSON.stringify(frontendDesign).slice(0, 1500)}`,
+  );
 
-  return { navigation, redirects, seo, site };
+  return { navigation, redirects, seo, frontendDesign, site };
 };
 
 const launchChrome = () => {
@@ -743,6 +879,10 @@ const main = async () => {
     robotsRule: `Disallow: /private-${suffix}`,
     commentBlockedTerm: `blocked-${suffix}`,
     commentClosedMessage: `Comments are closed for ${siteName}.`,
+    frontendLabel: `Smoke Frontend ${suffix}`,
+    frontendUrl: `https://${slug}.example.com`,
+    frontendRepository: `backy/smoke-${suffix}`,
+    frontendBranch: `design-${suffix}`,
   };
 
   try {
@@ -775,6 +915,7 @@ const main = async () => {
     await assertSiteDetailLayout(client, siteName);
 
     await configureNavigationThroughUi(client, expected);
+    await configureFrontendDesignThroughUi(client, expected);
     await configureRedirectsThroughUi(client, {
       from: expected.redirectFrom,
       to: expected.redirectTo,
