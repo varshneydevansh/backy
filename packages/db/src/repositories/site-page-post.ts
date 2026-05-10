@@ -187,6 +187,21 @@ const normalizeNavigation = (value: unknown): SiteSettings['navigation'] => (
         : { primary: [], footer: [] }
 );
 
+const normalizeFrontendDesign = (value: unknown): SiteSettings['frontendDesign'] => {
+    if (isRecord(value)) {
+        return value as unknown as SiteSettings['frontendDesign'];
+    }
+
+    return {
+        ...DEFAULT_SITE_SETTINGS.frontendDesign,
+        source: { ...DEFAULT_SITE_SETTINGS.frontendDesign.source },
+        tokens: { ...DEFAULT_SITE_SETTINGS.frontendDesign.tokens },
+        chrome: { ...DEFAULT_SITE_SETTINGS.frontendDesign.chrome },
+        templates: [],
+        editableMap: [],
+    };
+};
+
 const normalizeSettings = (value: unknown): SiteSettings => ({
     ...DEFAULT_SITE_SETTINGS,
     ...(isRecord(value) ? value : {}),
@@ -204,6 +219,7 @@ const normalizeSettings = (value: unknown): SiteSettings => ({
     },
     redirectRules: normalizeSiteRedirectRules(isRecord(value) ? value.redirectRules : undefined),
     navigation: normalizeNavigation(isRecord(value) ? value.navigation : undefined),
+    frontendDesign: normalizeFrontendDesign(isRecord(value) ? value.frontendDesign : undefined),
 });
 
 const normalizeMeta = (value: unknown): PageMeta => (

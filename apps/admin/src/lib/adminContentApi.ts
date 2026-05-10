@@ -151,6 +151,24 @@ interface ApiSiteSeoResponse {
   };
 }
 
+export interface AdminFrontendDesignResponse {
+  site: Pick<ApiSite, 'id' | 'slug' | 'name' | 'customDomain'>;
+  frontendDesign: NonNullable<SiteSettings['frontendDesign']>;
+  endpoints: {
+    admin: string;
+    publicManifest: string;
+  };
+  nextSteps: string[];
+}
+
+interface ApiSiteFrontendDesignResponse {
+  success: boolean;
+  data?: AdminFrontendDesignResponse;
+  error?: {
+    message?: string;
+  };
+}
+
 export interface ReadinessCheck {
   id: string;
   category: 'site' | 'page' | 'seo' | 'navigation' | 'content' | 'media' | 'layout';
@@ -2017,6 +2035,54 @@ export async function updateSite(siteId: string, input: Partial<SiteCreateInput>
   }
 
   return toStoreSite(payload.data.site);
+}
+
+export async function getSiteFrontendDesign(siteId: string): Promise<AdminFrontendDesignResponse> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/frontend-design`);
+  const payload = await readJson<ApiSiteFrontendDesignResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load frontend design contract');
+  }
+
+  return payload.data;
+}
+
+export async function updateSiteFrontendDesign(
+  siteId: string,
+  frontendDesign: SiteSettings['frontendDesign'],
+): Promise<AdminFrontendDesignResponse> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/frontend-design`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ frontendDesign }),
+  });
+  const payload = await readJson<ApiSiteFrontendDesignResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to save frontend design contract');
+  }
+
+  return payload.data;
+}
+
+export async function captureSiteFrontendDesignDefaults(siteId: string): Promise<AdminFrontendDesignResponse> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/frontend-design`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ action: 'capture-site-defaults' }),
+  });
+  const payload = await readJson<ApiSiteFrontendDesignResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to capture frontend design defaults');
+  }
+
+  return payload.data;
 }
 
 export async function getSiteReadiness(siteId: string): Promise<SiteReadiness> {

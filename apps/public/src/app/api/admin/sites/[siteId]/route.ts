@@ -16,6 +16,7 @@ import {
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeNavigationConfig } from '@/lib/navigation';
 import { normalizeRedirectRules } from '@/lib/redirectRules';
+import { emptyFrontendDesignContract, normalizeFrontendDesignContract } from '@/lib/frontendDesignContract';
 
 export const runtime = 'nodejs';
 
@@ -112,6 +113,12 @@ const mergeSiteSettings = (current: SiteSettings, input: unknown): SiteSettings 
     navigation: input.navigation === undefined
       ? current.navigation
       : normalizeNavigationConfig(input.navigation, current.navigation),
+    frontendDesign: input.frontendDesign === undefined
+      ? (current.frontendDesign || emptyFrontendDesignContract())
+      : normalizeFrontendDesignContract(input.frontendDesign, {
+          fallback: current.frontendDesign,
+          updatedAt: new Date().toISOString(),
+        }),
   };
 };
 

@@ -174,6 +174,7 @@ const buildRepositoryManifest = (
         customDomain: input.site.customDomain,
         status: input.site.isPublished ? 'published' : 'draft',
         themeTokens: input.site.theme,
+        frontendDesign: input.site.settings?.frontendDesign || null,
         commentPolicy: normalizeSiteCommentPolicy(input.site.settings?.commentPolicy),
       },
       contract: {
@@ -211,6 +212,7 @@ const buildRepositoryManifest = (
         dynamicItemRoutes: publicCollections.length > 0,
         redirectRoutes: redirectRules.length > 0,
         reusableSections: input.reusableSections.length > 0,
+        frontendDesignContract: Boolean(input.site.settings?.frontendDesign && input.site.settings.frontendDesign.status !== 'unconfigured'),
         previewTokens: true,
       },
       endpoints: {
@@ -223,6 +225,7 @@ const buildRepositoryManifest = (
         sitemap: `/api/sites/${input.site.id}/seo?format=sitemap`,
         robots: `/api/sites/${input.site.id}/seo?format=robots`,
         navigation: `/api/sites/${input.site.id}/navigation`,
+        frontendDesign: `/api/sites/${input.site.id}/manifest#data.site.frontendDesign`,
         media: `/api/sites/${input.site.id}/media`,
         mediaFonts: `/api/sites/${input.site.id}/media/fonts`,
         mediaDetail: `/api/sites/${input.site.id}/media/{mediaId}`,
@@ -472,6 +475,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           customDomain: site.customDomain,
           status: site.status,
           themeTokens: site.theme,
+          frontendDesign: site.settings?.frontendDesign || null,
           commentPolicy: normalizeSiteCommentPolicy(site.settings?.commentPolicy),
         },
         contract: {
@@ -509,6 +513,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           dynamicItemRoutes: collections.length > 0,
           redirectRoutes: redirectRules.length > 0,
           reusableSections: reusableSections.length > 0,
+          frontendDesignContract: Boolean(site.settings?.frontendDesign && site.settings.frontendDesign.status !== 'unconfigured'),
           previewTokens: true,
         },
         endpoints: {
@@ -521,6 +526,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           sitemap: `/api/sites/${site.id}/seo?format=sitemap`,
           robots: `/api/sites/${site.id}/seo?format=robots`,
           navigation: `/api/sites/${site.id}/navigation`,
+          frontendDesign: `/api/sites/${site.id}/manifest#data.site.frontendDesign`,
           media: `/api/sites/${site.id}/media`,
           mediaFonts: `/api/sites/${site.id}/media/fonts`,
           mediaDetail: `/api/sites/${site.id}/media/{mediaId}`,

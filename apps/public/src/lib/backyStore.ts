@@ -34,6 +34,7 @@ import {
 } from './collectionRoutes';
 import { buildSiteNavigation, normalizeNavigationConfig, type PublicNavigationItem } from './navigation';
 import { normalizeRedirectRules } from './redirectRules';
+import { emptyFrontendDesignContract, normalizeFrontendDesignContract } from './frontendDesignContract';
 
 interface PageMeta {
   title: string;
@@ -457,6 +458,7 @@ const createDefaultSiteSettings = (): SiteSettings => ({
     primary: [],
     footer: [],
   },
+  frontendDesign: emptyFrontendDesignContract(),
 });
 
 const SITE_LIST: StoreSite[] = [
@@ -3725,6 +3727,12 @@ function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): Sit
     navigation: settingsInput.navigation === undefined
       ? base.navigation
       : normalizeNavigationConfig(settingsInput.navigation, base.navigation),
+    frontendDesign: settingsInput.frontendDesign === undefined
+      ? (base.frontendDesign || emptyFrontendDesignContract())
+      : normalizeFrontendDesignContract(settingsInput.frontendDesign, {
+          fallback: base.frontendDesign,
+          updatedAt: new Date().toISOString(),
+        }),
   };
 }
 

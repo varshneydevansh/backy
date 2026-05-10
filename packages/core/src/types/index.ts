@@ -303,6 +303,71 @@ export interface SiteSettings {
 
   /** Site-level navigation menus for default and custom frontends */
   navigation: SiteNavigationConfig;
+
+  /** Captured custom frontend design contract used to seed new Backy pages, posts, forms, products, and reusable sections */
+  frontendDesign?: SiteFrontendDesignContract;
+}
+
+export interface SiteFrontendDesignContract {
+  /** Contract schema identifier for frontend design ingestion */
+  schemaVersion: 'backy.frontend-design.v1' | string;
+
+  /** Whether Backy has captured an external/frontend design source for this site */
+  status: 'unconfigured' | 'captured' | 'synced' | 'stale';
+
+  /** Source metadata for the connected frontend or manually imported design */
+  source: {
+    type: 'manual' | 'managed-site' | 'custom-frontend';
+    label?: string;
+    url?: string;
+    repository?: string;
+    branch?: string;
+    capturedAt?: string;
+  };
+
+  /** Visual tokens extracted from the frontend design system */
+  tokens: {
+    colors?: Record<string, string>;
+    fonts?: Record<string, string>;
+    spacing?: Record<string, unknown>;
+    radii?: Record<string, unknown>;
+    shadows?: Record<string, unknown>;
+    customCss?: string;
+  };
+
+  /** Site chrome slots Backy should preserve for generated content */
+  chrome: {
+    header?: Record<string, unknown>;
+    navigation?: Record<string, unknown>;
+    footer?: Record<string, unknown>;
+  };
+
+  /** Reusable frontend-derived templates for new content surfaces */
+  templates: Array<{
+    id: string;
+    type: 'page' | 'blogPost' | 'form' | 'product' | 'collection' | 'section';
+    name: string;
+    routePattern?: string;
+    description?: string;
+    canvasSize?: { width: number; height: number };
+    content?: Record<string, unknown>;
+    bindingHints?: Array<Record<string, unknown>>;
+  }>;
+
+  /** Optional mapping from frontend selectors/components to Backy editable fields */
+  editableMap: Array<{
+    selector?: string;
+    elementId?: string;
+    role?: string;
+    binding?: string;
+    fields?: string[];
+  }>;
+
+  /** Human notes for setup state, extraction limitations, or manual decisions */
+  notes?: string;
+
+  /** Last time Backy persisted or refreshed this design contract */
+  updatedAt?: string;
 }
 
 export interface SiteCommentPolicy {

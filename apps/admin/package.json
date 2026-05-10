@@ -27,6 +27,7 @@
     "test:users": "node scripts/users-smoke.mjs",
     "test:sites": "node scripts/sites-smoke.mjs",
     "test:site-detail": "node scripts/site-detail-smoke.mjs",
+    "test:frontend-design": "node scripts/frontend-design-smoke.mjs",
     "test:settings": "node scripts/settings-smoke.mjs",
     "clean": "rm -rf dist"
   },

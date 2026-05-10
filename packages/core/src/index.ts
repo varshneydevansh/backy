@@ -109,6 +109,19 @@ export const DEFAULT_SITE_SETTINGS = {
       },
     },
   },
+  frontendDesign: {
+    schemaVersion: 'backy.frontend-design.v1',
+    status: 'unconfigured',
+    source: {
+      type: 'manual',
+      label: 'No custom frontend connected',
+    },
+    tokens: {},
+    chrome: {},
+    templates: [],
+    editableMap: [],
+    notes: 'Connect or import a frontend design contract so Backy can preserve site chrome, tokens, templates, and editable bindings for new content.',
+  },
 } as const;
 
 /**
