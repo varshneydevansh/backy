@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
+import { ArrowDown, ArrowUp, CornerUpLeft, MoveRight } from 'lucide-react';
 import type { CanvasElement } from '../../types/editor';
 
 // ==========================================================================
@@ -22,6 +23,8 @@ interface LayersPanelProps {
     selectedIds: string[];
     onSelect: (ids: string[]) => void;
     onReorder: (fromId: string, toId: string) => void;
+    onMove: (id: string, action: LayerMoveAction) => void;
+    onNestSelection: (parentId: string) => void;
     onVisibilityToggle: (id: string) => void;
     onLockToggle: (id: string) => void;
     onDelete: (id: string) => void;
@@ -31,16 +34,22 @@ interface LayersPanelProps {
     hideHeader?: boolean;
 }
 
+type LayerMoveAction = 'up' | 'down' | 'outdent';
+
 interface LayerItemProps {
     element: CanvasElement;
     isSelected: boolean;
     isHidden: boolean;
     isLocked: boolean;
     canReorder: boolean;
+    canAcceptChildren: boolean;
+    selectedIds: string[];
     onSelect: (id: string, multiSelect: boolean) => void;
     onDragStart: (id: string) => void;
     onDragOver: (id: string) => void;
     onDragEnd: () => void;
+    onMove: (id: string, action: LayerMoveAction) => void;
+    onNestSelection: (parentId: string) => void;
     onVisibilityToggle: (id: string) => void;
     onLockToggle: (id: string) => void;
     onDelete: (id: string) => void;
@@ -126,6 +135,17 @@ const ELEMENT_ICONS: Record<string, string> = {
     embed: '</>',
 };
 
+const CHILD_ACCEPTING_TYPES = new Set([
+    'box',
+    'container',
+    'section',
+    'header',
+    'footer',
+    'nav',
+    'columns',
+    'form',
+]);
+
 // ==========================================================================
 // LAYER ITEM COMPONENT
 // ==========================================================================
@@ -136,10 +156,14 @@ function LayerItem({
     isHidden,
     isLocked,
     canReorder,
+    canAcceptChildren,
+    selectedIds,
     onSelect,
     onDragStart,
     onDragOver,
     onDragEnd,
+    onMove,
+    onNestSelection,
     onVisibilityToggle,
     onLockToggle,
     onDelete,
@@ -149,6 +173,16 @@ function LayerItem({
 }: LayerItemProps) {
     const [showActions, setShowActions] = useState(false);
     const layerName = (element.props.name as string) || `${element.type}-${element.id.slice(0, 4)}`;
+    const hasExternalSelection = selectedIds.some((id) => id !== element.id);
+    const canNestSelectedHere = !disabled && !isLocked && canAcceptChildren && hasExternalSelection;
+
+    const iconButtonStyle = (active = true, danger = false): React.CSSProperties => ({
+        padding: '4px',
+        border: 'none',
+        background: 'none',
+        cursor: active ? 'pointer' : 'not-allowed',
+        color: active ? (danger ? '#ef4444' : '#6b7280') : '#cbd5e1',
+    });
 
     const handleClick = (e: React.MouseEvent) => {
         onSelect(element.id, e.metaKey || e.ctrlKey);
@@ -167,6 +201,7 @@ function LayerItem({
         <div
             className={`layer-item ${isSelected ? 'selected' : ''} ${isHidden ? 'hidden' : ''} ${isLocked ? 'locked' : ''}`}
             data-layer-id={element.id}
+            data-layer-depth={depth}
             data-layer-selected={isSelected ? 'true' : 'false'}
             style={{
                 display: 'flex',
@@ -241,6 +276,82 @@ function LayerItem({
                     type="button"
                     onClick={(e) => {
                         e.stopPropagation();
+                        if (disabled || isLocked) {
+                            return;
+                        }
+                        onMove(element.id, 'up');
+                    }}
+                    disabled={disabled || isLocked}
+                    data-layer-action="move-up"
+                    data-layer-action-id={element.id}
+                    aria-label={`Move ${layerName} up`}
+                    style={iconButtonStyle(!disabled && !isLocked)}
+                    title={isLocked ? 'Unlock to move' : 'Move up'}
+                >
+                    <ArrowUp size={14} strokeWidth={2} />
+                </button>
+
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (disabled || isLocked) {
+                            return;
+                        }
+                        onMove(element.id, 'down');
+                    }}
+                    disabled={disabled || isLocked}
+                    data-layer-action="move-down"
+                    data-layer-action-id={element.id}
+                    aria-label={`Move ${layerName} down`}
+                    style={iconButtonStyle(!disabled && !isLocked)}
+                    title={isLocked ? 'Unlock to move' : 'Move down'}
+                >
+                    <ArrowDown size={14} strokeWidth={2} />
+                </button>
+
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (disabled || isLocked) {
+                            return;
+                        }
+                        onMove(element.id, 'outdent');
+                    }}
+                    disabled={disabled || isLocked}
+                    data-layer-action="outdent"
+                    data-layer-action-id={element.id}
+                    aria-label={`Move ${layerName} out`}
+                    style={iconButtonStyle(!disabled && !isLocked)}
+                    title={isLocked ? 'Unlock to move out' : 'Move out of parent'}
+                >
+                    <CornerUpLeft size={14} strokeWidth={2} />
+                </button>
+
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (!canNestSelectedHere) {
+                            return;
+                        }
+                        onNestSelection(element.id);
+                    }}
+                    disabled={!canNestSelectedHere}
+                    data-layer-action="nest-selection"
+                    data-layer-action-id={element.id}
+                    aria-label={`Move selected layers into ${layerName}`}
+                    style={iconButtonStyle(canNestSelectedHere)}
+                    title={canAcceptChildren ? 'Move selected layers into this layer' : 'This layer cannot contain children'}
+                >
+                    <MoveRight size={14} strokeWidth={2} />
+                </button>
+
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
                         if (disabled) {
                             return;
                         }
@@ -250,13 +361,7 @@ function LayerItem({
                     data-layer-action="visibility"
                     data-layer-action-id={element.id}
                     aria-label={`${isHidden ? 'Show' : 'Hide'} ${layerName}`}
-                    style={{
-                        padding: '4px',
-                        border: 'none',
-                        background: 'none',
-                        cursor: disabled ? 'not-allowed' : 'pointer',
-                        color: disabled ? '#cbd5e1' : isHidden ? '#9ca3af' : '#6b7280',
-                    }}
+                    style={iconButtonStyle(!disabled)}
                     title={isHidden ? 'Show' : 'Hide'}
                 >
                     {isHidden ? <EyeOffIcon /> : <EyeIcon />}
@@ -275,13 +380,7 @@ function LayerItem({
                     data-layer-action="lock"
                     data-layer-action-id={element.id}
                     aria-label={`${isLocked ? 'Unlock' : 'Lock'} ${layerName}`}
-                    style={{
-                        padding: '4px',
-                        border: 'none',
-                        background: 'none',
-                        cursor: disabled ? 'not-allowed' : 'pointer',
-                        color: disabled ? '#cbd5e1' : isLocked ? '#6b7280' : '#9ca3af',
-                    }}
+                    style={iconButtonStyle(!disabled)}
                     title={isLocked ? 'Unlock' : 'Lock'}
                 >
                     {isLocked ? <LockIcon /> : <UnlockIcon />}
@@ -296,13 +395,7 @@ function LayerItem({
                         onDuplicate(element.id);
                     }}
                     disabled={disabled || isLocked}
-                    style={{
-                        padding: '4px',
-                        border: 'none',
-                        background: 'none',
-                        cursor: disabled || isLocked ? 'not-allowed' : 'pointer',
-                        color: disabled || isLocked ? '#cbd5e1' : '#6b7280',
-                    }}
+                    style={iconButtonStyle(!disabled && !isLocked)}
                     title={isLocked ? 'Unlock to duplicate' : 'Duplicate'}
                 >
                     <CopyIcon />
@@ -317,13 +410,7 @@ function LayerItem({
                         onDelete(element.id);
                     }}
                     disabled={disabled || isLocked}
-                    style={{
-                        padding: '4px',
-                        border: 'none',
-                        background: 'none',
-                        cursor: disabled || isLocked ? 'not-allowed' : 'pointer',
-                        color: disabled || isLocked ? '#cbd5e1' : '#ef4444',
-                    }}
+                    style={iconButtonStyle(!disabled && !isLocked, true)}
                     title={isLocked ? 'Unlock to delete' : 'Delete'}
                 >
                     <TrashIcon />
@@ -342,6 +429,8 @@ export function LayersPanel({
     selectedIds,
     onSelect,
     onReorder,
+    onMove,
+    onNestSelection,
     onVisibilityToggle,
     onLockToggle,
     onDelete,
@@ -406,11 +495,15 @@ export function LayersPanel({
                         isHidden={element.visible === false}
                         isLocked={element.locked === true}
                         canReorder={!disabled && element.locked !== true}
+                        canAcceptChildren={CHILD_ACCEPTING_TYPES.has(element.type)}
+                        selectedIds={selectedIds}
                         disabled={disabled}
                         onSelect={handleSelect}
                         onDragStart={handleDragStart}
                         onDragOver={handleDragOver}
                         onDragEnd={handleDragEnd}
+                        onMove={onMove}
+                        onNestSelection={onNestSelection}
                         onVisibilityToggle={handleVisibilityToggle}
                         onLockToggle={handleLockToggle}
                         onDelete={onDelete}

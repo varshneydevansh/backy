@@ -933,6 +933,38 @@ export function CanvasEditor({
     return null;
   }, []);
 
+  const getElementAbsoluteOffset = useCallback((
+    items: CanvasElement[],
+    targetId: string,
+    origin = { x: 0, y: 0 },
+  ): { x: number; y: number } | null => {
+    for (const item of items) {
+      const nextOrigin = {
+        x: origin.x + (Number(item.x) || 0),
+        y: origin.y + (Number(item.y) || 0),
+      };
+
+      if (item.id === targetId) {
+        return nextOrigin;
+      }
+
+      if (item.children?.length) {
+        const found = getElementAbsoluteOffset(item.children, targetId, nextOrigin);
+        if (found) {
+          return found;
+        }
+      }
+    }
+
+    return null;
+  }, []);
+
+  const elementContainsId = useCallback((element: CanvasElement, targetId: string): boolean => (
+    Boolean(element.children?.some((child) => (
+      child.id === targetId || elementContainsId(child, targetId)
+    )))
+  ), []);
+
   const toReusableTemplateElement = useCallback((
     element: CanvasElement,
     isRoot = true,
@@ -1016,9 +1048,14 @@ export function CanvasEditor({
     const next = items.map((item) => {
       if (item.id === parentId) {
         updated = true;
+        const nextChildren = [...(item.children || []), { ...child, parentId }]
+          .map((nextChild, index) => ({
+            ...nextChild,
+            zIndex: index + 1,
+          }));
         return {
           ...item,
-          children: [...(item.children || []), { ...child, parentId }],
+          children: nextChildren,
         };
       }
 
@@ -1039,6 +1076,65 @@ export function CanvasEditor({
     });
 
     return { elements: next, updated };
+  };
+
+  const insertElementAfterTarget = (
+    items: CanvasElement[],
+    targetId: string,
+    sibling: CanvasElement,
+  ): { elements: CanvasElement[]; updated: boolean } => {
+    const walk = (nodes: CanvasElement[], parentId: string | null): { elements: CanvasElement[]; updated: boolean } => {
+      let updated = false;
+
+      const next = nodes.reduce<CanvasElement[]>((acc, item) => {
+        acc.push(item);
+
+        if (item.id === targetId) {
+          const nextSibling: CanvasElement = {
+            ...sibling,
+            ...(parentId ? { parentId } : {}),
+          };
+
+          if (!parentId) {
+            delete nextSibling.parentId;
+          }
+
+          updated = true;
+          acc.push(nextSibling);
+          return acc;
+        }
+
+        if (!item.children?.length) {
+          return acc;
+        }
+
+        const childResult = walk(item.children, item.id);
+        if (!childResult.updated) {
+          return acc;
+        }
+
+        updated = true;
+        acc[acc.length - 1] = {
+          ...item,
+          children: childResult.elements,
+        };
+        return acc;
+      }, []);
+
+      if (!updated) {
+        return { elements: next, updated };
+      }
+
+      return {
+        updated,
+        elements: next.map((element, index) => ({
+          ...element,
+          zIndex: index + 1,
+        })),
+      };
+    };
+
+    return walk(items, null);
   };
 
   const insertElementAsSibling = (
@@ -1510,6 +1606,214 @@ export function CanvasEditor({
       return updateParentChildren(currentElements);
     }, selectedId);
   }, [findElementEntry, selectedId, updateElementsWithHistory]);
+
+  const handleLayerMove = useCallback((elementId: string, action: 'up' | 'down' | 'outdent') => {
+    if (isCanvasMutationDisabled) {
+      return;
+    }
+
+    const entry = findElementEntry(elements, elementId);
+    if (!entry || entry.element.locked) {
+      return;
+    }
+
+    if (action === 'outdent') {
+      if (!entry.parentId) {
+        return;
+      }
+
+      const parentEntry = findElementEntry(elements, entry.parentId);
+      if (!parentEntry) {
+        return;
+      }
+
+      const elementOffset = getElementAbsoluteOffset(elements, elementId);
+      const nextParentOffset = parentEntry.parentId
+        ? getElementAbsoluteOffset(elements, parentEntry.parentId)
+        : { x: 0, y: 0 };
+
+      if (!elementOffset || !nextParentOffset) {
+        return;
+      }
+
+      const promotedElement: CanvasElement = {
+        ...(JSON.parse(JSON.stringify(entry.element)) as CanvasElement),
+        x: elementOffset.x - nextParentOffset.x,
+        y: elementOffset.y - nextParentOffset.y,
+      };
+
+      if (parentEntry.parentId) {
+        promotedElement.parentId = parentEntry.parentId;
+      } else {
+        delete promotedElement.parentId;
+      }
+
+      const removed = removeElementById(elements, elementId);
+      if (!removed.updated) {
+        return;
+      }
+
+      const inserted = insertElementAfterTarget(removed.elements, entry.parentId, promotedElement);
+      if (!inserted.updated) {
+        return;
+      }
+
+      setSelectedId(elementId);
+      setSelectedIds([elementId]);
+      updateElementsWithHistory(inserted.elements, elementId, [elementId]);
+      return;
+    }
+
+    const moveSiblings = (siblings: CanvasElement[]): { siblings: CanvasElement[]; moved: boolean } => {
+      const fromIndex = siblings.findIndex((element) => element.id === elementId);
+      if (fromIndex < 0) {
+        return { siblings, moved: false };
+      }
+
+      const toIndex = action === 'up' ? fromIndex + 1 : fromIndex - 1;
+      if (toIndex < 0 || toIndex >= siblings.length) {
+        return { siblings, moved: false };
+      }
+
+      const next = [...siblings];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+
+      return {
+        moved: true,
+        siblings: next.map((element, index) => ({
+          ...element,
+          zIndex: index + 1,
+        })),
+      };
+    };
+
+    const updateParentChildren = (nodes: CanvasElement[]): { nodes: CanvasElement[]; moved: boolean } => {
+      if (entry.parentId === null) {
+        const result = moveSiblings(nodes);
+        return { nodes: result.siblings, moved: result.moved };
+      }
+
+      let moved = false;
+      const nextNodes = nodes.map((node) => {
+        if (node.id === entry.parentId) {
+          const result = moveSiblings(node.children || []);
+          moved = result.moved;
+          return result.moved
+            ? { ...node, children: result.siblings }
+            : node;
+        }
+
+        if (!node.children?.length) {
+          return node;
+        }
+
+        const childResult = updateParentChildren(node.children);
+        if (!childResult.moved) {
+          return node;
+        }
+
+        moved = true;
+        return {
+          ...node,
+          children: childResult.nodes,
+        };
+      });
+
+      return { nodes: nextNodes, moved };
+    };
+
+    const result = updateParentChildren(elements);
+    if (!result.moved) {
+      return;
+    }
+
+    setSelectedId(elementId);
+    setSelectedIds([elementId]);
+    updateElementsWithHistory(result.nodes, elementId, [elementId]);
+  }, [
+    elements,
+    findElementEntry,
+    getElementAbsoluteOffset,
+    isCanvasMutationDisabled,
+    updateElementsWithHistory,
+  ]);
+
+  const handleNestSelectionIntoLayer = useCallback((parentId: string) => {
+    if (isCanvasMutationDisabled) {
+      return;
+    }
+
+    const parentEntry = findElementEntry(elements, parentId);
+    if (!parentEntry || parentEntry.element.locked || !canAcceptNestedDrop(parentEntry.element.type)) {
+      return;
+    }
+
+    const parentOffset = getElementAbsoluteOffset(elements, parentId);
+    if (!parentOffset) {
+      return;
+    }
+
+    const candidateIds = (selectedIds.length ? selectedIds : selectedId ? [selectedId] : [])
+      .filter((id) => id !== parentId);
+    const movedElements: CanvasElement[] = [];
+    let nextElements = elements;
+
+    candidateIds.forEach((candidateId) => {
+      const entryForMove = findElementEntry(elements, candidateId);
+      const candidateOffset = getElementAbsoluteOffset(elements, candidateId);
+
+      if (
+        !entryForMove ||
+        !candidateOffset ||
+        entryForMove.parentId === parentId ||
+        entryForMove.element.locked ||
+        elementContainsId(entryForMove.element, parentId)
+      ) {
+        return;
+      }
+
+      const nestedElement: CanvasElement = {
+        ...(JSON.parse(JSON.stringify(entryForMove.element)) as CanvasElement),
+        parentId,
+        x: candidateOffset.x - parentOffset.x,
+        y: candidateOffset.y - parentOffset.y,
+      };
+
+      const removed = removeElementById(nextElements, candidateId);
+      if (!removed.updated) {
+        return;
+      }
+
+      nextElements = removed.elements;
+      movedElements.push(nestedElement);
+    });
+
+    if (!movedElements.length) {
+      return;
+    }
+
+    movedElements.forEach((nestedElement) => {
+      const inserted = insertElementAsChild(nextElements, parentId, nestedElement);
+      if (inserted.updated) {
+        nextElements = inserted.elements;
+      }
+    });
+
+    const movedIds = movedElements.map((element) => element.id);
+    setSelectedId(movedIds[0] ?? null);
+    setSelectedIds(movedIds);
+    updateElementsWithHistory(nextElements, movedIds[0] ?? null, movedIds);
+  }, [
+    elements,
+    elementContainsId,
+    findElementEntry,
+    getElementAbsoluteOffset,
+    isCanvasMutationDisabled,
+    selectedId,
+    selectedIds,
+    updateElementsWithHistory,
+  ]);
 
   const handleLayerVisibilityToggle = useCallback((elementId: string) => {
     const activeElement = findElementById(displayedElements, elementId) || findElementById(elements, elementId);
@@ -3803,6 +4107,8 @@ export function CanvasEditor({
                     selectedIds={selectedIds}
                     onSelect={handleLayerSelect}
                     onReorder={handleLayerReorder}
+                    onMove={handleLayerMove}
+                    onNestSelection={handleNestSelectionIntoLayer}
                     onVisibilityToggle={handleLayerVisibilityToggle}
                     onLockToggle={handleLayerLockToggle}
                     onDelete={handleLayerDelete}

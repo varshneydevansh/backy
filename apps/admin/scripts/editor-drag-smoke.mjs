@@ -815,6 +815,91 @@ const setLayerLockedState = async (client, elementId, locked) => {
   return nextState;
 };
 
+const clickLayerAction = async (client, action, elementId) => {
+  const opened = await evaluate(client, `(() => {
+    const layersButton = document.querySelector('[data-testid="editor-tab-layers"]');
+    if (!(layersButton instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'missing-layers-tab' };
+    }
+    layersButton.click();
+    return { ok: true };
+  })()`);
+
+  assert(opened?.ok, `Unable to open layers panel before ${action} on ${elementId}: ${JSON.stringify(opened)}`);
+  await sleep(150);
+
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-layer-action="${action}"][data-layer-action-id="${elementId}"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        reason: 'missing-button',
+        availableActions: Array.from(document.querySelectorAll('[data-layer-action]')).map((node) => ({
+          action: node.getAttribute('data-layer-action'),
+          id: node.getAttribute('data-layer-action-id'),
+          disabled: node instanceof HTMLButtonElement ? node.disabled : null,
+        })),
+      };
+    }
+
+    if (button.disabled) {
+      return {
+        ok: false,
+        reason: 'disabled',
+        label: button.getAttribute('aria-label') || '',
+      };
+    }
+
+    button.click();
+    return {
+      ok: true,
+      label: button.getAttribute('aria-label') || '',
+    };
+  })()`);
+
+  assert(clicked?.ok, `Unable to click layer ${action} for ${elementId}: ${JSON.stringify(clicked)}`);
+  await sleep(300);
+  return clicked;
+};
+
+const readLayerTreeState = async (client, elementIds) => {
+  const opened = await evaluate(client, `(() => {
+    const layersButton = document.querySelector('[data-testid="editor-tab-layers"]');
+    if (!(layersButton instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'missing-layers-tab' };
+    }
+    layersButton.click();
+    return { ok: true };
+  })()`);
+
+  assert(opened?.ok, `Unable to open layers panel for tree state: ${JSON.stringify(opened)}`);
+  await sleep(150);
+
+  const state = await evaluate(client, `(() => {
+    const wanted = ${JSON.stringify(elementIds)};
+    const rows = Array.from(document.querySelectorAll('[data-layer-id]')).map((row, index) => ({
+      id: row.getAttribute('data-layer-id'),
+      depth: Number(row.getAttribute('data-layer-depth') || 0),
+      selected: row.getAttribute('data-layer-selected') === 'true',
+      index,
+    }));
+    return {
+      rows,
+      byId: Object.fromEntries(wanted.map((id) => [
+        id,
+        rows.find((row) => row.id === id) || null,
+      ])),
+    };
+  })()`);
+
+  assert(
+    elementIds.every((elementId) => state.byId?.[elementId]),
+    `Layer tree state missing expected rows: ${JSON.stringify(state)}`,
+  );
+
+  return state;
+};
+
 const readBreakpointOverrideControls = async (client) => {
   const controls = await evaluate(client, `(() => {
     const panel = document.querySelector('[data-testid="editor-breakpoint-override"]');
@@ -1727,6 +1812,64 @@ const testMultiSelectionDistribution = async (client, elementIds) => {
   };
 };
 
+const testLayerHierarchyControls = async (client) => {
+  await selectLayerIds(client, ['smoke-image']);
+  const beforeImageBox = await getElementBox(client, 'smoke-image');
+  const beforeChildBox = await getElementBox(client, 'smoke-child-button');
+  const beforeState = await readEditorElementState(client, ['smoke-image', 'smoke-box', 'smoke-child-button']);
+  assert(beforeImageBox && beforeChildBox, 'Unable to read visual boxes before layer hierarchy controls');
+
+  const nestedClick = await clickLayerAction(client, 'nest-selection', 'smoke-box');
+  const afterNestTree = await readLayerTreeState(client, ['smoke-image', 'smoke-box', 'smoke-child-button']);
+  const afterNestedImageBox = await getElementBox(client, 'smoke-image');
+  const afterNestedState = await readEditorElementState(client, ['smoke-image']);
+  assert(afterNestedImageBox, 'Unable to read image box after nesting');
+  assert(
+    afterNestTree.byId['smoke-image'].depth > afterNestTree.byId['smoke-box'].depth,
+    `Nesting selected layer did not move smoke-image under smoke-box: ${JSON.stringify(afterNestTree)}`,
+  );
+  assert(
+    Math.abs(afterNestedImageBox.x - beforeImageBox.x) <= 3 &&
+      Math.abs(afterNestedImageBox.y - beforeImageBox.y) <= 3,
+    `Nesting selected layer did not preserve visual position: before ${JSON.stringify(beforeImageBox)}, after ${JSON.stringify(afterNestedImageBox)}`,
+  );
+  assert(
+    Math.abs(afterNestedState['smoke-image'].x - (beforeState['smoke-image'].x - beforeState['smoke-box'].x)) <= 1 &&
+      Math.abs(afterNestedState['smoke-image'].y - (beforeState['smoke-image'].y - beforeState['smoke-box'].y)) <= 1,
+    `Nested image did not convert to parent-relative coordinates: ${JSON.stringify({ beforeState, afterNestedState })}`,
+  );
+
+  const outdentClick = await clickLayerAction(client, 'outdent', 'smoke-child-button');
+  const afterOutdentTree = await readLayerTreeState(client, ['smoke-child-button', 'smoke-box']);
+  const afterOutdentChildBox = await getElementBox(client, 'smoke-child-button');
+  const afterOutdentState = await readEditorElementState(client, ['smoke-child-button']);
+  assert(afterOutdentChildBox, 'Unable to read child button after outdent');
+  assert(
+    afterOutdentTree.byId['smoke-child-button'].depth === afterOutdentTree.byId['smoke-box'].depth,
+    `Outdent did not promote nested child to parent layer level: ${JSON.stringify(afterOutdentTree)}`,
+  );
+  assert(
+    Math.abs(afterOutdentChildBox.x - beforeChildBox.x) <= 3 &&
+      Math.abs(afterOutdentChildBox.y - beforeChildBox.y) <= 3,
+    `Outdent did not preserve visual position: before ${JSON.stringify(beforeChildBox)}, after ${JSON.stringify(afterOutdentChildBox)}`,
+  );
+  assert(
+    afterOutdentState['smoke-child-button'].x > beforeState['smoke-child-button'].x &&
+      afterOutdentState['smoke-child-button'].y > beforeState['smoke-child-button'].y,
+    `Outdent did not convert nested child to root-relative coordinates: ${JSON.stringify({ beforeState, afterOutdentState })}`,
+  );
+
+  return {
+    nestedClick,
+    outdentClick,
+    beforeState,
+    afterNestedState,
+    afterNestTree,
+    afterOutdentState,
+    afterOutdentTree,
+  };
+};
+
 const dragSelectionHandle = async (client, elementId, deltaX, deltaY, options = {}) => {
   await scrollElementIntoView(client, elementId);
   if (options.selectFirst !== false) {
@@ -2062,6 +2205,9 @@ const main = async () => {
       client,
       EDITOR_PATH ? ['home-heading', 'home-cta'] : ['smoke-heading', 'smoke-image'],
     );
+    const layerHierarchy = EDITOR_PATH
+      ? null
+      : await testLayerHierarchyControls(client);
 
     let persistedState = null;
     let reloadedState = null;
@@ -2201,6 +2347,7 @@ const main = async () => {
       multiSelectionDrag,
       multiSelectionDistribution,
       grouping,
+      layerHierarchy,
       responsiveEditing,
       reloadedResponsiveEditing,
       postSaveInspector,
