@@ -144,7 +144,7 @@ It explicitly excludes:
 13. `/users`: role matrix and invitation flows
 14. `/users.new`: invite token and provisioning states
 15. `/users.$userId`: active session and permission display
-16. `/settings`: SMTP, API keys, security, theme defaults
+16. `/settings`: backend-backed delivery mode, API keys, security policy, notification routing, theme/SEO defaults, handoff manifest, and Supabase/Vercel/storage metadata; remaining work is full auth/RBAC, secret lifecycle, deployment/domain history, billing/storage limits, and provider execution workflows
 
 ## 6) Public-route completion checklist
 
