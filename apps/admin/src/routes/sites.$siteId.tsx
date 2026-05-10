@@ -408,11 +408,25 @@ const apiBase = (() => {
   if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
     return 'http://localhost:3001';
   }
-  return envBase ? envBase.replace(/\/$/, '') : '';
+  return envBase
+    ? envBase
+      .replace(/\/api\/admin$/, '')
+      .replace(/\/api$/, '')
+      .replace(/\/$/, '')
+    : '';
 })();
 
 function buildApiUrl(path: string): string {
-  return `${apiBase}${path}`;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${apiBase}${normalizedPath}`;
+}
+
+function readPayloadData(payload: unknown): Record<string, unknown> {
+  if (!payload || typeof payload !== 'object') return {};
+  const record = payload as Record<string, unknown>;
+  return record.data && typeof record.data === 'object'
+    ? record.data as Record<string, unknown>
+    : record;
 }
 
 function formatTime(value?: string): string {
@@ -985,8 +999,9 @@ function EditSitePage() {
       }
 
       const payload = await response.json();
-      const comments = Array.isArray(payload?.comments) ? (payload.comments as Comment[]) : [];
-      const commentCount = typeof payload?.count === 'number' ? payload.count : comments.length;
+      const data = readPayloadData(payload);
+      const comments = Array.isArray(data.comments) ? (data.comments as Comment[]) : [];
+      const commentCount = typeof data.count === 'number' ? data.count : comments.length;
 
       setState((prev) => ({
         ...prev,
@@ -1032,7 +1047,8 @@ function EditSitePage() {
       }
 
       const payload = await response.json().catch(() => null);
-      const reasons: unknown[] = Array.isArray(payload?.reasons) ? payload.reasons : [];
+      const data = readPayloadData(payload);
+      const reasons: unknown[] = Array.isArray(data.reasons) ? data.reasons : [];
       const fallback = new Set(DEFAULT_COMMENT_REPORT_REASONS);
       const parsed = reasons
         .map((value: unknown) => (typeof value === 'string' ? value.trim() : ''))
@@ -1310,8 +1326,9 @@ function EditSitePage() {
         }
 
         const payload = await response.json();
-        const comments = Array.isArray(payload?.comments) ? payload.comments : [];
-        const count = typeof payload?.count === 'number' ? payload.count : comments.length;
+        const data = readPayloadData(payload);
+        const comments = Array.isArray(data.comments) ? data.comments as Comment[] : [];
+        const count = typeof data.count === 'number' ? data.count : comments.length;
         allComments.push(...comments);
         hasMore = offset + comments.length < count;
         offset += limit;
@@ -1423,8 +1440,9 @@ function EditSitePage() {
         }
 
         const payload = await response.json();
-        const events = Array.isArray(payload?.events) ? payload.events : [];
-        const count = typeof payload?.count === 'number' ? payload.count : events.length;
+        const data = readPayloadData(payload);
+        const events = Array.isArray(data.events) ? data.events : [];
+        const count = typeof data.count === 'number' ? data.count : events.length;
         allEvents.push(...events);
         hasMore = offset + events.length < count;
         offset += limit;
