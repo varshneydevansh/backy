@@ -216,6 +216,11 @@ const PAGE_EXPORT_COLUMNS = [
   'path',
   'status',
   'is_homepage',
+  'parent_id',
+  'parent_title',
+  'children_count',
+  'navigation_placement',
+  'navigation_label',
   'scheduled_at',
   'last_updated',
   'readiness_score',
@@ -336,6 +341,18 @@ function PagesListView() {
 
     return pages.filter((page) => siteIdentifiers.has(page.siteId));
   }, [activeSite?.id, activeSite?.publicSiteId, activeSiteId, pages]);
+  const activeSitePageMap = useMemo(
+    () => new Map(activeSitePages.map((page) => [page.id, page])),
+    [activeSitePages],
+  );
+  const pageChildCountMap = useMemo(() => {
+    const counts = new Map<string, number>();
+    activeSitePages.forEach((page) => {
+      if (!page.parentId) return;
+      counts.set(page.parentId, (counts.get(page.parentId) || 0) + 1);
+    });
+    return counts;
+  }, [activeSitePages]);
   const visiblePages = useMemo(
     () => activeSitePages.filter((page) => {
       const matchesStatus = statusFilter === 'all' || page.status === statusFilter;
@@ -515,6 +532,11 @@ function PagesListView() {
         pagePath,
         page.status,
         Boolean(page.isHomepage),
+        page.parentId || '',
+        getParentPageTitle(page, activeSitePageMap),
+        pageChildCountMap.get(page.id) || 0,
+        pageMetaString(page, 'navigationPlacement'),
+        pageMetaString(page, 'navigationLabel'),
         page.scheduledAt || '',
         page.lastUpdated || '',
         readiness?.score ?? '',
@@ -869,6 +891,17 @@ function PagesListView() {
       )
     },
     {
+      key: 'parentId',
+      label: 'Hierarchy',
+      render: (page) => (
+        <PageHierarchyCell
+          page={page}
+          parentPage={page.parentId ? activeSitePageMap.get(page.parentId) || null : null}
+          childCount={pageChildCountMap.get(page.id) || 0}
+        />
+      )
+    },
+    {
       key: 'meta',
       label: 'Health',
       render: (page) => {
@@ -1134,6 +1167,15 @@ function PagesListView() {
       path: pagePublicPath(page),
       status: page.status,
       isHomepage: Boolean(page.isHomepage),
+      hierarchy: {
+        parentId: page.parentId || null,
+        parentTitle: getParentPageTitle(page, activeSitePageMap) || null,
+        childCount: pageChildCountMap.get(page.id) || 0,
+      },
+      navigation: {
+        placement: pageMetaString(page, 'navigationPlacement') || null,
+        label: pageMetaString(page, 'navigationLabel') || null,
+      },
       health: readinessMap[page.id]
         ? {
             score: readinessMap[page.id].score,
@@ -1174,6 +1216,7 @@ function PagesListView() {
     pageDesignReadiness.score,
     pageDesignReadiness.workflow,
     pageMetrics,
+    pageChildCountMap,
     filteredPages,
     publicPageBySlugUrl,
     publicPagesUrl,
@@ -1184,6 +1227,7 @@ function PagesListView() {
     selectedPages.length,
     siteSlug,
     statusFilter,
+    activeSitePageMap,
     totalItems,
     totalPages,
   ]);
@@ -1998,6 +2042,49 @@ function PagesListView() {
   );
 }
 
+function PageHierarchyCell({ page, parentPage, childCount }: { page: Page; parentPage: Page | null; childCount: number }) {
+  const navigationPlacement = pageMetaString(page, 'navigationPlacement');
+  const navigationLabel = pageMetaString(page, 'navigationLabel');
+
+  return (
+    <div className="min-w-48 space-y-1" data-testid={`pages-hierarchy-${page.id}`}>
+      {parentPage ? (
+        <div>
+          <div className="text-sm font-medium text-foreground">Nested under {parentPage.title}</div>
+          <div className="text-xs text-muted-foreground">{pagePublicPath(parentPage)} parent route</div>
+        </div>
+      ) : page.parentId ? (
+        <div>
+          <div className="text-sm font-medium text-amber-800">Parent not loaded</div>
+          <div className="font-mono text-xs text-muted-foreground">{page.parentId}</div>
+        </div>
+      ) : (
+        <div>
+          <div className="text-sm font-medium text-foreground">Top-level page</div>
+          <div className="text-xs text-muted-foreground">
+            {childCount === 0 ? 'No child pages' : `${childCount} child page${childCount === 1 ? '' : 's'}`}
+          </div>
+        </div>
+      )}
+
+      {(navigationPlacement || navigationLabel) && (
+        <div className="flex flex-wrap items-center gap-1">
+          {navigationPlacement && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium capitalize text-muted-foreground">
+              {navigationPlacement} menu
+            </span>
+          )}
+          {navigationLabel && (
+            <span className="max-w-40 truncate rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground" title={navigationLabel}>
+              {navigationLabel}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PageApiStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-border bg-muted/30 px-3 py-3">
@@ -2108,6 +2195,15 @@ const pagePublicPath = (page: Page): string => {
   }
   return !slug || slug === 'home' ? '/' : `/${slug}`;
 };
+
+const pageMetaString = (page: Page, key: string): string => {
+  const value = page.meta?.[key];
+  return typeof value === 'string' ? value : '';
+};
+
+const getParentPageTitle = (page: Page, pageMap: Map<string, Page>): string => (
+  page.parentId ? pageMap.get(page.parentId)?.title || pageMetaString(page, 'parentPageTitle') : ''
+);
 
 const getPublishBlocker = (readiness: PageReadiness): string | null => {
   if (readiness.statusLabel !== 'blocked') {

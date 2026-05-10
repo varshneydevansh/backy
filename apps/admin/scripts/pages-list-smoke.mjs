@@ -6,8 +6,10 @@ import os from 'node:os';
 import path from 'node:path';
 
 const ADMIN_BASE_URL = process.env.BACKY_ADMIN_BASE_URL || 'http://localhost:5173';
+const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_PAGES_LIST_CDP_PORT || 9374);
+const HIERARCHY_SITE_ID = process.env.BACKY_PAGES_LIST_HIERARCHY_SITE_ID || 'site-demo';
 const EMPTY_SITE_ID = process.env.BACKY_PAGES_LIST_EMPTY_SITE_ID || 'site-cook';
 const SCREENSHOT_PATH = process.env.BACKY_PAGES_LIST_SCREENSHOT || path.join(os.tmpdir(), 'backy-pages-list-smoke.png');
 
@@ -17,6 +19,69 @@ const assert = (condition, message) => {
   if (!condition) {
     throw new Error(message);
   }
+};
+
+const requestApi = async (endpoint, options = {}) => {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      'content-type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.success === false) {
+    throw new Error(`${endpoint} returned ${response.status}: ${JSON.stringify(payload.error || payload).slice(0, 300)}`);
+  }
+
+  return payload;
+};
+
+const createHierarchyPages = async () => {
+  const suffix = Date.now().toString(36);
+  const parentTitle = `Smoke Hierarchy Parent ${suffix}`;
+  const childTitle = `Smoke Hierarchy Child ${suffix}`;
+  const parentSlug = `smoke-hierarchy-parent-${suffix}`;
+  const childSlug = `smoke-hierarchy-child-${suffix}`;
+  const parentPayload = await requestApi(`/api/admin/sites/${HIERARCHY_SITE_ID}/pages`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title: parentTitle,
+      slug: parentSlug,
+      status: 'published',
+      description: 'Temporary parent page for pages list hierarchy smoke.',
+      content: [],
+      meta: {
+        title: parentTitle,
+        description: 'Temporary parent page for pages list hierarchy smoke.',
+        canonical: `/${parentSlug}`,
+      },
+    }),
+  });
+  const parentPage = parentPayload.data.page;
+  const childPayload = await requestApi(`/api/admin/sites/${HIERARCHY_SITE_ID}/pages`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title: childTitle,
+      slug: childSlug,
+      status: 'draft',
+      parentId: parentPage.id,
+      description: 'Temporary child page for pages list hierarchy smoke.',
+      content: [],
+      meta: {
+        title: childTitle,
+        description: 'Temporary child page for pages list hierarchy smoke.',
+        canonical: `/${childSlug}`,
+        parentPageId: parentPage.id,
+        parentPageTitle: parentPage.title,
+        navigationPlacement: 'primary',
+        navigationLabel: 'Smoke Child Link',
+      },
+    }),
+  });
+
+  return { parentPage, childPage: childPayload.data.page };
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -194,6 +259,37 @@ const clickEmptyCreate = async (client, testId, expectedSearch) => {
   return null;
 };
 
+const waitForHierarchyRow = async (client, page, expectedText, expectedSearch = page.title) => {
+  const url = `${ADMIN_BASE_URL}/pages?siteId=${encodeURIComponent(HIERARCHY_SITE_ID)}&q=${encodeURIComponent(expectedSearch)}`;
+  await client.send('Page.navigate', { url });
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const hierarchy = document.querySelector('[data-testid="pages-hierarchy-${page.id}"]');
+      return {
+        ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
+        hierarchyText: hierarchy?.textContent || '',
+        body: document.body?.innerText?.slice(0, 700) || '',
+      };
+    })()`);
+
+    if (
+      state.ready
+      && state.hierarchyText.includes(expectedText)
+    ) {
+      return { url, state };
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Hierarchy row did not render expected text "${expectedText}": ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -212,7 +308,23 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir }) => {
+const cleanup = async ({ client, childProcess, userDataDir, hierarchyPages }) => {
+  if (hierarchyPages?.childPage?.id) {
+    try {
+      await requestApi(`/api/admin/sites/${HIERARCHY_SITE_ID}/pages/${hierarchyPages.childPage.id}`, { method: 'DELETE' });
+    } catch (error) {
+      console.warn(`Unable to delete smoke child page ${hierarchyPages.childPage.id}:`, error instanceof Error ? error.message : error);
+    }
+  }
+
+  if (hierarchyPages?.parentPage?.id) {
+    try {
+      await requestApi(`/api/admin/sites/${HIERARCHY_SITE_ID}/pages/${hierarchyPages.parentPage.id}`, { method: 'DELETE' });
+    } catch (error) {
+      console.warn(`Unable to delete smoke parent page ${hierarchyPages.parentPage.id}:`, error instanceof Error ? error.message : error);
+    }
+  }
+
   if (client) {
     try {
       await client.send('Browser.close');
@@ -237,8 +349,10 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   const { childProcess, userDataDir } = launchChrome();
   let client;
+  let hierarchyPages = null;
 
   try {
+    hierarchyPages = await createHierarchyPages();
     await waitForCdp();
     const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
     assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
@@ -257,6 +371,16 @@ const main = async () => {
     const emptyCreate = await clickEmptyCreate(client, 'pages-empty-create', []);
     await waitForPagesEmptyState(client);
     const registrationShortcut = await clickEmptyCreate(client, 'pages-empty-create-registration', ['template=registration']);
+    const childHierarchy = await waitForHierarchyRow(
+      client,
+      hierarchyPages.childPage,
+      `Nested under ${hierarchyPages.parentPage.title}`,
+    );
+    const parentHierarchy = await waitForHierarchyRow(
+      client,
+      hierarchyPages.parentPage,
+      '1 child page',
+    );
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -275,10 +399,12 @@ const main = async () => {
       initialRender,
       emptyCreate,
       registrationShortcut,
+      childHierarchy,
+      parentHierarchy,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
-    await cleanup({ client, childProcess, userDataDir });
+    await cleanup({ client, childProcess, userDataDir, hierarchyPages });
   }
 };
 
