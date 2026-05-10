@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { buildUserPermissionMatrix } from '@/lib/adminPermissions';
 import { getAdminUserById } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -26,6 +27,10 @@ export async function GET(
   context: { params: Promise<{ userId: string }> },
 ) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId);
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { userId } = await context.params;

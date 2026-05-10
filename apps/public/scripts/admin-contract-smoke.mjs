@@ -3,7 +3,9 @@
 import { validateAiFrontendManifest, validateAiRenderPayload } from './validate-ai-render-payload.mjs';
 
 const baseUrl = (process.env.BACKY_PUBLIC_CONTRACT_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
-const adminApiKey = (process.env.BACKY_ADMIN_API_KEY || process.env.BACKY_ADMIN_SECRET_KEY || '').trim();
+const configuredAdminApiKey = (process.env.BACKY_ADMIN_API_KEY || process.env.BACKY_ADMIN_SECRET_KEY || '').trim();
+let adminRequestApiKey = configuredAdminApiKey;
+let adminSessionToken = '';
 
 const checks = [];
 let createdSiteId = null;
@@ -38,8 +40,11 @@ async function request(pathOrUrl, init) {
   const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${baseUrl}${pathOrUrl}`;
   const headers = new Headers(init?.headers || {});
   const pathname = pathOrUrl.startsWith('http') ? new URL(pathOrUrl).pathname : pathOrUrl;
-  if (adminApiKey && pathname.startsWith('/api/admin/') && !headers.has('x-backy-admin-key') && !headers.has('authorization')) {
-    headers.set('x-backy-admin-key', adminApiKey);
+  if (!adminRequestApiKey && adminSessionToken && pathname.startsWith('/api/admin/') && !headers.has('authorization')) {
+    headers.set('authorization', `Bearer ${adminSessionToken}`);
+  }
+  if (adminRequestApiKey && pathname.startsWith('/api/admin/') && !headers.has('x-backy-admin-key') && !headers.has('authorization')) {
+    headers.set('x-backy-admin-key', adminRequestApiKey);
   }
   const response = await fetch(url, {
     ...init,
@@ -85,6 +90,39 @@ async function record(name, fn) {
   const startedAt = Date.now();
   await fn();
   checks.push({ name, ms: Date.now() - startedAt });
+}
+
+async function loginAdminApi() {
+  if (adminRequestApiKey) return;
+
+  const response = await fetch(`${baseUrl}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const json = await response.json().catch(() => ({}));
+
+  if (!response.ok || json.success === false || !json.data?.session?.token) {
+    throw new Error(`Unable to create admin session for contract smoke: ${JSON.stringify(json).slice(0, 500)}`);
+  }
+
+  adminSessionToken = json.data.session.token;
+
+  const settingsResponse = await fetch(`${baseUrl}/api/admin/settings`, {
+    headers: {
+      authorization: `Bearer ${adminSessionToken}`,
+    },
+  });
+  const settingsJson = await settingsResponse.json().catch(() => ({}));
+  const settingsAdminKey = settingsJson?.data?.settings?.apiKeys?.adminApiKey;
+  if (settingsResponse.ok && typeof settingsAdminKey === 'string' && settingsAdminKey.trim()) {
+    adminRequestApiKey = settingsAdminKey.trim();
+  }
 }
 
 async function cleanup() {
@@ -184,6 +222,7 @@ async function cleanup() {
 }
 
 try {
+  await loginAdminApi();
   const unique = Date.now();
   const siteSlug = `admin-contract-site-${unique}`;
   const customDomain = `${siteSlug}.example.test`;

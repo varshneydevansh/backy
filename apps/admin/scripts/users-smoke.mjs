@@ -11,6 +11,7 @@ const SITE_ID = process.env.BACKY_USERS_SMOKE_SITE_ID || 'site-demo';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_USERS_CDP_PORT || 9382);
 const SCREENSHOT_PATH = process.env.BACKY_USERS_SCREENSHOT || path.join(os.tmpdir(), 'backy-users-smoke.png');
+let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -44,6 +45,7 @@ const requestApi = async (endpoint, options = {}) => {
     ...options,
     headers: {
       'content-type': 'application/json',
+      ...(apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
       ...(options.headers || {}),
     },
   });
@@ -54,6 +56,35 @@ const requestApi = async (endpoint, options = {}) => {
   }
 
   return payload;
+};
+
+const loginAdminApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.success === false || !payload.data?.session?.token) {
+    throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
+  }
+
+  apiAdminSessionToken = payload.data.session.token;
+  return payload.data;
+};
+
+const assertUsersApiRequiresAuth = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/users`);
+  const payload = await response.json().catch(() => ({}));
+
+  assert(response.status === 401, `Users API should reject missing auth, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(payload?.success === false && payload?.error?.code === 'UNAUTHORIZED', `Users API missing auth envelope: ${JSON.stringify(payload).slice(0, 500)}`);
 };
 
 const listUsers = async () => {
@@ -837,6 +868,8 @@ const main = async () => {
   const email = `users-smoke-${suffix}@example.com`;
 
   try {
+    await loginAdminApi();
+    await assertUsersApiRequiresAuth();
     const existing = await findUserByEmail(email);
     assert(!existing, `Temporary user already exists: ${email}`);
 

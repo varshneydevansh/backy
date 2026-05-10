@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { createAdminUser, getAdminUserByEmail, listAdminUsers } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -53,6 +54,10 @@ const normalizeStatus = (value: unknown): 'active' | 'inactive' | 'invited' | 's
 
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId);
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { searchParams } = new URL(request.url);
@@ -103,6 +108,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId);
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const body = await parseJsonBody(request);
