@@ -14,6 +14,8 @@ interface PageShellProps {
     action?: ReactNode;
     children: ReactNode;
     className?: string;
+    contentClassName?: string;
+    hideHeader?: boolean;
 }
 
 export function PageShell({
@@ -21,11 +23,14 @@ export function PageShell({
     description,
     action,
     children,
-    className
+    className,
+    contentClassName,
+    hideHeader = false,
 }: PageShellProps) {
     return (
-        <div className={cn("space-y-6 animate-fade-in", className)}>
+        <div className={cn("animate-fade-in", hideHeader ? "space-y-0" : "space-y-6", className)}>
             {/* Page Header */}
+            {!hideHeader && (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
@@ -43,9 +48,10 @@ export function PageShell({
                     </div>
                 )}
             </div>
+            )}
 
             {/* Main Content */}
-            <div className="w-full">
+            <div className={cn("w-full", contentClassName)}>
                 {children}
             </div>
         </div>

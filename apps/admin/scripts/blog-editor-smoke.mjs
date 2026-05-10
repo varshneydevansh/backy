@@ -20,6 +20,25 @@ const assert = (condition, message) => {
   }
 };
 
+const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
+  if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
+    resolve(true);
+    return;
+  }
+
+  const timeout = setTimeout(() => {
+    childProcess.off('exit', onExit);
+    resolve(false);
+  }, timeoutMs);
+
+  const onExit = () => {
+    clearTimeout(timeout);
+    resolve(true);
+  };
+
+  childProcess.once('exit', onExit);
+});
+
 const requestApi = async (endpoint, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
@@ -330,10 +349,16 @@ const cleanup = async ({ client, childProcess, userDataDir, postId }) => {
     } catch {
       // Chrome may already be closed.
     }
+    client.close();
   }
 
   if (childProcess && childProcess.exitCode === null && childProcess.signalCode === null) {
     childProcess.kill('SIGTERM');
+    const exited = await waitForExit(childProcess);
+    if (!exited) {
+      childProcess.kill('SIGKILL');
+      await waitForExit(childProcess, 500);
+    }
   }
 
   if (postId) {

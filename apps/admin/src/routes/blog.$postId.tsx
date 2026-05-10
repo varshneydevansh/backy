@@ -1088,6 +1088,13 @@ function EditBlogPostPage() {
                 </div>
             }
             description="Edit the article, its publishing state, and its public design in one workspace."
+            className={cn(
+                isWorkspaceFocus
+                    ? 'h-[calc(100vh-1rem)] overflow-hidden lg:h-[calc(100vh-1.5rem)]'
+                    : undefined,
+            )}
+            contentClassName={isWorkspaceFocus ? 'h-full min-h-0' : undefined}
+            hideHeader={isWorkspaceFocus}
             action={
                 <Button
                     type="button"
@@ -1100,7 +1107,7 @@ function EditBlogPostPage() {
                 </Button>
             }
         >
-            <div className="w-full pb-24">
+            <div className={cn('w-full', isWorkspaceFocus ? 'h-full min-h-0 overflow-hidden pb-0' : 'pb-24')}>
                 {(loadError || saveWarning || routeCheckError) && (
                     <Notice tone="warning" className="mb-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1277,11 +1284,12 @@ function EditBlogPostPage() {
                     onSubmit={handleSubmit}
                     className={cn(
                         'grid gap-5',
+                        isWorkspaceFocus && 'h-full min-h-0',
                         !isWorkspaceFocus && '[@media(min-width:2200px)]:grid-cols-[minmax(0,1fr)_360px] [@media(min-width:2200px)]:items-start',
                     )}
                     data-testid="blog-editor-workspace-grid"
                 >
-                    <div className="min-w-0 space-y-6">
+                    <div className={cn('min-w-0 space-y-6', isWorkspaceFocus && 'h-full min-h-0 space-y-0')}>
                         {!isWorkspaceFocus && (
                         <Panel id="blog-editor-draft" className="overflow-hidden scroll-mt-24">
                             <PanelHeader
@@ -1475,7 +1483,7 @@ function EditBlogPostPage() {
                         </Panel>
                         )}
 
-                        <div id="blog-editor-canvas" className="min-w-0 scroll-mt-24" data-testid="blog-editor-canvas-shell">
+                        <div id="blog-editor-canvas" className={cn('min-w-0 scroll-mt-24', isWorkspaceFocus && 'h-full min-h-0')} data-testid="blog-editor-canvas-shell">
                             <EditorWorkspaceFrame
                                 title="Post design canvas"
                                 description={isWorkspaceFocus
@@ -1529,7 +1537,7 @@ function EditBlogPostPage() {
                                 className={cn(
                                     'relative',
                                     isWorkspaceFocus
-                                        ? 'min-h-[calc(100vh-96px)] xl:h-[calc(100vh-96px)] xl:min-h-[calc(100vh-96px)]'
+                                        ? 'h-full min-h-0'
                                         : 'min-h-[820px] xl:h-[calc(100vh-72px)] xl:min-h-[920px]',
                                 )}
                             >

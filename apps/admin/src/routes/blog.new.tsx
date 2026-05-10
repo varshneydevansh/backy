@@ -1016,6 +1016,13 @@ function NewBlogPostPage() {
                 </div>
             }
             description="Create a post and design its public page from the same workspace."
+            className={cn(
+                isWorkspaceFocus
+                    ? 'h-[calc(100vh-1rem)] overflow-hidden lg:h-[calc(100vh-1.5rem)]'
+                    : undefined,
+            )}
+            contentClassName={isWorkspaceFocus ? 'h-full min-h-0' : undefined}
+            hideHeader={isWorkspaceFocus}
             action={
                 <Button
                     type="button"
@@ -1028,7 +1035,7 @@ function NewBlogPostPage() {
                 </Button>
             }
         >
-            <div className="w-full pb-24">
+            <div className={cn('w-full', isWorkspaceFocus ? 'h-full min-h-0 overflow-hidden pb-0' : 'pb-24')}>
                 {error && (
                     <Notice tone="warning" className="mb-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1085,7 +1092,7 @@ function NewBlogPostPage() {
                     </Notice>
                 )}
 
-                <form id="blog-create-form" onSubmit={handleSubmit} className="grid gap-5">
+                <form id="blog-create-form" onSubmit={handleSubmit} className={cn('grid gap-5', isWorkspaceFocus && 'h-full min-h-0')}>
                     {!isWorkspaceFocus && (
                     <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="blog-create-command-center">
                         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -1201,10 +1208,10 @@ function NewBlogPostPage() {
                     )}
 
                     <div
-                        className={cn('grid gap-5', !isWorkspaceFocus && '2xl:grid-cols-[minmax(0,1fr)_380px]')}
+                        className={cn('grid gap-5', isWorkspaceFocus && 'h-full min-h-0', !isWorkspaceFocus && '2xl:grid-cols-[minmax(0,1fr)_380px]')}
                         data-testid="blog-create-workspace-grid"
                     >
-                    <div className="min-w-0 space-y-6">
+                    <div className={cn('min-w-0 space-y-6', isWorkspaceFocus && 'h-full min-h-0 space-y-0')}>
                         {!isWorkspaceFocus && (
                         <>
                         <Panel id="blog-create-draft" className="overflow-hidden scroll-mt-24">
@@ -1394,7 +1401,7 @@ function NewBlogPostPage() {
                         </>
                         )}
 
-                        <div id="blog-create-canvas" className="scroll-mt-24" data-testid="blog-create-canvas-shell">
+                        <div id="blog-create-canvas" className={cn('scroll-mt-24', isWorkspaceFocus && 'h-full min-h-0')} data-testid="blog-create-canvas-shell">
                             <EditorWorkspaceFrame
                                 title="Post design canvas"
                                 description={isWorkspaceFocus
@@ -1461,7 +1468,7 @@ function NewBlogPostPage() {
                                 className={cn(
                                     'relative',
                                     isWorkspaceFocus
-                                        ? 'min-h-[calc(100vh-96px)] xl:h-[calc(100vh-96px)] xl:min-h-[calc(100vh-96px)]'
+                                        ? 'h-full min-h-0'
                                         : 'min-h-[780px] xl:h-[calc(100vh-120px)] xl:min-h-[900px]',
                                 )}
                             >
