@@ -15,6 +15,7 @@ import {
   getSiteByIdOrSlug,
   updateAdminCollection,
 } from '@/lib/backyStore';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import {
@@ -105,6 +106,10 @@ const parseListRoutePattern = (value: unknown, slug: string): string | undefined
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'collections.view' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, collectionId } = await params;
@@ -145,6 +150,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'collections.edit' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, collectionId } = await params;
@@ -292,6 +301,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'collections.delete' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, collectionId } = await params;

@@ -13,6 +13,7 @@ import {
   getSiteByIdOrSlug,
   updateAdminCollectionRecord,
 } from '@/lib/backyStore';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -56,6 +57,12 @@ const parseRecordStatus = (value: unknown): PublishStatus | null => (
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const body = await parseJsonBody(request);
+  const action = typeof body.action === 'string' ? body.action : '';
+  const access = requireAdminAccess(request, requestId, { permission: action === 'delete' ? 'collections.delete' : 'collections.edit' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, collectionId } = await params;
@@ -73,8 +80,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
       }
 
-      const body = await parseJsonBody(request);
-      const action = typeof body.action === 'string' ? body.action : '';
       const recordIds = parseRecordIds(body.recordIds);
 
       if (recordIds.length === 0) {
@@ -185,8 +190,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
     }
 
-    const body = await parseJsonBody(request);
-    const action = typeof body.action === 'string' ? body.action : '';
     const recordIds = parseRecordIds(body.recordIds);
 
     if (recordIds.length === 0) {

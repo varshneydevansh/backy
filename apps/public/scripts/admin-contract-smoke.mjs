@@ -2370,6 +2370,11 @@ try {
   });
 
   await record('admin collections create/read/update/delete records for temporary site', async () => {
+    const unauthCollections = await fetch(`${baseUrl}/api/admin/sites/${createdSiteId}/collections`);
+    const unauthCollectionsJson = await unauthCollections.json().catch(() => ({}));
+    assert(unauthCollections.status === 401, `Collections admin API should reject missing auth, got ${unauthCollections.status}`);
+    assert(unauthCollectionsJson?.success === false && unauthCollectionsJson?.error?.code === 'UNAUTHORIZED', `Collections admin API missing auth envelope: ${JSON.stringify(unauthCollectionsJson).slice(0, 500)}`);
+
     const createCollection = await request(`/api/admin/sites/${createdSiteId}/collections`, {
       method: 'POST',
       headers: {

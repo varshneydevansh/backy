@@ -18,6 +18,7 @@ import {
   validateCollectionRecordValues,
   type StoreCollection,
 } from '@/lib/backyStore';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -131,10 +132,15 @@ const buildRecordsCsv = (
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const { searchParams } = new URL(request.url);
+  const csvRequested = searchParams.get('format') === 'csv' || searchParams.get('export') === 'csv';
+  const access = requireAdminAccess(request, requestId, { permission: csvRequested ? 'collections.export' : 'collections.view' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, collectionId } = await params;
-    const { searchParams } = new URL(request.url);
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
@@ -268,6 +274,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'collections.edit' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, collectionId } = await params;
