@@ -932,29 +932,6 @@ function PageEditorRoute() {
       </section>
       )}
 
-      {isWorkspaceFocus && (
-        <div className="rounded-lg border border-border bg-card px-4 py-3 shadow-sm" data-testid="page-editor-focus-banner">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-foreground">Canvas focus mode</div>
-              <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                Page management panels are hidden so the editor can use the full workspace. Use the editor Focus button to hide component and inspector panels inside the canvas.
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setWorkspaceFocusRoute(false)}
-              disabled={isPageEditorBusy}
-              iconStart={<Minimize2 className="size-4" />}
-            >
-              Show panels
-            </Button>
-          </div>
-        </div>
-      )}
-
       <div className={cn(
         'grid gap-5',
         !isWorkspaceFocus && '[@media(min-width:2200px)]:grid-cols-[minmax(0,1fr)_360px] [@media(min-width:2200px)]:items-start',
@@ -987,10 +964,23 @@ function PageEditorRoute() {
                 )}
               </>
             }
+            actions={isWorkspaceFocus ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setWorkspaceFocusRoute(false)}
+                disabled={isPageEditorBusy}
+                iconStart={<Minimize2 className="size-4" />}
+              >
+                Show panels
+              </Button>
+            ) : undefined}
+            data-testid={isWorkspaceFocus ? 'page-editor-focus-banner' : undefined}
             className={cn(
               'relative',
               isWorkspaceFocus
-                ? 'min-h-[calc(100vh-132px)] xl:h-[calc(100vh-132px)] xl:min-h-[calc(100vh-132px)]'
+                ? 'min-h-[calc(100vh-96px)] xl:h-[calc(100vh-96px)] xl:min-h-[calc(100vh-96px)]'
                 : 'min-h-[820px] xl:h-[calc(100vh-72px)] xl:min-h-[920px]',
             )}
           >

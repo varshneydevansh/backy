@@ -410,14 +410,18 @@ const assertFeaturedMediaPicker = async (client) => {
 };
 
 const assertRecoveryRestore = async (client, slug) => {
-  await client.send('Page.reload', { ignoreCache: true });
+  const currentUrl = await evaluate(client, 'window.location.href');
+  await client.send('Page.navigate', { url: currentUrl });
   await sleep(500);
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => ({
+      href: window.location.href,
+      readyState: document.readyState,
       recovery: document.body?.innerText?.includes('Recovered unsaved blog draft') || false,
       restore: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Restore draft'),
       body: document.body?.innerText?.slice(0, 220) || '',
+      errors: Array.from(document.querySelectorAll('[role="alert"], [data-testid*="error"]')).map((node) => node.textContent || '').slice(0, 3),
     }))()`);
 
     if (state.recovery && state.restore) {

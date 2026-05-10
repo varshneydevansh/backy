@@ -1127,6 +1127,102 @@ const createPageFromUi = async (client) => {
   return editState;
 };
 
+const assertPageEditorFocusMode = async (client) => {
+  let clicked = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    clicked = await evaluate(client, `(() => {
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.textContent || '').trim() === 'Focus canvas'
+      ));
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return { ok: false, label: button?.textContent || null, disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+      }
+      button.click();
+      return { ok: true };
+    })()`);
+
+    if (clicked.ok) {
+      break;
+    }
+
+    await sleep(200);
+  }
+  assert(clicked.ok, `Page editor Focus canvas button was not ready: ${JSON.stringify(clicked)}`);
+
+  let focused = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    focused = await evaluate(client, `(() => ({
+      path: window.location.pathname,
+      search: window.location.search,
+      banner: Boolean(document.querySelector('[data-testid="page-editor-focus-banner"]')),
+      commandCenter: Boolean(document.querySelector('[data-testid="page-editor-command-center"]')),
+      publishPanel: Boolean(document.querySelector('#page-editor-publish')),
+      canvas: Boolean(document.querySelector('[data-testid="editor-canvas"]')),
+      adminSidebar: Boolean(document.querySelector('[data-testid="admin-sidebar-shell"]')),
+      adminHeader: Boolean(document.querySelector('[data-testid="admin-header-shell"]')),
+      showPanels: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Show panels'),
+    }))()`);
+
+    if (focused.banner && focused.canvas && focused.showPanels && !focused.commandCenter && !focused.publishPanel && !focused.adminSidebar && !focused.adminHeader && focused.search.includes('focus=canvas')) {
+      break;
+    }
+
+    if (attempt === 59) {
+      throw new Error(`Page editor focus mode did not hide management panels: ${JSON.stringify(focused)}`);
+    }
+
+    await sleep(200);
+  }
+
+  let restored = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    restored = await evaluate(client, `(() => {
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.textContent || '').trim() === 'Show panels'
+      ));
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return { ok: false, label: button?.textContent || null, disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+      }
+      button.click();
+      return { ok: true };
+    })()`);
+
+    if (restored.ok) {
+      break;
+    }
+
+    await sleep(200);
+  }
+  assert(restored.ok, `Page editor Show panels button was not ready: ${JSON.stringify(restored)}`);
+
+  let normal = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    normal = await evaluate(client, `(() => ({
+      search: window.location.search,
+      banner: Boolean(document.querySelector('[data-testid="page-editor-focus-banner"]')),
+      commandCenter: Boolean(document.querySelector('[data-testid="page-editor-command-center"]')),
+      publishPanel: Boolean(document.querySelector('#page-editor-publish')),
+      adminSidebar: Boolean(document.querySelector('[data-testid="admin-sidebar-shell"]')),
+      adminHeader: Boolean(document.querySelector('[data-testid="admin-header-shell"]')),
+    }))()`);
+
+    if (!normal.banner && normal.commandCenter && normal.publishPanel && normal.adminSidebar && normal.adminHeader && !normal.search.includes('focus=canvas')) {
+      break;
+    }
+
+    if (attempt === 59) {
+      throw new Error(`Page editor Show panels did not restore management panels: ${JSON.stringify(normal)}`);
+    }
+
+    await sleep(200);
+  }
+
+  return {
+    focused,
+    normal,
+  };
+};
+
 const findNavigationItem = (items, predicate) => {
   for (const item of items || []) {
     if (predicate(item)) return item;
@@ -1306,6 +1402,7 @@ const main = async () => {
     const editState = await createPageFromUi(client);
     pageId = editState.path.split('/').filter(Boolean).at(-2);
     createdPageIds.push(pageId);
+    const pageEditorFocus = await assertPageEditorFocusMode(client);
     const navigationItem = await assertNavigationContainsPage(pageId, navLabel, parentPage.id);
     const pageMeta = await assertCreatedPageSeo(pageId, seo, parentPage);
     const starterTemplateBackends = await createStarterTemplateBackends(client, createdPageIds);
@@ -1334,6 +1431,7 @@ const main = async () => {
       autosave,
       recovery,
       editState,
+      pageEditorFocus,
       pageId,
       parentPageId: parentPage.id,
       navigationItem,

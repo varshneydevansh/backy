@@ -5,19 +5,24 @@ interface EditorWorkspaceFrameProps {
   title: string;
   description?: string;
   meta?: ReactNode;
+  actions?: ReactNode;
   children: ReactNode;
   className?: string;
+  'data-testid'?: string;
 }
 
 export function EditorWorkspaceFrame({
   title,
   description,
   meta,
+  actions,
   children,
   className,
+  'data-testid': dataTestId,
 }: EditorWorkspaceFrameProps) {
   return (
     <section
+      data-testid={dataTestId}
       className={cn(
         'flex min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.08)] ring-1 ring-slate-950/[0.03]',
         className,
@@ -36,9 +41,18 @@ export function EditorWorkspaceFrame({
               </p>
             )}
           </div>
-          {meta && (
-            <div className="flex shrink-0 flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
-              {meta}
+          {(meta || actions) && (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {meta && (
+                <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
+                  {meta}
+                </div>
+              )}
+              {actions && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {actions}
+                </div>
+              )}
             </div>
           )}
         </div>

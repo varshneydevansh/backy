@@ -1085,50 +1085,6 @@ function NewBlogPostPage() {
                     </Notice>
                 )}
 
-                {isWorkspaceFocus && (
-                    <div className="rounded-lg border border-border bg-card px-4 py-3 shadow-sm" data-testid="blog-create-focus-banner">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                                <div className="text-sm font-semibold text-foreground">Canvas focus mode</div>
-                                <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                                    Draft, SEO, taxonomy, and publish panels are hidden so the new article design can use the full workspace.
-                                </div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={isLoading || isPreviewAfterCreateBusy || !canCreatePreviewDraft}
-                                    onClick={() => void handleCreatePreview()}
-                                    iconStart={<Eye className="size-4" />}
-                                >
-                                    {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    form="blog-create-form"
-                                    size="sm"
-                                    disabled={isCreateBusy || !canSubmit}
-                                    iconStart={<Save className="size-4" />}
-                                >
-                                    {isLoading ? 'Saving...' : submitLabel}
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setWorkspaceFocusRoute(false)}
-                                    disabled={isCreateBusy}
-                                    iconStart={<Minimize2 className="size-4" />}
-                                >
-                                    Show panels
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
                 <form id="blog-create-form" onSubmit={handleSubmit} className="grid gap-5">
                     {!isWorkspaceFocus && (
                     <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="blog-create-command-center">
@@ -1465,10 +1421,44 @@ function NewBlogPostPage() {
                                         )}
                                     </>
                                 }
+                                actions={isWorkspaceFocus ? (
+                                    <>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={isLoading || isPreviewAfterCreateBusy || !canCreatePreviewDraft}
+                                            onClick={() => void handleCreatePreview()}
+                                            iconStart={<Eye className="size-4" />}
+                                        >
+                                            {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
+                                        </Button>
+                                        <Button
+                                            type="submit"
+                                            form="blog-create-form"
+                                            size="sm"
+                                            disabled={isCreateBusy || !canSubmit}
+                                            iconStart={<Save className="size-4" />}
+                                        >
+                                            {isLoading ? 'Saving...' : submitLabel}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setWorkspaceFocusRoute(false)}
+                                            disabled={isCreateBusy}
+                                            iconStart={<Minimize2 className="size-4" />}
+                                        >
+                                            Show panels
+                                        </Button>
+                                    </>
+                                ) : undefined}
+                                data-testid={isWorkspaceFocus ? 'blog-create-focus-banner' : undefined}
                                 className={cn(
                                     'relative',
                                     isWorkspaceFocus
-                                        ? 'min-h-[calc(100vh-132px)] xl:h-[calc(100vh-132px)] xl:min-h-[calc(100vh-132px)]'
+                                        ? 'min-h-[calc(100vh-96px)] xl:h-[calc(100vh-96px)] xl:min-h-[calc(100vh-96px)]'
                                         : 'min-h-[780px] xl:h-[calc(100vh-120px)] xl:min-h-[900px]',
                                 )}
                             >

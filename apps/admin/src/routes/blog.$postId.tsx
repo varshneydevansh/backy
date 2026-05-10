@@ -1272,40 +1272,6 @@ function EditBlogPostPage() {
                 </section>
                 )}
 
-                {isWorkspaceFocus && (
-                    <div className="rounded-lg border border-border bg-card px-4 py-3 shadow-sm" data-testid="blog-editor-focus-banner">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                                <div className="text-sm font-semibold text-foreground">Canvas focus mode</div>
-                                <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                                    Editorial, taxonomy, and publish panels are hidden so the article design canvas can use the full workspace. Save remains available from this bar.
-                                </div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                                <Button
-                                    type="submit"
-                                    form="blog-editor-form"
-                                    disabled={editorActionBusy || !canSave}
-                                    size="sm"
-                                    iconStart={<Save className="size-4" />}
-                                >
-                                    {isLoading ? 'Saving...' : submitLabel}
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setWorkspaceFocusRoute(false)}
-                                    disabled={editorBusy}
-                                    iconStart={<Minimize2 className="size-4" />}
-                                >
-                                    Show panels
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
                 <form
                     id="blog-editor-form"
                     onSubmit={handleSubmit}
@@ -1535,10 +1501,34 @@ function EditBlogPostPage() {
                                         )}
                                     </>
                                 }
+                                actions={isWorkspaceFocus ? (
+                                    <>
+                                        <Button
+                                            type="submit"
+                                            form="blog-editor-form"
+                                            disabled={editorActionBusy || !canSave}
+                                            size="sm"
+                                            iconStart={<Save className="size-4" />}
+                                        >
+                                            {isLoading ? 'Saving...' : submitLabel}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setWorkspaceFocusRoute(false)}
+                                            disabled={editorBusy}
+                                            iconStart={<Minimize2 className="size-4" />}
+                                        >
+                                            Show panels
+                                        </Button>
+                                    </>
+                                ) : undefined}
+                                data-testid={isWorkspaceFocus ? 'blog-editor-focus-banner' : undefined}
                                 className={cn(
                                     'relative',
                                     isWorkspaceFocus
-                                        ? 'min-h-[calc(100vh-132px)] xl:h-[calc(100vh-132px)] xl:min-h-[calc(100vh-132px)]'
+                                        ? 'min-h-[calc(100vh-96px)] xl:h-[calc(100vh-96px)] xl:min-h-[calc(100vh-96px)]'
                                         : 'min-h-[820px] xl:h-[calc(100vh-72px)] xl:min-h-[920px]',
                                 )}
                             >
