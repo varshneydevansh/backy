@@ -12,6 +12,13 @@ const PORT = Number(process.env.BACKY_PAGES_LIST_CDP_PORT || 9374);
 const HIERARCHY_SITE_ID = process.env.BACKY_PAGES_LIST_HIERARCHY_SITE_ID || 'site-demo';
 const EMPTY_SITE_ID = process.env.BACKY_PAGES_LIST_EMPTY_SITE_ID || 'site-cook';
 const SCREENSHOT_PATH = process.env.BACKY_PAGES_LIST_SCREENSHOT || path.join(os.tmpdir(), 'backy-pages-list-smoke.png');
+const VISUAL_SCREENSHOT_DIR = process.env.BACKY_PAGES_LIST_VISUAL_SCREENSHOT_DIR || os.tmpdir();
+const VISUAL_SCREENSHOT_PATHS = {
+  empty: path.join(VISUAL_SCREENSHOT_DIR, 'backy-pages-list-empty-state.png'),
+  delivery: path.join(VISUAL_SCREENSHOT_DIR, 'backy-pages-list-delivery-row.png'),
+  bulkModal: path.join(VISUAL_SCREENSHOT_DIR, 'backy-pages-list-bulk-publish-modal.png'),
+  postPublish: path.join(VISUAL_SCREENSHOT_DIR, 'backy-pages-list-post-publish-row.png'),
+};
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -192,6 +199,68 @@ const evaluate = async (client, expression) => {
   }
 
   return result.result.value;
+};
+
+const captureScreenshot = async (client, screenshotPath) => {
+  const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
+  fs.writeFileSync(screenshotPath, Buffer.from(screenshot.data, 'base64'));
+  return screenshotPath;
+};
+
+const assertPagesVisualState = async (client, label, screenshotPath, options = {}) => {
+  const state = await evaluate(client, `(() => {
+    const expectedText = ${JSON.stringify(options.expectedText || '')};
+    const bodyText = document.body?.innerText || '';
+    const tableRows = Array.from(document.querySelectorAll('tbody tr'));
+    const modal = document.querySelector('[data-testid="pages-bulk-publish-modal"]');
+    const deliveryPanels = Array.from(document.querySelectorAll('[data-testid^="pages-delivery-"]'));
+    const commandCenter = document.querySelector('[data-testid="pages-command-center"]');
+    const commandRect = commandCenter?.getBoundingClientRect();
+    const searchableText = [
+      bodyText,
+      modal?.textContent || '',
+      ...tableRows.map((row) => row.textContent || ''),
+      ...deliveryPanels.map((panel) => panel.textContent || ''),
+    ].join('\\n');
+    return {
+      label: ${JSON.stringify(label)},
+      ready: Boolean(commandCenter),
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      documentWidth: document.documentElement.scrollWidth,
+      horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      commandCenterVisible: Boolean(commandRect && commandRect.width > 300 && commandRect.height > 120),
+      tableRowCount: tableRows.length,
+      emptyCreateVisible: Boolean(document.querySelector('[data-testid="pages-empty-create"]')),
+      modalOpen: Boolean(modal),
+      modalText: modal?.textContent || '',
+      hasExpectedText: expectedText ? searchableText.includes(expectedText) : true,
+      hasFrameworkOverlay: /Failed to compile|Unhandled Runtime Error|Vite Error|Internal Server Error/i.test(bodyText),
+      body: bodyText.slice(0, 4000),
+    };
+  })()`);
+
+  assert(state.ready && state.commandCenterVisible, `${label} pages command center was not visibly rendered: ${JSON.stringify(state)}`);
+  assert(state.horizontalOverflow <= 4, `${label} has horizontal overflow: ${JSON.stringify(state)}`);
+  assert(!state.hasFrameworkOverlay, `${label} rendered a framework/runtime overlay: ${JSON.stringify(state)}`);
+
+  if (options.empty) {
+    assert(state.emptyCreateVisible && /Create (First Page|the first page for this site)/.test(state.body), `${label} did not render the empty state controls: ${JSON.stringify(state)}`);
+  }
+
+  if (options.table) {
+    assert(state.tableRowCount >= 1 && state.body.includes('Page library'), `${label} did not render a populated page table: ${JSON.stringify(state)}`);
+  }
+
+  if (options.expectedText) {
+    assert(state.hasExpectedText, `${label} did not include expected text "${options.expectedText}": ${JSON.stringify(state)}`);
+  }
+
+  if (options.modal) {
+    assert(state.modalOpen && state.modalText.includes('Publish 1 selected page?'), `${label} did not render the bulk publish modal: ${JSON.stringify(state)}`);
+  }
+
+  await captureScreenshot(client, screenshotPath);
+  return { ...state, screenshotPath };
 };
 
 const waitForPagesEmptyState = async (client) => {
@@ -577,7 +646,7 @@ const clearVisibleBulkSelection = async (client) => evaluate(client, `(() => {
   };
 })()`);
 
-const assertBulkPublishReviewModal = async (client, page, expectedSearch = page.title) => {
+const assertBulkPublishReviewModal = async (client, page, expectedSearch = page.title, screenshotPath = null) => {
   const url = `${ADMIN_BASE_URL}/pages?siteId=${encodeURIComponent(HIERARCHY_SITE_ID)}&q=${encodeURIComponent(expectedSearch)}`;
   await client.send('Page.navigate', { url });
 
@@ -679,6 +748,12 @@ const assertBulkPublishReviewModal = async (client, page, expectedSearch = page.
       && state.cancel
       && state.confirm
     ) {
+      const visualState = screenshotPath
+        ? await assertPagesVisualState(client, 'bulk publish review modal', screenshotPath, {
+          modal: true,
+          expectedText: page.title,
+        })
+        : null;
       await evaluate(client, `(() => {
         [...document.querySelectorAll('button')]
           .find((button) => button.textContent.trim() === 'Cancel')
@@ -688,7 +763,7 @@ const assertBulkPublishReviewModal = async (client, page, expectedSearch = page.
         const cancelled = await evaluate(client, `(() => !document.querySelector('[data-testid="pages-bulk-publish-modal"]'))()`);
         if (cancelled) {
           const cleared = await clearVisibleBulkSelection(client);
-          return { url, prepared, opened: openedState, state, cleared };
+          return { url, prepared, opened: openedState, state, visualState, cleared };
         }
         await sleep(100);
       }
@@ -942,6 +1017,10 @@ const main = async () => {
     });
 
     const initialRender = await waitForPagesEmptyState(client);
+    const emptyVisual = await assertPagesVisualState(client, 'pages empty state', VISUAL_SCREENSHOT_PATHS.empty, {
+      empty: true,
+      expectedText: 'Create the first page for this site.',
+    });
     const emptyCreate = await clickEmptyCreate(client, 'pages-empty-create', []);
     await waitForPagesEmptyState(client);
     const registrationShortcut = await clickEmptyCreate(client, 'pages-empty-create-registration', ['template=registration']);
@@ -960,6 +1039,10 @@ const main = async () => {
       hierarchyPages.parentPage,
       'Health',
     );
+    const deliveryVisual = await assertPagesVisualState(client, 'pages delivery row', VISUAL_SCREENSHOT_PATHS.delivery, {
+      table: true,
+      expectedText: 'Recent probes',
+    });
     const deliveryRefresh = await assertDeliveryRefreshControl(
       client,
       hierarchyPages.parentPage,
@@ -986,14 +1069,19 @@ const main = async () => {
     const bulkPublishReview = await assertBulkPublishReviewModal(
       client,
       hierarchyPages.parentPage,
+      hierarchyPages.parentPage.title,
+      VISUAL_SCREENSHOT_PATHS.bulkModal,
     );
     const bulkPublishMutation = await assertBulkPublishMutation(
       client,
       hierarchyPages.childPage,
     );
+    const postPublishVisual = await assertPagesVisualState(client, 'pages post-publish table row', VISUAL_SCREENSHOT_PATHS.postPublish, {
+      table: true,
+      expectedText: 'Published',
+    });
 
-    const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
-    fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
+    await captureScreenshot(client, SCREENSHOT_PATH);
 
     const browserErrors = client.events
       .filter((event) => (
@@ -1007,6 +1095,11 @@ const main = async () => {
     console.log(JSON.stringify({
       ok: true,
       initialRender,
+      visualStates: {
+        empty: emptyVisual,
+        delivery: deliveryVisual,
+        postPublish: postPublishVisual,
+      },
       emptyCreate,
       registrationShortcut,
       childHierarchy,
@@ -1019,6 +1112,7 @@ const main = async () => {
       publishReview,
       bulkPublishReview,
       bulkPublishMutation,
+      visualScreenshotPaths: VISUAL_SCREENSHOT_PATHS,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
