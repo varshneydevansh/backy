@@ -369,6 +369,17 @@ interface CommentSpamResult {
   errors?: string;
 }
 
+export interface CommentBlocklistEntry {
+  id: string;
+  siteId: string;
+  type: 'email' | 'ip';
+  value: string;
+  reason: string;
+  actor?: string;
+  requestId?: string;
+  createdAt: string;
+}
+
 const normalizeCommentPolicy = (value: unknown, current?: SiteCommentPolicy): SiteCommentPolicy => {
   const input = toRecord(value);
   const base = current || createDefaultSiteSettings().commentPolicy || {};
@@ -1761,6 +1772,7 @@ interface InteractionStoreSnapshot {
   formSubmissions?: FormSubmission[];
   contacts?: Contact[];
   auditEvents?: AuditEvent[];
+  commentBlocklist?: CommentBlocklistEntry[];
 }
 
 function ensurePersistedMediaLoaded() {
@@ -2186,7 +2198,7 @@ const CONTACT_LIST: Contact[] = [
 ];
 const COMMENT_REPORT_BLOCKLIST = new Map<
   string,
-  { type: 'email' | 'ip'; value: string; reason: string; actor?: string; requestId?: string; createdAt: string; }
+  CommentBlocklistEntry
 >();
 const SUBMISSION_RATE_WINDOWS = new Map<string, SubmissionRateState>();
 const SUBMISSION_SIGNATURE_WINDOW_MS = 10 * 60 * 1000;
@@ -2237,6 +2249,15 @@ function setContactStore(next: Contact[]) {
   runtimeStoreState.contacts = next;
 }
 
+function setCommentBlocklist(entries: CommentBlocklistEntry[]) {
+  COMMENT_REPORT_BLOCKLIST.clear();
+  for (const entry of entries) {
+    if (entry?.id && entry.siteId && entry.type && entry.value) {
+      COMMENT_REPORT_BLOCKLIST.set(entry.id, entry);
+    }
+  }
+}
+
 function refreshPersistedInteractionStore() {
   if (!existsSync(INTERACTION_STORE_PATH)) {
     return;
@@ -2259,6 +2280,10 @@ function refreshPersistedInteractionStore() {
 
     if (Array.isArray(parsed.auditEvents)) {
       auditEvents.splice(0, auditEvents.length, ...parsed.auditEvents);
+    }
+
+    if (Array.isArray(parsed.commentBlocklist)) {
+      setCommentBlocklist(parsed.commentBlocklist);
     }
   } catch (error) {
     console.error('Unable to load persisted interaction store:', error);
@@ -2292,12 +2317,16 @@ function persistInteractionStore(options: { mergePersisted?: boolean } = {}) {
       formSubmissions: mergePersisted ? mergeById(persisted.formSubmissions, formSubmissions) : formSubmissions,
       contacts: mergePersisted ? mergeById(persisted.contacts, contactStore) : contactStore,
       auditEvents: mergePersisted ? mergeById(persisted.auditEvents, auditEvents) : auditEvents,
+      commentBlocklist: mergePersisted
+        ? mergeById(persisted.commentBlocklist, Array.from(COMMENT_REPORT_BLOCKLIST.values()))
+        : Array.from(COMMENT_REPORT_BLOCKLIST.values()),
     };
 
     setCommentStore(nextSnapshot.comments || []);
     setFormSubmissions(nextSnapshot.formSubmissions || []);
     setContactStore(nextSnapshot.contacts || []);
     auditEvents.splice(0, auditEvents.length, ...(nextSnapshot.auditEvents || []));
+    setCommentBlocklist(nextSnapshot.commentBlocklist || []);
 
     writeFileSync(
       INTERACTION_STORE_PATH,
@@ -6729,7 +6758,10 @@ export function blockCommentIdentity(params: {
   ipHash?: string | null;
 }) {
   if (params.email) {
-    COMMENT_REPORT_BLOCKLIST.set(getCommentBlockKey(params.siteId, 'email', params.email), {
+    const id = getCommentBlockKey(params.siteId, 'email', params.email);
+    COMMENT_REPORT_BLOCKLIST.set(id, {
+      id,
+      siteId: params.siteId,
       type: 'email',
       value: normalizeIdentifier(params.email),
       reason: params.reason,
@@ -6740,7 +6772,10 @@ export function blockCommentIdentity(params: {
   }
 
   if (params.ipHash) {
-    COMMENT_REPORT_BLOCKLIST.set(getCommentBlockKey(params.siteId, 'ip', params.ipHash), {
+    const id = getCommentBlockKey(params.siteId, 'ip', params.ipHash);
+    COMMENT_REPORT_BLOCKLIST.set(id, {
+      id,
+      siteId: params.siteId,
       type: 'ip',
       value: normalizeIdentifier(params.ipHash),
       reason: params.reason,
@@ -6749,6 +6784,69 @@ export function blockCommentIdentity(params: {
       createdAt: new Date().toISOString(),
     });
   }
+
+  persistInteractionStore();
+}
+
+export function listCommentBlocklist(
+  siteId: string,
+  options: { type?: 'email' | 'ip' | 'all'; q?: string; limit?: number; offset?: number } = {},
+): { blocklist: CommentBlocklistEntry[]; count: number; pagination: Pagination } {
+  refreshPersistedInteractionStore();
+
+  const type = options.type === 'email' || options.type === 'ip' ? options.type : 'all';
+  const q = sanitizeString(options.q || '').toLowerCase();
+  const limit = Number.isFinite(options.limit) ? Math.max(1, Math.min(100, Number(options.limit))) : 50;
+  const offset = Number.isFinite(options.offset) ? Math.max(0, Number(options.offset)) : 0;
+  let entries = Array.from(COMMENT_REPORT_BLOCKLIST.values()).filter((entry) => entry.siteId === siteId);
+
+  if (type !== 'all') {
+    entries = entries.filter((entry) => entry.type === type);
+  }
+
+  if (q) {
+    entries = entries.filter((entry) => (
+      entry.value.toLowerCase().includes(q) ||
+      entry.reason.toLowerCase().includes(q) ||
+      (entry.actor || '').toLowerCase().includes(q)
+    ));
+  }
+
+  entries = entries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const paginated = entries.slice(offset, offset + limit);
+
+  return {
+    blocklist: clone(paginated),
+    count: entries.length,
+    pagination: getPagination(entries.length, limit, offset),
+  };
+}
+
+export function deleteCommentBlocklistEntries(params: {
+  siteId: string;
+  ids: string[];
+}): { deleted: CommentBlocklistEntry[]; missingIds: string[] } {
+  refreshPersistedInteractionStore();
+
+  const ids = Array.from(new Set(params.ids.map((id) => sanitizeString(id)).filter(Boolean)));
+  const deleted: CommentBlocklistEntry[] = [];
+  const missingIds = new Set(ids);
+
+  for (const id of ids) {
+    const entry = COMMENT_REPORT_BLOCKLIST.get(id);
+    if (entry?.siteId === params.siteId) {
+      COMMENT_REPORT_BLOCKLIST.delete(id);
+      deleted.push(entry);
+      missingIds.delete(id);
+    }
+  }
+
+  persistInteractionStore({ mergePersisted: false });
+
+  return {
+    deleted: clone(deleted),
+    missingIds: Array.from(missingIds),
+  };
 }
 
 export function getCommentReportReasons(): CommentReportReason[] {

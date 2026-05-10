@@ -1098,6 +1098,52 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
           },
         },
+        [`/api/sites/${site.id}/comments/blocklist`]: {
+          get: {
+            tags: ['Interactions'],
+            summary: 'List blocked comment authors for moderation',
+            operationId: 'listBackyCommentBlocklist',
+            parameters: [
+              queryParameter('type', { type: 'string', enum: ['email', 'ip', 'all'] }),
+              queryParameter('q', { type: 'string' }, 'Search blocked value, reason, or actor.'),
+              queryParameter('limit', { type: 'integer', minimum: 1 }),
+              queryParameter('offset', { type: 'integer', minimum: 0 }),
+            ],
+            responses: {
+              '200': {
+                description: 'Comment author blocklist',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/CommentBlocklistEnvelope' },
+                  },
+                },
+              },
+            },
+          },
+          delete: {
+            tags: ['Interactions'],
+            summary: 'Remove blocked comment authors',
+            operationId: 'deleteBackyCommentBlocklistEntries',
+            requestBody: {
+              required: true,
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/CommentBlocklistDeleteRequest' },
+                },
+              },
+            },
+            responses: {
+              '200': {
+                description: 'Removed comment author blocklist entries',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/CommentBlocklistDeleteEnvelope' },
+                  },
+                },
+              },
+            },
+          },
+        },
         [`/api/sites/${site.id}/comments/{commentId}`]: {
           get: {
             tags: ['Interactions'],
@@ -1741,6 +1787,48 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               updatedAt: { type: 'string', format: 'date-time' },
             },
           },
+          CommentBlocklistEntry: {
+            type: 'object',
+            required: ['id', 'siteId', 'type', 'value', 'reason', 'createdAt'],
+            properties: {
+              id: { type: 'string' },
+              siteId: { type: 'string' },
+              type: { type: 'string', enum: ['email', 'ip'] },
+              value: { type: 'string' },
+              reason: { type: 'string' },
+              actor: { type: 'string' },
+              requestId: { type: 'string' },
+              createdAt: { type: 'string', format: 'date-time' },
+            },
+          },
+          CommentBlocklistEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['siteId', 'blocklist', 'count', 'pagination'],
+            properties: {
+              siteId: { type: 'string' },
+              blocklist: { type: 'array', items: { $ref: '#/components/schemas/CommentBlocklistEntry' } },
+              count: { type: 'integer', minimum: 0 },
+              pagination: { type: 'object', additionalProperties: true },
+            },
+          }),
+          CommentBlocklistDeleteRequest: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              ids: { type: 'array', items: { type: 'string' } },
+              blocklistIds: { type: 'array', items: { type: 'string' }, description: 'Alias for ids.' },
+            },
+          },
+          CommentBlocklistDeleteEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['siteId', 'deleted', 'deletedCount', 'missingIds'],
+            properties: {
+              siteId: { type: 'string' },
+              deleted: { type: 'array', items: { $ref: '#/components/schemas/CommentBlocklistEntry' } },
+              deletedCount: { type: 'integer', minimum: 0 },
+              missingIds: { type: 'array', items: { type: 'string' } },
+            },
+          }),
           CommentsEnvelope: envelopeSchema({
             type: 'object',
             required: ['comments', 'count', 'pagination'],

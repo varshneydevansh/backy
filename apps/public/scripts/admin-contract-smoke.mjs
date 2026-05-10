@@ -1729,6 +1729,97 @@ try {
     assert(commentReportEvents.json?.data?.events?.some((event) => event.commentId === pageCommentId), `${commentReportEvents.url} missing comment report event in data envelope`);
     assert(commentReportEvents.json?.events?.some((event) => event.commentId === pageCommentId), `${commentReportEvents.url} missing legacy comment report event`);
 
+    const blockedAuthorEmail = `blocked-author-${unique}@example.test`;
+    const blockableComment = await request(`/api/sites/${createdSiteId}/pages/${createdPageId}/comments`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: 'This comment will seed the author blocklist.',
+        authorName: 'Blocked Author',
+        authorEmail: blockedAuthorEmail,
+        moderationMode: 'auto-approve',
+        requestId: 'contract-page-comment-blockable',
+        rateLimitBypass: true,
+      }),
+    });
+    assert(blockableComment.response.status === 201, `${blockableComment.url} expected blockable comment 201, got ${blockableComment.response.status}`);
+    const blockableCommentId = blockableComment.json?.data?.comment?.id;
+    assert(blockableCommentId, `${blockableComment.url} missing blockable comment id`);
+
+    const blockAuthor = await request(`/api/sites/${createdSiteId}/comments`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        commentIds: [blockableCommentId],
+        status: 'blocked',
+        blockReason: 'abuse',
+        actor: 'contract-smoke',
+        requestId: 'contract-page-comment-block-author',
+      }),
+    });
+    assert(blockAuthor.response.status === 200, `${blockAuthor.url} expected block author 200, got ${blockAuthor.response.status}`);
+    assert(blockAuthor.json?.data?.updated?.[0]?.status === 'blocked', `${blockAuthor.url} did not block comment`);
+
+    const authorBlocklist = await request(`/api/sites/${createdSiteId}/comments/blocklist?type=all`);
+    assert(authorBlocklist.response.status === 200, `${authorBlocklist.url} expected blocklist 200, got ${authorBlocklist.response.status}`);
+    assertBackyContract(authorBlocklist, 'private');
+    const blockedAuthorEntries = (authorBlocklist.json?.data?.blocklist || [])
+      .filter((entry) => entry.requestId === 'contract-page-comment-block-author');
+    const blockedAuthorEntry = blockedAuthorEntries.find((entry) => entry.value === blockedAuthorEmail);
+    assert(blockedAuthorEntry?.id, `${authorBlocklist.url} missing blocked author entry`);
+    assert(blockedAuthorEntry?.reason === 'abuse', `${authorBlocklist.url} missing blocked author reason`);
+    assert(blockedAuthorEntries.length >= 1, `${authorBlocklist.url} missing blocked author entries`);
+
+    const blockedAuthorAttempt = await request(`/api/sites/${createdSiteId}/pages/${createdPageId}/comments`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: 'This blocked author should not be accepted.',
+        authorName: 'Blocked Author',
+        authorEmail: blockedAuthorEmail,
+        moderationMode: 'auto-approve',
+        requestId: 'contract-page-comment-blocked-author-attempt',
+        rateLimitBypass: true,
+      }),
+    });
+    assert(blockedAuthorAttempt.response.status === 422, `${blockedAuthorAttempt.url} expected blocked author 422, got ${blockedAuthorAttempt.response.status}`);
+    assert(blockedAuthorAttempt.json?.status === 'blocked', `${blockedAuthorAttempt.url} missing blocked author status`);
+    assert(blockedAuthorAttempt.json?.spamFlags?.includes('blocked-actor'), `${blockedAuthorAttempt.url} missing blocked actor flag`);
+
+    const unblockAuthor = await request(`/api/sites/${createdSiteId}/comments/blocklist`, {
+      method: 'DELETE',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        ids: blockedAuthorEntries.map((entry) => entry.id),
+      }),
+    });
+    assert(unblockAuthor.response.status === 200, `${unblockAuthor.url} expected unblock author 200, got ${unblockAuthor.response.status}`);
+    assert(unblockAuthor.json?.data?.deleted?.some((entry) => entry.id === blockedAuthorEntry.id), `${unblockAuthor.url} missing deleted blocklist entry`);
+
+    const unblockedAuthorAttempt = await request(`/api/sites/${createdSiteId}/pages/${createdPageId}/comments`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: 'This author should be accepted after unblock.',
+        authorName: 'Blocked Author',
+        authorEmail: blockedAuthorEmail,
+        moderationMode: 'auto-approve',
+        requestId: 'contract-page-comment-unblocked-author-attempt',
+        rateLimitBypass: true,
+      }),
+    });
+    assert(unblockedAuthorAttempt.response.status === 201, `${unblockedAuthorAttempt.url} expected unblocked author 201, got ${unblockedAuthorAttempt.response.status}`);
+
     const unbindMedia = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}/bind`, {
       method: 'POST',
       headers: {
@@ -3624,6 +3715,8 @@ try {
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/pages/{pageId}/comments`]?.get, `${publicOpenApi.url} missing page comments list operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/pages/{pageId}/comments/{commentId}`]?.patch, `${publicOpenApi.url} missing page comment update operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/blog/{postId}/comments`]?.get, `${publicOpenApi.url} missing blog comments list operation`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/comments/blocklist`]?.get, `${publicOpenApi.url} missing comment blocklist operation`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/comments/blocklist`]?.delete, `${publicOpenApi.url} missing comment blocklist delete operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/comments/{commentId}/report`]?.post, `${publicOpenApi.url} missing comment report operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/events`]?.get, `${publicOpenApi.url} missing interaction events operation`);
       assert(publicOpenApi.json?.components?.schemas?.FormSubmissionEnvelope, `${publicOpenApi.url} missing form submission schema`);
@@ -3642,6 +3735,8 @@ try {
       assert(publicOpenApi.json?.components?.schemas?.CommentSubmitRequest?.properties?.body, `${publicOpenApi.url} missing comment body alias schema`);
       assert(publicOpenApi.json?.components?.schemas?.CommentBulkUpdateRequest?.properties?.clearReports, `${publicOpenApi.url} missing comment clear reports schema`);
       assert(publicOpenApi.json?.components?.schemas?.CommentBulkUpdateRequest?.properties?.ids, `${publicOpenApi.url} missing comment ids alias schema`);
+      assert(publicOpenApi.json?.components?.schemas?.CommentBlocklistEntry?.properties?.value, `${publicOpenApi.url} missing comment blocklist entry schema`);
+      assert(publicOpenApi.json?.components?.schemas?.CommentBlocklistDeleteRequest?.properties?.ids, `${publicOpenApi.url} missing comment blocklist delete schema`);
       assert(publicOpenApi.json?.components?.schemas?.CommentsEnvelope?.properties?.data?.properties?.comments?.items?.$ref === '#/components/schemas/Comment', `${publicOpenApi.url} missing typed comment list schema`);
       assert(publicOpenApi.json?.components?.schemas?.CommentReportEnvelope, `${publicOpenApi.url} missing comment report schema`);
       assert(publicOpenApi.json?.components?.schemas?.EventsEnvelope, `${publicOpenApi.url} missing interaction event schema`);

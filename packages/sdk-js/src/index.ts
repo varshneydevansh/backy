@@ -615,6 +615,24 @@ export interface BackyCommentBulkUpdateInput {
   requestId?: string;
 }
 
+export interface BackyCommentBlocklistEntry {
+  id: string;
+  siteId?: string;
+  type: 'email' | 'ip';
+  value: string;
+  reason: string;
+  actor?: string;
+  requestId?: string;
+  createdAt?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyCommentBlocklistOptions extends BackyListOptions {
+  type?: 'email' | 'ip' | 'all';
+  q?: string;
+  requestId?: string;
+}
+
 export interface BackyEventListOptions extends BackyListOptions {
   kind?: string;
 }
@@ -1158,6 +1176,22 @@ export class BackyClient {
       ...input,
       commentIds,
       action: 'clearReports',
+    });
+  }
+
+  commentBlocklist(options: BackyCommentBlocklistOptions = {}): Promise<BackyEnvelope<{ siteId?: string; blocklist: BackyCommentBlocklistEntry[]; count: number; pagination?: BackyPagination }>> {
+    const { requestId, ...query } = options;
+    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/blocklist`, {
+      query,
+      requestId,
+    });
+  }
+
+  deleteCommentBlocklistEntries(ids: string[], input: { requestId?: string } = {}): Promise<BackyEnvelope<{ siteId?: string; deleted: BackyCommentBlocklistEntry[]; deletedCount?: number; missingIds?: string[] }>> {
+    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/blocklist`, {
+      method: 'DELETE',
+      body: { ids },
+      requestId: input.requestId,
     });
   }
 
