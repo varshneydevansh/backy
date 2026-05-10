@@ -231,6 +231,33 @@ const MEMBERSHIP_HANDOFF_STEPS = [
   },
 ] as const;
 
+const MEMBERSHIP_AUTH_BOUNDARIES = [
+  {
+    key: 'public-registration',
+    title: 'Public registration capture',
+    status: 'available',
+    detail: 'Registration pages can submit form data into Backy Forms, Contacts, and optional profile collections.',
+  },
+  {
+    key: 'workspace-users',
+    title: 'Private workspace users',
+    status: 'available',
+    detail: 'Backy admin users remain private operators with role, status, permission, session, and audit controls.',
+  },
+  {
+    key: 'credentialed-login',
+    title: 'Credentialed member login',
+    status: 'next',
+    detail: 'Public member signup, login, password reset, email verification, and protected routes still need the Supabase/Auth provider pass.',
+  },
+  {
+    key: 'member-portal',
+    title: 'Self-service member portal',
+    status: 'next',
+    detail: 'Profile editing, order history, downloads, subscriptions, and account deletion are not yet public member APIs.',
+  },
+] as const;
+
 function UsersLayout() {
   const routerState = useRouterState();
   const isExactUsersRoute = routerState.location.pathname === '/users';
@@ -623,12 +650,12 @@ function UsersListView() {
     try {
       const csv = await file.text();
       const result = await importUsersCsv(csv, { mode: importMode, dryRun });
-      setImportResult(result);
-      setNotice(`${dryRun ? 'Previewed' : 'Imported'} ${result.created} user${result.created === 1 ? '' : 's'}; updated ${result.updated}; skipped ${result.skipped}; ${result.errors.length} row issue${result.errors.length === 1 ? '' : 's'}.`);
       if (!dryRun) {
         await loadUsers();
         await loadUserAuditLogs();
       }
+      setImportResult(result);
+      setNotice(`${dryRun ? 'Previewed' : 'Imported'} ${result.created} user${result.created === 1 ? '' : 's'}; updated ${result.updated}; skipped ${result.skipped}; ${result.errors.length} row issue${result.errors.length === 1 ? '' : 's'}.`);
     } catch (error) {
       const details = error && typeof error === 'object' && 'details' in error
         ? (error as { details?: unknown }).details
@@ -888,6 +915,16 @@ function UsersListView() {
       },
       systems: MEMBERSHIP_FLOW_SYSTEMS,
       handoffSteps: MEMBERSHIP_HANDOFF_STEPS,
+      authBoundary: {
+        model: 'Registration capture is available through Backy content systems; credentialed public member sessions are intentionally separated from private admin users until Supabase/Auth integration is complete.',
+        boundaries: MEMBERSHIP_AUTH_BOUNDARIES,
+        availableNow: MEMBERSHIP_AUTH_BOUNDARIES
+          .filter((boundary) => boundary.status === 'available')
+          .map((boundary) => boundary.key),
+        notYetShipped: MEMBERSHIP_AUTH_BOUNDARIES
+          .filter((boundary) => boundary.status === 'next')
+          .map((boundary) => boundary.key),
+      },
       frontendFlow: [
         'Create a registration page from the page starter template.',
         'Use Forms to review the registration definition, public submit URL, contacts, and submissions.',
@@ -1727,6 +1764,41 @@ function UsersListView() {
                     </div>
                   </div>
                 ))}
+              </div>
+
+              <div data-testid="users-member-auth-boundary" className="mt-4 rounded-lg border border-border bg-background p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Member auth boundary</h3>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Public registration capture is available today. Credentialed public member sessions stay separate from private Backy admin users until the Supabase/Auth pass is complete.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    {MEMBERSHIP_AUTH_BOUNDARIES.filter((boundary) => boundary.status === 'available').length}/{MEMBERSHIP_AUTH_BOUNDARIES.length} available
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {MEMBERSHIP_AUTH_BOUNDARIES.map((boundary) => (
+                    <div key={boundary.key} className="rounded-lg border border-border bg-card p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-foreground">{boundary.title}</div>
+                          <div className="mt-1 text-xs leading-5 text-muted-foreground">{boundary.detail}</div>
+                        </div>
+                        <span className={cn(
+                          'shrink-0 rounded-md px-2 py-1 text-xs font-semibold',
+                          boundary.status === 'available'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : 'bg-amber-50 text-amber-700',
+                        )}
+                        >
+                          {boundary.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="mt-4 space-y-3">

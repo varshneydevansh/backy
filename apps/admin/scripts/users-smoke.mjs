@@ -954,6 +954,41 @@ const setUsersBulkStatus = async (client, fullNames, status) => {
   assert(result.ok, `Unable to run users bulk status action: ${JSON.stringify(result)}`);
 };
 
+const waitForUsersImportReady = async (client) => {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const modeSelect = document.querySelector('select[aria-label="User import duplicate handling"]');
+      const input = document.querySelector('input[aria-label="Import users CSV"]');
+      const importButtons = Array.from(document.querySelectorAll('button')).filter((button) => {
+        const text = button.textContent || '';
+        return text.includes('Preview CSV') || text.includes('Import CSV') || text.includes('Previewing') || text.includes('Importing');
+      });
+      return {
+        ready: Boolean(document.querySelector('[data-testid="users-command-center"]')) &&
+          modeSelect instanceof HTMLSelectElement &&
+          input instanceof HTMLInputElement &&
+          !modeSelect.disabled &&
+          importButtons.length >= 2 &&
+          importButtons.every((button) => !button.disabled),
+        hasInput: input instanceof HTMLInputElement,
+        modeDisabled: modeSelect instanceof HTMLSelectElement ? modeSelect.disabled : null,
+        importButtons: importButtons.map((button) => ({
+          text: (button.textContent || '').trim(),
+          disabled: button.disabled,
+        })),
+        body: document.body?.innerText?.slice(0, 800) || '',
+      };
+    })()`);
+    if (state.ready) return state;
+    if (attempt === 119) {
+      throw new Error(`Users import controls did not become ready: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const importUsersThroughUi = async (client, csvPath, expectedName, options = {}) => {
   const {
     mode = 'create',
@@ -963,11 +998,15 @@ const importUsersThroughUi = async (client, csvPath, expectedName, options = {})
     skipped = 1,
   } = options;
   await navigateToUsers(client);
+  await waitForUsersImportReady(client);
 
   const markResult = await evaluate(client, `(() => {
     const modeSelect = document.querySelector('select[aria-label="User import duplicate handling"]');
     if (!(modeSelect instanceof HTMLSelectElement)) {
       return { ok: false, reason: 'import-mode-missing' };
+    }
+    if (modeSelect.disabled) {
+      return { ok: false, reason: 'import-mode-disabled' };
     }
     modeSelect.value = ${JSON.stringify(mode)};
     modeSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1032,10 +1071,14 @@ const assertLayout = async (client, expectedName) => {
     hasDirectory: document.body?.innerText?.includes('People directory') || document.body?.innerText?.includes(${JSON.stringify(expectedName)}) || false,
     hasApi: document.body?.innerText?.includes('User access API') || false,
     hasMembership: document.body?.innerText?.includes('Membership registration') || false,
+    hasMemberAuthBoundary: Boolean(document.querySelector('[data-testid="users-member-auth-boundary"]')) &&
+      document.body?.innerText?.includes('Member auth boundary') &&
+      document.body?.innerText?.includes('Credentialed member login') &&
+      document.body?.innerText?.includes('Self-service member portal'),
     hasActivity: document.body?.innerText?.includes('Access activity') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Users page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasDirectory && layout.hasApi && layout.hasMembership && layout.hasActivity, `Users page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasDirectory && layout.hasApi && layout.hasMembership && layout.hasMemberAuthBoundary && layout.hasActivity, `Users page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
