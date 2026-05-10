@@ -117,7 +117,8 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Public media catalog for custom frontends.
   - Response uses `{ success, requestId, data: { media, pagination } }`; legacy top-level `media` and `pagination` remain for compatibility.
   - Current implementation only returns `visibility=public` catalog items, even if a caller asks for private media.
-  - Supports `type`, `scope`, `pageId`, `postId`, `q`/`search`, `tag`, `folderId`, `limit`, and `offset` filters.
+  - Supports `type`, `scope`, `pageId`, `postId`, `blogId` (alias for `postId`), `global=true`, `q`/`search`, `tag`, `folderId`, `limit`, and `offset` filters.
+  - `pageId`/`postId`/`blogId` media filters return globally reusable assets plus assets explicitly scoped or bound to the requested content item. Use `global=true` to return only site-global assets, or combine `scope=page|post` with the content id for only content-scoped assets.
   - Public image media includes `responsive: { src, srcSet, sizes, variants, preparedAt?, preparedBy? }` with transform URLs for generated/custom frontend responsive image rendering.
   - The detail route returns one public asset in `{ success, requestId, data: { media } }`, preserves legacy top-level `media`, and returns `404` for missing or private media.
 - `GET /api/sites/:siteId/media/:mediaId/file`
@@ -334,7 +335,7 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
 
 - `GET /api/admin/sites/:siteId/media`
   - filters: `scope`, `visibility`, `search`, `type`, `tag`, `page`, `perPage`
-  - current implementation supports `scope`, `visibility`, `type`, `search`, `tag`, `folderId`, `pageId`, `postId`, `limit`, `offset`
+  - current implementation supports `scope`, `visibility`, `type`, `search`, `tag`, `folderId`, `pageId`, `postId`, `blogId`, `global=true`, `limit`, `offset`
 
 - `GET /api/admin/sites/:siteId/media/folders`
   - Current implementation lists local runtime media folders.

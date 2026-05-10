@@ -10,6 +10,7 @@ import { NextRequest } from 'next/server';
 import type { MediaItem } from '@backy-cms/core';
 import { getMediaList, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { withResponsiveMediaManifest } from '@/lib/mediaResponsive';
+import { booleanQueryFlag, mediaMatchesScopeFilters } from '@/lib/mediaScope';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -68,7 +69,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
         const scope = searchParams.get('scope');
         const pageId = searchParams.get('pageId');
-        const postId = searchParams.get('postId');
+        const postId = searchParams.get('postId') || searchParams.get('blogId');
+        const globalOnly = booleanQueryFlag(searchParams.get('global'));
         const search = searchParams.get('search') || searchParams.get('q');
         const tag = searchParams.get('tag');
         const folderId = searchParams.has('folderId') ? searchParams.get('folderId') : undefined;
@@ -90,9 +92,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 offset: 0,
             });
             const filtered = result.items
-                .filter((item) => scope ? item.scope === scope : true)
-                .filter((item) => pageId ? item.pageIds.includes(pageId) || (item.scope === 'page' && item.scopeTargetId === pageId) : true)
-                .filter((item) => postId ? item.postIds.includes(postId) || (item.scope === 'post' && item.scopeTargetId === postId) : true)
+                .filter((item) => mediaMatchesScopeFilters(item, { scope, pageId, postId, globalOnly }))
                 .filter((item) => tag ? item.tags.includes(tag) : true);
             const mediaPayload = paginateMedia(site.id, filtered, limit, offset);
             const cacheRevision = await repositories.cacheInvalidations.latestRevision({
@@ -128,6 +128,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             folderId,
             pageId: pageId || undefined,
             postId: postId || undefined,
+            global: globalOnly,
             limit,
             offset,
         });

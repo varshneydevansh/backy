@@ -35,6 +35,7 @@ import {
 import { buildSiteNavigation, normalizeNavigationConfig, type PublicNavigationItem } from './navigation';
 import { normalizeRedirectRules } from './redirectRules';
 import { emptyFrontendDesignContract, normalizeFrontendDesignContract } from './frontendDesignContract';
+import { mediaMatchesScopeFilters } from './mediaScope';
 
 interface PageMeta {
   title?: string;
@@ -5966,13 +5967,15 @@ export function getMediaList(
     folderId?: string | null;
     pageId?: string;
     postId?: string;
+    blogId?: string;
+    global?: boolean;
     limit?: number;
     offset?: number;
   } = {},
 ): { media: MediaItem[]; pagination: Pagination } {
   ensurePersistedMediaLoaded();
 
-  const { type, scope, visibility, search, tag, folderId, pageId, postId, limit = 50, offset = 0 } = params;
+  const { type, scope, visibility, search, tag, folderId, pageId, postId, blogId, global: globalOnly, limit = 50, offset = 0 } = params;
   const normalizedType = typeof type === 'string' ? type.trim().toLowerCase() : undefined;
   const normalizedSearch = typeof search === 'string' ? normalizeIdentifier(search) : '';
   const normalizedTag = typeof tag === 'string' ? normalizeIdentifier(tag) : '';
@@ -5981,10 +5984,6 @@ export function getMediaList(
 
   if (normalizedType) {
     media = media.filter((item) => item.type === normalizedType);
-  }
-
-  if (scope) {
-    media = media.filter((item) => item.scope === scope);
   }
 
   if (visibility) {
@@ -6010,31 +6009,12 @@ export function getMediaList(
     media = media.filter((item) => item.folderId === (folderId || null));
   }
 
-  if (pageId) {
-    media = media.filter((item) => {
-      const itemScope = item.scope || 'global';
-      if (itemScope === 'global') {
-        return true;
-      }
-      if (itemScope === 'page') {
-        return item.scopeTargetId === pageId || item.pageIds.includes(pageId);
-      }
-      return false;
-    });
-  }
-
-  if (postId) {
-    media = media.filter((item) => {
-      const itemScope = item.scope || 'global';
-      if (itemScope === 'global') {
-        return true;
-      }
-      if (itemScope === 'post') {
-        return item.scopeTargetId === postId || item.postIds.includes(postId);
-      }
-      return false;
-    });
-  }
+  media = media.filter((item) => mediaMatchesScopeFilters(item, {
+    scope,
+    pageId,
+    postId: postId || blogId,
+    globalOnly,
+  }));
 
   const paginated = media.slice(offset, offset + limit);
 

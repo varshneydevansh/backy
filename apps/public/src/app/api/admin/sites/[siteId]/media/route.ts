@@ -11,6 +11,7 @@ import { recordAdminAudit } from '@/lib/adminAudit';
 import { createMediaItem, getMediaList, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { MediaSafetyError, scanMediaUpload } from '@/lib/mediaSafety';
+import { booleanQueryFlag, mediaMatchesScopeFilters } from '@/lib/mediaScope';
 import { getMediaStorageAdapter, getMediaStoragePath } from '@/lib/mediaStorage';
 import { generatedTransformBytes } from '@/lib/mediaTransformGeneration';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -235,7 +236,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const offset = Math.max(0, Number(searchParams.get('offset') || 0));
       const scope = searchParams.get('scope');
       const pageId = searchParams.get('pageId');
-      const postId = searchParams.get('postId');
+      const postId = searchParams.get('postId') || searchParams.get('blogId');
+      const globalOnly = booleanQueryFlag(searchParams.get('global'));
       const tag = searchParams.get('tag');
       const result = await repositories.media.list({
         siteId: site.id,
@@ -247,9 +249,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         offset: 0,
       });
       const filtered = result.items
-        .filter((item) => scope ? item.scope === scope : true)
-        .filter((item) => pageId ? item.pageIds.includes(pageId) || (item.scope === 'page' && item.scopeTargetId === pageId) : true)
-        .filter((item) => postId ? item.postIds.includes(postId) || (item.scope === 'post' && item.scopeTargetId === postId) : true)
+        .filter((item) => mediaMatchesScopeFilters(item, { scope, pageId, postId, globalOnly }))
         .filter((item) => tag ? item.tags.includes(tag) : true);
       const payload = paginateMedia(filtered, limit, offset);
       const allMedia = (await repositories.media.list({
@@ -286,7 +286,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       tag: searchParams.get('tag') || undefined,
       folderId: searchParams.has('folderId') ? searchParams.get('folderId') : undefined,
       pageId: searchParams.get('pageId') || undefined,
-      postId: searchParams.get('postId') || undefined,
+      postId: searchParams.get('postId') || searchParams.get('blogId') || undefined,
+      global: booleanQueryFlag(searchParams.get('global')),
       limit,
       offset,
     });

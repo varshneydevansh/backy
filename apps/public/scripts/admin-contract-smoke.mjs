@@ -455,6 +455,10 @@ try {
       item.metadata?.license === 'contract-smoke'
     )), `${publicFonts.url} missing public font media`);
 
+    const publicGlobalFonts = await request(`/api/sites/${createdSiteId}/media?type=font&global=true`);
+    assert(publicGlobalFonts.response.status === 200, `${publicGlobalFonts.url} expected 200, got ${publicGlobalFonts.response.status}`);
+    assert(publicGlobalFonts.json?.data?.media?.some((item) => item.id === createdMediaId && item.scope === 'global'), `${publicGlobalFonts.url} missing global font media`);
+
     const publicFontDetail = await request(`/api/sites/${createdSiteId}/media/${createdMediaId}`);
     assert(publicFontDetail.response.status === 200, `${publicFontDetail.url} expected 200, got ${publicFontDetail.response.status}`);
     assert(publicFontDetail.json?.success === true, `${publicFontDetail.url} expected success envelope`);
@@ -468,6 +472,10 @@ try {
     assert(adminMediaList.json?.data?.quota?.usedBytes >= upload.json?.data?.media?.sizeBytes, `${adminMediaList.url} missing media quota usage`);
     assert(adminMediaList.json?.data?.quota?.remainingBytes >= 0, `${adminMediaList.url} missing media quota remaining bytes`);
     assert(adminMediaList.json?.data?.media?.some((item) => item.id === createdMediaId), `${adminMediaList.url} missing admin media list item`);
+
+    const adminGlobalMediaList = await request(`/api/admin/sites/${createdSiteId}/media?type=font&global=true`);
+    assert(adminGlobalMediaList.response.status === 200, `${adminGlobalMediaList.url} expected 200, got ${adminGlobalMediaList.response.status}`);
+    assert(adminGlobalMediaList.json?.data?.media?.some((item) => item.id === createdMediaId && item.scope === 'global'), `${adminGlobalMediaList.url} missing admin global media list item`);
 
     const privateUpdate = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}`, {
       method: 'PATCH',
@@ -1777,6 +1785,27 @@ try {
     assert(detail.json?.data?.post?.authorId === 'user-admin', `${detail.url} missing author assignment`);
     assert(detail.json?.data?.post?.categoryIds?.includes(createdCategoryId), `${detail.url} missing category assignment`);
     assert(detail.json?.data?.post?.tagIds?.includes(createdTagId), `${detail.url} missing tag assignment`);
+
+    const bindPostMedia = await request(`/api/admin/sites/${createdSiteId}/media/${createdMediaId}/bind`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        targetType: 'post',
+        targetId: createdPostId,
+        usageType: 'featured',
+        attachedBy: 'contract-smoke',
+      }),
+    });
+    assert(bindPostMedia.response.status === 200, `${bindPostMedia.url} expected 200, got ${bindPostMedia.response.status}`);
+    assert(bindPostMedia.json?.data?.media?.postIds?.includes(createdPostId), `${bindPostMedia.url} did not bind media to post`);
+    const blogMediaAliasList = await request(`/api/admin/sites/${createdSiteId}/media?blogId=${createdPostId}&type=font`);
+    assert(blogMediaAliasList.response.status === 200, `${blogMediaAliasList.url} expected 200, got ${blogMediaAliasList.response.status}`);
+    assert(blogMediaAliasList.json?.data?.media?.some((item) => item.id === createdMediaId && item.postIds?.includes(createdPostId)), `${blogMediaAliasList.url} missing blogId media alias item`);
+    const publicBlogMediaAliasList = await request(`/api/sites/${createdSiteId}/media?blogId=${createdPostId}&type=font`);
+    assert(publicBlogMediaAliasList.response.status === 200, `${publicBlogMediaAliasList.url} expected 200, got ${publicBlogMediaAliasList.response.status}`);
+    assert(publicBlogMediaAliasList.json?.data?.media?.some((item) => item.id === createdMediaId && item.postIds?.includes(createdPostId)), `${publicBlogMediaAliasList.url} missing public blogId media alias item`);
 
     const readiness = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}/readiness`);
     assert(readiness.response.status === 200, `${readiness.url} expected 200, got ${readiness.response.status}`);
