@@ -4,10 +4,11 @@
 
 import { useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, FileText, Globe, PenLine, Save, Tags, UserRound } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, FileText, Globe, PenLine, RefreshCw, Save, Tags, UserRound } from 'lucide-react';
 import {
     createBlogPost,
     getAdminApiBase,
+    listBlogPosts,
     listBlogAuthors,
     listBlogCategories,
     listBlogTags,
@@ -16,7 +17,7 @@ import {
     type BlogTag,
 } from '@/lib/adminContentApi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
-import { useStore } from '@/stores/mockStore';
+import { useStore, type BlogPost } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
 import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
@@ -168,8 +169,12 @@ function NewBlogPostPage() {
     const { user } = useAuthStore();
 
     const [isLoading, setIsLoading] = useState(false);
+    const [isCheckingPosts, setIsCheckingPosts] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    const [routeCheckError, setRouteCheckError] = useState<string | null>(null);
+    const [routeCheckRetry, setRouteCheckRetry] = useState(0);
+    const [existingBlogPosts, setExistingBlogPosts] = useState<BlogPost[]>([]);
     const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
     const requestedSite = search.siteId
         ? sites.find((site) => siteMatchesIdentifier(site, search.siteId || ''))
@@ -189,7 +194,7 @@ function NewBlogPostPage() {
     const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
     const [selectedAuthorId, setSelectedAuthorId] = useState(user?.id || 'admin');
-    const isCreateBusy = isLoading;
+    const isCreateBusy = isLoading || isCheckingPosts;
 
     const clearCreationFeedback = () => {
         setError((current) => current ? null : current);
@@ -229,6 +234,41 @@ function NewBlogPostPage() {
             cancelled = true;
         };
     }, [activeSiteId, selectedAuthorId, user?.id]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadExistingPosts = async () => {
+            setIsCheckingPosts(true);
+            setRouteCheckError(null);
+
+            try {
+                const backendPosts = await listBlogPosts(activeSiteId);
+                if (!cancelled) {
+                    setExistingBlogPosts(backendPosts);
+                    setRouteCheckError(null);
+                    setError(null);
+                }
+            } catch (loadError) {
+                if (!cancelled) {
+                    const message = loadError instanceof Error ? loadError.message : 'Unable to check existing blog routes for this site';
+                    setExistingBlogPosts([]);
+                    setRouteCheckError(message);
+                    setError(message);
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsCheckingPosts(false);
+                }
+            }
+        };
+
+        void loadExistingPosts();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeSiteId, routeCheckRetry]);
 
     useEffect(() => {
         if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, activeSiteId))) {
@@ -294,20 +334,37 @@ function NewBlogPostPage() {
         [activeSiteId],
     );
     const routePath = `/blog/${slugValue || 'post-slug'}`;
+    const routeConflict = useMemo(
+        () => slugValue.trim()
+            ? existingBlogPosts.find((post) => slugify(post.slug) === slugValue) || null
+            : null,
+        [existingBlogPosts, slugValue],
+    );
     const readinessChecks = [
         { label: 'Title', complete: title.trim().length > 0 },
         { label: 'Slug', complete: slugValue.trim().length > 0 },
+        { label: 'Route', complete: !isCheckingPosts && !routeCheckError && !routeConflict },
         { label: 'Summary', complete: excerpt.trim().length >= 24 },
         { label: 'Design', complete: canvasElements.length > 0 },
         { label: 'Schedule', complete: status !== 'scheduled' || Boolean(scheduledAt) },
     ];
     const readyCount = readinessChecks.filter((check) => check.complete).length;
     const readinessScore = Math.round((readyCount / readinessChecks.length) * 100);
-    const canSubmit = title.trim().length > 0 && slugValue.trim().length > 0 && (status !== 'scheduled' || Boolean(scheduledAt));
+    const canSubmit = title.trim().length > 0
+        && slugValue.trim().length > 0
+        && !isCheckingPosts
+        && !routeCheckError
+        && !routeConflict
+        && (status !== 'scheduled' || Boolean(scheduledAt));
     const submitLabel = status === 'published' ? 'Publish post' : status === 'scheduled' ? 'Schedule post' : 'Save draft';
     const createPayloadPreview = useMemo(() => ({
         title: title.trim() || 'Untitled post',
         slug: slugValue || 'post-slug',
+        routeAvailability: routeCheckError
+            ? { status: 'unverified', message: routeCheckError }
+            : routeConflict
+                ? { status: 'conflict', postId: routeConflict.id, title: routeConflict.title, path: `/blog/${routeConflict.slug}` }
+                : { status: 'available', checkedPosts: existingBlogPosts.length },
         excerpt: excerpt.trim(),
         status,
         scheduledAt: status === 'scheduled' ? scheduledAt : null,
@@ -324,7 +381,10 @@ function NewBlogPostPage() {
         canvasElements.length,
         canvasSize.height,
         canvasSize.width,
+        existingBlogPosts.length,
         excerpt,
+        routeCheckError,
+        routeConflict,
         scheduledAt,
         selectedAuthorId,
         selectedCategoryIds,
@@ -349,6 +409,22 @@ function NewBlogPostPage() {
             path: routePath,
             slug: slugValue || 'post-slug',
             publicCollectionPath: '/blog',
+            availability: routeCheckError
+                ? {
+                    status: 'unverified',
+                    message: routeCheckError,
+                }
+                : routeConflict
+                    ? {
+                        status: 'conflict',
+                        postId: routeConflict.id,
+                        title: routeConflict.title,
+                        path: `/blog/${routeConflict.slug}`,
+                    }
+                    : {
+                        status: 'available',
+                        checkedPosts: existingBlogPosts.length,
+                    },
         },
         readiness: {
             score: readinessScore,
@@ -390,9 +466,12 @@ function NewBlogPostPage() {
         canvasSize.height,
         canvasSize.width,
         createPayloadPreview,
+        existingBlogPosts.length,
         excerpt,
         readinessChecks,
         readinessScore,
+        routeCheckError,
+        routeConflict,
         routePath,
         scheduledAt,
         selectedAuthor,
@@ -452,7 +531,17 @@ function NewBlogPostPage() {
         if (isCreateBusy) return;
 
         if (!canSubmit) {
-            setError(status === 'scheduled' && !scheduledAt ? 'Choose a publish date before scheduling' : 'Add a title and URL slug before saving');
+            setError(
+                isCheckingPosts
+                    ? 'Checking existing blog routes before saving'
+                    : routeCheckError
+                        ? 'Backy could not verify existing blog routes for this site. Retry the route check before saving.'
+                        : routeConflict
+                            ? `The ${routePath} route is already used by "${routeConflict.title}". Choose another slug or edit that post first.`
+                            : status === 'scheduled' && !scheduledAt
+                                ? 'Choose a publish date before scheduling'
+                                : 'Add a title and URL slug before saving',
+            );
             setNotice(null);
             return;
         }
@@ -460,6 +549,7 @@ function NewBlogPostPage() {
         setIsLoading(true);
         setError(null);
         setNotice(null);
+        setRouteCheckError(null);
 
     // Serialize canvas elements for storage
         const content = serializeCanvasContent(canvasElements, canvasSize, undefined, {
@@ -492,7 +582,9 @@ function NewBlogPostPage() {
             setPosts([created, ...posts.filter((post) => post.id !== created.id)]);
             navigate({ to: '/blog', search: { siteId: activeSiteId } });
         } catch (createError) {
-            setError(createError instanceof Error ? createError.message : 'Unable to create post');
+            setError(createError instanceof Error
+                ? `${createError.message}. The post was not created because the backend did not persist it.`
+                : 'Unable to create post. The post was not persisted.');
         } finally {
             setIsLoading(false);
         }
@@ -522,7 +614,24 @@ function NewBlogPostPage() {
             <div className="w-full pb-24">
                 {error && (
                     <Notice tone="warning" className="mb-4">
-                        {error}. The post was not created because the backend did not persist it.
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <span>{error}</span>
+                            {routeCheckError && (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={isCreateBusy}
+                                    onClick={() => {
+                                        if (isCreateBusy) return;
+                                        setRouteCheckRetry((value) => value + 1);
+                                    }}
+                                    iconStart={<RefreshCw className={cn('size-3.5', isCheckingPosts && 'animate-spin')} />}
+                                >
+                                    Retry route check
+                                </Button>
+                            )}
+                        </div>
                     </Notice>
                 )}
                 {notice && (
@@ -569,7 +678,7 @@ function NewBlogPostPage() {
                                     Download JSON
                                 </Button>
                                 <Button type="submit" disabled={isCreateBusy || !canSubmit} variant="primary" iconStart={<Save className="size-4" />}>
-                                    {isCreateBusy ? 'Saving...' : submitLabel}
+                                    {isLoading ? 'Saving...' : isCheckingPosts ? 'Checking routes...' : submitLabel}
                                 </Button>
                             </div>
                         </div>
@@ -668,6 +777,13 @@ function NewBlogPostPage() {
                                 placeholder="post-slug"
                             />
                         </div>
+                        {(routeConflict || routeCheckError) && (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                                {routeCheckError
+                                    ? 'Backy could not verify existing blog routes for this site. Retry the route check before saving.'
+                                    : `${routePath} is already used by "${routeConflict?.title}". Choose another slug or edit that post first.`}
+                            </div>
+                        )}
 
                         <div className="space-y-2">
                             <label htmlFor="blog-create-excerpt" className="text-xs font-medium text-muted-foreground">Excerpt</label>
@@ -814,7 +930,7 @@ function NewBlogPostPage() {
 
                                 <div className="grid gap-2">
                                     <Button type="submit" disabled={isCreateBusy || !canSubmit} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
-                                        {isCreateBusy ? 'Saving...' : submitLabel}
+                                        {isLoading ? 'Saving...' : isCheckingPosts ? 'Checking routes...' : submitLabel}
                                     </Button>
                                     <Button
                                         type="button"
@@ -924,6 +1040,13 @@ function NewBlogPostPage() {
                                         <div>
                                             <div className="text-xs font-medium text-muted-foreground">Public route</div>
                                             <div className="mt-1 font-mono text-xs text-foreground">{routePath}</div>
+                                            <div className={cn('mt-1 text-xs font-medium', routeCheckError || routeConflict ? 'text-amber-700' : 'text-emerald-700')}>
+                                                {routeCheckError
+                                                    ? 'Route not verified'
+                                                    : routeConflict
+                                                        ? `Conflicts with ${routeConflict.title}`
+                                                        : `${existingBlogPosts.length} existing post${existingBlogPosts.length === 1 ? '' : 's'} checked`}
+                                            </div>
                                         </div>
                                         <span className="rounded bg-muted px-2 py-1 text-xs text-muted-foreground">POST</span>
                                     </div>
