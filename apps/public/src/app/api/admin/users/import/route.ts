@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
-import { createAdminUser, getAdminUserByEmail } from '@/lib/backyStore';
+import { createAdminUser, getAdminUserByEmail, listAdminUsers, updateAdminUser } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -17,11 +17,19 @@ type ParsedImportRow = {
   status: AdminUserStatus;
 };
 
+type AdminUserForSafeguard = {
+  id: string;
+  role: AdminUserRole;
+  status: AdminUserStatus;
+};
+
 type ImportError = {
   row: number;
   email?: string;
   message: string;
 };
+
+type ImportMode = 'create' | 'upsert';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -109,6 +117,23 @@ const getColumn = (headers: string[], aliases: string[]) => (
   aliases.map((alias) => headers.indexOf(alias)).find((index) => index !== -1) ?? -1
 );
 
+const normalizeImportMode = (value: string | null): ImportMode => (
+  value === 'upsert' ? 'upsert' : 'create'
+);
+
+const isActiveAdminAuthority = (user: AdminUserForSafeguard) => (
+  (user.role === 'owner' || user.role === 'admin') && user.status === 'active'
+);
+
+const wouldRemoveLastAdminAuthority = (
+  users: AdminUserForSafeguard[],
+  existingUser: AdminUserForSafeguard,
+  nextUser: AdminUserForSafeguard,
+) => {
+  const nextUsers = users.map((user) => (user.id === existingUser.id ? nextUser : user));
+  return nextUsers.filter(isActiveAdminAuthority).length === 0;
+};
+
 const parseUserImportRows = (csv: string): { rows: ParsedImportRow[]; errors: ImportError[] } => {
   const table = parseCsv(csv).filter((row) => row.some((cell) => cell.trim()));
   if (table.length === 0) {
@@ -176,9 +201,17 @@ const parseUserImportRows = (csv: string): { rows: ParsedImportRow[]; errors: Im
 
 export async function POST(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const { searchParams } = new URL(request.url);
+  const mode = normalizeImportMode(searchParams.get('mode'));
   const access = requireAdminAccess(request, requestId, { permission: 'users.create' });
   if (access instanceof NextResponse) {
     return access;
+  }
+  if (mode === 'upsert') {
+    const manageAccess = requireAdminAccess(request, requestId, { permission: 'users.manage' });
+    if (manageAccess instanceof NextResponse) {
+      return manageAccess;
+    }
   }
 
   try {
@@ -193,6 +226,7 @@ export async function POST(request: NextRequest) {
       : null;
 
     const createdUsers = [];
+    const updatedUsers = [];
     const errors = [...parsed.errors];
     let skipped = 0;
 
@@ -202,10 +236,52 @@ export async function POST(request: NextRequest) {
         : getAdminUserByEmail(row.email);
 
       if (existing) {
-        skipped += 1;
+        if (mode !== 'upsert') {
+          skipped += 1;
+          continue;
+        }
+
+        if (access.session && existing.id === access.session.user.id) {
+          errors.push({ row: row.row, email: row.email, message: 'Current signed-in admin cannot be updated through CSV import.' });
+          skipped += 1;
+          continue;
+        }
+
+        const nextUser = {
+          ...existing,
+          fullName: row.fullName,
+          role: row.role,
+          status: row.status,
+        };
+        const allUsers = repositories
+          ? (await repositories.users.list({ limit: 1000, offset: 0 })).items
+          : listAdminUsers();
+
+        if (wouldRemoveLastAdminAuthority(allUsers, existing, nextUser)) {
+          errors.push({ row: row.row, email: row.email, message: 'Import would remove the last active owner/admin.' });
+          skipped += 1;
+          continue;
+        }
+
+        const updated = repositories
+          ? (await repositories.users.update(existing.id, {
+              fullName: row.fullName,
+              role: row.role,
+              status: row.status,
+            })).item
+          : updateAdminUser(existing.id, {
+              fullName: row.fullName,
+              role: row.role,
+              status: row.status,
+            });
+
+        if (updated) {
+          updatedUsers.push(updated);
+        } else {
+          skipped += 1;
+        }
         continue;
       }
-
       const user = repositories
         ? (await repositories.users.create({
             fullName: row.fullName,
@@ -218,22 +294,27 @@ export async function POST(request: NextRequest) {
       createdUsers.push(user);
     }
 
+    const changedUsers = [...createdUsers, ...updatedUsers];
+
     await recordAdminAudit({
       repositories,
       entity: 'user',
       entityId: 'import',
-      action: 'user.import.create',
+      action: mode === 'upsert' ? 'user.import.upsert' : 'user.import.create',
       after: {
         created: createdUsers.length,
+        updated: updatedUsers.length,
         skipped,
         errors: errors.length,
       },
       metadata: {
+        mode,
         created: createdUsers.length,
+        updated: updatedUsers.length,
         skipped,
         errors: errors.length,
-        userIds: createdUsers.map((user) => user.id),
-        emails: createdUsers.map((user) => user.email),
+        userIds: changedUsers.map((user) => user.id),
+        emails: changedUsers.map((user) => user.email),
         requestedById: access.session?.user.id || null,
       },
       requestId,
@@ -243,9 +324,11 @@ export async function POST(request: NextRequest) {
       success: true,
       requestId,
       data: {
-        users: createdUsers,
+        users: changedUsers,
         import: {
+          mode,
           created: createdUsers.length,
+          updated: updatedUsers.length,
           skipped,
           errors,
         },

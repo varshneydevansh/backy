@@ -954,10 +954,23 @@ const setUsersBulkStatus = async (client, fullNames, status) => {
   assert(result.ok, `Unable to run users bulk status action: ${JSON.stringify(result)}`);
 };
 
-const importUsersThroughUi = async (client, csvPath, expectedName) => {
+const importUsersThroughUi = async (client, csvPath, expectedName, options = {}) => {
+  const {
+    mode = 'create',
+    created = 1,
+    updated = 0,
+    skipped = 1,
+  } = options;
   await navigateToUsers(client);
 
   const markResult = await evaluate(client, `(() => {
+    const modeSelect = document.querySelector('select[aria-label="User import duplicate handling"]');
+    if (!(modeSelect instanceof HTMLSelectElement)) {
+      return { ok: false, reason: 'import-mode-missing' };
+    }
+    modeSelect.value = ${JSON.stringify(mode)};
+    modeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
     const input = document.querySelector('input[aria-label="Import users CSV"]');
     if (!(input instanceof HTMLInputElement)) {
       return {
@@ -989,13 +1002,14 @@ const importUsersThroughUi = async (client, csvPath, expectedName) => {
       const text = result?.textContent || '';
       return {
         hasResult: Boolean(result),
-        hasCreated: text.includes('1 created'),
-        hasSkipped: text.includes('1 skipped'),
+        hasCreated: text.includes(${JSON.stringify(`${created} created`)}),
+        hasUpdated: text.includes(${JSON.stringify(`${updated} updated`)}),
+        hasSkipped: text.includes(${JSON.stringify(`${skipped} skipped`)}),
         hasUser: document.body?.innerText?.includes(${JSON.stringify(expectedName)}) || false,
         text: text.slice(0, 800),
       };
     })()`);
-    if (state.hasResult && state.hasCreated && state.hasSkipped && state.hasUser) {
+    if (state.hasResult && state.hasCreated && state.hasUpdated && state.hasSkipped && state.hasUser) {
       return state;
     }
     if (attempt === 119) {
@@ -1121,6 +1135,7 @@ const main = async () => {
   const bulkFullName = `Users Bulk ${suffix}`;
   const bulkEmail = `users-bulk-${suffix}@example.com`;
   const importedFullName = `Users Import ${suffix}`;
+  const importedUpdatedFullName = `Users Import Updated ${suffix}`;
   const importedEmail = `users-import-${suffix}@example.com`;
 
   try {
@@ -1172,6 +1187,27 @@ const main = async () => {
     assert(
       importAuditLogs.some((log) => log.action === 'user.import.create' && log.metadata?.created === 1 && log.metadata?.skipped === 1),
       `User import audit log was not recorded: ${JSON.stringify(importAuditLogs).slice(0, 500)}`,
+    );
+    const upsertCsvPath = path.join(os.tmpdir(), `backy-users-import-upsert-${suffix}.csv`);
+    fs.writeFileSync(
+      upsertCsvPath,
+      [
+        'full_name,email,role,status',
+        `${importedUpdatedFullName},${importedEmail},viewer,active`,
+      ].join('\n'),
+      'utf8',
+    );
+    await importUsersThroughUi(client, upsertCsvPath, importedUpdatedFullName, {
+      mode: 'upsert',
+      created: 0,
+      updated: 1,
+      skipped: 0,
+    });
+    await waitForUser(importedEmail, (user) => user.fullName === importedUpdatedFullName && user.role === 'viewer' && user.status === 'active');
+    const upsertAuditLogs = await listUserAuditLogs('import');
+    assert(
+      upsertAuditLogs.some((log) => log.action === 'user.import.upsert' && log.metadata?.updated === 1 && log.metadata?.mode === 'upsert'),
+      `User import upsert audit log was not recorded: ${JSON.stringify(upsertAuditLogs).slice(0, 500)}`,
     );
     await waitForUsersSelfProtection(client);
     await openUserDetail(client, 'Admin User');

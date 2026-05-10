@@ -258,6 +258,7 @@ function UsersListView() {
   const [isBulkActionBusy, setIsBulkActionBusy] = useState(false);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [importMode, setImportMode] = useState<'create' | 'upsert'>('create');
   const [isImportingUsers, setIsImportingUsers] = useState(false);
   const [importResult, setImportResult] = useState<UserImportResult | null>(null);
   const [userAuditLogs, setUserAuditLogs] = useState<AdminAuditLog[]>([]);
@@ -609,9 +610,9 @@ function UsersListView() {
 
     try {
       const csv = await file.text();
-      const result = await importUsersCsv(csv);
+      const result = await importUsersCsv(csv, { mode: importMode });
       setImportResult(result);
-      setNotice(`Imported ${result.created} user${result.created === 1 ? '' : 's'}; skipped ${result.skipped}; ${result.errors.length} row issue${result.errors.length === 1 ? '' : 's'}.`);
+      setNotice(`Imported ${result.created} user${result.created === 1 ? '' : 's'}; updated ${result.updated}; skipped ${result.skipped}; ${result.errors.length} row issue${result.errors.length === 1 ? '' : 's'}.`);
       await loadUsers();
       await loadUserAuditLogs();
     } catch (error) {
@@ -624,7 +625,7 @@ function UsersListView() {
           ))
         : [];
       if (errors.length > 0) {
-        setImportResult({ created: 0, skipped: 0, errors });
+        setImportResult({ mode: importMode, created: 0, updated: 0, skipped: 0, errors });
       }
       setNotice(error instanceof Error ? error.message : 'Unable to import users from CSV.');
     } finally {
@@ -930,7 +931,7 @@ function UsersListView() {
     guardrails: [
       'Backend blocks deleting or demoting the final active owner/admin.',
       'Invites and edits reject emails already attached to another user.',
-      'CSV import creates new users only and reports duplicate emails as skipped.',
+      'CSV import can skip duplicate emails or update existing users when explicitly selected.',
       'CSV export is the explicit admin path for identity fields.',
     ],
     privacy: {
@@ -1067,6 +1068,16 @@ function UsersListView() {
             >
               CSV template
             </Button>
+            <select
+              value={importMode}
+              disabled={isUsersBusy}
+              onChange={(event) => setImportMode(event.target.value === 'upsert' ? 'upsert' : 'create')}
+              className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="User import duplicate handling"
+            >
+              <option value="create">Skip duplicates</option>
+              <option value="upsert">Update duplicates</option>
+            </select>
             <Button
               type="button"
               variant="outline"
@@ -1185,6 +1196,16 @@ function UsersListView() {
                   >
                     Import CSV
                   </Button>
+                  <select
+                    value={importMode}
+                    disabled={isUsersBusy}
+                    onChange={(event) => setImportMode(event.target.value === 'upsert' ? 'upsert' : 'create')}
+                    className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="User API import duplicate handling"
+                  >
+                    <option value="create">Skip duplicates</option>
+                    <option value="upsert">Update duplicates</option>
+                  </select>
                   <Button
                     type="button"
                     variant="outline"
@@ -1383,6 +1404,9 @@ function UsersListView() {
                   <span className="font-semibold text-foreground">Import result</span>
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
                     {importResult.created} created
+                  </span>
+                  <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
+                    {importResult.updated} updated
                   </span>
                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
                     {importResult.skipped} skipped
