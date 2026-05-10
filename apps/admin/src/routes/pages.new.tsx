@@ -34,6 +34,8 @@ interface NewPageSearch {
     parentPageId?: string;
     seoTitle?: string;
     canonical?: string;
+    keywords?: string;
+    jsonLd?: string;
     ogImage?: string;
     noIndex?: boolean;
     noFollow?: boolean;
@@ -57,6 +59,8 @@ interface PageCreateDraftState {
     navigationLabel: string;
     seoTitle: string;
     canonicalPath: string;
+    keywords: string;
+    jsonLdText: string;
     ogImage: string;
     noIndex: boolean;
     noFollow: boolean;
@@ -219,6 +223,41 @@ const normalizeCanonicalPath = (value: string) => {
     return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
 };
 
+const normalizeKeywords = (value: string): string[] => (
+    Array.from(new Set(value
+        .split(',')
+        .map((keyword) => keyword.trim())
+        .filter(Boolean)))
+        .slice(0, 20)
+);
+
+const parseJsonLd = (
+    value: string,
+): { ok: true; value: Array<Record<string, unknown>> } | { ok: false; message: string } => {
+    if (!value.trim()) {
+        return { ok: true, value: [] };
+    }
+
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(value);
+    } catch {
+        return { ok: false, message: 'JSON-LD must be valid JSON.' };
+    }
+
+    if (!Array.isArray(parsed)) {
+        return { ok: false, message: 'JSON-LD must be a JSON array.' };
+    }
+
+    for (const [index, entry] of parsed.entries()) {
+        if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+            return { ok: false, message: `JSON-LD entry ${index + 1} must be an object.` };
+        }
+    }
+
+    return { ok: true, value: parsed as Array<Record<string, unknown>> };
+};
+
 const getPagePublicPath = (page: Pick<Page, 'slug' | 'isHomepage'>) => (
     page.isHomepage || page.slug === 'home' || page.slug === ''
         ? '/'
@@ -259,6 +298,21 @@ const normalizedSearchBoolean = (value: unknown): boolean | undefined => {
     return undefined;
 };
 
+const normalizedSearchJsonLd = (value: unknown): string | undefined => {
+    const stringValue = normalizedSearchString(value);
+    if (stringValue) return stringValue;
+
+    if ((Array.isArray(value) || (typeof value === 'object' && value !== null))) {
+        try {
+            return JSON.stringify(value, null, 2);
+        } catch {
+            return undefined;
+        }
+    }
+
+    return undefined;
+};
+
 const normalizeNewPageSearch = (input: NewPageSearch): NewPageSearch => ({
     ...(input.siteId ? { siteId: input.siteId } : {}),
     ...(input.template && input.template !== 'blank' ? { template: input.template } : {}),
@@ -273,6 +327,8 @@ const normalizeNewPageSearch = (input: NewPageSearch): NewPageSearch => ({
     ...(input.parentPageId?.trim() ? { parentPageId: input.parentPageId.trim() } : {}),
     ...(input.seoTitle?.trim() ? { seoTitle: input.seoTitle.trim() } : {}),
     ...(input.canonical?.trim() ? { canonical: input.canonical.trim() } : {}),
+    ...(input.keywords?.trim() ? { keywords: input.keywords.trim() } : {}),
+    ...(input.jsonLd?.trim() ? { jsonLd: input.jsonLd.trim() } : {}),
     ...(input.ogImage?.trim() ? { ogImage: input.ogImage.trim() } : {}),
     ...(input.noIndex ? { noIndex: true } : {}),
     ...(input.noFollow ? { noFollow: true } : {}),
@@ -293,6 +349,8 @@ export const Route = createFileRoute('/pages/new')({
         parentPageId: normalizedSearchString(search.parentPageId),
         seoTitle: normalizedSearchString(search.seoTitle),
         canonical: normalizedSearchString(search.canonical),
+        keywords: normalizedSearchString(search.keywords),
+        jsonLd: normalizedSearchJsonLd(search.jsonLd),
         ogImage: normalizedSearchString(search.ogImage),
         noIndex: normalizedSearchBoolean(search.noIndex),
         noFollow: normalizedSearchBoolean(search.noFollow),
@@ -339,6 +397,8 @@ function NewPageRoute() {
         navigationLabel: search.navLabel ?? search.title ?? templateDefaults.title,
         seoTitle: search.seoTitle ?? search.title ?? templateDefaults.title,
         canonicalPath: search.canonical ?? '',
+        keywords: search.keywords ?? '',
+        jsonLdText: search.jsonLd ?? '',
         ogImage: search.ogImage ?? '',
         noIndex: search.noIndex ?? false,
         noFollow: search.noFollow ?? false,
@@ -358,6 +418,8 @@ function NewPageRoute() {
         navLabel: nextFormData.navigationLabel,
         seoTitle: nextFormData.seoTitle,
         canonical: nextFormData.canonicalPath,
+        keywords: nextFormData.keywords,
+        jsonLd: nextFormData.jsonLdText,
         ogImage: nextFormData.ogImage,
         noIndex: nextFormData.noIndex,
         noFollow: nextFormData.noFollow,
@@ -468,6 +530,8 @@ function NewPageRoute() {
             navigationLabel: search.navLabel ?? search.title ?? nextDefaults.title,
             seoTitle: search.seoTitle ?? search.title ?? nextDefaults.title,
             canonicalPath: search.canonical ?? '',
+            keywords: search.keywords ?? '',
+            jsonLdText: search.jsonLd ?? '',
             ogImage: search.ogImage ?? '',
             noIndex: search.noIndex ?? false,
             noFollow: search.noFollow ?? false,
@@ -487,6 +551,8 @@ function NewPageRoute() {
                 || nextFormData.navigationLabel !== current.navigationLabel
                 || nextFormData.seoTitle !== current.seoTitle
                 || nextFormData.canonicalPath !== current.canonicalPath
+                || nextFormData.keywords !== current.keywords
+                || nextFormData.jsonLdText !== current.jsonLdText
                 || nextFormData.ogImage !== current.ogImage
                 || nextFormData.noIndex !== current.noIndex
                 || nextFormData.noFollow !== current.noFollow
@@ -511,6 +577,8 @@ function NewPageRoute() {
         search.parentPageId,
         search.seoTitle,
         search.canonical,
+        search.keywords,
+        search.jsonLd,
         search.ogImage,
         search.noIndex,
         search.noFollow,
@@ -575,6 +643,32 @@ function NewPageRoute() {
     const canonicalValid = normalizedCanonicalPath.startsWith('/');
     const effectiveSeoTitle = formData.seoTitle.trim() || formData.title.trim();
     const effectiveSeoDescription = formData.description.trim();
+    const defaultKeywordText = [
+        formData.title.trim(),
+        selectedTemplate.name,
+        selectedSite?.name || '',
+        formData.template.replace('-', ' '),
+    ].filter(Boolean).join(', ');
+    const effectiveKeywords = normalizeKeywords(formData.keywords.trim() || defaultKeywordText);
+    const jsonLdResult = parseJsonLd(formData.jsonLdText);
+    const defaultJsonLd = useMemo(() => ([
+        {
+            '@context': 'https://schema.org',
+            '@type': formData.template === 'contact' ? 'ContactPage' : formData.template === 'about' ? 'AboutPage' : 'WebPage',
+            name: effectiveSeoTitle || formData.title.trim() || 'Untitled page',
+            description: effectiveSeoDescription || undefined,
+            url: normalizedCanonicalPath,
+            isPartOf: selectedSite?.name ? {
+                '@type': 'WebSite',
+                name: selectedSite.name,
+            } : undefined,
+            image: formData.ogImage.trim() || undefined,
+        },
+    ]), [effectiveSeoDescription, effectiveSeoTitle, formData.ogImage, formData.template, formData.title, normalizedCanonicalPath, selectedSite?.name]);
+    const effectiveJsonLd = jsonLdResult.ok && jsonLdResult.value.length > 0
+        ? jsonLdResult.value
+        : defaultJsonLd;
+    const jsonLdValid = jsonLdResult.ok;
     const routeConflict = useMemo(
         () => selectedSitePages.find((page) => getPagePublicPath(page) === routePreview) || null,
         [routePreview, selectedSitePages],
@@ -596,6 +690,7 @@ function NewPageRoute() {
         && hasNavigationLabel
         && hasValidParentPage
         && canonicalValid
+        && jsonLdValid
         && (!formData.isHomepage || formData.slug.trim() || formData.title.trim()),
     );
     const submitBlockerMessage = useMemo(() => {
@@ -606,11 +701,12 @@ function NewPageRoute() {
         if (!formData.title.trim()) return 'Add a page title so Backy can create a named page and editor document.';
         if (routeConflict) return `The ${routePreview} route is already used by "${routeConflict.title}".`;
         if (!canonicalValid) return 'Use a canonical path that starts with / or paste a valid site URL.';
+        if (!jsonLdValid) return jsonLdResult.message;
         if (!hasValidParentPage) return 'Choose an existing parent page or keep this page at the top level.';
         if (!hasSchedule) return 'Choose a publish date before creating a scheduled page.';
         if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this page to navigation.';
         return 'Review the required page basics before creating this page.';
-    }, [canSubmit, canonicalValid, formData.title, hasNavigationLabel, hasSchedule, hasValidParentPage, isCheckingPages, isLoading, routeCheckError, routeConflict, routePreview, selectedSite]);
+    }, [canSubmit, canonicalValid, formData.title, hasNavigationLabel, hasSchedule, hasValidParentPage, isCheckingPages, isLoading, jsonLdResult, jsonLdValid, routeCheckError, routeConflict, routePreview, selectedSite]);
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
         const hasStarterCanvas = selectedTemplate.sections.length > 0;
@@ -643,9 +739,16 @@ function NewPageRoute() {
             {
                 label: 'SEO summary',
                 detail: effectiveSeoDescription
-                    ? `${formData.description.trim().length} characters ready for route metadata`
+                    ? `${formData.description.trim().length} characters, ${effectiveKeywords.length} keyword${effectiveKeywords.length === 1 ? '' : 's'}, and canonical metadata ready`
                     : 'Add a short SEO description for frontend previews.',
-                ready: effectiveSeoTitle.length > 0 && effectiveSeoDescription.length > 0 && canonicalValid,
+                ready: effectiveSeoTitle.length > 0 && effectiveSeoDescription.length > 0 && canonicalValid && effectiveKeywords.length > 0,
+            },
+            {
+                label: 'Structured data',
+                detail: jsonLdValid
+                    ? `${effectiveJsonLd.length} JSON-LD object${effectiveJsonLd.length === 1 ? '' : 's'} will be stored in page meta.`
+                    : jsonLdResult.message,
+                ready: jsonLdValid,
             },
             {
                 label: 'Social metadata',
@@ -699,6 +802,8 @@ function NewPageRoute() {
         };
     }, [
         formData.description,
+        formData.keywords,
+        formData.jsonLdText,
         formData.ogImage,
         formData.isHomepage,
         formData.canonicalPath,
@@ -717,7 +822,11 @@ function NewPageRoute() {
         canonicalValid,
         effectiveSeoDescription,
         effectiveSeoTitle.length,
+        effectiveKeywords.length,
+        effectiveJsonLd.length,
         hasSchedule,
+        jsonLdResult,
+        jsonLdValid,
         routeCheckError,
         routeConflict,
         routePreview,
@@ -760,6 +869,8 @@ function NewPageRoute() {
             title: effectiveSeoTitle || 'Untitled page',
             description: effectiveSeoDescription,
             canonical: normalizedCanonicalPath,
+            keywords: effectiveKeywords,
+            jsonLd: effectiveJsonLd,
             ogImage: formData.ogImage.trim() || null,
             robots: {
                 index: !formData.noIndex,
@@ -769,6 +880,8 @@ function NewPageRoute() {
     }), [
         formData.description,
         formData.isHomepage,
+        formData.keywords,
+        formData.jsonLdText,
         formData.navigationLabel,
         formData.navigationPlacement,
         formData.noFollow,
@@ -781,6 +894,8 @@ function NewPageRoute() {
         formData.title,
         effectiveSeoDescription,
         effectiveSeoTitle,
+        effectiveKeywords,
+        effectiveJsonLd,
         normalizedCanonicalPath,
         routeConflict,
         resolvedSlug,
@@ -847,12 +962,14 @@ function NewPageRoute() {
             title: effectiveSeoTitle || formData.title.trim() || 'Untitled page',
             description: effectiveSeoDescription,
             canonical: normalizedCanonicalPath,
+            keywords: effectiveKeywords,
+            jsonLd: effectiveJsonLd,
             ogImage: formData.ogImage.trim() || null,
             robots: {
                 index: !formData.noIndex,
                 follow: !formData.noFollow,
             },
-            renderPayloadKeys: ['seo.title', 'seo.description', 'seo.canonical', 'seo.openGraph.image', 'seo.robots'],
+            renderPayloadKeys: ['seo.title', 'seo.description', 'seo.canonical', 'seo.keywords', 'seo.jsonLd', 'seo.openGraph.image', 'seo.robots'],
         },
         canvas: {
             width: DEFAULT_CANVAS_SIZE.width,
@@ -876,6 +993,7 @@ function NewPageRoute() {
             'Navigation placement updates the site navigation settings after the page record is created.',
             'Parent placement stores page hierarchy in meta and nests navigation under the selected parent when navigation placement is enabled.',
             'SEO metadata is saved into page meta so render payloads, manifests, and custom frontends can use it immediately.',
+            'Keywords and JSON-LD are generated by default and can be overridden before create.',
             'The canvas seed is serialized before persistence so the editor never starts from a blank record unless the user intentionally keeps the starter sparse.',
         ],
     }), [
@@ -883,6 +1001,8 @@ function NewPageRoute() {
         createPayloadPreview,
         formData.description,
         formData.isHomepage,
+        formData.keywords,
+        formData.jsonLdText,
         formData.navigationLabel,
         formData.navigationPlacement,
         formData.noFollow,
@@ -895,6 +1015,8 @@ function NewPageRoute() {
         formData.title,
         effectiveSeoDescription,
         effectiveSeoTitle,
+        effectiveKeywords,
+        effectiveJsonLd,
         normalizedCanonicalPath,
         pageCreationReadiness.checks,
         pageCreationReadiness.score,
@@ -923,6 +1045,8 @@ function NewPageRoute() {
         || formData.navigationLabel.trim().length > 0
         || formData.seoTitle.trim().length > 0
         || formData.canonicalPath.trim().length > 0
+        || formData.keywords.trim().length > 0
+        || formData.jsonLdText.trim().length > 0
         || formData.ogImage.trim().length > 0
         || formData.noIndex
         || formData.noFollow
@@ -930,6 +1054,8 @@ function NewPageRoute() {
         formData.canonicalPath,
         formData.description,
         formData.isHomepage,
+        formData.keywords,
+        formData.jsonLdText,
         formData.navigationLabel,
         formData.navigationPlacement,
         formData.parentPageId,
@@ -1057,6 +1183,8 @@ function NewPageRoute() {
                 setError('Choose a publish date before creating a scheduled page');
             } else if (!hasNavigationLabel) {
                 setError('Add a navigation label or choose not to add this page to navigation.');
+            } else if (!jsonLdValid) {
+                setError(jsonLdResult.message);
             } else {
                 setError('Add a page title and select a site before creating the page.');
             }
@@ -1093,6 +1221,8 @@ function NewPageRoute() {
                 title: effectiveSeoTitle || title,
                 description: formData.description,
                 canonical: normalizedCanonicalPath,
+                keywords: effectiveKeywords,
+                jsonLd: effectiveJsonLd,
                 ogImage: formData.ogImage.trim() || undefined,
                 noIndex: formData.noIndex,
                 noFollow: formData.noFollow,
@@ -1627,6 +1757,43 @@ function NewPageRoute() {
                         </div>
 
                         <div>
+                            <label htmlFor="page-seo-keywords" className="mb-2 block text-sm font-medium">Keywords</label>
+                            <input
+                                id="page-seo-keywords"
+                                type="text"
+                                value={formData.keywords}
+                                onChange={(event) => updatePageDraft({ keywords: event.target.value })}
+                                placeholder={defaultKeywordText || 'brand, service, page topic'}
+                                disabled={isPageCreateBusy}
+                                className="w-full rounded-lg border bg-card px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                            />
+                            <div className="mt-1 text-xs text-muted-foreground">
+                                {effectiveKeywords.length} keyword{effectiveKeywords.length === 1 ? '' : 's'} will be saved into page meta.
+                            </div>
+                        </div>
+
+                        <div>
+                            <label htmlFor="page-json-ld" className="mb-2 block text-sm font-medium">JSON-LD structured data</label>
+                            <textarea
+                                id="page-json-ld"
+                                value={formData.jsonLdText}
+                                onChange={(event) => updatePageDraft({ jsonLdText: event.target.value })}
+                                placeholder={JSON.stringify(defaultJsonLd, null, 2)}
+                                rows={7}
+                                disabled={isPageCreateBusy}
+                                className={cn(
+                                    'w-full resize-y rounded-lg border bg-card px-4 py-2.5 font-mono text-xs leading-5 outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60',
+                                    !jsonLdValid && 'border-amber-300 focus:ring-amber-300',
+                                )}
+                            />
+                            <div className={cn('mt-1 text-xs', jsonLdValid ? 'text-muted-foreground' : 'text-amber-700')}>
+                                {jsonLdValid
+                                    ? `${effectiveJsonLd.length} JSON-LD object${effectiveJsonLd.length === 1 ? '' : 's'} will be saved. Leave empty to use the generated default.`
+                                    : jsonLdResult.message}
+                            </div>
+                        </div>
+
+                        <div>
                             <label htmlFor="page-og-image" className="mb-2 block text-sm font-medium">Open Graph image URL</label>
                             <div className="relative">
                                 <ImageIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1963,6 +2130,8 @@ const isRecoverablePageCreateDraft = (value: Partial<PageCreateAutosaveDraft>): 
         && typeof formData.navigationLabel === 'string'
         && typeof formData.seoTitle === 'string'
         && typeof formData.canonicalPath === 'string'
+        && typeof formData.keywords === 'string'
+        && typeof formData.jsonLdText === 'string'
         && typeof formData.ogImage === 'string'
         && typeof formData.noIndex === 'boolean'
         && typeof formData.noFollow === 'boolean'

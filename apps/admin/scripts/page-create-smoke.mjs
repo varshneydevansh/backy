@@ -168,6 +168,8 @@ const navigateToPageCreate = async (client, slug, title, navLabel, seo, parentPa
     parentPageId,
     seoTitle: seo.title,
     canonical: seo.canonical,
+    keywords: seo.keywords,
+    jsonLd: seo.jsonLd,
     ogImage: seo.ogImage,
     noIndex: 'true',
     noFollow: 'true',
@@ -186,6 +188,8 @@ const navigateToPageCreate = async (client, slug, title, navLabel, seo, parentPa
       parentPageId: document.querySelector('#page-parent-page')?.value || '',
       seoTitle: document.querySelector('#page-seo-title')?.value || '',
       canonical: document.querySelector('#page-canonical-path')?.value || '',
+      keywords: document.querySelector('#page-seo-keywords')?.value || '',
+      jsonLd: document.querySelector('#page-json-ld')?.value || '',
       ogImage: document.querySelector('#page-og-image')?.value || '',
       noIndex: Array.from(document.querySelectorAll('#page-seo input[type="checkbox"]'))[0]?.checked ?? null,
       noFollow: Array.from(document.querySelectorAll('#page-seo input[type="checkbox"]'))[1]?.checked ?? null,
@@ -202,6 +206,8 @@ const navigateToPageCreate = async (client, slug, title, navLabel, seo, parentPa
       && state.parentPageId === parentPageId
       && state.seoTitle === seo.title
       && state.canonical === seo.canonical
+      && state.keywords === seo.keywords
+      && state.jsonLd === seo.jsonLd
       && state.ogImage === seo.ogImage
       && state.noIndex === true
       && state.noFollow === true
@@ -236,6 +242,8 @@ const assertAutosaveWritten = async (client, slug, title, navLabel, seo, parentP
         parentPageId: parsed?.formData?.parentPageId || null,
         seoTitle: parsed?.formData?.seoTitle || null,
         canonicalPath: parsed?.formData?.canonicalPath || null,
+        keywords: parsed?.formData?.keywords || null,
+        jsonLdText: parsed?.formData?.jsonLdText || null,
         ogImage: parsed?.formData?.ogImage || null,
         noIndex: parsed?.formData?.noIndex ?? null,
         noFollow: parsed?.formData?.noFollow ?? null,
@@ -259,6 +267,8 @@ const assertAutosaveWritten = async (client, slug, title, navLabel, seo, parentP
   assert(state.parentPageId === parentPageId, `Autosave parent page mismatch: ${JSON.stringify(state)}`);
   assert(state.seoTitle === seo.title, `Autosave SEO title mismatch: ${JSON.stringify(state)}`);
   assert(state.canonicalPath === seo.canonical, `Autosave canonical mismatch: ${JSON.stringify(state)}`);
+  assert(state.keywords === seo.keywords, `Autosave keywords mismatch: ${JSON.stringify(state)}`);
+  assert(state.jsonLdText === seo.jsonLd, `Autosave JSON-LD mismatch: ${JSON.stringify(state)}`);
   assert(state.ogImage === seo.ogImage, `Autosave OG image mismatch: ${JSON.stringify(state)}`);
   assert(state.noIndex === true, `Autosave noIndex mismatch: ${JSON.stringify(state)}`);
   assert(state.noFollow === true, `Autosave noFollow mismatch: ${JSON.stringify(state)}`);
@@ -306,6 +316,8 @@ const assertRecoveryRestore = async (client, slug, title, navLabel, seo, parentP
     parentPageId: document.querySelector('#page-parent-page')?.value || '',
     seoTitle: document.querySelector('#page-seo-title')?.value || '',
     canonical: document.querySelector('#page-canonical-path')?.value || '',
+    keywords: document.querySelector('#page-seo-keywords')?.value || '',
+    jsonLd: document.querySelector('#page-json-ld')?.value || '',
     ogImage: document.querySelector('#page-og-image')?.value || '',
     noIndex: Array.from(document.querySelectorAll('#page-seo input[type="checkbox"]'))[0]?.checked ?? null,
     noFollow: Array.from(document.querySelectorAll('#page-seo input[type="checkbox"]'))[1]?.checked ?? null,
@@ -319,6 +331,8 @@ const assertRecoveryRestore = async (client, slug, title, navLabel, seo, parentP
   assert(state.parentPageId === parentPageId, `Recovered draft parent page mismatch: ${JSON.stringify(state)}`);
   assert(state.seoTitle === seo.title, `Recovered draft SEO title mismatch: ${JSON.stringify(state)}`);
   assert(state.canonical === seo.canonical, `Recovered draft canonical mismatch: ${JSON.stringify(state)}`);
+  assert(state.keywords === seo.keywords, `Recovered draft keywords mismatch: ${JSON.stringify(state)}`);
+  assert(state.jsonLd === seo.jsonLd, `Recovered draft JSON-LD mismatch: ${JSON.stringify(state)}`);
   assert(state.ogImage === seo.ogImage, `Recovered draft OG image mismatch: ${JSON.stringify(state)}`);
   assert(state.noIndex === true, `Recovered draft noIndex mismatch: ${JSON.stringify(state)}`);
   assert(state.noFollow === true, `Recovered draft noFollow mismatch: ${JSON.stringify(state)}`);
@@ -333,6 +347,8 @@ const assertCreatedPageSeo = async (pageId, seo, parentPage) => {
   assert(page.parentId === parentPage.id, `Created page parentId mismatch: ${JSON.stringify({ parentId: page.parentId, meta: page.meta })}`);
   assert(page.meta?.title === seo.title, `Created page SEO title mismatch: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.canonical === seo.normalizedCanonical, `Created page canonical mismatch: ${JSON.stringify(page.meta)}`);
+  assert(Array.isArray(page.meta?.keywords) && page.meta.keywords.join(',') === seo.expectedKeywords.join(','), `Created page keywords mismatch: ${JSON.stringify(page.meta)}`);
+  assert(Array.isArray(page.meta?.jsonLd) && page.meta.jsonLd[0]?.['@type'] === 'AboutPage', `Created page JSON-LD mismatch: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.ogImage === seo.ogImage, `Created page OG image mismatch: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.noIndex === true, `Created page noIndex mismatch: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.noFollow === true, `Created page noFollow mismatch: ${JSON.stringify(page.meta)}`);
@@ -508,6 +524,15 @@ const main = async () => {
     title: 'Smoke Page SEO Title',
     canonical: `https://example.com/${slug}`,
     normalizedCanonical: `/${slug}`,
+    keywords: 'smoke page, page builder, structured data',
+    expectedKeywords: ['smoke page', 'page builder', 'structured data'],
+    jsonLd: JSON.stringify([
+      {
+        '@context': 'https://schema.org',
+        '@type': 'AboutPage',
+        name: 'Smoke Page SEO Title',
+      },
+    ], null, 2),
     ogImage: 'https://example.com/smoke-page-og.jpg',
   };
   const { childProcess, userDataDir } = launchChrome();
