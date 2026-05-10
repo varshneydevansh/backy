@@ -13,6 +13,7 @@ const PORT = Number(process.env.BACKY_BLOG_CREATE_CDP_PORT || 9371);
 const SCREENSHOT_PATH = process.env.BACKY_BLOG_CREATE_SCREENSHOT || path.join(os.tmpdir(), 'backy-blog-create-smoke.png');
 const FRONTEND_BLOG_TEMPLATE_ID = 'smoke-blog-contract-template';
 const FRONTEND_BLOG_TEMPLATE_NAME = 'Smoke Blog Contract';
+let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -46,6 +47,7 @@ const requestApi = async (endpoint, options = {}) => {
     ...options,
     headers: {
       'content-type': 'application/json',
+      ...(endpoint.startsWith('/api/admin/') && apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
       ...(options.headers || {}),
     },
   });
@@ -56,6 +58,27 @@ const requestApi = async (endpoint, options = {}) => {
   }
 
   return payload;
+};
+
+const loginAdminApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.success === false || !payload.data?.session?.token) {
+    throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
+  }
+
+  apiAdminSessionToken = payload.data.session.token;
+  return payload.data;
 };
 
 const getFrontendDesign = async () => {
@@ -757,6 +780,7 @@ const cleanup = async ({ client, childProcess, userDataDir, postId }) => {
 };
 
 const main = async () => {
+  await loginAdminApi();
   const slug = `blog-create-smoke-${Date.now().toString(36)}`;
   const { childProcess, userDataDir } = launchChrome();
   let client;

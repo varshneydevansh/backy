@@ -13,6 +13,7 @@ const PORT = Number(process.env.BACKY_FORMS_CDP_PORT || 9379);
 const SCREENSHOT_PATH = process.env.BACKY_FORMS_SCREENSHOT || path.join(os.tmpdir(), 'backy-forms-smoke.png');
 const FRONTEND_FORM_TEMPLATE_ID = 'smoke-form-contract-template';
 const FRONTEND_FORM_TEMPLATE_NAME = 'Smoke Frontend Intake';
+let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -46,6 +47,7 @@ const requestApi = async (endpoint, options = {}) => {
     ...options,
     headers: {
       'content-type': 'application/json',
+      ...(endpoint.startsWith('/api/admin/') && apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
       ...(options.headers || {}),
     },
   });
@@ -56,6 +58,27 @@ const requestApi = async (endpoint, options = {}) => {
   }
 
   return payload;
+};
+
+const loginAdminApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.success === false || !payload.data?.session?.token) {
+    throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
+  }
+
+  apiAdminSessionToken = payload.data.session.token;
+  return payload.data;
 };
 
 const getFrontendDesign = async () => {
@@ -872,6 +895,7 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 };
 
 const main = async () => {
+  await loginAdminApi();
   const originalFrontendDesign = await getFrontendDesign();
   await patchFrontendDesign(smokeFrontendDesignContract());
   const beforeIds = new Set((await listForms()).map((form) => form.id));

@@ -4,6 +4,7 @@ import { validateAiFrontendManifest } from '../../public/scripts/validate-ai-ren
 
 const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 const SITE_ID = process.env.BACKY_FRONTEND_DESIGN_SMOKE_SITE_ID || 'site-demo';
+let apiAdminSessionToken = '';
 
 const assert = (condition, message) => {
   if (!condition) {
@@ -16,6 +17,7 @@ const requestApi = async (endpoint, options = {}) => {
     ...options,
     headers: {
       'content-type': 'application/json',
+      ...(endpoint.startsWith('/api/admin/') && apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
       ...(options.headers || {}),
     },
   });
@@ -26,6 +28,27 @@ const requestApi = async (endpoint, options = {}) => {
   }
 
   return payload;
+};
+
+const loginAdminApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.success === false || !payload.data?.session?.token) {
+    throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
+  }
+
+  apiAdminSessionToken = payload.data.session.token;
+  return payload.data;
 };
 
 const getFrontendDesign = async () => {
@@ -156,6 +179,12 @@ const smokeContract = () => ({
 });
 
 const main = async () => {
+  const unauthResponse = await fetch(`${API_BASE_URL}/api/admin/sites/${SITE_ID}/frontend-design`);
+  const unauthPayload = await unauthResponse.json().catch(() => ({}));
+  assert(unauthResponse.status === 401, `Frontend design API should reject missing auth, got ${unauthResponse.status}`);
+  assert(unauthPayload?.success === false && unauthPayload?.error?.code === 'UNAUTHORIZED', `Frontend design API missing auth envelope: ${JSON.stringify(unauthPayload).slice(0, 500)}`);
+
+  await loginAdminApi();
   const original = await getFrontendDesign();
   const unique = Date.now().toString(36);
   let createdPageId = null;

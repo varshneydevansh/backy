@@ -18,6 +18,7 @@ const TEMPLATE_MOBILE_SCREENSHOT_PATH = process.env.BACKY_PAGE_CREATE_TEMPLATE_M
 const EDITOR_TEMPLATE_SCREENSHOT_DIR = process.env.BACKY_PAGE_CREATE_EDITOR_TEMPLATE_SCREENSHOT_DIR || os.tmpdir();
 const FRONTEND_DESIGN_TEMPLATE_ID = 'smoke-page-contract-template';
 const FRONTEND_DESIGN_TEMPLATE_NAME = 'Smoke Contract Landing';
+let apiAdminSessionToken = '';
 
 const STARTER_TEMPLATE_BACKEND_CASES = [
   {
@@ -200,6 +201,7 @@ const requestApi = async (endpoint, options = {}) => {
     ...options,
     headers: {
       'content-type': 'application/json',
+      ...(endpoint.startsWith('/api/admin/') && apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
       ...(options.headers || {}),
     },
   });
@@ -210,6 +212,27 @@ const requestApi = async (endpoint, options = {}) => {
   }
 
   return payload;
+};
+
+const loginAdminApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.success === false || !payload.data?.session?.token) {
+    throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
+  }
+
+  apiAdminSessionToken = payload.data.session.token;
+  return payload.data;
 };
 
 const createParentPage = async () => {
@@ -1581,6 +1604,7 @@ const cleanup = async ({ client, childProcess, userDataDir, pageIds = [], pageId
 };
 
 const main = async () => {
+  await loginAdminApi();
   const slug = `page-create-smoke-${Date.now().toString(36)}`;
   const title = 'Smoke Page Create';
   const navLabel = 'Smoke Nav Page';

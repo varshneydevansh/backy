@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import type { Site, SiteSettings } from '@backy-cms/core';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   getPageSummary,
@@ -111,6 +112,8 @@ const persistRepositoryFrontendDesign = async (
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'sites.view' });
+  if (access instanceof NextResponse) return access;
 
   try {
     const { siteId } = await params;
@@ -141,6 +144,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'sites.configure' });
+  if (access instanceof NextResponse) return access;
 
   try {
     const { siteId } = await params;
@@ -235,6 +240,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'sites.configure' });
+  if (access instanceof NextResponse) return access;
 
   try {
     const { siteId } = await params;
