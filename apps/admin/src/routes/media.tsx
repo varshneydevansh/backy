@@ -16,6 +16,7 @@ import {
   listAdminAuditLogs,
   listBlogPosts,
   listPages,
+  updateSettings as updateBackendSettings,
   validateSettingsInfrastructure,
   type AdminAuditLog,
   type SiteSettingsInput,
@@ -48,6 +49,9 @@ import { useStore, type MediaAsset } from '@/stores/mockStore';
 type MediaTypeFilter = 'all' | MediaAsset['type'];
 type MediaVisibilityFilter = 'all' | 'public' | 'private';
 type MediaUsageFilter = 'all' | 'unused' | 'referenced' | 'replaced';
+type MediaIntegrationSettings = NonNullable<SiteSettingsInput['integrations']>;
+type MediaStorageSettings = NonNullable<MediaIntegrationSettings['storage']>;
+type MediaSupabaseSettings = NonNullable<MediaIntegrationSettings['supabase']>;
 
 interface MediaSearch {
   siteId?: string;
@@ -228,6 +232,13 @@ const cleanFontFamilyFromFilename = (name: string): string => (
     .trim() || name.replace(/\.[a-z0-9]+$/i, '')
 );
 
+const buildSupabaseStoragePublicBaseUrl = (projectUrl?: string, bucket?: string): string => {
+  const trimmedUrl = projectUrl?.trim().replace(/\/+$/, '');
+  const trimmedBucket = bucket?.trim();
+  if (!trimmedUrl || !trimmedBucket) return '';
+  return `${trimmedUrl}/storage/v1/object/public/${trimmedBucket}`;
+};
+
 function MediaPage() {
   const navigate = useNavigate();
   const routeSearch = Route.useSearch();
@@ -253,10 +264,14 @@ function MediaPage() {
   const [mediaQuota, setMediaQuota] = useState<MediaQuota | undefined>();
   const [runtimeStorage, setRuntimeStorage] = useState<SiteSettingsInput['runtimeStorage']>();
   const [runtimeSupabase, setRuntimeSupabase] = useState<SiteSettingsInput['runtimeSupabase']>();
+  const [settingsDeliveryMode, setSettingsDeliveryMode] = useState<SiteSettingsInput['deliveryMode']>();
+  const [settingsIntegrations, setSettingsIntegrations] = useState<MediaIntegrationSettings | undefined>();
   const [settingsInfrastructureInput, setSettingsInfrastructureInput] = useState<Pick<SiteSettingsInput, 'deliveryMode' | 'integrations'> | null>(null);
   const [storageDiagnostics, setStorageDiagnostics] = useState<SettingsInfrastructureDiagnostic[] | null>(null);
   const [isCheckingStorage, setIsCheckingStorage] = useState(false);
+  const [isSavingStorageSettings, setIsSavingStorageSettings] = useState(false);
   const [storageCheckError, setStorageCheckError] = useState<string | null>(null);
+  const [storageSettingsNotice, setStorageSettingsNotice] = useState<string | null>(null);
   const [signedUrlSeconds, setSignedUrlSeconds] = useState(900);
   const [signedUrlDisposition, setSignedUrlDisposition] = useState<'inline' | 'attachment'>('inline');
   const [transformWidth, setTransformWidth] = useState(1200);
@@ -802,6 +817,8 @@ function MediaPage() {
     siteId,
   ]);
   const mediaHandoffText = useMemo(() => JSON.stringify(mediaHandoff, null, 2), [mediaHandoff]);
+  const storageSettings = settingsIntegrations?.storage || {};
+  const supabaseSettings = settingsIntegrations?.supabase || {};
 
   const loadLibrary = useCallback(async () => {
     setIsLoading(true);
@@ -843,6 +860,8 @@ function MediaPage() {
         if (!cancelled) {
           setRuntimeStorage(settings.runtimeStorage);
           setRuntimeSupabase(settings.runtimeSupabase);
+          setSettingsDeliveryMode(settings.deliveryMode);
+          setSettingsIntegrations(settings.integrations);
           setSettingsInfrastructureInput({
             deliveryMode: settings.deliveryMode,
             integrations: settings.integrations,
@@ -852,6 +871,8 @@ function MediaPage() {
         if (!cancelled) {
           setRuntimeStorage(undefined);
           setRuntimeSupabase(undefined);
+          setSettingsDeliveryMode(undefined);
+          setSettingsIntegrations(undefined);
           setSettingsInfrastructureInput(null);
         }
       }
@@ -863,6 +884,111 @@ function MediaPage() {
       cancelled = true;
     };
   }, []);
+
+  const updateMediaStorageSettingsDraft = useCallback((next: Partial<MediaStorageSettings>) => {
+    setStorageSettingsNotice(null);
+    setSettingsIntegrations((current) => ({
+      ...(current || {}),
+      storage: {
+        ...(current?.storage || {}),
+        ...next,
+      },
+    }));
+  }, []);
+
+  const updateMediaSupabaseSettingsDraft = useCallback((next: Partial<MediaSupabaseSettings>) => {
+    setStorageSettingsNotice(null);
+    setSettingsIntegrations((current) => ({
+      ...(current || {}),
+      supabase: {
+        ...(current?.supabase || {}),
+        ...next,
+      },
+    }));
+  }, []);
+
+  const handleUseRuntimeStorageSettings = useCallback(() => {
+    updateMediaStorageSettingsDraft({
+      provider: runtimeStorage?.provider || storageSettings.provider || 'local',
+      bucket: runtimeStorage?.bucket || storageSettings.bucket || runtimeSupabase?.storageBucket || '',
+      publicBaseUrl: runtimeStorage?.publicUrl || storageSettings.publicBaseUrl || '',
+      pathPrefix: runtimeStorage?.basePath || storageSettings.pathPrefix || '',
+      imageTransformsEnabled: storageSettings.imageTransformsEnabled !== false,
+    });
+  }, [
+    runtimeStorage?.basePath,
+    runtimeStorage?.bucket,
+    runtimeStorage?.provider,
+    runtimeStorage?.publicUrl,
+    runtimeSupabase?.storageBucket,
+    storageSettings.bucket,
+    storageSettings.imageTransformsEnabled,
+    storageSettings.pathPrefix,
+    storageSettings.provider,
+    storageSettings.publicBaseUrl,
+    updateMediaStorageSettingsDraft,
+  ]);
+
+  const handleUseRuntimeSupabaseSettings = useCallback(() => {
+    const bucket = runtimeSupabase?.storageBucket || storageSettings.bucket || '';
+    const projectUrl = runtimeSupabase?.projectUrl || supabaseSettings.projectUrl || '';
+    const projectRef = runtimeSupabase?.projectRef || supabaseSettings.projectRef || '';
+    const publicBaseUrl = storageSettings.publicBaseUrl || buildSupabaseStoragePublicBaseUrl(projectUrl, bucket);
+
+    setStorageSettingsNotice(null);
+    setSettingsIntegrations((current) => ({
+      ...(current || {}),
+      storage: {
+        ...(current?.storage || {}),
+        provider: 'supabase',
+        bucket,
+        publicBaseUrl,
+        imageTransformsEnabled: current?.storage?.imageTransformsEnabled !== false,
+      },
+      supabase: {
+        ...(current?.supabase || {}),
+        projectUrl,
+        projectRef,
+        storageEnabled: Boolean(bucket || current?.supabase?.storageEnabled),
+      },
+    }));
+  }, [
+    runtimeSupabase?.projectRef,
+    runtimeSupabase?.projectUrl,
+    runtimeSupabase?.storageBucket,
+    storageSettings.bucket,
+    storageSettings.publicBaseUrl,
+    supabaseSettings.projectRef,
+    supabaseSettings.projectUrl,
+  ]);
+
+  const saveMediaStorageSettings = useCallback(async () => {
+    if (!settingsIntegrations || isSavingStorageSettings) return;
+
+    setIsSavingStorageSettings(true);
+    setStorageCheckError(null);
+    setStorageSettingsNotice(null);
+    try {
+      const updated = await updateBackendSettings({
+        ...(settingsDeliveryMode ? { deliveryMode: settingsDeliveryMode } : {}),
+        integrations: settingsIntegrations,
+      });
+      setRuntimeStorage(updated.runtimeStorage);
+      setRuntimeSupabase(updated.runtimeSupabase);
+      setSettingsDeliveryMode(updated.deliveryMode);
+      setSettingsIntegrations(updated.integrations);
+      setSettingsInfrastructureInput({
+        deliveryMode: updated.deliveryMode,
+        integrations: updated.integrations,
+      });
+      setStorageDiagnostics(null);
+      setStorageSettingsNotice('Storage metadata saved. Run check to validate the current runtime.');
+    } catch (saveError) {
+      setStorageCheckError(saveError instanceof Error ? saveError.message : 'Unable to save storage settings.');
+    } finally {
+      setIsSavingStorageSettings(false);
+    }
+  }, [isSavingStorageSettings, settingsDeliveryMode, settingsIntegrations]);
 
   const runStorageInfrastructureCheck = useCallback(async () => {
     if (isCheckingStorage || !settingsInfrastructureInput) return;
@@ -2230,6 +2356,199 @@ function MediaPage() {
               )}
             </div>
           </div>
+
+          <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="media-storage-settings-editor">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Storage provider metadata</h3>
+                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                  Save non-secret provider intent from the media workspace. Runtime credentials still stay in environment variables.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleUseRuntimeStorageSettings}
+                  disabled={isSavingStorageSettings || !settingsIntegrations}
+                >
+                  Use detected storage
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleUseRuntimeSupabaseSettings}
+                  disabled={isSavingStorageSettings || !settingsIntegrations}
+                >
+                  Use Supabase
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="primary"
+                  onClick={() => void saveMediaStorageSettings()}
+                  disabled={isSavingStorageSettings || !settingsIntegrations}
+                  iconStart={<Save className="size-3.5" />}
+                >
+                  {isSavingStorageSettings ? 'Saving...' : 'Save storage'}
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium">Storage provider</span>
+                  <select
+                    aria-label="Storage provider"
+                    value={storageSettings.provider || ''}
+                    disabled={isSavingStorageSettings || !settingsIntegrations}
+                    onChange={(event) => updateMediaStorageSettingsDraft({ provider: event.target.value })}
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="">Choose provider</option>
+                    <option value="local">Local development</option>
+                    <option value="supabase">Supabase Storage</option>
+                    <option value="s3">S3 compatible</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium">Storage bucket</span>
+                  <input
+                    aria-label="Storage bucket"
+                    value={storageSettings.bucket || ''}
+                    disabled={isSavingStorageSettings || !settingsIntegrations}
+                    onChange={(event) => updateMediaStorageSettingsDraft({ bucket: event.target.value })}
+                    placeholder="media"
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm md:col-span-2">
+                  <span className="font-medium">Public media base URL</span>
+                  <input
+                    aria-label="Public media base URL"
+                    value={storageSettings.publicBaseUrl || ''}
+                    disabled={isSavingStorageSettings || !settingsIntegrations}
+                    onChange={(event) => updateMediaStorageSettingsDraft({ publicBaseUrl: event.target.value })}
+                    placeholder="https://project-ref.supabase.co/storage/v1/object/public/media"
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium">Storage path prefix</span>
+                  <input
+                    aria-label="Storage path prefix"
+                    value={storageSettings.pathPrefix || ''}
+                    disabled={isSavingStorageSettings || !settingsIntegrations}
+                    onChange={(event) => updateMediaStorageSettingsDraft({ pathPrefix: event.target.value })}
+                    placeholder="sites/site-demo"
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium">Supabase project URL</span>
+                  <input
+                    aria-label="Supabase project URL"
+                    value={supabaseSettings.projectUrl || ''}
+                    disabled={isSavingStorageSettings || !settingsIntegrations}
+                    onChange={(event) => updateMediaSupabaseSettingsDraft({ projectUrl: event.target.value })}
+                    placeholder="https://project-ref.supabase.co"
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium">Supabase project ref</span>
+                  <input
+                    aria-label="Supabase project ref"
+                    value={supabaseSettings.projectRef || ''}
+                    disabled={isSavingStorageSettings || !settingsIntegrations}
+                    onChange={(event) => updateMediaSupabaseSettingsDraft({ projectRef: event.target.value })}
+                    placeholder="project-ref"
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </label>
+                <div className="grid gap-2">
+                  <label className="flex min-h-10 items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 text-sm">
+                    <input
+                      type="checkbox"
+                      aria-label="Enable private media files"
+                      checked={Boolean(storageSettings.privateFilesEnabled)}
+                      disabled={isSavingStorageSettings || !settingsIntegrations}
+                      onChange={(event) => updateMediaStorageSettingsDraft({ privateFilesEnabled: event.target.checked })}
+                      className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                    Private file delivery
+                  </label>
+                  <label className="flex min-h-10 items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 text-sm">
+                    <input
+                      type="checkbox"
+                      aria-label="Enable image transforms"
+                      checked={storageSettings.imageTransformsEnabled !== false}
+                      disabled={isSavingStorageSettings || !settingsIntegrations}
+                      onChange={(event) => updateMediaStorageSettingsDraft({ imageTransformsEnabled: event.target.checked })}
+                      className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                    Image transforms
+                  </label>
+                  <label className="flex min-h-10 items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 text-sm">
+                    <input
+                      type="checkbox"
+                      aria-label="Enable Supabase storage"
+                      checked={Boolean(supabaseSettings.storageEnabled)}
+                      disabled={isSavingStorageSettings || !settingsIntegrations}
+                      onChange={(event) => updateMediaSupabaseSettingsDraft({ storageEnabled: event.target.checked })}
+                      className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                    Supabase storage
+                  </label>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-muted/30 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold">Saved intent</h4>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      This is the contract custom frontends and operators use before runtime env is configured.
+                    </p>
+                  </div>
+                  <span className="rounded bg-background px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                    metadata
+                  </span>
+                </div>
+                <dl className="mt-3 grid gap-2 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">Provider</dt>
+                    <dd className="font-mono">{storageSettings.provider || 'unset'}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">Bucket</dt>
+                    <dd className="max-w-[58%] truncate font-mono">{storageSettings.bucket || 'unset'}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">Private files</dt>
+                    <dd>{storageSettings.privateFilesEnabled ? 'enabled' : 'off'}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">Transforms</dt>
+                    <dd>{storageSettings.imageTransformsEnabled === false ? 'off' : 'enabled'}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">Supabase storage</dt>
+                    <dd>{supabaseSettings.storageEnabled ? 'enabled' : 'off'}</dd>
+                  </div>
+                </dl>
+                {storageSettingsNotice && (
+                  <Notice tone="success" className="mt-3">
+                    {storageSettingsNotice}
+                  </Notice>
+                )}
+              </div>
+            </div>
+          </div>
+
           {storageCheckError && (
             <Notice tone="warning" title="Storage check failed" className="mt-4">
               {storageCheckError}

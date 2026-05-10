@@ -63,6 +63,25 @@ const requestApi = async (endpoint, options = {}) => {
   return payload;
 };
 
+const readSettings = async () => {
+  const payload = await requestApi('/api/admin/settings');
+  assert(payload.data?.settings, 'Settings API returned no settings payload');
+  return payload.data.settings;
+};
+
+const restoreSettings = async (settings) => {
+  if (!settings) return;
+
+  await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      deliveryMode: settings.deliveryMode,
+      auth: settings.auth,
+      integrations: settings.integrations || {},
+    }),
+  });
+};
+
 const createFolder = async (name) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/media/folders`, {
     method: 'POST',
@@ -410,6 +429,107 @@ const setDetailsField = async (client, labelText, value) => {
   return result;
 };
 
+const setMediaStorageField = async (client, labelText, value) => {
+  let result = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    result = await evaluate(client, `(() => {
+      const labelText = ${JSON.stringify(labelText)};
+      const value = ${JSON.stringify(value)};
+      const normalized = (text) => (text || '').replace(/\\s+/g, ' ').trim();
+      const labels = Array.from(document.querySelectorAll('[data-testid="media-storage-settings-editor"] label'));
+      const label = labels.find((candidate) => normalized(candidate.textContent).includes(labelText));
+      if (!(label instanceof HTMLLabelElement)) {
+        return { ok: false, reason: 'label-not-found', labels: labels.map((item) => normalized(item.textContent)).slice(0, 80) };
+      }
+      const control = label.querySelector('input, select, textarea');
+      if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)) {
+        return { ok: false, reason: 'control-not-found', labelText, container: label.textContent?.slice(0, 300) || '' };
+      }
+      if (control.disabled) return { ok: false, reason: 'control-disabled', labelText };
+      const prototype = control instanceof HTMLSelectElement
+        ? HTMLSelectElement.prototype
+        : control instanceof HTMLTextAreaElement
+          ? HTMLTextAreaElement.prototype
+          : HTMLInputElement.prototype;
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+      descriptor?.set?.call(control, String(value));
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+      return { ok: true, value: control.value };
+    })()`);
+    if (result.ok) break;
+    await sleep(250);
+  }
+  assert(result.ok, `Unable to set media storage field ${labelText}: ${JSON.stringify(result)}`);
+  await sleep(100);
+  return result;
+};
+
+const setMediaStorageCheckbox = async (client, labelText, checked) => {
+  const result = await evaluate(client, `(() => {
+    const labelText = ${JSON.stringify(labelText)};
+    const checked = ${JSON.stringify(checked)};
+    const normalized = (text) => (text || '').replace(/\\s+/g, ' ').trim();
+    const labels = Array.from(document.querySelectorAll('[data-testid="media-storage-settings-editor"] label'));
+    const label = labels.find((candidate) => normalized(candidate.textContent).includes(labelText));
+    if (!(label instanceof HTMLLabelElement)) {
+      return { ok: false, reason: 'label-not-found', labels: labels.map((item) => normalized(item.textContent)).slice(0, 80) };
+    }
+    const control = label.querySelector('input[type="checkbox"]');
+    if (!(control instanceof HTMLInputElement)) {
+      return { ok: false, reason: 'checkbox-not-found', labelText, container: label.textContent?.slice(0, 300) || '' };
+    }
+    if (control.disabled) return { ok: false, reason: 'control-disabled', labelText };
+    if (control.checked !== checked) {
+      control.click();
+    }
+    return { ok: true, checked: control.checked };
+  })()`);
+  assert(result.ok, `Unable to set media storage checkbox ${labelText}: ${JSON.stringify(result)}`);
+  await sleep(100);
+  return result;
+};
+
+const saveMediaStorageSettingsFromUi = async (client, suffix) => {
+  await setMediaStorageField(client, 'Storage provider', 'supabase');
+  await setMediaStorageField(client, 'Storage bucket', `media-${suffix}`);
+  await setMediaStorageField(client, 'Public media base URL', `https://${suffix}.supabase.co/storage/v1/object/public/media-${suffix}`);
+  await setMediaStorageField(client, 'Storage path prefix', `sites/${SITE_ID}/${suffix}`);
+  await setMediaStorageField(client, 'Supabase project URL', `https://${suffix}.supabase.co`);
+  await setMediaStorageField(client, 'Supabase project ref', suffix);
+  await setMediaStorageCheckbox(client, 'Private file delivery', true);
+  await setMediaStorageCheckbox(client, 'Image transforms', true);
+  await setMediaStorageCheckbox(client, 'Supabase storage', true);
+
+  const clicked = await evaluate(client, `(() => {
+    const panel = document.querySelector('[data-testid="media-storage-settings-editor"]');
+    if (!(panel instanceof HTMLElement)) return { ok: false, reason: 'panel-not-found' };
+    const button = Array.from(panel.querySelectorAll('button')).find((candidate) => (
+      /Save storage|Saving/.test(candidate.textContent || '')
+    ));
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'save-button-not-found', buttons: Array.from(panel.querySelectorAll('button')).map((item) => item.textContent?.trim()).slice(0, 20) };
+    }
+    if (button.disabled) return { ok: false, reason: 'save-button-disabled', text: button.textContent || '' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clicked.ok, `Unable to save media storage settings: ${JSON.stringify(clicked)}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      saved: document.body?.innerText?.includes('Storage metadata saved.'),
+      error: document.body?.innerText?.includes('Storage check failed'),
+      body: document.body?.innerText?.slice(0, 1400) || '',
+    }))()`);
+    if (state.saved) return state;
+    assert(!state.error, `Media storage settings save failed: ${JSON.stringify(state)}`);
+    await sleep(250);
+  }
+
+  throw new Error('Timed out waiting for media storage settings save notice');
+};
+
 const clickDetailsButton = async (client, text) => {
   const result = await evaluate(client, `(() => {
     const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
@@ -658,6 +778,8 @@ const main = async () => {
   let childProcess;
   let userDataDir;
   let folderId;
+  let originalSettings;
+  let restoredSettings = false;
   const mediaIds = [];
   const suffix = Date.now().toString(36);
   const marker = `media-smoke-${suffix}`;
@@ -670,6 +792,7 @@ const main = async () => {
   const tempFiles = [replacementPath];
 
   try {
+    originalSettings = await readSettings();
     fs.writeFileSync(replacementPath, ONE_PIXEL_PNG);
     const existing = await listMedia(marker);
     assert(existing.length === 0, `Temporary media already exists for marker ${marker}`);
@@ -719,6 +842,14 @@ const main = async () => {
     await waitForMediaPageAsset(client, imageName);
     await waitForMediaPageAsset(client, privateName);
     await assertMediaLayout(client, imageName);
+    await saveMediaStorageSettingsFromUi(client, suffix);
+    const savedStorageSettings = await readSettings();
+    assert(savedStorageSettings.integrations?.storage?.provider === 'supabase', 'Media storage provider was not persisted through the Media page.');
+    assert(savedStorageSettings.integrations?.storage?.bucket === `media-${suffix}`, 'Media storage bucket was not persisted through the Media page.');
+    assert(savedStorageSettings.integrations?.storage?.privateFilesEnabled === true, 'Media private file setting was not persisted through the Media page.');
+    assert(savedStorageSettings.integrations?.storage?.imageTransformsEnabled === true, 'Media image transform setting was not persisted through the Media page.');
+    assert(savedStorageSettings.integrations?.supabase?.projectRef === suffix, 'Media Supabase project ref was not persisted through the Media page.');
+    assert(savedStorageSettings.integrations?.supabase?.storageEnabled === true, 'Media Supabase storage toggle was not persisted through the Media page.');
     await runMediaStorageCheck(client);
 
     await openMediaDetails(client, imageName);
@@ -764,6 +895,8 @@ const main = async () => {
     await deleteFolder(folderId);
     folderId = null;
     await waitForMediaMissing(marker);
+    await restoreSettings(originalSettings);
+    restoredSettings = true;
 
     console.log(JSON.stringify({
       ok: true,
@@ -771,8 +904,14 @@ const main = async () => {
       folderName,
       replacementName,
       screenshot: SCREENSHOT_PATH,
+      restoredSettings,
     }, null, 2));
   } finally {
+    if (!restoredSettings) {
+      await restoreSettings(originalSettings).catch((error) => {
+        console.warn('Unable to restore original settings:', error instanceof Error ? error.message : error);
+      });
+    }
     await cleanup({ client, childProcess, userDataDir, mediaIds, folderId, tempFiles });
   }
 };
