@@ -394,11 +394,6 @@ function PagesListView() {
   const getCreatePageSearch = (template: PageCreationTemplate = 'blank') => (
     template === 'blank' ? createPageSearch : { ...createPageSearch, template }
   );
-  const openCreatePage = (template: PageCreationTemplate = 'blank') => {
-    if (isPageLibraryBusy) return;
-
-    navigate({ to: '/pages/new', search: getCreatePageSearch(template) });
-  };
   const pageDesignReadiness = useMemo(() => {
     const checkedPages = activeSitePages.filter((page) => readinessMap[page.id]);
     const readyPages = activeSitePages.filter((page) => readinessMap[page.id]?.statusLabel === 'ready');
@@ -1872,29 +1867,35 @@ function PagesListView() {
                       Clear Filters
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => openCreatePage()}
-                    disabled={isPageLibraryBusy}
+                  <Link
+                    to="/pages/new"
+                    search={createPageSearch}
+                    aria-disabled={isPageLibraryBusy}
                     data-testid="pages-empty-create"
-                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                    className={cn(
+                      'inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90',
+                      isPageLibraryBusy && 'pointer-events-none opacity-60',
+                    )}
                     aria-label={hasPages ? 'Create page after clearing filters' : 'Create first page for active site'}
                   >
                     <Plus className="w-4 h-4" />
                     {hasPages ? 'New Page' : 'Create First Page'}
-                  </button>
+                  </Link>
                   {!hasPages && (
                     <div className="mt-3 grid w-full max-w-3xl gap-2 sm:grid-cols-2 lg:grid-cols-3">
                       {PAGE_CREATION_SHORTCUTS.map((shortcut) => {
                         const ShortcutIcon = shortcut.icon;
 
                         return (
-                          <button
+                          <Link
                             key={shortcut.key}
-                            type="button"
-                            onClick={() => openCreatePage(shortcut.key)}
-                            disabled={isPageLibraryBusy}
-                            className="rounded-lg border border-border bg-background px-3 py-3 text-left transition hover:border-primary/50 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                            to="/pages/new"
+                            search={getCreatePageSearch(shortcut.key)}
+                            aria-disabled={isPageLibraryBusy}
+                            className={cn(
+                              'rounded-lg border border-border bg-background px-3 py-3 text-left transition hover:border-primary/50 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring',
+                              isPageLibraryBusy && 'pointer-events-none opacity-60',
+                            )}
                             data-testid={`pages-empty-create-${shortcut.key}`}
                             aria-label={`Create ${shortcut.title.toLowerCase()} for active site`}
                           >
@@ -1905,7 +1906,7 @@ function PagesListView() {
                               <span className="text-sm font-semibold text-foreground">{shortcut.title}</span>
                             </div>
                             <div className="mt-2 text-xs leading-5 text-muted-foreground">{shortcut.detail}</div>
-                          </button>
+                          </Link>
                         );
                       })}
                     </div>
