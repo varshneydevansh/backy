@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Home, Layout, Save, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Home, Layout, RefreshCw, Save, Sparkles } from 'lucide-react';
 import { createPage, getAdminApiBase, listPages } from '@/lib/adminContentApi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore, type Page } from '@/stores/mockStore';
@@ -221,6 +221,8 @@ function NewPageRoute() {
     const [isCheckingPages, setIsCheckingPages] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    const [routeCheckError, setRouteCheckError] = useState<string | null>(null);
+    const [routeCheckRetry, setRouteCheckRetry] = useState(0);
     const isPageCreateBusy = isLoading || isCheckingPages;
     const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
     const requestedSite = search.siteId
@@ -274,6 +276,7 @@ function NewPageRoute() {
 
         const loadSelectedSitePages = async () => {
             setIsCheckingPages(true);
+            setRouteCheckError(null);
 
             try {
                 const backendPages = await listPages(siteId);
@@ -284,10 +287,13 @@ function NewPageRoute() {
                     const otherPages = pages.filter((page) => !siteIdentifiers.has(page.siteId));
                     setPages([...backendPages, ...otherPages]);
                     setError(null);
+                    setRouteCheckError(null);
                 }
             } catch (loadError) {
                 if (!cancelled) {
-                    setError(loadError instanceof Error ? loadError.message : 'Unable to check existing pages for this site');
+                    const message = loadError instanceof Error ? loadError.message : 'Unable to check existing pages for this site';
+                    setRouteCheckError(message);
+                    setError(message);
                 }
             } finally {
                 if (!cancelled) {
@@ -301,7 +307,7 @@ function NewPageRoute() {
         return () => {
             cancelled = true;
         };
-    }, [formData.siteId, selectedSite?.id, selectedSite?.publicSiteId, setPages]);
+    }, [formData.siteId, routeCheckRetry, selectedSite?.id, selectedSite?.publicSiteId, setPages]);
 
     useEffect(() => {
         if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, formData.siteId))) {
@@ -410,17 +416,19 @@ function NewPageRoute() {
         && !isCheckingPages
         && hasSchedule
         && !routeConflict
+        && !routeCheckError
         && (!formData.isHomepage || formData.slug.trim() || formData.title.trim()),
     );
     const submitBlockerMessage = useMemo(() => {
         if (isLoading || canSubmit) return null;
         if (isCheckingPages) return 'Checking existing routes for this site before creating the page.';
+        if (routeCheckError) return 'Backy could not verify existing routes for this site. Refresh or choose the site again before creating the page.';
         if (!selectedSite) return 'Select a target site before creating this page.';
         if (!formData.title.trim()) return 'Add a page title so Backy can create a named page and editor document.';
         if (routeConflict) return `The ${routePreview} route is already used by "${routeConflict.title}".`;
         if (!hasSchedule) return 'Choose a publish date before creating a scheduled page.';
         return 'Review the required page basics before creating this page.';
-    }, [canSubmit, formData.title, hasSchedule, isCheckingPages, isLoading, routeConflict, routePreview, selectedSite]);
+    }, [canSubmit, formData.title, hasSchedule, isCheckingPages, isLoading, routeCheckError, routeConflict, routePreview, selectedSite]);
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
         const hasStarterCanvas = selectedTemplate.sections.length > 0;
@@ -443,10 +451,12 @@ function NewPageRoute() {
             },
             {
                 label: 'Route availability',
-                detail: routeConflict
+                detail: routeCheckError
+                    ? 'Backy could not verify existing routes for this site.'
+                    : routeConflict
                     ? `${routePreview} is already used by "${routeConflict.title}". Choose another slug or edit that page.`
                     : `${routePreview} is available in the current ${selectedSite?.name || 'site'} page library.`,
-                ready: !routeConflict,
+                ready: !routeConflict && !routeCheckError,
             },
             {
                 label: 'SEO summary',
@@ -492,6 +502,7 @@ function NewPageRoute() {
         formData.template,
         formData.title,
         hasSchedule,
+        routeCheckError,
         routeConflict,
         routePreview,
         selectedSite,
@@ -659,6 +670,7 @@ function NewPageRoute() {
         setIsLoading(true);
         setError(null);
         setNotice(null);
+        setRouteCheckError(null);
 
         const title = formData.title.trim();
         const slug = resolvedSlug;
@@ -692,7 +704,9 @@ function NewPageRoute() {
             setPages([created, ...pages.filter((page) => page.id !== created.id)]);
             navigate({ to: '/pages/$pageId/edit', params: { pageId: created.id }, search: { siteId: formData.siteId } });
         } catch (createError) {
-            setError(createError instanceof Error ? createError.message : 'Unable to create page');
+            setError(createError instanceof Error
+                ? `${createError.message}. The page was not created because the backend did not persist it.`
+                : 'Unable to create page. The page was not persisted.');
         } finally {
             setIsLoading(false);
         }
@@ -845,7 +859,23 @@ function NewPageRoute() {
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
                 {error && (
                     <div className="xl:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                        {error}. The page was not created because the backend did not persist it.
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <span>{error}</span>
+                            {routeCheckError && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (isPageCreateBusy) return;
+                                        setRouteCheckRetry((value) => value + 1);
+                                    }}
+                                    disabled={isPageCreateBusy}
+                                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    <RefreshCw className={cn('h-3.5 w-3.5', isCheckingPages && 'animate-spin')} />
+                                    Retry route check
+                                </button>
+                            )}
+                        </div>
                     </div>
                 )}
 
