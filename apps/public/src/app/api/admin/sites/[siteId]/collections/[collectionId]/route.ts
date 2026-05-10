@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { BackyCollectionField, BackyCollectionPermissions, PublishStatus } from '@backy-cms/core';
+import type { BackyCollectionField, BackyCollectionPermissions, BackyJsonObject, PublishStatus } from '@backy-cms/core';
 import {
   deleteAdminCollection,
   getCollectionByIdOrSlug,
@@ -64,6 +64,12 @@ const toCollectionFields = (value: unknown): BackyCollectionField[] | undefined 
 const toCollectionPermissions = (value: unknown): Partial<BackyCollectionPermissions> | undefined => (
   value && typeof value === 'object' && !Array.isArray(value)
     ? value as Partial<BackyCollectionPermissions>
+    : undefined
+);
+
+const toCollectionMetadata = (value: unknown): BackyJsonObject | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as BackyJsonObject
     : undefined
 );
 
@@ -204,6 +210,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ...(parseStatus(body.status) ? { status: parseStatus(body.status) } : {}),
         ...(fields === undefined ? {} : { fields }),
         ...(body.permissions === undefined ? {} : { permissions: toCollectionPermissions(body.permissions) }),
+        ...(body.metadata === undefined ? {} : { metadata: toCollectionMetadata(body.metadata) || {} }),
         ...(nextSlug ? { slug: nextSlug } : {}),
         ...(routePattern === undefined ? {} : { routePattern }),
         ...(listRoutePattern === undefined ? {} : { listRoutePattern }),

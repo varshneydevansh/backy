@@ -318,6 +318,7 @@ export interface BackyCollection {
   status: PublishStatus;
   fields: BackyCollectionField[];
   permissions: BackyCollectionPermissions;
+  metadata?: BackyJsonObject;
   createdAt: string;
   updatedAt: string;
 }
@@ -345,6 +346,7 @@ export interface BackyCollectionCreateInput {
   status?: PublishStatus;
   fields: BackyCollectionField[];
   permissions?: Partial<BackyCollectionPermissions>;
+  metadata?: BackyJsonObject;
 }
 
 export interface BackyCollectionUpdateInput extends Partial<Omit<BackyCollectionCreateInput, 'siteId'>> {}

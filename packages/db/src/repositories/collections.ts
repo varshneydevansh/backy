@@ -10,6 +10,7 @@ import {
     type BackyCollectionRepository,
     type BackyCollectionListInput,
     type BackyCollectionUpdateInput,
+    type BackyJsonObject,
     type BackyJsonValue,
     type BackyListResult,
     type BackyRepositoryMutationResult,
@@ -142,6 +143,10 @@ const normalizeValues = (value: unknown): Record<string, BackyJsonValue> => (
     isRecord(value) ? value as Record<string, BackyJsonValue> : {}
 );
 
+const normalizeMetadata = (value: unknown): BackyJsonObject => (
+    isRecord(value) ? value as BackyJsonObject : {}
+);
+
 const sortValue = (record: BackyCollectionRecord, key: string): string | number | boolean => {
     const value = key in record ? record[key as keyof BackyCollectionRecord] : record.values[key];
     if (typeof value === 'number' || typeof value === 'boolean') {
@@ -174,6 +179,7 @@ const toCollection = (row: CollectionRow): BackyCollection => ({
     status: row.status,
     fields: normalizeFields(row.fields),
     permissions: normalizePermissions(row.permissions),
+    metadata: normalizeMetadata(row.metadata),
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
 });
@@ -230,6 +236,7 @@ export function createCollectionRepository(db: DatabaseInstance): BackyCollectio
                 status: input.status || 'draft',
                 fields: input.fields,
                 permissions: normalizePermissions(input.permissions),
+                metadata: input.metadata || {},
                 updatedAt: new Date(),
             }).returning() as CollectionRow[];
             return { item: toCollection(row) };
@@ -247,6 +254,7 @@ export function createCollectionRepository(db: DatabaseInstance): BackyCollectio
             if (input.status !== undefined) updates.status = input.status;
             if (input.fields !== undefined) updates.fields = input.fields;
             if (input.permissions !== undefined) updates.permissions = normalizePermissions(input.permissions);
+            if (input.metadata !== undefined) updates.metadata = input.metadata || {};
 
             const [row] = await database.update(contentCollections).set(updates).where(and(eq(contentCollections.siteId, siteId), eq(contentCollections.id, collectionId))).returning() as CollectionRow[];
             return { item: toCollection(row) };

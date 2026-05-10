@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { BackyCollectionField, BackyCollectionPermissions, PublishStatus } from '@backy-cms/core';
+import type { BackyCollectionField, BackyCollectionPermissions, BackyJsonObject, PublishStatus } from '@backy-cms/core';
 import {
   createAdminCollection,
   getCollectionByIdOrSlug,
@@ -62,6 +62,12 @@ const toCollectionFields = (value: unknown): BackyCollectionField[] => (
 const toCollectionPermissions = (value: unknown): Partial<BackyCollectionPermissions> | undefined => (
   value && typeof value === 'object' && !Array.isArray(value)
     ? value as Partial<BackyCollectionPermissions>
+    : undefined
+);
+
+const toCollectionMetadata = (value: unknown): BackyJsonObject | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as BackyJsonObject
     : undefined
 );
 
@@ -210,6 +216,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         status: parseStatus(body.status) || 'draft',
         fields: toCollectionFields(body.fields),
         permissions: toCollectionPermissions(body.permissions),
+        metadata: toCollectionMetadata(body.metadata),
       })).item;
       const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
         siteId: site.id,

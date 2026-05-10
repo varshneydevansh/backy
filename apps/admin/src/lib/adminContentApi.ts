@@ -822,6 +822,7 @@ interface ApiCollection {
     publicUpdate: boolean;
     publicDelete: boolean;
   };
+  metadata?: Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -1542,6 +1543,7 @@ export interface Collection {
   status: 'draft' | 'published' | 'archived';
   fields: CollectionField[];
   permissions: CollectionPermissions;
+  metadata?: Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -1568,6 +1570,7 @@ export interface CollectionInput {
   status?: Collection['status'];
   fields?: CollectionField[];
   permissions?: CollectionPermissions;
+  metadata?: Record<string, unknown>;
 }
 
 export interface CollectionRecordInput {
@@ -1908,6 +1911,7 @@ const toCollection = (collection: ApiCollection): Collection => ({
     publicUpdate: collection.permissions?.publicUpdate === true,
     publicDelete: collection.permissions?.publicDelete === true,
   },
+  metadata: collection.metadata || {},
   createdAt: collection.createdAt,
   updatedAt: collection.updatedAt,
 });

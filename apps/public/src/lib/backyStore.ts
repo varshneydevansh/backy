@@ -289,6 +289,7 @@ interface StoreCollection {
   status: 'draft' | 'published' | 'archived';
   fields: StoreCollectionField[];
   permissions: StoreCollectionPermissions;
+  metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
@@ -4386,6 +4387,7 @@ export function createAdminCollection(siteId: string, input: Record<string, unkn
     status: parseStatusInput(input.status, ['draft', 'published', 'archived'] as const, 'draft'),
     fields: normalizeCollectionFields(input.fields),
     permissions: normalizeCollectionPermissions(input.permissions),
+    metadata: asJsonObject(input.metadata) || {},
     createdAt: now,
     updatedAt: now,
   };
@@ -4445,6 +4447,7 @@ export function updateAdminCollection(
     permissions: input.permissions === undefined
       ? current.permissions
       : normalizeCollectionPermissions(input.permissions, current.permissions),
+    metadata: input.metadata === undefined ? current.metadata : asJsonObject(input.metadata) || {},
     updatedAt: new Date().toISOString(),
   };
 

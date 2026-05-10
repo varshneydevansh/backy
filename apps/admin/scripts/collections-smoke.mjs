@@ -11,6 +11,8 @@ const SITE_ID = process.env.BACKY_COLLECTIONS_SMOKE_SITE_ID || 'site-demo';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_COLLECTIONS_CDP_PORT || 9386);
 const SCREENSHOT_PATH = process.env.BACKY_COLLECTIONS_SCREENSHOT || path.join(os.tmpdir(), 'backy-collections-smoke.png');
+const FRONTEND_COLLECTION_TEMPLATE_ID = 'smoke-collection-contract';
+const FRONTEND_COLLECTION_TEMPLATE_NAME = 'Smoke frontend directory';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -60,6 +62,85 @@ const requestApi = async (endpoint, options = {}) => {
 
   return payload;
 };
+
+const getFrontendDesign = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`);
+  const frontendDesign = payload.data?.frontendDesign;
+  assert(frontendDesign?.schemaVersion === 'backy.frontend-design.v1', `Unexpected frontend design response: ${JSON.stringify(payload).slice(0, 500)}`);
+  return frontendDesign;
+};
+
+const patchFrontendDesign = async (frontendDesign) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`, {
+    method: 'PATCH',
+    body: JSON.stringify({ frontendDesign }),
+  });
+  const updated = payload.data?.frontendDesign;
+  assert(updated?.schemaVersion === 'backy.frontend-design.v1', `Frontend design patch failed: ${JSON.stringify(payload).slice(0, 500)}`);
+  return updated;
+};
+
+const smokeFrontendDesignContract = () => ({
+  schemaVersion: 'backy.frontend-design.v1',
+  status: 'synced',
+  source: {
+    type: 'custom-frontend',
+    label: 'Smoke collections frontend',
+    url: 'https://example.com/smoke-collections-frontend',
+    repository: 'example/backy-smoke-collections-frontend',
+    branch: 'main',
+  },
+  tokens: {
+    colors: {
+      primary: '#0f766e',
+      text: '#111827',
+    },
+    fonts: {
+      heading: 'Inter',
+      body: 'Inter',
+    },
+    customCss: ':root { --backy-smoke-collection-primary: #0f766e; }',
+  },
+  chrome: {
+    header: { component: 'SmokeCollectionsHeader', source: 'site.navigation.primary' },
+    navigation: { component: 'SmokeCollectionsNavigation', source: 'site.navigation.primary' },
+    footer: { component: 'SmokeCollectionsFooter', source: 'site.navigation.footer' },
+  },
+  templates: [
+    {
+      id: FRONTEND_COLLECTION_TEMPLATE_ID,
+      type: 'collection',
+      name: FRONTEND_COLLECTION_TEMPLATE_NAME,
+      routePattern: '/smoke-contract-directory/:recordSlug',
+      description: 'Frontend contract collection template used by the collections smoke.',
+      content: {
+        name: 'Smoke contract directory',
+        slug: `smoke-contract-directory-${Date.now().toString(36)}`,
+        description: 'A directory schema seeded from the connected frontend design contract.',
+        listRoutePattern: '/smoke-contract-directory',
+        publicRead: true,
+        publicCreate: true,
+        fields: [
+          { key: 'title', label: 'Title', type: 'text', required: true, unique: true },
+          { key: 'category', label: 'Category', type: 'select', required: true, options: ['Featured', 'Smoke', 'Reference'] },
+          { key: 'summary', label: 'Summary', type: 'richText', required: false },
+          { key: 'image', label: 'Image', type: 'image', required: false },
+          { key: 'website', label: 'Website', type: 'url', required: false },
+        ],
+      },
+      bindingHints: [
+        { role: 'collection.list', binding: 'collections.smokeContractDirectory.records' },
+        { role: 'collection.item.title', binding: 'record.title' },
+        { role: 'collection.item.image', binding: 'record.image' },
+      ],
+    },
+  ],
+  editableMap: [
+    { role: 'collection.list', binding: 'collections.smokeContractDirectory.records', fields: ['title', 'category', 'summary', 'image'] },
+  ],
+  notes: 'Temporary frontend design contract for collections smoke validation.',
+  updatedAt: new Date().toISOString(),
+});
 
 const createCollection = async ({ name, slug }) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections`, {
@@ -157,6 +238,11 @@ const fetchRecordBySlug = async (collectionId, recordSlug) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records?slug=${encodeURIComponent(recordSlug)}`);
   const records = payload.data?.records || payload.records || [];
   return records[0] || null;
+};
+
+const fetchCollections = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections`);
+  return payload.data?.collections || payload.collections || [];
 };
 
 const waitForRecordStatus = async (collectionId, recordSlug, status) => {
@@ -310,6 +396,10 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
       path: window.location.pathname,
       hasCommandCenter: Boolean(document.querySelector('[data-testid="collections-command-center"]')),
       hasTemplates: Boolean(document.querySelector('[data-testid="collections-templates"]')),
+      hasFrontendTemplates: Boolean(document.querySelector('[data-testid="collections-frontend-template-options"]')) &&
+        Boolean(document.querySelector(${JSON.stringify(`[data-testid="collections-frontend-template-${FRONTEND_COLLECTION_TEMPLATE_ID}"]`)})) &&
+        body.includes('Frontend design collections') &&
+        body.includes(${JSON.stringify(FRONTEND_COLLECTION_TEMPLATE_NAME)}),
       hasApiContract: body.includes('Collection API contract') && body.includes('Public records') && body.includes('Bulk records'),
       hasFrontendContract: body.includes('Dynamic data frontend contract') && body.includes('Frontend wiring'),
       hasBindingContract: Boolean(document.querySelector('[data-testid="collections-binding-contract"]')) &&
@@ -332,6 +422,7 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
     layout.path === '/collections' &&
     layout.hasCommandCenter &&
     layout.hasTemplates &&
+    layout.hasFrontendTemplates &&
     layout.hasApiContract &&
     layout.hasFrontendContract &&
     layout.hasBindingContract &&
@@ -344,6 +435,44 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
     `Collections page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
+};
+
+const createFrontendTemplateCollectionThroughUi = async (client) => {
+  const before = await fetchCollections();
+  const beforeIds = new Set(before.map((collection) => collection.id));
+
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector(${JSON.stringify(`[data-testid="collections-frontend-template-${FRONTEND_COLLECTION_TEMPLATE_ID}"]`)});
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'frontend-template-button-missing', body: document.body?.innerText?.slice(0, 1200) || '' };
+    }
+    if (button.disabled) return { ok: false, reason: 'frontend-template-button-disabled' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clicked.ok, `Unable to create collection from frontend template: ${JSON.stringify(clicked)}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const collections = await fetchCollections();
+    const created = collections.find((collection) => (
+      !beforeIds.has(collection.id) &&
+      collection.metadata?.frontendDesignTemplateId === FRONTEND_COLLECTION_TEMPLATE_ID
+    ));
+    if (created) {
+      assert(created.metadata?.frontendDesignTemplateName === FRONTEND_COLLECTION_TEMPLATE_NAME, `Frontend template name was not stored: ${JSON.stringify(created.metadata)}`);
+      assert(created.metadata?.frontendDesignSource?.label === 'Smoke collections frontend', `Frontend source snapshot missing: ${JSON.stringify(created.metadata)}`);
+      assert(created.metadata?.frontendDesignRoutePattern === '/smoke-contract-directory/:recordSlug', `Frontend route pattern missing: ${JSON.stringify(created.metadata)}`);
+      assert(created.metadata?.frontendDesignChrome?.header?.component === 'SmokeCollectionsHeader', `Frontend chrome snapshot missing: ${JSON.stringify(created.metadata)}`);
+      assert(created.metadata?.frontendDesignTokens?.fonts?.heading === 'Inter', `Frontend token snapshot missing: ${JSON.stringify(created.metadata)}`);
+      assert(Array.isArray(created.metadata?.frontendDesignBindingHints) && created.metadata.frontendDesignBindingHints.length === 3, `Frontend binding hints missing: ${JSON.stringify(created.metadata)}`);
+      assert(created.permissions?.publicCreate === true, `Frontend template permissions were not applied: ${JSON.stringify(created.permissions)}`);
+      assert(created.fields?.some((field) => field.key === 'category' && field.type === 'select'), `Frontend template fields were not applied: ${JSON.stringify(created.fields)}`);
+      return created;
+    }
+    await sleep(250);
+  }
+
+  throw new Error('Frontend template collection was not created');
 };
 
 const publishRecordThroughUi = async (client, recordSlug) => {
@@ -421,7 +550,7 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, collectionId }) => {
+const cleanup = async ({ client, childProcess, userDataDir, collectionIds, originalFrontendDesign }) => {
   if (client) {
     try {
       await client.send('Browser.close');
@@ -442,11 +571,21 @@ const cleanup = async ({ client, childProcess, userDataDir, collectionId }) => {
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 
-  if (collectionId) {
+  for (const collectionId of collectionIds || []) {
+    if (collectionId) {
+      try {
+        await deleteCollection(collectionId);
+      } catch {
+        // The smoke creates temporary collections and deletes them best-effort.
+      }
+    }
+  }
+
+  if (originalFrontendDesign) {
     try {
-      await deleteCollection(collectionId);
+      await patchFrontendDesign(originalFrontendDesign);
     } catch {
-      // The smoke creates a temporary collection and deletes it best-effort.
+      // Restore is best-effort so cleanup does not mask the primary failure.
     }
   }
 };
@@ -456,6 +595,8 @@ const main = async () => {
   let childProcess;
   let userDataDir;
   let collectionId;
+  let frontendTemplateCollectionId;
+  let originalFrontendDesign;
   const suffix = Date.now().toString(36);
   const collectionName = `Smoke Directory ${suffix}`;
   const collectionSlug = `smoke-directory-${suffix}`;
@@ -463,6 +604,9 @@ const main = async () => {
   const recordTitle = `Smoke record ${suffix}`;
 
   try {
+    originalFrontendDesign = await getFrontendDesign();
+    await patchFrontendDesign(smokeFrontendDesignContract());
+
     const collection = await createCollection({ name: collectionName, slug: collectionSlug });
     collectionId = collection.id;
     await createRecord({ collectionId, slug: recordSlug, title: recordTitle });
@@ -483,6 +627,9 @@ const main = async () => {
 
     await navigateToCollections(client, { collectionId, recordSlug });
     await assertCollectionsLayout(client, { collectionName, collectionSlug, recordSlug });
+    const frontendTemplateCollection = await createFrontendTemplateCollectionThroughUi(client);
+    frontendTemplateCollectionId = frontendTemplateCollection.id;
+    await navigateToCollections(client, { collectionId, recordSlug });
     await publishRecordThroughUi(client, recordSlug);
     await waitForRecordStatus(collectionId, recordSlug, 'published');
     await assertPublicRecord(collectionSlug, recordSlug);
@@ -493,6 +640,10 @@ const main = async () => {
 
     await deleteCollection(collectionId);
     collectionId = null;
+    await deleteCollection(frontendTemplateCollectionId);
+    frontendTemplateCollectionId = null;
+    await patchFrontendDesign(originalFrontendDesign);
+    originalFrontendDesign = null;
 
     console.log(JSON.stringify({
       ok: true,
@@ -500,10 +651,17 @@ const main = async () => {
       collectionName,
       collectionSlug,
       recordSlug,
+      frontendTemplateCollectionId: frontendTemplateCollection.id,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
-    await cleanup({ client, childProcess, userDataDir, collectionId });
+    await cleanup({
+      client,
+      childProcess,
+      userDataDir,
+      collectionIds: [collectionId, frontendTemplateCollectionId],
+      originalFrontendDesign,
+    });
   }
 };
 

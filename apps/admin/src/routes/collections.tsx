@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Save,
   ShieldCheck,
+  Sparkles,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -25,6 +26,7 @@ import {
   deleteCollection,
   deleteCollectionRecord,
   exportCollectionRecordsCsv,
+  getSiteFrontendDesign,
   importCollectionRecordsCsv,
   listCollectionRecords,
   listCollections,
@@ -41,10 +43,13 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { useStore } from '@/stores/mockStore';
 import { cn, formatDate } from '@/lib/utils';
+import type { SiteSettings } from '@backy-cms/core';
 
 const DEFAULT_RECORD_PAGE_SIZE = 25;
 const RECORD_PAGE_SIZES = [25, 50, 100] as const;
 type RecordStatusFilter = CollectionRecord['status'] | '';
+type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
+type SiteFrontendDesignTemplate = SiteFrontendDesignContract['templates'][number];
 
 interface CollectionsSearch {
   siteId?: string;
@@ -162,6 +167,17 @@ interface CollectionTemplate {
   description: string;
   useCase: string;
   permissions: CollectionPermissions;
+  fields: CollectionField[];
+}
+
+interface FrontendCollectionTemplateBlueprint {
+  name: string;
+  slug: string;
+  description: string;
+  status: Collection['status'];
+  permissions: CollectionPermissions;
+  listRoutePattern: string;
+  routePattern: string;
   fields: CollectionField[];
 }
 
@@ -570,9 +586,135 @@ const parseFieldOptions = (value: string) => (
 const cloneTemplateFields = (fields: CollectionField[]) => (
   fields.map((field, index) => ({
     ...field,
+    id: field.id || `field-${index + 1}`,
     options: field.options ? [...field.options] : undefined,
     sortOrder: (index + 1) * 10,
   }))
+);
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const optionalStringFromRecord = (record: Record<string, unknown> | undefined, key: string): string | undefined => {
+  const value = record?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+};
+
+const optionalBooleanFromRecord = (record: Record<string, unknown> | undefined, key: string): boolean | undefined => {
+  const value = record?.[key];
+  return typeof value === 'boolean' ? value : undefined;
+};
+
+const optionalStringListFromRecord = (record: Record<string, unknown> | undefined, key: string): string[] | undefined => {
+  const value = record?.[key];
+  if (!Array.isArray(value)) return undefined;
+  const strings = value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  return strings.length > 0 ? strings : undefined;
+};
+
+const asCollectionFieldType = (value: unknown): CollectionFieldType => (
+  typeof value === 'string' && FIELD_TYPES.includes(value as CollectionFieldType)
+    ? value as CollectionFieldType
+    : 'text'
+);
+
+const frontendTemplateContent = (template: SiteFrontendDesignTemplate): Record<string, unknown> => {
+  const content = isPlainRecord(template.content) ? template.content : {};
+  const collection = isPlainRecord(content.collection) ? content.collection : {};
+  const schema = isPlainRecord(content.schema) ? content.schema : {};
+
+  return {
+    ...content,
+    ...collection,
+    ...schema,
+  };
+};
+
+const frontendTemplateFieldsFromContent = (content: Record<string, unknown>): CollectionField[] => {
+  const candidates = Array.isArray(content.fields)
+    ? content.fields
+    : Array.isArray(content.schemaFields)
+      ? content.schemaFields
+      : [];
+
+  return candidates
+    .filter(isPlainRecord)
+    .map((field, index): CollectionField => {
+      const key = normalizeSlug(optionalStringFromRecord(field, 'key') || optionalStringFromRecord(field, 'name') || `field-${index + 1}`, `field-${index + 1}`).replace(/-/g, '_');
+      const options = optionalStringListFromRecord(field, 'options');
+
+      return {
+        id: optionalStringFromRecord(field, 'id') || `frontend-${key}`,
+        key,
+        label: optionalStringFromRecord(field, 'label') || optionalStringFromRecord(field, 'title') || key.replace(/_/g, ' '),
+        type: asCollectionFieldType(field.type),
+        required: optionalBooleanFromRecord(field, 'required') ?? false,
+        unique: optionalBooleanFromRecord(field, 'unique') ?? false,
+        sortOrder: (index + 1) * 10,
+        helpText: optionalStringFromRecord(field, 'helpText') || optionalStringFromRecord(field, 'description') || null,
+        ...(options ? { options } : {}),
+        ...(optionalStringFromRecord(field, 'referenceCollectionId') ? { referenceCollectionId: optionalStringFromRecord(field, 'referenceCollectionId') } : {}),
+        ...(field.defaultValue !== undefined ? { defaultValue: field.defaultValue } : {}),
+      };
+    });
+};
+
+const defaultFrontendCollectionFields = (): CollectionField[] => ([
+  { id: 'frontend-title', key: 'title', label: 'Title', type: 'text', required: true, unique: false, sortOrder: 10 },
+  { id: 'frontend-slug', key: 'slug', label: 'Slug', type: 'slug', required: true, unique: true, sortOrder: 20 },
+  { id: 'frontend-summary', key: 'summary', label: 'Summary', type: 'richText', required: false, unique: false, sortOrder: 30 },
+  { id: 'frontend-image', key: 'image', label: 'Image', type: 'image', required: false, unique: false, sortOrder: 40 },
+  { id: 'frontend-tags', key: 'tags', label: 'Tags', type: 'tags', required: false, unique: false, sortOrder: 50 },
+]);
+
+const buildFrontendCollectionTemplateBlueprint = (template: SiteFrontendDesignTemplate): FrontendCollectionTemplateBlueprint => {
+  const content = frontendTemplateContent(template);
+  const name = optionalStringFromRecord(content, 'name') || optionalStringFromRecord(content, 'title') || template.name;
+  const slug = normalizeSlug(optionalStringFromRecord(content, 'slug') || template.id || name, 'frontend-collection');
+  const fields = frontendTemplateFieldsFromContent(content);
+
+  return {
+    name,
+    slug,
+    description: template.description || optionalStringFromRecord(content, 'description') || 'Collection seeded from the connected frontend design contract.',
+    status: content.status === 'draft' || content.status === 'archived' ? content.status : 'published',
+    permissions: {
+      publicRead: optionalBooleanFromRecord(content, 'publicRead') ?? true,
+      publicCreate: optionalBooleanFromRecord(content, 'publicCreate') ?? false,
+      publicUpdate: optionalBooleanFromRecord(content, 'publicUpdate') ?? false,
+      publicDelete: optionalBooleanFromRecord(content, 'publicDelete') ?? false,
+    },
+    listRoutePattern: normalizeCollectionListRoutePattern(
+      optionalStringFromRecord(content, 'listRoutePattern') || optionalStringFromRecord(content, 'listRoute') || `/${slug}`,
+      slug,
+    ),
+    routePattern: normalizeCollectionRoutePattern(
+      template.routePattern || optionalStringFromRecord(content, 'routePattern') || optionalStringFromRecord(content, 'detailRoutePattern') || `/${slug}/:recordSlug`,
+      slug,
+    ),
+    fields: fields.length > 0 ? fields : defaultFrontendCollectionFields(),
+  };
+};
+
+const buildFrontendCollectionTemplateMetadata = (
+  template: SiteFrontendDesignTemplate,
+  frontendDesign: SiteFrontendDesignContract | null,
+): Record<string, unknown> => ({
+  frontendDesignTemplateId: template.id,
+  frontendDesignTemplateName: template.name,
+  frontendDesignSource: frontendDesign?.source,
+  frontendDesignBindingHints: template.bindingHints || [],
+  ...(template.routePattern ? { frontendDesignRoutePattern: template.routePattern } : {}),
+  ...(frontendDesign?.tokens ? { frontendDesignTokens: frontendDesign.tokens } : {}),
+  ...(frontendDesign?.chrome ? { frontendDesignChrome: frontendDesign.chrome } : {}),
+  ...(frontendDesign?.tokens?.customCss ? { frontendDesignCustomCss: frontendDesign.tokens.customCss } : {}),
+});
+
+const getCollectionFrontendTemplateId = (collection: Collection): string | undefined => (
+  typeof collection.metadata?.frontendDesignTemplateId === 'string'
+    ? collection.metadata.frontendDesignTemplateId
+    : undefined
 );
 
 const formatValidationDetails = (details: unknown): string[] => {
@@ -648,6 +790,10 @@ function CollectionsPage() {
   const [isSavingRecord, setIsSavingRecord] = useState(false);
   const [isExportingRecords, setIsExportingRecords] = useState(false);
   const [isImportingRecords, setIsImportingRecords] = useState(false);
+  const [isCreatingFrontendTemplateId, setIsCreatingFrontendTemplateId] = useState<string | null>(null);
+  const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
+  const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
+  const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationDetails, setValidationDetails] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
@@ -655,7 +801,7 @@ function CollectionsPage() {
   const [pendingRecordDelete, setPendingRecordDelete] = useState<CollectionRecord | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
-  const isCollectionMutationPending = isSavingCollection || isImportingRecords || isExportingRecords;
+  const isCollectionMutationPending = isSavingCollection || isImportingRecords || isExportingRecords || Boolean(isCreatingFrontendTemplateId);
   const isRecordMutationPending = isSavingRecord || isImportingRecords || isExportingRecords;
   const isCollectionsBusy = isLoading || isRecordsLoading || isCollectionMutationPending || isRecordMutationPending;
 
@@ -669,6 +815,17 @@ function CollectionsPage() {
   const activeCollection = useMemo(
     () => collections.find((collection) => collection.id === selectedCollectionId) || null,
     [collections, selectedCollectionId],
+  );
+  const frontendCollectionTemplates = useMemo(
+    () => (frontendDesign?.templates || []).filter((template) => template.type === 'collection'),
+    [frontendDesign?.templates],
+  );
+  const frontendCollectionTemplateBlueprints = useMemo(
+    () => frontendCollectionTemplates.map((template) => ({
+      template,
+      blueprint: buildFrontendCollectionTemplateBlueprint(template),
+    })),
+    [frontendCollectionTemplates],
   );
   const selectedRecord = useMemo(
     () => records.find((record) => record.id === selectedRecordId) || null,
@@ -866,6 +1023,17 @@ function CollectionsPage() {
         sortOrder: field.sortOrder,
       })),
     })),
+    frontendDesign: frontendDesign ? {
+      status: frontendDesign.status,
+      source: frontendDesign.source,
+      templateCount: frontendDesign.templates.length,
+      collectionTemplates: frontendCollectionTemplates.map((template) => ({
+        id: template.id,
+        name: template.name,
+        routePattern: template.routePattern,
+        bindingHints: template.bindingHints || [],
+      })),
+    } : null,
     readiness: {
       score: collectionReadiness.score,
       checks: collectionReadiness.checks,
@@ -888,6 +1056,8 @@ function CollectionsPage() {
       listRoutePath: activeListRoutePath,
       itemRouteTemplate: activeItemRoutePath,
       publicApiReady: activeCollectionIsPublic,
+      frontendDesignTemplateId: getCollectionFrontendTemplateId(activeCollection),
+      metadata: activeCollection.metadata || {},
       fields: activeCollection.fields.map((field) => ({
         key: field.key,
         label: field.label,
@@ -912,6 +1082,7 @@ function CollectionsPage() {
       publicListRoute: buildCollectionListRoutePath(collection),
       publicItemRouteTemplate: buildCollectionRecordRouteTemplate(collection),
       publicReadReady: collection.status === 'published' && collection.permissions.publicRead,
+      frontendDesignTemplateId: getCollectionFrontendTemplateId(collection),
     })),
     records: records.map((record) => ({
       id: record.id,
@@ -950,6 +1121,8 @@ function CollectionsPage() {
     collectionReadiness.score,
     collections,
     fieldHealth,
+    frontendCollectionTemplates,
+    frontendDesign,
     publicCollectionsUrl,
     publicRecordBySlugUrl,
     publicRecordsUrl,
@@ -1114,6 +1287,36 @@ function CollectionsPage() {
     }
   }, [selectedSiteId, sites]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFrontendDesign = async () => {
+      setFrontendDesignLoading(true);
+      setFrontendDesignError(null);
+      try {
+        const response = await getSiteFrontendDesign(activeSiteId);
+        if (!cancelled) {
+          setFrontendDesign(response.frontendDesign);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setFrontendDesign(null);
+          setFrontendDesignError(loadError instanceof Error ? loadError.message : 'Unable to load frontend design contract');
+        }
+      } finally {
+        if (!cancelled) {
+          setFrontendDesignLoading(false);
+        }
+      }
+    };
+
+    void loadFrontendDesign();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSiteId]);
+
   const resetCollectionForm = () => {
     setSelectedCollectionId(null);
     setSelectedRecordId(null);
@@ -1273,6 +1476,43 @@ function CollectionsPage() {
     window.requestAnimationFrame(() => {
       document.getElementById('collections-schema')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
     });
+  };
+
+  const createCollectionFromFrontendTemplate = async (
+    template: SiteFrontendDesignTemplate,
+    blueprint: FrontendCollectionTemplateBlueprint,
+  ) => {
+    if (isCollectionsBusy) return;
+
+    setIsCreatingFrontendTemplateId(template.id);
+    setIsSavingCollection(true);
+    setError(null);
+    setValidationDetails([]);
+    setNotice(null);
+
+    try {
+      const metadata = buildFrontendCollectionTemplateMetadata(template, frontendDesign);
+      const saved = await createCollection(activeSiteId, {
+        name: blueprint.name,
+        slug: blueprint.slug,
+        listRoutePattern: blueprint.listRoutePattern,
+        routePattern: blueprint.routePattern,
+        description: blueprint.description,
+        status: blueprint.status,
+        permissions: blueprint.permissions,
+        fields: cloneTemplateFields(blueprint.fields),
+        metadata,
+      });
+
+      setCollections((prev) => [saved, ...prev.filter((collection) => collection.id !== saved.id)]);
+      selectCollection(saved);
+      setNotice(`${saved.name} created from frontend design template ${template.name}.`);
+    } catch (saveError) {
+      showApiError(saveError, 'Unable to create collection from frontend design template');
+    } finally {
+      setIsCreatingFrontendTemplateId(null);
+      setIsSavingCollection(false);
+    }
   };
 
   const selectCollection = (collection: Collection, preserveRouteState = false) => {
@@ -1904,6 +2144,108 @@ function CollectionsPage() {
             {COLLECTION_TEMPLATES.length} starters
           </span>
         </div>
+
+        {(frontendCollectionTemplates.length > 0 || frontendDesignLoading || frontendDesignError) && (
+          <div className="mt-4 rounded-lg border border-teal-200 bg-teal-50/50 p-4" data-testid="collections-frontend-template-options">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="size-4 text-teal-700" />
+                  <h3 className="text-sm font-semibold text-foreground">Frontend design collections</h3>
+                </div>
+                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                  Create dynamic datasets from the connected frontend contract while preserving source, chrome, tokens, route patterns, and data-binding hints.
+                </p>
+              </div>
+              <span className="rounded-full bg-background px-2.5 py-1 text-xs font-medium text-teal-700">
+                {frontendDesign?.source.label || frontendDesign?.source.type || 'Frontend contract'}
+              </span>
+            </div>
+            {frontendDesignLoading ? (
+              <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                <RefreshCw className="size-3.5 animate-spin" />
+                Loading captured collection templates...
+              </div>
+            ) : null}
+            {frontendDesignError ? (
+              <div className="mt-3 flex items-center gap-2 text-xs text-destructive">
+                <AlertTriangle className="size-3.5" />
+                {frontendDesignError}
+              </div>
+            ) : null}
+            {frontendCollectionTemplateBlueprints.length > 0 ? (
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {frontendCollectionTemplateBlueprints.map(({ template, blueprint }) => {
+                  const metadata = buildFrontendCollectionTemplateMetadata(template, frontendDesign);
+                  const manifestText = JSON.stringify({
+                    schemaVersion: 'backy.frontend-collection-template.v1',
+                    template,
+                    collection: {
+                      ...blueprint,
+                      fields: blueprint.fields,
+                      metadata,
+                    },
+                  }, null, 2);
+
+                  return (
+                    <article key={template.id} className="rounded-lg border border-teal-200 bg-background p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h4 className="text-sm font-semibold text-foreground">{template.name}</h4>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">{template.description || blueprint.description}</p>
+                        </div>
+                        <span className="rounded-full bg-teal-50 px-2 py-1 text-[11px] font-medium text-teal-700">
+                          {blueprint.fields.length} fields
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">{blueprint.listRoutePattern}</span>
+                        <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">{template.bindingHints?.length || 0} bindings</span>
+                        <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                          {blueprint.permissions.publicCreate ? 'public create' : 'admin write'}
+                        </span>
+                      </div>
+                      <div className="mt-4 space-y-2">
+                        {blueprint.fields.slice(0, 4).map((field) => (
+                          <div key={field.key} className="flex items-center justify-between gap-3 rounded border border-border bg-muted/40 px-2.5 py-2">
+                            <span className="truncate text-xs font-medium text-foreground">{field.label}</span>
+                            <span className="shrink-0 rounded bg-background px-2 py-0.5 text-[10px] text-muted-foreground">{field.type}</span>
+                          </div>
+                        ))}
+                        {blueprint.fields.length > 4 ? (
+                          <div className="text-xs text-muted-foreground">+{blueprint.fields.length - 4} more field{blueprint.fields.length - 4 === 1 ? '' : 's'}</div>
+                        ) : null}
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void createCollectionFromFrontendTemplate(template, blueprint)}
+                          disabled={isCollectionsBusy}
+                          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                          data-testid={`collections-frontend-template-${template.id}`}
+                        >
+                          <Database className="h-4 w-4" />
+                          {isCreatingFrontendTemplateId === template.id ? 'Creating...' : 'Create collection'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void copyCollectionApiText(manifestText, `${template.name} frontend collection template`)}
+                          disabled={isCollectionsBusy}
+                          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <Copy className="h-4 w-4" />
+                          Copy schema
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : !frontendDesignLoading && !frontendDesignError ? (
+              <p className="mt-3 text-xs text-muted-foreground">The current frontend contract has no collection templates yet.</p>
+            ) : null}
+          </div>
+        )}
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {COLLECTION_TEMPLATES.map((template) => (
             <article key={template.id} className="rounded-lg border border-border bg-background p-3">

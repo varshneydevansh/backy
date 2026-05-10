@@ -347,6 +347,7 @@ export const contentCollections = pgTable('content_collections', {
         publicUpdate: false,
         publicDelete: false,
     }).notNull(),
+    metadata: jsonb('metadata').default({}).notNull(),
 
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
