@@ -234,6 +234,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         status,
         scheduledAt: typeof body.scheduledAt === 'string' ? body.scheduledAt : null,
         isHomepage: typeof body.isHomepage === 'boolean' ? body.isHomepage : false,
+        parentId: typeof body.parentId === 'string' ? body.parentId : null,
         content: contentDocumentFromInput(body.content, { id: pageId, title, slug, status }),
         meta: isRecord(body.meta) ? body.meta : undefined,
       });

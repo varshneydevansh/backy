@@ -598,6 +598,12 @@ export interface PageMeta {
 
   /** Whether to exclude links from search engines */
   noFollow?: boolean;
+
+  /** Parent page identifier for editor/runtime hierarchy handoff */
+  parentPageId?: string;
+
+  /** Parent page title snapshot for custom frontends */
+  parentPageTitle?: string;
 }
 
 /**

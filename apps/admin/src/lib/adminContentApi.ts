@@ -257,6 +257,7 @@ interface ApiPage {
   slug: string;
   description?: string | null;
   isHomepage?: boolean;
+  parentId?: string | null;
   status?: AdminSiteStatus;
   scheduledAt?: string | null;
   content?: unknown;
@@ -1001,6 +1002,7 @@ export interface PageCreateInput {
   description?: string;
   template?: string;
   isHomepage?: boolean;
+  parentId?: string | null;
   meta?: Record<string, unknown>;
   content?: unknown;
 }
@@ -1011,6 +1013,7 @@ export interface PageUpdateInput {
   status?: Page['status'];
   scheduledAt?: string | null;
   description?: string;
+  parentId?: string | null;
   meta?: Record<string, unknown>;
   content?: unknown;
   revisionNote?: string;
@@ -1518,6 +1521,7 @@ const toStorePage = (page: ApiPage): Page => ({
   title: page.title,
   slug: page.slug,
   isHomepage: page.isHomepage === true,
+  parentId: page.parentId || null,
   status: toContentStatus(page.status, page.status === 'published'),
   scheduledAt: page.scheduledAt || null,
   content: page.content ? JSON.stringify(page.content) : undefined,

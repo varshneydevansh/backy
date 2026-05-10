@@ -56,6 +56,27 @@ const requestApi = async (endpoint, options = {}) => {
   return payload;
 };
 
+const createParentPage = async () => {
+  const slug = `page-create-parent-${Date.now().toString(36)}`;
+  const title = 'Smoke Parent Page';
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title,
+      slug,
+      status: 'published',
+      description: 'Temporary parent page for page create hierarchy smoke.',
+      content: [],
+      meta: {
+        title,
+        description: 'Temporary parent page for page create hierarchy smoke.',
+        canonical: `/${slug}`,
+      },
+    }),
+  });
+  return payload.data.page;
+};
+
 const fetchJson = async (endpoint) => {
   const response = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
   if (!response.ok) {
@@ -137,13 +158,14 @@ const evaluate = async (client, expression) => {
   return result.result.value;
 };
 
-const navigateToPageCreate = async (client, slug, title, navLabel, seo) => {
+const navigateToPageCreate = async (client, slug, title, navLabel, seo, parentPageId) => {
   const query = new URLSearchParams({
     siteId: SITE_ID,
     template: 'about',
     title,
     slug,
     navLabel,
+    parentPageId,
     seoTitle: seo.title,
     canonical: seo.canonical,
     ogImage: seo.ogImage,
@@ -161,6 +183,7 @@ const navigateToPageCreate = async (client, slug, title, navLabel, seo) => {
       slug: document.querySelector('#page-slug')?.value || '',
       navPlacement: document.querySelector('#page-navigation-placement-select')?.value || '',
       navLabel: document.querySelector('#page-navigation-label')?.value || '',
+      parentPageId: document.querySelector('#page-parent-page')?.value || '',
       seoTitle: document.querySelector('#page-seo-title')?.value || '',
       canonical: document.querySelector('#page-canonical-path')?.value || '',
       ogImage: document.querySelector('#page-og-image')?.value || '',
@@ -176,6 +199,7 @@ const navigateToPageCreate = async (client, slug, title, navLabel, seo) => {
       && state.slug === slug
       && state.navPlacement === 'primary'
       && state.navLabel === navLabel
+      && state.parentPageId === parentPageId
       && state.seoTitle === seo.title
       && state.canonical === seo.canonical
       && state.ogImage === seo.ogImage
@@ -195,7 +219,7 @@ const navigateToPageCreate = async (client, slug, title, navLabel, seo) => {
   return null;
 };
 
-const assertAutosaveWritten = async (client, slug, title, navLabel, seo) => {
+const assertAutosaveWritten = async (client, slug, title, navLabel, seo, parentPageId) => {
   let state = null;
 
   for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -209,6 +233,7 @@ const assertAutosaveWritten = async (client, slug, title, navLabel, seo) => {
         template: parsed?.formData?.template || null,
         navigationPlacement: parsed?.formData?.navigationPlacement || null,
         navigationLabel: parsed?.formData?.navigationLabel || null,
+        parentPageId: parsed?.formData?.parentPageId || null,
         seoTitle: parsed?.formData?.seoTitle || null,
         canonicalPath: parsed?.formData?.canonicalPath || null,
         ogImage: parsed?.formData?.ogImage || null,
@@ -231,6 +256,7 @@ const assertAutosaveWritten = async (client, slug, title, navLabel, seo) => {
   assert(state.template === 'about', `Autosave template mismatch: ${JSON.stringify(state)}`);
   assert(state.navigationPlacement === 'primary', `Autosave navigation placement mismatch: ${JSON.stringify(state)}`);
   assert(state.navigationLabel === navLabel, `Autosave navigation label mismatch: ${JSON.stringify(state)}`);
+  assert(state.parentPageId === parentPageId, `Autosave parent page mismatch: ${JSON.stringify(state)}`);
   assert(state.seoTitle === seo.title, `Autosave SEO title mismatch: ${JSON.stringify(state)}`);
   assert(state.canonicalPath === seo.canonical, `Autosave canonical mismatch: ${JSON.stringify(state)}`);
   assert(state.ogImage === seo.ogImage, `Autosave OG image mismatch: ${JSON.stringify(state)}`);
@@ -239,7 +265,7 @@ const assertAutosaveWritten = async (client, slug, title, navLabel, seo) => {
   return state;
 };
 
-const assertRecoveryRestore = async (client, slug, title, navLabel, seo) => {
+const assertRecoveryRestore = async (client, slug, title, navLabel, seo, parentPageId) => {
   await client.send('Page.reload', { ignoreCache: true });
   await sleep(500);
 
@@ -277,6 +303,7 @@ const assertRecoveryRestore = async (client, slug, title, navLabel, seo) => {
     slug: document.querySelector('#page-slug')?.value || '',
     navPlacement: document.querySelector('#page-navigation-placement-select')?.value || '',
     navLabel: document.querySelector('#page-navigation-label')?.value || '',
+    parentPageId: document.querySelector('#page-parent-page')?.value || '',
     seoTitle: document.querySelector('#page-seo-title')?.value || '',
     canonical: document.querySelector('#page-canonical-path')?.value || '',
     ogImage: document.querySelector('#page-og-image')?.value || '',
@@ -289,6 +316,7 @@ const assertRecoveryRestore = async (client, slug, title, navLabel, seo) => {
   assert(state.slug === slug, `Recovered draft slug mismatch: ${JSON.stringify(state)}`);
   assert(state.navPlacement === 'primary', `Recovered draft navigation placement mismatch: ${JSON.stringify(state)}`);
   assert(state.navLabel === navLabel, `Recovered draft navigation label mismatch: ${JSON.stringify(state)}`);
+  assert(state.parentPageId === parentPageId, `Recovered draft parent page mismatch: ${JSON.stringify(state)}`);
   assert(state.seoTitle === seo.title, `Recovered draft SEO title mismatch: ${JSON.stringify(state)}`);
   assert(state.canonical === seo.canonical, `Recovered draft canonical mismatch: ${JSON.stringify(state)}`);
   assert(state.ogImage === seo.ogImage, `Recovered draft OG image mismatch: ${JSON.stringify(state)}`);
@@ -297,18 +325,21 @@ const assertRecoveryRestore = async (client, slug, title, navLabel, seo) => {
   return state;
 };
 
-const assertCreatedPageSeo = async (pageId, seo) => {
+const assertCreatedPageSeo = async (pageId, seo, parentPage) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
   const page = payload.data?.page;
 
   assert(page, `Created page ${pageId} detail was not returned`);
+  assert(page.parentId === parentPage.id, `Created page parentId mismatch: ${JSON.stringify({ parentId: page.parentId, meta: page.meta })}`);
   assert(page.meta?.title === seo.title, `Created page SEO title mismatch: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.canonical === seo.normalizedCanonical, `Created page canonical mismatch: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.ogImage === seo.ogImage, `Created page OG image mismatch: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.noIndex === true, `Created page noIndex mismatch: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.noFollow === true, `Created page noFollow mismatch: ${JSON.stringify(page.meta)}`);
+  assert(page.meta?.parentPageId === parentPage.id, `Created page meta parent id mismatch: ${JSON.stringify(page.meta)}`);
+  assert(page.meta?.parentPageTitle === parentPage.title, `Created page meta parent title mismatch: ${JSON.stringify(page.meta)}`);
 
-  return page.meta;
+  return { parentId: page.parentId, meta: page.meta };
 };
 
 const createPageFromUi = async (client) => {
@@ -357,15 +388,26 @@ const createPageFromUi = async (client) => {
   return editState;
 };
 
-const assertNavigationContainsPage = async (pageId, navLabel) => {
+const findNavigationItem = (items, predicate) => {
+  for (const item of items || []) {
+    if (predicate(item)) return item;
+    const child = findNavigationItem(item.children || [], predicate);
+    if (child) return child;
+  }
+  return null;
+};
+
+const assertNavigationContainsPage = async (pageId, navLabel, parentPageId) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/navigation`);
   const primary = payload.data?.navigation?.settings?.primary || [];
-  const item = primary.find((candidate) => candidate.pageId === pageId);
+  const parentItem = findNavigationItem(primary, (candidate) => candidate.pageId === parentPageId);
+  const item = findNavigationItem(parentItem?.children || [], (candidate) => candidate.pageId === pageId);
 
-  assert(item, `Created page ${pageId} was not added to primary navigation: ${JSON.stringify(primary)}`);
+  assert(parentItem, `Parent page ${parentPageId} was not available in primary navigation: ${JSON.stringify(primary)}`);
+  assert(item, `Created page ${pageId} was not nested under parent ${parentPageId}: ${JSON.stringify(parentItem)}`);
   assert(item.label === navLabel, `Created page navigation label mismatch: ${JSON.stringify(item)}`);
 
-  return item;
+  return { parentItem, item };
 };
 
 const removePageFromNavigation = async (pageId) => {
@@ -408,7 +450,7 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, pageId }) => {
+const cleanup = async ({ client, childProcess, userDataDir, pageId, parentPageId }) => {
   if (pageId) {
     try {
       await removePageFromNavigation(pageId);
@@ -420,6 +462,20 @@ const cleanup = async ({ client, childProcess, userDataDir, pageId }) => {
       await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`, { method: 'DELETE' });
     } catch (error) {
       console.warn(`Unable to delete smoke page ${pageId}:`, error instanceof Error ? error.message : error);
+    }
+  }
+
+  if (parentPageId) {
+    try {
+      await removePageFromNavigation(parentPageId);
+    } catch (error) {
+      console.warn(`Unable to remove smoke parent page ${parentPageId} from navigation:`, error instanceof Error ? error.message : error);
+    }
+
+    try {
+      await requestApi(`/api/admin/sites/${SITE_ID}/pages/${parentPageId}`, { method: 'DELETE' });
+    } catch (error) {
+      console.warn(`Unable to delete smoke parent page ${parentPageId}:`, error instanceof Error ? error.message : error);
     }
   }
 
@@ -457,8 +513,10 @@ const main = async () => {
   const { childProcess, userDataDir } = launchChrome();
   let client;
   let pageId = null;
+  let parentPage = null;
 
   try {
+    parentPage = await createParentPage();
     await waitForCdp();
     const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
     assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
@@ -473,13 +531,13 @@ const main = async () => {
       source: AUTH_STORAGE_SCRIPT,
     });
 
-    const initialRender = await navigateToPageCreate(client, slug, title, navLabel, seo);
-    const autosave = await assertAutosaveWritten(client, slug, title, navLabel, seo);
-    const recovery = await assertRecoveryRestore(client, slug, title, navLabel, seo);
+    const initialRender = await navigateToPageCreate(client, slug, title, navLabel, seo, parentPage.id);
+    const autosave = await assertAutosaveWritten(client, slug, title, navLabel, seo, parentPage.id);
+    const recovery = await assertRecoveryRestore(client, slug, title, navLabel, seo, parentPage.id);
     const editState = await createPageFromUi(client);
     pageId = editState.path.split('/').filter(Boolean).at(-2);
-    const navigationItem = await assertNavigationContainsPage(pageId, navLabel);
-    const pageMeta = await assertCreatedPageSeo(pageId, seo);
+    const navigationItem = await assertNavigationContainsPage(pageId, navLabel, parentPage.id);
+    const pageMeta = await assertCreatedPageSeo(pageId, seo, parentPage);
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -501,12 +559,13 @@ const main = async () => {
       recovery,
       editState,
       pageId,
+      parentPageId: parentPage.id,
       navigationItem,
       pageMeta,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
-    await cleanup({ client, childProcess, userDataDir, pageId });
+    await cleanup({ client, childProcess, userDataDir, pageId, parentPageId: parentPage?.id || null });
   }
 };
 

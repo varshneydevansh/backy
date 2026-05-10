@@ -33,6 +33,7 @@ export interface Page {
     title: string;
     slug: string;
     isHomepage?: boolean;
+    parentId?: string | null;
     status: ContentStatus;
     scheduledAt?: string | null;
     content?: string;

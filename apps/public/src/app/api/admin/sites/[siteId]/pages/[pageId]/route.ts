@@ -239,6 +239,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         status: statusFromInput(body.status),
         scheduledAt: typeof body.scheduledAt === 'string' || body.scheduledAt === null ? body.scheduledAt : undefined,
         isHomepage: typeof body.isHomepage === 'boolean' ? body.isHomepage : undefined,
+        parentId: typeof body.parentId === 'string' || body.parentId === null ? body.parentId : undefined,
         content,
         meta: isRecord(body.meta) ? body.meta : undefined,
         revisionNote: typeof body.revisionNote === 'string' ? body.revisionNote : undefined,

@@ -43,6 +43,8 @@ interface PageMeta {
   jsonLd?: Array<Record<string, unknown>>;
   noIndex?: boolean;
   noFollow?: boolean;
+  parentPageId?: string | null;
+  parentPageTitle?: string | null;
 }
 
 interface CanvasElement {
@@ -113,6 +115,8 @@ interface StorePage {
   description: string | null;
   status: 'draft' | 'published' | 'scheduled' | 'archived';
   isHomepage: boolean;
+  parentId?: string | null;
+  sortOrder?: number;
   content: PageContent;
   meta: PageMeta;
   forms?: string[];
@@ -4850,6 +4854,8 @@ export function createAdminPage(siteId: string, input: Record<string, unknown>):
     description: sanitizeString(input.description) || sanitizeString(metaInput.description) || null,
     status,
     isHomepage: parseBooleanInput(input.isHomepage, false),
+    parentId: sanitizeString(input.parentId) || null,
+    sortOrder: Number(input.sortOrder) || 0,
     content: {
       elements: Array.isArray(contentInput.elements) ? contentInput.elements as CanvasElement[] : [],
       canvasSize: {
@@ -4871,6 +4877,8 @@ export function createAdminPage(siteId: string, input: Record<string, unknown>):
       jsonLd: toJsonObjectArray(metaInput.jsonLd),
       noIndex: parseBooleanInput(metaInput.noIndex, defaultNoIndexForStatus(status)),
       noFollow: parseBooleanInput(metaInput.noFollow, false),
+      parentPageId: sanitizeString(metaInput.parentPageId) || null,
+      parentPageTitle: sanitizeString(metaInput.parentPageTitle) || null,
     },
     forms: Array.isArray(input.forms) ? input.forms.map(sanitizeString).filter(Boolean) : [],
     createdAt: now,
@@ -4914,6 +4922,8 @@ export function updateAdminPage(
     description: input.description === undefined ? current.description : sanitizeString(input.description) || null,
     status,
     isHomepage: input.isHomepage === undefined ? current.isHomepage : parseBooleanInput(input.isHomepage, current.isHomepage),
+    parentId: input.parentId === undefined ? current.parentId : sanitizeString(input.parentId) || null,
+    sortOrder: input.sortOrder === undefined ? current.sortOrder : Number(input.sortOrder) || current.sortOrder || 0,
     content: input.content === undefined
       ? current.content
       : {
@@ -4955,6 +4965,8 @@ export function updateAdminPage(
           jsonLd: metaInput.jsonLd === undefined ? current.meta.jsonLd : toJsonObjectArray(metaInput.jsonLd),
           noIndex: metaInput.noIndex === undefined ? current.meta.noIndex : parseBooleanInput(metaInput.noIndex, false),
           noFollow: metaInput.noFollow === undefined ? current.meta.noFollow : parseBooleanInput(metaInput.noFollow, false),
+          parentPageId: metaInput.parentPageId === undefined ? current.meta.parentPageId : sanitizeString(metaInput.parentPageId) || null,
+          parentPageTitle: metaInput.parentPageTitle === undefined ? current.meta.parentPageTitle : sanitizeString(metaInput.parentPageTitle) || null,
         },
     forms: Array.isArray(input.forms) ? input.forms.map(sanitizeString).filter(Boolean) : current.forms,
     updatedAt: now,
