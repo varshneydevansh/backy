@@ -1207,6 +1207,25 @@ function SettingsPage() {
             <div className="mt-4 rounded-lg border border-border bg-background p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
+                  <h3 className="text-sm font-semibold">Platform ownership map</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Backy owns the CMS, editor, media metadata, commerce records, APIs, and admin workflows. Supabase and Vercel are connected providers for hosted database/storage and deployment runtime.
+                  </p>
+                </div>
+                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                  {PLATFORM_RESPONSIBILITIES.length} control areas
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3" data-testid="settings-platform-ownership-map">
+                {PLATFORM_RESPONSIBILITIES.map((item) => (
+                  <SettingsResponsibilityCard key={item.area} item={item} />
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
                   <h3 className="text-sm font-semibold">Settings control map</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
                     Jump to the settings that control public APIs, visual defaults, infrastructure, notifications, and security.
@@ -1399,6 +1418,39 @@ function SettingsCapabilityCard({ capability }: { capability: FrontendApiCapabil
         <div>
           <dt className="font-semibold text-foreground">Still needed</dt>
           <dd className="text-muted-foreground">{capability.stillNeeded}</dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
+function SettingsResponsibilityCard({ item }: { item: ResponsibilityArea }) {
+  const ownerClassName = {
+    'Backy in-house': 'bg-emerald-50 text-emerald-700',
+    'Supabase connection': 'bg-sky-50 text-sky-700',
+    'Vercel connection': 'bg-slate-100 text-slate-700',
+  }[item.owner];
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <h4 className="min-w-0 text-sm font-semibold text-foreground">{item.area}</h4>
+        <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold', ownerClassName)}>
+          {item.owner}
+        </span>
+      </div>
+      <dl className="mt-3 grid gap-2 text-xs leading-5">
+        <div>
+          <dt className="font-semibold text-foreground">Control surface</dt>
+          <dd className="text-muted-foreground">{item.controlSurface}</dd>
+        </div>
+        <div>
+          <dt className="font-semibold text-foreground">Runtime source</dt>
+          <dd className="text-muted-foreground">{item.runtimeSource}</dd>
+        </div>
+        <div>
+          <dt className="font-semibold text-foreground">Frontend impact</dt>
+          <dd className="text-muted-foreground">{item.frontendImpact}</dd>
         </div>
       </dl>
     </div>
@@ -3053,13 +3105,7 @@ function InfrastructureSettings({
         </div>
         <div className="mt-4 grid gap-3 xl:grid-cols-5">
           {PLATFORM_RESPONSIBILITIES.map((item) => (
-            <div key={item.area} className="rounded-lg border border-border bg-card p-3">
-              <div className="text-xs font-semibold text-foreground">{item.area}</div>
-              <div className="mt-2 inline-flex rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                {item.owner}
-              </div>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">{item.controlSurface}</p>
-            </div>
+            <SettingsResponsibilityCard key={item.area} item={item} />
           ))}
         </div>
       </div>

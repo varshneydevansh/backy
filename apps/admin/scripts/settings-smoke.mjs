@@ -161,13 +161,17 @@ const navigateToSettings = async (client) => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => ({
       ready: Boolean(document.querySelector('[data-testid="settings-command-center"]')),
+      ownershipMap: Boolean(document.querySelector('[data-testid="settings-platform-ownership-map"]')),
+      hasBackyOwner: document.body?.innerText?.includes('Backy in-house') || false,
+      hasSupabaseOwner: document.body?.innerText?.includes('Supabase connection') || false,
+      hasVercelOwner: document.body?.innerText?.includes('Vercel connection') || false,
       tabs: Boolean(document.querySelector('#settings-tabs')),
       title: document.body?.innerText?.includes('Settings command center') || false,
       handoff: document.body?.innerText?.includes('Copy handoff') || false,
       body: document.body?.innerText?.slice(0, 300) || '',
     }))()`);
 
-    if (state.ready && state.tabs && state.title && state.handoff) {
+    if (state.ready && state.ownershipMap && state.hasBackyOwner && state.hasSupabaseOwner && state.hasVercelOwner && state.tabs && state.title && state.handoff) {
       return state;
     }
 
