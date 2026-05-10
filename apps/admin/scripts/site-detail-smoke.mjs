@@ -115,6 +115,11 @@ const getSeo = async (siteId) => {
   return payload.data?.seo || payload.seo;
 };
 
+const getSite = async (siteId) => {
+  const payload = await requestApi(`/api/admin/sites/${siteId}`);
+  return payload.data?.site || payload.site;
+};
+
 const fetchJson = async (endpoint) => {
   const response = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
   if (!response.ok) {
@@ -334,6 +339,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       hasSeo: Boolean(document.querySelector('[data-testid="site-seo-panel"]')) && body.includes('SEO defaults') && body.includes('JSON-LD defaults'),
       hasSettings: body.includes('Site Name') && body.includes('Custom Domain'),
       hasAutomation: body.includes('Forms') && body.includes('Comments moderation'),
+      hasCommentPolicy: Boolean(document.querySelector('[data-testid="site-comment-policy-panel"]')) && body.includes('Site comment policy') && body.includes('Save comment policy'),
       hasHandoff: body.includes('Frontend handoff') && body.includes('Public render') && body.includes('OpenAPI'),
     };
   })()`);
@@ -349,6 +355,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.hasSeo &&
       layout.hasSettings &&
       layout.hasAutomation &&
+      layout.hasCommentPolicy &&
       layout.hasHandoff,
     `Site detail page missing expected regions: ${JSON.stringify(layout)}`,
   );
@@ -577,10 +584,57 @@ const configureSeoThroughUi = async (client, { titleTemplate, description, ogIma
   await waitForText(client, '[data-testid="site-seo-panel"]', 'SEO defaults saved and reflected in public SEO discovery.', 'SEO save notice');
 };
 
+const configureCommentPolicyThroughUi = async (client, { blockedTerm, closedMessage }) => {
+  const result = await evaluate(client, `(() => {
+    ${setInputValue}
+    const section = document.querySelector('[data-testid="site-comment-policy-panel"]');
+    if (!section) return { ok: false, reason: 'section-missing' };
+    const findCheckbox = (labelText) => Array.from(section.querySelectorAll('label')).find((label) => (
+      (label.textContent || '').includes(labelText)
+    ))?.querySelector('input[type="checkbox"]');
+    const requireEmail = findCheckbox('Require email');
+    const reports = findCheckbox('Enable reports');
+    const moderation = section.querySelector('select[aria-label="Site default comment moderation"]');
+    const sort = section.querySelector('select[aria-label="Site default comment sort"]');
+    const closed = section.querySelector('input[aria-label="Site comment closed message"]');
+    const blockedTerms = section.querySelector('textarea[aria-label="Site comment blocked terms"]');
+    if (
+      !(requireEmail instanceof HTMLInputElement) ||
+      !(reports instanceof HTMLInputElement) ||
+      !(moderation instanceof HTMLSelectElement) ||
+      !(sort instanceof HTMLSelectElement) ||
+      !(closed instanceof HTMLInputElement) ||
+      !(blockedTerms instanceof HTMLTextAreaElement)
+    ) {
+      return { ok: false, reason: 'controls-missing', text: section.textContent?.slice(0, 1200) || '' };
+    }
+    if (!requireEmail.checked) requireEmail.click();
+    if (reports.checked) reports.click();
+    setNativeValue(moderation, 'auto-approve');
+    setNativeValue(sort, 'oldest');
+    setNativeValue(closed, ${JSON.stringify(closedMessage)});
+    setNativeValue(blockedTerms, ${JSON.stringify(blockedTerm)});
+    return {
+      ok: true,
+      requireEmail: requireEmail.checked,
+      reports: reports.checked,
+      moderation: moderation.value,
+      sort: sort.value,
+      closed: closed.value,
+      blockedTerms: blockedTerms.value,
+    };
+  })()`);
+  assert(result.ok, `Unable to configure comment policy through UI: ${JSON.stringify(result)}`);
+
+  await clickButtonByText(client, '[data-testid="site-comment-policy-panel"]', 'Save comment policy');
+  await waitForText(client, '[data-testid="site-workspace-command-center"]', 'Site comment policy saved.', 'Comment policy save notice');
+};
+
 const assertApiReadback = async (siteId, expected) => {
   const navigation = await getNavigation(siteId);
   const redirects = await getRedirects(siteId);
   const seo = await getSeo(siteId);
+  const site = await getSite(siteId);
 
   assert(
     navigation?.settings?.primary?.some((item) => item.label === expected.routeLabel && item.path === expected.routePath),
@@ -606,8 +660,17 @@ const assertApiReadback = async (siteId, expected) => {
       seo?.robots?.extraRules === expected.robotsRule,
     `SEO API did not include saved defaults: ${JSON.stringify(seo).slice(0, 1000)}`,
   );
+  assert(
+    site?.settings?.commentPolicy?.requireEmail === true &&
+      site?.settings?.commentPolicy?.enableReports === false &&
+      site?.settings?.commentPolicy?.moderationMode === 'auto-approve' &&
+      site?.settings?.commentPolicy?.sort === 'oldest' &&
+      site?.settings?.commentPolicy?.closedMessage === expected.commentClosedMessage &&
+      site?.settings?.commentPolicy?.blockedTerms?.includes(expected.commentBlockedTerm),
+    `Site API did not include saved comment policy: ${JSON.stringify(site?.settings?.commentPolicy).slice(0, 1000)}`,
+  );
 
-  return { navigation, redirects, seo };
+  return { navigation, redirects, seo, site };
 };
 
 const launchChrome = () => {
@@ -678,6 +741,8 @@ const main = async () => {
     ogImage: `/uploads/${slug}/social-card.png`,
     favicon: `/uploads/${slug}/favicon.ico`,
     robotsRule: `Disallow: /private-${suffix}`,
+    commentBlockedTerm: `blocked-${suffix}`,
+    commentClosedMessage: `Comments are closed for ${siteName}.`,
   };
 
   try {
@@ -715,6 +780,10 @@ const main = async () => {
       to: expected.redirectTo,
     });
     await configureSeoThroughUi(client, expected);
+    await configureCommentPolicyThroughUi(client, {
+      blockedTerm: expected.commentBlockedTerm,
+      closedMessage: expected.commentClosedMessage,
+    });
     await assertApiReadback(site.id, expected);
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {

@@ -32,6 +32,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { cn } from '@/lib/utils';
 import {
   deleteSite as deleteSiteFromApi,
+  getAdminSite,
   getSiteNavigation,
   getSiteRedirects,
   getSiteReadiness,
@@ -65,6 +66,7 @@ import type {
   SiteNavigationConfig,
   SiteNavigationConfigItem,
   SiteNavigationLayoutConfig,
+  SiteCommentPolicy,
   SiteRedirectRule,
 } from '@backy-cms/core';
 
@@ -172,6 +174,32 @@ const DEFAULT_COMMENT_REPORT_REASONS: CommentReportReason[] = [
   'privacy',
   'other',
 ];
+
+type SiteCommentPolicyDraft = Required<Omit<SiteCommentPolicy, 'blockedTerms'>> & {
+  blockedTerms: string[];
+};
+
+const DEFAULT_SITE_COMMENT_POLICY: SiteCommentPolicyDraft = {
+  enabled: true,
+  moderationMode: 'manual',
+  allowGuests: true,
+  requireName: true,
+  requireEmail: false,
+  allowReplies: true,
+  enableReports: true,
+  blockedTerms: [],
+  closedMessage: 'Comments are closed for this site.',
+  sort: 'newest',
+};
+
+const normalizeSiteCommentPolicyDraft = (policy?: SiteCommentPolicy | null): SiteCommentPolicyDraft => ({
+  ...DEFAULT_SITE_COMMENT_POLICY,
+  ...(policy || {}),
+  blockedTerms: Array.isArray(policy?.blockedTerms) ? policy.blockedTerms.filter(Boolean) : [],
+  moderationMode: policy?.moderationMode === 'auto-approve' ? 'auto-approve' : 'manual',
+  sort: policy?.sort === 'oldest' ? 'oldest' : 'newest',
+  closedMessage: policy?.closedMessage?.trim() || DEFAULT_SITE_COMMENT_POLICY.closedMessage,
+});
 
 const EMPTY_NAVIGATION: SiteNavigationConfig = {
   primary: [],
@@ -571,10 +599,14 @@ function EditSitePage() {
   const [commentTargetType, setCommentTargetType] = useState<CommentTargetFilter>('all');
   const [commentTargetId, setCommentTargetId] = useState('');
   const [commentBlockReason, setCommentBlockReason] = useState<CommentReportReason>(DEFAULT_COMMENT_REPORT_REASONS[0]);
+  const [commentPolicyDraft, setCommentPolicyDraft] = useState<SiteCommentPolicyDraft>(DEFAULT_SITE_COMMENT_POLICY);
+  const [savedCommentPolicy, setSavedCommentPolicy] = useState<SiteCommentPolicyDraft>(DEFAULT_SITE_COMMENT_POLICY);
+  const [commentPolicyLoading, setCommentPolicyLoading] = useState(false);
+  const [commentPolicySaving, setCommentPolicySaving] = useState(false);
   const [contactNoteDrafts, setContactNoteDrafts] = useState<Record<string, string>>({});
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const isSiteSettingsBusy = isLoading;
+  const isSiteSettingsBusy = isLoading || commentPolicySaving;
 
   useEffect(() => {
     if (site) {
@@ -858,6 +890,64 @@ function EditSitePage() {
         loading: false,
         errorMessage: error instanceof Error ? error.message : 'Unable to load site SEO settings.',
       }));
+    }
+  };
+
+  const loadSiteCommentPolicy = async () => {
+    if (!siteApiId) return;
+    setCommentPolicyLoading(true);
+    try {
+      const siteDetail = await getAdminSite(siteApiId);
+      const normalized = normalizeSiteCommentPolicyDraft(siteDetail.settings?.commentPolicy);
+      setCommentPolicyDraft(normalized);
+      setSavedCommentPolicy(normalized);
+    } catch (error) {
+      setSiteSettingsError(error instanceof Error ? error.message : 'Unable to load site comment policy.');
+    } finally {
+      setCommentPolicyLoading(false);
+    }
+  };
+
+  const patchCommentPolicyDraft = (updates: Partial<SiteCommentPolicyDraft>) => {
+    setCommentPolicyDraft((current) => ({
+      ...current,
+      ...updates,
+    }));
+    setSiteWorkspaceNotice(null);
+  };
+
+  const updateCommentPolicyBlockedTerms = (value: string) => {
+    patchCommentPolicyDraft({
+      blockedTerms: value
+        .split(/[\n,]/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    });
+  };
+
+  const saveSiteCommentPolicy = async () => {
+    if (!siteApiId || commentPolicySaving) return;
+    setCommentPolicySaving(true);
+    setSiteSettingsError(null);
+    setSiteWorkspaceNotice(null);
+
+    try {
+      const savedSite = await updateSiteFromApi(siteApiId, {
+        settings: {
+          commentPolicy: commentPolicyDraft,
+        },
+      });
+      updateSite(siteId, savedSite);
+      const siteDetail = await getAdminSite(siteApiId);
+      const normalized = normalizeSiteCommentPolicyDraft(siteDetail.settings?.commentPolicy);
+      setCommentPolicyDraft(normalized);
+      setSavedCommentPolicy(normalized);
+      setSiteWorkspaceNotice('Site comment policy saved.');
+      void loadComments();
+    } catch (error) {
+      setSiteSettingsError(error instanceof Error ? error.message : 'Unable to save site comment policy.');
+    } finally {
+      setCommentPolicySaving(false);
     }
   };
 
@@ -1510,6 +1600,7 @@ function EditSitePage() {
       void loadNavigationEditor();
       void loadRedirectEditor();
       void loadSeoEditor();
+      void loadSiteCommentPolicy();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteApiId]);
@@ -1534,6 +1625,8 @@ function EditSitePage() {
   }, [state.commentReportReasons, commentBlockReason]);
 
   const activeForm = state.forms.find((form) => form.id === state.selectedFormId);
+  const commentPolicyDirty = JSON.stringify(commentPolicyDraft) !== JSON.stringify(savedCommentPolicy);
+  const commentPolicyBlockedTermsText = commentPolicyDraft.blockedTerms.join('\n');
   const readinessFindings = readiness?.checks
     .filter((check) => check.status !== 'pass')
     .slice(0, 5) || [];
@@ -1581,7 +1674,7 @@ function EditSitePage() {
       seoState.seo.favicon ||
       seoState.seo.jsonLd?.length,
     );
-    const hasAutomation = state.forms.length > 0 || state.submissionCount > 0 || state.contactCount > 0 || state.commentCount > 0;
+    const hasAutomation = state.forms.length > 0 || state.submissionCount > 0 || state.contactCount > 0 || state.commentCount > 0 || commentPolicyDraft.enabled;
     const hasDomain = Boolean(formData.customDomain || site?.customDomain || site?.slug);
     const checks = [
       {
@@ -1631,7 +1724,7 @@ function EditSitePage() {
       {
         label: 'Automation queues',
         detail: hasAutomation
-          ? `${state.forms.length} forms, ${state.contactCount} leads, ${state.commentCount} comments`
+          ? `${state.forms.length} forms, ${state.contactCount} leads, ${state.commentCount} comments, ${commentPolicyDraft.moderationMode} comments policy`
           : 'Connect forms, leads, or comments to complete the site workflow.',
         ready: hasAutomation,
       },
@@ -1651,6 +1744,8 @@ function EditSitePage() {
   }, [
     formData.customDomain,
     formData.slug,
+    commentPolicyDraft.enabled,
+    commentPolicyDraft.moderationMode,
     navigationState.navigation.footer,
     navigationState.navigation.layout,
     navigationState.navigation.primary,
@@ -1739,6 +1834,10 @@ function EditSitePage() {
       submissions: state.submissionCount,
       contacts: state.contactCount,
       comments: state.commentCount,
+      commentPolicy: {
+        ...commentPolicyDraft,
+        dirty: commentPolicyDirty,
+      },
       selectedFormId: state.selectedFormId || null,
       filters: {
         submissions: submissionStatus,
@@ -1758,6 +1857,8 @@ function EditSitePage() {
     ],
   }), [
     adminSiteUrl,
+    commentPolicyDirty,
+    commentPolicyDraft,
     commentRequestId,
     commentSearch,
     commentStatus,
@@ -3114,6 +3215,137 @@ function EditSitePage() {
                   </div>
                 </div>
               </div>
+
+              <section className="bg-card border border-border rounded-xl p-4 shadow-sm" data-testid="site-comment-policy-panel">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-semibold">Site comment policy</h3>
+                      <span className={cn(
+                        'rounded-md px-2 py-1 text-xs font-semibold',
+                        commentPolicyDraft.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                      )}
+                      >
+                        {commentPolicyDraft.enabled ? 'Open' : 'Closed'}
+                      </span>
+                      {commentPolicyDirty && (
+                        <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                          Unsaved
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                      Site-level defaults for page and blog comment blocks. Custom frontends receive this policy through the public manifest and public comment APIs enforce it.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCommentPolicyDraft(savedCommentPolicy)}
+                      disabled={commentPolicyLoading || commentPolicySaving || !commentPolicyDirty}
+                      className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      onClick={saveSiteCommentPolicy}
+                      disabled={commentPolicyLoading || commentPolicySaving || !commentPolicyDirty}
+                      className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Save className="h-4 w-4" />
+                      {commentPolicySaving ? 'Saving...' : 'Save comment policy'}
+                    </button>
+                  </div>
+                </div>
+
+                {commentPolicyLoading ? (
+                  <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
+                    Loading comment policy...
+                  </div>
+                ) : (
+                  <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {[
+                        ['Accept public comments', 'enabled'],
+                        ['Allow guests', 'allowGuests'],
+                        ['Require name', 'requireName'],
+                        ['Require email', 'requireEmail'],
+                        ['Allow replies', 'allowReplies'],
+                        ['Enable reports', 'enableReports'],
+                      ].map(([label, key]) => (
+                        <label key={key} className="flex items-start gap-3 rounded-lg border border-border bg-background p-3 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(commentPolicyDraft[key as keyof SiteCommentPolicyDraft])}
+                            onChange={(event) => patchCommentPolicyDraft({ [key]: event.target.checked } as Partial<SiteCommentPolicyDraft>)}
+                            className="mt-0.5"
+                          />
+                          <span>
+                            <span className="block font-medium text-foreground">{label}</span>
+                            <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
+                              {key === 'enabled'
+                                ? 'Controls whether new public comments are accepted.'
+                                : key === 'enableReports'
+                                  ? 'Allows visitors to report published comments.'
+                                  : 'Applied before page or blog comment block overrides.'}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+
+                    <div className="grid gap-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="text-sm font-medium">
+                          <span className="mb-1 block">Default moderation</span>
+                          <select
+                            value={commentPolicyDraft.moderationMode}
+                            onChange={(event) => patchCommentPolicyDraft({ moderationMode: event.target.value as SiteCommentPolicyDraft['moderationMode'] })}
+                            aria-label="Site default comment moderation"
+                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                          >
+                            <option value="manual">Manual review</option>
+                            <option value="auto-approve">Auto approve</option>
+                          </select>
+                        </label>
+                        <label className="text-sm font-medium">
+                          <span className="mb-1 block">Public sort</span>
+                          <select
+                            value={commentPolicyDraft.sort}
+                            onChange={(event) => patchCommentPolicyDraft({ sort: event.target.value as SiteCommentPolicyDraft['sort'] })}
+                            aria-label="Site default comment sort"
+                            className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                          >
+                            <option value="newest">Newest first</option>
+                            <option value="oldest">Oldest first</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label className="text-sm font-medium">
+                        <span className="mb-1 block">Closed message</span>
+                        <input
+                          value={commentPolicyDraft.closedMessage}
+                          onChange={(event) => patchCommentPolicyDraft({ closedMessage: event.target.value })}
+                          aria-label="Site comment closed message"
+                          className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                        />
+                      </label>
+                      <label className="text-sm font-medium">
+                        <span className="mb-1 block">Blocked terms</span>
+                        <textarea
+                          value={commentPolicyBlockedTermsText}
+                          onChange={(event) => updateCommentPolicyBlockedTerms(event.target.value)}
+                          aria-label="Site comment blocked terms"
+                          rows={4}
+                          className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm"
+                          placeholder="One term per line or comma separated"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </section>
 
               <div className="grid grid-cols-1 gap-6">
                 <div className="bg-card border border-border rounded-xl p-4 shadow-sm space-y-4">

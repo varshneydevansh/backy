@@ -2007,7 +2007,7 @@ export async function updateSite(siteId: string, input: Partial<SiteCreateInput>
     },
     body: JSON.stringify({
       ...input,
-      isPublished: input.status === 'published',
+      ...(input.status === undefined ? {} : { isPublished: input.status === 'published' }),
     }),
   });
   const payload = await readJson<ApiSiteResponse>(response);
