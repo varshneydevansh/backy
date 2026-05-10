@@ -2568,6 +2568,11 @@ try {
     let formWritePageId = null;
     let manifestReusableSectionId = null;
     try {
+      const unauthAdminForms = await fetch(`${baseUrl}/api/admin/sites/${createdSiteId}/forms`);
+      const unauthAdminFormsJson = await unauthAdminForms.json().catch(() => ({}));
+      assert(unauthAdminForms.status === 401, `Forms admin API should reject missing auth, got ${unauthAdminForms.status}`);
+      assert(unauthAdminFormsJson?.success === false && unauthAdminFormsJson?.error?.code === 'UNAUTHORIZED', `Forms admin API missing auth envelope: ${JSON.stringify(unauthAdminFormsJson).slice(0, 500)}`);
+
       const createFormWritePage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
         method: 'POST',
         headers: {

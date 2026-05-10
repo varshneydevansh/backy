@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { Contact } from '@backy-cms/core';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import {
   getContactById,
   getFormById,
@@ -114,6 +115,10 @@ const toFallbackUpdate = (body: NonNullable<ReturnType<typeof parseBody>>) => {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'collections.edit' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, formId, contactId } = await params;
