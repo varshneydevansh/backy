@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit",
+    "test:dashboard": "node scripts/dashboard-smoke.mjs",
     "test:editor-drag": "node scripts/editor-drag-smoke.mjs",
     "test:pages-list": "node scripts/pages-list-smoke.mjs",
     "test:page-create": "node scripts/page-create-smoke.mjs",
