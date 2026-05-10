@@ -2,7 +2,7 @@
  * BACKY CMS - EDIT USER PAGE
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
@@ -13,8 +13,10 @@ import {
   Copy,
   Download,
   ExternalLink,
+  History,
   KeyRound,
   Mail,
+  RefreshCw,
   Save,
   Shield,
   ShieldAlert,
@@ -29,7 +31,9 @@ import {
   deleteUser as deleteBackendUser,
   getAdminApiBase,
   getUser as getBackendUser,
+  listAdminAuditLogs,
   updateUser as updateBackendUser,
+  type AdminAuditLog,
 } from '@/lib/adminContentApi';
 import { useStore, type User } from '@/stores/mockStore';
 
@@ -98,6 +102,11 @@ const USER_DETAIL_CONTROL_AREAS = [
     href: '#user-detail-api',
   },
   {
+    title: 'Activity',
+    detail: 'Audit events for this exact user record.',
+    href: '#user-detail-activity',
+  },
+  {
     title: 'Danger zone',
     detail: 'Removal guardrails and destructive access controls.',
     href: '#user-detail-danger',
@@ -125,6 +134,9 @@ function EditUserPage() {
   const [isLoadingUser, setIsLoadingUser] = useState(Boolean(user));
   const [isLoading, setIsLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [userAuditLogs, setUserAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [isLoadingUserAudit, setIsLoadingUserAudit] = useState(false);
+  const [userAuditError, setUserAuditError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formData, setFormData] = useState<{
     fullName: string;
@@ -181,6 +193,25 @@ function EditUserPage() {
       cancelled = true;
     };
   }, [setUsers, userId]);
+
+  const loadUserAuditLogs = useCallback(async () => {
+    setIsLoadingUserAudit(true);
+    setUserAuditError(null);
+
+    try {
+      const result = await listAdminAuditLogs({ entity: 'user', entityId: userId, limit: 12 });
+      setUserAuditLogs(result.logs);
+    } catch (error) {
+      setUserAuditError(error instanceof Error ? error.message : 'Unable to load user activity.');
+      setUserAuditLogs([]);
+    } finally {
+      setIsLoadingUserAudit(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    void loadUserAuditLogs();
+  }, [loadUserAuditLogs]);
 
   const selectedRole = useMemo(
     () => ROLE_OPTIONS.find((role) => role.value === formData.role) || ROLE_OPTIONS[2],
@@ -334,6 +365,7 @@ function EditUserPage() {
       setUsers(users.map((item) => (item.id === userId ? saved : item)));
       setFormData((current) => ({ ...current, status: saved.status }));
       setNotice(`${saved.fullName} is now ${saved.status}.`);
+      await loadUserAuditLogs();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Backend status update failed.');
     } finally {
@@ -402,6 +434,7 @@ function EditUserPage() {
       'Backend prevents deleting or demoting the final active owner/admin.',
       'Duplicate emails are rejected before persistence.',
       'Lifecycle quick actions persist only status; use Save changes for identity or role edits.',
+      'Per-user activity is queryable through the admin audit log by entity and id.',
       'Suspend or inactivate access before destructive removal when ownership history matters.',
     ],
   };
@@ -545,7 +578,7 @@ function EditUserPage() {
           <div className="mt-4 rounded-lg border border-border bg-background p-4">
             <h3 className="text-sm font-semibold">User control map</h3>
             <p className="mt-1 text-sm text-muted-foreground">Jump to identity, lifecycle, permissions, API payload, and removal controls.</p>
-            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
               {USER_DETAIL_CONTROL_AREAS.map((area) => (
                 <a
                   key={area.title}
@@ -779,6 +812,56 @@ function EditUserPage() {
             </div>
           </section>
 
+          <section id="user-detail-activity" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24" data-testid="user-detail-activity">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <span className="rounded-lg bg-sky-50 p-2 text-sky-700">
+                  <History className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">User activity</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Create, update, lifecycle, and removal events for this account record.
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void loadUserAuditLogs()}
+                disabled={isLoadingUserAudit}
+                iconStart={<RefreshCw className={cn('size-3.5', isLoadingUserAudit && 'animate-spin')} />}
+              >
+                Refresh
+              </Button>
+            </div>
+
+            {userAuditError && (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {userAuditError}
+              </div>
+            )}
+
+            {isLoadingUserAudit ? (
+              <div className="mt-4 space-y-2" aria-label="Loading user activity">
+                {[0, 1, 2].map((index) => (
+                  <div key={index} className="h-16 animate-pulse rounded-lg bg-muted" />
+                ))}
+              </div>
+            ) : userAuditLogs.length === 0 ? (
+              <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
+                No activity has been recorded for this user yet.
+              </div>
+            ) : (
+              <div className="mt-4 space-y-2">
+                {userAuditLogs.map((log) => (
+                  <UserDetailAuditEvent key={log.id} log={log} />
+                ))}
+              </div>
+            )}
+          </section>
+
           <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
@@ -919,6 +1002,55 @@ function EditUserPage() {
   );
 }
 
+function UserDetailAuditEvent({ log }: { log: AdminAuditLog }) {
+  const email = readAuditString(log.metadata?.email) || readAuditString(log.after?.email) || readAuditString(log.before?.email) || log.entityId;
+  const role = readAuditString(log.metadata?.role) || readAuditString(log.after?.role) || readAuditString(log.before?.role);
+  const status = readAuditString(log.metadata?.status) || readAuditString(log.after?.status) || readAuditString(log.before?.status);
+  const changedFields = Array.isArray(log.metadata?.changedFields)
+    ? log.metadata.changedFields.filter((field): field is string => typeof field === 'string')
+    : [];
+  const actionLabel = log.action === 'create'
+    ? 'Created'
+    : log.action === 'delete'
+      ? 'Removed'
+      : log.action === 'update'
+        ? 'Updated'
+        : log.action;
+
+  return (
+    <article className="rounded-lg border border-border bg-background p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={cn(
+              'rounded px-2 py-0.5 text-[11px] font-semibold',
+              log.action === 'delete'
+                ? 'bg-red-50 text-red-700'
+                : log.action === 'create'
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'bg-sky-50 text-sky-700',
+            )}
+            >
+              {actionLabel}
+            </span>
+            <h3 className="truncate text-sm font-semibold text-foreground">{email}</h3>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {role ? `${roleLabel(role)} role` : 'User access'}{status ? ` - ${status}` : ''}
+            {changedFields.length > 0 ? ` - changed ${changedFields.join(', ')}` : ''}
+          </p>
+        </div>
+        <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{formatAuditDate(log.createdAt)}</span>
+      </div>
+      {log.requestId && (
+        <p className="mt-2 truncate font-mono text-[11px] text-muted-foreground">
+          request {log.requestId}
+        </p>
+      )}
+    </article>
+  );
+}
+
 function AccessReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
   return (
     <div className="rounded-lg border border-border bg-card p-3">
@@ -936,6 +1068,22 @@ function AccessReadinessCheck({ label, detail, ready }: { label: string; detail:
     </div>
   );
 }
+
+const readAuditString = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
+
+const roleLabel = (role: string): string => ROLE_OPTIONS.find((option) => option.value === role)?.label || role;
+
+const formatAuditDate = (value: string): string => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+};
 
 function AccessWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
   return (

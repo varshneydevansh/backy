@@ -448,6 +448,28 @@ const waitForUserActivity = async (client, email) => {
   throw new Error(`Users activity panel did not show ${email}: timed out`);
 };
 
+const waitForUserDetailActivity = async (client, email) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="user-detail-activity"]');
+      const text = panel?.textContent || '';
+      return {
+        ready: Boolean(panel),
+        hasUser: text.includes(${JSON.stringify(email)}),
+        hasUpdated: text.includes('Updated'),
+        hasSuspended: text.includes('suspended'),
+        text: text.slice(0, 1600),
+      };
+    })()`);
+    if (state.ready && state.hasUser && state.hasUpdated && state.hasSuspended) {
+      return state;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`User detail activity panel did not show ${email}: timed out`);
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -542,6 +564,7 @@ const main = async () => {
     await setUserDetailLifecycle(client, 'Suspend');
     const suspended = await waitForUser(email, (user) => user.fullName === fullName && user.role === 'viewer' && user.status === 'suspended');
     assert((await getUser(suspended.id)).status === 'suspended', 'User detail lifecycle action did not persist suspended status.');
+    await waitForUserDetailActivity(client, email);
 
     await navigateToUsers(client, fullName);
     await waitForUsersPageUser(client, fullName);
