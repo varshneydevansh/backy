@@ -362,6 +362,41 @@ const waitForRouteRow = async (client, page, expectedText, expectedSearch = page
   return null;
 };
 
+const waitForDeliveryRow = async (client, page, expectedText, expectedSearch = page.title) => {
+  const url = `${ADMIN_BASE_URL}/pages?siteId=${encodeURIComponent(HIERARCHY_SITE_ID)}&q=${encodeURIComponent(expectedSearch)}`;
+  await client.send('Page.navigate', { url });
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const delivery = document.querySelector('[data-testid="pages-delivery-${page.id}"]');
+      return {
+        ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
+        deliveryText: delivery?.textContent || '',
+        renderLink: delivery?.querySelector('a[href*="/render?path="]')?.getAttribute('href') || '',
+        resolveLink: delivery?.querySelector('a[href*="/resolve?path="]')?.getAttribute('href') || '',
+        body: document.body?.innerText?.slice(0, 700) || '',
+      };
+    })()`);
+
+    if (
+      state.ready
+      && state.deliveryText.includes(expectedText)
+      && state.renderLink.includes('/api/sites/')
+      && state.resolveLink.includes('/api/sites/')
+    ) {
+      return { url, state };
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Delivery row did not render expected text "${expectedText}": ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -463,6 +498,11 @@ const main = async () => {
       hierarchyPages.childPage,
       'Route is available.',
     );
+    const childDelivery = await waitForDeliveryRow(
+      client,
+      hierarchyPages.childPage,
+      'Preview Only',
+    );
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -485,6 +525,7 @@ const main = async () => {
       parentHierarchy,
       childRevisions,
       childRoute,
+      childDelivery,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {

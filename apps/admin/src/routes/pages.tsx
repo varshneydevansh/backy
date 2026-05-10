@@ -225,6 +225,8 @@ const PAGE_EXPORT_COLUMNS = [
   'route_status',
   'route_issue',
   'route_conflict_ids',
+  'delivery_status',
+  'preview_endpoint',
   'parent_id',
   'parent_title',
   'children_count',
@@ -256,6 +258,8 @@ type PageRouteDiagnostic = {
   message: string;
   conflictIds: string[];
 };
+
+type PageDeliveryStatus = 'published' | 'preview-only' | 'scheduled' | 'archived' | 'blocked';
 
 const PAGE_CREATION_SHORTCUTS: Array<{
   key: PageCreationTemplate;
@@ -574,6 +578,8 @@ function PagesListView() {
       const encodedSiteId = encodeURIComponent(pageSiteId);
       const encodedPageId = encodeURIComponent(page.id);
       const readiness = readinessMap[page.id];
+      const routeDiagnostic = pageRouteDiagnostics[page.id];
+      const deliveryStatus = getPageDeliveryStatus(page, readiness, routeDiagnostic);
 
       return [
         page.id,
@@ -587,6 +593,8 @@ function PagesListView() {
         pageRouteDiagnostics[page.id]?.status || 'available',
         pageRouteDiagnostics[page.id]?.message || '',
         pageRouteDiagnostics[page.id]?.conflictIds.join('; ') || '',
+        deliveryStatus,
+        `${adminBaseUrl}/sites/${encodedSiteId}/pages/${encodedPageId}/preview`,
         page.parentId || '',
         getParentPageTitle(page, activeSitePageMap),
         pageChildCountMap.get(page.id) || 0,
@@ -1046,6 +1054,29 @@ function PagesListView() {
       )
     },
     {
+      key: 'siteId',
+      label: 'Delivery',
+      render: (page) => {
+        const pageSiteId = page.siteId || activeSiteId;
+        const pagePath = pagePublicPath(page);
+        const encodedSiteId = encodeURIComponent(pageSiteId);
+        const encodedPath = encodeURIComponent(pagePath);
+        const encodedPageId = encodeURIComponent(page.id);
+
+        return (
+          <PageDeliveryCell
+            page={page}
+            status={getPageDeliveryStatus(page, readinessMap[page.id], pageRouteDiagnostics[page.id])}
+            routeDiagnostic={pageRouteDiagnostics[page.id]}
+            publicUrl={publicPageUrl(page)}
+            renderUrl={`${publicBaseUrl}/api/sites/${encodedSiteId}/render?path=${encodedPath}`}
+            resolveUrl={`${publicBaseUrl}/api/sites/${encodedSiteId}/resolve?path=${encodedPath}`}
+            previewEndpoint={`${adminBaseUrl}/sites/${encodedSiteId}/pages/${encodedPageId}/preview`}
+          />
+        );
+      }
+    },
+    {
       key: 'lastUpdated',
       label: 'Last Updated',
       sortable: true,
@@ -1290,19 +1321,31 @@ function PagesListView() {
       const revisionSummary = revisionSummaryMap[page.id];
       const latestRevision = revisionSummary?.latest || null;
       const routeDiagnostic = pageRouteDiagnostics[page.id];
+      const pageSiteId = page.siteId || activeSiteId;
+      const pagePath = pagePublicPath(page);
+      const encodedSiteId = encodeURIComponent(pageSiteId);
+      const encodedPath = encodeURIComponent(pagePath);
+      const encodedPageId = encodeURIComponent(page.id);
 
       return {
         id: page.id,
         title: page.title,
         slug: page.slug,
-        path: pagePublicPath(page),
+        path: pagePath,
         status: page.status,
         isHomepage: Boolean(page.isHomepage),
         route: {
-          path: routeDiagnostic?.path || pagePublicPath(page),
+          path: routeDiagnostic?.path || pagePath,
           status: routeDiagnostic?.status || 'available',
           message: routeDiagnostic?.message || 'Route is available.',
           conflictIds: routeDiagnostic?.conflictIds || [],
+        },
+        delivery: {
+          status: getPageDeliveryStatus(page, readinessMap[page.id], routeDiagnostic),
+          publicUrl: page.status === 'published' ? publicPageUrl(page) : null,
+          renderUrl: `${publicBaseUrl}/api/sites/${encodedSiteId}/render?path=${encodedPath}`,
+          resolveUrl: `${publicBaseUrl}/api/sites/${encodedSiteId}/resolve?path=${encodedPath}`,
+          previewEndpoint: `${adminBaseUrl}/sites/${encodedSiteId}/pages/${encodedPageId}/preview`,
         },
         hierarchy: {
           parentId: page.parentId || null,
@@ -2321,6 +2364,77 @@ function PageRevisionCell({
   );
 }
 
+function PageDeliveryCell({
+  page,
+  status,
+  routeDiagnostic,
+  publicUrl,
+  renderUrl,
+  resolveUrl,
+  previewEndpoint,
+}: {
+  page: Page;
+  status: PageDeliveryStatus;
+  routeDiagnostic: PageRouteDiagnostic | undefined;
+  publicUrl: string;
+  renderUrl: string;
+  resolveUrl: string;
+  previewEndpoint: string;
+}) {
+  const labelByStatus: Record<PageDeliveryStatus, string> = {
+    published: 'Published URL live',
+    'preview-only': 'Preview only',
+    scheduled: 'Scheduled',
+    archived: 'Archived',
+    blocked: 'Blocked',
+  };
+  const detailByStatus: Record<PageDeliveryStatus, string> = {
+    published: 'Hosted page, render API, and resolve API are ready.',
+    'preview-only': 'Use preview tokens until this page is published.',
+    scheduled: page.scheduledAt ? `Public after ${formatDate(page.scheduledAt)}.` : 'Publish date is required.',
+    archived: 'Hidden from public delivery until restored.',
+    blocked: routeDiagnostic?.message || 'Resolve blockers before delivery.',
+  };
+  const badgeType = status === 'published'
+    ? 'success'
+    : status === 'blocked'
+      ? 'error'
+      : status === 'archived'
+        ? 'neutral'
+        : 'warning';
+
+  return (
+    <div className="min-w-60 space-y-2" data-testid={`pages-delivery-${page.id}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge status={labelByStatus[status]} type={badgeType} />
+      </div>
+      <div className={cn(
+        'text-xs leading-5',
+        status === 'blocked' ? 'text-destructive' : 'text-muted-foreground',
+      )}
+      >
+        {detailByStatus[status]}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        {page.status === 'published' && status !== 'blocked' && (
+          <a href={publicUrl} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
+            Public
+          </a>
+        )}
+        <a href={renderUrl} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
+          Render
+        </a>
+        <a href={resolveUrl} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
+          Resolve
+        </a>
+        <code className="max-w-48 truncate rounded-md bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground" title={previewEndpoint}>
+          preview POST
+        </code>
+      </div>
+    </div>
+  );
+}
+
 function PageApiStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-border bg-muted/30 px-3 py-3">
@@ -2601,6 +2715,30 @@ const getPublishBlocker = (readiness: PageReadiness): string | null => {
     || readiness.checks.find((check) => check.status !== 'pass');
 
   return firstBlockingCheck?.message || 'Resolve page readiness errors before publishing.';
+};
+
+const getPageDeliveryStatus = (
+  page: Page,
+  readiness: PageReadiness | undefined,
+  routeDiagnostic: PageRouteDiagnostic | undefined,
+): PageDeliveryStatus => {
+  if (routeDiagnostic?.status === 'conflict' || readiness?.statusLabel === 'blocked') {
+    return 'blocked';
+  }
+
+  if (page.status === 'published') {
+    return 'published';
+  }
+
+  if (page.status === 'scheduled') {
+    return 'scheduled';
+  }
+
+  if (page.status === 'archived') {
+    return 'archived';
+  }
+
+  return 'preview-only';
 };
 
 const getBulkActionLabel = (action: 'publish' | 'archive' | 'delete' | '', count: number, isConfirmingDelete: boolean): string => {
