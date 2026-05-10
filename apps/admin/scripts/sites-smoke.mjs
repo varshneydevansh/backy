@@ -60,25 +60,14 @@ const listSites = async () => {
   return payload.data?.sites || payload.sites || [];
 };
 
-const createSite = async ({ name, slug, customDomain }) => {
-  const payload = await requestApi('/api/admin/sites', {
-    method: 'POST',
-    body: JSON.stringify({
-      name,
-      slug,
-      customDomain,
-      description: 'Temporary multi-site smoke workspace.',
-      status: 'draft',
-    }),
-  });
-  const site = payload.data?.site || payload.site;
-  assert(site?.id, `Create site did not return a site: ${JSON.stringify(payload).slice(0, 500)}`);
-  return site;
-};
-
 const getSite = async (siteId) => {
   const payload = await requestApi(`/api/admin/sites/${siteId}`);
   return payload.data?.site || payload.site;
+};
+
+const listSitePages = async (siteId) => {
+  const payload = await requestApi(`/api/admin/sites/${siteId}/pages?includeUnpublished=true`);
+  return payload.data?.pages || payload.pages || [];
 };
 
 const deleteSite = async (siteId) => {
@@ -113,6 +102,19 @@ const waitForSiteMissing = async (slug) => {
   }
 
   throw new Error(`Temporary site ${slug} still exists after cleanup`);
+};
+
+const waitForSeededPages = async (siteId, expectedSlugs) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const pages = await listSitePages(siteId);
+    const slugs = new Set(pages.map((page) => page.slug));
+    if (expectedSlugs.every((slug) => slugs.has(slug))) {
+      return pages;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Starter pages were not created for site ${siteId}`);
 };
 
 const fetchJson = async (endpoint) => {
@@ -235,6 +237,115 @@ const navigateToSites = (client, expectedText = 'Sites command center') => navig
   'Sites page',
 );
 
+const setCreateSiteControl = async (client, labelText, value) => {
+  const result = await evaluate(client, `(() => {
+    const labelText = ${JSON.stringify(labelText)};
+    const value = ${JSON.stringify(value)};
+    const normalize = (text) => String(text || '').replace(/\\s+/g, ' ').trim();
+    const labels = Array.from(document.querySelectorAll('label'));
+    const label = labels.find((candidate) => {
+      const firstSpan = candidate.querySelector('span');
+      return normalize(firstSpan?.textContent || candidate.textContent) === labelText;
+    });
+    if (!(label instanceof HTMLLabelElement)) {
+      return {
+        ok: false,
+        reason: 'label-missing',
+        labelText,
+        labels: labels.map((candidate) => normalize(candidate.querySelector('span')?.textContent || candidate.textContent)).slice(0, 80),
+      };
+    }
+    const control = label.querySelector('input, select, textarea');
+    if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)) {
+      return { ok: false, reason: 'control-missing', labelText };
+    }
+    if (control.disabled) return { ok: false, reason: 'control-disabled', labelText };
+    const prototype = control instanceof HTMLSelectElement
+      ? HTMLSelectElement.prototype
+      : control instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+    setter?.call(control, String(value));
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+    control.dispatchEvent(new Event('blur', { bubbles: true }));
+    return { ok: true, value: control.value };
+  })()`);
+  assert(result.ok, `Unable to set create-site ${labelText}: ${JSON.stringify(result)}`);
+  await sleep(150);
+  return result;
+};
+
+const setCreateSiteBlueprint = async (client, blueprint) => {
+  const result = await evaluate(client, `(() => {
+    const input = document.querySelector('input[name="site-blueprint"][value="' + CSS.escape(${JSON.stringify(blueprint)}) + '"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return {
+        ok: false,
+        reason: 'blueprint-missing',
+        blueprints: Array.from(document.querySelectorAll('input[name="site-blueprint"]')).map((candidate) => candidate.value),
+      };
+    }
+    if (input.disabled) return { ok: false, reason: 'blueprint-disabled' };
+    input.click();
+    return { ok: true, checked: input.checked, value: input.value };
+  })()`);
+  assert(result.ok, `Unable to select create-site blueprint: ${JSON.stringify(result)}`);
+  await sleep(150);
+  return result;
+};
+
+const submitCreateSiteForm = async (client) => {
+  const result = await evaluate(client, `(() => {
+    const button = Array.from(document.querySelectorAll('button[type="submit"]')).find((candidate) => (
+      (candidate.textContent || '').includes('Create site')
+    ));
+    if (!(button instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        reason: 'submit-missing',
+        buttons: Array.from(document.querySelectorAll('button')).map((candidate) => candidate.textContent || '').slice(0, 80),
+      };
+    }
+    if (button.disabled) return { ok: false, reason: 'submit-disabled' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(result.ok, `Unable to submit create-site form: ${JSON.stringify(result)}`);
+};
+
+const createSiteThroughUi = async (client, { siteName, slug, customDomain }) => {
+  await setCreateSiteControl(client, 'Site name', siteName);
+  await setCreateSiteControl(client, 'URL slug', slug);
+  await setCreateSiteControl(client, 'Custom domain', customDomain);
+  await setCreateSiteControl(client, 'Description', 'Temporary storefront workspace created through the Backy admin UI smoke.');
+  await setCreateSiteControl(client, 'Status', 'published');
+  await setCreateSiteBlueprint(client, 'storefront');
+  await submitCreateSiteForm(client);
+
+  const created = await waitForSite(slug, (site) => site.status === 'published' || site.isPublished === true);
+  const siteId = created.publicSiteId || created.id;
+  const pages = await waitForSeededPages(siteId, ['home', 'shop', 'contact']);
+  const homepage = pages.find((page) => page.slug === 'home');
+  assert(homepage?.isHomepage === true, `Storefront blueprint did not create a homepage: ${JSON.stringify(pages).slice(0, 700)}`);
+  assert(pages.every((page) => page.status === 'published'), `Storefront blueprint pages did not inherit published status: ${JSON.stringify(pages).slice(0, 700)}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      path: window.location.pathname,
+      search: window.location.search,
+      body: document.body?.innerText?.slice(0, 700) || '',
+    }))()`);
+    if (state.path === '/pages' && state.search.includes(siteId)) {
+      return { site: created, pages };
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Create-site form did not route to the seeded page workspace for ${slug}`);
+};
+
 const waitForSitesPageSite = async (client, siteName) => {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const state = await evaluate(client, `(() => ({
@@ -313,7 +424,7 @@ const exerciseSitesFilters = async (client, siteName) => {
   await waitForSitesPageSite(client, siteName);
   await setSitesFilter(client, 'Filter sites by domain', 'custom');
   await waitForSitesPageSite(client, siteName);
-  await setSitesFilter(client, 'Filter sites by page coverage', 'empty');
+  await setSitesFilter(client, 'Filter sites by page coverage', 'with-pages');
   await waitForSitesPageSite(client, siteName);
   await setSitesFilter(client, 'Filter sites by status', 'published');
   await waitForSitesPageSite(client, siteName);
@@ -515,15 +626,17 @@ const main = async () => {
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: AUTH_STORAGE_SCRIPT });
 
     await navigateToCreateSite(client);
-
-    const created = await createSite({ name: siteName, slug, customDomain });
+    const { site: created, pages } = await createSiteThroughUi(client, { siteName, slug, customDomain });
     createdSiteId = created.id;
-    assert(created.status === 'draft', `Unexpected created site status: ${JSON.stringify(created)}`);
+    assert(created.status === 'published', `Unexpected created site status: ${JSON.stringify(created)}`);
+    assert(pages.length >= 3, `Storefront blueprint did not seed enough pages: ${JSON.stringify(pages).slice(0, 700)}`);
 
     await navigateToSites(client, siteName);
     await waitForSitesPageSite(client, siteName);
     await assertLayout(client, siteName);
 
+    await setSiteStatusSelect(client, siteName, 'draft');
+    await waitForSite(slug, (site) => site.status === 'draft' || site.isPublished === false);
     await setSiteStatusSelect(client, siteName, 'published');
     const published = await waitForSite(slug, (site) => site.status === 'published' || site.isPublished === true);
     assert((await getSite(published.id)).status === 'published', 'Site status update did not persist through the admin API.');
