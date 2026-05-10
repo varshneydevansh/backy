@@ -16,6 +16,8 @@ const PRODUCT_COLLECTION_SLUG = 'products';
 const ORDERS_COLLECTION_SLUG = 'orders';
 const PRODUCT_REQUIRED_FIELD_COUNT = 23;
 const ORDER_REQUIRED_FIELD_COUNT = 29;
+const FRONTEND_PRODUCT_TEMPLATE_ID = 'smoke-product-contract-template';
+const FRONTEND_PRODUCT_TEMPLATE_NAME = 'Smoke Frontend Product';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -60,6 +62,98 @@ const requestApi = async (endpoint, options = {}) => {
 
   return payload;
 };
+
+const getFrontendDesign = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`);
+  const frontendDesign = payload.data?.frontendDesign;
+  assert(frontendDesign?.schemaVersion === 'backy.frontend-design.v1', `Unexpected frontend design response: ${JSON.stringify(payload).slice(0, 500)}`);
+  return frontendDesign;
+};
+
+const patchFrontendDesign = async (frontendDesign) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`, {
+    method: 'PATCH',
+    body: JSON.stringify({ frontendDesign }),
+  });
+  const updated = payload.data?.frontendDesign;
+  assert(updated?.schemaVersion === 'backy.frontend-design.v1', `Patch did not return frontend design: ${JSON.stringify(payload).slice(0, 500)}`);
+  return updated;
+};
+
+const smokeFrontendDesignContract = () => ({
+  schemaVersion: 'backy.frontend-design.v1',
+  status: 'synced',
+  source: {
+    type: 'custom-frontend',
+    label: 'Smoke commerce frontend',
+    url: 'https://example.com/smoke-commerce-frontend',
+    repository: 'example/backy-smoke-commerce-frontend',
+    branch: 'main',
+  },
+  tokens: {
+    colors: {
+      primary: '#0f766e',
+      accent: '#f59e0b',
+    },
+    fonts: {
+      heading: 'Inter',
+      body: 'Inter',
+    },
+    customCss: ':root { --backy-smoke-commerce-primary: #0f766e; }',
+  },
+  chrome: {
+    header: { component: 'SmokeCommerceHeader', source: 'site.navigation.primary' },
+    navigation: { component: 'SmokeCommerceNavigation', source: 'site.navigation.primary' },
+    footer: { component: 'SmokeCommerceFooter', source: 'site.navigation.footer' },
+  },
+  templates: [
+    {
+      id: FRONTEND_PRODUCT_TEMPLATE_ID,
+      type: 'product',
+      name: FRONTEND_PRODUCT_TEMPLATE_NAME,
+      routePattern: '/products/smoke-contract-product',
+      description: 'Frontend contract product template used by the commerce smoke.',
+      content: {
+        title: 'Smoke frontend product',
+        slug: 'smoke-frontend-product',
+        sku: 'SMOKE-FRONTEND-PRODUCT',
+        price: 39,
+        compareAtPrice: 59,
+        currency: 'USD',
+        inventory: 11,
+        lowStockThreshold: 3,
+        inventoryPolicy: 'deny',
+        productType: 'physical',
+        checkoutUrl: 'https://checkout.example.com/smoke-frontend-product',
+        shippingRequired: true,
+        weight: 1.25,
+        imageUrl: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085',
+        galleryImages: ['https://images.unsplash.com/photo-1498050108023-c5249f4df085'],
+        category: 'Frontend templates',
+        tags: ['frontend-design', 'commerce'],
+        vendor: 'Backy',
+        description: 'A product seeded from a custom frontend design contract.',
+        seoTitle: 'Smoke frontend product | Backy',
+        featured: true,
+        taxable: true,
+      },
+      bindingHints: [
+        { role: 'product.title', binding: 'product.title' },
+        { role: 'product.price', binding: 'product.price' },
+        { role: 'product.media', binding: 'product.imageUrl' },
+      ],
+    },
+  ],
+  editableMap: [
+    {
+      selector: '[data-backy-role="product-card"]',
+      role: 'product.card',
+      binding: 'product',
+      fields: ['title', 'price', 'imageUrl', 'checkoutUrl'],
+    },
+  ],
+  notes: 'Temporary contract for validating product creation from custom frontend templates.',
+});
 
 const listCollections = async () => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections`);
@@ -496,6 +590,89 @@ const fillProductEditor = async (client, suffix) => {
   return { slug };
 };
 
+const clickFrontendTemplateCreateProduct = async (client) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const section = document.querySelector('[data-testid="products-frontend-template-options"]');
+      const button = document.querySelector('[data-testid="products-frontend-template-${FRONTEND_PRODUCT_TEMPLATE_ID}"]');
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return {
+          ok: false,
+          section: Boolean(section),
+          button: button?.textContent || null,
+          disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+          body: document.body?.innerText?.slice(0, 700) || '',
+        };
+      }
+      button.click();
+      return { ok: true, text: button.textContent || '' };
+    })()`);
+
+    if (result.ok) {
+      return;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Unable to click frontend product template Create product: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+};
+
+const waitForFrontendTemplateProduct = async (productCollection) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const records = await listCollectionRecords(productCollection.id, '?limit=100&status=all');
+    const record = records.find((candidate) => candidate.values?.frontendDesignTemplateId === FRONTEND_PRODUCT_TEMPLATE_ID);
+
+    if (record) {
+      return record;
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Frontend product template was not created: ${JSON.stringify(records.map((record) => ({
+        id: record.id,
+        slug: record.slug,
+        values: record.values,
+      })).slice(0, 8))}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const assertFrontendTemplateProduct = async ({ productCollection, record }) => {
+  assert(record?.values?.title === 'Smoke frontend product', `Frontend product title mismatch: ${JSON.stringify(record?.values)}`);
+  assert(record.values.frontendDesignTemplateId === FRONTEND_PRODUCT_TEMPLATE_ID, `Frontend template id was not stored: ${JSON.stringify(record.values)}`);
+  assert(record.values.frontendDesignTemplateName === FRONTEND_PRODUCT_TEMPLATE_NAME, `Frontend template name was not stored: ${JSON.stringify(record.values)}`);
+  assert(record.values.frontendDesignSource?.label === 'Smoke commerce frontend', `Frontend source snapshot missing: ${JSON.stringify(record.values)}`);
+  assert(record.values.frontendDesignRoutePattern === '/products/smoke-contract-product', `Frontend route pattern missing: ${JSON.stringify(record.values)}`);
+  assert(record.values.frontendDesignChrome?.header?.component === 'SmokeCommerceHeader', `Frontend chrome snapshot missing: ${JSON.stringify(record.values)}`);
+  assert(record.values.frontendDesignTokens?.fonts?.heading === 'Inter', `Frontend token snapshot missing: ${JSON.stringify(record.values)}`);
+  assert(Array.isArray(record.values.frontendDesignBindingHints) && record.values.frontendDesignBindingHints.length === 3, `Frontend binding hints missing: ${JSON.stringify(record.values)}`);
+  assert(record.values.price === 39, `Frontend product price mismatch: ${record.values.price}`);
+  assert(record.values.inventory === 11, `Frontend product inventory mismatch: ${record.values.inventory}`);
+
+  await requestApi(`/api/admin/sites/${SITE_ID}/collections/${productCollection.id}/records/${record.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      status: 'published',
+      values: record.values,
+    }),
+  });
+
+  const catalog = await requestApi(`/api/sites/${SITE_ID}/commerce/catalog?slug=${encodeURIComponent(record.slug)}`);
+  const product = catalog.data?.products?.[0] || catalog.products?.[0];
+  assert(product?.design?.frontendDesignTemplateId === FRONTEND_PRODUCT_TEMPLATE_ID, `Public catalog did not expose frontend product design metadata: ${JSON.stringify(product)}`);
+  assert(product.design.frontendDesignTemplateName === FRONTEND_PRODUCT_TEMPLATE_NAME, `Public catalog did not expose frontend template name: ${JSON.stringify(product.design)}`);
+  assert(product.design.frontendDesignSource?.label === 'Smoke commerce frontend', `Public catalog did not expose frontend source: ${JSON.stringify(product.design)}`);
+  assert(product.design.frontendDesignBindingHints?.length === 3, `Public catalog did not expose binding hints: ${JSON.stringify(product.design)}`);
+
+  return product;
+};
+
 const assertPublicCommerce = async ({ productCollection, ordersCollection, slug }) => {
   const productRecord = await getCollectionRecordBySlug(productCollection.id, slug);
   assert(productRecord, `Created product record was not found by slug ${slug}`);
@@ -685,16 +862,22 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 
 const main = async () => {
   const suffix = Date.now().toString(36);
+  const originalFrontendDesign = await getFrontendDesign();
+  await patchFrontendDesign(smokeFrontendDesignContract());
   const originalProductCollection = snapshotCollection(await findCollection(PRODUCT_COLLECTION_SLUG));
   const originalOrdersCollection = snapshotCollection(await findCollection(ORDERS_COLLECTION_SLUG));
   const { childProcess, userDataDir } = launchChrome();
   let client;
+  let frontendProductRecordId = null;
   let productRecordId = null;
   let importedProductRecordId = null;
   let orderRecordId = null;
   let finalProductCollection = null;
   let finalOrdersCollection = null;
+  let frontendProductCleaned = false;
   let restored = false;
+  let frontendTemplateProduct = null;
+  let frontendCatalogProduct = null;
 
   try {
     await waitForCdp();
@@ -713,6 +896,21 @@ const main = async () => {
 
     const ordersReady = await ensureOrdersReady(client);
     const productsReady = await ensureProductsReady(client);
+
+    finalProductCollection = await findCollection(PRODUCT_COLLECTION_SLUG);
+    assert(finalProductCollection?.id, 'Products collection was not available after UI setup');
+    await clickFrontendTemplateCreateProduct(client);
+    frontendTemplateProduct = await waitForFrontendTemplateProduct(finalProductCollection);
+    frontendProductRecordId = frontendTemplateProduct.id;
+    frontendCatalogProduct = await assertFrontendTemplateProduct({
+      productCollection: finalProductCollection,
+      record: frontendTemplateProduct,
+    });
+    await deleteCollectionRecord(finalProductCollection.id, frontendProductRecordId);
+    frontendProductRecordId = null;
+    frontendProductCleaned = true;
+    await clickByText(client, 'New product');
+
     const { slug } = await fillProductEditor(client, suffix);
 
     finalProductCollection = await findCollection(PRODUCT_COLLECTION_SLUG);
@@ -762,7 +960,7 @@ const main = async () => {
       ok: true,
       siteId: SITE_ID,
       routes: {
-        products: `${ADMIN_BASE_URL}/products?siteId=${SITE_ID}`,
+      products: `${ADMIN_BASE_URL}/products?siteId=${SITE_ID}`,
         orders: `${ADMIN_BASE_URL}/orders?siteId=${SITE_ID}`,
         catalog: `${API_BASE_URL}/api/sites/${SITE_ID}/commerce/catalog?slug=${slug}`,
         orderIntake: `${API_BASE_URL}/api/sites/${SITE_ID}/commerce/orders`,
@@ -775,6 +973,13 @@ const main = async () => {
         startingInventory: publicCommerce.productRecord.values?.inventory,
         endingInventory: publicCommerce.updatedProduct.values?.inventory,
       },
+      frontendTemplateProduct: {
+        slug: frontendTemplateProduct.slug,
+        recordId: frontendTemplateProduct.id,
+        templateId: frontendTemplateProduct.values?.frontendDesignTemplateId,
+        publicTemplateId: frontendCatalogProduct.design?.frontendDesignTemplateId,
+        bindingHints: frontendCatalogProduct.design?.frontendDesignBindingHints?.length || 0,
+      },
       importedProduct: {
         slug: importedProduct.slug,
         recordId: importedProduct.id,
@@ -786,11 +991,17 @@ const main = async () => {
         itemCount: publicCommerce.order.itemCount,
       },
       layout,
+      frontendProductCleaned,
       restored,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
     if (!restored) {
+      if (finalProductCollection?.id && frontendProductRecordId) {
+        await deleteCollectionRecord(finalProductCollection.id, frontendProductRecordId).catch((error) => {
+          console.warn('Unable to delete frontend template smoke product:', error instanceof Error ? error.message : error);
+        });
+      }
       if (finalOrdersCollection?.id && orderRecordId) {
         await deleteCollectionRecord(finalOrdersCollection.id, orderRecordId).catch((error) => {
           console.warn('Unable to delete smoke order:', error instanceof Error ? error.message : error);
@@ -813,6 +1024,9 @@ const main = async () => {
         console.warn('Unable to restore orders collection:', error instanceof Error ? error.message : error);
       });
     }
+    await patchFrontendDesign(originalFrontendDesign).catch((error) => {
+      console.warn('Unable to restore original frontend design contract:', error instanceof Error ? error.message : error);
+    });
 
     await cleanupBrowser({ client, childProcess, userDataDir });
   }

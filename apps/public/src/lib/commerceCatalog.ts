@@ -53,6 +53,16 @@ export interface CommerceProduct {
     url: string | null;
     enabled: boolean;
   };
+  design?: {
+    frontendDesignTemplateId?: string;
+    frontendDesignTemplateName?: string;
+    frontendDesignSource?: Record<string, unknown>;
+    frontendDesignBindingHints?: Array<Record<string, unknown>>;
+    frontendDesignRoutePattern?: string;
+    frontendDesignTokens?: Record<string, unknown>;
+    frontendDesignChrome?: Record<string, unknown>;
+    frontendDesignCustomCss?: string;
+  };
   links: {
     storefrontPath: string;
   };
@@ -302,6 +312,46 @@ const maybeNumber = (value: unknown): number | null => {
   return Number.isFinite(number) ? number : null;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+);
+
+const normalizeRecordArray = (value: unknown): Array<Record<string, unknown>> | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const records = value.filter(isRecord);
+  return records.length > 0 ? records : undefined;
+};
+
+const normalizeDesignRecord = (value: unknown): Record<string, unknown> | undefined => (
+  isRecord(value) ? value : undefined
+);
+
+const buildProductDesignContract = (values: Record<string, unknown>): CommerceProduct['design'] => {
+  const templateId = normalizeText(values.frontendDesignTemplateId);
+  const templateName = normalizeText(values.frontendDesignTemplateName);
+  const source = normalizeDesignRecord(values.frontendDesignSource);
+  const bindingHints = normalizeRecordArray(values.frontendDesignBindingHints);
+  const routePattern = normalizeText(values.frontendDesignRoutePattern);
+  const tokens = normalizeDesignRecord(values.frontendDesignTokens);
+  const chrome = normalizeDesignRecord(values.frontendDesignChrome);
+  const customCss = normalizeText(values.frontendDesignCustomCss);
+
+  if (!templateId && !templateName && !source && !bindingHints && !routePattern && !tokens && !chrome && !customCss) {
+    return undefined;
+  }
+
+  return {
+    ...(templateId ? { frontendDesignTemplateId: templateId } : {}),
+    ...(templateName ? { frontendDesignTemplateName: templateName } : {}),
+    ...(source ? { frontendDesignSource: source } : {}),
+    ...(bindingHints ? { frontendDesignBindingHints: bindingHints } : {}),
+    ...(routePattern ? { frontendDesignRoutePattern: routePattern } : {}),
+    ...(tokens ? { frontendDesignTokens: tokens } : {}),
+    ...(chrome ? { frontendDesignChrome: chrome } : {}),
+    ...(customCss ? { frontendDesignCustomCss: customCss } : {}),
+  };
+};
+
 export const isCommerceSourceRecord = (record: unknown): record is CommerceSourceRecord => {
   if (!record || typeof record !== 'object') return false;
   const candidate = record as Partial<CommerceSourceRecord>;
@@ -369,6 +419,7 @@ export const productRecordToCommerceProduct = (record: CommerceSourceRecord): Co
       url: checkoutUrl || null,
       enabled: checkoutUrl.length > 0,
     },
+    design: buildProductDesignContract(values),
     links: {
       storefrontPath: `/products/${record.slug}`,
     },

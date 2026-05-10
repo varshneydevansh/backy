@@ -25,6 +25,7 @@ import {
   createCollection,
   createCollectionRecord,
   deleteCollectionRecord,
+  getSiteFrontendDesign,
   importCollectionRecordsCsv,
   listCollectionRecords,
   listCollections,
@@ -45,6 +46,7 @@ import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
 import { getPublicMediaFileUrl } from '@/lib/mediaApi';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatDate } from '@/lib/utils';
+import type { SiteSettings } from '@backy-cms/core';
 
 const PRODUCT_CONTROL_AREAS = [
   {
@@ -77,6 +79,8 @@ const PRODUCT_CONTROL_AREAS = [
 type ProductStatusFilter = ContentStatus | 'all';
 type ProductTypeFilter = ProductFormState['productType'] | 'all';
 type ProductStockFilter = 'all' | 'in-stock' | 'low-stock' | 'out-of-stock' | 'featured' | 'checkout-missing';
+type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
+type SiteFrontendDesignTemplate = SiteFrontendDesignContract['templates'][number];
 
 interface ProductsSearch {
   siteId?: string;
@@ -169,6 +173,13 @@ interface ProductVariant {
   option: string;
   price: number | null;
   inventory: number | null;
+}
+
+interface FrontendProductTemplateBlueprint {
+  title: string;
+  slug: string;
+  sku: string;
+  values: Record<string, unknown>;
 }
 
 const PRODUCT_FIELDS: CollectionField[] = [
@@ -380,7 +391,8 @@ function ProductsRoute() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isImportingProducts, setIsImportingProducts] = useState(false);
-  const isProductsBusy = isLoading || isSaving || isImportingProducts;
+  const [isCreatingTemplateId, setIsCreatingTemplateId] = useState<string | null>(null);
+  const isProductsBusy = isLoading || isSaving || isImportingProducts || Boolean(isCreatingTemplateId);
   const productImportInputRef = useRef<HTMLInputElement>(null);
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const [mediaPickerTarget, setMediaPickerTarget] = useState<'image' | 'gallery' | 'download'>('image');
@@ -394,6 +406,9 @@ function ProductsRoute() {
   });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
+  const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
+  const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
   const [pendingDeleteProduct, setPendingDeleteProduct] = useState<CollectionRecord | null>(null);
 
   const activeSite = useMemo(
@@ -426,6 +441,17 @@ function ProductsRoute() {
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId) || null,
     [products, selectedProductId],
+  );
+  const frontendProductTemplates = useMemo(
+    () => (frontendDesign?.templates || []).filter((template) => template.type === 'product'),
+    [frontendDesign?.templates],
+  );
+  const frontendProductTemplateBlueprints = useMemo(
+    () => frontendProductTemplates.map((template) => ({
+      template,
+      blueprint: buildFrontendProductTemplateBlueprint(template),
+    })),
+    [frontendProductTemplates],
   );
   const galleryImageUrls = useMemo(
     () => parseGalleryImages(formState.galleryImages),
@@ -689,6 +715,16 @@ function ProductsRoute() {
         note: 'Use this endpoint for storefront cards, facets, inventory state, delivery metadata, and checkout URL handoff without re-mapping raw collection fields.',
       },
     },
+    frontendDesign: frontendDesign ? {
+      status: frontendDesign.status,
+      source: frontendDesign.source,
+      productTemplates: frontendProductTemplates.map((template) => ({
+        id: template.id,
+        name: template.name,
+        routePattern: template.routePattern,
+        bindingHints: template.bindingHints || [],
+      })),
+    } : null,
     pageBuilderContract: {
       model: 'Products are sellable CMS records that page and blog canvases can bind into storefront grids, detail sections, variant controls, checkout calls to action, and merchandising filters.',
       targets: PRODUCT_PAGE_BINDING_TARGETS,
@@ -753,6 +789,7 @@ function ProductsRoute() {
       checkoutUrl: String(product.values.checkoutUrl || ''),
       scheduledAt: product.scheduledAt || null,
       storefrontPath: `/products/${product.slug}`,
+      frontendDesignTemplateId: getProductFrontendTemplateId(product),
     })),
   }), [
     activeSite?.name,
@@ -767,6 +804,8 @@ function ProductsRoute() {
     commerceOrderContractUrl,
     commerceOrderCreateUrl,
     filteredProducts.length,
+    frontendDesign,
+    frontendProductTemplates,
     metrics,
     missingProductFields,
     orderIntakeReady,
@@ -879,6 +918,37 @@ function ProductsRoute() {
   useEffect(() => {
     void loadProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSiteId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFrontendDesign = async () => {
+      setFrontendDesignLoading(true);
+      setFrontendDesignError(null);
+
+      try {
+        const response = await getSiteFrontendDesign(activeSiteId);
+        if (!cancelled) {
+          setFrontendDesign(response.frontendDesign);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setFrontendDesign(null);
+          setFrontendDesignError(loadError instanceof Error ? loadError.message : 'Unable to load frontend design contract');
+        }
+      } finally {
+        if (!cancelled) {
+          setFrontendDesignLoading(false);
+        }
+      }
+    };
+
+    void loadFrontendDesign();
+
+    return () => {
+      cancelled = true;
+    };
   }, [activeSiteId]);
 
   useEffect(() => {
@@ -1050,6 +1120,40 @@ function ProductsRoute() {
     }
   };
 
+  const createProductFromFrontendTemplate = async (
+    template: SiteFrontendDesignTemplate,
+    blueprint: FrontendProductTemplateBlueprint,
+  ) => {
+    if (!productCollection || isProductsBusy) return;
+
+    const creatingId = `frontend:${template.id}`;
+    setIsCreatingTemplateId(creatingId);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const values = {
+        ...blueprint.values,
+        ...buildFrontendProductTemplateValues(template, frontendDesign),
+      };
+      const saved = await createCollectionRecord(activeSiteId, productCollection.id, {
+        slug: `${blueprint.slug}-${Date.now().toString(36)}`,
+        status: 'draft',
+        values,
+      });
+
+      setProducts((current) => [saved, ...current.filter((product) => product.id !== saved.id)]);
+      setSelectedProductId(saved.id);
+      setFormState(productToForm(saved));
+      updateProductsRouteSearch({ productId: saved.id });
+      setNotice(`${template.name} product created from the frontend design contract.`);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Unable to create product from frontend design template');
+    } finally {
+      setIsCreatingTemplateId(null);
+    }
+  };
+
   const saveProduct = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!productCollection) return;
@@ -1103,6 +1207,7 @@ function ProductsRoute() {
         seoTitle: formState.seoTitle.trim(),
         featured: formState.featured,
         taxable: formState.taxable,
+        ...getPersistedFrontendProductValues(selectedProduct),
       },
     };
 
@@ -1192,6 +1297,18 @@ function ProductsRoute() {
       setNotice(productHandoffText);
     }
   };
+
+  const copyText = async (value: string, label: string) => {
+    if (isProductsBusy) return;
+
+    try {
+      await navigator.clipboard.writeText(value);
+      setNotice(`${label} copied.`);
+    } catch {
+      setNotice(value);
+    }
+  };
+
   const downloadProductHandoff = () => {
     if (isProductsBusy) return;
 
@@ -1463,6 +1580,110 @@ function ProductsRoute() {
             ))}
           </div>
         </div>
+
+        {(frontendProductTemplates.length > 0 || frontendDesignLoading || frontendDesignError) && (
+          <div className="mt-4 rounded-lg border border-teal-200 bg-teal-50/50 p-4" data-testid="products-frontend-template-options">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Frontend design products</h3>
+                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                  Seed products from the connected frontend contract while preserving source, chrome, tokens, route pattern, and product binding hints for custom storefronts.
+                </p>
+              </div>
+              <span className="rounded-full bg-background px-2.5 py-1 text-xs font-medium text-teal-700">
+                {frontendDesign?.source.label || frontendDesign?.source.type || 'Frontend contract'}
+              </span>
+            </div>
+            {frontendDesignLoading ? (
+              <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                <RefreshCw className="size-3.5 animate-spin" />
+                Loading captured product templates...
+              </div>
+            ) : null}
+            {frontendDesignError ? (
+              <div className="mt-3 flex items-center gap-2 text-xs text-destructive">
+                <AlertTriangle className="size-3.5" />
+                {frontendDesignError}
+              </div>
+            ) : null}
+            {frontendProductTemplateBlueprints.length > 0 ? (
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {frontendProductTemplateBlueprints.map(({ template, blueprint }) => {
+                  const values = {
+                    ...blueprint.values,
+                    ...buildFrontendProductTemplateValues(template, frontendDesign),
+                  };
+                  const manifestText = JSON.stringify({
+                    schemaVersion: 'backy.frontend-product-template.v1',
+                    template,
+                    product: {
+                      slug: blueprint.slug,
+                      status: 'draft',
+                      values,
+                    },
+                  }, null, 2);
+
+                  return (
+                    <div key={template.id} className="rounded-lg border border-teal-200 bg-background p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h4 className="text-sm font-semibold text-foreground">{template.name}</h4>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">{template.description || String(blueprint.values.description || 'Product seeded from the frontend design contract.')}</p>
+                        </div>
+                        <span className="rounded-full bg-teal-50 px-2 py-1 text-[11px] font-medium text-teal-700">
+                          {String(blueprint.values.productType || 'physical')}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">{formatMoney(toNumber(blueprint.values.price), String(blueprint.values.currency || 'USD'))}</span>
+                        <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">{template.bindingHints?.length || 0} bindings</span>
+                        {template.routePattern ? (
+                          <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">{template.routePattern}</span>
+                        ) : null}
+                      </div>
+                      <div className="mt-4 grid gap-2 text-xs">
+                        <div className="flex items-center justify-between gap-3 rounded border border-border bg-muted/40 px-2.5 py-2">
+                          <span className="font-medium text-foreground">SKU</span>
+                          <span className="font-mono text-muted-foreground">{blueprint.sku}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 rounded border border-border bg-muted/40 px-2.5 py-2">
+                          <span className="font-medium text-foreground">Category</span>
+                          <span className="text-muted-foreground">{String(blueprint.values.category || 'Uncategorized')}</span>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          onClick={() => void createProductFromFrontendTemplate(template, blueprint)}
+                          disabled={!productCollection || isProductsBusy}
+                          iconStart={<Package className="size-4" />}
+                          data-testid={`products-frontend-template-${template.id}`}
+                        >
+                          {isCreatingTemplateId === `frontend:${template.id}` ? 'Creating...' : 'Create product'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void copyText(manifestText, `${template.name} frontend product template`)}
+                          disabled={isProductsBusy}
+                          iconStart={<Copy className="size-4" />}
+                        >
+                          Copy schema
+                        </Button>
+                      </div>
+                      {!productCollection ? (
+                        <p className="mt-3 text-xs text-muted-foreground">Set up products before creating catalog records from frontend templates.</p>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : !frontendDesignLoading && !frontendDesignError ? (
+              <p className="mt-3 text-xs text-muted-foreground">The current frontend contract has no product templates yet.</p>
+            ) : null}
+          </div>
+        )}
       </section>
 
       {productCollection && (
@@ -2723,6 +2944,139 @@ const productToForm = (product: CollectionRecord): ProductFormState => ({
   featured: Boolean(product.values.featured),
   taxable: product.values.taxable !== false,
 });
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+);
+
+const optionalStringFromRecord = (record: Record<string, unknown> | undefined, key: string): string | undefined => {
+  const value = record?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+};
+
+const optionalNumberFromRecord = (record: Record<string, unknown> | undefined, key: string): number | undefined => {
+  const value = record?.[key];
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : undefined;
+  }
+  return undefined;
+};
+
+const optionalBooleanFromRecord = (record: Record<string, unknown> | undefined, key: string): boolean | undefined => {
+  const value = record?.[key];
+  return typeof value === 'boolean' ? value : undefined;
+};
+
+const optionalStringListFromRecord = (record: Record<string, unknown> | undefined, key: string): string[] | undefined => {
+  const value = record?.[key];
+  if (Array.isArray(value)) {
+    const entries = value.map((entry) => (typeof entry === 'string' ? entry.trim() : '')).filter(Boolean);
+    return entries.length > 0 ? entries : undefined;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const entries = value.split(/\r?\n|,/g).map((entry) => entry.trim()).filter(Boolean);
+    return entries.length > 0 ? entries : undefined;
+  }
+  return undefined;
+};
+
+const frontendTemplateContent = (template: SiteFrontendDesignTemplate): Record<string, unknown> => {
+  if (!isPlainRecord(template.content)) return {};
+  const product = template.content.product;
+  const values = template.content.values;
+  return {
+    ...template.content,
+    ...(isPlainRecord(product) ? product : {}),
+    ...(isPlainRecord(values) ? values : {}),
+  };
+};
+
+const buildFrontendProductTemplateBlueprint = (template: SiteFrontendDesignTemplate): FrontendProductTemplateBlueprint => {
+  const content = frontendTemplateContent(template);
+  const title = optionalStringFromRecord(content, 'title') || `${template.name} product`;
+  const slug = slugify(optionalStringFromRecord(content, 'slug') || template.id || title) || 'frontend-product';
+  const sku = optionalStringFromRecord(content, 'sku') || slug.toUpperCase().replace(/[^A-Z0-9]+/g, '-').slice(0, 40) || 'FRONTEND-PRODUCT';
+  const productType = asProductType(optionalStringFromRecord(content, 'productType'));
+  const galleryImages = optionalStringListFromRecord(content, 'galleryImages') || [];
+  const tags = optionalStringListFromRecord(content, 'tags') || [];
+  const variants = Array.isArray(content.variants)
+    ? formatProductVariants(content.variants)
+    : [];
+
+  return {
+    title,
+    slug,
+    sku,
+    values: {
+      title,
+      sku,
+      variants,
+      price: optionalNumberFromRecord(content, 'price') ?? 0,
+      compareAtPrice: optionalNumberFromRecord(content, 'compareAtPrice') ?? null,
+      currency: normalizeCurrency(optionalStringFromRecord(content, 'currency') || 'USD'),
+      inventory: optionalNumberFromRecord(content, 'inventory') ?? (productType === 'physical' ? 0 : 1),
+      lowStockThreshold: optionalNumberFromRecord(content, 'lowStockThreshold') ?? 5,
+      inventoryPolicy: asInventoryPolicy(optionalStringFromRecord(content, 'inventoryPolicy')),
+      productType,
+      downloadUrl: optionalStringFromRecord(content, 'downloadUrl') || '',
+      checkoutUrl: optionalStringFromRecord(content, 'checkoutUrl') || '',
+      shippingRequired: optionalBooleanFromRecord(content, 'shippingRequired') ?? productType === 'physical',
+      weight: optionalNumberFromRecord(content, 'weight') ?? null,
+      imageUrl: optionalStringFromRecord(content, 'imageUrl') || galleryImages[0] || '',
+      galleryImages,
+      category: optionalStringFromRecord(content, 'category') || '',
+      tags,
+      vendor: optionalStringFromRecord(content, 'vendor') || '',
+      description: template.description || optionalStringFromRecord(content, 'description') || 'Product seeded from the connected frontend design contract.',
+      seoTitle: optionalStringFromRecord(content, 'seoTitle') || title,
+      featured: optionalBooleanFromRecord(content, 'featured') ?? false,
+      taxable: optionalBooleanFromRecord(content, 'taxable') ?? true,
+    },
+  };
+};
+
+const buildFrontendProductTemplateValues = (
+  template: SiteFrontendDesignTemplate,
+  frontendDesign: SiteFrontendDesignContract | null,
+): Record<string, unknown> => ({
+  frontendDesignTemplateId: template.id,
+  frontendDesignTemplateName: template.name,
+  frontendDesignSource: frontendDesign?.source,
+  frontendDesignBindingHints: template.bindingHints || [],
+  ...(template.routePattern ? { frontendDesignRoutePattern: template.routePattern } : {}),
+  ...(frontendDesign?.tokens ? { frontendDesignTokens: frontendDesign.tokens } : {}),
+  ...(frontendDesign?.chrome ? { frontendDesignChrome: frontendDesign.chrome } : {}),
+  ...(frontendDesign?.tokens?.customCss ? { frontendDesignCustomCss: frontendDesign.tokens.customCss } : {}),
+});
+
+const FRONTEND_PRODUCT_VALUE_KEYS = [
+  'frontendDesignTemplateId',
+  'frontendDesignTemplateName',
+  'frontendDesignSource',
+  'frontendDesignBindingHints',
+  'frontendDesignRoutePattern',
+  'frontendDesignTokens',
+  'frontendDesignChrome',
+  'frontendDesignCustomCss',
+] as const;
+
+const getPersistedFrontendProductValues = (product: CollectionRecord | null): Record<string, unknown> => {
+  if (!product) return {};
+
+  return Object.fromEntries(
+    FRONTEND_PRODUCT_VALUE_KEYS
+      .filter((key) => product.values[key] !== undefined)
+      .map((key) => [key, product.values[key]]),
+  );
+};
+
+const getProductFrontendTemplateId = (product: CollectionRecord): string | undefined => (
+  typeof product.values.frontendDesignTemplateId === 'string'
+    ? product.values.frontendDesignTemplateId
+    : undefined
+);
 
 const asProductType = (value: unknown): ProductFormState['productType'] => (
   value === 'digital' || value === 'service' || value === 'physical' ? value : 'physical'
