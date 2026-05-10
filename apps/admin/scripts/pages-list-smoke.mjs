@@ -272,6 +272,7 @@ const waitForPagesEmptyState = async (client) => {
       const emptyCreate = document.querySelector('[data-testid="pages-empty-create"]');
       return {
         ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
+        loading: document.body?.innerText?.includes('Loading pages from backend...') || false,
         emptyCreate: Boolean(emptyCreate),
         emptyCreateTag: emptyCreate?.tagName || null,
         emptyCreateHref: emptyCreate?.getAttribute('href') || '',
@@ -282,6 +283,7 @@ const waitForPagesEmptyState = async (client) => {
 
     if (
       state.ready
+      && !state.loading
       && state.emptyCreate
       && state.emptyCreateTag === 'A'
       && state.emptyCreateHref.includes('/pages/new')
@@ -301,7 +303,7 @@ const waitForPagesEmptyState = async (client) => {
   return null;
 };
 
-const clickEmptyCreate = async (client, testId, expectedSearch) => {
+const clickEmptyCreate = async (client, testId, expectedSearch, expectedCreate = {}) => {
   const clicked = await evaluate(client, `(() => {
     const link = document.querySelector('[data-testid="${testId}"]');
     if (!(link instanceof HTMLAnchorElement)) {
@@ -316,7 +318,14 @@ const clickEmptyCreate = async (client, testId, expectedSearch) => {
     const state = await evaluate(client, `(() => ({
       path: window.location.pathname,
       search: window.location.search,
+      ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
+      targetSite: document.querySelector('#page-target-site')?.value || '',
       title: document.querySelector('#page-title')?.value || '',
+      slug: document.querySelector('#page-slug')?.value || '',
+      template: document.querySelector('input[name="template"]:checked')?.value || '',
+      homepage: document.querySelector('#page-basics input[type="checkbox"]')?.checked ?? false,
+      createButton: Boolean(Array.from(document.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').includes('Create Page'))),
+      createDisabled: Array.from(document.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').includes('Create Page'))?.disabled ?? null,
       body: document.body?.innerText?.slice(0, 300) || '',
     }))()`);
 
@@ -324,12 +333,20 @@ const clickEmptyCreate = async (client, testId, expectedSearch) => {
       state.path === '/pages/new'
       && state.search.includes(`siteId=${encodeURIComponent(EMPTY_SITE_ID)}`)
       && expectedSearch.every((fragment) => state.search.includes(fragment))
+      && state.ready
+      && state.targetSite === EMPTY_SITE_ID
+      && (!expectedCreate.title || state.title === expectedCreate.title)
+      && (!expectedCreate.slug || state.slug === expectedCreate.slug)
+      && (!expectedCreate.template || state.template === expectedCreate.template)
+      && (typeof expectedCreate.homepage !== 'boolean' || state.homepage === expectedCreate.homepage)
+      && state.createButton
+      && state.createDisabled === false
     ) {
       return { clicked, state };
     }
 
     if (attempt === 79) {
-      throw new Error(`${testId} did not navigate to page create with expected search: ${JSON.stringify(state)}`);
+      throw new Error(`${testId} did not navigate to a usable page create workspace: ${JSON.stringify({ state, expectedCreate })}`);
     }
 
     await sleep(250);
@@ -1021,9 +1038,19 @@ const main = async () => {
       empty: true,
       expectedText: 'Create the first page for this site.',
     });
-    const emptyCreate = await clickEmptyCreate(client, 'pages-empty-create', []);
+    const emptyCreate = await clickEmptyCreate(
+      client,
+      'pages-empty-create',
+      ['template=landing', 'title=Home', 'slug=home', 'isHomepage=true', 'nav=primary', 'navLabel=Home'],
+      { title: 'Home', slug: 'home', template: 'landing', homepage: true },
+    );
     await waitForPagesEmptyState(client);
-    const registrationShortcut = await clickEmptyCreate(client, 'pages-empty-create-registration', ['template=registration']);
+    const registrationShortcut = await clickEmptyCreate(
+      client,
+      'pages-empty-create-registration',
+      ['template=registration'],
+      { title: 'Member registration', slug: 'register', template: 'registration', homepage: false },
+    );
     const childHierarchy = await waitForHierarchyRow(
       client,
       hierarchyPages.childPage,

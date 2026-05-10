@@ -477,6 +477,15 @@ function PagesListView() {
   const adminPageReadinessUrl = `${adminPageDetailUrl}/readiness`;
   const adminPagePreviewUrl = `${adminPageDetailUrl}/preview`;
   const createPageSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
+  const firstPageSearch = useMemo(() => ({
+    ...createPageSearch,
+    template: 'landing' as const,
+    title: 'Home',
+    slug: 'home',
+    isHomepage: true,
+    nav: 'primary' as const,
+    navLabel: 'Home',
+  }), [createPageSearch]);
   const getCreatePageSearch = (template: PageCreationTemplate = 'blank') => (
     template === 'blank' ? createPageSearch : { ...createPageSearch, template }
   );
@@ -2340,14 +2349,14 @@ function PagesListView() {
                   )}
                   <Link
                     to="/pages/new"
-                    search={createPageSearch}
+                    search={hasPages ? createPageSearch : firstPageSearch}
                     aria-disabled={isPageLibraryBusy}
                     data-testid="pages-empty-create"
                     className={cn(
                       'inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90',
                       isPageLibraryBusy && 'pointer-events-none opacity-60',
                     )}
-                    aria-label={hasPages ? 'Create page after clearing filters' : 'Create first page for active site'}
+                    aria-label={hasPages ? 'Create page after clearing filters' : 'Create first homepage for active site'}
                   >
                     <Plus className="w-4 h-4" />
                     {hasPages ? 'New Page' : 'Create First Page'}
