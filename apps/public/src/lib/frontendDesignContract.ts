@@ -4,6 +4,7 @@ type FrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type FrontendDesignTemplate = FrontendDesignContract['templates'][number];
 type FrontendDesignTemplateType = FrontendDesignTemplate['type'];
 type FrontendDesignEditableMapEntry = FrontendDesignContract['editableMap'][number];
+type ContentTemplateResourceType = Extract<FrontendDesignTemplateType, 'page' | 'blogPost' | 'form' | 'section'>;
 
 const SCHEMA_VERSION = 'backy.frontend-design.v1';
 
@@ -246,6 +247,7 @@ const contentElements = (content: unknown): unknown[] => {
 
 const contentTemplatePayload = (content: unknown) => {
   const contentRecord = isRecord(content) ? content : {};
+  const baseRecord = cloneRecord(contentRecord) || {};
   const contentDocument = isRecord(contentRecord.contentDocument)
     ? cloneRecord(contentRecord.contentDocument)
     : isRecord(contentRecord) && Array.isArray(contentRecord.elements) && isRecord(contentRecord.metadata)
@@ -253,9 +255,19 @@ const contentTemplatePayload = (content: unknown) => {
       : undefined;
   const canvasSize = contentCanvasSize(content) || { width: 1200, height: 900 };
   const customCSS = contentCustomCss(content);
+  const elements = contentElements(content);
+
+  if (elements.length === 0 && !contentDocument && Object.keys(baseRecord).length > 0) {
+    return {
+      ...baseRecord,
+      elements,
+      canvasSize,
+      ...(customCSS ? { customCSS } : {}),
+    };
+  }
 
   return {
-    elements: contentElements(content),
+    elements,
     canvasSize,
     ...(customCSS ? { customCSS } : {}),
     ...(contentDocument ? { contentDocument } : {}),
@@ -319,7 +331,7 @@ export const buildFrontendDesignContractFromContentTemplate = (input: {
   frontendDesign?: SiteSettings['frontendDesign'];
   resource: {
     id: string;
-    type: 'page' | 'blogPost';
+    type: ContentTemplateResourceType;
     title: string;
     slug: string;
     description?: string | null;
@@ -341,9 +353,16 @@ export const buildFrontendDesignContractFromContentTemplate = (input: {
   const templateId = input.templateId
     || stringValue(meta.frontendDesignTemplateId)
     || `${input.resource.type}-${input.resource.id}`;
+  const defaultRoutePattern = input.resource.type === 'blogPost'
+    ? `/blog/${input.resource.slug}`
+    : input.resource.type === 'form'
+      ? `/forms/${input.resource.slug}`
+      : input.resource.type === 'section'
+        ? `/sections/${input.resource.slug}`
+        : `/${input.resource.slug}`;
   const routePattern = input.routePattern
     || stringValue(meta.frontendDesignRoutePattern)
-    || (input.resource.type === 'blogPost' ? `/blog/${input.resource.slug}` : `/${input.resource.slug}`);
+    || defaultRoutePattern;
   const sourceInput = mergeRecord(current.source, meta.frontendDesignSource);
   const normalizedSource = normalizeFrontendDesignContract({
     source: mergeRecord(sourceInput, input.source) || {
@@ -403,7 +422,7 @@ export const buildFrontendDesignContractFromContentTemplate = (input: {
       ...inferredEditableMap,
       ...explicitEditableMap,
     ]),
-    notes: current.notes || 'Captured from content so new pages and posts can retain frontend design details.',
+    notes: current.notes || 'Captured from content so new pages, posts, forms, and sections can retain frontend design details.',
     updatedAt,
   };
 };

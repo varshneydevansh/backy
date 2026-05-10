@@ -4,16 +4,19 @@
  * GET   /api/admin/sites/[siteId]/frontend-design
  * PATCH /api/admin/sites/[siteId]/frontend-design
  * POST  /api/admin/sites/[siteId]/frontend-design with { action: "capture-site-defaults" }
+ *       or { action: "capture-content-template", resourceType, resourceId }
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { Site, SiteSettings } from '@backy-cms/core';
+import type { FormDefinition, Site, SiteSettings } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   getAdminBlogPostById,
   getAdminPageById,
+  getFormById,
   getPageSummary,
+  getReusableSectionByIdOrSlug,
   getSiteByIdOrSlug,
   updateAdminSite,
 } from '@/lib/backyStore';
@@ -64,9 +67,23 @@ const toPageTemplates = (pages: Array<{ id: string; title: string; slug: string 
   }))
 );
 
-const templateResourceType = (value: unknown): 'page' | 'blogPost' | null => {
+type TemplateCaptureResourceType = 'page' | 'blogPost' | 'form' | 'section';
+
+type TemplateCaptureResource = {
+  id: string;
+  type: TemplateCaptureResourceType;
+  title: string;
+  slug: string;
+  description?: string | null;
+  content: unknown;
+  meta?: Record<string, unknown>;
+};
+
+const templateResourceType = (value: unknown): TemplateCaptureResourceType | null => {
   if (value === 'page' || value === 'pages') return 'page';
   if (value === 'blogPost' || value === 'post' || value === 'blog') return 'blogPost';
+  if (value === 'form' || value === 'forms') return 'form';
+  if (value === 'section' || value === 'reusableSection' || value === 'reusable-section') return 'section';
   return null;
 };
 
@@ -77,6 +94,183 @@ const recordArray = (value: unknown): Array<Record<string, unknown>> | undefined
       ))
     : undefined
 );
+
+const formTemplateContent = (form: FormDefinition): Record<string, unknown> => ({
+  id: form.id,
+  name: form.name,
+  title: form.title || form.name,
+  description: form.description || undefined,
+  audience: form.audience,
+  isActive: form.isActive,
+  fields: form.fields || [],
+  notificationEmail: form.notificationEmail || undefined,
+  notificationWebhook: form.notificationWebhook || undefined,
+  successRedirectUrl: form.successRedirectUrl || undefined,
+  successMessage: form.successMessage || undefined,
+  enableHoneypot: form.enableHoneypot,
+  enableCaptcha: form.enableCaptcha,
+  moderationMode: form.moderationMode || 'manual',
+  contactShare: form.contactShare,
+  collectionTarget: form.collectionTarget,
+  settings: form.settings || {},
+});
+
+const formBindingHints = (form: FormDefinition): Array<Record<string, unknown>> => (
+  (form.fields || []).map((field) => ({
+    role: 'form.field',
+    binding: `form.fields.${field.key}`,
+    fields: ['key', 'label', 'type', 'required', 'validation'],
+  }))
+);
+
+const formEditableMap = (form: FormDefinition): Array<Record<string, unknown>> => [
+  { role: 'form.title', binding: 'form.title', fields: ['title', 'description'] },
+  ...(form.fields || []).map((field) => ({
+    role: 'form.field',
+    binding: `form.fields.${field.key}`,
+    fields: ['label', 'placeholder', 'helpText', 'defaultValue', 'options', 'validation', 'required'],
+  })),
+];
+
+const sectionEditableMap = (): Array<Record<string, unknown>> => [
+  { role: 'section.metadata', binding: 'section.metadata', fields: ['name', 'description', 'category', 'tags'] },
+];
+
+const repositoryTemplateResource = async (
+  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
+  siteId: string,
+  resourceType: TemplateCaptureResourceType,
+  resourceId: string,
+): Promise<{ resource: TemplateCaptureResource; bindingHints?: Array<Record<string, unknown>>; editableMap?: Array<Record<string, unknown>> } | null> => {
+  if (resourceType === 'page') {
+    const page = await repositories.pages.getById(siteId, resourceId);
+    return page ? {
+      resource: {
+        id: page.id,
+        type: 'page',
+        title: page.title,
+        slug: page.slug,
+        description: page.description,
+        content: page.content,
+        meta: page.meta as Record<string, unknown> | undefined,
+      },
+    } : null;
+  }
+
+  if (resourceType === 'blogPost') {
+    const post = await repositories.posts.getById(siteId, resourceId);
+    return post ? {
+      resource: {
+        id: post.id,
+        type: 'blogPost',
+        title: post.title,
+        slug: post.slug,
+        description: post.excerpt,
+        content: post.content,
+        meta: post.meta as Record<string, unknown> | undefined,
+      },
+    } : null;
+  }
+
+  if (resourceType === 'form') {
+    const form = await repositories.forms.getById(siteId, resourceId);
+    return form ? {
+      resource: {
+        id: form.id,
+        type: 'form',
+        title: form.title || form.name,
+        slug: form.id,
+        description: form.description,
+        content: formTemplateContent(form),
+        meta: form.settings,
+      },
+      bindingHints: formBindingHints(form),
+      editableMap: formEditableMap(form),
+    } : null;
+  }
+
+  const section = await repositories.reusableSections.getById(siteId, resourceId)
+    || await repositories.reusableSections.getBySlug(siteId, resourceId);
+  return section ? {
+    resource: {
+      id: section.id,
+      type: 'section',
+      title: section.name,
+      slug: section.slug,
+      description: section.description,
+      content: section.content,
+      meta: section.metadata,
+    },
+    editableMap: sectionEditableMap(),
+  } : null;
+};
+
+const demoTemplateResource = (
+  siteId: string,
+  resourceType: TemplateCaptureResourceType,
+  resourceId: string,
+): { resource: TemplateCaptureResource; bindingHints?: Array<Record<string, unknown>>; editableMap?: Array<Record<string, unknown>> } | null => {
+  if (resourceType === 'page') {
+    const page = getAdminPageById(siteId, resourceId);
+    return page ? {
+      resource: {
+        id: page.id,
+        type: 'page',
+        title: page.title,
+        slug: page.slug,
+        description: page.description,
+        content: page.content,
+        meta: page.meta as Record<string, unknown> | undefined,
+      },
+    } : null;
+  }
+
+  if (resourceType === 'blogPost') {
+    const post = getAdminBlogPostById(siteId, resourceId);
+    return post ? {
+      resource: {
+        id: post.id,
+        type: 'blogPost',
+        title: post.title,
+        slug: post.slug,
+        description: post.excerpt,
+        content: post.content,
+        meta: post.meta as Record<string, unknown> | undefined,
+      },
+    } : null;
+  }
+
+  if (resourceType === 'form') {
+    const form = getFormById(siteId, resourceId);
+    return form ? {
+      resource: {
+        id: form.id,
+        type: 'form',
+        title: form.title || form.name,
+        slug: form.id,
+        description: form.description,
+        content: formTemplateContent(form),
+        meta: form.settings,
+      },
+      bindingHints: formBindingHints(form),
+      editableMap: formEditableMap(form),
+    } : null;
+  }
+
+  const section = getReusableSectionByIdOrSlug(siteId, resourceId);
+  return section ? {
+    resource: {
+      id: section.id,
+      type: 'section',
+      title: section.name,
+      slug: section.slug,
+      description: section.description,
+      content: section.content,
+      meta: section.metadata,
+    },
+    editableMap: sectionEditableMap(),
+  } : null;
+};
 
 const responseForSite = (
   requestId: string,
@@ -288,35 +482,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           return errorResponse(400, 'VALIDATION_ERROR', 'resourceType and resourceId are required for content template capture', requestId);
         }
 
-        const resource = resourceType === 'page'
-          ? await repositories.pages.getById(site.id, resourceId)
-          : await repositories.posts.getById(site.id, resourceId);
-        if (!resource) {
+        const captured = await repositoryTemplateResource(repositories, site.id, resourceType, resourceId);
+        if (!captured) {
           return errorResponse(404, 'CONTENT_NOT_FOUND', 'Content resource not found', requestId);
         }
-        const resourceDescription = resourceType === 'page'
-          ? (resource as { description?: string | null }).description
-          : (resource as { excerpt?: string | null }).excerpt;
 
         const frontendDesign = buildFrontendDesignContractFromContentTemplate({
           frontendDesign: site.settings.frontendDesign,
-          resource: {
-            id: resource.id,
-            type: resourceType,
-            title: resource.title,
-            slug: resource.slug,
-            description: resourceDescription,
-            content: resource.content,
-            meta: resource.meta as Record<string, unknown> | undefined,
-          },
+          resource: captured.resource,
           templateId: typeof body.templateId === 'string' ? body.templateId.trim() : undefined,
           templateName: typeof body.templateName === 'string' ? body.templateName.trim() : undefined,
           routePattern: typeof body.routePattern === 'string' ? body.routePattern.trim() : undefined,
           source: typeof body.source === 'object' && body.source !== null && !Array.isArray(body.source)
             ? body.source as Record<string, unknown>
             : undefined,
-          bindingHints: recordArray(body.bindingHints),
-          editableMap: recordArray(body.editableMap),
+          bindingHints: recordArray(body.bindingHints) || captured.bindingHints,
+          editableMap: recordArray(body.editableMap) || captured.editableMap,
           updatedAt,
         });
         const updated = await persistRepositoryFrontendDesign(site, site.settings, frontendDesign);
@@ -397,35 +578,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, 'VALIDATION_ERROR', 'resourceType and resourceId are required for content template capture', requestId);
       }
 
-      const resource = resourceType === 'page'
-        ? getAdminPageById(site.id, resourceId)
-        : getAdminBlogPostById(site.id, resourceId);
-      if (!resource) {
+      const captured = demoTemplateResource(site.id, resourceType, resourceId);
+      if (!captured) {
         return errorResponse(404, 'CONTENT_NOT_FOUND', 'Content resource not found', requestId);
       }
-      const resourceDescription = resourceType === 'page'
-        ? (resource as { description?: string | null }).description
-        : (resource as { excerpt?: string | null }).excerpt;
 
       const frontendDesign = buildFrontendDesignContractFromContentTemplate({
         frontendDesign: site.settings?.frontendDesign,
-        resource: {
-          id: resource.id,
-          type: resourceType,
-          title: resource.title,
-          slug: resource.slug,
-          description: resourceDescription,
-          content: resource.content,
-          meta: resource.meta as Record<string, unknown> | undefined,
-        },
+        resource: captured.resource,
         templateId: typeof body.templateId === 'string' ? body.templateId.trim() : undefined,
         templateName: typeof body.templateName === 'string' ? body.templateName.trim() : undefined,
         routePattern: typeof body.routePattern === 'string' ? body.routePattern.trim() : undefined,
         source: typeof body.source === 'object' && body.source !== null && !Array.isArray(body.source)
           ? body.source as Record<string, unknown>
           : undefined,
-        bindingHints: recordArray(body.bindingHints),
-        editableMap: recordArray(body.editableMap),
+        bindingHints: recordArray(body.bindingHints) || captured.bindingHints,
+        editableMap: recordArray(body.editableMap) || captured.editableMap,
         updatedAt,
       });
       const updated = updateAdminSite(site.id, {

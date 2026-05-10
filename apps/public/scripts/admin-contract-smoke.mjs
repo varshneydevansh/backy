@@ -2855,6 +2855,25 @@ try {
       assert(formDetailBeforeSubmission.json?.data?.form?.id === 'contract-form-write', `${formDetailBeforeSubmission.url} missing form in data envelope`);
       assert(formDetailBeforeSubmission.json?.form?.id === 'contract-form-write', `${formDetailBeforeSubmission.url} missing legacy form`);
 
+      const capturedFormTemplate = await request(`/api/admin/sites/${createdSiteId}/frontend-design`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'capture-content-template',
+          resourceType: 'form',
+          resourceId: 'contract-form-write',
+          templateId: 'captured-form-template',
+          templateName: 'Captured Contract Form Template',
+        }),
+      });
+      assert(capturedFormTemplate.response.status === 200, `${capturedFormTemplate.url} expected form template capture 200`);
+      const capturedFormTemplateEntry = capturedFormTemplate.json?.data?.frontendDesign?.templates?.find((template) => template.id === 'captured-form-template');
+      assert(capturedFormTemplateEntry?.type === 'form', `${capturedFormTemplate.url} missing captured form template`);
+      assert(capturedFormTemplateEntry?.content?.fields?.some((field) => field.key === 'title'), `${capturedFormTemplate.url} did not preserve form fields`);
+      assert(capturedFormTemplateEntry?.bindingHints?.some((hint) => hint.binding === 'form.fields.title'), `${capturedFormTemplate.url} missing captured form binding hints`);
+
       const formWriteSubmission = await request(`/api/sites/${createdSiteId}/forms/contract-form-write/submissions`, {
         method: 'POST',
         headers: {
@@ -3051,6 +3070,25 @@ try {
       assert(publicReusableSection.json?.data?.section?.metadata?.frontendDesignTemplateName === 'Contract Section Template', `${publicReusableSection.url} missing reusable section detail frontend metadata`);
       assert(publicReusableSection.json?.data?.section?.frontendDesign?.routePattern === '/contract-section', `${publicReusableSection.url} missing reusable section detail normalized frontend route`);
 
+      const capturedSectionTemplate = await request(`/api/admin/sites/${createdSiteId}/frontend-design`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'capture-content-template',
+          resourceType: 'section',
+          resourceId: manifestReusableSectionId,
+          templateId: 'captured-section-template',
+          templateName: 'Captured Contract Section Template',
+        }),
+      });
+      assert(capturedSectionTemplate.response.status === 200, `${capturedSectionTemplate.url} expected section template capture 200`);
+      const capturedSectionTemplateEntry = capturedSectionTemplate.json?.data?.frontendDesign?.templates?.find((template) => template.id === 'captured-section-template');
+      assert(capturedSectionTemplateEntry?.type === 'section', `${capturedSectionTemplate.url} missing captured section template`);
+      assert(capturedSectionTemplateEntry?.content?.elements?.[0]?.id === 'frontend-contract-section-root', `${capturedSectionTemplate.url} did not preserve section canvas content`);
+      assert(capturedSectionTemplateEntry?.routePattern === '/contract-section', `${capturedSectionTemplate.url} did not preserve section route pattern`);
+
       const unauthSeo = await fetch(`${baseUrl}/api/admin/sites/${createdSiteId}/seo`);
       const unauthSeoJson = await unauthSeo.json().catch(() => ({}));
       assert(unauthSeo.status === 401, `SEO admin API should reject missing auth, got ${unauthSeo.status}`);
@@ -3238,6 +3276,8 @@ try {
       assert(frontendManifest.json?.data?.endpoints?.frontendDesign === `/api/sites/${createdSiteId}/manifest#data.site.frontendDesign`, `${frontendManifest.url} missing frontend design contract pointer`);
       assert(Object.prototype.hasOwnProperty.call(frontendManifest.json?.data?.site || {}, 'frontendDesign'), `${frontendManifest.url} missing site frontend design field`);
       assert(frontendManifest.json?.data?.site?.frontendDesign?.templates?.some((template) => template.id === 'captured-page-template' && template.type === 'page'), `${frontendManifest.url} missing captured page frontend template`);
+      assert(frontendManifest.json?.data?.site?.frontendDesign?.templates?.some((template) => template.id === 'captured-form-template' && template.type === 'form'), `${frontendManifest.url} missing captured form frontend template`);
+      assert(frontendManifest.json?.data?.site?.frontendDesign?.templates?.some((template) => template.id === 'captured-section-template' && template.type === 'section'), `${frontendManifest.url} missing captured section frontend template`);
       assert(frontendManifest.json?.data?.endpoints?.mediaDetail === `/api/sites/${createdSiteId}/media/{mediaId}`, `${frontendManifest.url} missing media detail endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.mediaFile === `/api/sites/${createdSiteId}/media/{mediaId}/file`, `${frontendManifest.url} missing media file endpoint template`);
       assert(frontendManifest.json?.data?.endpoints?.mediaTransform === `/api/sites/${createdSiteId}/media/{mediaId}/transform?width={width}`, `${frontendManifest.url} missing media transform endpoint template`);
