@@ -228,6 +228,7 @@ const PAGE_EXPORT_COLUMNS = [
   'delivery_status',
   'delivery_health',
   'delivery_health_message',
+  'delivery_health_history',
   'preview_endpoint',
   'parent_id',
   'parent_title',
@@ -271,6 +272,8 @@ type PageDeliveryHealth = {
   renderStatus?: number | null;
   resolveStatus?: number | null;
 };
+
+type PageDeliveryHealthHistory = Record<string, PageDeliveryHealth[]>;
 
 const PAGE_CREATION_SHORTCUTS: Array<{
   key: PageCreationTemplate;
@@ -356,6 +359,7 @@ function PagesListView() {
   const [readinessMap, setReadinessMap] = useState<Record<string, PageReadiness>>({});
   const [revisionSummaryMap, setRevisionSummaryMap] = useState<Record<string, ContentRevisionSummary>>({});
   const [deliveryHealthMap, setDeliveryHealthMap] = useState<Record<string, PageDeliveryHealth>>({});
+  const [deliveryHealthHistoryMap, setDeliveryHealthHistoryMap] = useState<PageDeliveryHealthHistory>({});
   const [refreshingDeliveryPageIds, setRefreshingDeliveryPageIds] = useState<Set<string>>(() => new Set());
   const [isRefreshingAllDeliveryHealth, setIsRefreshingAllDeliveryHealth] = useState(false);
   const [routeCollections, setRouteCollections] = useState<Collection[]>([]);
@@ -588,6 +592,21 @@ function PagesListView() {
     }
   };
 
+  const recordDeliveryHealthHistory = (entries: Array<readonly [string, PageDeliveryHealth]>) => {
+    if (entries.length === 0) return;
+
+    setDeliveryHealthHistoryMap((current) => {
+      const next = { ...current };
+      entries.forEach(([pageId, health]) => {
+        if (!health.checkedAt || health.status === 'checking') return;
+        const currentHistory = next[pageId] || [];
+        const deduped = currentHistory.filter((entry) => entry.checkedAt !== health.checkedAt);
+        next[pageId] = [health, ...deduped].slice(0, 5);
+      });
+      return next;
+    });
+  };
+
   const downloadPagesCsv = () => {
     if (isPageLibraryBusy) return;
 
@@ -606,6 +625,7 @@ function PagesListView() {
       const routeDiagnostic = pageRouteDiagnostics[page.id];
       const deliveryStatus = getPageDeliveryStatus(page, readiness, routeDiagnostic);
       const deliveryHealth = deliveryHealthMap[page.id];
+      const deliveryHistory = deliveryHealthHistoryMap[page.id] || [];
 
       return [
         page.id,
@@ -622,6 +642,7 @@ function PagesListView() {
         deliveryStatus,
         deliveryHealth?.status || '',
         deliveryHealth?.message || '',
+        deliveryHistory.map((entry) => `${entry.checkedAt || 'unknown'}:${entry.status}:${entry.publicStatus ?? 'n/a'}/${entry.renderStatus ?? 'n/a'}/${entry.resolveStatus ?? 'n/a'}`).join('; '),
         `${adminBaseUrl}/sites/${encodedSiteId}/pages/${encodedPageId}/preview`,
         page.parentId || '',
         getParentPageTitle(page, activeSitePageMap),
@@ -719,6 +740,12 @@ function PagesListView() {
         setPages(backendPages);
         setRouteCollections(collections);
         setSelectedPageIds((current) => new Set(backendPages.filter((page) => current.has(page.id)).map((page) => page.id)));
+        setDeliveryHealthHistoryMap((current) => {
+          const nextIds = new Set(backendPages.map((page) => page.id));
+          return Object.fromEntries(
+            Object.entries(current).filter(([pageId]) => nextIds.has(pageId)),
+          ) as PageDeliveryHealthHistory;
+        });
         setReadinessMap(Object.fromEntries((readiness?.pages || []).map((page) => [page.id, page])));
         setRevisionSummaryMap(revisionSummaries);
       } catch (loadError) {
@@ -752,6 +779,12 @@ function PagesListView() {
           setPages(backendPages);
           setRouteCollections(collections);
           setSelectedPageIds((current) => new Set(backendPages.filter((page) => current.has(page.id)).map((page) => page.id)));
+          setDeliveryHealthHistoryMap((current) => {
+            const nextIds = new Set(backendPages.map((page) => page.id));
+            return Object.fromEntries(
+              Object.entries(current).filter(([pageId]) => nextIds.has(pageId)),
+            ) as PageDeliveryHealthHistory;
+          });
           setReadinessMap(Object.fromEntries((readiness?.pages || []).map((page) => [page.id, page])));
           setRevisionSummaryMap(revisionSummaries);
         }
@@ -785,6 +818,7 @@ function PagesListView() {
 
     if (probeTargets.length === 0) {
       setDeliveryHealthMap({});
+      setDeliveryHealthHistoryMap({});
       return () => {
         cancelled = true;
       };
@@ -823,14 +857,15 @@ function PagesListView() {
     })).then((results) => {
       if (cancelled) return;
 
+      const fulfilledEntries = results
+        .filter((result): result is PromiseFulfilledResult<readonly [string, PageDeliveryHealth]> => result.status === 'fulfilled')
+        .map((result) => result.value);
+
       setDeliveryHealthMap((current) => ({
         ...current,
-        ...Object.fromEntries(
-          results
-            .filter((result): result is PromiseFulfilledResult<readonly [string, PageDeliveryHealth]> => result.status === 'fulfilled')
-            .map((result) => result.value),
-        ),
+        ...Object.fromEntries(fulfilledEntries),
       }));
+      recordDeliveryHealthHistory(fulfilledEntries);
     });
 
     return () => {
@@ -896,6 +931,11 @@ function PagesListView() {
         ...current,
         ...nextHealth,
       }));
+      recordDeliveryHealthHistory(
+        results
+          .filter((result): result is PromiseFulfilledResult<readonly [string, PageDeliveryHealth]> => result.status === 'fulfilled')
+          .map((result) => result.value),
+      );
       setNotice(`Delivery health refreshed for ${Object.keys(nextHealth).length} published page${Object.keys(nextHealth).length === 1 ? '' : 's'}.`);
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : 'Unable to refresh delivery health.');
@@ -1236,6 +1276,7 @@ function PagesListView() {
             page={page}
             status={getPageDeliveryStatus(page, readinessMap[page.id], pageRouteDiagnostics[page.id])}
             health={deliveryHealthMap[page.id]}
+            healthHistory={deliveryHealthHistoryMap[page.id] || []}
             isRefreshingHealth={refreshingDeliveryPageIds.has(page.id)}
             onRefreshHealth={() => void handleRefreshDeliveryHealth([page])}
             routeDiagnostic={pageRouteDiagnostics[page.id]}
@@ -1516,6 +1557,7 @@ function PagesListView() {
         delivery: {
           status: getPageDeliveryStatus(page, readinessMap[page.id], routeDiagnostic),
           health: deliveryHealthMap[page.id] || null,
+          healthHistory: deliveryHealthHistoryMap[page.id] || [],
           publicUrl: page.status === 'published' ? publicPageUrl(page) : null,
           renderUrl: `${publicBaseUrl}/api/sites/${encodedSiteId}/render?path=${encodedPath}`,
           resolveUrl: `${publicBaseUrl}/api/sites/${encodedSiteId}/resolve?path=${encodedPath}`,
@@ -1585,6 +1627,7 @@ function PagesListView() {
     pageChildCountMap,
     pageRouteDiagnostics,
     deliveryHealthMap,
+    deliveryHealthHistoryMap,
     refreshingDeliveryPageIds,
     filteredPages,
     publicPageBySlugUrl,
@@ -2696,6 +2739,7 @@ function PageDeliveryCell({
   page,
   status,
   health,
+  healthHistory,
   isRefreshingHealth,
   onRefreshHealth,
   routeDiagnostic,
@@ -2707,6 +2751,7 @@ function PageDeliveryCell({
   page: Page;
   status: PageDeliveryStatus;
   health: PageDeliveryHealth | undefined;
+  healthHistory: PageDeliveryHealth[];
   isRefreshingHealth: boolean;
   onRefreshHealth: () => void;
   routeDiagnostic: PageRouteDiagnostic | undefined;
@@ -2752,6 +2797,7 @@ function PageDeliveryCell({
       {status === 'published' && (
         <PageDeliveryHealthSummary
           health={health}
+          history={healthHistory}
           isRefreshing={isRefreshingHealth}
           onRefresh={onRefreshHealth}
           pageId={page.id}
@@ -2779,11 +2825,13 @@ function PageDeliveryCell({
 
 function PageDeliveryHealthSummary({
   health,
+  history,
   isRefreshing,
   onRefresh,
   pageId,
 }: {
   health: PageDeliveryHealth | undefined;
+  history: PageDeliveryHealth[];
   isRefreshing: boolean;
   onRefresh: () => void;
   pageId: string;
@@ -2825,6 +2873,22 @@ function PageDeliveryHealthSummary({
       {(effectiveHealth.publicStatus || effectiveHealth.renderStatus || effectiveHealth.resolveStatus) && (
         <div className="mt-1 font-mono text-[11px] text-muted-foreground">
           public {effectiveHealth.publicStatus ?? 'n/a'} · render {effectiveHealth.renderStatus ?? 'n/a'} · resolve {effectiveHealth.resolveStatus ?? 'n/a'}
+        </div>
+      )}
+      {history.length > 0 && (
+        <div className="mt-2 border-t border-border pt-2" data-testid={`pages-delivery-history-${pageId}`}>
+          <div className="font-medium text-foreground">Recent probes</div>
+          <div className="mt-1 space-y-1">
+            {history.slice(0, 3).map((entry, index) => (
+              <div key={`${entry.checkedAt || 'pending'}-${index}`} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-muted-foreground">
+                <span>{entry.checkedAt ? formatDate(entry.checkedAt) : 'Unknown time'}</span>
+                <span className="font-medium capitalize text-foreground">{entry.status}</span>
+                <span className="font-mono text-[11px]">
+                  public {entry.publicStatus ?? 'n/a'} · render {entry.renderStatus ?? 'n/a'} · resolve {entry.resolveStatus ?? 'n/a'}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

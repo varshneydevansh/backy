@@ -406,6 +406,7 @@ const assertDeliveryRefreshControl = async (client, page, expectedSearch = page.
       const globalRefresh = document.querySelector('[data-testid="pages-refresh-delivery-health"]');
       const rowRefresh = document.querySelector('[data-testid="pages-delivery-refresh-${page.id}"]');
       const delivery = document.querySelector('[data-testid="pages-delivery-${page.id}"]');
+      const history = document.querySelector('[data-testid="pages-delivery-history-${page.id}"]');
       return {
         ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
         globalRefresh: Boolean(globalRefresh),
@@ -413,6 +414,7 @@ const assertDeliveryRefreshControl = async (client, page, expectedSearch = page.
         rowRefresh: Boolean(rowRefresh),
         rowDisabled: rowRefresh?.disabled === true,
         deliveryText: delivery?.textContent || '',
+        historyText: history?.textContent || '',
         body: document.body?.innerText?.slice(0, 900) || '',
       };
     })()`);
@@ -436,15 +438,20 @@ const assertDeliveryRefreshControl = async (client, page, expectedSearch = page.
         const refreshed = await evaluate(client, `(() => {
           const rowRefresh = document.querySelector('[data-testid="pages-delivery-refresh-${page.id}"]');
           const delivery = document.querySelector('[data-testid="pages-delivery-${page.id}"]');
+          const history = document.querySelector('[data-testid="pages-delivery-history-${page.id}"]');
           return {
             rowDisabled: rowRefresh?.disabled === true,
             deliveryText: delivery?.textContent || '',
+            historyText: history?.textContent || '',
           };
         })()`);
 
         if (
           !refreshed.rowDisabled
           && refreshed.deliveryText.includes('Health')
+          && refreshed.deliveryText.includes('Recent probes')
+          && refreshed.historyText.includes('render 200')
+          && refreshed.historyText.includes('resolve 200')
           && !refreshed.deliveryText.includes('Refreshing public, render, and resolve endpoint health.')
         ) {
           return { url, state, clicked, refreshed };
