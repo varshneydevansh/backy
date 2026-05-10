@@ -45,12 +45,37 @@ interface BlogNewSearch {
     siteId?: string;
 }
 
+interface BlogCreateAutosaveDraft {
+    version: 1;
+    savedAt: string;
+    activeSiteId: string;
+    title: string;
+    slug: string;
+    excerpt: string;
+    status: 'draft' | 'published' | 'scheduled';
+    scheduledAt: string | null;
+    seoTitle: string;
+    seoDescription: string;
+    canonicalPath: string;
+    featuredImageId: string | null;
+    ogImage: string;
+    noIndex: boolean;
+    noFollow: boolean;
+    selectedCategoryIds: string[];
+    selectedTagIds: string[];
+    selectedAuthorId: string;
+    canvasElements: CanvasElement[];
+    canvasSize: CanvasSize;
+}
+
 export const Route = createFileRoute('/blog/new')({
     validateSearch: (search: Record<string, unknown>): BlogNewSearch => ({
         siteId: typeof search.siteId === 'string' ? search.siteId : undefined,
     }),
     component: NewBlogPostPage,
 });
+
+const BLOG_CREATE_AUTOSAVE_KEY = 'backy:blog-new:draft:v1';
 
 const BLOG_CREATE_CONTROL_AREAS = [
     {
@@ -191,6 +216,11 @@ function NewBlogPostPage() {
     const [routeCheckRetry, setRouteCheckRetry] = useState(0);
     const [existingBlogPosts, setExistingBlogPosts] = useState<BlogPost[]>([]);
     const [isFeaturedMediaOpen, setIsFeaturedMediaOpen] = useState(false);
+    const [hasHydratedAutosave, setHasHydratedAutosave] = useState(false);
+    const [draftRecovery, setDraftRecovery] = useState<BlogCreateAutosaveDraft | null>(null);
+    const [autosavePausedForRecovery, setAutosavePausedForRecovery] = useState(false);
+    const [lastAutosavedAt, setLastAutosavedAt] = useState<string | null>(null);
+    const [autosaveStatus, setAutosaveStatus] = useState('Autosave ready');
     const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
     const requestedSite = search.siteId
         ? sites.find((site) => siteMatchesIdentifier(site, search.siteId || ''))
@@ -351,6 +381,28 @@ function NewBlogPostPage() {
 
     const [canvasElements, setCanvasElements] = useState<CanvasElement[]>(initialElements);
     const [canvasSize, setCanvasSize] = useState<CanvasSize>(initialCanvasSize);
+
+    useEffect(() => {
+        try {
+            const storedDraft = window.localStorage.getItem(BLOG_CREATE_AUTOSAVE_KEY);
+            if (storedDraft) {
+                const parsedDraft = JSON.parse(storedDraft) as Partial<BlogCreateAutosaveDraft>;
+                if (isRecoverableBlogCreateDraft(parsedDraft)) {
+                    setDraftRecovery(parsedDraft);
+                    setAutosavePausedForRecovery(true);
+                    setAutosaveStatus('Recovered draft available');
+                    setLastAutosavedAt(parsedDraft.savedAt);
+                } else {
+                    window.localStorage.removeItem(BLOG_CREATE_AUTOSAVE_KEY);
+                }
+            }
+        } catch {
+            window.localStorage.removeItem(BLOG_CREATE_AUTOSAVE_KEY);
+        } finally {
+            setHasHydratedAutosave(true);
+        }
+    }, []);
+
     const slugValue = slug || slugify(title);
     const selectedAuthor = authors.find((author) => author.id === selectedAuthorId);
     const selectedSite = sites.find((site) => siteMatchesIdentifier(site, activeSiteId));
@@ -587,6 +639,175 @@ function NewBlogPostPage() {
         user?.id,
     ]);
     const creationHandoffText = useMemo(() => JSON.stringify(creationHandoff, null, 2), [creationHandoff]);
+    const hasAutosaveContent = useMemo(() => (
+        title.trim().length > 0
+        || slug.trim().length > 0
+        || excerpt.trim().length > 0
+        || status !== 'draft'
+        || Boolean(scheduledAt)
+        || seoTitle.trim().length > 0
+        || seoDescription.trim().length > 0
+        || canonicalPath.trim().length > 0
+        || Boolean(featuredImageId)
+        || ogImage.trim().length > 0
+        || noIndex
+        || noFollow
+        || selectedCategoryIds.length > 0
+        || selectedTagIds.length > 0
+        || selectedAuthorId !== (user?.id || 'admin')
+        || canvasSize.width !== initialCanvasSize.width
+        || canvasSize.height !== initialCanvasSize.height
+        || JSON.stringify(canvasElements) !== JSON.stringify(initialElements)
+    ), [
+        canonicalPath,
+        canvasElements,
+        canvasSize.height,
+        canvasSize.width,
+        excerpt,
+        featuredImageId,
+        initialCanvasSize.height,
+        initialCanvasSize.width,
+        initialElements,
+        noFollow,
+        noIndex,
+        ogImage,
+        scheduledAt,
+        selectedAuthorId,
+        selectedCategoryIds.length,
+        selectedTagIds.length,
+        seoDescription,
+        seoTitle,
+        slug,
+        status,
+        title,
+        user?.id,
+    ]);
+
+    useEffect(() => {
+        if (!hasHydratedAutosave || autosavePausedForRecovery || isLoading || isPreviewAfterCreateBusy) {
+            return;
+        }
+
+        if (!hasAutosaveContent) {
+            window.localStorage.removeItem(BLOG_CREATE_AUTOSAVE_KEY);
+            setLastAutosavedAt(null);
+            setAutosaveStatus('Autosave ready');
+            return;
+        }
+
+        setAutosaveStatus('Saving draft...');
+        const autosaveTimer = window.setTimeout(() => {
+            try {
+                const savedAt = new Date().toISOString();
+                const draft: BlogCreateAutosaveDraft = {
+                    version: 1,
+                    savedAt,
+                    activeSiteId,
+                    title,
+                    slug,
+                    excerpt,
+                    status,
+                    scheduledAt,
+                    seoTitle,
+                    seoDescription,
+                    canonicalPath,
+                    featuredImageId,
+                    ogImage,
+                    noIndex,
+                    noFollow,
+                    selectedCategoryIds,
+                    selectedTagIds,
+                    selectedAuthorId,
+                    canvasElements,
+                    canvasSize,
+                };
+                window.localStorage.setItem(BLOG_CREATE_AUTOSAVE_KEY, JSON.stringify(draft));
+                setLastAutosavedAt(savedAt);
+                setAutosaveStatus(`Autosaved ${new Date(savedAt).toLocaleTimeString()}`);
+            } catch {
+                setAutosaveStatus('Autosave failed');
+            }
+        }, 800);
+
+        return () => window.clearTimeout(autosaveTimer);
+    }, [
+        activeSiteId,
+        autosavePausedForRecovery,
+        canonicalPath,
+        canvasElements,
+        canvasSize,
+        excerpt,
+        featuredImageId,
+        hasAutosaveContent,
+        hasHydratedAutosave,
+        isLoading,
+        isPreviewAfterCreateBusy,
+        noFollow,
+        noIndex,
+        ogImage,
+        scheduledAt,
+        selectedAuthorId,
+        selectedCategoryIds,
+        selectedTagIds,
+        seoDescription,
+        seoTitle,
+        slug,
+        status,
+        title,
+    ]);
+
+    const clearAutosavedDraft = () => {
+        window.localStorage.removeItem(BLOG_CREATE_AUTOSAVE_KEY);
+        setDraftRecovery(null);
+        setAutosavePausedForRecovery(false);
+        setLastAutosavedAt(null);
+        setAutosaveStatus('Autosave ready');
+    };
+
+    const restoreRecoveredDraft = () => {
+        if (!draftRecovery || isCreateBusy) return;
+
+        const recoveredSiteId = draftRecovery.activeSiteId || activeSiteId;
+        setActiveSiteId(recoveredSiteId);
+        setTitle(draftRecovery.title);
+        setSlug(draftRecovery.slug);
+        setExcerpt(draftRecovery.excerpt);
+        setStatus(draftRecovery.status);
+        setScheduledAt(draftRecovery.scheduledAt);
+        setSeoTitle(draftRecovery.seoTitle);
+        setSeoDescription(draftRecovery.seoDescription);
+        setCanonicalPath(draftRecovery.canonicalPath);
+        setFeaturedImageId(draftRecovery.featuredImageId);
+        setOgImage(draftRecovery.ogImage);
+        setNoIndex(draftRecovery.noIndex);
+        setNoFollow(draftRecovery.noFollow);
+        setSelectedCategoryIds(draftRecovery.selectedCategoryIds);
+        setSelectedTagIds(draftRecovery.selectedTagIds);
+        setSelectedAuthorId(draftRecovery.selectedAuthorId);
+        setCanvasElements(draftRecovery.canvasElements.length > 0 ? draftRecovery.canvasElements : initialElements);
+        setCanvasSize(draftRecovery.canvasSize || initialCanvasSize);
+        setDraftRecovery(null);
+        setAutosavePausedForRecovery(false);
+        setLastAutosavedAt(draftRecovery.savedAt);
+        setAutosaveStatus('Recovered draft restored');
+        setError(null);
+        setNotice('Recovered local blog draft.');
+        navigate({ to: '/blog/new', search: { siteId: recoveredSiteId }, replace: true });
+    };
+
+    const discardRecoveredDraft = () => {
+        if (isCreateBusy) return;
+
+        clearAutosavedDraft();
+        setError(null);
+        setNotice('Recovered draft discarded.');
+    };
+
+    const autosaveLabel = draftRecovery
+        ? `Recovery from ${new Date(draftRecovery.savedAt).toLocaleTimeString()}`
+        : lastAutosavedAt
+            ? `Autosaved ${new Date(lastAutosavedAt).toLocaleTimeString()}`
+            : autosaveStatus;
 
     // Dummy settings for CanvasEditor (since we manage settings externally)
     const dummySettings: PageSettings = {
@@ -695,6 +916,7 @@ function NewBlogPostPage() {
         try {
             created = await createBlogPost(activeSiteId, buildPostInput('draft'));
             setPosts([created, ...posts.filter((post) => post.id !== created?.id)]);
+            clearAutosavedDraft();
 
             const preview = await createBlogPostPreview(activeSiteId, created.id);
             window.open(preview.url, '_blank', 'noopener,noreferrer');
@@ -731,6 +953,7 @@ function NewBlogPostPage() {
         try {
             const created = await createBlogPost(activeSiteId, buildPostInput(status));
             setPosts([created, ...posts.filter((post) => post.id !== created.id)]);
+            clearAutosavedDraft();
             navigate({ to: '/blog', search: { siteId: activeSiteId } });
         } catch (createError) {
             setError(createError instanceof Error
@@ -790,6 +1013,34 @@ function NewBlogPostPage() {
                         {notice}
                     </Notice>
                 )}
+                {draftRecovery && (
+                    <Notice tone="info" title="Recovered unsaved blog draft" className="mb-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <span>
+                                Local autosave found a draft from {new Date(draftRecovery.savedAt).toLocaleString()} for {draftRecovery.activeSiteId}.
+                            </span>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={isCreateBusy}
+                                    onClick={discardRecoveredDraft}
+                                >
+                                    Discard recovery
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={isCreateBusy}
+                                    onClick={restoreRecoveredDraft}
+                                >
+                                    Restore draft
+                                </Button>
+                            </div>
+                        </div>
+                    </Notice>
+                )}
 
                 <form onSubmit={handleSubmit} className="grid gap-5">
                     <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="blog-create-command-center">
@@ -803,6 +1054,17 @@ function NewBlogPostPage() {
                                     )}
                                     >
                                         {readinessScore}% ready
+                                    </span>
+                                    <span className={cn(
+                                        'rounded-full px-2.5 py-1 text-xs font-semibold',
+                                        draftRecovery
+                                            ? 'bg-sky-50 text-sky-700'
+                                            : autosaveStatus === 'Autosave failed'
+                                                ? 'bg-red-50 text-red-700'
+                                                : 'bg-slate-100 text-slate-700',
+                                    )}
+                                    >
+                                        {autosaveLabel}
                                     </span>
                                 </div>
                                 <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
@@ -1489,6 +1751,30 @@ const normalizeCanonicalPath = (value: string) => {
 
     return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
 };
+
+const isRecoverableBlogCreateDraft = (value: Partial<BlogCreateAutosaveDraft>): value is BlogCreateAutosaveDraft => (
+    value.version === 1
+    && typeof value.savedAt === 'string'
+    && typeof value.activeSiteId === 'string'
+    && typeof value.title === 'string'
+    && typeof value.slug === 'string'
+    && typeof value.excerpt === 'string'
+    && (value.status === 'draft' || value.status === 'published' || value.status === 'scheduled')
+    && (typeof value.scheduledAt === 'string' || value.scheduledAt === null)
+    && typeof value.seoTitle === 'string'
+    && typeof value.seoDescription === 'string'
+    && typeof value.canonicalPath === 'string'
+    && (typeof value.featuredImageId === 'string' || value.featuredImageId === null)
+    && typeof value.ogImage === 'string'
+    && typeof value.noIndex === 'boolean'
+    && typeof value.noFollow === 'boolean'
+    && Array.isArray(value.selectedCategoryIds)
+    && Array.isArray(value.selectedTagIds)
+    && typeof value.selectedAuthorId === 'string'
+    && Array.isArray(value.canvasElements)
+    && typeof value.canvasSize?.width === 'number'
+    && typeof value.canvasSize?.height === 'number'
+);
 
 function BlogCreateReadinessCheck({ label, ready }: { label: string; ready: boolean }) {
     return (
