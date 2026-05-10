@@ -259,10 +259,12 @@ const assertCanvasFocusMode = async (client) => {
       draftPanel: Boolean(document.querySelector('#blog-create-draft')),
       publishPanel: Boolean(document.querySelector('#blog-create-publish')),
       canvas: Boolean(document.querySelector('[data-testid="editor-canvas"]')),
+      adminSidebar: Boolean(document.querySelector('[data-testid="admin-sidebar-shell"]')),
+      adminHeader: Boolean(document.querySelector('[data-testid="admin-header-shell"]')),
       showPanels: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Show panels'),
     }))()`);
 
-    if (focused.banner && focused.canvas && focused.showPanels && !focused.commandCenter && !focused.draftPanel && !focused.publishPanel && focused.search.includes('focus=canvas')) {
+    if (focused.banner && focused.canvas && focused.showPanels && !focused.commandCenter && !focused.draftPanel && !focused.publishPanel && !focused.adminSidebar && !focused.adminHeader && focused.search.includes('focus=canvas')) {
       break;
     }
 
@@ -302,9 +304,11 @@ const assertCanvasFocusMode = async (client) => {
       commandCenter: Boolean(document.querySelector('[data-testid="blog-create-command-center"]')),
       draftPanel: Boolean(document.querySelector('#blog-create-draft')),
       publishPanel: Boolean(document.querySelector('#blog-create-publish')),
+      adminSidebar: Boolean(document.querySelector('[data-testid="admin-sidebar-shell"]')),
+      adminHeader: Boolean(document.querySelector('[data-testid="admin-header-shell"]')),
     }))()`);
 
-    if (!normal.banner && normal.commandCenter && normal.draftPanel && normal.publishPanel && !normal.search.includes('focus=canvas')) {
+    if (!normal.banner && normal.commandCenter && normal.draftPanel && normal.publishPanel && normal.adminSidebar && normal.adminHeader && !normal.search.includes('focus=canvas')) {
       break;
     }
 
@@ -347,6 +351,7 @@ const assertAutosaveWritten = async (client, slug) => {
   }
 
   assert(state.hasDraft, `Autosave draft was not written: ${JSON.stringify(state)}`);
+  assert(state.title === 'Smoke Blog Create', `Autosave draft title mismatch: ${JSON.stringify(state)}`);
   assert(state.slug === slug, `Autosave draft slug mismatch: ${JSON.stringify(state)}`);
   assert(state.noIndex === true, `Autosave did not retain robots toggle: ${JSON.stringify(state)}`);
   assert(state.canvasCount > 0, `Autosave did not retain canvas elements: ${JSON.stringify(state)}`);
@@ -426,24 +431,43 @@ const assertRecoveryRestore = async (client, slug) => {
     await sleep(250);
   }
 
-  const restored = await evaluate(client, `(() => {
-    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').trim() === 'Restore draft');
-    if (!(button instanceof HTMLButtonElement)) {
-      return { clicked: false };
+  let restored = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    restored = await evaluate(client, `(() => {
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').trim() === 'Restore draft');
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return { clicked: false, disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+      }
+      button.click();
+      return { clicked: true };
+    })()`);
+
+    if (restored.clicked) {
+      break;
     }
-    button.click();
-    return { clicked: true };
-  })()`);
+
+    await sleep(200);
+  }
   assert(restored.clicked, `Restore draft button was not clickable: ${JSON.stringify(restored)}`);
-  await sleep(500);
 
-  const state = await evaluate(client, `(() => ({
-    slug: document.querySelector('#blog-create-slug')?.value || '',
-    seoDescription: document.querySelector('#blog-create-seo-description')?.value || '',
-    noIndex: Array.from(document.querySelectorAll('#blog-create-seo input[type="checkbox"]'))[0]?.checked ?? null,
-    notice: document.body?.innerText?.includes('Recovered local blog draft.') || false,
-  }))()`);
+  let state = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    state = await evaluate(client, `(() => ({
+      slug: document.querySelector('#blog-create-slug')?.value || '',
+      title: document.querySelector('#blog-create-title')?.value || '',
+      seoDescription: document.querySelector('#blog-create-seo-description')?.value || '',
+      noIndex: Array.from(document.querySelectorAll('#blog-create-seo input[type="checkbox"]'))[0]?.checked ?? null,
+      notice: document.body?.innerText?.includes('Recovered local blog draft.') || false,
+    }))()`);
 
+    if (state.title === 'Smoke Blog Create' && state.slug === slug && state.noIndex === true && state.seoDescription.length > 50) {
+      break;
+    }
+
+    await sleep(200);
+  }
+
+  assert(state.title === 'Smoke Blog Create', `Recovered draft did not restore title: ${JSON.stringify(state)}`);
   assert(state.slug === slug, `Recovered draft did not restore slug: ${JSON.stringify(state)}`);
   assert(state.noIndex === true, `Recovered draft did not restore robots toggle: ${JSON.stringify(state)}`);
   assert(state.seoDescription.length > 50, `Recovered draft did not restore SEO description: ${JSON.stringify(state)}`);
@@ -452,14 +476,31 @@ const assertRecoveryRestore = async (client, slug) => {
 
 const createPreviewFromUi = async (client) => {
   const beforeTargets = await fetchJson('/json/list');
-  const clicked = await evaluate(client, `(() => {
-    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').includes('Save draft and preview'));
-    if (!(button instanceof HTMLButtonElement) || button.disabled) {
-      return { ok: false, label: button?.textContent || null, disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+  let clicked = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    clicked = await evaluate(client, `(() => {
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').includes('Save draft and preview'));
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return {
+          ok: false,
+          label: button?.textContent || null,
+          disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+          title: document.querySelector('#blog-create-title')?.value || '',
+          slug: document.querySelector('#blog-create-slug')?.value || '',
+          canonical: document.querySelector('#blog-create-canonical')?.value || '',
+          body: document.body?.innerText?.slice(0, 260) || '',
+        };
+      }
+      button.click();
+      return { ok: true, label: button.textContent || '' };
+    })()`);
+
+    if (clicked.ok) {
+      break;
     }
-    button.click();
-    return { ok: true, label: button.textContent || '' };
-  })()`);
+
+    await sleep(250);
+  }
   assert(clicked.ok, `Save draft and preview button was not ready: ${JSON.stringify(clicked)}`);
 
   let editPath = null;
@@ -467,6 +508,7 @@ const createPreviewFromUi = async (client) => {
     const state = await evaluate(client, `(() => ({
       path: window.location.pathname,
       text: document.body?.innerText?.slice(0, 260) || '',
+      fullText: document.body?.innerText?.slice(0, 1200) || '',
       storedDraft: localStorage.getItem('backy:blog-new:draft:v1'),
     }))()`);
 
@@ -477,6 +519,14 @@ const createPreviewFromUi = async (client) => {
     }
 
     if (attempt === 99) {
+      const browserErrors = client.events
+        .filter((event) => (
+          event.method === 'Runtime.exceptionThrown'
+          || (event.method === 'Log.entryAdded' && event.params?.entry?.level === 'error')
+        ))
+        .map((event) => event.params)
+        .slice(0, 5);
+      state.browserErrors = browserErrors;
       throw new Error(`Create preview did not navigate to edit page: ${JSON.stringify(state)}`);
     }
 

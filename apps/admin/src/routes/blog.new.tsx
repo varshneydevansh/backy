@@ -456,6 +456,10 @@ function NewBlogPostPage() {
         && !routeCheckError
         && !routeConflict
         && canonicalValid;
+    const canCreatePreviewDraft = title.trim().length > 0
+        && slugValue.trim().length > 0
+        && !routeConflict
+        && canonicalValid;
     const canSubmit = canCreateDraft
         && (status !== 'scheduled' || Boolean(scheduledAt));
     const submitLabel = status === 'published' ? 'Publish post' : status === 'scheduled' ? 'Schedule post' : 'Save draft';
@@ -776,7 +780,7 @@ function NewBlogPostPage() {
     };
 
     const restoreRecoveredDraft = () => {
-        if (!draftRecovery || isCreateBusy) return;
+        if (!draftRecovery || isLoading || isPreviewAfterCreateBusy) return;
 
         const recoveredSiteId = draftRecovery.activeSiteId || activeSiteId;
         setActiveSiteId(recoveredSiteId);
@@ -801,6 +805,8 @@ function NewBlogPostPage() {
         setAutosavePausedForRecovery(false);
         setLastAutosavedAt(draftRecovery.savedAt);
         setAutosaveStatus('Recovered draft restored');
+        setRouteCheckError(null);
+        setRouteCheckRetry((value) => value + 1);
         setError(null);
         setNotice('Recovered local blog draft.');
         navigate({
@@ -811,7 +817,7 @@ function NewBlogPostPage() {
     };
 
     const discardRecoveredDraft = () => {
-        if (isCreateBusy) return;
+        if (isLoading || isPreviewAfterCreateBusy) return;
 
         clearAutosavedDraft();
         setError(null);
@@ -924,9 +930,9 @@ function NewBlogPostPage() {
     );
 
     const handleCreatePreview = async () => {
-        if (isCreateBusy) return;
+        if (isLoading || isPreviewAfterCreateBusy) return;
 
-        if (!canCreateDraft) {
+        if (!canCreatePreviewDraft) {
             setError(getCreateBlockedMessage('preview'));
             setNotice(null);
             return;
@@ -1061,7 +1067,7 @@ function NewBlogPostPage() {
                                     type="button"
                                     size="sm"
                                     variant="outline"
-                                    disabled={isCreateBusy}
+                                    disabled={isLoading || isPreviewAfterCreateBusy}
                                     onClick={discardRecoveredDraft}
                                 >
                                     Discard recovery
@@ -1069,7 +1075,7 @@ function NewBlogPostPage() {
                                 <Button
                                     type="button"
                                     size="sm"
-                                    disabled={isCreateBusy}
+                                    disabled={isLoading || isPreviewAfterCreateBusy}
                                     onClick={restoreRecoveredDraft}
                                 >
                                     Restore draft
@@ -1093,7 +1099,7 @@ function NewBlogPostPage() {
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    disabled={isCreateBusy || !canCreateDraft}
+                                    disabled={isLoading || isPreviewAfterCreateBusy || !canCreatePreviewDraft}
                                     onClick={() => void handleCreatePreview()}
                                     iconStart={<Eye className="size-4" />}
                                 >
@@ -1174,7 +1180,7 @@ function NewBlogPostPage() {
                                 </Button>
                                 <Button
                                     type="button"
-                                    disabled={isCreateBusy || !canCreateDraft}
+                                    disabled={isLoading || isPreviewAfterCreateBusy || !canCreatePreviewDraft}
                                     onClick={() => void handleCreatePreview()}
                                     variant="outline"
                                     iconStart={<Eye className="size-4" />}
@@ -1462,7 +1468,7 @@ function NewBlogPostPage() {
                                 className={cn(
                                     'relative',
                                     isWorkspaceFocus
-                                        ? 'min-h-[calc(100vh-180px)] xl:h-[calc(100vh-180px)] xl:min-h-[calc(100vh-180px)]'
+                                        ? 'min-h-[calc(100vh-132px)] xl:h-[calc(100vh-132px)] xl:min-h-[calc(100vh-132px)]'
                                         : 'min-h-[780px] xl:h-[calc(100vh-120px)] xl:min-h-[900px]',
                                 )}
                             >
@@ -1573,7 +1579,7 @@ function NewBlogPostPage() {
                                     <Button
                                         type="button"
                                         onClick={() => void handleCreatePreview()}
-                                        disabled={isCreateBusy || !canCreateDraft}
+                                        disabled={isLoading || isPreviewAfterCreateBusy || !canCreatePreviewDraft}
                                         variant="outline"
                                         iconStart={<Eye className="size-4" />}
                                         className="w-full"

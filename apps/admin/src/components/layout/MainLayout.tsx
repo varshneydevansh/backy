@@ -44,11 +44,13 @@ interface MainLayoutProps {
 export function MainLayout({ children }: MainLayoutProps) {
   const routerState = useRouterState();
   const pathname = routerState.location.pathname;
+  const routeSearch = routerState.location.search as Record<string, unknown>;
   const isEditorWorkspace = useMemo(() => (
     pathname === '/blog/new' ||
     /^\/blog\/[^/]+$/.test(pathname) ||
     /^\/pages\/[^/]+\/edit$/.test(pathname)
   ), [pathname]);
+  const isFocusedEditorWorkspace = isEditorWorkspace && routeSearch.focus === 'canvas';
 
   /** Whether the sidebar is collapsed */
   const [sidebarCollapsed, setSidebarCollapsed] = useState(isEditorWorkspace);
@@ -63,12 +65,14 @@ export function MainLayout({ children }: MainLayoutProps) {
   return (
     <div className="min-h-screen bg-background flex min-w-0">
       {/* Sidebar Navigation */}
-      <div className="hidden shrink-0 lg:flex">
-        <Sidebar
-          collapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-        />
-      </div>
+      {!isFocusedEditorWorkspace && (
+        <div className="hidden shrink-0 lg:flex" data-testid="admin-sidebar-shell">
+          <Sidebar
+            collapsed={sidebarCollapsed}
+            onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+          />
+        </div>
+      )}
 
       {mobileSidebarOpen && (
         <div className="fixed inset-0 z-50 flex lg:hidden" role="dialog" aria-modal="true" aria-label="Admin navigation">
@@ -91,13 +95,25 @@ export function MainLayout({ children }: MainLayoutProps) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Header */}
-        <Header
-          sidebarCollapsed={sidebarCollapsed}
-          onSidebarToggle={() => setMobileSidebarOpen(true)}
-        />
+        {!isFocusedEditorWorkspace && (
+          <div data-testid="admin-header-shell">
+            <Header
+              sidebarCollapsed={sidebarCollapsed}
+              onSidebarToggle={() => setMobileSidebarOpen(true)}
+            />
+          </div>
+        )}
 
         {/* Page Content */}
-        <main className={cn('flex-1 overflow-auto', isEditorWorkspace ? 'bg-muted/40 p-3 lg:p-4' : 'p-5 lg:p-6')}>
+        <main className={cn(
+          'flex-1 overflow-auto',
+          isFocusedEditorWorkspace
+            ? 'bg-muted/40 p-2 lg:p-3'
+            : isEditorWorkspace
+              ? 'bg-muted/40 p-3 lg:p-4'
+              : 'p-5 lg:p-6',
+        )}
+        >
           <div className={cn(isEditorWorkspace ? 'w-full min-w-0' : 'mx-auto w-full max-w-[1680px]')}>
             {children}
           </div>

@@ -990,7 +990,7 @@ function PageEditorRoute() {
             className={cn(
               'relative',
               isWorkspaceFocus
-                ? 'min-h-[calc(100vh-180px)] xl:h-[calc(100vh-180px)] xl:min-h-[calc(100vh-180px)]'
+                ? 'min-h-[calc(100vh-132px)] xl:h-[calc(100vh-132px)] xl:min-h-[calc(100vh-132px)]'
                 : 'min-h-[820px] xl:h-[calc(100vh-72px)] xl:min-h-[920px]',
             )}
           >
