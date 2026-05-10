@@ -346,9 +346,11 @@ const setDetailsField = async (client, labelText, value) => {
     if (!(label instanceof HTMLLabelElement)) {
       return { ok: false, reason: 'label-not-found', labels: labels.map((item) => normalized(item.textContent)).slice(0, 80) };
     }
-    const control = label.querySelector('input, select, textarea');
+    const container = label.parentElement;
+    const control = label.querySelector('input, select, textarea') ||
+      container?.querySelector('input, select, textarea');
     if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)) {
-      return { ok: false, reason: 'control-not-found', labelText };
+      return { ok: false, reason: 'control-not-found', labelText, container: container?.textContent?.slice(0, 300) || '' };
     }
     const prototype = control instanceof HTMLSelectElement
       ? HTMLSelectElement.prototype
@@ -428,6 +430,79 @@ const generateSignedUrl = async (client) => {
   return null;
 };
 
+const replaceAssetThroughDetails = async (client, replacementPath, replacementName) => {
+  const markResult = await evaluate(client, `(() => {
+    const label = Array.from(document.querySelectorAll('label')).find((candidate) => (
+      (candidate.textContent || '').includes('Replace file')
+    ));
+    const input = label?.querySelector('input[type="file"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return {
+        ok: false,
+        reason: 'replacement-input-not-found',
+        labels: Array.from(document.querySelectorAll('label')).map((candidate) => candidate.textContent || '').slice(0, 80),
+      };
+    }
+    input.setAttribute('data-media-smoke-replace-input', 'true');
+    return { ok: true };
+  })()`);
+  assert(markResult.ok, `Unable to find replacement file input: ${JSON.stringify(markResult)}`);
+
+  await client.send('DOM.enable');
+  const documentResult = await client.send('DOM.getDocument', { depth: 1 });
+  const queryResult = await client.send('DOM.querySelector', {
+    nodeId: documentResult.root.nodeId,
+    selector: 'input[data-media-smoke-replace-input="true"]',
+  });
+  assert(queryResult.nodeId, `Unable to resolve replacement input node: ${JSON.stringify(queryResult)}`);
+  await client.send('DOM.setFileInputFiles', {
+    nodeId: queryResult.nodeId,
+    files: [replacementPath],
+  });
+
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      hasReplacementName: document.body?.innerText?.includes(${JSON.stringify(replacementName)}) || false,
+      hasVersionCount: document.body?.innerText?.includes('1 previous') || false,
+      hasHistory: document.body?.innerText?.includes('Replacement history') || false,
+      replacing: document.body?.innerText?.includes('Replacing...') || false,
+      body: document.body?.innerText?.slice(0, 1800) || '',
+    }))()`);
+    if (state.hasReplacementName && state.hasVersionCount && state.hasHistory && !state.replacing) {
+      return state;
+    }
+    if (attempt === 119) {
+      throw new Error(`Media replacement did not finish in details dialog: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const prepareVariantsThroughDetails = async (client) => {
+  await clickDetailsButton(client, 'Prepare variants');
+
+  for (let attempt = 0; attempt < 160; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      hasResponsiveManifest: document.body?.innerText?.includes('Responsive image manifest') || false,
+      hasPrepared: document.body?.innerText?.includes('Prepared') || false,
+      hasWebp: document.body?.innerText?.includes('webp') || false,
+      preparing: document.body?.innerText?.includes('Preparing...') || false,
+      body: document.body?.innerText?.slice(0, 1800) || '',
+    }))()`);
+    if (state.hasResponsiveManifest && state.hasPrepared && !state.preparing) {
+      return state;
+    }
+    if (attempt === 159) {
+      throw new Error(`Responsive variants were not prepared from details dialog: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const closeMediaDetails = async (client) => {
   const result = await evaluate(client, `(() => {
     const button = document.querySelector('button[aria-label="Close media details"]');
@@ -492,7 +567,7 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, mediaIds, folderId }) => {
+const cleanup = async ({ client, childProcess, userDataDir, mediaIds, folderId, tempFiles }) => {
   if (client) {
     try {
       await client.send('Browser.close');
@@ -528,6 +603,12 @@ const cleanup = async ({ client, childProcess, userDataDir, mediaIds, folderId }
       // The UI flow or cleanup may already have removed the folder.
     }
   }
+
+  for (const tempFile of tempFiles || []) {
+    if (tempFile) {
+      fs.rmSync(tempFile, { force: true });
+    }
+  }
 };
 
 const main = async () => {
@@ -540,10 +621,14 @@ const main = async () => {
   const marker = `media-smoke-${suffix}`;
   const folderName = `Media Smoke ${suffix}`;
   const imageName = `${marker}.png`;
+  const replacementName = `${marker}-replacement.png`;
   const privateName = `${marker}.txt`;
   const updatedAltText = `Updated central media smoke ${suffix}`;
+  const replacementPath = path.join(os.tmpdir(), `${replacementName}`);
+  const tempFiles = [replacementPath];
 
   try {
+    fs.writeFileSync(replacementPath, ONE_PIXEL_PNG);
     const existing = await listMedia(marker);
     assert(existing.length === 0, `Temporary media already exists for marker ${marker}`);
 
@@ -594,11 +679,29 @@ const main = async () => {
     await assertMediaLayout(client, imageName);
 
     await openMediaDetails(client, imageName);
+    await replaceAssetThroughDetails(client, replacementPath, replacementName);
+    const replacedImage = await waitForMedia(marker, (item) => (
+      item.id === publicImage.id &&
+      item.originalName === replacementName &&
+      Array.isArray(item.metadata?.replacementVersions) &&
+      item.metadata.replacementVersions.length === 1 &&
+      item.metadata.replacementVersions[0]?.originalName === imageName
+    ));
+    assert(replacedImage.id === publicImage.id, 'Media replacement changed the stable asset id.');
+    await prepareVariantsThroughDetails(client);
+    const transformedImage = await waitForMedia(marker, (item) => (
+      item.id === publicImage.id &&
+      Array.isArray(item.metadata?.generatedTransforms?.variants) &&
+      item.metadata.generatedTransforms.variants.length > 0
+    ));
+    assert(transformedImage.metadata.generatedTransforms.preparedBy === 'admin', 'UI transform preparation did not record the admin actor.');
     await setDetailsField(client, 'Alt text', updatedAltText);
     await setDetailsField(client, 'Visibility', 'private');
     await saveDetails(client);
     const updatedImage = await waitForMedia(marker, (item) => item.id === publicImage.id && item.altText === updatedAltText && item.visibility === 'private');
     assert(updatedImage.folderId === folderId, 'Media metadata save lost the folder assignment.');
+    assert(Array.isArray(updatedImage.metadata?.replacementVersions) && updatedImage.metadata.replacementVersions.length === 1, 'Media metadata save lost replacement history.');
+    assert(Array.isArray(updatedImage.metadata?.generatedTransforms?.variants) && updatedImage.metadata.generatedTransforms.variants.length > 0, 'Media metadata save lost generated transforms.');
     await closeMediaDetails(client);
 
     await openMediaDetails(client, privateName);
@@ -623,10 +726,11 @@ const main = async () => {
       ok: true,
       marker,
       folderName,
+      replacementName,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
-    await cleanup({ client, childProcess, userDataDir, mediaIds, folderId });
+    await cleanup({ client, childProcess, userDataDir, mediaIds, folderId, tempFiles });
   }
 };
 
