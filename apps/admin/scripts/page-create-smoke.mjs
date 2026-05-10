@@ -588,6 +588,59 @@ const navigateToPageCreate = async (client, slug, title, navLabel, seo, parentPa
   return waitForPageCreateControls(client, slug, title, navLabel, seo, parentPageId, url);
 };
 
+const assertSlugCanSyncFromTitle = async (client) => {
+  const title = 'Smoke Synced Route Title';
+  const expectedSlug = 'smoke-synced-route-title';
+  const changed = await evaluate(client, `(() => {
+    const input = document.querySelector('#page-title');
+    const button = document.querySelector('[data-testid="page-slug-use-title"]');
+    if (!(input instanceof HTMLInputElement) || !(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'controls-missing', buttonTag: button?.tagName || null };
+    }
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, ${JSON.stringify(title)});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return {
+      ok: true,
+      title: input.value,
+      buttonDisabled: button.disabled,
+      slug: document.querySelector('#page-slug')?.value || '',
+    };
+  })()`);
+  assert(changed.ok, `Slug sync controls were missing: ${JSON.stringify(changed)}`);
+
+  let synced = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    synced = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="page-slug-use-title"]');
+      if (button instanceof HTMLButtonElement && !button.disabled) {
+        button.click();
+      }
+      return {
+        title: document.querySelector('#page-title')?.value || '',
+        slug: document.querySelector('#page-slug')?.value || '',
+        buttonDisabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        routePreview: document.querySelector('#page-preview')?.textContent || '',
+        search: window.location.search,
+      };
+    })()`);
+
+    if (
+      synced.title === title
+      && synced.slug === expectedSlug
+      && synced.routePreview.includes(`/${expectedSlug}`)
+      && synced.search.includes(`slug=${expectedSlug}`)
+    ) {
+      return synced;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Slug did not sync from title: ${JSON.stringify(synced)}`);
+};
+
 const waitForStarterTemplateCreateControls = async (client, testCase, slug, url) => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => {
@@ -1231,6 +1284,8 @@ const main = async () => {
 
     await setViewport(client, { width: 1440, height: 1100 });
     const initialRender = await navigateToPageCreate(client, slug, title, navLabel, seo, parentPage.id);
+    const slugSync = await assertSlugCanSyncFromTitle(client);
+    await navigateToPageCreate(client, slug, title, navLabel, seo, parentPage.id);
     const desktopTemplateVisual = await assertTemplatePreviewVisualState(
       client,
       'desktop template preview',
@@ -1270,6 +1325,7 @@ const main = async () => {
       ok: true,
       url: initialRender.url,
       initialRender: initialRender.state,
+      slugSync,
       templateVisuals: {
         desktop: desktopTemplateVisual,
         mobile: mobileTemplateVisual,

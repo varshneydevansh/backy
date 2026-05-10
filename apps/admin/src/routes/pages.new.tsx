@@ -704,6 +704,8 @@ function NewPageRoute() {
         ? '/'
         : `/${slugify(formData.slug || formData.title || 'new-page')}`;
     const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
+    const titleDerivedSlug = slugify(formData.title || 'new-page');
+    const canSyncSlugFromTitle = !isPageCreateBusy && !formData.isHomepage && Boolean(formData.title.trim()) && formData.slug !== titleDerivedSlug;
     const normalizedCanonicalPath = normalizeCanonicalPath(formData.canonicalPath || routePreview);
     const canonicalValid = normalizedCanonicalPath.startsWith('/');
     const effectiveSeoTitle = formData.seoTitle.trim() || formData.title.trim();
@@ -1597,7 +1599,21 @@ function NewPageRoute() {
                             </div>
 
                             <div>
-                                <label htmlFor="page-slug" className="mb-2 block text-sm font-medium">URL slug</label>
+                                <div className="mb-2 flex items-center justify-between gap-3">
+                                    <label htmlFor="page-slug" className="block text-sm font-medium">URL slug</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (!canSyncSlugFromTitle) return;
+                                            updatePageDraft({ slug: titleDerivedSlug });
+                                        }}
+                                        disabled={!canSyncSlugFromTitle}
+                                        data-testid="page-slug-use-title"
+                                        className="text-xs font-semibold text-primary transition hover:text-primary/80 disabled:cursor-not-allowed disabled:text-muted-foreground"
+                                    >
+                                        Use title
+                                    </button>
+                                </div>
                                 <div className="flex items-center">
                                     <span className="rounded-l-lg border border-r-0 bg-muted px-4 py-2.5 text-sm text-muted-foreground">
                                         /
