@@ -11,6 +11,8 @@ const SITE_ID = process.env.BACKY_BLOG_CREATE_SMOKE_SITE_ID || 'site-demo';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_BLOG_CREATE_CDP_PORT || 9371);
 const SCREENSHOT_PATH = process.env.BACKY_BLOG_CREATE_SCREENSHOT || path.join(os.tmpdir(), 'backy-blog-create-smoke.png');
+const FRONTEND_BLOG_TEMPLATE_ID = 'smoke-blog-contract-template';
+const FRONTEND_BLOG_TEMPLATE_NAME = 'Smoke Blog Contract';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -55,6 +57,74 @@ const requestApi = async (endpoint, options = {}) => {
 
   return payload;
 };
+
+const getFrontendDesign = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`);
+  const frontendDesign = payload.data?.frontendDesign;
+  assert(frontendDesign?.schemaVersion === 'backy.frontend-design.v1', `Unexpected frontend design response: ${JSON.stringify(payload).slice(0, 500)}`);
+  return frontendDesign;
+};
+
+const patchFrontendDesign = async (frontendDesign) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`, {
+    method: 'PATCH',
+    body: JSON.stringify({ frontendDesign }),
+  });
+  const updated = payload.data?.frontendDesign;
+  assert(updated?.schemaVersion === 'backy.frontend-design.v1', `Patch did not return frontend design: ${JSON.stringify(payload).slice(0, 500)}`);
+  return updated;
+};
+
+const smokeFrontendDesignContract = () => ({
+  schemaVersion: 'backy.frontend-design.v1',
+  status: 'synced',
+  source: {
+    type: 'custom-frontend',
+    label: 'Smoke blog frontend',
+    url: 'https://example.com/smoke-blog-frontend',
+    repository: 'example/backy-smoke-blog-frontend',
+    branch: 'main',
+  },
+  tokens: {
+    colors: {
+      primary: '#0f766e',
+      text: '#111827',
+    },
+    fonts: {
+      heading: 'Inter',
+      body: 'Inter',
+    },
+    customCss: ':root { --backy-smoke-blog-primary: #0f766e; }',
+  },
+  chrome: {
+    header: { component: 'SmokeBlogHeader', source: 'site.navigation.primary' },
+    navigation: { component: 'SmokeBlogNavigation', source: 'site.navigation.primary' },
+    footer: { component: 'SmokeBlogFooter', source: 'site.navigation.footer' },
+  },
+  templates: [
+    {
+      id: FRONTEND_BLOG_TEMPLATE_ID,
+      type: 'blogPost',
+      name: FRONTEND_BLOG_TEMPLATE_NAME,
+      routePattern: '/blog/smoke-contract',
+      description: 'Frontend contract blog template used by the blog create smoke.',
+      canvasSize: { width: 1260, height: 940 },
+      bindingHints: [
+        { role: 'post.title', binding: 'post.title' },
+        { role: 'post.content', binding: 'post.content' },
+      ],
+    },
+  ],
+  editableMap: [
+    {
+      selector: '[data-backy-role="post-title"]',
+      role: 'post.title',
+      binding: 'post.title',
+      fields: ['content'],
+    },
+  ],
+  notes: 'Temporary contract for validating blog creation from custom frontend templates.',
+});
 
 const fetchJson = async (endpoint) => {
   const response = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
@@ -138,7 +208,7 @@ const evaluate = async (client, expression) => {
 };
 
 const navigateToBlogCreate = async (client) => {
-  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}` });
+  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}&designTemplate=${encodeURIComponent(FRONTEND_BLOG_TEMPLATE_ID)}` });
 
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => ({
@@ -147,10 +217,24 @@ const navigateToBlogCreate = async (client) => {
       seo: Boolean(document.querySelector('#blog-create-seo')),
       media: Boolean(document.querySelector('#blog-create-media')),
       canvas: Boolean(document.querySelector('[data-testid="editor-canvas"]')),
+      frontendPanel: Boolean(document.querySelector('[data-testid="blog-frontend-template-options"]')),
+      frontendTemplateActive: document.querySelector('[data-testid="blog-frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}"]')?.getAttribute('data-active') || '',
+      payloadTemplateId: JSON.parse(document.querySelector('[data-testid="blog-create-payload"]')?.textContent || '{}')?.template?.id || '',
+      payloadTemplateSource: JSON.parse(document.querySelector('[data-testid="blog-create-payload"]')?.textContent || '{}')?.template?.source || '',
       body: document.body?.innerText?.slice(0, 200) || '',
     }))()`);
 
-    if (state.ready && state.title && state.seo && state.media && state.canvas) {
+    if (
+      state.ready
+      && state.title
+      && state.seo
+      && state.media
+      && state.canvas
+      && state.frontendPanel
+      && state.frontendTemplateActive === 'true'
+      && state.payloadTemplateId === FRONTEND_BLOG_TEMPLATE_ID
+      && state.payloadTemplateSource === 'frontend-design'
+    ) {
       return state;
     }
 
@@ -461,10 +545,21 @@ const assertRecoveryRestore = async (client, slug) => {
       title: document.querySelector('#blog-create-title')?.value || '',
       seoDescription: document.querySelector('#blog-create-seo-description')?.value || '',
       noIndex: Array.from(document.querySelectorAll('#blog-create-seo input[type="checkbox"]'))[0]?.checked ?? null,
+      frontendTemplateActive: document.querySelector('[data-testid="blog-frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}"]')?.getAttribute('data-active') || '',
+      payloadTemplateId: JSON.parse(document.querySelector('[data-testid="blog-create-payload"]')?.textContent || '{}')?.template?.id || '',
+      payloadTemplateSource: JSON.parse(document.querySelector('[data-testid="blog-create-payload"]')?.textContent || '{}')?.template?.source || '',
       notice: document.body?.innerText?.includes('Recovered local blog draft.') || false,
     }))()`);
 
-    if (state.title === 'Smoke Blog Create' && state.slug === slug && state.noIndex === true && state.seoDescription.length > 50) {
+    if (
+      state.title === 'Smoke Blog Create'
+      && state.slug === slug
+      && state.noIndex === true
+      && state.seoDescription.length > 50
+      && state.frontendTemplateActive === 'true'
+      && state.payloadTemplateId === FRONTEND_BLOG_TEMPLATE_ID
+      && state.payloadTemplateSource === 'frontend-design'
+    ) {
       break;
     }
 
@@ -475,6 +570,8 @@ const assertRecoveryRestore = async (client, slug) => {
   assert(state.slug === slug, `Recovered draft did not restore slug: ${JSON.stringify(state)}`);
   assert(state.noIndex === true, `Recovered draft did not restore robots toggle: ${JSON.stringify(state)}`);
   assert(state.seoDescription.length > 50, `Recovered draft did not restore SEO description: ${JSON.stringify(state)}`);
+  assert(state.frontendTemplateActive === 'true', `Recovered draft did not restore frontend design template selection: ${JSON.stringify(state)}`);
+  assert(state.payloadTemplateId === FRONTEND_BLOG_TEMPLATE_ID, `Recovered draft did not restore frontend design payload template: ${JSON.stringify(state)}`);
   return state;
 };
 
@@ -544,6 +641,73 @@ const createPreviewFromUi = async (client) => {
   };
 };
 
+const normalizeCreatedContent = (content) => {
+  if (content && typeof content === 'object' && !Array.isArray(content)) {
+    return content;
+  }
+  return {};
+};
+
+const flattenElements = (elements = []) => {
+  const flat = [];
+  const visit = (element) => {
+    if (!element || typeof element !== 'object') return;
+    flat.push(element);
+    if (Array.isArray(element.children)) {
+      element.children.forEach(visit);
+    }
+  };
+  elements.forEach(visit);
+  return flat;
+};
+
+const assertCreatedFrontendBlogPost = async (postId, slug) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/blog/${postId}`);
+  const post = payload.data?.post;
+
+  assert(post, `Created blog post ${postId} detail was not returned`);
+  assert(post.slug === slug, `Created blog slug mismatch: ${JSON.stringify({ slug: post.slug, expected: slug })}`);
+  assert(post.meta?.frontendDesignTemplateId === FRONTEND_BLOG_TEMPLATE_ID, `Created blog did not store frontend template id: ${JSON.stringify(post.meta)}`);
+  assert(post.meta?.frontendDesignTemplateName === FRONTEND_BLOG_TEMPLATE_NAME, `Created blog did not store frontend template name: ${JSON.stringify(post.meta)}`);
+  assert(post.meta?.frontendDesignSource?.type === 'custom-frontend', `Created blog did not store frontend design source: ${JSON.stringify(post.meta)}`);
+  assert(Array.isArray(post.meta?.frontendDesignBindingHints) && post.meta.frontendDesignBindingHints.length === 2, `Created blog did not store frontend binding hints: ${JSON.stringify(post.meta)}`);
+
+  const content = normalizeCreatedContent(post.content);
+  const elements = Array.isArray(content.elements) ? content.elements : [];
+  const allElements = flattenElements(elements);
+  const byId = new Map(allElements.map((element) => [element.id, element]));
+  const canvasSize = content.canvasSize || content.contentDocument?.metadata?.canvasSize || {};
+  const wrapper = byId.get(`frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}`);
+  const heading = byId.get(`frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}-heading`);
+  const bodyRegion = byId.get(`frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}-body-region`);
+
+  assert(wrapper?.type === 'section', `Frontend blog template wrapper missing: ${JSON.stringify({ ids: allElements.map((element) => element.id).slice(0, 40) })}`);
+  assert(wrapper.props?.frontendTemplateId === FRONTEND_BLOG_TEMPLATE_ID, `Frontend blog wrapper metadata mismatch: ${JSON.stringify(wrapper)}`);
+  assert(heading?.props?.content === 'Smoke Blog Create', `Frontend blog heading does not use post title: ${JSON.stringify(heading?.props)}`);
+  assert(Array.isArray(bodyRegion?.props?.bindingHints) && bodyRegion.props.bindingHints.length === 2, `Frontend blog body region missing binding hints: ${JSON.stringify(bodyRegion?.props)}`);
+  assert(canvasSize.width === 1260 && canvasSize.height >= 940, `Frontend blog canvas size mismatch: ${JSON.stringify(canvasSize)}`);
+  assert(typeof content.customCSS === 'string' && content.customCSS.includes('--backy-smoke-blog-primary'), `Frontend blog custom CSS was not persisted: ${JSON.stringify(content.customCSS)}`);
+
+  return {
+    postId,
+    slug: post.slug,
+    meta: {
+      frontendDesignTemplateId: post.meta?.frontendDesignTemplateId,
+      frontendDesignTemplateName: post.meta?.frontendDesignTemplateName,
+      frontendDesignSourceType: post.meta?.frontendDesignSource?.type,
+      bindingHintCount: post.meta?.frontendDesignBindingHints?.length || 0,
+    },
+    content: {
+      rootElementCount: elements.length,
+      totalElementCount: allElements.length,
+      canvasSize,
+      wrapperId: wrapper.id,
+      heading: heading?.props?.content,
+      customCssStored: typeof content.customCSS === 'string',
+    },
+  };
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -597,8 +761,11 @@ const main = async () => {
   const { childProcess, userDataDir } = launchChrome();
   let client;
   let postId = null;
+  let originalFrontendDesign = null;
 
   try {
+    originalFrontendDesign = await getFrontendDesign();
+    await patchFrontendDesign(smokeFrontendDesignContract());
     await waitForCdp();
     const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
     assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
@@ -621,6 +788,7 @@ const main = async () => {
     const recovery = await assertRecoveryRestore(client, slug);
     const preview = await createPreviewFromUi(client);
     postId = preview.editPath.split('/').filter(Boolean).at(-1);
+    const frontendBlogPost = await assertCreatedFrontendBlogPost(postId, slug);
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -644,10 +812,18 @@ const main = async () => {
       autosave,
       recovery,
       preview,
+      frontendBlogPost,
       postId,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
+    if (originalFrontendDesign) {
+      try {
+        await patchFrontendDesign(originalFrontendDesign);
+      } catch (error) {
+        console.warn('Unable to restore original frontend design contract:', error instanceof Error ? error.message : error);
+      }
+    }
     await cleanup({ client, childProcess, userDataDir, postId });
   }
 };

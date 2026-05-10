@@ -37,7 +37,7 @@ import { normalizeRedirectRules } from './redirectRules';
 import { emptyFrontendDesignContract, normalizeFrontendDesignContract } from './frontendDesignContract';
 
 interface PageMeta {
-  title: string;
+  title?: string;
   description?: string | null;
   keywords?: string[];
   ogImage?: string | null;
@@ -144,16 +144,7 @@ interface StoreBlogPost {
   status: 'draft' | 'published' | 'scheduled' | 'archived';
   featuredImageId: string | null;
   authorId: string | null;
-  meta: {
-    title?: string;
-    description?: string;
-    keywords?: string[];
-    ogImage?: string | null;
-    canonical?: string | null;
-    jsonLd?: Array<Record<string, unknown>>;
-    noIndex?: boolean;
-    noFollow?: boolean;
-  };
+  meta: PageMeta;
   categoryIds: string[];
   tagIds: string[];
   createdAt: string;
@@ -5564,6 +5555,14 @@ export function createAdminBlogPost(siteId: string, input: Record<string, unknow
       jsonLd: toJsonObjectArray(metaInput.jsonLd),
       noIndex: parseBooleanInput(metaInput.noIndex, defaultNoIndexForStatus(status)),
       noFollow: parseBooleanInput(metaInput.noFollow, false),
+      frontendDesignTemplateId: sanitizeString(metaInput.frontendDesignTemplateId) || null,
+      frontendDesignTemplateName: sanitizeString(metaInput.frontendDesignTemplateName) || null,
+      frontendDesignSource: isObjectRecord(metaInput.frontendDesignSource)
+        ? clone(metaInput.frontendDesignSource)
+        : null,
+      frontendDesignBindingHints: Array.isArray(metaInput.frontendDesignBindingHints)
+        ? metaInput.frontendDesignBindingHints.filter(isObjectRecord).map(clone)
+        : undefined,
     },
     categoryIds: Array.isArray(input.categoryIds) ? input.categoryIds.map(sanitizeString).filter(Boolean) : [],
     tagIds: Array.isArray(input.tagIds) ? input.tagIds.map(sanitizeString).filter(Boolean) : [],
@@ -5631,6 +5630,22 @@ export function updateAdminBlogPost(
           jsonLd: metaInput.jsonLd === undefined ? current.meta.jsonLd : toJsonObjectArray(metaInput.jsonLd),
           noIndex: metaInput.noIndex === undefined ? current.meta.noIndex : parseBooleanInput(metaInput.noIndex, false),
           noFollow: metaInput.noFollow === undefined ? current.meta.noFollow : parseBooleanInput(metaInput.noFollow, false),
+          frontendDesignTemplateId: metaInput.frontendDesignTemplateId === undefined
+            ? current.meta.frontendDesignTemplateId
+            : sanitizeString(metaInput.frontendDesignTemplateId) || null,
+          frontendDesignTemplateName: metaInput.frontendDesignTemplateName === undefined
+            ? current.meta.frontendDesignTemplateName
+            : sanitizeString(metaInput.frontendDesignTemplateName) || null,
+          frontendDesignSource: metaInput.frontendDesignSource === undefined
+            ? current.meta.frontendDesignSource
+            : isObjectRecord(metaInput.frontendDesignSource)
+              ? clone(metaInput.frontendDesignSource)
+              : null,
+          frontendDesignBindingHints: metaInput.frontendDesignBindingHints === undefined
+            ? current.meta.frontendDesignBindingHints
+            : Array.isArray(metaInput.frontendDesignBindingHints)
+              ? metaInput.frontendDesignBindingHints.filter(isObjectRecord).map(clone)
+              : undefined,
         },
     categoryIds: Array.isArray(input.categoryIds)
       ? input.categoryIds.map(sanitizeString).filter(Boolean)

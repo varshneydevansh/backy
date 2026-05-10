@@ -705,10 +705,10 @@ export interface PageMeta {
   /** Parent page title snapshot for custom frontends */
   parentPageTitle?: string;
 
-  /** Frontend design template used to seed this page */
+  /** Frontend design template used to seed this page or post */
   frontendDesignTemplateId?: string;
 
-  /** Frontend design template name snapshot used to seed this page */
+  /** Frontend design template name snapshot used to seed this page or post */
   frontendDesignTemplateName?: string;
 
   /** Frontend design source snapshot used to preserve custom frontend context */
