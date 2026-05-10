@@ -400,6 +400,12 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - Lists the current reusable section version plus bounded historical snapshots from `metadata.reusableSection.history`.
   - Returns `{ success, requestId, data: { sectionId, currentVersion, versions } }`; the current entry has `current: true`.
 
+- `POST /api/admin/sites/:siteId/reusable-sections/:sectionId/versions/:version/restore`
+  - Restores a saved reusable-section version through the normal update path, preserving the pre-restore section as the next history entry.
+  - Supports `expectedVersion` / `expectedUpdatedAt` conflict guards and returns `409 REUSABLE_SECTION_VERSION_CONFLICT` for stale clients.
+  - Validates restored slugs against other sections and returns `409 SLUG_CONFLICT` if the historical slug is no longer available.
+  - Returns `{ success, requestId, data: { restored, restoredFromVersion, version, section } }` and records restore provenance in `section.metadata.reusableSection.restoredFromVersion`.
+
 - `GET /api/admin/sites/:siteId/reusable-sections/export`
   - Exports reusable sections as JSON with `{ data: { export, sections } }`.
   - Supports `ids`/`sectionIds`, `status`, `category`, `tag`, and `search`; default `status=all`.

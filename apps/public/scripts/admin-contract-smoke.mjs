@@ -1619,6 +1619,42 @@ try {
     assert(versions.json?.data?.versions?.some((entry) => entry.current === true && entry.version === 2), `${versions.url} missing current reusable section version entry`);
     assert(versions.json?.data?.versions?.some((entry) => entry.version === 1 && entry.name === 'Admin Contract Hero Section'), `${versions.url} missing previous reusable section version entry`);
 
+    const restore = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}/versions/1/restore`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        expectedVersion: 2,
+        restoredBy: 'contract-smoke',
+      }),
+    });
+    assert(restore.response.status === 200, `${restore.url} expected 200, got ${restore.response.status}`);
+    assert(restore.json?.data?.restored === true, `${restore.url} expected restored true`);
+    assert(restore.json?.data?.restoredFromVersion === 1, `${restore.url} missing restored version`);
+    assert(restore.json?.data?.version === 3, `${restore.url} did not increment reusable section version on restore`);
+    assert(restore.json?.data?.section?.name === 'Admin Contract Hero Section', `${restore.url} did not restore section name`);
+    assert(restore.json?.data?.section?.status === 'active', `${restore.url} did not restore section status`);
+    assert(restore.json?.data?.section?.metadata?.reusableSection?.restoredFromVersion === 1, `${restore.url} missing restore provenance`);
+    assert(restore.json?.data?.section?.metadata?.reusableSection?.history?.some((entry) => entry.version === 2 && entry.name === 'Updated Contract Hero Section'), `${restore.url} did not preserve pre-restore section revision`);
+
+    const rearchive = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        expectedVersion: 3,
+        name: 'Updated Contract Hero Section',
+        tags: ['hero', 'updated'],
+        status: 'archived',
+        updatedBy: 'contract-smoke',
+      }),
+    });
+    assert(rearchive.response.status === 200, `${rearchive.url} expected 200, got ${rearchive.response.status}`);
+    assert(rearchive.json?.data?.version === 4, `${rearchive.url} did not increment reusable section version after rearchive`);
+    assert(rearchive.json?.data?.section?.status === 'archived', `${rearchive.url} did not rearchive section`);
+
     const exportSections = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/export?ids=${createdReusableSectionId}`);
     assert(exportSections.response.status === 200, `${exportSections.url} expected 200, got ${exportSections.response.status}`);
     assert(exportSections.response.headers.get('content-disposition')?.includes('reusable-sections.json'), `${exportSections.url} missing export filename`);
@@ -1650,7 +1686,7 @@ try {
     });
     assert(importUpsert.response.status === 200, `${importUpsert.url} expected 200, got ${importUpsert.response.status}`);
     assert(importUpsert.json?.data?.import?.updated === 1, `${importUpsert.url} expected one upserted reusable section`);
-    assert(importUpsert.json?.data?.sections?.[0]?.metadata?.reusableSection?.version === 3, `${importUpsert.url} did not increment reusable section version on upsert import`);
+    assert(importUpsert.json?.data?.sections?.[0]?.metadata?.reusableSection?.version === 5, `${importUpsert.url} did not increment reusable section version on upsert import`);
 
     const activeList = await request(`/api/admin/sites/${createdSiteId}/reusable-sections`);
     assert(!activeList.json?.data?.sections?.some((section) => section.id === createdReusableSectionId), `${activeList.url} included archived section in active default list`);

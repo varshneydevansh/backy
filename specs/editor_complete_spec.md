@@ -455,7 +455,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Site frontend design contracts now persist page/blog template registries, and admin page/blog create APIs can seed editable content plus design provenance from `frontendDesignTemplateId`.
   - Reusable-section updates now expose optimistic conflict guards (`expectedVersion`/`expectedUpdatedAt`) and bounded version history through the admin versions endpoint.
   - Reusable-section export/import now supports JSON portability across sites, duplicate-slug protection, and upsert imports that increment version history.
-  - Still missing richer saved-section metadata editing, instance registry/bulk propagation, and restore flows for synced section sources.
+  - Reusable-section restore now lets admins restore an older saved-section version with slug conflict checks and restore provenance.
+  - Still missing richer saved-section metadata editing and instance registry/bulk propagation for synced section sources.
 
 ## Priority Order
 **Phase 1: Critical Fixes (Immediate)**
