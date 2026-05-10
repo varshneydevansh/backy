@@ -997,6 +997,35 @@ export interface SiteSettingsInput {
   };
 }
 
+export interface SettingsInfrastructureDiagnosticCheck {
+  label: string;
+  ready: boolean;
+  required: boolean;
+  detail: string;
+}
+
+export interface SettingsInfrastructureDiagnostic {
+  area: 'database' | 'storage' | 'supabase' | 'vercel';
+  label: string;
+  status: 'ready' | 'warning' | 'blocked';
+  summary: string;
+  missing: string[];
+  checks: SettingsInfrastructureDiagnosticCheck[];
+}
+
+export interface SettingsInfrastructureCheckResult {
+  diagnostics: SettingsInfrastructureDiagnostic[];
+  generatedAt: string;
+}
+
+interface ApiSettingsInfrastructureCheckResponse {
+  success: boolean;
+  data?: SettingsInfrastructureCheckResult;
+  error?: {
+    message?: string;
+  };
+}
+
 export interface PageCreateInput {
   title: string;
   slug: string;
@@ -2089,6 +2118,23 @@ export async function regenerateSettingsApiKeys(scope: 'all' | 'public' | 'admin
     runtimeSupabase: payload.data.settings.runtimeSupabase,
     runtimeVercel: payload.data.settings.runtimeVercel,
   };
+}
+
+export async function validateSettingsInfrastructure(input: Pick<SiteSettingsInput, 'deliveryMode' | 'integrations'>): Promise<SettingsInfrastructureCheckResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/settings`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ action: 'validate-infrastructure', ...input }),
+  });
+  const payload = await readJson<ApiSettingsInfrastructureCheckResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to validate infrastructure settings');
+  }
+
+  return payload.data;
 }
 
 export async function listAdminAuditLogs(filters: AdminAuditLogListFilters = {}): Promise<AdminAuditLogListResult> {

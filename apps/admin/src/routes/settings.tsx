@@ -43,8 +43,10 @@ import {
   getSettings,
   listAdminAuditLogs,
   regenerateSettingsApiKeys,
+  validateSettingsInfrastructure,
   type AdminAuditLog,
   type SiteSettingsInput,
+  type SettingsInfrastructureDiagnostic,
   updateSettings as updateBackendSettings,
 } from '@/lib/adminContentApi';
 
@@ -1262,6 +1264,7 @@ function SettingsPage() {
         {activeTab === 'infrastructure' && (
           <InfrastructureSettings
             integrations={integrations}
+            deliveryMode={deliveryMode}
             runtimeDatabase={runtimeDatabase}
             runtimeStorage={runtimeStorage}
             runtimeSupabase={runtimeSupabase}
@@ -2776,6 +2779,7 @@ function InfrastructureEnvContractPanel({
 
 function InfrastructureSettings({
   integrations,
+  deliveryMode,
   runtimeDatabase,
   runtimeStorage,
   runtimeSupabase,
@@ -2785,6 +2789,7 @@ function InfrastructureSettings({
   onChange,
 }: {
   integrations: IntegrationSettings;
+  deliveryMode: SiteSettingsInput['deliveryMode'];
   runtimeDatabase?: SiteSettingsInput['runtimeDatabase'];
   runtimeStorage?: SiteSettingsInput['runtimeStorage'];
   runtimeSupabase?: SiteSettingsInput['runtimeSupabase'];
@@ -2797,6 +2802,9 @@ function InfrastructureSettings({
   const supabase: SupabaseSettings = integrations.supabase || {};
   const vercel: VercelSettings = integrations.vercel || {};
   const [copiedEnvProfile, setCopiedEnvProfile] = useState('');
+  const [isCheckingInfrastructure, setIsCheckingInfrastructure] = useState(false);
+  const [infrastructureCheckError, setInfrastructureCheckError] = useState('');
+  const [infrastructureDiagnostics, setInfrastructureDiagnostics] = useState<SettingsInfrastructureDiagnostic[] | null>(null);
 
   const updateStorage = (next: Partial<StorageSettings>) => {
     if (disabled) return;
@@ -2899,6 +2907,21 @@ function InfrastructureSettings({
     }
   };
 
+  const runInfrastructureCheck = async () => {
+    if (disabled || isCheckingInfrastructure) return;
+
+    setIsCheckingInfrastructure(true);
+    setInfrastructureCheckError('');
+    try {
+      const result = await validateSettingsInfrastructure({ deliveryMode, integrations });
+      setInfrastructureDiagnostics(result.diagnostics);
+    } catch (error) {
+      setInfrastructureCheckError(error instanceof Error ? error.message : 'Unable to run infrastructure check.');
+    } finally {
+      setIsCheckingInfrastructure(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -2969,6 +2992,79 @@ function InfrastructureSettings({
           ]}
         />
       </div>
+
+      <Panel>
+        <PanelHeader
+          title="Infrastructure check"
+          description="Validate the saved/draft provider metadata against runtime capability before relying on Supabase, storage, or Vercel deployment workflows."
+          icon={<CheckCircle2 className="size-4" />}
+          action={
+            <Button size="sm" disabled={disabled || isCheckingInfrastructure} onClick={() => void runInfrastructureCheck()}>
+              {isCheckingInfrastructure ? 'Checking...' : 'Run infrastructure check'}
+            </Button>
+          }
+        />
+        <PanelContent>
+          {infrastructureCheckError && (
+            <Notice tone="warning" title="Infrastructure check failed">
+              {infrastructureCheckError}
+            </Notice>
+          )}
+          {!infrastructureDiagnostics && !infrastructureCheckError && (
+            <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+              Run a check after editing provider metadata to see which runtime pieces are ready, optional, or blocked.
+            </div>
+          )}
+          {infrastructureDiagnostics && (
+            <div>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-sm font-semibold">Infrastructure check results</h4>
+                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                  {infrastructureDiagnostics.filter((item) => item.status === 'blocked').length} blocked
+                </span>
+              </div>
+              <div className="grid gap-3 xl:grid-cols-4">
+                {infrastructureDiagnostics.map((diagnostic) => (
+                  <div key={diagnostic.area} className="rounded-lg border border-border bg-background p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-semibold text-foreground">{diagnostic.label}</div>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">{diagnostic.summary}</p>
+                      </div>
+                      <span className={cn(
+                        'rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize',
+                        diagnostic.status === 'ready' && 'bg-emerald-50 text-emerald-700',
+                        diagnostic.status === 'warning' && 'bg-amber-50 text-amber-700',
+                        diagnostic.status === 'blocked' && 'bg-red-50 text-red-700',
+                      )}
+                      >
+                        {diagnostic.status}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2">
+                      {diagnostic.checks.map((check) => (
+                        <div key={check.label} className="rounded-md border border-border bg-card px-2.5 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-medium text-foreground">{check.label}</span>
+                            <span className={cn(
+                              'text-[11px] font-semibold',
+                              check.ready ? 'text-emerald-700' : check.required ? 'text-red-700' : 'text-amber-700',
+                            )}
+                            >
+                              {check.ready ? 'Ready' : check.required ? 'Required' : 'Optional'}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </PanelContent>
+      </Panel>
 
       <Panel>
         <PanelHeader

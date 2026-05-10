@@ -215,6 +215,167 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
   };
 };
 
+type InfrastructureDiagnosticStatus = 'ready' | 'warning' | 'blocked';
+
+interface InfrastructureCheckInput {
+  deliveryMode: 'managed-hosting' | 'custom-frontend';
+  integrations: BackyJsonObject;
+  runtimeDatabase: ReturnType<typeof getDatabaseRuntimeSummary>;
+  runtimeStorage: ReturnType<typeof getMediaStorageConfigSummary>;
+  runtimeSupabase: ReturnType<typeof getSupabaseRuntimeSummary>;
+  runtimeVercel: ReturnType<typeof getVercelRuntimeSummary>;
+}
+
+const makeInfrastructureDiagnostic = (
+  area: 'database' | 'storage' | 'supabase' | 'vercel',
+  label: string,
+  checks: Array<{ label: string; ready: boolean; required: boolean; detail: string }>,
+) => {
+  const requiredFailures = checks.filter((check) => check.required && !check.ready);
+  const optionalFailures = checks.filter((check) => !check.required && !check.ready);
+  const status: InfrastructureDiagnosticStatus = requiredFailures.length > 0
+    ? 'blocked'
+    : optionalFailures.length > 0
+      ? 'warning'
+      : 'ready';
+
+  return {
+    area,
+    label,
+    status,
+    summary: status === 'ready'
+      ? `${label} is ready for the selected Backy settings.`
+      : status === 'blocked'
+        ? `${label} is missing required configuration.`
+        : `${label} is usable, but optional production wiring is incomplete.`,
+    missing: checks.filter((check) => !check.ready).map((check) => check.label),
+    checks,
+  };
+};
+
+const buildInfrastructureDiagnostics = ({
+  deliveryMode,
+  integrations,
+  runtimeDatabase,
+  runtimeStorage,
+  runtimeSupabase,
+  runtimeVercel,
+}: InfrastructureCheckInput) => {
+  const storage = parseJsonObject(integrations.storage) || {};
+  const supabase = parseJsonObject(integrations.supabase) || {};
+  const vercel = parseJsonObject(integrations.vercel) || {};
+  const storageProvider = stringValue(storage.provider) || runtimeStorage.provider;
+  const storageBucket = stringValue(storage.bucket) || runtimeStorage.bucket || runtimeSupabase.storageBucket;
+  const storagePublicBaseUrl = stringValue(storage.publicBaseUrl) || runtimeStorage.publicUrl || '';
+  const supabaseProjectUrl = stringValue(supabase.projectUrl) || runtimeSupabase.projectUrl || '';
+  const supabaseProjectRef = stringValue(supabase.projectRef) || runtimeSupabase.projectRef || inferSupabaseProjectRef(supabaseProjectUrl);
+  const supabaseEnabled = boolValue(supabase.databaseEnabled)
+    || boolValue(supabase.storageEnabled)
+    || boolValue(supabase.authEnabled)
+    || storageProvider === 'supabase';
+  const vercelProjectId = stringValue(vercel.projectId) || runtimeVercel.projectId || '';
+  const vercelProductionDomain = stringValue(vercel.productionDomain) || runtimeVercel.url || '';
+
+  return [
+    makeInfrastructureDiagnostic('database', 'Database runtime', [
+      {
+        label: 'Persistence runtime',
+        ready: Boolean(runtimeDatabase.configured),
+        required: true,
+        detail: runtimeDatabase.configured
+          ? `${runtimeDatabase.provider} persistence is available.`
+          : `Missing ${runtimeDatabase.missing.join(', ') || 'database configuration'}.`,
+      },
+      {
+        label: 'Supabase database intent',
+        ready: !boolValue(supabase.databaseEnabled) || Boolean(runtimeSupabase.databaseUrlConfigured || runtimeDatabase.configured),
+        required: boolValue(supabase.databaseEnabled),
+        detail: boolValue(supabase.databaseEnabled)
+          ? 'Supabase database is enabled and needs a repository/database runtime.'
+          : 'Supabase database is not enabled for this workspace.',
+      },
+    ]),
+    makeInfrastructureDiagnostic('storage', 'Media storage', [
+      {
+        label: 'Storage provider',
+        ready: Boolean(storageProvider),
+        required: true,
+        detail: storageProvider ? `${storageProvider} is selected.` : 'Choose local, Supabase Storage, or S3-compatible storage.',
+      },
+      {
+        label: 'Storage bucket',
+        ready: storageProvider === 'local' || Boolean(storageBucket),
+        required: storageProvider !== 'local',
+        detail: storageProvider === 'local'
+          ? 'Local storage does not require a bucket.'
+          : storageBucket
+            ? `${storageBucket} will store uploaded files.`
+            : 'Set a bucket for Supabase/S3 media uploads.',
+      },
+      {
+        label: 'Public asset URL',
+        ready: deliveryMode !== 'custom-frontend' || storageProvider === 'local' || Boolean(storagePublicBaseUrl),
+        required: deliveryMode === 'custom-frontend' && storageProvider !== 'local',
+        detail: storagePublicBaseUrl
+          ? 'Public file URL is configured for custom frontends.'
+          : 'Custom frontends need a public base URL for media delivery.',
+      },
+    ]),
+    makeInfrastructureDiagnostic('supabase', 'Supabase connection', [
+      {
+        label: 'Project URL or ref',
+        ready: !supabaseEnabled || Boolean(supabaseProjectUrl || supabaseProjectRef),
+        required: supabaseEnabled,
+        detail: supabaseProjectUrl || supabaseProjectRef
+          ? 'Supabase project metadata is present.'
+          : 'Set a Supabase project URL or project ref.',
+      },
+      {
+        label: 'Supabase API key env',
+        ready: !supabaseEnabled || Boolean(runtimeSupabase.anonKeyConfigured || runtimeSupabase.serviceRoleConfigured),
+        required: supabaseEnabled,
+        detail: runtimeSupabase.anonKeyConfigured || runtimeSupabase.serviceRoleConfigured
+          ? 'Supabase API key environment is detected.'
+          : 'Set BACKY_SUPABASE_ANON_KEY or BACKY_SUPABASE_SERVICE_ROLE_KEY.',
+      },
+      {
+        label: 'Service role for privileged work',
+        ready: !boolValue(supabase.databaseEnabled) && !boolValue(supabase.storageEnabled) || Boolean(runtimeSupabase.serviceRoleConfigured),
+        required: boolValue(supabase.databaseEnabled) || boolValue(supabase.storageEnabled),
+        detail: runtimeSupabase.serviceRoleConfigured
+          ? 'Service role key is available server-side.'
+          : 'Database/storage writes need a server-only Supabase service role key.',
+      },
+    ]),
+    makeInfrastructureDiagnostic('vercel', 'Vercel deployment', [
+      {
+        label: 'Project metadata',
+        ready: Boolean(vercelProjectId || runtimeVercel.onVercel),
+        required: boolValue(vercel.autoDeploy),
+        detail: vercelProjectId || runtimeVercel.onVercel
+          ? 'Vercel project/runtime metadata is present.'
+          : 'Set Vercel project metadata before enabling deploy orchestration.',
+      },
+      {
+        label: 'Production domain',
+        ready: deliveryMode !== 'custom-frontend' || Boolean(vercelProductionDomain),
+        required: deliveryMode === 'custom-frontend',
+        detail: vercelProductionDomain
+          ? 'Production domain is configured.'
+          : 'Custom frontend mode should expose the production domain.',
+      },
+      {
+        label: 'Deploy token env',
+        ready: !boolValue(vercel.autoDeploy) || Boolean(runtimeVercel.tokenConfigured),
+        required: boolValue(vercel.autoDeploy),
+        detail: runtimeVercel.tokenConfigured
+          ? 'Vercel deploy token is detected server-side.'
+          : 'Auto deploy needs VERCEL_TOKEN or BACKY_VERCEL_TOKEN.',
+      },
+    ]),
+  ];
+};
+
 const sanitizeSettingsAuditSnapshot = (settings: unknown): BackyJsonObject | undefined => {
   const snapshot = parseJsonObject(settings);
   if (!snapshot) {
@@ -372,6 +533,48 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await parseJsonBody(request);
+
+    if (body.action === 'validate-infrastructure') {
+      const currentSettings = !shouldUseDemoStoreFallback()
+        ? toAdminSettings(await (await getRequiredDatabaseRepositories()).settings.get())
+        : {
+            ...getAdminSettings(),
+            runtimeStorage: getMediaStorageConfigSummary(),
+            runtimeDatabase: getDatabaseRuntimeSummary(),
+            runtimeSupabase: getSupabaseRuntimeSummary(),
+            runtimeVercel: getVercelRuntimeSummary(),
+          };
+      const normalizedIntegrations = normalizeInfrastructureIntegrations(body.integrations);
+      const integrations = normalizedIntegrations || parseJsonObject(body.integrations) || currentSettings.integrations || {};
+      const deliveryMode = body.deliveryMode === undefined
+        ? normalizeDeliveryMode(currentSettings.deliveryMode)
+        : normalizeDeliveryMode(body.deliveryMode);
+
+      if (!deliveryMode) {
+        return errorResponse(
+          400,
+          'VALIDATION_ERROR',
+          'Delivery mode must be managed-hosting or custom-frontend',
+          requestId,
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        requestId,
+        data: {
+          diagnostics: buildInfrastructureDiagnostics({
+            deliveryMode,
+            integrations,
+            runtimeDatabase: currentSettings.runtimeDatabase,
+            runtimeStorage: currentSettings.runtimeStorage,
+            runtimeSupabase: currentSettings.runtimeSupabase,
+            runtimeVercel: currentSettings.runtimeVercel,
+          }),
+          generatedAt: new Date().toISOString(),
+        },
+      });
+    }
 
     if (body.action !== 'regenerate-api-keys') {
       return errorResponse(400, 'VALIDATION_ERROR', 'Unsupported settings action', requestId);

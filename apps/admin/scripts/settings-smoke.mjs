@@ -197,6 +197,21 @@ const clickByText = async (client, text) => {
   return result;
 };
 
+const waitForText = async (client, text) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      hasText: document.body?.innerText?.includes(${JSON.stringify(text)}) || false,
+      body: document.body?.innerText?.slice(0, 1200) || '',
+    }))()`);
+    if (state.hasText) {
+      return state;
+    }
+    await sleep(150);
+  }
+
+  throw new Error(`Timed out waiting for text ${text}`);
+};
+
 const openSettingsTab = async (client, label, expectedQuery) => {
   await clickByText(client, label);
 
@@ -379,9 +394,23 @@ const updateSettingsThroughUi = async (client, suffix) => {
     search: window.location.search,
     text: document.querySelector('#settings-tab-content')?.textContent?.slice(0, 500) || '',
     hasEnvContract: document.body?.innerText?.includes('Environment contract') || document.body?.innerText?.includes('Copy the environment contract'),
+    hasInfrastructureCheck: document.body?.innerText?.includes('Run infrastructure check') || false,
   }))()`);
   assert(infrastructureState.search.includes('tab=infrastructure'), `Infrastructure tab search state was not persisted: ${JSON.stringify(infrastructureState)}`);
   assert(infrastructureState.hasEnvContract, `Infrastructure env contract was not visible: ${JSON.stringify(infrastructureState)}`);
+  assert(infrastructureState.hasInfrastructureCheck, `Infrastructure check control was not visible: ${JSON.stringify(infrastructureState)}`);
+  await clickByText(client, 'Run infrastructure check');
+  await waitForText(client, 'Infrastructure check results');
+  const checkState = await evaluate(client, `(() => ({
+    hasSupabase: document.body?.innerText?.includes('Supabase connection') || false,
+    hasVercel: document.body?.innerText?.includes('Vercel deployment') || false,
+    hasBlocked: document.body?.innerText?.includes('blocked') || false,
+    body: document.querySelector('#settings-tab-content')?.textContent?.slice(0, 1200) || '',
+  }))()`);
+  assert(
+    checkState.hasSupabase && checkState.hasVercel,
+    `Infrastructure check did not show provider diagnostics: ${JSON.stringify(checkState)}`,
+  );
 
   await openSettingsTab(client, 'Notifications', 'tab=notifications');
   await setLabeledControl(client, 'New user registration', true);
