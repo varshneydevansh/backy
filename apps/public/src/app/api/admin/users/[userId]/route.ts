@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { deleteAdminUser, getAdminUserByEmail, getAdminUserById, listAdminUsers, updateAdminUser } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -192,6 +193,21 @@ export async function PATCH(
         status: nextStatus,
         ...(typeof body.avatarUrl === 'string' ? { avatarUrl: body.avatarUrl.trim() || null } : {}),
       })).item;
+      await recordAdminAudit({
+        repositories,
+        entity: 'user',
+        entityId: user.id,
+        action: 'update',
+        before: current,
+        after: user,
+        metadata: {
+          changedFields: Object.keys(body).filter((key) => ['fullName', 'email', 'role', 'status', 'avatarUrl'].includes(key)),
+          email: user.email,
+          role: user.role,
+          status: user.status,
+        },
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -249,6 +265,20 @@ export async function PATCH(
     if (!user) {
       return errorResponse(404, 'USER_NOT_FOUND', 'User not found', requestId);
     }
+    await recordAdminAudit({
+      entity: 'user',
+      entityId: user.id,
+      action: 'update',
+      before: current,
+      after: user,
+      metadata: {
+        changedFields: Object.keys(body).filter((key) => ['fullName', 'email', 'role', 'status', 'avatarUrl'].includes(key)),
+        email: user.email,
+        role: user.role,
+        status: user.status,
+      },
+      requestId,
+    });
 
     return NextResponse.json({
       success: true,
@@ -290,6 +320,19 @@ export async function DELETE(
       if (!deleted) {
         return errorResponse(404, 'USER_NOT_FOUND', 'User not found', requestId);
       }
+      await recordAdminAudit({
+        repositories,
+        entity: 'user',
+        entityId: current.id,
+        action: 'delete',
+        before: current,
+        metadata: {
+          email: current.email,
+          role: current.role,
+          status: current.status,
+        },
+        requestId,
+      });
 
       return NextResponse.json({
         success: true,
@@ -315,6 +358,18 @@ export async function DELETE(
     if (!deleted) {
       return errorResponse(404, 'USER_NOT_FOUND', 'User not found', requestId);
     }
+    await recordAdminAudit({
+      entity: 'user',
+      entityId: current.id,
+      action: 'delete',
+      before: current,
+      metadata: {
+        email: current.email,
+        role: current.role,
+        status: current.status,
+      },
+      requestId,
+    });
 
     return NextResponse.json({
       success: true,

@@ -15,6 +15,7 @@ import {
   Download,
   Edit,
   Filter,
+  History,
   KeyRound,
   LockKeyhole,
   Mail,
@@ -41,8 +42,10 @@ import { useDataTable, type Column } from '@/hooks/useDataTable';
 import { cn } from '@/lib/utils';
 import {
   deleteUser as deleteBackendUser,
+  listAdminAuditLogs,
   listUsers,
   updateUser as updateBackendUser,
+  type AdminAuditLog,
 } from '@/lib/adminContentApi';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { useStore, type User as UserType } from '@/stores/mockStore';
@@ -134,6 +137,11 @@ const USER_CONTROL_AREAS = [
     title: 'Role permissions',
     detail: 'Compare owner, admin, editor, and viewer capabilities before handoff.',
     href: '#users-permissions',
+  },
+  {
+    title: 'Access activity',
+    detail: 'Review recent user create, update, and remove events from admin audit logs.',
+    href: '#users-activity',
   },
   {
     title: 'Membership handoff',
@@ -239,6 +247,9 @@ function UsersListView() {
   const [reviewFilter, setReviewFilter] = useState<UserReviewFilter>('all');
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<UserType | null>(null);
+  const [userAuditLogs, setUserAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [isLoadingUserAudit, setIsLoadingUserAudit] = useState(false);
+  const [userAuditError, setUserAuditError] = useState<string | null>(null);
   const isUserMutationBusy = updatingUserId !== null;
   const isUsersBusy = isLoading || isUserMutationBusy;
   const adminBaseUrl = useMemo(() => getAdminBaseUrl(), []);
@@ -270,9 +281,26 @@ function UsersListView() {
     }
   }, [setUsers]);
 
+  const loadUserAuditLogs = useCallback(async () => {
+    setIsLoadingUserAudit(true);
+    setUserAuditError(null);
+    try {
+      const result = await listAdminAuditLogs({ entity: 'user', limit: 12 });
+      setUserAuditLogs(result.logs);
+    } catch (error) {
+      setUserAuditError(error instanceof Error ? error.message : 'Unable to load user activity.');
+    } finally {
+      setIsLoadingUserAudit(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
+
+  useEffect(() => {
+    void loadUserAuditLogs();
+  }, [loadUserAuditLogs]);
 
   const metrics = useMemo(() => {
     const active = users.filter((user) => user.status === 'active').length;
@@ -379,6 +407,7 @@ function UsersListView() {
       const saved = await updateBackendUser(user.id, updates);
       setUsers(users.map((item) => (item.id === user.id ? saved : item)));
       setNotice(`${saved.fullName} was updated.`);
+      void loadUserAuditLogs();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Backend update failed. The user was not changed.');
     } finally {
@@ -396,6 +425,7 @@ function UsersListView() {
       await deleteBackendUser(pendingDelete.id);
       setUsers(users.filter((user) => user.id !== pendingDelete.id));
       setPendingDelete(null);
+      void loadUserAuditLogs();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Backend delete failed. The user was not removed.');
     } finally {
@@ -1300,6 +1330,49 @@ function UsersListView() {
             </PanelContent>
           </Panel>
 
+          <Panel id="users-activity" className="scroll-mt-24">
+            <PanelHeader
+              title="Access activity"
+              description="Recent user events from the admin audit log."
+              icon={<History className="size-4" />}
+              action={
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isLoadingUserAudit}
+                  onClick={() => void loadUserAuditLogs()}
+                  iconStart={<RefreshCw className={cn('size-3.5', isLoadingUserAudit && 'animate-spin')} />}
+                >
+                  Refresh
+                </Button>
+              }
+            />
+            <PanelContent>
+              {userAuditError && (
+                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  {userAuditError}
+                </div>
+              )}
+              {isLoadingUserAudit ? (
+                <div className="space-y-2" aria-label="Loading user audit events">
+                  {[0, 1, 2].map((index) => (
+                    <div key={index} className="h-16 animate-pulse rounded-lg bg-muted" />
+                  ))}
+                </div>
+              ) : userAuditLogs.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
+                  No user audit events recorded yet. Create, update, or remove a user to populate this timeline.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {userAuditLogs.map((log) => (
+                    <UserAuditEventCard key={log.id} log={log} />
+                  ))}
+                </div>
+              )}
+            </PanelContent>
+          </Panel>
+
           <Panel>
             <PanelHeader
               title="Access guardrails"
@@ -1433,6 +1506,74 @@ function UserApiSnippet({ label, value }: { label: string; value: string }) {
   );
 }
 
+function UserAuditEventCard({ log }: { log: AdminAuditLog }) {
+  const email = typeof log.metadata?.email === 'string'
+    ? log.metadata.email
+    : typeof log.after?.email === 'string'
+      ? log.after.email
+      : typeof log.before?.email === 'string'
+        ? log.before.email
+        : log.entityId;
+  const role = typeof log.metadata?.role === 'string'
+    ? log.metadata.role
+    : typeof log.after?.role === 'string'
+      ? log.after.role
+      : typeof log.before?.role === 'string'
+        ? log.before.role
+        : undefined;
+  const status = typeof log.metadata?.status === 'string'
+    ? log.metadata.status
+    : typeof log.after?.status === 'string'
+      ? log.after.status
+      : typeof log.before?.status === 'string'
+        ? log.before.status
+        : undefined;
+  const changedFields = Array.isArray(log.metadata?.changedFields)
+    ? log.metadata.changedFields.filter((field): field is string => typeof field === 'string')
+    : [];
+  const actionLabel = log.action === 'create'
+    ? 'Created'
+    : log.action === 'delete'
+      ? 'Removed'
+      : log.action === 'update'
+        ? 'Updated'
+        : log.action;
+  const createdAt = formatAuditDate(log.createdAt);
+
+  return (
+    <article className="rounded-lg border border-border bg-background p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={cn(
+              'rounded px-2 py-0.5 text-[11px] font-semibold',
+              log.action === 'delete'
+                ? 'bg-red-50 text-red-700'
+                : log.action === 'create'
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'bg-sky-50 text-sky-700',
+            )}
+            >
+              {actionLabel}
+            </span>
+            <h4 className="truncate text-sm font-semibold text-foreground">{email}</h4>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {role ? `${roleLabel(role as UserRole)} role` : 'User access'}{status ? ` · ${status}` : ''}
+            {changedFields.length > 0 ? ` · changed ${changedFields.join(', ')}` : ''}
+          </p>
+        </div>
+        <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{createdAt}</span>
+      </div>
+      {log.requestId && (
+        <p className="mt-2 truncate font-mono text-[11px] text-muted-foreground">
+          request {log.requestId}
+        </p>
+      )}
+    </article>
+  );
+}
+
 function MembershipStepCard({
   step,
   disabled,
@@ -1485,6 +1626,18 @@ function MembershipStepCard({
 const isNeverActiveUser = (user: UserType): boolean => {
   const lastActive = user.lastActive.trim().toLowerCase();
   return !lastActive || lastActive === 'never' || lastActive === 'invited';
+};
+
+const formatAuditDate = (value: string): string => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
 };
 
 const getEnvValue = (key: string): string => {

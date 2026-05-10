@@ -81,6 +81,12 @@ const getUser = async (userId) => {
   return payload.data?.user || payload.user;
 };
 
+const listUserAuditLogs = async (userId) => {
+  const params = new URLSearchParams({ entity: 'user', entityId: userId, limit: '20' });
+  const payload = await requestApi(`/api/admin/audit-logs?${params.toString()}`);
+  return payload.data?.logs || payload.logs || [];
+};
+
 const deleteUser = async (userId) => {
   if (!userId) return;
   await requestApi(`/api/admin/users/${userId}`, { method: 'DELETE' });
@@ -418,10 +424,28 @@ const assertLayout = async (client, expectedName) => {
     hasDirectory: document.body?.innerText?.includes('People directory') || document.body?.innerText?.includes(${JSON.stringify(expectedName)}) || false,
     hasApi: document.body?.innerText?.includes('User access API') || false,
     hasMembership: document.body?.innerText?.includes('Membership registration') || false,
+    hasActivity: document.body?.innerText?.includes('Access activity') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Users page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasDirectory && layout.hasApi && layout.hasMembership, `Users page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasDirectory && layout.hasApi && layout.hasMembership && layout.hasActivity, `Users page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
+};
+
+const waitForUserActivity = async (client, email) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      ready: document.body?.innerText?.includes('Access activity') || false,
+      hasUser: document.body?.innerText?.includes(${JSON.stringify(email)}) || false,
+      hasUpdated: document.body?.innerText?.includes('Updated') || false,
+      body: document.body?.innerText?.slice(0, 1600) || '',
+    }))()`);
+    if (state.ready && state.hasUser && state.hasUpdated) {
+      return state;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Users activity panel did not show ${email}: timed out`);
 };
 
 const launchChrome = () => {
@@ -511,6 +535,8 @@ const main = async () => {
     await waitForUser(email, (user) => user.role === 'viewer');
     await setDirectoryUserSelect(client, fullName, 'Change status for', 'inactive');
     await waitForUser(email, (user) => user.role === 'viewer' && user.status === 'inactive');
+    const updateAuditLogs = await listUserAuditLogs(createdUserId);
+    assert(updateAuditLogs.some((log) => log.action === 'update'), `User update audit log was not recorded: ${JSON.stringify(updateAuditLogs).slice(0, 500)}`);
 
     await openUserDetail(client, fullName);
     await setUserDetailLifecycle(client, 'Suspend');
@@ -519,6 +545,7 @@ const main = async () => {
 
     await navigateToUsers(client, fullName);
     await waitForUsersPageUser(client, fullName);
+    await waitForUserActivity(client, email);
     await assertLayout(client, fullName);
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));

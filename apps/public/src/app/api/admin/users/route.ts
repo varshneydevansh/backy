@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { recordAdminAudit } from '@/lib/adminAudit';
 import { createAdminUser, getAdminUserByEmail, listAdminUsers } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -134,6 +135,19 @@ export async function POST(request: NextRequest) {
         role,
         status,
       })).item;
+      await recordAdminAudit({
+        repositories,
+        entity: 'user',
+        entityId: user.id,
+        action: 'create',
+        after: user,
+        metadata: {
+          email: user.email,
+          role: user.role,
+          status: user.status,
+        },
+        requestId,
+      });
 
       return NextResponse.json(
         {
@@ -157,6 +171,18 @@ export async function POST(request: NextRequest) {
       email,
       role,
       status,
+    });
+    await recordAdminAudit({
+      entity: 'user',
+      entityId: user.id,
+      action: 'create',
+      after: user,
+      metadata: {
+        email: user.email,
+        role: user.role,
+        status: user.status,
+      },
+      requestId,
     });
 
     return NextResponse.json(
