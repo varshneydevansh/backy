@@ -870,28 +870,32 @@ const readPersistedElement = async (pageId, elementId) => {
 };
 
 const assertResponsiveBreakpointEditing = async (client, pageId, elementId, options = {}) => {
+  const breakpoint = options.breakpoint || 'mobile';
+  const breakpointLabel = breakpoint.charAt(0).toUpperCase() + breakpoint.slice(1);
+  const breakpointCanvasLabel = `${breakpointLabel} canvas`;
+  const expectedBreakpointX = options.expectedX ?? (breakpoint === 'tablet' ? 64 : 24);
+  const expectedBreakpointWidth = options.expectedWidth ?? (breakpoint === 'tablet' ? 360 : 300);
+
   await selectLayerById(client, elementId);
   await clickButtonByAriaLabel(client, 'Desktop canvas');
   await selectLayerById(client, elementId);
   const desktopBefore = (await readEditorElementState(client, [elementId]))[elementId];
   assert(desktopBefore, `Unable to read current desktop editor state before responsive edit: ${elementId}`);
-  await clickButtonByAriaLabel(client, 'Mobile canvas');
+  await clickButtonByAriaLabel(client, breakpointCanvasLabel);
   await selectLayerById(client, elementId);
-  const expectedMobileX = 24;
-  const expectedMobileWidth = 300;
-  await setLayoutNumberInput(client, 'X', expectedMobileX);
-  await setLayoutNumberInput(client, 'Width', expectedMobileWidth);
+  await setLayoutNumberInput(client, 'X', expectedBreakpointX);
+  await setLayoutNumberInput(client, 'Width', expectedBreakpointWidth);
 
-  const mobileStateForElement = await waitForElementState(
+  const breakpointStateForElement = await waitForElementState(
     client,
     elementId,
-    (state) => state.x === expectedMobileX && state.width === expectedMobileWidth,
-    'Mobile override did not update editor element state',
+    (state) => state.x === expectedBreakpointX && state.width === expectedBreakpointWidth,
+    `${breakpointLabel} override did not update editor element state`,
   );
-  const mobileState = { [elementId]: mobileStateForElement };
+  const breakpointState = { [elementId]: breakpointStateForElement };
   assert(
-    mobileState[elementId].x === expectedMobileX && mobileState[elementId].width === expectedMobileWidth,
-    `Mobile override did not update editor element state: ${JSON.stringify(mobileState[elementId])}`,
+    breakpointState[elementId].x === expectedBreakpointX && breakpointState[elementId].width === expectedBreakpointWidth,
+    `${breakpointLabel} override did not update editor element state: ${JSON.stringify(breakpointState[elementId])}`,
   );
 
   const overridePanel = await evaluate(client, `(() => {
@@ -902,7 +906,7 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
     };
   })()`);
   assert(
-    overridePanel.exists && /mobile override/i.test(overridePanel.text),
+    overridePanel.exists && new RegExp(`${breakpoint} override`, 'i').test(overridePanel.text),
     `Responsive override panel did not appear: ${JSON.stringify(overridePanel)}`,
   );
 
@@ -922,17 +926,17 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
     (state) => state.x === Math.round(desktopBefore.x) && state.width === Math.round(desktopBefore.width),
     'Layout reset control did not restore inherited desktop layout',
   );
-  await setLayoutNumberInput(client, 'X', expectedMobileX);
-  await setLayoutNumberInput(client, 'Width', expectedMobileWidth);
+  await setLayoutNumberInput(client, 'X', expectedBreakpointX);
+  await setLayoutNumberInput(client, 'Width', expectedBreakpointWidth);
   await waitForElementState(
     client,
     elementId,
-    (state) => state.x === expectedMobileX && state.width === expectedMobileWidth,
-    'Mobile override did not reapply after layout reset',
+    (state) => state.x === expectedBreakpointX && state.width === expectedBreakpointWidth,
+    `${breakpointLabel} override did not reapply after layout reset`,
   );
 
-  const mobileLayerHidden = await setLayerHiddenState(client, elementId, true);
-  const mobileLayerLocked = await setLayerLockedState(client, elementId, true);
+  const breakpointLayerHidden = await setLayerHiddenState(client, elementId, true);
+  const breakpointLayerLocked = await setLayerLockedState(client, elementId, true);
   const layerControls = await readBreakpointOverrideControls(client);
   assert(
     layerControls.groups.layout.disabled === false &&
@@ -954,11 +958,12 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
   let persistedElement = null;
   for (let attempt = 0; attempt < 60; attempt += 1) {
     persistedElement = await readPersistedElement(pageId, elementId);
+    const persistedOverride = persistedElement?.responsive?.[breakpoint];
     if (
-      persistedElement?.responsive?.mobile?.x === expectedMobileX &&
-      persistedElement?.responsive?.mobile?.width === expectedMobileWidth &&
-      persistedElement?.responsive?.mobile?.visible === false &&
-      persistedElement?.responsive?.mobile?.locked === true
+      persistedOverride?.x === expectedBreakpointX &&
+      persistedOverride?.width === expectedBreakpointWidth &&
+      persistedOverride?.visible === false &&
+      persistedOverride?.locked === true
     ) {
       break;
     }
@@ -966,12 +971,17 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
   }
 
   assert(
-    persistedElement?.x === desktopBefore.x &&
-      persistedElement?.width === desktopBefore.width &&
-      persistedElement?.responsive?.mobile?.x === expectedMobileX &&
-      persistedElement?.responsive?.mobile?.width === expectedMobileWidth &&
-      persistedElement?.responsive?.mobile?.visible === false &&
-      persistedElement?.responsive?.mobile?.locked === true,
+    (() => {
+      const persistedOverride = persistedElement?.responsive?.[breakpoint];
+      return (
+        persistedElement?.x === desktopBefore.x &&
+        persistedElement?.width === desktopBefore.width &&
+        persistedOverride?.x === expectedBreakpointX &&
+        persistedOverride?.width === expectedBreakpointWidth &&
+        persistedOverride?.visible === false &&
+        persistedOverride?.locked === true
+      );
+    })(),
     `Responsive override was not persisted without changing desktop layout: ${JSON.stringify({ desktopBefore, persistedElement })}`,
   );
 
@@ -980,30 +990,31 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
   assert(
     desktopAfter[elementId].x === Math.round(desktopBefore.x) &&
       desktopAfter[elementId].width === Math.round(desktopBefore.width),
-    `Desktop canvas did not retain base layout after mobile override: ${JSON.stringify({ desktopBefore, desktopAfter })}`,
+    `Desktop canvas did not retain base layout after ${breakpoint} override: ${JSON.stringify({ desktopBefore, desktopAfter })}`,
   );
 
-  await clickButtonByAriaLabel(client, 'Mobile canvas');
-  const mobileLayerAfter = await readLayerActionState(client, elementId);
+  await clickButtonByAriaLabel(client, breakpointCanvasLabel);
+  const breakpointLayerAfter = await readLayerActionState(client, elementId);
   assert(
-    mobileLayerAfter.hidden === true && mobileLayerAfter.locked === true,
-    `Mobile layer override did not hydrate after switching breakpoints: ${JSON.stringify(mobileLayerAfter)}`,
+    breakpointLayerAfter.hidden === true && breakpointLayerAfter.locked === true,
+    `${breakpointLabel} layer override did not hydrate after switching breakpoints: ${JSON.stringify(breakpointLayerAfter)}`,
   );
 
   return {
+    breakpoint,
     elementId,
     desktopBefore: {
       x: desktopBefore.x,
       width: desktopBefore.width,
     },
-    mobileOverride: persistedElement.responsive.mobile,
-    mobileLayerHidden,
-    mobileLayerLocked,
+    breakpointOverride: persistedElement.responsive[breakpoint],
+    breakpointLayerHidden,
+    breakpointLayerLocked,
     desktopAfter: desktopAfter[elementId],
-    mobileAfter: {
-      ...mobileState[elementId],
-      hidden: mobileLayerAfter.hidden,
-      locked: mobileLayerAfter.locked,
+    breakpointAfter: {
+      ...breakpointState[elementId],
+      hidden: breakpointLayerAfter.hidden,
+      locked: breakpointLayerAfter.locked,
     },
   };
 };
@@ -1976,7 +1987,18 @@ const main = async () => {
     let savedStatus = null;
     if (tempPageId) {
       const elementIds = ['smoke-heading', 'smoke-image', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form'];
-      responsiveEditing = await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading');
+      responsiveEditing = {
+        mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
+          breakpoint: 'mobile',
+          expectedX: 24,
+          expectedWidth: 300,
+        }),
+        tablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
+          breakpoint: 'tablet',
+          expectedX: 64,
+          expectedWidth: 360,
+        }),
+      };
       await clickButtonByAriaLabel(client, 'Desktop canvas');
       const expectedState = await readEditorElementState(client, elementIds);
       await clickSave(client);
@@ -2001,12 +2023,30 @@ const main = async () => {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
         await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-form']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
-        reloadedResponsiveEditing = await assertResponsiveBreakpointEditing(
-          reloadClient,
-          tempPageId,
-          'smoke-heading',
-          { expectExistingLayerOverride: true },
-        );
+        reloadedResponsiveEditing = {
+          mobile: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-heading',
+            {
+              breakpoint: 'mobile',
+              expectedX: 24,
+              expectedWidth: 300,
+              expectExistingLayerOverride: true,
+            },
+          ),
+          tablet: await assertResponsiveBreakpointEditing(
+            reloadClient,
+            tempPageId,
+            'smoke-heading',
+            {
+              breakpoint: 'tablet',
+              expectedX: 64,
+              expectedWidth: 360,
+              expectExistingLayerOverride: true,
+            },
+          ),
+        };
       } finally {
         if (reloadClient) {
           try {
@@ -2032,9 +2072,11 @@ const main = async () => {
       assert(
         reloadedResponsiveEditing &&
           responsiveEditing &&
-          reloadedResponsiveEditing.mobileAfter.x === responsiveEditing.mobileAfter.x &&
-          reloadedResponsiveEditing.mobileAfter.width === responsiveEditing.mobileAfter.width,
-        `Reloaded editor did not hydrate saved mobile override: ${JSON.stringify({ responsiveEditing, reloadedResponsiveEditing })}`,
+          reloadedResponsiveEditing.mobile.breakpointAfter.x === responsiveEditing.mobile.breakpointAfter.x &&
+          reloadedResponsiveEditing.mobile.breakpointAfter.width === responsiveEditing.mobile.breakpointAfter.width &&
+          reloadedResponsiveEditing.tablet.breakpointAfter.x === responsiveEditing.tablet.breakpointAfter.x &&
+          reloadedResponsiveEditing.tablet.breakpointAfter.width === responsiveEditing.tablet.breakpointAfter.width,
+        `Reloaded editor did not hydrate saved responsive overrides: ${JSON.stringify({ responsiveEditing, reloadedResponsiveEditing })}`,
       );
     }
 
