@@ -291,6 +291,31 @@ const waitForUsersPageUser = async (client, email) => {
   return null;
 };
 
+const waitForUsersSelfProtection = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const roleSelect = document.querySelector('select[aria-label="Change role for Admin User"]');
+      const statusSelect = document.querySelector('select[aria-label="Change status for Admin User"]');
+      const removeButton = document.querySelector('button[aria-label="Self removal locked for Admin User"]');
+      return {
+        hasYouPill: document.body?.innerText?.includes('You') || false,
+        hasRoleLock: document.body?.innerText?.includes('Self role locked') || false,
+        hasStatusLock: document.body?.innerText?.includes('Self status locked') || false,
+        roleDisabled: roleSelect instanceof HTMLSelectElement && roleSelect.disabled,
+        statusDisabled: statusSelect instanceof HTMLSelectElement && statusSelect.disabled,
+        removeDisabled: removeButton instanceof HTMLButtonElement && removeButton.disabled,
+        body: document.body?.innerText?.slice(0, 1600) || '',
+      };
+    })()`);
+    if (state.hasYouPill && state.hasRoleLock && state.hasStatusLock && state.roleDisabled && state.statusDisabled && state.removeDisabled) {
+      return state;
+    }
+    await sleep(250);
+  }
+
+  throw new Error('Users self-protection controls did not render for Admin User');
+};
+
 const setDirectoryUserSelect = async (client, fullName, labelPrefix, value) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
@@ -357,6 +382,35 @@ const openUserDetail = async (client, fullName) => {
   }
 
   return null;
+};
+
+const waitForUserDetailSelfProtection = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const accessSelects = Array.from(document.querySelectorAll('#user-detail-access select'));
+      const lifecycleButtons = Array.from(document.querySelectorAll('button')).filter((button) => (
+        ['Activate', 'Set invited', 'Mark inactive', 'Suspend'].some((label) => (button.textContent || '').includes(label))
+      ));
+      const removeButton = Array.from(document.querySelectorAll('button')).find((button) => (
+        (button.textContent || '').trim() === 'Remove user'
+      ));
+      const text = document.body?.innerText || '';
+      return {
+        hasSelfNotice: text.includes('You are editing your signed-in account'),
+        roleDisabled: accessSelects[0] instanceof HTMLSelectElement && accessSelects[0].disabled,
+        statusDisabled: accessSelects[1] instanceof HTMLSelectElement && accessSelects[1].disabled,
+        lifecycleDisabled: lifecycleButtons.length >= 3 && lifecycleButtons.every((button) => button.disabled),
+        removeDisabled: removeButton instanceof HTMLButtonElement && removeButton.disabled,
+        body: text.slice(0, 1600),
+      };
+    })()`);
+    if (state.hasSelfNotice && state.roleDisabled && state.statusDisabled && state.lifecycleDisabled && state.removeDisabled) {
+      return state;
+    }
+    await sleep(250);
+  }
+
+  throw new Error('User detail self-protection controls did not render for Admin User');
 };
 
 const setUserDetailLifecycle = async (client, label) => {
@@ -550,6 +604,11 @@ const main = async () => {
 
     await navigateToInvite(client);
     await fillInviteForm(client, { fullName: `${fullName} Preview`, email: `preview-${email}` });
+    await navigateToUsers(client);
+    await waitForUsersPageUser(client, email);
+    await waitForUsersSelfProtection(client);
+    await openUserDetail(client, 'Admin User');
+    await waitForUserDetailSelfProtection(client);
     await navigateToUsers(client);
     await waitForUsersPageUser(client, email);
 

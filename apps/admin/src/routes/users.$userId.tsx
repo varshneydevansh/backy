@@ -35,6 +35,7 @@ import {
   updateUser as updateBackendUser,
   type AdminAuditLog,
 } from '@/lib/adminContentApi';
+import { useAuthStore } from '@/stores/authStore';
 import { useStore, type User } from '@/stores/mockStore';
 
 export const Route = createFileRoute('/users/$userId')({
@@ -127,6 +128,7 @@ const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.
 function EditUserPage() {
   const navigate = useNavigate();
   const { userId } = Route.useParams();
+  const currentAdmin = useAuthStore((state) => state.user);
   const { users, setUsers } = useStore();
   const user = users.find((item) => item.id === userId);
   const userDetailUrl = useMemo(() => `${getAdminApiBase()}/users/${userId}`, [userId]);
@@ -233,6 +235,15 @@ function EditUserPage() {
     ].filter((change): change is string => Boolean(change));
   }, [formData.email, formData.fullName, formData.role, formData.status, user]);
   const hasUnsavedChanges = pendingChanges.length > 0;
+  const isCurrentUser = Boolean(user && currentAdmin && (
+    user.id === currentAdmin.id ||
+    user.email.trim().toLowerCase() === currentAdmin.email.trim().toLowerCase()
+  ));
+  const hasSelfAccessChanges = Boolean(user && isCurrentUser && (
+    formData.role !== user.role ||
+    formData.status !== user.status
+  ));
+  const canSaveUserDetail = canSubmit && hasUnsavedChanges && !hasSelfAccessChanges;
   const accessReadiness = useMemo(() => {
     const enabledCapabilities = ROLE_CAPABILITIES.filter((capability) => capability.roles.includes(formData.role));
     const isPrivileged = formData.role === 'owner' || formData.role === 'admin';
@@ -269,6 +280,13 @@ function EditUserPage() {
         ready: true,
       },
       {
+        label: 'Self-protection',
+        detail: isCurrentUser
+          ? 'This is your signed-in account, so role, status, lifecycle, and removal controls are locked here.'
+          : 'A separate admin can manage this account from this page.',
+        ready: true,
+      },
+      {
         label: 'Pending changes',
         detail: hasUnsavedChanges
           ? `${pendingChanges.length} field${pendingChanges.length === 1 ? '' : 's'} ready to save: ${pendingChanges.join(', ')}.`
@@ -288,7 +306,7 @@ function EditUserPage() {
         { label: 'Recover', detail: 'Use reset help, suspension, or removal when access needs intervention.' },
       ],
     };
-  }, [canSubmit, formData.role, formData.status, hasUnsavedChanges, notice, pendingChanges, selectedRole.label, user]);
+  }, [canSubmit, formData.role, formData.status, hasUnsavedChanges, isCurrentUser, notice, pendingChanges, selectedRole.label, user]);
 
   if (!user) {
     return (
@@ -311,6 +329,11 @@ function EditUserPage() {
 
     if (!canSubmit) {
       setNotice('Enter a full name and a valid email address before saving.');
+      return;
+    }
+
+    if (hasSelfAccessChanges) {
+      setNotice('Use another owner/admin account to change your own role or account status.');
       return;
     }
 
@@ -339,6 +362,11 @@ function EditUserPage() {
 
   const handleDelete = async () => {
     if (isUserDetailBusy) return;
+    if (isCurrentUser) {
+      setNotice('Use another owner/admin account to remove your own access.');
+      setShowDeleteConfirm(false);
+      return;
+    }
 
     setIsLoading(true);
     setNotice(null);
@@ -356,6 +384,10 @@ function EditUserPage() {
 
   const handleLifecycleAction = async (status: UserStatus) => {
     if (isUserDetailBusy || status === formData.status) return;
+    if (isCurrentUser) {
+      setNotice('Use another owner/admin account to change your own account status.');
+      return;
+    }
 
     setIsLoading(true);
     setNotice(null);
@@ -537,7 +569,7 @@ function EditUserPage() {
               <Button
                 type="submit"
                 variant="primary"
-                disabled={isUserDetailBusy || !canSubmit || !hasUnsavedChanges}
+                disabled={isUserDetailBusy || !canSaveUserDetail}
                 iconStart={<Save className="size-4" />}
               >
                 {isLoading ? 'Saving...' : isLoadingUser ? 'Loading user...' : 'Save changes'}
@@ -664,15 +696,20 @@ function EditUserPage() {
                 <p className="mt-1 text-sm text-muted-foreground">These controls are persisted through the users API.</p>
               </div>
             </div>
+            {isCurrentUser && (
+              <div className="mt-4 rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-sm text-primary">
+                You are editing your signed-in account. Role, status, lifecycle, and removal controls are locked to prevent self-demotion or self-removal.
+              </div>
+            )}
 
             <div className="mt-5 grid gap-5 md:grid-cols-2">
               <label className="block">
                 <span className="text-sm font-medium">Role</span>
                 <select
                   value={formData.role}
-                  disabled={isUserDetailBusy}
+                  disabled={isUserDetailBusy || isCurrentUser}
                   onChange={(e) => {
-                    if (isUserDetailBusy) return;
+                    if (isUserDetailBusy || isCurrentUser) return;
                     setFormData({ ...formData, role: e.target.value as UserRole });
                   }}
                   className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
@@ -688,9 +725,9 @@ function EditUserPage() {
                 <span className="text-sm font-medium">Status</span>
                 <select
                   value={formData.status}
-                  disabled={isUserDetailBusy}
+                  disabled={isUserDetailBusy || isCurrentUser}
                   onChange={(e) => {
-                    if (isUserDetailBusy) return;
+                    if (isUserDetailBusy || isCurrentUser) return;
                     setFormData({ ...formData, status: e.target.value as UserStatus });
                   }}
                   className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
@@ -894,7 +931,7 @@ function EditUserPage() {
                     key={action.status}
                     type="button"
                     onClick={() => void handleLifecycleAction(action.status)}
-                    disabled={isUserDetailBusy || active}
+                    disabled={isUserDetailBusy || active || isCurrentUser}
                     className={cn(
                       'rounded-lg border px-3 py-2 text-left text-sm transition focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60',
                       active ? 'border-primary bg-primary/5 text-primary' : 'border-border hover:bg-accent',
@@ -908,15 +945,23 @@ function EditUserPage() {
             </div>
           </section>
 
-          <section id="user-detail-danger" className="rounded-lg border border-red-200 bg-red-50 p-5 scroll-mt-24">
-            <h2 className="text-sm font-semibold text-red-800">Danger zone</h2>
-            <p className="mt-1 text-sm text-red-700">
-              Removing a user revokes their admin access. Backy prevents removing the last active owner or admin.
+          <section
+            id="user-detail-danger"
+            className={cn(
+              'rounded-lg border p-5 scroll-mt-24',
+              isCurrentUser ? 'border-primary/20 bg-primary/10' : 'border-red-200 bg-red-50',
+            )}
+          >
+            <h2 className={cn('text-sm font-semibold', isCurrentUser ? 'text-primary' : 'text-red-800')}>Danger zone</h2>
+            <p className={cn('mt-1 text-sm', isCurrentUser ? 'text-primary' : 'text-red-700')}>
+              {isCurrentUser
+                ? 'Self-removal is locked in the UI. Use another owner/admin account for destructive changes to your own access.'
+                : 'Removing a user revokes their admin access. Backy prevents removing the last active owner or admin.'}
             </p>
             <button
               type="button"
               onClick={() => setShowDeleteConfirm(true)}
-              disabled={isUserDetailBusy}
+              disabled={isUserDetailBusy || isCurrentUser}
               className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Trash2 className="h-4 w-4" />
@@ -927,7 +972,7 @@ function EditUserPage() {
           <div className="flex flex-col gap-2">
             <button
               type="submit"
-              disabled={isUserDetailBusy || !canSubmit || !hasUnsavedChanges}
+              disabled={isUserDetailBusy || !canSaveUserDetail}
               className={cn(
                 'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-ring',
                 'bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50',

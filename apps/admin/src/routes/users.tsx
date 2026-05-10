@@ -48,6 +48,7 @@ import {
   type AdminAuditLog,
 } from '@/lib/adminContentApi';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { useAuthStore } from '@/stores/authStore';
 import { useStore, type User as UserType } from '@/stores/mockStore';
 
 export const Route = createFileRoute('/users')({
@@ -239,6 +240,7 @@ function UsersLayout() {
 
 function UsersListView() {
   const navigate = useNavigate();
+  const currentAdmin = useAuthStore((state) => state.user);
   const { sites, users, setUsers } = useStore();
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
@@ -267,6 +269,12 @@ function UsersListView() {
   const publicRegistrationDefinitionUrl = `${publicBaseUrl}/api/sites/${encodedMembershipSiteId}/forms/{registrationFormId}/definition`;
   const publicRegistrationSubmitUrl = `${publicBaseUrl}/api/sites/${encodedMembershipSiteId}/forms/{registrationFormId}/submissions`;
   const publicContactsUrl = `${adminBaseUrl}/sites/${encodedMembershipSiteId}/forms/{registrationFormId}/contacts`;
+  const isCurrentUser = useCallback((user: UserType) => (
+    Boolean(currentAdmin && (
+      user.id === currentAdmin.id ||
+      user.email.trim().toLowerCase() === currentAdmin.email.trim().toLowerCase()
+    ))
+  ), [currentAdmin]);
 
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
@@ -362,6 +370,13 @@ function UsersListView() {
         detail: 'Registration can be captured through Backy Forms; credentialed member auth is not wired yet.',
         ready: true,
       },
+      {
+        label: 'Self-protection',
+        detail: currentAdmin
+          ? 'The signed-in admin cannot demote, suspend, or remove their own account from this table.'
+          : 'Sign in to show self-protection controls for the current admin.',
+        ready: Boolean(currentAdmin),
+      },
     ];
     const readyCount = checks.filter((check) => check.ready).length;
 
@@ -375,7 +390,7 @@ function UsersListView() {
         { label: 'Protect', detail: 'Backend guards prevent removing the final active owner/admin.' },
       ],
     };
-  }, [users]);
+  }, [currentAdmin, users]);
 
   const filteredUsers = useMemo(() => (
     users.filter((user) => {
@@ -399,6 +414,10 @@ function UsersListView() {
 
   const handlePatchUser = async (user: UserType, updates: Partial<Pick<UserType, 'role' | 'status'>>) => {
     if (isUsersBusy) return;
+    if (isCurrentUser(user) && (updates.role || updates.status)) {
+      setNotice('Use another owner/admin account to change your own role or account status.');
+      return;
+    }
 
     setUpdatingUserId(user.id);
     setNotice(null);
@@ -417,6 +436,11 @@ function UsersListView() {
 
   const handleDeleteUser = async () => {
     if (!pendingDelete || isUserMutationBusy) return;
+    if (isCurrentUser(pendingDelete)) {
+      setNotice('Use another owner/admin account to remove your own access.');
+      setPendingDelete(null);
+      return;
+    }
 
     setUpdatingUserId(pendingDelete.id);
     setNotice(null);
@@ -501,7 +525,14 @@ function UsersListView() {
             )} />
           </span>
           <span>
-            <span className="block font-semibold text-foreground group-hover:text-primary">{user.fullName}</span>
+            <span className="flex flex-wrap items-center gap-2 font-semibold text-foreground group-hover:text-primary">
+              {user.fullName}
+              {isCurrentUser(user) && (
+                <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                  You
+                </span>
+              )}
+            </span>
             <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
               <Mail className="h-3 w-3" />
               {user.email}
@@ -516,12 +547,15 @@ function UsersListView() {
       sortable: true,
       render: (user) => (
         <div className="space-y-2">
+          {isCurrentUser(user) && (
+            <div className="text-[11px] font-medium text-muted-foreground">Self role locked</div>
+          )}
           <span className={cn('inline-flex rounded-md border px-2 py-1 text-xs font-semibold', roleBadgeClass[user.role])}>
             {roleLabel(user.role)}
           </span>
           <select
             value={user.role}
-            disabled={isUsersBusy}
+            disabled={isUsersBusy || isCurrentUser(user)}
             onChange={(event) => void handlePatchUser(user, { role: event.target.value as UserRole })}
             className="block w-36 rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none transition focus:ring-2 focus:ring-ring disabled:opacity-50"
             aria-label={`Change role for ${user.fullName}`}
@@ -539,10 +573,13 @@ function UsersListView() {
       sortable: true,
       render: (user) => (
         <div className="space-y-2">
+          {isCurrentUser(user) && (
+            <div className="text-[11px] font-medium text-muted-foreground">Self status locked</div>
+          )}
           <StatusBadge status={user.status} />
           <select
             value={user.status}
-            disabled={isUsersBusy}
+            disabled={isUsersBusy || isCurrentUser(user)}
             onChange={(event) => void handlePatchUser(user, { status: event.target.value as UserStatus })}
             className="block w-36 rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none transition focus:ring-2 focus:ring-ring disabled:opacity-50"
             aria-label={`Change status for ${user.fullName}`}
@@ -583,13 +620,13 @@ function UsersListView() {
           <button
             type="button"
             onClick={() => {
-              if (!isUsersBusy) {
+              if (!isUsersBusy && !isCurrentUser(user)) {
                 setPendingDelete(user);
               }
             }}
-            disabled={isUsersBusy}
+            disabled={isUsersBusy || isCurrentUser(user)}
             className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-200 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label={`Remove ${user.fullName}`}
+            aria-label={isCurrentUser(user) ? `Self removal locked for ${user.fullName}` : `Remove ${user.fullName}`}
           >
             <Trash2 className="h-4 w-4" />
           </button>
