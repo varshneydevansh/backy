@@ -4,7 +4,7 @@
 
 import { useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, FileText, Globe, Image as ImageIcon, PenLine, RefreshCw, Save, Tags, UserRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, FileText, Globe, Image as ImageIcon, PenLine, RefreshCw, Save, SearchCheck, Tags, UserRound, X } from 'lucide-react';
 import {
     createBlogPost,
     getAdminApiBase,
@@ -65,6 +65,11 @@ const BLOG_CREATE_CONTROL_AREAS = [
         title: 'Publishing',
         detail: 'Draft, publish, schedule, readiness, and save controls.',
         href: '#blog-create-publish',
+    },
+    {
+        title: 'SEO',
+        detail: 'Search title, canonical path, description, Open Graph image, and robots controls.',
+        href: '#blog-create-seo',
     },
     {
         title: 'Site and author',
@@ -196,8 +201,13 @@ function NewBlogPostPage() {
     const [excerpt, setExcerpt] = useState('');
     const [status, setStatus] = useState<'draft' | 'published' | 'scheduled'>('draft');
     const [scheduledAt, setScheduledAt] = useState<string | null>(null);
+    const [seoTitle, setSeoTitle] = useState('');
+    const [seoDescription, setSeoDescription] = useState('');
+    const [canonicalPath, setCanonicalPath] = useState('');
     const [featuredImageId, setFeaturedImageId] = useState<string | null>(null);
     const [ogImage, setOgImage] = useState('');
+    const [noIndex, setNoIndex] = useState(false);
+    const [noFollow, setNoFollow] = useState(false);
     const [categories, setCategories] = useState<BlogCategory[]>([]);
     const [tags, setTags] = useState<BlogTag[]>([]);
     const [authors, setAuthors] = useState<BlogAuthor[]>([]);
@@ -358,11 +368,16 @@ function NewBlogPostPage() {
     const selectedFeaturedImageUrl = selectedFeaturedImage
         ? selectedFeaturedImage.url || getPublicMediaFileUrl(selectedFeaturedImage.id, activeSiteId)
         : null;
+    const normalizedCanonicalPath = normalizeCanonicalPath(canonicalPath || routePath);
+    const canonicalValid = normalizedCanonicalPath.startsWith('/');
+    const effectiveSeoTitle = seoTitle.trim() || title.trim();
+    const effectiveSeoDescription = seoDescription.trim() || excerpt.trim();
     const readinessChecks = [
         { label: 'Title', complete: title.trim().length > 0 },
         { label: 'Slug', complete: slugValue.trim().length > 0 },
         { label: 'Route', complete: !isCheckingPosts && !routeCheckError && !routeConflict },
         { label: 'Summary', complete: excerpt.trim().length >= 24 },
+        { label: 'SEO', complete: effectiveSeoTitle.length > 0 && effectiveSeoDescription.length >= 50 && canonicalValid },
         { label: 'Featured image', complete: Boolean(featuredImageId) },
         { label: 'Design', complete: canvasElements.length > 0 },
         { label: 'Schedule', complete: status !== 'scheduled' || Boolean(scheduledAt) },
@@ -374,6 +389,7 @@ function NewBlogPostPage() {
         && !isCheckingPosts
         && !routeCheckError
         && !routeConflict
+        && canonicalValid
         && (status !== 'scheduled' || Boolean(scheduledAt));
     const submitLabel = status === 'published' ? 'Publish post' : status === 'scheduled' ? 'Schedule post' : 'Save draft';
     const createPayloadPreview = useMemo(() => ({
@@ -387,6 +403,16 @@ function NewBlogPostPage() {
         excerpt: excerpt.trim(),
         status,
         scheduledAt: status === 'scheduled' ? scheduledAt : null,
+        seo: {
+            title: effectiveSeoTitle || 'Untitled post',
+            description: effectiveSeoDescription,
+            canonical: normalizedCanonicalPath,
+            ogImage: ogImage.trim() || selectedFeaturedImageUrl || null,
+            robots: {
+                index: !noIndex,
+                follow: !noFollow,
+            },
+        },
         featuredImageId,
         featuredImage: selectedFeaturedImage
             ? {
@@ -413,7 +439,13 @@ function NewBlogPostPage() {
         canvasSize.width,
         existingBlogPosts.length,
         excerpt,
+        effectiveSeoDescription,
+        effectiveSeoTitle,
         featuredImageId,
+        normalizedCanonicalPath,
+        noFollow,
+        noIndex,
+        ogImage,
         selectedFeaturedImage,
         selectedFeaturedImageUrl,
         routeCheckError,
@@ -468,6 +500,16 @@ function NewBlogPostPage() {
             excerpt: excerpt.trim(),
             status,
             scheduledAt: status === 'scheduled' ? scheduledAt : null,
+            seo: {
+                title: effectiveSeoTitle || 'Untitled post',
+                description: effectiveSeoDescription,
+                canonical: normalizedCanonicalPath,
+                ogImage: ogImage.trim() || selectedFeaturedImageUrl || null,
+                robots: {
+                    index: !noIndex,
+                    follow: !noFollow,
+                },
+            },
             featuredImageId,
             featuredImage: selectedFeaturedImage
                 ? {
@@ -511,8 +553,15 @@ function NewBlogPostPage() {
         canvasSize.height,
         canvasSize.width,
         createPayloadPreview,
+        effectiveSeoDescription,
+        effectiveSeoTitle,
         existingBlogPosts.length,
         excerpt,
+        featuredImageId,
+        normalizedCanonicalPath,
+        noFollow,
+        noIndex,
+        ogImage,
         readinessChecks,
         readinessScore,
         routeCheckError,
@@ -524,7 +573,6 @@ function NewBlogPostPage() {
         selectedFeaturedImageUrl,
         selectedAuthorId,
         selectedCategoryIds,
-        featuredImageId,
         selectedSite?.name,
         selectedSite?.slug,
         selectedTagIds,
@@ -542,7 +590,10 @@ function NewBlogPostPage() {
         slug: slugValue,
         status: 'draft',
         scheduledAt: null,
-        meta: { title, description: excerpt }
+        meta: {
+            title: effectiveSeoTitle || title,
+            description: effectiveSeoDescription || excerpt,
+        }
     };
 
     const copyCreationText = async (value: string, label: string) => {
@@ -586,6 +637,8 @@ function NewBlogPostPage() {
                         ? 'Backy could not verify existing blog routes for this site. Retry the route check before saving.'
                         : routeConflict
                             ? `The ${routePath} route is already used by "${routeConflict.title}". Choose another slug or edit that post first.`
+                            : !canonicalValid
+                                ? 'Canonical path must start with / before saving'
                             : status === 'scheduled' && !scheduledAt
                                 ? 'Choose a publish date before scheduling'
                                 : 'Add a title and URL slug before saving',
@@ -621,9 +674,12 @@ function NewBlogPostPage() {
             tagIds: selectedTagIds,
             content: JSON.parse(content),
             meta: {
-                title,
-                description: excerpt,
+                title: effectiveSeoTitle || title,
+                description: effectiveSeoDescription || excerpt,
+                canonical: normalizedCanonicalPath,
                 ogImage: ogImage.trim() || selectedFeaturedImageUrl || null,
+                noIndex,
+                noFollow,
             },
         };
 
@@ -851,6 +907,122 @@ function NewBlogPostPage() {
                             />
                             <div className="text-xs text-muted-foreground">{excerpt.length} characters</div>
                         </div>
+                            </PanelContent>
+                        </Panel>
+
+                        <Panel id="blog-create-seo" className="overflow-hidden scroll-mt-24">
+                            <PanelHeader
+                                title="SEO and discovery"
+                                description="Search metadata, canonical path, Open Graph image, and robots controls for hosted pages and external frontends."
+                                icon={<SearchCheck className="size-4" />}
+                            />
+                            <PanelContent className="space-y-5">
+                                <div className="grid gap-4 xl:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <label htmlFor="blog-create-seo-title" className="text-xs font-medium text-muted-foreground">Search title</label>
+                                        <input
+                                            id="blog-create-seo-title"
+                                            type="text"
+                                            value={seoTitle}
+                                            onChange={(e) => {
+                                                clearCreationFeedback();
+                                                setSeoTitle(e.target.value);
+                                            }}
+                                            disabled={isCreateBusy}
+                                            className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                                            placeholder={title || 'Search result title'}
+                                        />
+                                        <div className="text-xs text-muted-foreground">{effectiveSeoTitle.length} characters</div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label htmlFor="blog-create-canonical" className="text-xs font-medium text-muted-foreground">Canonical path</label>
+                                        <input
+                                            id="blog-create-canonical"
+                                            type="text"
+                                            value={canonicalPath}
+                                            onChange={(e) => {
+                                                clearCreationFeedback();
+                                                setCanonicalPath(e.target.value);
+                                            }}
+                                            disabled={isCreateBusy}
+                                            className="w-full rounded-lg border bg-background px-3 py-2.5 font-mono text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                                            placeholder={routePath}
+                                        />
+                                        <div className={cn('text-xs', canonicalValid ? 'text-muted-foreground' : 'text-amber-700')}>
+                                            {normalizedCanonicalPath}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label htmlFor="blog-create-seo-description" className="text-xs font-medium text-muted-foreground">Search description</label>
+                                    <textarea
+                                        id="blog-create-seo-description"
+                                        value={seoDescription}
+                                        onChange={(e) => {
+                                            clearCreationFeedback();
+                                            setSeoDescription(e.target.value);
+                                        }}
+                                        rows={3}
+                                        disabled={isCreateBusy}
+                                        className="w-full resize-none rounded-lg border bg-background px-4 py-3 text-sm leading-6 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                                        placeholder={excerpt || 'Describe the article for search, social previews, feeds, and generated frontends.'}
+                                    />
+                                    <div className={cn('text-xs', effectiveSeoDescription.length >= 50 ? 'text-muted-foreground' : 'text-amber-700')}>
+                                        {effectiveSeoDescription.length} characters. Aim for at least 50.
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label htmlFor="blog-create-og-image" className="text-xs font-medium text-muted-foreground">Open Graph image URL</label>
+                                    <input
+                                        id="blog-create-og-image"
+                                        type="url"
+                                        value={ogImage}
+                                        onChange={(e) => {
+                                            clearCreationFeedback();
+                                            setOgImage(e.target.value);
+                                        }}
+                                        disabled={isCreateBusy}
+                                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                                        placeholder={selectedFeaturedImageUrl || 'https://...'}
+                                    />
+                                </div>
+
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    <label className="flex items-start gap-3 rounded-lg border border-border bg-background px-4 py-3">
+                                        <input
+                                            type="checkbox"
+                                            checked={noIndex}
+                                            onChange={(e) => {
+                                                clearCreationFeedback();
+                                                setNoIndex(e.target.checked);
+                                            }}
+                                            disabled={isCreateBusy}
+                                            className="mt-1"
+                                        />
+                                        <span>
+                                            <span className="block text-sm font-medium text-foreground">No index</span>
+                                            <span className="mt-1 block text-xs leading-5 text-muted-foreground">Ask crawlers to keep this post out of search indexes.</span>
+                                        </span>
+                                    </label>
+                                    <label className="flex items-start gap-3 rounded-lg border border-border bg-background px-4 py-3">
+                                        <input
+                                            type="checkbox"
+                                            checked={noFollow}
+                                            onChange={(e) => {
+                                                clearCreationFeedback();
+                                                setNoFollow(e.target.checked);
+                                            }}
+                                            disabled={isCreateBusy}
+                                            className="mt-1"
+                                        />
+                                        <span>
+                                            <span className="block text-sm font-medium text-foreground">No follow</span>
+                                            <span className="mt-1 block text-xs leading-5 text-muted-foreground">Ask crawlers not to follow links from this post.</span>
+                                        </span>
+                                    </label>
+                                </div>
                             </PanelContent>
                         </Panel>
 
@@ -1238,6 +1410,21 @@ const slugify = (value: string) => (
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)/g, '')
 );
+
+const normalizeCanonicalPath = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return '/';
+
+    if (/^https?:\/\//i.test(trimmed)) {
+        try {
+            return new URL(trimmed).pathname || '/';
+        } catch {
+            return trimmed;
+        }
+    }
+
+    return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+};
 
 function BlogCreateReadinessCheck({ label, ready }: { label: string; ready: boolean }) {
     return (
