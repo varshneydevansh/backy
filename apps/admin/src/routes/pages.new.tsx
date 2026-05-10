@@ -4,8 +4,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Home, Layout, RefreshCw, Save, Sparkles } from 'lucide-react';
-import { createPage, getAdminApiBase, listPages } from '@/lib/adminContentApi';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Home, Layout, Menu, RefreshCw, Save, Sparkles } from 'lucide-react';
+import { createPage, getAdminApiBase, getSiteNavigation, listPages, updateSiteNavigation } from '@/lib/adminContentApi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore, type Page } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
@@ -18,6 +18,7 @@ import {
     serializeCanvasContent,
 } from '@/components/editor/editorCatalog';
 import type { CanvasElement } from '@/types/editor';
+import type { SiteNavigationConfig, SiteNavigationConfigItem } from '@backy-cms/core';
 
 interface NewPageSearch {
     siteId?: string;
@@ -28,10 +29,13 @@ interface NewPageSearch {
     status?: PageCreationStatus;
     scheduledAt?: string;
     isHomepage?: boolean;
+    nav?: PageNavigationPlacement;
+    navLabel?: string;
 }
 
 type PageTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'about' | 'contact' | 'registration';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
+type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 
 const TEMPLATE_OPTIONS: Array<{
     id: PageTemplate;
@@ -125,6 +129,16 @@ const TEMPLATE_DEFAULTS: Record<PageTemplate, { title: string; slug: string; des
     },
 };
 
+const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigationPlacement> = {
+    blank: 'none',
+    landing: 'primary',
+    storefront: 'primary',
+    'blog-index': 'primary',
+    about: 'primary',
+    contact: 'footer',
+    registration: 'primary',
+};
+
 const PAGE_CREATION_AREAS = [
     {
         title: 'Page basics',
@@ -176,6 +190,10 @@ const isPageCreationStatus = (value: unknown): value is PageCreationStatus => (
     value === 'draft' || value === 'published' || value === 'scheduled'
 );
 
+const isPageNavigationPlacement = (value: unknown): value is PageNavigationPlacement => (
+    value === 'none' || value === 'primary' || value === 'footer'
+);
+
 const normalizedSearchString = (value: unknown): string | undefined => {
     if (typeof value !== 'string') return undefined;
     const trimmed = value.trim();
@@ -197,6 +215,8 @@ const normalizeNewPageSearch = (input: NewPageSearch): NewPageSearch => ({
     ...(input.status && input.status !== 'draft' ? { status: input.status } : {}),
     ...(input.scheduledAt && input.status === 'scheduled' ? { scheduledAt: input.scheduledAt } : {}),
     ...(input.isHomepage ? { isHomepage: true } : {}),
+    ...(input.nav && input.nav !== DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[input.template || 'blank'] ? { nav: input.nav } : {}),
+    ...(input.navLabel?.trim() ? { navLabel: input.navLabel.trim() } : {}),
 });
 
 export const Route = createFileRoute('/pages/new')({
@@ -209,6 +229,8 @@ export const Route = createFileRoute('/pages/new')({
         status: isPageCreationStatus(search.status) ? search.status : undefined,
         scheduledAt: normalizedSearchString(search.scheduledAt),
         isHomepage: normalizedSearchBoolean(search.isHomepage),
+        nav: isPageNavigationPlacement(search.nav) ? search.nav : undefined,
+        navLabel: normalizedSearchString(search.navLabel),
     }),
     component: NewPageRoute,
 });
@@ -242,6 +264,8 @@ function NewPageRoute() {
         scheduledAt: search.status === 'scheduled' ? search.scheduledAt ?? null : null,
         isHomepage: search.isHomepage ?? false,
         description: search.description ?? templateDefaults.description,
+        navigationPlacement: search.nav || DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[initialTemplate],
+        navigationLabel: search.navLabel ?? search.title ?? templateDefaults.title,
     });
     const selectedSite = sites.find((site) => siteMatchesIdentifier(site, formData.siteId));
     const buildRouteSearchFromForm = (nextFormData: typeof formData): NewPageSearch => normalizeNewPageSearch({
@@ -253,6 +277,8 @@ function NewPageRoute() {
         status: nextFormData.status,
         scheduledAt: nextFormData.scheduledAt || undefined,
         isHomepage: nextFormData.isHomepage,
+        nav: nextFormData.navigationPlacement,
+        navLabel: nextFormData.navigationLabel,
     });
     const updatePageDraft = (next: Partial<typeof formData>) => {
         if (isPageCreateBusy) return;
@@ -334,6 +360,8 @@ function NewPageRoute() {
             status: search.status || ('draft' as PageCreationStatus),
             scheduledAt: search.status === 'scheduled' ? search.scheduledAt ?? null : null,
             isHomepage: search.isHomepage ?? false,
+            navigationPlacement: search.nav || DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[nextTemplate],
+            navigationLabel: search.navLabel ?? search.title ?? nextDefaults.title,
         };
         setFormData((current) => {
             const hasChanged = (
@@ -345,6 +373,8 @@ function NewPageRoute() {
                 || nextFormData.status !== current.status
                 || nextFormData.scheduledAt !== current.scheduledAt
                 || nextFormData.isHomepage !== current.isHomepage
+                || nextFormData.navigationPlacement !== current.navigationPlacement
+                || nextFormData.navigationLabel !== current.navigationLabel
             );
 
             return hasChanged ? nextFormData : current;
@@ -361,6 +391,8 @@ function NewPageRoute() {
         search.status,
         search.template,
         search.title,
+        search.nav,
+        search.navLabel,
         sites,
     ]);
 
@@ -386,6 +418,8 @@ function NewPageRoute() {
             title: shouldApplyTitle ? nextDefaults.title : formData.title,
             slug: formData.isHomepage ? 'home' : shouldApplySlug ? nextDefaults.slug : formData.slug,
             description: shouldApplyDescription ? nextDefaults.description : formData.description,
+            navigationPlacement: DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[nextTemplate],
+            navigationLabel: shouldApplyTitle ? nextDefaults.title : formData.navigationLabel || formData.title,
         });
     };
     const selectedSiteIdentifiers = useMemo(
@@ -406,6 +440,7 @@ function NewPageRoute() {
         [routePreview, selectedSitePages],
     );
     const hasSchedule = formData.status !== 'scheduled' || Boolean(formData.scheduledAt);
+    const hasNavigationLabel = formData.navigationPlacement === 'none' || Boolean((formData.navigationLabel || formData.title).trim());
     const adminPagesUrl = useMemo(
         () => `${getAdminApiBase()}/sites/${encodeURIComponent(formData.siteId || requestedSiteId)}/pages`,
         [formData.siteId, requestedSiteId],
@@ -417,6 +452,7 @@ function NewPageRoute() {
         && hasSchedule
         && !routeConflict
         && !routeCheckError
+        && hasNavigationLabel
         && (!formData.isHomepage || formData.slug.trim() || formData.title.trim()),
     );
     const submitBlockerMessage = useMemo(() => {
@@ -427,8 +463,9 @@ function NewPageRoute() {
         if (!formData.title.trim()) return 'Add a page title so Backy can create a named page and editor document.';
         if (routeConflict) return `The ${routePreview} route is already used by "${routeConflict.title}".`;
         if (!hasSchedule) return 'Choose a publish date before creating a scheduled page.';
+        if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this page to navigation.';
         return 'Review the required page basics before creating this page.';
-    }, [canSubmit, formData.title, hasSchedule, isCheckingPages, isLoading, routeCheckError, routeConflict, routePreview, selectedSite]);
+    }, [canSubmit, formData.title, hasNavigationLabel, hasSchedule, isCheckingPages, isLoading, routeCheckError, routeConflict, routePreview, selectedSite]);
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
         const hasStarterCanvas = selectedTemplate.sections.length > 0;
@@ -479,6 +516,13 @@ function NewPageRoute() {
                     : `${formData.status} pages can be saved immediately.`,
                 ready: hasSchedule,
             },
+            {
+                label: 'Navigation',
+                detail: formData.navigationPlacement === 'none'
+                    ? 'The page will stay out of menus until you add it from site settings.'
+                    : `The page will be added to the ${formData.navigationPlacement} menu as "${formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page'}".`,
+                ready: formData.navigationPlacement === 'none' || Boolean((formData.navigationLabel || formData.title).trim()),
+            },
         ];
         const readyCount = checks.filter((check) => check.ready).length;
 
@@ -499,6 +543,8 @@ function NewPageRoute() {
         formData.siteId,
         formData.slug,
         formData.status,
+        formData.navigationLabel,
+        formData.navigationPlacement,
         formData.template,
         formData.title,
         hasSchedule,
@@ -528,9 +574,14 @@ function NewPageRoute() {
             : formData.template === 'blog-index'
                 ? 'Backy blog feed placeholders'
                 : 'none',
+        navigation: formData.navigationPlacement === 'none'
+            ? { placement: 'none' }
+            : { placement: formData.navigationPlacement, label: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page' },
     }), [
         formData.description,
         formData.isHomepage,
+        formData.navigationLabel,
+        formData.navigationPlacement,
         formData.scheduledAt,
         formData.siteId,
         formData.status,
@@ -578,6 +629,8 @@ function NewPageRoute() {
             sections: selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration'].includes(formData.template),
             seedsDynamicData: ['storefront', 'blog-index'].includes(formData.template),
+            navigationPlacement: formData.navigationPlacement,
+            navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
         },
         canvas: {
             width: DEFAULT_CANVAS_SIZE.width,
@@ -598,6 +651,7 @@ function NewPageRoute() {
             'Contact and registration templates seed editable form blocks that connect to Backy Forms and Contacts.',
             'Storefront and blog index templates seed dynamic data placeholders for products and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
+            'Navigation placement updates the site navigation settings after the page record is created.',
             'The canvas seed is serialized before persistence so the editor never starts from a blank record unless the user intentionally keeps the starter sparse.',
         ],
     }), [
@@ -605,6 +659,8 @@ function NewPageRoute() {
         createPayloadPreview,
         formData.description,
         formData.isHomepage,
+        formData.navigationLabel,
+        formData.navigationPlacement,
         formData.siteId,
         formData.template,
         formData.title,
@@ -660,6 +716,8 @@ function NewPageRoute() {
                 setError(`Route ${routePreview} is already used by "${routeConflict.title}". Choose another slug or edit that page first`);
             } else if (!hasSchedule) {
                 setError('Choose a publish date before creating a scheduled page');
+            } else if (!hasNavigationLabel) {
+                setError('Add a navigation label or choose not to add this page to navigation.');
             } else {
                 setError('Add a page title and select a site before creating the page.');
             }
@@ -695,12 +753,24 @@ function NewPageRoute() {
                 title,
                 description: formData.description,
                 template: formData.template,
+                navigationPlacement: formData.navigationPlacement,
+                navigationLabel: formData.navigationLabel.trim() || title,
             },
             content,
         };
 
         try {
             const created = await createPage(formData.siteId, input);
+            try {
+                await applyPageNavigationPlacement({
+                    siteId: formData.siteId,
+                    page: created,
+                    placement: formData.navigationPlacement,
+                    label: formData.navigationLabel.trim() || title,
+                });
+            } catch (navigationError) {
+                console.warn('Page was created, but navigation placement failed.', navigationError);
+            }
             setPages([created, ...pages.filter((page) => page.id !== created.id)]);
             navigate({ to: '/pages/$pageId/edit', params: { pageId: created.id }, search: { siteId: formData.siteId } });
         } catch (createError) {
@@ -934,6 +1004,7 @@ function NewPageRoute() {
                                     onChange={(e) => updatePageDraft({
                                         title: e.target.value,
                                         slug: formData.slug ? formData.slug : slugify(e.target.value),
+                                        navigationLabel: formData.navigationLabel ? formData.navigationLabel : e.target.value,
                                     })}
                                     placeholder="About us"
                                     disabled={isPageCreateBusy}
@@ -1029,6 +1100,56 @@ function NewPageRoute() {
                                 </div>
                             </div>
                         )}
+
+                        <div className="rounded-lg border border-border bg-background p-4" data-testid="page-navigation-placement">
+                            <div className="flex items-start gap-3">
+                                <span className="rounded-lg bg-primary/10 p-2 text-primary">
+                                    <Menu className="h-4 w-4" />
+                                </span>
+                                <div className="min-w-0">
+                                    <h3 className="text-sm font-semibold text-foreground">Navigation placement</h3>
+                                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                        Add the new page to site navigation so hosted pages, manifests, render payloads, and custom frontends can expose it immediately after publish.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)]">
+                                <div>
+                                    <label htmlFor="page-navigation-placement-select" className="mb-2 block text-sm font-medium">Placement</label>
+                                    <select
+                                        id="page-navigation-placement-select"
+                                        value={formData.navigationPlacement}
+                                        onChange={(event) => updatePageDraft({
+                                            navigationPlacement: event.target.value as PageNavigationPlacement,
+                                            navigationLabel: formData.navigationLabel || formData.title,
+                                        })}
+                                        disabled={isPageCreateBusy}
+                                        className="w-full rounded-lg border bg-card px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <option value="none">Do not add</option>
+                                        <option value="primary">Primary menu</option>
+                                        <option value="footer">Footer menu</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label htmlFor="page-navigation-label" className="mb-2 block text-sm font-medium">Menu label</label>
+                                    <input
+                                        id="page-navigation-label"
+                                        type="text"
+                                        value={formData.navigationLabel}
+                                        onChange={(event) => updatePageDraft({ navigationLabel: event.target.value })}
+                                        placeholder={formData.title || 'Navigation label'}
+                                        disabled={isPageCreateBusy || formData.navigationPlacement === 'none'}
+                                        className="w-full rounded-lg border bg-card px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                                    />
+                                </div>
+                            </div>
+                            <div className="mt-3 rounded-lg bg-muted/50 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                                {formData.navigationPlacement === 'none'
+                                    ? 'The page record will be created without changing site navigation.'
+                                    : `Backy will append this page to the ${formData.navigationPlacement} menu after the page record is created.`}
+                            </div>
+                        </div>
                     </div>
 
                     <div id="page-design" className="space-y-5 rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
@@ -1293,6 +1414,69 @@ function PageCreationWorkflowStep({ index, label, detail }: { index: number; lab
             </div>
         </div>
     );
+}
+
+async function applyPageNavigationPlacement(input: {
+    siteId: string;
+    page: Page;
+    placement: PageNavigationPlacement;
+    label: string;
+}) {
+    if (input.placement === 'none') {
+        return;
+    }
+
+    const currentNavigation = await getSiteNavigation(input.siteId);
+    const nextNavigation = appendPageToNavigation(
+        currentNavigation.settings,
+        input.placement,
+        input.page,
+        input.label,
+    );
+
+    await updateSiteNavigation(input.siteId, nextNavigation);
+}
+
+function appendPageToNavigation(
+    navigation: SiteNavigationConfig,
+    placement: Exclude<PageNavigationPlacement, 'none'>,
+    page: Page,
+    label: string,
+): SiteNavigationConfig {
+    const stripPageItem = (items: SiteNavigationConfigItem[] | undefined): SiteNavigationConfigItem[] => (
+        (items || [])
+            .filter((item) => item.pageId !== page.id)
+            .map((item) => ({
+                ...item,
+                children: stripPageItem(item.children),
+            }))
+    );
+    const nextItem: SiteNavigationConfigItem = {
+        id: `nav_page_${page.id}`,
+        type: 'page',
+        label: label.trim() || page.title,
+        pageId: page.id,
+        target: '_self',
+        visible: true,
+        children: [],
+    };
+    const nextPrimary = stripPageItem(navigation.primary);
+    const nextFooter = stripPageItem(navigation.footer);
+
+    if (placement === 'primary') {
+        const primary = page.isHomepage ? [nextItem, ...nextPrimary] : [...nextPrimary, nextItem];
+        return {
+            ...navigation,
+            primary,
+            footer: nextFooter,
+        };
+    }
+
+    return {
+        ...navigation,
+        primary: nextPrimary,
+        footer: [...nextFooter, nextItem],
+    };
 }
 
 function createInitialPageContent(input: {

@@ -10,6 +10,7 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test:editor-drag": "node scripts/editor-drag-smoke.mjs",
+    "test:page-create": "node scripts/page-create-smoke.mjs",
     "test:blog-create": "node scripts/blog-create-smoke.mjs",
     "clean": "rm -rf dist"
   },
