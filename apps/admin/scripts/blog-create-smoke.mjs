@@ -259,6 +259,57 @@ const assertAutosaveWritten = async (client, slug) => {
   return state;
 };
 
+const assertFeaturedMediaPicker = async (client) => {
+  const clicked = await evaluate(client, `(() => {
+    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+      /Select image|Replace image/.test(candidate.textContent || '')
+    ));
+    if (!(button instanceof HTMLButtonElement) || button.disabled) {
+      return { ok: false, label: button?.textContent || null, disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+    }
+    button.click();
+    return { ok: true, label: button.textContent || '' };
+  })()`);
+
+  assert(clicked.ok, `Featured media picker button was not ready: ${JSON.stringify(clicked)}`);
+
+  let state = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    state = await evaluate(client, `(() => ({
+      hasModal: document.body?.innerText?.includes('Media library') || false,
+      hasContext: document.body?.innerText?.includes('Context:') && document.body?.innerText?.includes('Smoke Blog Create'),
+      hasUploadTab: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'upload'),
+      hasImageFilter: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'image'),
+      hasScopeControls: document.body?.innerText?.includes('Selection controls') || false,
+      closeButton: Boolean(document.querySelector('button[aria-label="Close media library"]')),
+    }))()`);
+
+    if (state.hasModal && state.hasContext && state.hasUploadTab && state.hasImageFilter && state.hasScopeControls && state.closeButton) {
+      break;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Featured media picker did not render expected controls: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  const closed = await evaluate(client, `(() => {
+    const button = document.querySelector('button[aria-label="Close media library"]');
+    if (!(button instanceof HTMLButtonElement)) return false;
+    button.click();
+    return true;
+  })()`);
+  assert(closed, 'Unable to close featured media picker');
+  await sleep(250);
+
+  return {
+    opened: clicked,
+    modal: state,
+  };
+};
+
 const assertRecoveryRestore = async (client, slug) => {
   await client.send('Page.reload', { ignoreCache: true });
   await sleep(500);
@@ -416,6 +467,7 @@ const main = async () => {
 
     const initialRender = await navigateToBlogCreate(client);
     const filled = await fillBlogCreateForm(client, slug);
+    const mediaPicker = await assertFeaturedMediaPicker(client);
     const autosave = await assertAutosaveWritten(client, slug);
     const recovery = await assertRecoveryRestore(client, slug);
     const preview = await createPreviewFromUi(client);
@@ -438,6 +490,7 @@ const main = async () => {
       url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}`,
       initialRender,
       filled,
+      mediaPicker,
       autosave,
       recovery,
       preview,
