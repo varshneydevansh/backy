@@ -404,6 +404,7 @@ export const formDefinitions = pgTable('form_definitions', {
     moderationMode: text('moderation_mode').default('manual').notNull(),
     contactShare: jsonb('contact_share').default({}),
     collectionTarget: jsonb('collection_target').default({}),
+    settings: jsonb('settings').default({}).notNull(),
     createdBy: uuid('created_by').references(() => profiles.id),
     updatedBy: uuid('updated_by').references(() => profiles.id),
     createdAt: timestamp('created_at').defaultNow().notNull(),

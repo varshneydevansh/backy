@@ -67,6 +67,7 @@ const normalizeCreateInput = (siteId: string, body: Record<string, unknown>) => 
   moderationMode: parseModerationMode(body.moderationMode),
   contactShare: parseRecord<FormDefinition['contactShare'] & Record<string, unknown>>(body.contactShare),
   collectionTarget: parseRecord<FormDefinition['collectionTarget'] & Record<string, unknown>>(body.collectionTarget),
+  settings: parseRecord<Record<string, unknown>>(body.settings) || {},
   createdBy: 'admin',
   updatedBy: 'admin',
 });

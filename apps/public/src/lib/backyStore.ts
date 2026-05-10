@@ -6278,6 +6278,7 @@ export function createAdminForm(input: Omit<FormDefinition, 'id' | 'createdAt' |
     moderationMode: input.moderationMode || 'manual',
     contactShare: input.contactShare,
     collectionTarget: input.collectionTarget,
+    settings: input.settings || {},
     createdBy: input.createdBy || 'admin',
     updatedBy: input.updatedBy || 'admin',
     createdAt: now,
@@ -6335,6 +6336,7 @@ export function updateAdminForm(siteId: string, formId: string, input: Partial<O
     moderationMode: input.moderationMode !== undefined ? input.moderationMode : before.moderationMode,
     contactShare: input.contactShare !== undefined ? input.contactShare : before.contactShare,
     collectionTarget: input.collectionTarget !== undefined ? input.collectionTarget : before.collectionTarget,
+    settings: input.settings !== undefined ? input.settings : before.settings,
     updatedBy: input.updatedBy || 'admin',
     updatedAt: new Date().toISOString(),
   };

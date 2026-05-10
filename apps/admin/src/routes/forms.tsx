@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import {
   getAdminApiBase,
+  getSiteFrontendDesign,
   getFormWithSubmissions,
   listCollections,
   listForms,
@@ -34,6 +35,7 @@ import {
   type FormSubmission,
   type FormSubmissionStatus,
 } from '@/lib/adminContentApi';
+import type { SiteSettings } from '@backy-cms/core';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -45,6 +47,8 @@ import { cn, formatDate } from '@/lib/utils';
 
 type SubmissionStatusFilter = FormSubmissionStatus | 'all';
 type PageTemplateHandoff = 'landing' | 'storefront' | 'contact' | 'registration';
+type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
+type SiteFrontendDesignTemplate = SiteFrontendDesignContract['templates'][number];
 type FormSourceFilter = 'all' | 'page' | 'blog' | 'embedded';
 type FormStateFilter = 'all' | 'active' | 'inactive';
 type FormDestinationFilter = 'all' | 'contacts' | 'collections' | 'inbox-only';
@@ -411,6 +415,9 @@ function FormsRoute() {
   const [isSavingForm, setIsSavingForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
+  const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
+  const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
   const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isCreatingTemplateId) || isSavingForm;
 
   const activeSite = useMemo(
@@ -430,6 +437,17 @@ function FormsRoute() {
   const writableCollections = useMemo(() => collections.filter((collection) => (
     collection.status === 'published' && collection.permissions.publicCreate
   )), [collections]);
+  const frontendFormTemplates = useMemo(
+    () => (frontendDesign?.templates || []).filter((template) => template.type === 'form'),
+    [frontendDesign?.templates],
+  );
+  const frontendTemplateBlueprints = useMemo(
+    () => frontendFormTemplates.map((template) => ({
+      template,
+      blueprint: buildFrontendFormTemplateBlueprint(template),
+    })),
+    [frontendFormTemplates],
+  );
   const formDraftTargetCollection = useMemo(() => {
     if (!formDraft?.collectionTarget?.collectionId) return null;
     return collections.find((collection) => collection.id === formDraft.collectionTarget?.collectionId) || null;
@@ -706,6 +724,16 @@ function FormsRoute() {
     },
     metrics,
     templates: FORM_TEMPLATES.map((template) => buildTemplateManifest(template)),
+    frontendDesign: frontendDesign ? {
+      status: frontendDesign.status,
+      source: frontendDesign.source,
+      formTemplates: frontendFormTemplates.map((template) => ({
+        id: template.id,
+        name: template.name,
+        routePattern: template.routePattern,
+        bindingHints: template.bindingHints || [],
+      })),
+    } : null,
     selectedForm: selectedForm ? {
       id: selectedForm.id,
       name: selectedForm.name,
@@ -720,6 +748,7 @@ function FormsRoute() {
       enableCaptcha: selectedForm.enableCaptcha,
       contactShare: selectedForm.contactShare,
       collectionTarget: selectedForm.collectionTarget,
+      settings: selectedForm.settings,
       fields: selectedForm.fields.map((field) => ({
         key: field.key,
         label: field.label,
@@ -759,6 +788,7 @@ function FormsRoute() {
           contactShare: Boolean(form.contactShare?.enabled),
           collectionTarget: Boolean(form.collectionTarget?.enabled),
         },
+        frontendDesignTemplateId: getFormFrontendTemplateId(form),
         submissionCounts: {
           total: inbox?.total || 0,
           pending: inbox?.submissions.filter((submission) => submission.status === 'pending').length || 0,
@@ -781,6 +811,8 @@ function FormsRoute() {
     activeSiteId,
     adminBaseUrl,
     filteredForms,
+    frontendDesign,
+    frontendFormTemplates,
     formDestinationFilter,
     formCommandReadiness.checks,
     formCommandReadiness.score,
@@ -928,6 +960,49 @@ function FormsRoute() {
     }
   };
 
+  const createFormFromFrontendTemplate = async (template: SiteFrontendDesignTemplate, blueprint: FormTemplateBlueprint) => {
+    if (isFormsBusy) return;
+
+    const creatingId = `frontend:${template.id}`;
+    setIsCreatingTemplateId(creatingId);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const created = await createForm(activeSiteId, {
+        name: `${normalizeFieldKey(template.id) || 'frontend-form'}-${Date.now().toString(36)}`,
+        title: blueprint.title,
+        description: blueprint.description,
+        audience: blueprint.audience,
+        isActive: true,
+        fields: blueprint.fields,
+        successMessage: blueprint.successMessage,
+        enableHoneypot: true,
+        enableCaptcha: false,
+        moderationMode: blueprint.moderationMode,
+        contactShare: blueprint.contactShare,
+        collectionTarget: blueprint.collectionTarget,
+        settings: buildFrontendFormTemplateSettings(template, frontendDesign),
+      });
+      setForms((current) => [created, ...current.filter((form) => form.id !== created.id)]);
+      setInboxByForm((current) => ({
+        ...current,
+        [created.id]: {
+          form: created,
+          submissions: [],
+          total: 0,
+        },
+      }));
+      setSelectedFormId(created.id);
+      updateFormsRouteSearch({ formId: created.id, q: undefined, source: undefined, state: undefined, destination: undefined, readiness: undefined });
+      setNotice(`${template.name} form created from the frontend design contract.`);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Unable to create form from frontend design template');
+    } finally {
+      setIsCreatingTemplateId(null);
+    }
+  };
+
   useEffect(() => {
     if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
       setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
@@ -969,6 +1044,37 @@ function FormsRoute() {
   useEffect(() => {
     void loadForms();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSiteId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFrontendDesign = async () => {
+      setFrontendDesignLoading(true);
+      setFrontendDesignError(null);
+
+      try {
+        const response = await getSiteFrontendDesign(activeSiteId);
+        if (!cancelled) {
+          setFrontendDesign(response.frontendDesign);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setFrontendDesign(null);
+          setFrontendDesignError(loadError instanceof Error ? loadError.message : 'Unable to load frontend design contract');
+        }
+      } finally {
+        if (!cancelled) {
+          setFrontendDesignLoading(false);
+        }
+      }
+    };
+
+    void loadFrontendDesign();
+
+    return () => {
+      cancelled = true;
+    };
   }, [activeSiteId]);
 
   useEffect(() => {
@@ -1610,6 +1716,105 @@ function FormsRoute() {
           icon={<Sparkles className="size-4" />}
         />
         <PanelContent>
+          {frontendFormTemplates.length > 0 || frontendDesignLoading || frontendDesignError ? (
+            <div className="mb-5 rounded-lg border border-teal-200 bg-teal-50/50 p-4" data-testid="forms-frontend-template-options">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">Frontend design forms</h3>
+                  <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+                    Create forms from the connected frontend contract while preserving template source, bindings, route pattern, and field intent.
+                  </p>
+                </div>
+                <span className="rounded-full bg-background px-2.5 py-1 text-xs font-medium text-teal-700">
+                  {frontendDesign?.source.label || frontendDesign?.source.type || 'Frontend contract'}
+                </span>
+              </div>
+              {frontendDesignLoading ? (
+                <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                  <RefreshCw className="size-3.5 animate-spin" />
+                  Loading captured form templates...
+                </div>
+              ) : null}
+              {frontendDesignError ? (
+                <div className="mt-3 flex items-center gap-2 text-xs text-destructive">
+                  <AlertTriangle className="size-3.5" />
+                  {frontendDesignError}
+                </div>
+              ) : null}
+              {frontendTemplateBlueprints.length > 0 ? (
+                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {frontendTemplateBlueprints.map(({ template, blueprint }) => {
+                    const settings = buildFrontendFormTemplateSettings(template, frontendDesign);
+                    const manifestText = JSON.stringify({
+                      schemaVersion: 'backy.frontend-form-template.v1',
+                      template,
+                      form: buildTemplateManifest(blueprint),
+                      settings,
+                    }, null, 2);
+
+                    return (
+                      <div key={template.id} className="rounded-lg border border-teal-200 bg-background p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h4 className="text-sm font-semibold text-foreground">{template.name}</h4>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">{template.description || blueprint.description}</p>
+                          </div>
+                          <span className="rounded-full bg-teal-50 px-2 py-1 text-[11px] font-medium text-teal-700">
+                            {blueprint.fields.length} fields
+                          </span>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">{blueprint.moderationMode}</span>
+                          <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                            {template.bindingHints?.length || 0} bindings
+                          </span>
+                          {template.routePattern ? (
+                            <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">{template.routePattern}</span>
+                          ) : null}
+                        </div>
+                        <div className="mt-4 space-y-2">
+                          {blueprint.fields.slice(0, 4).map((field) => (
+                            <div key={field.key} className="flex items-center justify-between gap-3 rounded border border-border bg-muted/40 px-2.5 py-2">
+                              <span className="truncate text-xs font-medium text-foreground">{field.label}</span>
+                              <span className="shrink-0 rounded bg-background px-2 py-0.5 text-[10px] text-muted-foreground">{field.type}</span>
+                            </div>
+                          ))}
+                          {blueprint.fields.length > 4 ? (
+                            <div className="text-xs text-muted-foreground">+{blueprint.fields.length - 4} more field{blueprint.fields.length - 4 === 1 ? '' : 's'}</div>
+                          ) : null}
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={() => void createFormFromFrontendTemplate(template, blueprint)}
+                            disabled={isFormsBusy}
+                            iconStart={<FileInput className="size-4" />}
+                            data-testid={`forms-frontend-template-${template.id}`}
+                          >
+                            {isCreatingTemplateId === `frontend:${template.id}` ? 'Creating...' : 'Create form'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void copyFormApiText(manifestText, `${template.name} frontend form template`)}
+                            disabled={isFormsBusy}
+                            iconStart={<Copy className="size-4" />}
+                          >
+                            Copy schema
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : !frontendDesignLoading && !frontendDesignError ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  The current frontend contract has no form templates yet.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             {FORM_TEMPLATES.map((template) => {
               const templateManifest = buildTemplateManifest(template);
@@ -2835,6 +3040,12 @@ const getFormSource = (form: FormDefinition): Exclude<FormSourceFilter, 'all'> =
   return 'embedded';
 };
 
+const getFormFrontendTemplateId = (form: FormDefinition): string | undefined => (
+  typeof form.settings?.frontendDesignTemplateId === 'string'
+    ? form.settings.frontendDesignTemplateId
+    : undefined
+);
+
 const formHasRequiredIdentity = (form: FormDefinition): boolean => (
   form.fields.some((field) => (
     ['email', 'tel'].includes(field.type) || ['email', 'phone'].includes(field.key)
@@ -2877,6 +3088,169 @@ const parseOptionsText = (value: string): string[] | undefined => {
   const options = value.split(',').map((option) => option.trim()).filter(Boolean);
   return options.length > 0 ? options : undefined;
 };
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+);
+
+const optionalStringFromRecord = (record: Record<string, unknown> | undefined, key: string): string | undefined => {
+  const value = record?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+};
+
+const optionalBooleanFromRecord = (record: Record<string, unknown> | undefined, key: string): boolean | undefined => {
+  const value = record?.[key];
+  return typeof value === 'boolean' ? value : undefined;
+};
+
+const optionalStringListFromRecord = (record: Record<string, unknown> | undefined, key: string): string[] | undefined => {
+  const value = record?.[key];
+  if (!Array.isArray(value)) return undefined;
+
+  const options = value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean);
+  return options.length > 0 ? options : undefined;
+};
+
+const normalizeFrontendFieldType = (value: unknown): FormFieldDefinition['type'] => {
+  const type = typeof value === 'string' ? value.trim() : '';
+  return FORM_FIELD_TYPES.includes(type as typeof FORM_FIELD_TYPES[number])
+    ? type as FormFieldDefinition['type']
+    : 'text';
+};
+
+const normalizeFrontendTemplateField = (value: unknown, index: number): FormFieldDefinition | null => {
+  const record = isPlainRecord(value) ? value : {};
+  const label = optionalStringFromRecord(record, 'label') || optionalStringFromRecord(record, 'name') || `Field ${index + 1}`;
+  const key = normalizeFieldKey(optionalStringFromRecord(record, 'key') || optionalStringFromRecord(record, 'id') || label) || `field_${index + 1}`;
+  const field: FormFieldDefinition = {
+    key,
+    label,
+    type: normalizeFrontendFieldType(record.type),
+    required: optionalBooleanFromRecord(record, 'required') === true,
+  };
+  const placeholder = optionalStringFromRecord(record, 'placeholder');
+  const helpText = optionalStringFromRecord(record, 'helpText') || optionalStringFromRecord(record, 'description');
+  const defaultValue = optionalStringFromRecord(record, 'defaultValue');
+  const options = optionalStringListFromRecord(record, 'options');
+
+  if (placeholder) field.placeholder = placeholder;
+  if (helpText) field.helpText = helpText;
+  if (defaultValue) field.defaultValue = defaultValue;
+  if (options) field.options = options;
+  if (Array.isArray(record.validation)) {
+    field.validation = record.validation as FormFieldDefinition['validation'];
+  }
+
+  return field;
+};
+
+const frontendTemplateFieldsFromContent = (content: Record<string, unknown> | undefined): FormFieldDefinition[] => {
+  const fieldsInput = content?.fields || content?.formFields || content?.schema;
+
+  if (Array.isArray(fieldsInput)) {
+    return fieldsInput
+      .map((field, index) => normalizeFrontendTemplateField(field, index))
+      .filter((field): field is FormFieldDefinition => Boolean(field));
+  }
+
+  if (isPlainRecord(fieldsInput)) {
+    return Object.entries(fieldsInput)
+      .map(([key, value], index) => normalizeFrontendTemplateField(
+        isPlainRecord(value) ? { key, ...value } : { key, label: key, type: value },
+        index,
+      ))
+      .filter((field): field is FormFieldDefinition => Boolean(field));
+  }
+
+  return [];
+};
+
+const defaultFrontendTemplateFields = (): FormFieldDefinition[] => [
+  { key: 'name', label: 'Name', type: 'text', required: true, placeholder: 'Ada Lovelace' },
+  { key: 'email', label: 'Email', type: 'email', required: true, placeholder: 'ada@example.com' },
+  { key: 'message', label: 'Message', type: 'textarea', required: false, placeholder: 'How can we help?' },
+];
+
+const inferFrontendTemplateContactShare = (
+  fields: FormFieldDefinition[],
+  content: Record<string, unknown> | undefined,
+): FormDefinition['contactShare'] => {
+  const configured = isPlainRecord(content?.contactShare) ? content.contactShare : undefined;
+  if (configured?.enabled === false) return { enabled: false };
+
+  const nameField = optionalStringFromRecord(configured, 'nameField')
+    || fields.find((field) => ['name', 'full_name', 'fullName'].includes(field.key))?.key;
+  const emailField = optionalStringFromRecord(configured, 'emailField')
+    || fields.find((field) => field.type === 'email' || field.key.includes('email'))?.key;
+  const phoneField = optionalStringFromRecord(configured, 'phoneField')
+    || fields.find((field) => field.type === 'tel' || field.key.includes('phone'))?.key;
+  const notesField = optionalStringFromRecord(configured, 'notesField')
+    || fields.find((field) => field.type === 'textarea' || ['message', 'notes'].includes(field.key))?.key;
+
+  if (!emailField && !phoneField) {
+    return configured?.enabled === true ? { enabled: true } : undefined;
+  }
+
+  return {
+    enabled: configured?.enabled !== false,
+    ...(nameField ? { nameField } : {}),
+    ...(emailField ? { emailField } : {}),
+    ...(phoneField ? { phoneField } : {}),
+    ...(notesField ? { notesField } : {}),
+    dedupeByEmail: configured?.dedupeByEmail !== false,
+  };
+};
+
+const inferFrontendTemplateCollectionTarget = (
+  content: Record<string, unknown> | undefined,
+): FormDefinition['collectionTarget'] => {
+  const configured = isPlainRecord(content?.collectionTarget) ? content.collectionTarget : undefined;
+  const collectionId = optionalStringFromRecord(configured, 'collectionId');
+  if (!configured?.enabled || !collectionId) return undefined;
+
+  return {
+    enabled: true,
+    collectionId,
+    fieldMap: isPlainRecord(configured.fieldMap)
+      ? Object.fromEntries(Object.entries(configured.fieldMap).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+      : undefined,
+    slugField: optionalStringFromRecord(configured, 'slugField'),
+  };
+};
+
+const buildFrontendFormTemplateBlueprint = (template: SiteFrontendDesignTemplate): FormTemplateBlueprint => {
+  const content = isPlainRecord(template.content) ? template.content : undefined;
+  const fields = frontendTemplateFieldsFromContent(content);
+  const normalizedFields = fields.length > 0 ? fields : defaultFrontendTemplateFields();
+  const pageTemplate = optionalStringFromRecord(content, 'pageTemplate');
+
+  return {
+    id: `frontend-${normalizeFieldKey(template.id) || 'form'}`,
+    title: optionalStringFromRecord(content, 'title') || `${template.name} form`,
+    description: template.description || optionalStringFromRecord(content, 'description') || 'Form seeded from the connected frontend design contract.',
+    pageTemplate: pageTemplate === 'landing' || pageTemplate === 'storefront' || pageTemplate === 'registration' ? pageTemplate : 'contact',
+    audience: content?.audience === 'authenticated' || content?.audience === 'adminOnly' ? content.audience : 'public',
+    moderationMode: content?.moderationMode === 'auto-approve' ? 'auto-approve' : 'manual',
+    successMessage: optionalStringFromRecord(content, 'successMessage') || 'Thanks. We received your submission.',
+    fields: normalizedFields,
+    contactShare: inferFrontendTemplateContactShare(normalizedFields, content),
+    collectionTarget: inferFrontendTemplateCollectionTarget(content),
+  };
+};
+
+const buildFrontendFormTemplateSettings = (
+  template: SiteFrontendDesignTemplate,
+  frontendDesign: SiteFrontendDesignContract | null,
+): Record<string, unknown> => ({
+  frontendDesignTemplateId: template.id,
+  frontendDesignTemplateName: template.name,
+  frontendDesignSource: frontendDesign?.source,
+  frontendDesignBindingHints: template.bindingHints || [],
+  ...(template.routePattern ? { frontendDesignRoutePattern: template.routePattern } : {}),
+  ...(frontendDesign?.tokens ? { frontendDesignTokens: frontendDesign.tokens } : {}),
+  ...(frontendDesign?.chrome ? { frontendDesignChrome: frontendDesign.chrome } : {}),
+  ...(frontendDesign?.tokens?.customCss ? { frontendDesignCustomCss: frontendDesign.tokens.customCss } : {}),
+});
 
 const normalizeOptionalText = (value: string | null | undefined): string | null => {
   const trimmed = typeof value === 'string' ? value.trim() : '';
@@ -2986,6 +3360,7 @@ const buildFormUpdatePayload = (form: FormDefinition) => ({
   collectionTarget: form.collectionTarget?.enabled
     ? form.collectionTarget
     : { enabled: false, collectionId: form.collectionTarget?.collectionId || '', fieldMap: form.collectionTarget?.fieldMap || {} },
+  settings: form.settings || {},
 });
 
 const formatSubmissionValue = (value: unknown): string => {

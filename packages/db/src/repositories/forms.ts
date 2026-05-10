@@ -139,6 +139,7 @@ const toForm = (row: FormRow): FormDefinition => ({
     moderationMode: normalizedModerationMode(row.moderationMode),
     contactShare: isRecord(row.contactShare) ? row.contactShare as FormDefinition['contactShare'] : undefined,
     collectionTarget: isRecord(row.collectionTarget) ? row.collectionTarget as FormDefinition['collectionTarget'] : undefined,
+    settings: isRecord(row.settings) ? row.settings : {},
     createdBy: row.createdBy,
     updatedBy: row.updatedBy,
     createdAt: toIso(row.createdAt),
@@ -226,6 +227,7 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
                 moderationMode: input.moderationMode || 'manual',
                 contactShare: input.contactShare || {},
                 collectionTarget: input.collectionTarget || {},
+                settings: input.settings || {},
                 createdBy: input.createdBy || null,
                 updatedBy: input.updatedBy || null,
                 updatedAt: new Date(),
@@ -252,6 +254,7 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
             if (input.moderationMode !== undefined) updates.moderationMode = input.moderationMode;
             if (input.contactShare !== undefined) updates.contactShare = input.contactShare || {};
             if (input.collectionTarget !== undefined) updates.collectionTarget = input.collectionTarget || {};
+            if (input.settings !== undefined) updates.settings = input.settings || {};
             if (input.updatedBy !== undefined) updates.updatedBy = input.updatedBy;
 
             const [row] = await database.update(formDefinitions).set(updates).where(and(eq(formDefinitions.siteId, siteId), eq(formDefinitions.id, formId))).returning() as FormRow[];

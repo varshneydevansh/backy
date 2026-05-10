@@ -11,6 +11,8 @@ const SITE_ID = process.env.BACKY_FORMS_SMOKE_SITE_ID || 'site-demo';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_FORMS_CDP_PORT || 9379);
 const SCREENSHOT_PATH = process.env.BACKY_FORMS_SCREENSHOT || path.join(os.tmpdir(), 'backy-forms-smoke.png');
+const FRONTEND_FORM_TEMPLATE_ID = 'smoke-form-contract-template';
+const FRONTEND_FORM_TEMPLATE_NAME = 'Smoke Frontend Intake';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -55,6 +57,93 @@ const requestApi = async (endpoint, options = {}) => {
 
   return payload;
 };
+
+const getFrontendDesign = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`);
+  const frontendDesign = payload.data?.frontendDesign;
+  assert(frontendDesign?.schemaVersion === 'backy.frontend-design.v1', `Unexpected frontend design response: ${JSON.stringify(payload).slice(0, 500)}`);
+  return frontendDesign;
+};
+
+const patchFrontendDesign = async (frontendDesign) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`, {
+    method: 'PATCH',
+    body: JSON.stringify({ frontendDesign }),
+  });
+  const updated = payload.data?.frontendDesign;
+  assert(updated?.schemaVersion === 'backy.frontend-design.v1', `Patch did not return frontend design: ${JSON.stringify(payload).slice(0, 500)}`);
+  return updated;
+};
+
+const smokeFrontendDesignContract = () => ({
+  schemaVersion: 'backy.frontend-design.v1',
+  status: 'synced',
+  source: {
+    type: 'custom-frontend',
+    label: 'Smoke forms frontend',
+    url: 'https://example.com/smoke-forms-frontend',
+    repository: 'example/backy-smoke-forms-frontend',
+    branch: 'main',
+  },
+  tokens: {
+    colors: {
+      primary: '#0f766e',
+      text: '#111827',
+    },
+    fonts: {
+      heading: 'Inter',
+      body: 'Inter',
+    },
+    customCss: ':root { --backy-smoke-form-primary: #0f766e; }',
+  },
+  chrome: {
+    header: { component: 'SmokeFormsHeader', source: 'site.navigation.primary' },
+    navigation: { component: 'SmokeFormsNavigation', source: 'site.navigation.primary' },
+    footer: { component: 'SmokeFormsFooter', source: 'site.navigation.footer' },
+  },
+  templates: [
+    {
+      id: FRONTEND_FORM_TEMPLATE_ID,
+      type: 'form',
+      name: FRONTEND_FORM_TEMPLATE_NAME,
+      routePattern: '/contact/smoke-intake',
+      description: 'Frontend contract form template used by the forms smoke.',
+      content: {
+        title: 'Smoke frontend intake',
+        description: 'A custom frontend intake form seeded from the connected design contract.',
+        successMessage: 'Smoke intake received.',
+        pageTemplate: 'contact',
+        fields: [
+          { key: 'full_name', label: 'Full name', type: 'text', required: true, placeholder: 'Ada Lovelace' },
+          { key: 'email', label: 'Email', type: 'email', required: true, placeholder: 'ada@example.com' },
+          { key: 'project_budget', label: 'Project budget', type: 'select', required: false, options: ['$5k-$10k', '$10k-$25k', '$25k+'] },
+          { key: 'message', label: 'Message', type: 'textarea', required: false, placeholder: 'Tell us about the project.' },
+        ],
+        contactShare: {
+          enabled: true,
+          nameField: 'full_name',
+          emailField: 'email',
+          notesField: 'message',
+          dedupeByEmail: true,
+        },
+      },
+      bindingHints: [
+        { role: 'form.name', binding: 'submission.full_name' },
+        { role: 'form.email', binding: 'submission.email' },
+        { role: 'form.message', binding: 'submission.message' },
+      ],
+    },
+  ],
+  editableMap: [
+    {
+      selector: '[data-backy-role="contact-form"]',
+      role: 'form',
+      binding: 'form.definition',
+      fields: ['fields', 'successMessage'],
+    },
+  ],
+  notes: 'Temporary contract for validating form creation from custom frontend templates.',
+});
 
 const listForms = async () => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms`);
@@ -245,6 +334,83 @@ const clickRegistrationCreateForm = async (client) => {
 
     await sleep(250);
   }
+};
+
+const clickFrontendTemplateCreateForm = async (client) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const section = document.querySelector('[data-testid="forms-frontend-template-options"]');
+      const button = document.querySelector('[data-testid="forms-frontend-template-${FRONTEND_FORM_TEMPLATE_ID}"]');
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return {
+          ok: false,
+          section: Boolean(section),
+          button: button?.textContent || null,
+          disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+          body: document.body?.innerText?.slice(0, 700) || '',
+        };
+      }
+      button.click();
+      return { ok: true, text: button.textContent || '' };
+    })()`);
+
+    if (result.ok) {
+      return;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Unable to click frontend template Create form: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+};
+
+const waitForFrontendTemplateForm = async (beforeIds) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const forms = await listForms();
+    const created = forms.find((form) => (
+      !beforeIds.has(form.id) &&
+      form.settings?.frontendDesignTemplateId === FRONTEND_FORM_TEMPLATE_ID
+    ));
+
+    if (created) {
+      return created;
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Frontend form template was not created: ${JSON.stringify(forms.map((form) => ({
+        id: form.id,
+        title: form.title,
+        settings: form.settings,
+      })).slice(0, 10))}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const assertFrontendTemplateForm = async (formId) => {
+  const form = await getAdminForm(formId);
+  assert(form?.title === 'Smoke frontend intake', `Frontend form title mismatch: ${form?.title}`);
+  assert(form?.settings?.frontendDesignTemplateId === FRONTEND_FORM_TEMPLATE_ID, `Frontend template id was not stored: ${JSON.stringify(form?.settings)}`);
+  assert(form?.settings?.frontendDesignTemplateName === FRONTEND_FORM_TEMPLATE_NAME, `Frontend template name was not stored: ${JSON.stringify(form?.settings)}`);
+  assert(form?.settings?.frontendDesignSource?.label === 'Smoke forms frontend', `Frontend source snapshot missing: ${JSON.stringify(form?.settings)}`);
+  assert(form?.settings?.frontendDesignRoutePattern === '/contact/smoke-intake', `Frontend route pattern missing: ${JSON.stringify(form?.settings)}`);
+  assert(form?.settings?.frontendDesignChrome?.header?.component === 'SmokeFormsHeader', `Frontend chrome snapshot missing: ${JSON.stringify(form?.settings)}`);
+  assert(form?.settings?.frontendDesignTokens?.fonts?.heading === 'Inter', `Frontend token snapshot missing: ${JSON.stringify(form?.settings)}`);
+  assert(Array.isArray(form?.settings?.frontendDesignBindingHints) && form.settings.frontendDesignBindingHints.length === 3, `Frontend binding hints missing: ${JSON.stringify(form?.settings)}`);
+  assert(form?.fields?.some((field) => field.key === 'project_budget' && field.type === 'select' && field.options?.includes('$25k+')), `Frontend fields did not persist: ${JSON.stringify(form?.fields)}`);
+  assert(
+    form?.contactShare?.enabled === true &&
+    form.contactShare.nameField === 'full_name' &&
+    form.contactShare.emailField === 'email' &&
+    form.contactShare.notesField === 'message',
+    `Frontend contact share mapping did not persist: ${JSON.stringify(form?.contactShare)}`,
+  );
+  return form;
 };
 
 const waitForCreatedForm = async (client, beforeIds) => {
@@ -706,13 +872,18 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 };
 
 const main = async () => {
+  const originalFrontendDesign = await getFrontendDesign();
+  await patchFrontendDesign(smokeFrontendDesignContract());
   const beforeIds = new Set((await listForms()).map((form) => form.id));
   const smokeCollection = await createCollection();
   const { childProcess, userDataDir } = launchChrome();
   let client;
+  let frontendCreatedFormId = null;
   let createdFormId = null;
+  let frontendCleaned = false;
   let cleaned = false;
   let collectionCleaned = false;
+  let frontendTemplateForm = null;
 
   try {
     await waitForCdp();
@@ -730,6 +901,13 @@ const main = async () => {
     });
 
     await navigateToForms(client);
+    await clickFrontendTemplateCreateForm(client);
+    frontendTemplateForm = await waitForFrontendTemplateForm(beforeIds);
+    frontendCreatedFormId = frontendTemplateForm.id;
+    frontendTemplateForm = await assertFrontendTemplateForm(frontendCreatedFormId);
+    await deleteForm(frontendCreatedFormId);
+    frontendCleaned = true;
+
     await clickRegistrationCreateForm(client);
     const created = await waitForCreatedForm(client, beforeIds);
     createdFormId = created.form.id;
@@ -789,6 +967,13 @@ const main = async () => {
       ok: true,
       siteId: SITE_ID,
       url: `${ADMIN_BASE_URL}/forms?siteId=${SITE_ID}`,
+      frontendTemplateForm: {
+        id: frontendTemplateForm.id,
+        title: frontendTemplateForm.title,
+        templateId: frontendTemplateForm.settings?.frontendDesignTemplateId,
+        bindingHints: frontendTemplateForm.settings?.frontendDesignBindingHints?.length || 0,
+        fieldCount: frontendTemplateForm.fields?.length || 0,
+      },
       form: {
         id: createdFormId,
         title: definition.data.form.title,
@@ -809,10 +994,16 @@ const main = async () => {
         collectionId: smokeCollection.id,
       },
       layout,
+      frontendCleaned,
       cleaned,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
+    if (!frontendCleaned && frontendCreatedFormId) {
+      await deleteForm(frontendCreatedFormId).catch((error) => {
+        console.warn('Unable to delete frontend template smoke form:', error instanceof Error ? error.message : error);
+      });
+    }
     if (!cleaned && createdFormId) {
       await deleteForm(createdFormId).catch((error) => {
         console.warn('Unable to delete smoke form:', error instanceof Error ? error.message : error);
@@ -825,6 +1016,9 @@ const main = async () => {
         console.warn('Unable to delete smoke collection:', error instanceof Error ? error.message : error);
       });
     }
+    await patchFrontendDesign(originalFrontendDesign).catch((error) => {
+      console.warn('Unable to restore original frontend design contract:', error instanceof Error ? error.message : error);
+    });
 
     await cleanupBrowser({ client, childProcess, userDataDir });
   }

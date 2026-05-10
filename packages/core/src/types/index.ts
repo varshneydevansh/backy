@@ -1160,6 +1160,9 @@ export interface FormDefinition {
     slugField?: string;
   };
 
+  /** Extensible form metadata used by custom frontend and generator workflows */
+  settings?: Record<string, unknown>;
+
   /** Who can access this form config */
   createdBy?: string | null;
   updatedBy?: string | null;

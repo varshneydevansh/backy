@@ -131,6 +131,7 @@ const normalizePatchInput = (body: Record<string, unknown>): Partial<FormDefinit
   if ('moderationMode' in body) input.moderationMode = parseModerationMode(body.moderationMode) || 'manual';
   if ('contactShare' in body) input.contactShare = parseRecord<FormDefinition['contactShare'] & Record<string, unknown>>(body.contactShare);
   if ('collectionTarget' in body) input.collectionTarget = parseRecord<FormDefinition['collectionTarget'] & Record<string, unknown>>(body.collectionTarget);
+  if ('settings' in body) input.settings = parseRecord<Record<string, unknown>>(body.settings) || {};
   return input;
 };
 

@@ -1321,6 +1321,7 @@ export interface FormDefinition {
     fieldMap?: Record<string, string>;
     slugField?: string;
   };
+  settings?: Record<string, unknown>;
   createdBy?: string | null;
   updatedBy?: string | null;
   createdAt: string;
