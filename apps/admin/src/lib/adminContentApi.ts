@@ -935,6 +935,21 @@ export interface SiteSettingsInput {
       autoDeploy?: boolean;
       previewDeployments?: boolean;
     };
+    commerce?: {
+      mode?: 'catalog-only' | 'manual-orders' | 'checkout-provider';
+      currency?: string;
+      paymentProvider?: 'none' | 'stripe' | 'manual';
+      providerAccountId?: string;
+      checkoutSuccessPath?: string;
+      checkoutCancelPath?: string;
+      guestCheckout?: boolean;
+      taxEnabled?: boolean;
+      shippingEnabled?: boolean;
+      discountsEnabled?: boolean;
+      inventoryReservations?: boolean;
+      reservationMinutes?: number;
+      webhookEventsEnabled?: boolean;
+    };
     notifications?: {
       email?: {
         newUser?: boolean;

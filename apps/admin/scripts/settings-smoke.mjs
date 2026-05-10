@@ -412,6 +412,28 @@ const updateSettingsThroughUi = async (client, suffix) => {
     `Infrastructure check did not show provider diagnostics: ${JSON.stringify(checkState)}`,
   );
 
+  await openSettingsTab(client, 'Commerce', 'tab=commerce');
+  await setLabeledControl(client, 'Commerce mode', 'checkout-provider');
+  await setLabeledControl(client, 'Default currency', 'EUR');
+  await setLabeledControl(client, 'Payment provider', 'stripe');
+  await setLabeledControl(client, 'Provider account ID', `acct_${suffix}`);
+  await setLabeledControl(client, 'Success redirect path', '/checkout/complete');
+  await setLabeledControl(client, 'Cancel redirect path', '/checkout/cancelled');
+  await setLabeledControl(client, 'Guest checkout', true);
+  await setLabeledControl(client, 'Taxes', true);
+  await setLabeledControl(client, 'Shipping', true);
+  await setLabeledControl(client, 'Discounts', true);
+  await setLabeledControl(client, 'Inventory reservations', true);
+  await setLabeledControl(client, 'Reservation window', '30');
+  await setLabeledControl(client, 'Webhook events', true);
+  const commerceState = await evaluate(client, `(() => ({
+    search: window.location.search,
+    hasStorefrontHandoff: document.body?.innerText?.includes('Storefront API handoff') || false,
+    hasCheckoutProvider: document.body?.innerText?.includes('Checkout provider') || false,
+  }))()`);
+  assert(commerceState.search.includes('tab=commerce'), `Commerce tab search state was not persisted: ${JSON.stringify(commerceState)}`);
+  assert(commerceState.hasStorefrontHandoff && commerceState.hasCheckoutProvider, `Commerce tab did not expose storefront handoff controls: ${JSON.stringify(commerceState)}`);
+
   await openSettingsTab(client, 'Notifications', 'tab=notifications');
   await setLabeledControl(client, 'New user registration', true);
   await setLabeledControl(client, 'Page published', true);
@@ -458,6 +480,13 @@ const assertPersistedSettings = (settings, suffix) => {
   assert(settings.integrations?.supabase?.databaseEnabled === true, 'Supabase database toggle was not persisted');
   assert(settings.integrations?.vercel?.projectId === `prj_${suffix}`, 'Vercel project id was not persisted');
   assert(settings.integrations?.vercel?.previewDeployments === true, 'Vercel preview toggle was not persisted');
+  assert(settings.integrations?.commerce?.mode === 'checkout-provider', 'Commerce mode was not persisted');
+  assert(settings.integrations?.commerce?.currency === 'EUR', 'Commerce currency was not persisted');
+  assert(settings.integrations?.commerce?.paymentProvider === 'stripe', 'Commerce payment provider was not persisted');
+  assert(settings.integrations?.commerce?.providerAccountId === `acct_${suffix}`, 'Commerce provider account ID was not persisted');
+  assert(settings.integrations?.commerce?.taxEnabled === true, 'Commerce tax toggle was not persisted');
+  assert(settings.integrations?.commerce?.shippingEnabled === true, 'Commerce shipping toggle was not persisted');
+  assert(settings.integrations?.commerce?.reservationMinutes === 30, 'Commerce reservation window was not persisted');
   assert(settings.integrations?.notifications?.email?.newUser === true, 'Notification email toggle was not persisted');
   assert(settings.integrations?.notifications?.inApp?.comments === true, 'Notification in-app toggle was not persisted');
   assert(settings.integrations?.notifications?.webhookUrl === `https://hooks.example.com/${suffix}`, 'Notification webhook was not persisted');
@@ -557,6 +586,7 @@ const main = async () => {
         storage: persisted.integrations?.storage,
         supabase: persisted.integrations?.supabase,
         vercel: persisted.integrations?.vercel,
+        commerce: persisted.integrations?.commerce,
         notifications: persisted.integrations?.notifications,
         auth: persisted.auth,
       },

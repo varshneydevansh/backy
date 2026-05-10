@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   Copy,
   Download,
+  ShoppingCart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
@@ -54,13 +55,13 @@ import {
 // TABS
 // ============================================
 
-type SettingsTab = 'general' | 'appearance' | 'seo' | 'delivery' | 'infrastructure' | 'notifications' | 'security';
+type SettingsTab = 'general' | 'appearance' | 'seo' | 'delivery' | 'infrastructure' | 'commerce' | 'notifications' | 'security';
 
 interface SettingsSearch {
   tab?: SettingsTab;
 }
 
-const SETTINGS_TAB_IDS: SettingsTab[] = ['general', 'appearance', 'seo', 'delivery', 'infrastructure', 'notifications', 'security'];
+const SETTINGS_TAB_IDS: SettingsTab[] = ['general', 'appearance', 'seo', 'delivery', 'infrastructure', 'commerce', 'notifications', 'security'];
 
 const isSettingsTab = (value: unknown): value is SettingsTab => (
   typeof value === 'string' && SETTINGS_TAB_IDS.includes(value as SettingsTab)
@@ -83,6 +84,7 @@ const TABS: Array<SegmentedTabItem<SettingsTab>> = [
   { id: 'seo', name: 'SEO', icon: Database },
   { id: 'delivery', name: 'Delivery', icon: Code },
   { id: 'infrastructure', name: 'Infrastructure', icon: Cloud },
+  { id: 'commerce', name: 'Commerce', icon: ShoppingCart },
   { id: 'notifications', name: 'Notifications', icon: Bell },
   { id: 'security', name: 'Security', icon: Shield },
 ];
@@ -498,6 +500,11 @@ const SETTINGS_CONTROL_AREAS: Array<{
     detail: 'Connect database, storage, deployment ownership, preview deploys, and hosting metadata.',
   },
   {
+    tab: 'commerce',
+    title: 'Commerce backend',
+    detail: 'Control catalog mode, checkout provider handoff, taxes, shipping, discounts, and stock reservations.',
+  },
+  {
     tab: 'appearance',
     title: 'Design tokens',
     detail: 'Control global colors, typography, and frontend defaults that custom designs can consume.',
@@ -746,6 +753,10 @@ function SettingsPage() {
       ...(integrations.notifications?.inApp || {}),
     },
   };
+  const commerceSettings: CommerceSettingsConfig = {
+    ...DEFAULT_COMMERCE_SETTINGS,
+    ...(integrations.commerce || {}),
+  };
   const currentSettingsSnapshot = useMemo<SettingsDraftSnapshot>(() => ({
     deliveryMode,
     auth: authSettings,
@@ -759,6 +770,7 @@ function SettingsPage() {
     generalSettings,
     appearanceSettings,
     seoSettings,
+    commerceSettings,
     notificationSettings,
     authSettings,
     integrations,
@@ -768,6 +780,7 @@ function SettingsPage() {
     deliveryMode,
     generalSettings,
     integrations,
+    commerceSettings,
     notificationSettings,
     seoSettings,
   ]);
@@ -780,6 +793,7 @@ function SettingsPage() {
     const storage = integrations.storage;
     const supabase = integrations.supabase;
     const vercel = integrations.vercel;
+    const commerce = integrations.commerce;
     const storageConfigured = runtimeStorage?.configured === true
       || Boolean(storage?.provider || storage?.bucket || storage?.publicBaseUrl);
     const databaseConfigured = runtimeDatabase?.configured === true;
@@ -854,6 +868,13 @@ function SettingsPage() {
           : 'Review publish, form, registration, and system alerts.',
         ready: Boolean(savedNotifications),
       },
+      {
+        label: 'Commerce controls',
+        detail: commerce
+          ? `${commerce.currency || 'USD'} ${commerce.mode || 'catalog-only'} commerce settings are stored.`
+          : 'Review catalog, checkout, tax, shipping, discount, and reservation controls.',
+        ready: Boolean(commerce),
+      },
     ];
     const readyCount = checks.filter((check) => check.ready).length;
 
@@ -872,6 +893,7 @@ function SettingsPage() {
     authSettings?.minPasswordLength,
     deliveryMode,
     integrations.appearance,
+    integrations.commerce,
     integrations.general,
     integrations.notifications,
     integrations.seo,
@@ -949,6 +971,11 @@ function SettingsPage() {
       themeContract: buildAppearanceThemeContract(appearanceSettings),
       seo: seoSettings,
       notifications: notificationSettings,
+      commerce: commerceSettings,
+    },
+    commerce: {
+      settings: commerceSettings,
+      note: 'Commerce settings control catalog/checkout intent for custom frontends; payment tokens and provider secrets stay outside Backy settings.',
     },
     security: {
       hasPublicApiKey: Boolean(publicApiKey),
@@ -968,6 +995,7 @@ function SettingsPage() {
     adminApiKey,
     appearanceSettings,
     authSettings,
+    commerceSettings,
     deliveryMode,
     generalSettings,
     integrations.storage,
@@ -1034,6 +1062,12 @@ function SettingsPage() {
     setIntegrations({
       ...integrations,
       seo: next,
+    });
+  };
+  const updateCommerceSettings = (next: CommerceSettingsConfig) => {
+    setIntegrations({
+      ...integrations,
+      commerce: next,
     });
   };
   const openSettingsTab = (tab: SettingsTab) => {
@@ -1272,6 +1306,12 @@ function SettingsPage() {
             envContract={infrastructureEnvContract}
             disabled={isSaving}
             onChange={setIntegrations}
+          />
+        )}
+        {activeTab === 'commerce' && (
+          <CommerceSettings
+            value={commerceSettings}
+            onChange={updateCommerceSettings}
           />
         )}
         {activeTab === 'notifications' && (
@@ -2067,6 +2107,7 @@ type SeoSettingsConfig = NonNullable<IntegrationSettings['seo']>;
 type SupabaseSettings = NonNullable<IntegrationSettings['supabase']>;
 type StorageSettings = NonNullable<IntegrationSettings['storage']>;
 type VercelSettings = NonNullable<IntegrationSettings['vercel']>;
+type CommerceSettingsConfig = NonNullable<IntegrationSettings['commerce']>;
 type NotificationSettingsConfig = NonNullable<IntegrationSettings['notifications']>;
 type InfrastructureEnvProvider = 'database' | 'storage' | 'supabase' | 'vercel';
 type InfrastructureEnvContract = {
@@ -2129,6 +2170,22 @@ const DEFAULT_SEO_SETTINGS: Required<SeoSettingsConfig> = {
   keywords: 'website, blog, cms',
   ogImageUrl: '',
   analyticsId: '',
+};
+
+const DEFAULT_COMMERCE_SETTINGS: Required<CommerceSettingsConfig> = {
+  mode: 'catalog-only',
+  currency: 'USD',
+  paymentProvider: 'none',
+  providerAccountId: '',
+  checkoutSuccessPath: '/checkout/success',
+  checkoutCancelPath: '/checkout/cancel',
+  guestCheckout: true,
+  taxEnabled: false,
+  shippingEnabled: false,
+  discountsEnabled: false,
+  inventoryReservations: true,
+  reservationMinutes: 15,
+  webhookEventsEnabled: false,
 };
 
 const DEFAULT_AUTH_SETTINGS: Required<AuthSettingsConfig> = {
@@ -2235,6 +2292,7 @@ function validateSettingsDraft({
   generalSettings,
   appearanceSettings,
   seoSettings,
+  commerceSettings,
   notificationSettings,
   authSettings,
   integrations,
@@ -2243,6 +2301,7 @@ function validateSettingsDraft({
   generalSettings: GeneralSettingsConfig;
   appearanceSettings: AppearanceSettingsConfig;
   seoSettings: SeoSettingsConfig;
+  commerceSettings: CommerceSettingsConfig;
   notificationSettings: NotificationSettingsConfig;
   authSettings?: SiteSettingsInput['auth'];
   integrations: IntegrationSettings;
@@ -2256,6 +2315,10 @@ function validateSettingsDraft({
   const storage = integrations.storage || {};
   const supabase = integrations.supabase || {};
   const vercel = integrations.vercel || {};
+  const commerce = {
+    ...DEFAULT_COMMERCE_SETTINGS,
+    ...commerceSettings,
+  };
 
   if (!generalSettings.siteName?.trim()) {
     addIssue(issues, {
@@ -2388,6 +2451,51 @@ function validateSettingsDraft({
       tab: 'infrastructure',
       label: 'Vercel production domain should be a hostname',
       detail: 'Use a bare domain such as backy.example.com, without https:// or a path.',
+      severity: 'error',
+    });
+  }
+
+  if (!/^[A-Z]{3}$/.test(commerce.currency || '')) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Commerce currency must be an ISO code',
+      detail: 'Use a three-letter uppercase currency code such as USD, EUR, GBP, or INR.',
+      severity: 'error',
+    });
+  }
+
+  if (commerce.mode === 'checkout-provider' && commerce.paymentProvider === 'none') {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Checkout provider is required',
+      detail: 'Choose Stripe or manual payment handling before enabling provider checkout mode.',
+      severity: 'warning',
+    });
+  }
+
+  if (commerce.checkoutSuccessPath && !commerce.checkoutSuccessPath.startsWith('/')) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Success path must start with /',
+      detail: 'Use an app-relative route such as /checkout/success so custom frontends can redirect consistently.',
+      severity: 'error',
+    });
+  }
+
+  if (commerce.checkoutCancelPath && !commerce.checkoutCancelPath.startsWith('/')) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Cancel path must start with /',
+      detail: 'Use an app-relative route such as /checkout/cancel so custom frontends can redirect consistently.',
+      severity: 'error',
+    });
+  }
+
+  if ((commerce.reservationMinutes || 0) < 1 || (commerce.reservationMinutes || 0) > 1440) {
+    addIssue(issues, {
+      tab: 'commerce',
+      label: 'Inventory reservation window is invalid',
+      detail: 'Use a reservation window from 1 to 1440 minutes.',
       severity: 'error',
     });
   }
@@ -3339,6 +3447,182 @@ function InfrastructureSettings({
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ============================================
+// COMMERCE SETTINGS
+// ============================================
+
+function CommerceSettings({
+  value,
+  onChange,
+}: {
+  value: CommerceSettingsConfig;
+  onChange: (next: CommerceSettingsConfig) => void;
+}) {
+  const resolved: Required<CommerceSettingsConfig> = {
+    ...DEFAULT_COMMERCE_SETTINGS,
+    ...value,
+  };
+  const update = (next: Partial<CommerceSettingsConfig>) => {
+    onChange({
+      ...resolved,
+      ...next,
+    });
+  };
+  const updateToggle = (key: keyof Pick<
+    CommerceSettingsConfig,
+    'guestCheckout' | 'taxEnabled' | 'shippingEnabled' | 'discountsEnabled' | 'inventoryReservations' | 'webhookEventsEnabled'
+  >, checked: boolean) => update({ [key]: checked } as Partial<CommerceSettingsConfig>);
+
+  return (
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+      <Panel>
+        <PanelHeader
+          title="Storefront checkout"
+          description="Control how public product grids, carts, checkout handoff, and private order intake should behave for custom frontends."
+          icon={<ShoppingCart className="size-4" />}
+        />
+        <PanelContent>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Commerce mode</span>
+              <select
+                value={resolved.mode}
+                onChange={(event) => update({ mode: event.target.value as CommerceSettingsConfig['mode'] })}
+                className={inputClassName}
+              >
+                <option value="catalog-only">Catalog only</option>
+                <option value="manual-orders">Manual order capture</option>
+                <option value="checkout-provider">Checkout provider</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Default currency</span>
+              <input
+                value={resolved.currency}
+                onChange={(event) => update({ currency: event.target.value.toUpperCase().slice(0, 3) })}
+                placeholder="USD"
+                className={inputClassName}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Payment provider</span>
+              <select
+                value={resolved.paymentProvider}
+                onChange={(event) => update({ paymentProvider: event.target.value as CommerceSettingsConfig['paymentProvider'] })}
+                className={inputClassName}
+              >
+                <option value="none">None yet</option>
+                <option value="stripe">Stripe</option>
+                <option value="manual">Manual / invoice</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Provider account ID</span>
+              <input
+                value={resolved.providerAccountId}
+                onChange={(event) => update({ providerAccountId: event.target.value })}
+                placeholder="acct_..."
+                className={inputClassName}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Success redirect path</span>
+              <input
+                value={resolved.checkoutSuccessPath}
+                onChange={(event) => update({ checkoutSuccessPath: event.target.value })}
+                placeholder="/checkout/success"
+                className={inputClassName}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Cancel redirect path</span>
+              <input
+                value={resolved.checkoutCancelPath}
+                onChange={(event) => update({ checkoutCancelPath: event.target.value })}
+                placeholder="/checkout/cancel"
+                className={inputClassName}
+              />
+            </label>
+          </div>
+
+          {resolved.mode === 'checkout-provider' && resolved.paymentProvider === 'none' && (
+            <Notice tone="warning" className="mt-4" title="Checkout provider needed">
+              Select Stripe or manual payment handling before a custom frontend relies on provider checkout mode.
+            </Notice>
+          )}
+        </PanelContent>
+      </Panel>
+
+      <Panel>
+        <PanelHeader
+          title="Commerce behavior"
+          description="Feature flags that the product, cart, order-intake, and storefront APIs can expose to frontends."
+        />
+        <PanelContent>
+          <div className="grid gap-3">
+            {[
+              ['guestCheckout', 'Guest checkout'],
+              ['taxEnabled', 'Taxes'],
+              ['shippingEnabled', 'Shipping'],
+              ['discountsEnabled', 'Discounts'],
+              ['inventoryReservations', 'Inventory reservations'],
+              ['webhookEventsEnabled', 'Webhook events'],
+            ].map(([key, label]) => (
+              <label key={key} className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border px-3 text-sm">
+                <span>{label}</span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(resolved[key as keyof CommerceSettingsConfig])}
+                  onChange={(event) => updateToggle(key as keyof Pick<
+                    CommerceSettingsConfig,
+                    'guestCheckout' | 'taxEnabled' | 'shippingEnabled' | 'discountsEnabled' | 'inventoryReservations' | 'webhookEventsEnabled'
+                  >, event.target.checked)}
+                  className="size-4 rounded border-input"
+                />
+              </label>
+            ))}
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium">Reservation window</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={1440}
+                  value={resolved.reservationMinutes}
+                  onChange={(event) => update({ reservationMinutes: Number(event.target.value) })}
+                  className={inputClassName}
+                />
+                <span className="shrink-0 text-xs text-muted-foreground">minutes</span>
+              </div>
+            </label>
+          </div>
+        </PanelContent>
+      </Panel>
+
+      <Panel className="xl:col-span-2">
+        <PanelHeader
+          title="Storefront API handoff"
+          description="What frontend teams can safely read from Settings when building product grids, carts, and checkout pages."
+        />
+        <PanelContent>
+          <div className="grid gap-3 md:grid-cols-3">
+            {[
+              ['Catalog', 'Products stay public through the product catalog and collection record APIs.'],
+              ['Checkout', 'The selected mode tells a custom frontend whether to show cart-only, manual order, or provider checkout flows.'],
+              ['Private data', 'Orders, customer details, provider references, refunds, and fulfillment remain admin-only.'],
+            ].map(([title, detail]) => (
+              <div key={title} className="rounded-lg border border-border bg-card p-3">
+                <div className="text-sm font-semibold">{title}</div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</div>
+              </div>
+            ))}
+          </div>
+        </PanelContent>
+      </Panel>
     </div>
   );
 }

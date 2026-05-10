@@ -66,6 +66,19 @@ const stringValue = (value: unknown): string => (
   typeof value === 'string' ? value.trim() : ''
 );
 
+const numberValue = (value: unknown, fallback = 0): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  return fallback;
+};
+
 const inferSupabaseProjectRef = (url: string): string => {
   try {
     const host = new URL(url).host;
@@ -187,6 +200,9 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
   const supabase = parseJsonObject(input.supabase) || {};
   const storage = parseJsonObject(input.storage) || {};
   const vercel = parseJsonObject(input.vercel) || {};
+  const commerce = parseJsonObject(input.commerce) || {};
+  const commerceMode = stringValue(commerce.mode);
+  const paymentProvider = stringValue(commerce.paymentProvider);
 
   return {
     ...input,
@@ -211,6 +227,25 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
       productionDomain: stringValue(vercel.productionDomain),
       autoDeploy: boolValue(vercel.autoDeploy),
       previewDeployments: boolValue(vercel.previewDeployments, true),
+    },
+    commerce: {
+      mode: ['catalog-only', 'manual-orders', 'checkout-provider'].includes(commerceMode)
+        ? commerceMode
+        : 'catalog-only',
+      currency: stringValue(commerce.currency).toUpperCase().slice(0, 3),
+      paymentProvider: ['none', 'stripe', 'manual'].includes(paymentProvider)
+        ? paymentProvider
+        : 'none',
+      providerAccountId: stringValue(commerce.providerAccountId),
+      checkoutSuccessPath: stringValue(commerce.checkoutSuccessPath),
+      checkoutCancelPath: stringValue(commerce.checkoutCancelPath),
+      guestCheckout: boolValue(commerce.guestCheckout, true),
+      taxEnabled: boolValue(commerce.taxEnabled),
+      shippingEnabled: boolValue(commerce.shippingEnabled),
+      discountsEnabled: boolValue(commerce.discountsEnabled),
+      inventoryReservations: boolValue(commerce.inventoryReservations, true),
+      reservationMinutes: Math.max(1, Math.min(1440, Math.round(numberValue(commerce.reservationMinutes, 15)))),
+      webhookEventsEnabled: boolValue(commerce.webhookEventsEnabled),
     },
   };
 };
