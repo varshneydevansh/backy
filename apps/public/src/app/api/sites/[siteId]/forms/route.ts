@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getSiteByIdOrSlug, listFormsBySite } from '@/lib/backyStore';
+import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -25,6 +26,13 @@ const errorResponse = (status: number, code: string, message: string, requestId:
         { status, requestId, cache: 'error' },
     )
 );
+
+const formFrontendDesign = (form: { settings?: unknown }) => frontendDesignProvenanceFromMetadata(form.settings);
+
+const withFormFrontendDesign = <TForm extends { settings?: unknown }>(form: TForm) => ({
+    ...form,
+    frontendDesign: formFrontendDesign(form),
+});
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
     const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -54,16 +62,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 siteId: site.id,
                 scope: 'content',
             }) || undefined;
+            const forms = payload.items.map(withFormFrontendDesign);
 
             return publicContractJson({
                 success: true,
                 requestId,
                 data: {
-                    forms: payload.items,
+                    forms,
                     total: payload.pagination.total,
                     pagination: payload.pagination,
                 },
-                forms: payload.items,
+                forms,
                 total: payload.pagination.total,
             }, {
                 requestId,
@@ -82,7 +91,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const forms = listFormsBySite(site.id, {
             pageId: pageId || undefined,
             postId: postId || undefined,
-        });
+        }).map(withFormFrontendDesign);
 
         return publicContractJson({
             success: true,

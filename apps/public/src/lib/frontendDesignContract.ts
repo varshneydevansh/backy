@@ -431,6 +431,28 @@ export const buildFrontendDesignContractFromContentTemplate = (input: {
   };
 };
 
+export const frontendDesignProvenanceFromMetadata = (metadataInput: unknown) => {
+  const metadata = isRecord(metadataInput) ? metadataInput : {};
+  const templateId = stringValue(metadata.frontendDesignTemplateId);
+
+  if (!templateId) {
+    return undefined;
+  }
+
+  return {
+    templateId,
+    templateName: stringValue(metadata.frontendDesignTemplateName),
+    routePattern: stringValue(metadata.frontendDesignRoutePattern),
+    source: cloneRecord(metadata.frontendDesignSource),
+    chrome: cloneRecord(metadata.frontendDesignChrome),
+    tokens: cloneRecord(metadata.frontendDesignTokens),
+    customCss: stringValue(metadata.frontendDesignCustomCss),
+    bindingHints: Array.isArray(metadata.frontendDesignBindingHints)
+      ? cloneArray(metadata.frontendDesignBindingHints.filter(isRecord))
+      : [],
+  };
+};
+
 const templateRequestId = (input: Record<string, unknown>): string | undefined => {
   const meta = isRecord(input.meta) ? input.meta : {};
   return stringValue(input.frontendDesignTemplateId)

@@ -3200,6 +3200,11 @@ try {
       assert(createFormFromTemplate.json?.data?.form?.settings?.frontendDesignTemplateId === 'captured-form-template', `${createFormFromTemplate.url} missing captured form provenance`);
       assert(createFormFromTemplate.json?.data?.form?.fields?.some((field) => field.key === 'title'), `${createFormFromTemplate.url} did not seed captured form fields`);
 
+      const publicCapturedTemplateFormDefinition = await request(`/api/sites/${createdSiteId}/forms/${capturedTemplateFormId}/definition`);
+      assert(publicCapturedTemplateFormDefinition.response.status === 200, `${publicCapturedTemplateFormDefinition.url} expected captured form definition 200`);
+      assert(publicCapturedTemplateFormDefinition.json?.data?.form?.frontendDesign?.templateId === 'captured-form-template', `${publicCapturedTemplateFormDefinition.url} missing captured form frontend design`);
+      assert(publicCapturedTemplateFormDefinition.json?.data?.form?.frontendDesign?.bindingHints?.some((hint) => hint.binding === 'form.fields.title'), `${publicCapturedTemplateFormDefinition.url} missing captured form binding hints`);
+
       const formWriteSubmission = await request(`/api/sites/${createdSiteId}/forms/contract-form-write/submissions`, {
         method: 'POST',
         headers: {
@@ -3674,6 +3679,11 @@ try {
         form.definitionUrl === `/api/sites/${createdSiteId}/forms/contract-form-write/definition` &&
         form.contactsUrl === `/api/sites/${createdSiteId}/forms/contract-form-write/contacts`
       )), `${frontendManifest.url} missing form collection target manifest`);
+      assert(frontendManifest.json?.data?.modules?.forms?.some((form) => (
+        form.id === capturedTemplateFormId &&
+        form.frontendDesign?.templateId === 'captured-form-template' &&
+        form.frontendDesign?.bindingHints?.some((hint) => hint.binding === 'form.fields.title')
+      )), `${frontendManifest.url} missing captured form frontend design manifest`);
       assert(frontendManifest.json?.data?.routePatterns?.some((route) => route.type === 'dynamicCollectionItem'), `${frontendManifest.url} missing dynamic item route pattern`);
       assert(frontendManifest.json?.data?.routePatterns?.some((route) => (
         route.type === 'dynamicCollectionList'
@@ -3740,6 +3750,7 @@ try {
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/events`]?.get, `${publicOpenApi.url} missing interaction events operation`);
       assert(publicOpenApi.json?.components?.schemas?.FormSubmissionEnvelope, `${publicOpenApi.url} missing form submission schema`);
       assert(publicOpenApi.json?.components?.schemas?.FormDefinitionEnvelope, `${publicOpenApi.url} missing form definition schema`);
+      assert(publicOpenApi.json?.components?.schemas?.FormDefinition?.properties?.frontendDesign?.$ref === '#/components/schemas/ReusableSectionFrontendDesign', `${publicOpenApi.url} missing form frontend design schema`);
       assert(publicOpenApi.json?.components?.schemas?.FrontendDesignEnvelope?.properties?.data?.properties?.frontendDesign?.$ref === '#/components/schemas/FrontendDesignContract', `${publicOpenApi.url} missing frontend design envelope schema`);
       assert(publicOpenApi.json?.components?.schemas?.FrontendDesignTemplate?.properties?.bindingHints, `${publicOpenApi.url} missing frontend design template binding schema`);
       assert(publicOpenApi.json?.components?.schemas?.SeoDiscoveryEnvelope, `${publicOpenApi.url} missing SEO discovery schema`);

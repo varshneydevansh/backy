@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getFormById, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -39,6 +40,11 @@ const errorResponse = (status: number, code: string, message: string, requestId:
     )
 );
 
+const withFormFrontendDesign = <TForm extends { settings?: unknown }>(form: TForm) => ({
+    ...form,
+    frontendDesign: frontendDesignProvenanceFromMetadata(form.settings),
+});
+
 export async function GET(_request: NextRequest, { params }: RouteParams) {
     const requestId = _request.headers.get('x-request-id') || makeRequestId();
 
@@ -58,15 +64,16 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
             }
 
             const endpoints = formEndpoints(_request, site.id, form.id);
+            const formContract = withFormFrontendDesign(form);
 
             return publicContractJson({
               success: true,
               requestId,
               data: {
-                form,
+                form: formContract,
                 endpoints,
               },
-              form,
+              form: formContract,
               endpoints,
             }, {
               requestId,
@@ -87,15 +94,16 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         }
 
         const endpoints = formEndpoints(_request, site.id, form.id);
+        const formContract = withFormFrontendDesign(form);
 
         return publicContractJson({
           success: true,
           requestId,
           data: {
-            form,
+            form: formContract,
             endpoints,
           },
-          form,
+          form: formContract,
           endpoints,
         }, {
           requestId,

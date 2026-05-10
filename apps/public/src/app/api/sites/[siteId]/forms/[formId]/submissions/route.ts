@@ -13,6 +13,7 @@ import {
   validateCollectionRecordValues,
   type StoreCollection,
 } from '@/lib/backyStore';
+import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -163,6 +164,11 @@ function parseRequestBody(raw: unknown) {
       : undefined,
   };
 }
+
+const withFormFrontendDesign = <TForm extends { settings?: unknown }>(form: TForm) => ({
+  ...form,
+  frontendDesign: frontendDesignProvenanceFromMetadata(form.settings),
+});
 
 function normalizeRequestId(value?: string): string {
   const trimmed = (value || '').trim();
@@ -473,12 +479,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         data: result.items,
         pagination: result.pagination,
       };
+      const formContract = withFormFrontendDesign(form);
 
       return privateResponse({
         success: true,
         requestId: responseRequestId,
-        data: { form, submissions },
-        form,
+        data: { form: formContract, submissions },
+        form: formContract,
         submissions,
       }, responseRequestId);
     }
@@ -499,12 +506,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       limit,
       offset,
     });
+    const formContract = withFormFrontendDesign(form);
 
     return privateResponse({
       success: true,
       requestId: responseRequestId,
-      data: { form, submissions },
-      form,
+      data: { form: formContract, submissions },
+      form: formContract,
       submissions,
     }, responseRequestId);
   } catch (error) {

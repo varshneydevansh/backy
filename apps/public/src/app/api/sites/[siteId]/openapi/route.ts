@@ -1736,7 +1736,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             type: 'object',
             required: ['forms', 'total', 'pagination'],
             properties: {
-              forms: { type: 'array', items: { type: 'object', additionalProperties: true } },
+              forms: { type: 'array', items: { $ref: '#/components/schemas/FormDefinition' } },
               total: { type: 'integer', minimum: 0 },
               pagination: { type: 'object', additionalProperties: true },
             },
@@ -1745,7 +1745,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             type: 'object',
             required: ['form', 'endpoints'],
             properties: {
-              form: { type: 'object', additionalProperties: true },
+              form: { $ref: '#/components/schemas/FormDefinition' },
               endpoints: {
                 type: 'object',
                 required: ['definition', 'submissions'],
@@ -1762,15 +1762,31 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             required: ['schemaVersion', 'form', 'submitUrl'],
             properties: {
               schemaVersion: { type: 'string', const: 'backy.form-definition.v1' },
-              form: { type: 'object', additionalProperties: true },
+              form: { $ref: '#/components/schemas/FormDefinition' },
               submitUrl: { type: 'string' },
             },
           }),
+          FormDefinition: {
+            type: 'object',
+            additionalProperties: true,
+            required: ['id'],
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              title: { type: 'string' },
+              description: { type: 'string' },
+              isActive: { type: 'boolean' },
+              fields: { type: 'array', items: { type: 'object', additionalProperties: true } },
+              settings: { type: 'object', additionalProperties: true },
+              collectionTarget: { type: ['object', 'null'], additionalProperties: true },
+              frontendDesign: { $ref: '#/components/schemas/ReusableSectionFrontendDesign' },
+            },
+          },
           FormSubmissionsEnvelope: envelopeSchema({
             type: 'object',
             required: ['form', 'submissions', 'pagination'],
             properties: {
-              form: { type: 'object', additionalProperties: true },
+              form: { $ref: '#/components/schemas/FormDefinition' },
               submissions: { type: 'array', items: { type: 'object', additionalProperties: true } },
               pagination: { type: 'object', additionalProperties: true },
             },
@@ -1788,7 +1804,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             type: 'object',
             required: ['form', 'contacts', 'pagination'],
             properties: {
-              form: { type: 'object', additionalProperties: true },
+              form: { $ref: '#/components/schemas/FormDefinition' },
               contacts: { type: 'array', items: { type: 'object', additionalProperties: true } },
               pagination: { type: 'object', additionalProperties: true },
             },

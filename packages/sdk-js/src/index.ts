@@ -498,6 +498,7 @@ export interface BackyFormDefinition {
   submissionsUrl?: string;
   contactsUrl?: string;
   collectionTarget?: Record<string, unknown> | null;
+  frontendDesign?: BackyFrontendDesignProvenance;
   [key: string]: unknown;
 }
 

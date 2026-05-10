@@ -25,6 +25,7 @@ import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/l
 import { normalizeCollectionListRoutePattern, normalizeCollectionRoutePattern } from '@/lib/collectionRoutes';
 import { PRODUCT_COLLECTION_SLUG, buildCommerceStorefrontContract } from '@/lib/commerceCatalog';
 import { normalizeSiteCommentPolicy } from '@/lib/commentPolicy';
+import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import { buildSiteNavigation } from '@/lib/navigation';
 import { normalizeRedirectRules } from '@/lib/redirectRules';
 
@@ -410,6 +411,7 @@ const buildRepositoryManifest = (
           submissionsUrl: `/api/sites/${input.site.id}/forms/${form.id}/submissions`,
           contactsUrl: `/api/sites/${input.site.id}/forms/${form.id}/contacts`,
           collectionTarget: form.collectionTarget || null,
+          frontendDesign: frontendDesignProvenanceFromMetadata(form.settings),
         })),
         media: {
           count: input.media.length,
@@ -729,6 +731,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             submissionsUrl: `/api/sites/${site.id}/forms/${form.id}/submissions`,
             contactsUrl: `/api/sites/${site.id}/forms/${form.id}/contacts`,
             collectionTarget: form.collectionTarget || null,
+            frontendDesign: frontendDesignProvenanceFromMetadata(form.settings),
           })),
           media: {
             count: media.pagination.total,

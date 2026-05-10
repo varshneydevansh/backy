@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getFormById, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -29,17 +30,27 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   )
 );
 
-const formDefinitionPayload = (siteId: string, form: unknown, requestId: string) => ({
-  success: true,
-  requestId,
-  data: {
-    schemaVersion: FORM_DEFINITION_SCHEMA_VERSION,
-    form,
-    submitUrl: `/api/sites/${siteId}/forms/${(form as { id: string }).id}/submissions`,
-  },
-  form,
-  submitUrl: `/api/sites/${siteId}/forms/${(form as { id: string }).id}/submissions`,
+const withFormFrontendDesign = <TForm extends { settings?: unknown }>(form: TForm) => ({
+  ...form,
+  frontendDesign: frontendDesignProvenanceFromMetadata(form.settings),
 });
+
+const formDefinitionPayload = <TForm extends { id: string; settings?: unknown }>(siteId: string, form: TForm, requestId: string) => {
+  const formContract = withFormFrontendDesign(form);
+  const submitUrl = `/api/sites/${siteId}/forms/${form.id}/submissions`;
+
+  return {
+    success: true,
+    requestId,
+    data: {
+      schemaVersion: FORM_DEFINITION_SCHEMA_VERSION,
+      form: formContract,
+      submitUrl,
+    },
+    form: formContract,
+    submitUrl,
+  };
+};
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
