@@ -570,6 +570,26 @@ function CommentsRoute() {
     clearCommentFilters();
     navigate({ to: '/comments', search: { siteId: nextSiteId }, replace: true });
   };
+  const openCommentWorkflowSurface = (surface: typeof COMMENT_WORKFLOW_SURFACES[number]) => {
+    if (isCommentsBusy) return;
+
+    if (surface.route === '/pages') {
+      navigate({ to: '/pages', search: activeSiteSearch });
+      return;
+    }
+
+    if (surface.route === '/blog') {
+      navigate({ to: '/blog', search: activeSiteSearch });
+      return;
+    }
+
+    if (surface.route === '/users') {
+      navigate({ to: '/users' });
+      return;
+    }
+
+    navigate({ to: '/settings', search: { tab: 'notifications' } });
+  };
 
   const handleExportComments = () => {
     if (filteredComments.length === 0 || isCommentsBusy) return;
@@ -767,19 +787,16 @@ function CommentsRoute() {
           </div>
           <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
             {COMMENT_WORKFLOW_SURFACES.map((surface) => (
-              <Link
+              <button
                 key={surface.key}
-                to={surface.route}
-                search={surface.route === '/settings' ? undefined : activeSiteSearch}
-                aria-disabled={isCommentsBusy}
-                className={cn(
-                  'rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5',
-                  isCommentsBusy && 'pointer-events-none opacity-60',
-                )}
+                type="button"
+                onClick={() => openCommentWorkflowSurface(surface)}
+                disabled={isCommentsBusy}
+                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <div className="text-sm font-semibold text-foreground">{surface.title}</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
-              </Link>
+              </button>
             ))}
           </div>
         </div>
