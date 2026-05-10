@@ -113,14 +113,14 @@ It explicitly excludes:
    2. Undo/redo controls
    3. Page settings modal action
    4. Publish/unpublish toggles in list and editor contexts
-   5. New media/form/blog actions where modal opens but state not persisted
+   5. New media/blog actions where modal opens but state not persisted; form template creation now persists standalone backend forms, but full form editing is still incomplete
 2. Labels and text not visible:
    1. controls with only icon affordance and no accessible label
    2. inconsistent color contrast in button state text
    3. settings toggles without inline helper labels
 3. Form subsystem incompleteness:
-   1. block container exists in schema but workflow incomplete
-   2. no production validation UX and no moderation state
+   1. block container exists in schema but full form-builder editing workflow is incomplete
+   2. registration templates can now create standalone forms, submit publicly, and move through moderation, but field editing, delivery, consent export, and analytics remain incomplete
 4. Comment subsystem incompleteness:
    1. no moderation and no status pipeline
    2. no bulk moderation actions
@@ -148,6 +148,7 @@ It explicitly excludes:
 16. `/settings`: backend-backed delivery mode, API keys, security policy, notification routing, theme/SEO defaults, handoff manifest, and Supabase/Vercel/storage metadata; remaining work is full auth/RBAC, secret lifecycle, deployment/domain history, billing/storage limits, and provider execution workflows
 17. `/products`: backend-backed product catalog workspace with schema setup/sync, public catalog API readiness, product editor, pricing, variants, inventory, delivery/checkout URLs, merchandising, SEO fields, CSV/handoff export, and smoke coverage through `test:commerce`; remaining work is payment providers, taxes, shipping, discounts, subscriptions, product page templates, customer linkage, and analytics
 18. `/orders`: backend-backed private order operations workspace with schema setup/sync, private order permissions, public checkout-intake contract, payment/fulfillment/tracking/refund/address fields, CSV/handoff export, and smoke coverage through `test:commerce`; remaining work is provider reconciliation, fulfillment integrations, notifications, fraud/risk controls, returns, and analytics
+19. `/forms`: backend-backed forms command center with direct template-to-form creation, public definition/submission APIs, inbox moderation, contact-share context, and smoke coverage through `test:forms`; remaining work is full form-builder editing, field reorder/options UX, delivery webhooks/email, consent exports, analytics, RBAC, and DB persistence
 
 ## 6) Public-route completion checklist
 
@@ -157,7 +158,7 @@ It explicitly excludes:
 4. `/api/sites/[siteId]/pages`: status-filtered page resolve
 5. `/api/sites/[siteId]/media`: metadata + signed URL access contract
 6. `/api/sites/[siteId]/blog`: public feed with pagination cursor
-7. `/api/sites/[siteId]/forms/...`: production form submit endpoint
+7. `/api/sites/[siteId]/forms/...`: public definition and submit endpoints with validation/moderation coverage; remaining work is delivery execution, consent export, analytics, DB persistence, and broader form-builder admin coverage
 8. `/api/sites/[siteId]/comments`: moderation-aware public read and create
 9. `PageRenderer.tsx`: single shared rendering contract with editor schema
 10. `/api/sites/[siteId]/commerce/catalog`: public product catalog and product detail contract for custom storefronts
@@ -178,6 +179,7 @@ It explicitly excludes:
 6. admin:
    1. review list with filters
    2. change status and add notes
+   3. direct template-to-form creation is covered by `test:forms`
 7. integration:
    1. webhook or email trigger
 

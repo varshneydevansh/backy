@@ -1135,6 +1135,11 @@ export interface FormDefinition {
   updatedAt: string;
 }
 
+export type FormDefinitionInput = Omit<FormDefinition, 'id' | 'siteId' | 'createdAt' | 'updatedAt'> & {
+  id?: string;
+  siteId?: string;
+};
+
 export interface FormSubmission {
   id: string;
   formId: string;
@@ -2562,6 +2567,38 @@ export async function listForms(
   }
 
   return forms;
+}
+
+export async function createForm(
+  siteId: string,
+  input: FormDefinitionInput,
+): Promise<FormDefinition> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiFormDetailResponse>(response);
+  const form = payload.data?.form || payload.form;
+
+  if (!response.ok || !payload.success || !form) {
+    throw new Error(payload.error?.message || 'Unable to create form');
+  }
+
+  return form;
+}
+
+export async function deleteForm(siteId: string, formId: string): Promise<void> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}`, {
+    method: 'DELETE',
+  });
+  const payload = await readJson<ApiDeleteResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data?.deleted) {
+    throw new Error(payload.error?.message || 'Unable to delete form');
+  }
 }
 
 export async function getFormWithSubmissions(

@@ -21,6 +21,7 @@ import {
   getAdminApiBase,
   getFormWithSubmissions,
   listForms,
+  createForm,
   updateFormSubmission,
   type FormDefinition,
   type FormFieldDefinition,
@@ -363,9 +364,10 @@ function FormsRoute() {
   const [submissionQuery, setSubmissionQuery] = useState(routeSearch.submissionQ || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
+  const [isCreatingTemplateId, setIsCreatingTemplateId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const isFormsBusy = isLoading || Boolean(isUpdatingId);
+  const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isCreatingTemplateId);
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -814,6 +816,47 @@ function FormsRoute() {
     if (isFormsBusy) return;
 
     navigate({ to: '/pages/new', search: { siteId: activeSiteId, template } });
+  };
+
+  const createFormFromTemplate = async (template: FormTemplateBlueprint) => {
+    if (isFormsBusy) return;
+
+    setIsCreatingTemplateId(template.id);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const created = await createForm(activeSiteId, {
+        name: `${template.id}-${Date.now().toString(36)}`,
+        title: template.title,
+        description: template.description,
+        audience: template.audience,
+        isActive: true,
+        fields: template.fields,
+        successMessage: template.successMessage,
+        enableHoneypot: true,
+        enableCaptcha: false,
+        moderationMode: template.moderationMode,
+        contactShare: template.contactShare,
+        collectionTarget: template.collectionTarget,
+      });
+      setForms((current) => [created, ...current.filter((form) => form.id !== created.id)]);
+      setInboxByForm((current) => ({
+        ...current,
+        [created.id]: {
+          form: created,
+          submissions: [],
+          total: 0,
+        },
+      }));
+      setSelectedFormId(created.id);
+      updateFormsRouteSearch({ formId: created.id, q: undefined, source: undefined, state: undefined, destination: undefined, readiness: undefined });
+      setNotice(`${template.title} form created. It is active and ready for public submissions.`);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Unable to create form from template');
+    } finally {
+      setIsCreatingTemplateId(null);
+    }
   };
 
   useEffect(() => {
@@ -1323,6 +1366,15 @@ function FormsRoute() {
                     <Button
                       size="sm"
                       variant="primary"
+                      onClick={() => void createFormFromTemplate(template)}
+                      disabled={isFormsBusy}
+                      iconStart={<FileInput className="size-4" />}
+                    >
+                      {isCreatingTemplateId === template.id ? 'Creating...' : 'Create form'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={() => openFormPageTemplate(template.pageTemplate)}
                       disabled={isFormsBusy}
                       iconStart={<Sparkles className="size-4" />}

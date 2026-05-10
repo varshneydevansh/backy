@@ -1684,6 +1684,7 @@ interface AdminContentSnapshot {
   blogPosts?: StoreBlogPost[];
   blogCategories?: StoreBlogCategory[];
   blogTags?: StoreBlogTag[];
+  forms?: FormDefinition[];
   collections?: StoreCollection[];
   collectionRecords?: StoreCollectionRecord[];
   reusableSections?: StoreReusableSection[];
@@ -1813,6 +1814,10 @@ function refreshPersistedAdminContent() {
       BLOG_TAGS.splice(0, BLOG_TAGS.length, ...parsed.blogTags);
     }
 
+    if (Array.isArray(parsed.forms)) {
+      FORM_LIBRARY.splice(0, FORM_LIBRARY.length, ...parsed.forms);
+    }
+
     if (Array.isArray(parsed.collections)) {
       COLLECTIONS.splice(0, COLLECTIONS.length, ...parsed.collections);
     }
@@ -1872,6 +1877,7 @@ function persistAdminContent() {
           blogPosts: BLOG_POSTS,
           blogCategories: BLOG_CATEGORIES,
           blogTags: BLOG_TAGS,
+          forms: FORM_LIBRARY,
           collections: COLLECTIONS,
           collectionRecords: COLLECTION_RECORDS,
           reusableSections: REUSABLE_SECTIONS,
@@ -3290,14 +3296,6 @@ function validateSubmissionValues(
     }
 
     if (field.type === 'radio' && submittedValues.length > 0 && normalizedAllowedOptions.length === 0) {
-      details.push({
-        field: fieldLabel,
-        message: `${fieldLabel} has no available options`,
-      });
-      return;
-    }
-
-    if (field.type === 'checkbox' && normalizedAllowedOptions.length === 0 && field.required && sanitized.length > 0) {
       details.push({
         field: fieldLabel,
         message: `${fieldLabel} has no available options`,
@@ -6047,6 +6045,102 @@ export function getFormById(siteId: string, formId: string): FormDefinition | un
   );
 
   return form ? clone(form) : undefined;
+}
+
+export function createAdminForm(input: Omit<FormDefinition, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): FormDefinition {
+  ensurePersistedAdminContentLoaded();
+  const site = getSiteByIdOrSlug(input.siteId);
+  if (!site) {
+    throw new Error('Site not found');
+  }
+
+  const baseName = normalizeSlugInput(input.name || input.title || 'form', 'form');
+  let formId = input.id && String(input.id).trim()
+    ? normalizeSlugInput(input.id, baseName)
+    : `form-${baseName}`;
+  let suffix = 2;
+  while (FORM_LIBRARY.some((form) => form.siteId === site.id && normalizeIdentifier(form.id) === normalizeIdentifier(formId))) {
+    formId = `form-${baseName}-${suffix}`;
+    suffix += 1;
+  }
+
+  const now = new Date().toISOString();
+  const form: FormDefinition = {
+    id: formId,
+    siteId: site.id,
+    pageId: input.pageId || null,
+    postId: input.postId || null,
+    name: input.name?.trim() || baseName,
+    title: input.title?.trim() || input.name?.trim() || 'Untitled form',
+    description: input.description?.trim() || null,
+    audience: input.audience || 'public',
+    isActive: input.isActive !== false,
+    fields: Array.isArray(input.fields) ? input.fields : [],
+    notificationEmail: input.notificationEmail || null,
+    notificationWebhook: input.notificationWebhook || null,
+    successRedirectUrl: input.successRedirectUrl || null,
+    successMessage: input.successMessage || 'Submission received.',
+    enableHoneypot: input.enableHoneypot !== false,
+    enableCaptcha: input.enableCaptcha === true,
+    moderationMode: input.moderationMode || 'manual',
+    contactShare: input.contactShare,
+    collectionTarget: input.collectionTarget,
+    createdBy: input.createdBy || 'admin',
+    updatedBy: input.updatedBy || 'admin',
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  FORM_LIBRARY.unshift(form);
+  persistAdminContent();
+  recordAdminAuditLog({
+    siteId: site.id,
+    actorId: input.createdBy || 'admin',
+    entity: 'form',
+    entityId: form.id,
+    action: 'form.created',
+    after: clone(form) as unknown as BackyJsonObject,
+    metadata: {
+      name: form.name,
+      fieldCount: form.fields.length,
+      source: form.pageId || form.postId ? 'content-bound' : 'standalone',
+    },
+  });
+
+  return clone(form);
+}
+
+export function deleteAdminForm(siteId: string, formId: string): FormDefinition | null {
+  ensurePersistedAdminContentLoaded();
+  const site = getSiteByIdOrSlug(siteId);
+  if (!site) {
+    return null;
+  }
+
+  const index = FORM_LIBRARY.findIndex((form) => form.siteId === site.id && normalizeIdentifier(form.id) === normalizeIdentifier(formId));
+  if (index === -1) {
+    return null;
+  }
+
+  const [removed] = FORM_LIBRARY.splice(index, 1);
+  setFormSubmissions(formSubmissions.filter((submission) => submission.formId !== removed.id));
+  setContactStore(contactStore.filter((contact) => contact.formId !== removed.id));
+  persistAdminContent();
+  persistInteractionStore();
+  recordAdminAuditLog({
+    siteId: site.id,
+    actorId: 'admin',
+    entity: 'form',
+    entityId: removed.id,
+    action: 'form.deleted',
+    before: clone(removed) as unknown as BackyJsonObject,
+    metadata: {
+      name: removed.name,
+      fieldCount: removed.fields.length,
+    },
+  });
+
+  return clone(removed);
 }
 
 export function validateAndClassifyFormSubmission(

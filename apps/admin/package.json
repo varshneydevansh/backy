@@ -14,6 +14,7 @@
     "test:page-create": "node scripts/page-create-smoke.mjs",
     "test:blog-create": "node scripts/blog-create-smoke.mjs",
     "test:commerce": "node scripts/commerce-smoke.mjs",
+    "test:forms": "node scripts/forms-smoke.mjs",
     "test:settings": "node scripts/settings-smoke.mjs",
     "clean": "rm -rf dist"
   },
