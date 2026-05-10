@@ -312,6 +312,10 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
       hasTemplates: Boolean(document.querySelector('[data-testid="collections-templates"]')),
       hasApiContract: body.includes('Collection API contract') && body.includes('Public records') && body.includes('Bulk records'),
       hasFrontendContract: body.includes('Dynamic data frontend contract') && body.includes('Frontend wiring'),
+      hasBindingContract: Boolean(document.querySelector('[data-testid="collections-binding-contract"]')) &&
+        body.includes('Editor data-binding contract') &&
+        body.includes('Repeater/list sections') &&
+        body.includes('Public write flows'),
       hasBuilder: body.includes('Schema builder') && body.includes('Public read') && body.includes('Visitor create'),
       hasRecords: body.includes('Records') && body.includes('Import CSV') && body.includes('Export CSV') && body.includes('New record'),
       hasCollection: body.includes(${JSON.stringify(collectionName)}) && body.includes(${JSON.stringify(`/${collectionSlug}`)}),
@@ -326,11 +330,12 @@ const assertCollectionsLayout = async (client, { collectionName, collectionSlug,
   assert(layout.scrollWidth <= layout.width + 8, `Collections page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
     layout.path === '/collections' &&
-      layout.hasCommandCenter &&
-      layout.hasTemplates &&
-      layout.hasApiContract &&
-      layout.hasFrontendContract &&
-      layout.hasBuilder &&
+    layout.hasCommandCenter &&
+    layout.hasTemplates &&
+    layout.hasApiContract &&
+    layout.hasFrontendContract &&
+    layout.hasBindingContract &&
+    layout.hasBuilder &&
       layout.hasRecords &&
       layout.hasCollection &&
       layout.hasRecord &&

@@ -343,6 +343,39 @@ const COLLECTION_WORKFLOW_SURFACES = [
   },
 ] as const;
 
+const COLLECTION_BINDING_TARGETS = [
+  {
+    key: 'repeater',
+    title: 'Repeater/list sections',
+    detail: 'Bind record arrays into grids, cards, tables, sliders, directories, catalogs, and filtered list blocks.',
+  },
+  {
+    key: 'detail',
+    title: 'Detail page routes',
+    detail: 'Use route templates and record slugs to render one public detail page per record.',
+  },
+  {
+    key: 'field',
+    title: 'Element field bindings',
+    detail: 'Map text, rich text, image, file, link, boolean, date, tag, and reference fields onto page components.',
+  },
+  {
+    key: 'filters',
+    title: 'Filters and sort controls',
+    detail: 'Expose status, field, search, sort, and pagination state to frontend filter controls.',
+  },
+  {
+    key: 'writes',
+    title: 'Public write flows',
+    detail: 'Use public-create collections for registrations, submissions, surveys, applications, and visitor-generated records.',
+  },
+  {
+    key: 'media',
+    title: 'Media and file fields',
+    detail: 'Connect image, video, and file fields to the central media library and delivery URLs.',
+  },
+] as const;
+
 const COLLECTION_SCHEMA_EXPORT_COLUMNS = [
   'collection_id',
   'active_site_id',
@@ -801,6 +834,20 @@ function CollectionsPage() {
       columns: COLLECTION_SCHEMA_EXPORT_COLUMNS,
     },
     frontendSystems: COLLECTION_FRONTEND_SYSTEMS,
+    bindingContract: {
+      model: 'Collections are the dataset layer for the page editor and custom frontends: one schema can power repeaters, detail routes, filters, field bindings, form writes, and media-backed records.',
+      targets: COLLECTION_BINDING_TARGETS,
+      activeCollection: activeCollection
+        ? {
+            id: activeCollection.id,
+            slug: activeCollection.slug,
+            listRoute: activeListRoutePath,
+            detailRoute: activeItemRoutePath,
+            publicReadReady: activeCollectionIsPublic,
+            publicCreateReady: activeCollection.permissions.publicCreate,
+          }
+        : null,
+    },
     templates: COLLECTION_TEMPLATES.map((template) => ({
       id: template.id,
       name: template.name,
@@ -2025,6 +2072,38 @@ function CollectionsPage() {
                     </div>
                     <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
                       {system.key}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="collections-binding-contract">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Database className="size-4 text-primary" />
+                  <h3 className="text-sm font-semibold">Editor data-binding contract</h3>
+                </div>
+                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                  Use collection schemas as reusable datasets for page repeaters, detail routes, filters, field-level component bindings, public write flows, and media-backed records.
+                </p>
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {COLLECTION_BINDING_TARGETS.length} targets
+              </span>
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {COLLECTION_BINDING_TARGETS.map((target) => (
+                <div key={target.key} className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-foreground">{target.title}</div>
+                      <div className="mt-1 text-xs leading-5 text-muted-foreground">{target.detail}</div>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                      {target.key}
                     </span>
                   </div>
                 </div>
