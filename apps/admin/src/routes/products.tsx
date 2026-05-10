@@ -300,6 +300,39 @@ const PRODUCT_FRONTEND_SYSTEMS = [
   },
 ] as const;
 
+const PRODUCT_PAGE_BINDING_TARGETS = [
+  {
+    key: 'product-card',
+    title: 'Product card blocks',
+    detail: 'Bind title, price, image, featured state, category, tags, and product URL into storefront grids.',
+  },
+  {
+    key: 'product-detail',
+    title: 'Product detail sections',
+    detail: 'Bind description, gallery, pricing, SEO title, inventory policy, and delivery metadata into detail pages.',
+  },
+  {
+    key: 'variant-selector',
+    title: 'Variant selectors',
+    detail: 'Expose option, SKU, price override, and variant stock for sizes, licenses, tiers, colors, or formats.',
+  },
+  {
+    key: 'cart-order-intake',
+    title: 'Cart and order intake',
+    detail: 'Use checkoutUrl or the Backy order POST contract to create private orders and reserve inventory.',
+  },
+  {
+    key: 'merchandising-filters',
+    title: 'Merchandising filters',
+    detail: 'Drive storefront filters from category, tags, vendor, product type, featured state, and stock policy.',
+  },
+  {
+    key: 'product-media',
+    title: 'Product media fields',
+    detail: 'Use central media URLs for primary images, galleries, and digital delivery/download references.',
+  },
+] as const;
+
 const EMPTY_PRODUCT_FORM: ProductFormState = {
   title: '',
   slug: '',
@@ -655,6 +688,14 @@ function ProductsRoute() {
         productBySlug: commerceProductDetailUrl,
         note: 'Use this endpoint for storefront cards, facets, inventory state, delivery metadata, and checkout URL handoff without re-mapping raw collection fields.',
       },
+    },
+    pageBuilderContract: {
+      model: 'Products are sellable CMS records that page and blog canvases can bind into storefront grids, detail sections, variant controls, checkout calls to action, and merchandising filters.',
+      targets: PRODUCT_PAGE_BINDING_TARGETS,
+      starterRoute: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
+      canvasBlocks: ['product-card', 'product-grid', 'product-detail', 'variant-selector', 'cart-button', 'checkout-button', 'related-products'],
+      requiredFields: ['title', 'slug', 'sku', 'price', 'currency', 'inventory', 'productType', 'checkoutUrl'],
+      optionalFields: ['compareAtPrice', 'variants', 'galleryImages', 'downloadUrl', 'category', 'tags', 'vendor', 'seoTitle', 'featured', 'taxable'],
     },
     frontendSystems: PRODUCT_FRONTEND_SYSTEMS,
     readiness: {
@@ -1584,6 +1625,34 @@ function ProductsRoute() {
                         </div>
                         <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
                           {system.key}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div data-testid="products-page-binding-contract" className="rounded-lg border border-border bg-background p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Page and editor binding contract</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Storefront pages should bind product records into grids, detail sections, variant controls, checkout buttons, merchandising filters, and product media.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    {PRODUCT_PAGE_BINDING_TARGETS.length} targets
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {PRODUCT_PAGE_BINDING_TARGETS.map((target) => (
+                    <div key={target.key} className="rounded-lg border border-border bg-card p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-foreground">{target.title}</div>
+                          <div className="mt-1 text-xs leading-5 text-muted-foreground">{target.detail}</div>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                          {target.key}
                         </span>
                       </div>
                     </div>

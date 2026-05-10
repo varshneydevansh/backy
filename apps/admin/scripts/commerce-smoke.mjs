@@ -631,11 +631,15 @@ const assertProductsLayout = async (client) => {
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="products-command-center"]')),
     hasApiPanel: document.body?.innerText?.includes('Storefront API') || false,
+    hasPageBindingContract: Boolean(document.querySelector('[data-testid="products-page-binding-contract"]')) &&
+      document.body?.innerText?.includes('Page and editor binding contract') &&
+      document.body?.innerText?.includes('Product card blocks') &&
+      document.body?.innerText?.includes('Cart and order intake'),
     hasEditor: document.body?.innerText?.includes('New product') || document.body?.innerText?.includes('Edit product') || false,
     hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Products page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasPageBindingContract && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
