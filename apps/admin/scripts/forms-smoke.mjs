@@ -313,15 +313,11 @@ const editFormBuilderInUi = async (client, formId) => {
       const fieldInputs = Array.from((fieldCard || panel).querySelectorAll('input'));
       const key = fieldInputs.find((input) => input.value === 'field_6');
       const label = fieldInputs.find((input) => input.value === 'Field 6');
-      const saveButton = Array.from(panel.querySelectorAll('button')).find((button) => (
-        (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Save form'
-      ));
-      if (!(key instanceof HTMLInputElement) || !(label instanceof HTMLInputElement) || !(saveButton instanceof HTMLButtonElement)) {
+      if (!(key instanceof HTMLInputElement) || !(label instanceof HTMLInputElement)) {
         return {
           ok: false,
           reason: 'new-field-controls-missing',
           inputs: fieldInputs.map((input) => input.value).slice(-16),
-          buttons: Array.from(panel.querySelectorAll('button')).map((button) => button.textContent || '').slice(-10),
         };
       }
 
@@ -330,6 +326,60 @@ const editFormBuilderInUi = async (client, formId) => {
 
       key.focus();
       setInputValue(key, 'company');
+
+      return { ok: true };
+    })()`);
+
+    if (result.ok) break;
+
+    if (attempt === 79) {
+      throw new Error(`Unable to rename new form field: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const setInputValue = (input, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        descriptor?.set?.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const panel = document.querySelector('[data-testid="form-builder-panel"]');
+      if (!panel) return { ok: false, reason: 'panel-missing' };
+      const fieldCards = Array.from(panel.querySelectorAll('.rounded-lg.border.border-border.bg-card.p-3'));
+      const fieldCard = fieldCards.find((candidate) => (
+        Array.from(candidate.querySelectorAll('input')).some((input) => input.value === 'company')
+      ));
+      const fieldInputs = Array.from((fieldCard || panel).querySelectorAll('input'));
+      const minLengthValue = fieldInputs.find((input) => (input.getAttribute('aria-label') || '').includes('Min length value'));
+      const minLengthMessage = fieldInputs.find((input) => (input.getAttribute('aria-label') || '').includes('Min length message'));
+      const saveButton = Array.from(panel.querySelectorAll('button')).find((button) => (
+        (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Save form'
+      ));
+      if (
+        !(minLengthValue instanceof HTMLInputElement) ||
+        !(minLengthMessage instanceof HTMLInputElement) ||
+        !(saveButton instanceof HTMLButtonElement)
+      ) {
+        return {
+          ok: false,
+          reason: 'validation-controls-missing',
+          inputs: fieldInputs.map((input) => ({
+            value: input.value,
+            aria: input.getAttribute('aria-label') || '',
+          })).slice(-24),
+          buttons: Array.from(panel.querySelectorAll('button')).map((button) => button.textContent || '').slice(-10),
+        };
+      }
+
+      minLengthValue.focus();
+      setInputValue(minLengthValue, '4');
+
+      minLengthMessage.focus();
+      setInputValue(minLengthMessage, 'Company must be at least 4 characters.');
 
       if (saveButton.disabled) {
         return { ok: false, reason: 'save-disabled', button: saveButton.textContent || '' };
@@ -341,7 +391,7 @@ const editFormBuilderInUi = async (client, formId) => {
     if (result.ok) break;
 
     if (attempt === 79) {
-      throw new Error(`Unable to save form builder changes: ${JSON.stringify(result)}`);
+      throw new Error(`Unable to save form validation changes: ${JSON.stringify(result)}`);
     }
 
     await sleep(250);
@@ -355,17 +405,23 @@ const editFormBuilderInUi = async (client, formId) => {
     const form = await getAdminForm(formId);
     const editedTitle = form?.title === 'Registration edited';
     const company = form?.fields?.some((field) => field.key === 'company' && field.label === 'Company');
+    const companyValidation = form?.fields?.find((field) => field.key === 'company')?.validation || [];
+    const hasCompanyMinLength = companyValidation.some((rule) => (
+      rule.type === 'minLength' &&
+      Number(rule.value) === 4 &&
+      rule.message === 'Company must be at least 4 characters.'
+    ));
     const placeholder = form?.fields?.some((field) => field.key === 'full_name' && field.placeholder === 'Grace Hopper');
 
-    if (saved.notice && editedTitle && company && placeholder) {
-      return { ...saved, editedTitle, company, placeholder };
+    if (saved.notice && editedTitle && company && hasCompanyMinLength && placeholder) {
+      return { ...saved, editedTitle, company, hasCompanyMinLength, placeholder };
     }
 
     if (attempt === 79) {
       throw new Error(`Form builder changes did not persist: ${JSON.stringify({
         saved,
         title: form?.title,
-        fields: form?.fields?.map((field) => ({ key: field.key, label: field.label, placeholder: field.placeholder })),
+        fields: form?.fields?.map((field) => ({ key: field.key, label: field.label, placeholder: field.placeholder, validation: field.validation })),
       })}`);
     }
 
@@ -398,6 +454,32 @@ const submitRegistration = async (formId) => {
   assert(submission?.id, `Public registration submit did not return a submission: ${JSON.stringify(payload).slice(0, 500)}`);
   assert(submission.status === 'pending', `Registration submission should be pending for manual review: ${submission.status}`);
   return submission;
+};
+
+const submitInvalidRegistration = async (formId) => {
+  const response = await fetch(`${API_BASE_URL}/api/sites/${SITE_ID}/forms/${formId}/submissions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      requestId: `forms-smoke-invalid-${Date.now().toString(36)}`,
+      rateLimitBypass: true,
+      startedAt: Date.now() - 3000,
+      honeypot: '',
+      values: {
+        full_name: 'Forms Smoke User',
+        email: 'forms-smoke-invalid@example.com',
+        phone: '+1 555 0199',
+        member_type: 'Creator',
+        consent: true,
+        company: 'ABC',
+      },
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  const serialized = JSON.stringify(payload);
+  assert(!response.ok || payload.success === false, `Invalid registration unexpectedly succeeded: ${serialized}`);
+  assert(serialized.includes('Company must be at least 4 characters.'), `Invalid registration did not return validation message: ${serialized}`);
+  return payload;
 };
 
 const refreshForms = async (client) => {
@@ -548,10 +630,18 @@ const main = async () => {
       'Edited registration definition did not expose Company field',
     );
     assert(
+      definition.data.form.fields.some((field) => (
+        field.key === 'company' &&
+        field.validation?.some((rule) => rule.type === 'minLength' && Number(rule.value) === 4)
+      )),
+      'Edited registration definition did not expose Company minLength validation',
+    );
+    assert(
       definition.data.form.fields.some((field) => field.key === 'full_name' && field.placeholder === 'Grace Hopper'),
       'Edited registration definition did not expose updated placeholder',
     );
 
+    const invalidSubmission = await submitInvalidRegistration(createdFormId);
     const submitted = await submitRegistration(createdFormId);
     await refreshForms(client);
     const approved = await approveSubmissionInUi(client, createdFormId, submitted.id);
@@ -581,7 +671,9 @@ const main = async () => {
         title: definition.data.form.title,
         fieldCount: definition.data.form.fields.length,
         contactShare: Boolean(definition.data.form.contactShare?.enabled),
+        companyValidation: definition.data.form.fields.find((field) => field.key === 'company')?.validation || [],
       },
+      invalidSubmissionRejected: Boolean(invalidSubmission.error || invalidSubmission.errorMessage),
       submission: {
         id: submitted.id,
         initialStatus: submitted.status,
