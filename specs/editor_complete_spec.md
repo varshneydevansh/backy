@@ -159,10 +159,10 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Buttons change canvas size and active authoring breakpoint
 - Desktop edits update the base element model
 - Tablet/mobile layout, content, prop, and style edits persist into `element.responsive` overrides
+- Tablet/mobile layer hide/show and lock/unlock edits persist into `element.responsive` overrides
 - Public rendering applies responsive overrides from the rendered container width
-- `test:editor-drag` verifies mobile override persistence, desktop layout preservation, breakpoint switching, and reload hydration
+- `test:editor-drag` verifies mobile layout plus layer visibility/lock override persistence, desktop layout preservation, breakpoint switching, and reload hydration
 - **Remaining Improvements Needed:**
-    - Add dedicated per-breakpoint hide/lock layer controls
     - Add clearer inheritance/reset controls for each field group
     - Add tablet-specific smoke coverage and broader visual regression snapshots
 - **Implemented Contract:**
@@ -444,8 +444,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ❌ Alignment guides
 - ❌ Zoom controls
 - ⚠️ Responsive breakpoint editing
-  - Desktop/tablet/mobile layout/content/style overrides now persist and render publicly.
-  - Still needs per-breakpoint layer visibility/lock controls, clearer inheritance UI, tablet smoke coverage, and visual regression thresholds.
+  - Desktop/tablet/mobile layout/content/style and layer visibility/lock overrides now persist and render publicly.
+  - Still needs clearer inheritance UI, tablet smoke coverage, and visual regression thresholds.
 - ❌ Media upload modal
 - ❌ Element locking
 - ⚠️ Page templates

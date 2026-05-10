@@ -723,6 +723,94 @@ const selectLayerById = async (client, elementId) => {
   await switchToPropertiesPanel(client);
 };
 
+const readLayerActionState = async (client, elementId) => {
+  const opened = await evaluate(client, `(() => {
+    const layersButton = document.querySelector('[data-testid="editor-tab-layers"]');
+    if (!(layersButton instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'missing-layers-tab' };
+    }
+    layersButton.click();
+    return { ok: true };
+  })()`);
+
+  assert(opened?.ok, `Unable to open layers panel for ${elementId}: ${JSON.stringify(opened)}`);
+  await sleep(150);
+
+  let state = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    state = await evaluate(client, `(() => {
+    const row = document.querySelector('[data-layer-id="${elementId}"]');
+    if (!(row instanceof HTMLElement)) {
+      return {
+        ok: false,
+        reason: 'missing-layer-row',
+        availableLayerIds: Array.from(document.querySelectorAll('[data-layer-id]'))
+          .map((node) => node.getAttribute('data-layer-id')),
+      };
+    }
+    return {
+      ok: true,
+      hidden: row.classList.contains('hidden'),
+      locked: row.classList.contains('locked'),
+      visibilityLabel: document.querySelector('[data-layer-action="visibility"][data-layer-action-id="${elementId}"]')?.getAttribute('aria-label') || '',
+      lockLabel: document.querySelector('[data-layer-action="lock"][data-layer-action-id="${elementId}"]')?.getAttribute('aria-label') || '',
+    };
+  })()`);
+
+    if (state?.ok) {
+      break;
+    }
+    await sleep(100);
+  }
+
+  assert(state?.ok, `Unable to read layer action state for ${elementId}: ${JSON.stringify(state)}`);
+  return state;
+};
+
+const setLayerHiddenState = async (client, elementId, hidden) => {
+  const state = await readLayerActionState(client, elementId);
+  if (state.hidden === hidden) {
+    return state;
+  }
+
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-layer-action="visibility"][data-layer-action-id="${elementId}"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return false;
+    }
+    button.click();
+    return true;
+  })()`);
+
+  assert(clicked, `Unable to toggle visibility for layer ${elementId}`);
+  await sleep(250);
+  const nextState = await readLayerActionState(client, elementId);
+  assert(nextState.hidden === hidden, `Layer ${elementId} hidden state did not become ${hidden}: ${JSON.stringify(nextState)}`);
+  return nextState;
+};
+
+const setLayerLockedState = async (client, elementId, locked) => {
+  const state = await readLayerActionState(client, elementId);
+  if (state.locked === locked) {
+    return state;
+  }
+
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-layer-action="lock"][data-layer-action-id="${elementId}"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return false;
+    }
+    button.click();
+    return true;
+  })()`);
+
+  assert(clicked, `Unable to toggle lock for layer ${elementId}`);
+  await sleep(250);
+  const nextState = await readLayerActionState(client, elementId);
+  assert(nextState.locked === locked, `Layer ${elementId} locked state did not become ${locked}: ${JSON.stringify(nextState)}`);
+  return nextState;
+};
+
 const waitForElementState = async (client, elementId, predicate, label) => {
   let lastState = null;
   for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -778,6 +866,9 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId) => {
     `Responsive override panel did not appear: ${JSON.stringify(overridePanel)}`,
   );
 
+  const mobileLayerHidden = await setLayerHiddenState(client, elementId, true);
+  const mobileLayerLocked = await setLayerLockedState(client, elementId, true);
+
   await clickSave(client);
 
   let persistedElement = null;
@@ -785,7 +876,9 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId) => {
     persistedElement = await readPersistedElement(pageId, elementId);
     if (
       persistedElement?.responsive?.mobile?.x === expectedMobileX &&
-      persistedElement?.responsive?.mobile?.width === expectedMobileWidth
+      persistedElement?.responsive?.mobile?.width === expectedMobileWidth &&
+      persistedElement?.responsive?.mobile?.visible === false &&
+      persistedElement?.responsive?.mobile?.locked === true
     ) {
       break;
     }
@@ -796,7 +889,9 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId) => {
     persistedElement?.x === desktopBefore.x &&
       persistedElement?.width === desktopBefore.width &&
       persistedElement?.responsive?.mobile?.x === expectedMobileX &&
-      persistedElement?.responsive?.mobile?.width === expectedMobileWidth,
+      persistedElement?.responsive?.mobile?.width === expectedMobileWidth &&
+      persistedElement?.responsive?.mobile?.visible === false &&
+      persistedElement?.responsive?.mobile?.locked === true,
     `Responsive override was not persisted without changing desktop layout: ${JSON.stringify({ desktopBefore, persistedElement })}`,
   );
 
@@ -809,8 +904,11 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId) => {
   );
 
   await clickButtonByAriaLabel(client, 'Mobile canvas');
-  const mobileAfter = await readEditorElementState(client, [elementId]);
-  assertElementState(mobileAfter, mobileState, `${elementId} mobile override after switching breakpoints`);
+  const mobileLayerAfter = await readLayerActionState(client, elementId);
+  assert(
+    mobileLayerAfter.hidden === true && mobileLayerAfter.locked === true,
+    `Mobile layer override did not hydrate after switching breakpoints: ${JSON.stringify(mobileLayerAfter)}`,
+  );
 
   return {
     elementId,
@@ -819,8 +917,14 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId) => {
       width: desktopBefore.width,
     },
     mobileOverride: persistedElement.responsive.mobile,
+    mobileLayerHidden,
+    mobileLayerLocked,
     desktopAfter: desktopAfter[elementId],
-    mobileAfter: mobileAfter[elementId],
+    mobileAfter: {
+      ...mobileState[elementId],
+      hidden: mobileLayerAfter.hidden,
+      locked: mobileLayerAfter.locked,
+    },
   };
 };
 

@@ -148,6 +148,7 @@ function LayerItem({
     depth = 0,
 }: LayerItemProps) {
     const [showActions, setShowActions] = useState(false);
+    const layerName = (element.props.name as string) || `${element.type}-${element.id.slice(0, 4)}`;
 
     const handleClick = (e: React.MouseEvent) => {
         onSelect(element.id, e.metaKey || e.ctrlKey);
@@ -224,7 +225,7 @@ function LayerItem({
                     whiteSpace: 'nowrap',
                 }}
             >
-                {(element.props.name as string) || `${element.type}-${element.id.slice(0, 4)}`}
+                {layerName}
             </span>
 
             {/* Action buttons (shown on hover) */}
@@ -237,6 +238,7 @@ function LayerItem({
                 }}
             >
                 <button
+                    type="button"
                     onClick={(e) => {
                         e.stopPropagation();
                         if (disabled) {
@@ -245,6 +247,9 @@ function LayerItem({
                         onVisibilityToggle(element.id);
                     }}
                     disabled={disabled}
+                    data-layer-action="visibility"
+                    data-layer-action-id={element.id}
+                    aria-label={`${isHidden ? 'Show' : 'Hide'} ${layerName}`}
                     style={{
                         padding: '4px',
                         border: 'none',
@@ -258,6 +263,7 @@ function LayerItem({
                 </button>
 
                 <button
+                    type="button"
                     onClick={(e) => {
                         e.stopPropagation();
                         if (disabled) {
@@ -266,6 +272,9 @@ function LayerItem({
                         onLockToggle(element.id);
                     }}
                     disabled={disabled}
+                    data-layer-action="lock"
+                    data-layer-action-id={element.id}
+                    aria-label={`${isLocked ? 'Unlock' : 'Lock'} ${layerName}`}
                     style={{
                         padding: '4px',
                         border: 'none',

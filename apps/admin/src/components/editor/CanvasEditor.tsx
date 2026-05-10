@@ -1403,26 +1403,30 @@ export function CanvasEditor({
   }, [findElementEntry, selectedId, updateElementsWithHistory]);
 
   const handleLayerVisibilityToggle = useCallback((elementId: string) => {
+    const activeElement = findElementById(displayedElements, elementId) || findElementById(elements, elementId);
+    const nextVisible = activeElement?.visible === false;
+
     updateElementsWithHistory((currentElements) => {
-      const result = updateElementById(currentElements, elementId, (element) => ({
-        ...element,
-        visible: element.visible === false,
-      }));
+      const result = updateElementById(currentElements, elementId, (element) => (
+        applyUpdatesForBreakpoint(element, { visible: nextVisible }, breakpoint)
+      ));
 
       return result.updated ? result.elements : currentElements;
     }, selectedId);
-  }, [selectedId, updateElementsWithHistory]);
+  }, [breakpoint, displayedElements, elements, findElementById, selectedId, updateElementsWithHistory]);
 
   const handleLayerLockToggle = useCallback((elementId: string) => {
+    const activeElement = findElementById(displayedElements, elementId) || findElementById(elements, elementId);
+    const nextLocked = !activeElement?.locked;
+
     updateElementsWithHistory((currentElements) => {
-      const result = updateElementById(currentElements, elementId, (element) => ({
-        ...element,
-        locked: !element.locked,
-      }));
+      const result = updateElementById(currentElements, elementId, (element) => (
+        applyUpdatesForBreakpoint(element, { locked: nextLocked }, breakpoint)
+      ));
 
       return result.updated ? result.elements : currentElements;
     }, selectedId);
-  }, [selectedId, updateElementsWithHistory]);
+  }, [breakpoint, displayedElements, elements, findElementById, selectedId, updateElementsWithHistory]);
 
   const handleLayerDelete = useCallback((elementId: string) => {
     const element = findElementById(elements, elementId);
