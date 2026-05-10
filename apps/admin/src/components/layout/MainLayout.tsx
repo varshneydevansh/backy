@@ -52,6 +52,7 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   /** Whether the sidebar is collapsed */
   const [sidebarCollapsed, setSidebarCollapsed] = useState(isEditorWorkspace);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (isEditorWorkspace) {
@@ -60,19 +61,39 @@ export function MainLayout({ children }: MainLayoutProps) {
   }, [isEditorWorkspace]);
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-background flex min-w-0">
       {/* Sidebar Navigation */}
-      <Sidebar
-        collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-      />
+      <div className="hidden shrink-0 lg:flex">
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        />
+      </div>
+
+      {mobileSidebarOpen && (
+        <div className="fixed inset-0 z-50 flex lg:hidden" role="dialog" aria-modal="true" aria-label="Admin navigation">
+          <button
+            type="button"
+            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+            aria-label="Close navigation"
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+          <div className="relative flex h-full shadow-xl">
+            <Sidebar
+              collapsed={false}
+              onToggle={() => setMobileSidebarOpen(false)}
+              onNavigate={() => setMobileSidebarOpen(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Header */}
         <Header
           sidebarCollapsed={sidebarCollapsed}
-          onSidebarToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onSidebarToggle={() => setMobileSidebarOpen(true)}
         />
 
         {/* Page Content */}

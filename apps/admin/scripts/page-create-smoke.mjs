@@ -11,6 +11,10 @@ const SITE_ID = process.env.BACKY_PAGE_CREATE_SMOKE_SITE_ID || 'site-demo';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_PAGE_CREATE_CDP_PORT || 9372);
 const SCREENSHOT_PATH = process.env.BACKY_PAGE_CREATE_SCREENSHOT || path.join(os.tmpdir(), 'backy-page-create-smoke.png');
+const TEMPLATE_DESKTOP_SCREENSHOT_PATH = process.env.BACKY_PAGE_CREATE_TEMPLATE_DESKTOP_SCREENSHOT
+  || path.join(os.tmpdir(), 'backy-page-create-templates-desktop.png');
+const TEMPLATE_MOBILE_SCREENSHOT_PATH = process.env.BACKY_PAGE_CREATE_TEMPLATE_MOBILE_SCREENSHOT
+  || path.join(os.tmpdir(), 'backy-page-create-templates-mobile.png');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -156,6 +160,96 @@ const evaluate = async (client, expression) => {
   }
 
   return result.result.value;
+};
+
+const captureScreenshot = async (client, screenshotPath) => {
+  const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
+  fs.writeFileSync(screenshotPath, Buffer.from(screenshot.data, 'base64'));
+  return screenshotPath;
+};
+
+const setViewport = async (client, { width, height, mobile = false, deviceScaleFactor = 1 }) => {
+  await client.send('Emulation.setDeviceMetricsOverride', {
+    width,
+    height,
+    mobile,
+    deviceScaleFactor,
+  });
+};
+
+const assertTemplatePreviewVisualState = async (client, label, screenshotPath) => {
+  await evaluate(client, `(() => {
+    document.querySelector('#page-design')?.scrollIntoView({ block: 'start' });
+    window.scrollTo(0, window.scrollY);
+    return true;
+  })()`);
+  await sleep(250);
+
+  const state = await evaluate(client, `(() => {
+    const previews = Array.from(document.querySelectorAll('[data-testid^="page-template-preview-"]'));
+    const cards = previews.map((preview) => {
+      const rect = preview.getBoundingClientRect();
+      const card = preview.closest('label') || preview.parentElement || preview;
+      const cardRect = card.getBoundingClientRect();
+      return {
+        testId: preview.getAttribute('data-testid'),
+        template: preview.getAttribute('data-template'),
+        active: preview.getAttribute('data-active') === 'true',
+        blockCount: Number(preview.getAttribute('data-block-count') || 0),
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        cardWidth: Math.round(cardRect.width),
+        clippedInsideCard: rect.left < cardRect.left - 1 || rect.right > cardRect.right + 1,
+      };
+    });
+    const leftBuckets = Array.from(new Set(cards.map((card) => Math.round(card.left / 12) * 12)));
+    const selected = document.querySelector('[data-testid="page-selected-template-preview"]');
+    const selectedRect = selected?.getBoundingClientRect();
+    return {
+      label: ${JSON.stringify(label)},
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      count: previews.length,
+      templates: cards.map((card) => card.template),
+      activeTemplates: cards.filter((card) => card.active).map((card) => card.template),
+      minPreviewWidth: Math.min(...cards.map((card) => card.width)),
+      minPreviewHeight: Math.min(...cards.map((card) => card.height)),
+      minLeft: Math.min(...cards.map((card) => card.left)),
+      maxRight: Math.max(...cards.map((card) => card.right)),
+      columns: leftBuckets.length,
+      clippedInsideCards: cards.filter((card) => card.clippedInsideCard),
+      zeroBlockTemplates: cards.filter((card) => card.blockCount <= 0).map((card) => card.template),
+      documentWidth: document.documentElement.scrollWidth,
+      horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      selectedTemplate: selected?.getAttribute('data-template') || '',
+      selectedVisible: Boolean(selectedRect && selectedRect.width > 220 && selectedRect.height > 150),
+      body: document.body?.innerText?.slice(0, 220) || '',
+    };
+  })()`);
+
+  assert(state.count === 7, `${label} template preview count mismatch: ${JSON.stringify(state)}`);
+  assert(state.templates.includes('about'), `${label} about template preview missing: ${JSON.stringify(state)}`);
+  assert(state.activeTemplates.length === 1 && state.activeTemplates[0] === 'about', `${label} active template mismatch: ${JSON.stringify(state)}`);
+  assert(state.zeroBlockTemplates.length === 0, `${label} templates without preview blocks: ${JSON.stringify(state)}`);
+  assert(state.minPreviewWidth >= 180, `${label} preview width is too small: ${JSON.stringify(state)}`);
+  assert(state.minPreviewHeight >= 110, `${label} preview height is too small: ${JSON.stringify(state)}`);
+  assert(state.clippedInsideCards.length === 0, `${label} preview clipped inside card: ${JSON.stringify(state)}`);
+  assert(state.minLeft >= -1 && state.maxRight <= state.viewport.width + 1, `${label} template preview is outside the viewport: ${JSON.stringify(state)}`);
+  assert(state.horizontalOverflow <= 4, `${label} page has horizontal overflow: ${JSON.stringify(state)}`);
+  assert(state.selectedTemplate === 'about' && state.selectedVisible, `${label} selected template summary missing: ${JSON.stringify(state)}`);
+
+  if (state.viewport.width >= 1024) {
+    assert(state.columns >= 2, `${label} template grid did not use multiple columns on desktop: ${JSON.stringify(state)}`);
+  }
+
+  await captureScreenshot(client, screenshotPath);
+
+  return {
+    ...state,
+    screenshotPath,
+  };
 };
 
 const navigateToPageCreate = async (client, slug, title, navLabel, seo, parentPageId) => {
@@ -564,7 +658,22 @@ const main = async () => {
       source: AUTH_STORAGE_SCRIPT,
     });
 
+    await setViewport(client, { width: 1440, height: 1100 });
     const initialRender = await navigateToPageCreate(client, slug, title, navLabel, seo, parentPage.id);
+    const desktopTemplateVisual = await assertTemplatePreviewVisualState(
+      client,
+      'desktop template preview',
+      TEMPLATE_DESKTOP_SCREENSHOT_PATH,
+    );
+    await setViewport(client, { width: 390, height: 900, mobile: true, deviceScaleFactor: 2 });
+    await navigateToPageCreate(client, slug, title, navLabel, seo, parentPage.id);
+    const mobileTemplateVisual = await assertTemplatePreviewVisualState(
+      client,
+      'mobile template preview',
+      TEMPLATE_MOBILE_SCREENSHOT_PATH,
+    );
+    await setViewport(client, { width: 1440, height: 1100 });
+    await navigateToPageCreate(client, slug, title, navLabel, seo, parentPage.id);
     const autosave = await assertAutosaveWritten(client, slug, title, navLabel, seo, parentPage.id);
     const recovery = await assertRecoveryRestore(client, slug, title, navLabel, seo, parentPage.id);
     const editState = await createPageFromUi(client);
@@ -572,8 +681,7 @@ const main = async () => {
     const navigationItem = await assertNavigationContainsPage(pageId, navLabel, parentPage.id);
     const pageMeta = await assertCreatedPageSeo(pageId, seo, parentPage);
 
-    const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
-    fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
+    await captureScreenshot(client, SCREENSHOT_PATH);
 
     const browserErrors = client.events
       .filter((event) => (
@@ -588,6 +696,10 @@ const main = async () => {
       ok: true,
       url: initialRender.url,
       initialRender: initialRender.state,
+      templateVisuals: {
+        desktop: desktopTemplateVisual,
+        mobile: mobileTemplateVisual,
+      },
       autosave,
       recovery,
       editState,

@@ -40,6 +40,8 @@ interface SidebarProps {
   collapsed: boolean;
   /** Callback when toggle button is clicked */
   onToggle: () => void;
+  /** Optional callback after a navigation item is selected */
+  onNavigate?: () => void;
 }
 
 interface NavItem {
@@ -132,7 +134,7 @@ const SITE_SCOPED_NAV_ROUTES = new Set([
  * @param props - Component props
  * @returns Sidebar component
  */
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
   const location = useLocation();
   const currentSearch = typeof window === 'undefined' ? '' : window.location.search;
   const activeSiteId = new URLSearchParams(currentSearch).get('siteId')?.trim();
@@ -185,6 +187,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     key={item.to}
                     to={item.to}
                     search={getNavSearch(item.to)}
+                    onClick={onNavigate}
                     className={cn(
                       'flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
                       'hover:bg-accent hover:text-accent-foreground',

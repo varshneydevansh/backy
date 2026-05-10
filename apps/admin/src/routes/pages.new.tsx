@@ -1343,9 +1343,9 @@ function NewPageRoute() {
                     Pages
                 </button>
             }
-            className="w-full"
+            className="w-full min-w-0"
         >
-            <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="page-creation-command-center">
+            <section className="mb-6 min-w-0 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="page-creation-command-center">
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -1480,7 +1480,7 @@ function NewPageRoute() {
                 </div>
             </section>
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+            <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
                 {error && (
                     <div className="xl:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1537,7 +1537,7 @@ function NewPageRoute() {
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-6">
+                <form onSubmit={handleSubmit} className="min-w-0 space-y-6">
                     <div id="page-basics" className="space-y-6 rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
                         <div className="flex items-start gap-3">
                             <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
@@ -2068,7 +2068,7 @@ function NewPageRoute() {
                     </div>
                 </form>
 
-                <aside className="space-y-4">
+                <aside className="min-w-0 space-y-4">
                     <section id="page-preview" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
                         <div className="flex items-start gap-3">
                             <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
