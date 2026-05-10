@@ -252,25 +252,115 @@ const assertTemplatePreviewVisualState = async (client, label, screenshotPath) =
   };
 };
 
-const navigateToPageCreate = async (client, slug, title, navLabel, seo, parentPageId) => {
-  const query = new URLSearchParams({
-    siteId: SITE_ID,
-    template: 'about',
-    title,
-    slug,
-    navLabel,
-    parentPageId,
-    seoTitle: seo.title,
-    canonical: seo.canonical,
-    keywords: seo.keywords,
-    jsonLd: seo.jsonLd,
-    ogImage: seo.ogImage,
-    noIndex: 'true',
-    noFollow: 'true',
-  });
-  const url = `${ADMIN_BASE_URL}/pages/new?${query.toString()}`;
-  await client.send('Page.navigate', { url });
+const assertTemplateSwitching = async (client) => {
+  const cases = [
+    {
+      template: 'contact',
+      navPlacement: 'footer',
+      selectedTemplateName: 'Contact page',
+      forms: 'Backy form API seeded',
+      dynamicData: 'none',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'storefront',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Storefront page',
+      forms: 'none',
+      dynamicData: 'Backy products catalog placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'blog-index',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Blog index',
+      forms: 'none',
+      dynamicData: 'Backy blog feed placeholders',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+    {
+      template: 'blank',
+      navPlacement: 'none',
+      selectedTemplateName: 'Blank page',
+      forms: 'none',
+      dynamicData: 'none',
+      siteChrome: 'available from component library',
+    },
+    {
+      template: 'registration',
+      navPlacement: 'primary',
+      selectedTemplateName: 'Registration page',
+      forms: 'Backy form API seeded',
+      dynamicData: 'none',
+      siteChrome: 'editable header, navigation, and footer seeded',
+    },
+  ];
+  const observed = [];
 
+  for (const testCase of cases) {
+    const state = await evaluate(client, `(() => {
+      const input = document.querySelector('input[name="template"][value="${testCase.template}"]');
+      if (!(input instanceof HTMLInputElement)) {
+        return { clicked: false, template: ${JSON.stringify(testCase.template)} };
+      }
+      input.click();
+      return { clicked: true, template: input.value };
+    })()`);
+    assert(state.clicked, `Template input was not clickable: ${JSON.stringify(state)}`);
+    await sleep(250);
+
+    const nextState = await evaluate(client, `(() => {
+      const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
+      return {
+        template: ${JSON.stringify(testCase.template)},
+        selectedTemplatePreview: document.querySelector('[data-testid="page-selected-template-preview"]')?.getAttribute('data-template') || '',
+        activeTemplatePreview: document.querySelector('[data-testid="page-template-preview-${testCase.template}"]')?.getAttribute('data-active') || '',
+        navPlacement: document.querySelector('#page-navigation-placement-select')?.value || '',
+        selectedTemplateName: Array.from(document.querySelectorAll('#page-preview dd')).map((node) => node.textContent?.trim() || '')[0] || '',
+        payloadTemplate: payload.template || '',
+        forms: payload.forms || '',
+        dynamicData: payload.dynamicData || '',
+        siteChrome: payload.siteChrome || '',
+        body: document.body?.innerText?.slice(0, 220) || '',
+      };
+    })()`);
+
+    assert(nextState.selectedTemplatePreview === testCase.template, `Selected preview did not update for ${testCase.template}: ${JSON.stringify(nextState)}`);
+    assert(nextState.activeTemplatePreview === 'true', `Active preview did not update for ${testCase.template}: ${JSON.stringify(nextState)}`);
+    assert(nextState.navPlacement === testCase.navPlacement, `Navigation placement did not update for ${testCase.template}: ${JSON.stringify(nextState)}`);
+    assert(nextState.selectedTemplateName === testCase.selectedTemplateName, `Route preview template name did not update for ${testCase.template}: ${JSON.stringify(nextState)}`);
+    assert(nextState.payloadTemplate === testCase.template, `Payload template did not update for ${testCase.template}: ${JSON.stringify(nextState)}`);
+    assert(nextState.forms === testCase.forms, `Payload form seed state mismatch for ${testCase.template}: ${JSON.stringify(nextState)}`);
+    assert(nextState.dynamicData === testCase.dynamicData, `Payload dynamic data state mismatch for ${testCase.template}: ${JSON.stringify(nextState)}`);
+    assert(nextState.siteChrome === testCase.siteChrome, `Payload site chrome state mismatch for ${testCase.template}: ${JSON.stringify(nextState)}`);
+    observed.push(nextState);
+  }
+
+  const resetState = await evaluate(client, `(() => {
+    const input = document.querySelector('input[name="template"][value="about"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return { clicked: false };
+    }
+    input.click();
+    return { clicked: true };
+  })()`);
+  assert(resetState.clicked, `Unable to reset template to about: ${JSON.stringify(resetState)}`);
+  await sleep(250);
+
+  const aboutState = await evaluate(client, `(() => ({
+    selectedTemplatePreview: document.querySelector('[data-testid="page-selected-template-preview"]')?.getAttribute('data-template') || '',
+    activeTemplatePreview: document.querySelector('[data-testid="page-template-preview-about"]')?.getAttribute('data-active') || '',
+    navPlacement: document.querySelector('#page-navigation-placement-select')?.value || '',
+  }))()`);
+  assert(aboutState.selectedTemplatePreview === 'about' && aboutState.activeTemplatePreview === 'true' && aboutState.navPlacement === 'primary', `Template reset to about failed: ${JSON.stringify(aboutState)}`);
+
+  return {
+    observed,
+    reset: aboutState,
+  };
+};
+
+const waitForPageCreateControls = async (client, slug, title, navLabel, seo, parentPageId, url) => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => ({
       ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
@@ -325,6 +415,27 @@ const navigateToPageCreate = async (client, slug, title, navLabel, seo, parentPa
   }
 
   return null;
+};
+
+const navigateToPageCreate = async (client, slug, title, navLabel, seo, parentPageId) => {
+  const query = new URLSearchParams({
+    siteId: SITE_ID,
+    template: 'about',
+    title,
+    slug,
+    navLabel,
+    parentPageId,
+    seoTitle: seo.title,
+    canonical: seo.canonical,
+    keywords: seo.keywords,
+    jsonLd: seo.jsonLd,
+    ogImage: seo.ogImage,
+    noIndex: 'true',
+    noFollow: 'true',
+  });
+  const url = `${ADMIN_BASE_URL}/pages/new?${query.toString()}`;
+  await client.send('Page.navigate', { url });
+  return waitForPageCreateControls(client, slug, title, navLabel, seo, parentPageId, url);
 };
 
 const assertAutosaveWritten = async (client, slug, title, navLabel, seo, parentPageId) => {
@@ -740,15 +851,16 @@ const main = async () => {
       'desktop template preview',
       TEMPLATE_DESKTOP_SCREENSHOT_PATH,
     );
+    const templateSwitching = await assertTemplateSwitching(client);
     await setViewport(client, { width: 390, height: 900, mobile: true, deviceScaleFactor: 2 });
-    await navigateToPageCreate(client, slug, title, navLabel, seo, parentPage.id);
+    await waitForPageCreateControls(client, slug, title, navLabel, seo, parentPage.id, initialRender.url);
     const mobileTemplateVisual = await assertTemplatePreviewVisualState(
       client,
       'mobile template preview',
       TEMPLATE_MOBILE_SCREENSHOT_PATH,
     );
     await setViewport(client, { width: 1440, height: 1100 });
-    await navigateToPageCreate(client, slug, title, navLabel, seo, parentPage.id);
+    await waitForPageCreateControls(client, slug, title, navLabel, seo, parentPage.id, initialRender.url);
     const autosave = await assertAutosaveWritten(client, slug, title, navLabel, seo, parentPage.id);
     const recovery = await assertRecoveryRestore(client, slug, title, navLabel, seo, parentPage.id);
     const editState = await createPageFromUi(client);
@@ -775,6 +887,7 @@ const main = async () => {
         desktop: desktopTemplateVisual,
         mobile: mobileTemplateVisual,
       },
+      templateSwitching,
       autosave,
       recovery,
       editState,
