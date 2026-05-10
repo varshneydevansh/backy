@@ -182,6 +182,12 @@ const PAGE_WORKFLOW_SURFACES = [
     route: '/sites',
   },
   {
+    key: 'collections',
+    title: 'Collections',
+    detail: 'Bind custom datasets into repeaters, detail pages, filters, and reusable cards.',
+    route: '/collections',
+  },
+  {
     key: 'media',
     title: 'Media',
     detail: 'Use uploaded images, fonts, documents, videos, icons, and reusable assets inside the visual editor.',
@@ -210,6 +216,39 @@ const PAGE_WORKFLOW_SURFACES = [
     title: 'Settings',
     detail: 'Confirm API keys, Supabase/storage/runtime connectivity, auth policy, and deployment readiness.',
     route: '/settings',
+  },
+] as const;
+
+const PAGE_BINDING_TARGETS = [
+  {
+    key: 'collections',
+    title: 'Collection repeaters',
+    detail: 'Bind collection records into lists, detail pages, filters, and reusable cards.',
+  },
+  {
+    key: 'blog',
+    title: 'Blog feeds',
+    detail: 'Render article lists, post detail links, taxonomy sections, and editorial previews.',
+  },
+  {
+    key: 'products',
+    title: 'Commerce sections',
+    detail: 'Bind product cards, price, inventory, checkout URLs, and digital delivery calls to action.',
+  },
+  {
+    key: 'forms',
+    title: 'Form blocks',
+    detail: 'Connect contact, registration, survey, and file-intake blocks to Backy form APIs.',
+  },
+  {
+    key: 'media',
+    title: 'Media fields',
+    detail: 'Use central images, files, fonts, downloads, and galleries inside page components.',
+  },
+  {
+    key: 'users',
+    title: 'User and member state',
+    detail: 'Prepare protected account, registration, login, and member-only surfaces while auth policies mature.',
   },
 ] as const;
 
@@ -1508,6 +1547,7 @@ function PagesListView() {
     },
     controlRoutes: {
       sites: '/sites',
+      collections: '/collections',
       media: '/media',
       forms: '/forms',
       products: '/products',
@@ -1525,6 +1565,22 @@ function PagesListView() {
       filteredRows: filteredPages.length,
     },
     builderSystems: PAGE_BUILDER_SYSTEMS,
+    bindingContract: {
+      model: 'Pages are the composition layer for static sections, custom collections, blog posts, products, forms, media, and user state.',
+      targets: PAGE_BINDING_TARGETS,
+      activeSite: {
+        id: activeSiteId,
+        name: activeSite?.name || activeSiteId,
+        slug: siteSlug,
+      },
+      createRoutes: {
+        blank: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}`,
+        contact: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=contact`,
+        registration: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
+        storefront: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
+        blogIndex: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
+      },
+    },
     readiness: {
       score: pageDesignReadiness.score,
       checks: pageDesignReadiness.checks,
@@ -1919,7 +1975,7 @@ function PagesListView() {
               {PAGE_WORKFLOW_SURFACES.length} surfaces
             </span>
           </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-7">
             {PAGE_WORKFLOW_SURFACES.map((surface) => (
               <Link
                 key={surface.key}
@@ -2128,6 +2184,35 @@ function PagesListView() {
                     </div>
                     <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
                       {system.key}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div data-testid="pages-binding-contract" className="mt-4 rounded-lg border border-border bg-background p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Page data-binding contract</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Backy pages should let users design freely while binding sections to collections, blog, commerce, forms, media, and member state.
+                </p>
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {PAGE_BINDING_TARGETS.length} targets
+              </span>
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {PAGE_BINDING_TARGETS.map((target) => (
+                <div key={target.key} className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-foreground">{target.title}</div>
+                      <div className="mt-1 text-xs leading-5 text-muted-foreground">{target.detail}</div>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                      {target.key}
                     </span>
                   </div>
                 </div>

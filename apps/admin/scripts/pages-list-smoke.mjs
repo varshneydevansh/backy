@@ -215,12 +215,14 @@ const assertPagesVisualState = async (client, label, screenshotPath, options = {
     const modal = document.querySelector('[data-testid="pages-bulk-publish-modal"]');
     const deliveryPanels = Array.from(document.querySelectorAll('[data-testid^="pages-delivery-"]'));
     const commandCenter = document.querySelector('[data-testid="pages-command-center"]');
+    const bindingContract = document.querySelector('[data-testid="pages-binding-contract"]');
     const commandRect = commandCenter?.getBoundingClientRect();
     const searchableText = [
       bodyText,
       modal?.textContent || '',
       ...tableRows.map((row) => row.textContent || ''),
       ...deliveryPanels.map((panel) => panel.textContent || ''),
+      bindingContract?.textContent || '',
     ].join('\\n');
     return {
       label: ${JSON.stringify(label)},
@@ -231,6 +233,7 @@ const assertPagesVisualState = async (client, label, screenshotPath, options = {
       commandCenterVisible: Boolean(commandRect && commandRect.width > 300 && commandRect.height > 120),
       tableRowCount: tableRows.length,
       emptyCreateVisible: Boolean(document.querySelector('[data-testid="pages-empty-create"]')),
+      bindingContractVisible: Boolean(bindingContract) && bindingContract.textContent.includes('Page data-binding contract') && bindingContract.textContent.includes('Collection repeaters'),
       modalOpen: Boolean(modal),
       modalText: modal?.textContent || '',
       hasExpectedText: expectedText ? searchableText.includes(expectedText) : true,
@@ -240,6 +243,7 @@ const assertPagesVisualState = async (client, label, screenshotPath, options = {
   })()`);
 
   assert(state.ready && state.commandCenterVisible, `${label} pages command center was not visibly rendered: ${JSON.stringify(state)}`);
+  assert(state.bindingContractVisible, `${label} did not render the page data-binding contract: ${JSON.stringify(state)}`);
   assert(state.horizontalOverflow <= 4, `${label} has horizontal overflow: ${JSON.stringify(state)}`);
   assert(!state.hasFrameworkOverlay, `${label} rendered a framework/runtime overlay: ${JSON.stringify(state)}`);
 
