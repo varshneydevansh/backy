@@ -271,6 +271,11 @@ try {
   });
 
   await record('admin sites list returns success envelope', async () => {
+    const unauthSites = await fetch(`${baseUrl}/api/admin/sites?includeUnpublished=true`);
+    const unauthSitesJson = await unauthSites.json().catch(() => ({}));
+    assert(unauthSites.status === 401, `Sites admin API should reject missing auth, got ${unauthSites.status}`);
+    assert(unauthSitesJson?.success === false && unauthSitesJson?.error?.code === 'UNAUTHORIZED', `Sites admin API missing auth envelope: ${JSON.stringify(unauthSitesJson).slice(0, 500)}`);
+
     const result = await request('/api/admin/sites?includeUnpublished=true');
     assert(result.response.status === 200, `${result.url} expected 200, got ${result.response.status}`);
     assert(result.json?.success === true, `${result.url} expected success envelope`);
@@ -786,6 +791,11 @@ try {
   });
 
   await record('admin pages create/list/detail/update/delete works for temporary site', async () => {
+    const unauthPages = await fetch(`${baseUrl}/api/admin/sites/${createdSiteId}/pages?includeUnpublished=true`);
+    const unauthPagesJson = await unauthPages.json().catch(() => ({}));
+    assert(unauthPages.status === 401, `Pages admin API should reject missing auth, got ${unauthPages.status}`);
+    assert(unauthPagesJson?.success === false && unauthPagesJson?.error?.code === 'UNAUTHORIZED', `Pages admin API missing auth envelope: ${JSON.stringify(unauthPagesJson).slice(0, 500)}`);
+
     const create = await request(`/api/admin/sites/${createdSiteId}/pages`, {
       method: 'POST',
       headers: {

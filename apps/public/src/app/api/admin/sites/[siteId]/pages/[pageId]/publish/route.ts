@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { BackyPage } from '@backy-cms/core';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { getAdminPageById, getSiteByIdOrSlug, publishAdminPage } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { buildRepositorySiteReadiness, buildSiteReadiness } from '@/lib/siteReadiness';
@@ -52,6 +53,10 @@ const adminPageFromRepositoryPage = (page: BackyPage) => {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.publish' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, pageId } = await params;

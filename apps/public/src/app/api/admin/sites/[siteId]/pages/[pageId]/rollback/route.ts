@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { getSiteByIdOrSlug, rollbackAdminPage } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import {
@@ -36,6 +37,10 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.edit' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, pageId } = await params;

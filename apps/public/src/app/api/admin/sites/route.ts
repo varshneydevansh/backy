@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import type { Site } from '@backy-cms/core';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { createAdminSite, getSiteByIdOrSlug, getSites } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -59,6 +60,10 @@ const adminSiteFromRepositorySite = (site: Site | null) => {
 
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'sites.view' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { searchParams } = new URL(request.url);
@@ -103,6 +108,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'sites.create' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const body = await parseJsonBody(request);

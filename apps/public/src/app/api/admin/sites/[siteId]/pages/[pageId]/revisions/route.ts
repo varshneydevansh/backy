@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { getAdminPageById, getSiteByIdOrSlug, listContentRevisions } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { resolveRepositorySite } from '@/lib/repositoryContentWorkflow';
@@ -25,6 +26,10 @@ const parseBoundedNumber = (value: string | null, fallback: number, min: number,
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.view' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, pageId } = await params;

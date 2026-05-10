@@ -21,6 +21,7 @@ import {
   listCollections,
   updateAdminPage,
 } from '@/lib/backyStore';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { pageRevisionSnapshot } from '@/lib/repositoryContentWorkflow';
 import { findPageRouteConflict } from '@/lib/routeConflicts';
@@ -124,6 +125,10 @@ const adminPageFromRepositoryPage = (page: BackyPage) => {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.view' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, pageId } = await params;
@@ -177,6 +182,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.edit' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, pageId } = await params;
@@ -321,6 +330,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'pages.delete' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, pageId } = await params;
