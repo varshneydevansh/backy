@@ -400,7 +400,18 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - Lists the current reusable section version plus bounded historical snapshots from `metadata.reusableSection.history`.
   - Returns `{ success, requestId, data: { sectionId, currentVersion, versions } }`; the current entry has `current: true`.
 
-Current reusable-section endpoints persist to `data/backy/admin-content.json` in demo mode and to the configured repository adapter otherwise. The editor library can load active sections, save the selected element tree, rename/delete saved entries, insert saved sections as synced canvas instances with source metadata, refresh selected instances from the saved source, detach instances into independent editable copies, and keep storing concrete canvas trees for public rendering. Active sections are also exposed through the public reusable-section endpoints, manifest, OpenAPI document, and SDK for custom frontends. Production completion still requires richer metadata management, import/export, RBAC, and broader audit events.
+- `GET /api/admin/sites/:siteId/reusable-sections/export`
+  - Exports reusable sections as JSON with `{ data: { export, sections } }`.
+  - Supports `ids`/`sectionIds`, `status`, `category`, `tag`, and `search`; default `status=all`.
+  - Exported sections preserve slug, metadata, source element, and normal canvas `content`.
+
+- `POST /api/admin/sites/:siteId/reusable-sections/import?upsert=true`
+  - Imports exported reusable section JSON from `{ sections }`, `{ data: { sections } }`, or `{ section }`.
+  - Without `upsert=true`, duplicate slugs return `409 SLUG_CONFLICT`.
+  - With `upsert=true`, matching slugs update existing reusable sections, increment version metadata, and preserve prior snapshots.
+  - Returns `{ success, requestId, data: { import: { created, updated, total }, sections } }`.
+
+Current reusable-section endpoints persist to `data/backy/admin-content.json` in demo mode and to the configured repository adapter otherwise. The editor library can load active sections, save the selected element tree, rename/delete saved entries, insert saved sections as synced canvas instances with source metadata, refresh selected instances from the saved source, detach instances into independent editable copies, and keep storing concrete canvas trees for public rendering. Active sections are also exposed through the public reusable-section endpoints, manifest, OpenAPI document, and SDK for custom frontends. Production completion still requires richer metadata management, RBAC, and broader audit events.
 
 ### 3.5 Forms
 - `POST /api/admin/sites/:siteId/forms`

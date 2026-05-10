@@ -454,7 +454,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Backend reusable-section APIs now persist saved canvas section patterns, the editor library can load active saved sections, save the selected element tree, insert saved sections as synced canvas instances, refresh a selected synced instance from its saved source, detach an instance into an independent editable copy, and expose active sections through public APIs, manifest/OpenAPI, and the SDK.
   - Site frontend design contracts now persist page/blog template registries, and admin page/blog create APIs can seed editable content plus design provenance from `frontendDesignTemplateId`.
   - Reusable-section updates now expose optimistic conflict guards (`expectedVersion`/`expectedUpdatedAt`) and bounded version history through the admin versions endpoint.
-  - Still missing richer saved-section metadata editing, instance registry/bulk propagation, restore flows for synced section sources, and import/export.
+  - Reusable-section export/import now supports JSON portability across sites, duplicate-slug protection, and upsert imports that increment version history.
+  - Still missing richer saved-section metadata editing, instance registry/bulk propagation, and restore flows for synced section sources.
 
 ## Priority Order
 **Phase 1: Critical Fixes (Immediate)**

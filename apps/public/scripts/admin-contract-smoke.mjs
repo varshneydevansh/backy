@@ -1619,6 +1619,39 @@ try {
     assert(versions.json?.data?.versions?.some((entry) => entry.current === true && entry.version === 2), `${versions.url} missing current reusable section version entry`);
     assert(versions.json?.data?.versions?.some((entry) => entry.version === 1 && entry.name === 'Admin Contract Hero Section'), `${versions.url} missing previous reusable section version entry`);
 
+    const exportSections = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/export?ids=${createdReusableSectionId}`);
+    assert(exportSections.response.status === 200, `${exportSections.url} expected 200, got ${exportSections.response.status}`);
+    assert(exportSections.response.headers.get('content-disposition')?.includes('reusable-sections.json'), `${exportSections.url} missing export filename`);
+    assert(exportSections.json?.data?.export?.schemaVersion === 'backy.reusable-sections.export.v1', `${exportSections.url} missing reusable section export schema`);
+    assert(exportSections.json?.data?.sections?.[0]?.slug === `admin-contract-hero-${unique}`, `${exportSections.url} missing exported reusable section`);
+
+    const importConflict = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/import`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        sections: exportSections.json?.data?.sections,
+        importedBy: 'contract-smoke',
+      }),
+    });
+    assert(importConflict.response.status === 409, `${importConflict.url} expected 409 for duplicate reusable section import, got ${importConflict.response.status}`);
+    assert(importConflict.json?.error?.code === 'SLUG_CONFLICT', `${importConflict.url} expected reusable section import slug conflict`);
+
+    const importUpsert = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/import?upsert=true`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        sections: exportSections.json?.data?.sections,
+        importedBy: 'contract-smoke',
+      }),
+    });
+    assert(importUpsert.response.status === 200, `${importUpsert.url} expected 200, got ${importUpsert.response.status}`);
+    assert(importUpsert.json?.data?.import?.updated === 1, `${importUpsert.url} expected one upserted reusable section`);
+    assert(importUpsert.json?.data?.sections?.[0]?.metadata?.reusableSection?.version === 3, `${importUpsert.url} did not increment reusable section version on upsert import`);
+
     const activeList = await request(`/api/admin/sites/${createdSiteId}/reusable-sections`);
     assert(!activeList.json?.data?.sections?.some((section) => section.id === createdReusableSectionId), `${activeList.url} included archived section in active default list`);
 
