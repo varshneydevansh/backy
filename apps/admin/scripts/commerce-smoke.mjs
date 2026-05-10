@@ -130,6 +130,11 @@ const deleteCollectionRecord = async (collectionId, recordId) => {
   });
 };
 
+const csvEscape = (value) => {
+  const text = value === null || value === undefined ? '' : String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
 const fetchJson = async (endpoint) => {
   const response = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
   if (!response.ok) {
@@ -538,6 +543,88 @@ const assertPublicCommerce = async ({ productCollection, ordersCollection, slug 
   return { productRecord, updatedProduct, order, orderRecord };
 };
 
+const assertProductCsvImport = async ({ productCollection, suffix }) => {
+  const slug = `commerce-import-${suffix}`;
+  const headers = [
+    'slug',
+    'status',
+    'scheduledAt',
+    'title',
+    'sku',
+    'price',
+    'compareAtPrice',
+    'currency',
+    'variants',
+    'inventory',
+    'lowStockThreshold',
+    'inventoryPolicy',
+    'productType',
+    'downloadUrl',
+    'checkoutUrl',
+    'shippingRequired',
+    'weight',
+    'imageUrl',
+    'galleryImages',
+    'category',
+    'tags',
+    'vendor',
+    'description',
+    'seoTitle',
+    'featured',
+    'taxable',
+  ];
+  const row = [
+    slug,
+    'published',
+    '',
+    `Imported Commerce ${suffix}`,
+    `CSV-${suffix.toUpperCase()}`,
+    '99',
+    '129',
+    'USD',
+    JSON.stringify([{ id: 'csv-team', title: 'Team', sku: `CSV-${suffix.toUpperCase()}-TEAM`, option: 'Seats', price: 149, inventory: 3 }]),
+    '12',
+    '4',
+    'continue',
+    'digital',
+    `https://downloads.example.com/${slug}.zip`,
+    '',
+    'false',
+    '',
+    'https://images.example.com/imported-product.png',
+    JSON.stringify(['https://images.example.com/imported-product.png']),
+    'Templates',
+    'csv,imported',
+    'Backy',
+    'Imported by the commerce smoke test.',
+    `Imported Commerce ${suffix}`,
+    'true',
+    'false',
+  ];
+  const csv = `${headers.join(',')}\n${row.map(csvEscape).join(',')}\n`;
+
+  const result = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${productCollection.id}/records/import?upsert=true`, {
+    method: 'POST',
+    headers: { 'content-type': 'text/csv; charset=utf-8' },
+    body: csv,
+  });
+  const summary = result.data?.import;
+  assert(summary?.created === 1 || summary?.updated === 1, `Product CSV import did not save a record: ${JSON.stringify(summary)}`);
+  assert(summary.skipped === 0, `Product CSV import skipped rows: ${JSON.stringify(summary)}`);
+
+  const record = await getCollectionRecordBySlug(productCollection.id, slug);
+  assert(record?.id, `Imported product was not found by slug ${slug}`);
+  assert(record.values?.price === 99, `Imported price did not stay numeric: ${JSON.stringify(record.values?.price)}`);
+  assert(record.values?.inventory === 12, `Imported inventory did not stay numeric: ${JSON.stringify(record.values?.inventory)}`);
+  assert(record.values?.shippingRequired === false, `Imported shipping flag did not stay boolean false: ${JSON.stringify(record.values?.shippingRequired)}`);
+  assert(record.values?.taxable === false, `Imported taxable flag did not stay boolean false: ${JSON.stringify(record.values?.taxable)}`);
+  assert(record.values?.featured === true, `Imported featured flag did not stay boolean true: ${JSON.stringify(record.values?.featured)}`);
+  assert(Array.isArray(record.values?.tags) && record.values.tags.includes('imported'), `Imported tags did not parse as an array: ${JSON.stringify(record.values?.tags)}`);
+  assert(Array.isArray(record.values?.variants) && record.values.variants.length === 1, `Imported variants did not parse JSON: ${JSON.stringify(record.values?.variants)}`);
+
+  return record;
+};
+
 const assertProductsLayout = async (client) => {
   const layout = await evaluate(client, `(() => ({
     width: window.innerWidth,
@@ -545,9 +632,10 @@ const assertProductsLayout = async (client) => {
     hasCommandCenter: Boolean(document.querySelector('[data-testid="products-command-center"]')),
     hasApiPanel: document.body?.innerText?.includes('Storefront API') || false,
     hasEditor: document.body?.innerText?.includes('New product') || document.body?.innerText?.includes('Edit product') || false,
+    hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Products page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasEditor, `Products page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasApiPanel && layout.hasEditor && layout.hasImportControls, `Products page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
@@ -598,6 +686,7 @@ const main = async () => {
   const { childProcess, userDataDir } = launchChrome();
   let client;
   let productRecordId = null;
+  let importedProductRecordId = null;
   let orderRecordId = null;
   let finalProductCollection = null;
   let finalOrdersCollection = null;
@@ -627,6 +716,12 @@ const main = async () => {
     assert(finalProductCollection?.id, 'Products collection was not available after UI setup');
     assert(finalOrdersCollection?.id, 'Orders collection was not available after UI setup');
 
+    const importedProduct = await assertProductCsvImport({
+      productCollection: finalProductCollection,
+      suffix,
+    });
+    importedProductRecordId = importedProduct.id;
+
     const publicCommerce = await assertPublicCommerce({
       productCollection: finalProductCollection,
       ordersCollection: finalOrdersCollection,
@@ -650,7 +745,9 @@ const main = async () => {
 
     await deleteCollectionRecord(finalOrdersCollection.id, orderRecordId);
     await deleteCollectionRecord(finalProductCollection.id, productRecordId);
+    await deleteCollectionRecord(finalProductCollection.id, importedProductRecordId);
     productRecordId = null;
+    importedProductRecordId = null;
     orderRecordId = null;
 
     await restoreCollection(originalProductCollection, finalProductCollection);
@@ -674,6 +771,10 @@ const main = async () => {
         startingInventory: publicCommerce.productRecord.values?.inventory,
         endingInventory: publicCommerce.updatedProduct.values?.inventory,
       },
+      importedProduct: {
+        slug: importedProduct.slug,
+        recordId: importedProduct.id,
+      },
       order: {
         id: publicCommerce.order.id,
         slug: publicCommerce.order.slug,
@@ -694,6 +795,11 @@ const main = async () => {
       if (finalProductCollection?.id && productRecordId) {
         await deleteCollectionRecord(finalProductCollection.id, productRecordId).catch((error) => {
           console.warn('Unable to delete smoke product:', error instanceof Error ? error.message : error);
+        });
+      }
+      if (finalProductCollection?.id && importedProductRecordId) {
+        await deleteCollectionRecord(finalProductCollection.id, importedProductRecordId).catch((error) => {
+          console.warn('Unable to delete imported smoke product:', error instanceof Error ? error.message : error);
         });
       }
       await restoreCollection(originalProductCollection, finalProductCollection || await findCollection(PRODUCT_COLLECTION_SLUG)).catch((error) => {

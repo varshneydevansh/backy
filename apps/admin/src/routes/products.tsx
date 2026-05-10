@@ -1,4 +1,4 @@
-import { FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
@@ -19,11 +19,13 @@ import {
   ShoppingBag,
   Sparkles,
   Trash2,
+  Upload,
 } from 'lucide-react';
 import {
   createCollection,
   createCollectionRecord,
   deleteCollectionRecord,
+  importCollectionRecordsCsv,
   listCollectionRecords,
   listCollections,
   updateCollection,
@@ -236,6 +238,35 @@ const PRODUCT_EXPORT_COLUMNS = [
   'updated_at',
 ] as const;
 
+const PRODUCT_IMPORT_COLUMNS = [
+  'slug',
+  'status',
+  'scheduledAt',
+  'title',
+  'sku',
+  'price',
+  'compareAtPrice',
+  'currency',
+  'variants',
+  'inventory',
+  'lowStockThreshold',
+  'inventoryPolicy',
+  'productType',
+  'downloadUrl',
+  'checkoutUrl',
+  'shippingRequired',
+  'weight',
+  'imageUrl',
+  'galleryImages',
+  'category',
+  'tags',
+  'vendor',
+  'description',
+  'seoTitle',
+  'featured',
+  'taxable',
+] as const;
+
 const PRODUCT_FRONTEND_SYSTEMS = [
   {
     key: 'catalog',
@@ -315,7 +346,9 @@ function ProductsRoute() {
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const isProductsBusy = isLoading || isSaving;
+  const [isImportingProducts, setIsImportingProducts] = useState(false);
+  const isProductsBusy = isLoading || isSaving || isImportingProducts;
+  const productImportInputRef = useRef<HTMLInputElement>(null);
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const [mediaPickerTarget, setMediaPickerTarget] = useState<'image' | 'gallery' | 'download'>('image');
   const [galleryImageDraft, setGalleryImageDraft] = useState('');
@@ -1157,6 +1190,53 @@ function ProductsRoute() {
     URL.revokeObjectURL(url);
     setNotice(`${filteredProducts.length} visible product${filteredProducts.length === 1 ? '' : 's'} exported.`);
   };
+  const downloadProductImportTemplate = () => {
+    if (isProductsBusy) return;
+
+    const csv = `${PRODUCT_IMPORT_COLUMNS.join(',')}\n`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSite?.slug || activeSiteId}-products-import-template.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setNotice('Product import template downloaded.');
+  };
+  const importProductsCsv = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (!productCollection) return;
+    if (isProductsBusy) return;
+
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImportingProducts(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const csv = await file.text();
+      const result = await importCollectionRecordsCsv(activeSiteId, productCollection.id, csv, { upsert: true });
+      const refreshed = await listCollectionRecords(activeSiteId, productCollection.id, {
+        limit: 100,
+        sortBy: 'updatedAt',
+        sortDirection: 'desc',
+      });
+      setProducts(refreshed.records);
+      setNotice(`${result.created} created, ${result.updated} updated, ${result.skipped} skipped from ${file.name}.`);
+      if (result.errors.length > 0) {
+        const firstError = result.errors[0];
+        setError(`Row ${firstError.row} skipped: ${firstError.message}`);
+      }
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : 'Unable to import products');
+    } finally {
+      setIsImportingProducts(false);
+      event.target.value = '';
+    }
+  };
   const clearCatalogFilters = () => {
     if (isProductsBusy) return;
 
@@ -1234,6 +1314,14 @@ function ProductsRoute() {
           {notice}
         </div>
       )}
+      <input
+        ref={productImportInputRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        aria-label="Import products CSV"
+        onChange={(event) => void importProductsCsv(event)}
+      />
 
       <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="products-command-center">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -1261,6 +1349,12 @@ function ProductsRoute() {
             </Button>
             <Button variant="outline" onClick={exportProductsCsv} disabled={filteredProducts.length === 0 || isProductsBusy} iconStart={<Download className="size-4" />}>
               Export CSV
+            </Button>
+            <Button variant="outline" onClick={downloadProductImportTemplate} disabled={!productCollection || isProductsBusy} iconStart={<FileText className="size-4" />}>
+              CSV template
+            </Button>
+            <Button variant="outline" onClick={() => productImportInputRef.current?.click()} disabled={!productCollection || isProductsBusy} iconStart={<Upload className="size-4" />}>
+              {isImportingProducts ? 'Importing...' : 'Import CSV'}
             </Button>
             <Button variant="outline" onClick={openStorefrontPage} disabled={isProductsBusy} iconStart={<Sparkles className="size-4" />}>
               Storefront page
@@ -1352,6 +1446,12 @@ function ProductsRoute() {
                 </Button>
                 <Button onClick={exportProductsCsv} disabled={filteredProducts.length === 0 || isProductsBusy} iconStart={<Download className="size-4" />}>
                   Export CSV
+                </Button>
+                <Button variant="outline" onClick={downloadProductImportTemplate} disabled={isProductsBusy} iconStart={<FileText className="size-4" />}>
+                  CSV template
+                </Button>
+                <Button variant="outline" onClick={() => productImportInputRef.current?.click()} disabled={isProductsBusy} iconStart={<Upload className="size-4" />}>
+                  {isImportingProducts ? 'Importing...' : 'Import CSV'}
                 </Button>
                 <Button onClick={() => void copyStorefrontApiUrl()} disabled={isProductsBusy} iconStart={<Copy className="size-4" />}>
                   Copy URL

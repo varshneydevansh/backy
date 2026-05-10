@@ -121,7 +121,28 @@ const parseImportedValue = (
   field: BackyCollectionField | NonNullable<ReturnType<typeof getCollectionByIdOrSlug>>['fields'][number] | undefined,
   value: string,
 ): unknown => {
-  if (!field || field.type !== 'json') {
+  if (!field) {
+    return value;
+  }
+
+  if (field.type === 'number') {
+    if (!value.trim()) return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : value;
+  }
+
+  if (field.type === 'boolean') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'n', 'off'].includes(normalized)) return false;
+    return false;
+  }
+
+  if (field.type === 'tags' || field.type === 'multiReference') {
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+
+  if (field.type !== 'json') {
     return value;
   }
 

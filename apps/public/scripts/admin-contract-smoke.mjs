@@ -2959,6 +2959,9 @@ try {
     assert(importRecords.json?.data?.import?.created === 1, `${importRecords.url} expected one imported record`);
     assert(importRecords.json?.data?.records?.[0]?.slug === importedCollectionRecordSlug, `${importRecords.url} returned wrong imported record`);
     assert(importRecords.json?.data?.records?.[0]?.values?.summary === 'Imported, structured content', `${importRecords.url} did not parse quoted CSV field`);
+    assert(importRecords.json?.data?.records?.[0]?.values?.rank === 2, `${importRecords.url} did not import numeric fields as numbers`);
+    assert(Array.isArray(importRecords.json?.data?.records?.[0]?.values?.labels), `${importRecords.url} did not import tags as arrays`);
+    assert(importRecords.json?.data?.records?.[0]?.values?.labels?.includes('Evergreen'), `${importRecords.url} did not import expected tag value`);
 
     const bulkRecordOne = await request(`/api/admin/sites/${createdSiteId}/collections/${createdCollectionId}/records`, {
       method: 'POST',
