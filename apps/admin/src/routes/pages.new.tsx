@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Home, Image as ImageIcon, Layout, Menu, RefreshCw, Save, Search, Sparkles } from 'lucide-react';
-import { createPage, getAdminApiBase, getSiteNavigation, listPages, updateSiteNavigation } from '@/lib/adminContentApi';
+import { createPage, getAdminApiBase, getSiteFrontendDesign, getSiteNavigation, listPages, updateSiteNavigation } from '@/lib/adminContentApi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore, type Page } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
@@ -18,7 +18,7 @@ import {
     serializeCanvasContent,
 } from '@/components/editor/editorCatalog';
 import type { CanvasElement } from '@/types/editor';
-import type { SiteNavigationConfig, SiteNavigationConfigItem } from '@backy-cms/core';
+import type { SiteNavigationConfig, SiteNavigationConfigItem, SiteSettings } from '@backy-cms/core';
 
 interface NewPageSearch {
     siteId?: string;
@@ -39,11 +39,14 @@ interface NewPageSearch {
     ogImage?: string;
     noIndex?: boolean;
     noFollow?: boolean;
+    designTemplate?: string;
 }
 
 type PageTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'about' | 'contact' | 'registration';
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
+type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
+type SiteFrontendDesignTemplate = SiteFrontendDesignContract['templates'][number];
 
 interface TemplatePreviewBlock {
     label?: string;
@@ -73,6 +76,7 @@ interface PageCreateDraftState {
     ogImage: string;
     noIndex: boolean;
     noFollow: boolean;
+    designTemplateId: string;
 }
 
 interface PageCreateAutosaveDraft {
@@ -216,6 +220,11 @@ const PAGE_CREATION_AREAS = [
 const slugify = (value: string) => (
     value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 );
+
+const routeSlugFromPattern = (value?: string) => {
+    if (!value || value.includes('{')) return '';
+    return slugify(value.replace(/^\/+|\/+$/g, ''));
+};
 
 const normalizeCanonicalPath = (value: string) => {
     const trimmed = value.trim();
@@ -397,6 +406,7 @@ const normalizeNewPageSearch = (input: NewPageSearch): NewPageSearch => ({
     ...(input.ogImage?.trim() ? { ogImage: input.ogImage.trim() } : {}),
     ...(input.noIndex ? { noIndex: true } : {}),
     ...(input.noFollow ? { noFollow: true } : {}),
+    ...(input.designTemplate?.trim() ? { designTemplate: input.designTemplate.trim() } : {}),
 });
 
 export const Route = createFileRoute('/pages/new')({
@@ -419,6 +429,7 @@ export const Route = createFileRoute('/pages/new')({
         ogImage: normalizedSearchString(search.ogImage),
         noIndex: normalizedSearchBoolean(search.noIndex),
         noFollow: normalizedSearchBoolean(search.noFollow),
+        designTemplate: normalizedSearchString(search.designTemplate),
     }),
     component: NewPageRoute,
 });
@@ -438,6 +449,9 @@ function NewPageRoute() {
     const [autosavePausedForRecovery, setAutosavePausedForRecovery] = useState(false);
     const [lastAutosavedAt, setLastAutosavedAt] = useState<string | null>(null);
     const [autosaveStatus, setAutosaveStatus] = useState('Autosave ready');
+    const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
+    const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
+    const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
     const isPageCreateBusy = isLoading || isCheckingPages;
     const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
     const requestedSite = search.siteId
@@ -467,6 +481,7 @@ function NewPageRoute() {
         ogImage: search.ogImage ?? '',
         noIndex: search.noIndex ?? false,
         noFollow: search.noFollow ?? false,
+        designTemplateId: search.designTemplate ?? '',
     });
     const selectedSite = sites.find((site) => siteMatchesIdentifier(site, formData.siteId));
     const buildRouteSearchFromForm = (nextFormData: typeof formData): NewPageSearch => normalizeNewPageSearch({
@@ -488,6 +503,7 @@ function NewPageRoute() {
         ogImage: nextFormData.ogImage,
         noIndex: nextFormData.noIndex,
         noFollow: nextFormData.noFollow,
+        designTemplate: nextFormData.designTemplateId,
     });
     const updatePageDraft = (next: Partial<typeof formData>) => {
         if (isPageCreateBusy) return;
@@ -566,6 +582,40 @@ function NewPageRoute() {
     }, [formData.siteId, routeCheckRetry, selectedSite?.id, selectedSite?.publicSiteId, setPages]);
 
     useEffect(() => {
+        let cancelled = false;
+        const siteId = formData.siteId;
+
+        if (!siteId) return;
+
+        const loadFrontendDesignTemplates = async () => {
+            setFrontendDesignLoading(true);
+            setFrontendDesignError(null);
+
+            try {
+                const response = await getSiteFrontendDesign(siteId);
+                if (!cancelled) {
+                    setFrontendDesign(response.frontendDesign);
+                }
+            } catch (loadError) {
+                if (!cancelled) {
+                    setFrontendDesign(null);
+                    setFrontendDesignError(loadError instanceof Error ? loadError.message : 'Unable to load frontend design templates.');
+                }
+            } finally {
+                if (!cancelled) {
+                    setFrontendDesignLoading(false);
+                }
+            }
+        };
+
+        void loadFrontendDesignTemplates();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [formData.siteId]);
+
+    useEffect(() => {
         if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, formData.siteId))) {
             const fallbackSiteId = sites[0].publicSiteId || sites[0].id;
             const nextFormData = { ...formData, siteId: fallbackSiteId };
@@ -600,6 +650,7 @@ function NewPageRoute() {
             ogImage: search.ogImage ?? '',
             noIndex: search.noIndex ?? false,
             noFollow: search.noFollow ?? false,
+            designTemplateId: search.designTemplate ?? '',
         };
         setFormData((current) => {
             const hasChanged = (
@@ -621,6 +672,7 @@ function NewPageRoute() {
                 || nextFormData.ogImage !== current.ogImage
                 || nextFormData.noIndex !== current.noIndex
                 || nextFormData.noFollow !== current.noFollow
+                || nextFormData.designTemplateId !== current.designTemplateId
             );
 
             return hasChanged ? nextFormData : current;
@@ -647,6 +699,7 @@ function NewPageRoute() {
         search.ogImage,
         search.noIndex,
         search.noFollow,
+        search.designTemplate,
         sites,
     ]);
 
@@ -658,6 +711,26 @@ function NewPageRoute() {
         () => TEMPLATE_OPTIONS.find((template) => template.id === formData.template) || TEMPLATE_OPTIONS[0],
         [formData.template],
     );
+    const frontendPageTemplates = useMemo(
+        () => (frontendDesign?.templates || []).filter((template) => template.type === 'page'),
+        [frontendDesign?.templates],
+    );
+    const selectedFrontendTemplate = useMemo(
+        () => frontendPageTemplates.find((template) => template.id === formData.designTemplateId) || null,
+        [formData.designTemplateId, frontendPageTemplates],
+    );
+    const effectiveTemplateName = selectedFrontendTemplate
+        ? `${selectedFrontendTemplate.name} frontend template`
+        : selectedTemplate.name;
+    const effectiveCanvasSize = selectedFrontendTemplate?.canvasSize || DEFAULT_CANVAS_SIZE;
+
+    useEffect(() => {
+        if (formData.designTemplateId && frontendDesign && !frontendPageTemplates.some((template) => template.id === formData.designTemplateId)) {
+            updatePageDraft({ designTemplateId: '' });
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formData.designTemplateId, frontendDesign, frontendPageTemplates]);
+
     const handleTemplateChange = (nextTemplate: PageTemplate) => {
         if (isPageCreateBusy) return;
 
@@ -675,6 +748,24 @@ function NewPageRoute() {
             navigationPlacement: DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[nextTemplate],
             navigationLabel: shouldApplyTitle ? nextDefaults.title : formData.navigationLabel || formData.title,
             seoTitle: shouldApplyTitle ? nextDefaults.title : formData.seoTitle || formData.title,
+            designTemplateId: '',
+        });
+    };
+    const handleFrontendTemplateChange = (template: SiteFrontendDesignTemplate) => {
+        if (isPageCreateBusy) return;
+
+        const shouldApplyTitle = !formData.title.trim() || formData.title === TEMPLATE_DEFAULTS[formData.template].title;
+        const routeSlug = routeSlugFromPattern(template.routePattern);
+        const shouldApplySlug = Boolean(routeSlug) && (!formData.slug.trim() || formData.slug === TEMPLATE_DEFAULTS[formData.template].slug);
+        const shouldApplyDescription = !formData.description.trim() || formData.description === TEMPLATE_DEFAULTS[formData.template].description;
+
+        updatePageDraft({
+            designTemplateId: template.id,
+            title: shouldApplyTitle ? template.name : formData.title,
+            slug: formData.isHomepage ? 'home' : shouldApplySlug ? routeSlug : formData.slug,
+            description: shouldApplyDescription ? template.description || formData.description : formData.description,
+            navigationLabel: shouldApplyTitle ? template.name : formData.navigationLabel || formData.title,
+            seoTitle: shouldApplyTitle ? template.name : formData.seoTitle || formData.title,
         });
     };
     const selectedSiteIdentifiers = useMemo(
@@ -712,9 +803,9 @@ function NewPageRoute() {
     const effectiveSeoDescription = formData.description.trim();
     const defaultKeywordText = [
         formData.title.trim(),
-        selectedTemplate.name,
+        effectiveTemplateName,
         selectedSite?.name || '',
-        formData.template.replace('-', ' '),
+        selectedFrontendTemplate ? 'frontend design template' : formData.template.replace('-', ' '),
     ].filter(Boolean).join(', ');
     const effectiveKeywords = normalizeKeywords(formData.keywords.trim() || defaultKeywordText);
     const jsonLdResult = parseJsonLd(formData.jsonLdText);
@@ -776,8 +867,8 @@ function NewPageRoute() {
     }, [canSubmit, canonicalValid, formData.title, hasNavigationLabel, hasSchedule, hasValidParentPage, isCheckingPages, isLoading, jsonLdResult, jsonLdValid, routeCheckError, routeConflict, routePreview, selectedSite]);
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
-        const hasStarterCanvas = selectedTemplate.sections.length > 0;
-        const seedsSiteChrome = formData.template !== 'blank';
+        const hasStarterCanvas = selectedFrontendTemplate ? true : selectedTemplate.sections.length > 0;
+        const seedsSiteChrome = selectedFrontendTemplate ? Boolean(frontendDesign?.chrome && Object.keys(frontendDesign.chrome).length > 0) : formData.template !== 'blank';
         const checks = [
             {
                 label: 'Target site',
@@ -826,7 +917,9 @@ function NewPageRoute() {
             },
             {
                 label: 'Canvas seed',
-                detail: hasStarterCanvas
+                detail: selectedFrontendTemplate
+                    ? `${selectedFrontendTemplate.name} will seed from the saved frontend design contract.`
+                    : hasStarterCanvas
                     ? `${selectedTemplate.sections.length} starter section${selectedTemplate.sections.length === 1 ? '' : 's'}${seedsSiteChrome ? ' plus editable header, navigation, and footer' : ''} will be created`
                     : 'Blank still creates a heading and intro copy.',
                 ready: true,
@@ -886,6 +979,7 @@ function NewPageRoute() {
         formData.seoTitle,
         formData.template,
         formData.title,
+        formData.designTemplateId,
         canonicalValid,
         effectiveSeoDescription,
         effectiveSeoTitle.length,
@@ -899,7 +993,9 @@ function NewPageRoute() {
         routePreview,
         selectedSite,
         selectedParentPage,
+        selectedFrontendTemplate,
         selectedTemplate.sections.length,
+        frontendDesign?.chrome,
     ]);
     const createPayloadPreview = useMemo(() => ({
         title: formData.title.trim() || 'Untitled page',
@@ -907,14 +1003,20 @@ function NewPageRoute() {
         siteId: formData.siteId,
         status: formData.status,
         scheduledAt: formData.status === 'scheduled' ? formData.scheduledAt : null,
-        template: formData.template,
+        template: selectedFrontendTemplate
+            ? { id: selectedFrontendTemplate.id, source: 'frontend-design', name: selectedFrontendTemplate.name }
+            : formData.template,
         description: formData.description,
         isHomepage: formData.isHomepage,
         routeAvailability: routeConflict
             ? { status: 'conflict', pageId: routeConflict.id, title: routeConflict.title, path: getPagePublicPath(routeConflict) }
             : { status: 'available', checkedPages: selectedSitePages.length },
-        content: `${selectedTemplate.sections.length + (formData.template === 'blank' ? 0 : 2)} starter block${selectedTemplate.sections.length === 1 ? '' : 's'}`,
-        siteChrome: formData.template === 'blank' ? 'available from component library' : 'editable header, navigation, and footer seeded',
+        content: selectedFrontendTemplate
+            ? `${selectedFrontendTemplate.name} frontend contract seed`
+            : `${selectedTemplate.sections.length + (formData.template === 'blank' ? 0 : 2)} starter block${selectedTemplate.sections.length === 1 ? '' : 's'}`,
+        siteChrome: selectedFrontendTemplate
+            ? 'captured from frontend design contract'
+            : formData.template === 'blank' ? 'available from component library' : 'editable header, navigation, and footer seeded',
         forms: ['contact', 'registration'].includes(formData.template) ? 'Backy form API seeded' : 'none',
         dynamicData: formData.template === 'storefront'
             ? 'Backy products catalog placeholders'
@@ -959,6 +1061,7 @@ function NewPageRoute() {
         formData.status,
         formData.template,
         formData.title,
+        formData.designTemplateId,
         effectiveSeoDescription,
         effectiveSeoTitle,
         effectiveKeywords,
@@ -968,6 +1071,7 @@ function NewPageRoute() {
         resolvedSlug,
         selectedSitePages.length,
         selectedParentPage,
+        selectedFrontendTemplate,
         selectedTemplate.sections.length,
     ]);
     const creationHandoff = useMemo(() => ({
@@ -1002,9 +1106,10 @@ function NewPageRoute() {
             checks: pageCreationReadiness.checks,
         },
         template: {
-            id: selectedTemplate.id,
-            name: selectedTemplate.name,
-            sections: selectedTemplate.sections,
+            id: selectedFrontendTemplate?.id || selectedTemplate.id,
+            name: selectedFrontendTemplate?.name || selectedTemplate.name,
+            source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
+            sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'registration'].includes(formData.template),
             seedsDynamicData: ['storefront', 'blog-index'].includes(formData.template),
             navigationPlacement: formData.navigationPlacement,
@@ -1039,15 +1144,15 @@ function NewPageRoute() {
             renderPayloadKeys: ['seo.title', 'seo.description', 'seo.canonical', 'seo.keywords', 'seo.jsonLd', 'seo.openGraph.image', 'seo.robots'],
         },
         canvas: {
-            width: DEFAULT_CANVAS_SIZE.width,
-            height: getCanvasHeightForElements(buildTemplateElements({
+            width: effectiveCanvasSize.width,
+            height: selectedFrontendTemplate?.canvasSize?.height || getCanvasHeightForElements(buildTemplateElements({
                 template: formData.template,
                 title: formData.title.trim() || 'Untitled page',
                 slug: resolvedSlug,
                 description: formData.description,
             })),
-            seededBlocks: selectedTemplate.sections.length,
-            siteChrome: formData.template === 'blank' ? 'component library' : ['header', 'navigation', 'footer'],
+            seededBlocks: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints?.length || 1 : selectedTemplate.sections.length,
+            siteChrome: selectedFrontendTemplate ? 'frontend design contract' : formData.template === 'blank' ? 'component library' : ['header', 'navigation', 'footer'],
         },
         payloadPreview: createPayloadPreview,
         nextStep: 'Created pages open directly in the visual editor for layout, grouping, media, binding, SEO, and publishing work.',
@@ -1080,6 +1185,7 @@ function NewPageRoute() {
         formData.status,
         formData.template,
         formData.title,
+        formData.designTemplateId,
         effectiveSeoDescription,
         effectiveSeoTitle,
         effectiveKeywords,
@@ -1094,9 +1200,12 @@ function NewPageRoute() {
         selectedSite?.name,
         selectedSite?.slug,
         selectedParentPage,
+        selectedFrontendTemplate,
         selectedTemplate.id,
         selectedTemplate.name,
         selectedTemplate.sections,
+        effectiveCanvasSize.height,
+        effectiveCanvasSize.width,
     ]);
     const creationHandoffText = useMemo(() => JSON.stringify(creationHandoff, null, 2), [creationHandoff]);
     const hasAutosaveContent = useMemo(() => (
@@ -1117,9 +1226,11 @@ function NewPageRoute() {
         || formData.ogImage.trim().length > 0
         || formData.noIndex
         || formData.noFollow
+        || formData.designTemplateId.trim().length > 0
     ), [
         formData.canonicalPath,
         formData.description,
+        formData.designTemplateId,
         formData.isHomepage,
         formData.keywords,
         formData.jsonLdText,
@@ -1186,14 +1297,19 @@ function NewPageRoute() {
     const restoreRecoveredDraft = () => {
         if (!draftRecovery || isPageCreateBusy) return;
 
-        setFormData(draftRecovery.formData);
+        const recoveredFormData = {
+            ...draftRecovery.formData,
+            designTemplateId: draftRecovery.formData.designTemplateId || '',
+        };
+
+        setFormData(recoveredFormData);
         setDraftRecovery(null);
         setAutosavePausedForRecovery(false);
         setLastAutosavedAt(draftRecovery.savedAt);
         setAutosaveStatus('Recovered draft restored');
         setError(null);
         setNotice('Recovered local page draft.');
-        navigate({ to: '/pages/new', search: buildRouteSearchFromForm(draftRecovery.formData), replace: true });
+        navigate({ to: '/pages/new', search: buildRouteSearchFromForm(recoveredFormData), replace: true });
     };
 
     const discardRecoveredDraft = () => {
@@ -1268,6 +1384,8 @@ function NewPageRoute() {
         const slug = resolvedSlug;
         const content = createInitialPageContent({
             template: formData.template,
+            frontendTemplate: selectedFrontendTemplate,
+            frontendDesign,
             title,
             slug,
             status: formData.status,
@@ -1294,6 +1412,10 @@ function NewPageRoute() {
                 noIndex: formData.noIndex,
                 noFollow: formData.noFollow,
                 template: formData.template,
+                frontendDesignTemplateId: selectedFrontendTemplate?.id,
+                frontendDesignTemplateName: selectedFrontendTemplate?.name,
+                frontendDesignSource: selectedFrontendTemplate ? frontendDesign?.source : undefined,
+                frontendDesignBindingHints: selectedFrontendTemplate?.bindingHints,
                 navigationPlacement: formData.navigationPlacement,
                 navigationLabel: formData.navigationLabel.trim() || title,
                 parentPageId: selectedParentPage?.id || undefined,
@@ -1941,6 +2063,61 @@ function NewPageRoute() {
                         </div>
 
                         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                            {frontendPageTemplates.length > 0 && (
+                                <div className="md:col-span-2 xl:col-span-3 rounded-lg border border-teal-200 bg-teal-50/60 p-4" data-testid="page-frontend-template-options">
+                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                        <div>
+                                            <h3 className="text-sm font-semibold text-teal-950">Frontend design templates</h3>
+                                            <p className="mt-1 text-xs leading-5 text-teal-900">
+                                                Use templates captured from this site&apos;s custom frontend contract.
+                                            </p>
+                                        </div>
+                                        <span className="rounded-md bg-white/80 px-2 py-1 text-xs font-semibold text-teal-900">
+                                            {frontendDesign?.source.label || frontendDesign?.source.type || 'Connected design'}
+                                        </span>
+                                    </div>
+                                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                        {frontendPageTemplates.map((template) => (
+                                            <button
+                                                key={template.id}
+                                                type="button"
+                                                onClick={() => handleFrontendTemplateChange(template)}
+                                                disabled={isPageCreateBusy}
+                                                data-testid={`page-frontend-template-${template.id}`}
+                                                data-active={formData.designTemplateId === template.id}
+                                                className={cn(
+                                                    'rounded-lg border bg-white p-3 text-left transition hover:border-teal-400 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-70',
+                                                    formData.designTemplateId === template.id ? 'border-teal-600 ring-1 ring-teal-600' : 'border-teal-200',
+                                                )}
+                                            >
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="truncate text-sm font-semibold text-foreground">{template.name}</span>
+                                                    <span className="shrink-0 rounded-md bg-teal-100 px-2 py-1 text-[11px] font-semibold text-teal-800">
+                                                        {template.canvasSize ? `${template.canvasSize.width} x ${template.canvasSize.height}` : 'Contract'}
+                                                    </span>
+                                                </div>
+                                                <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                                                    {template.description || template.routePattern || 'Captured template with editable frontend bindings.'}
+                                                </p>
+                                                <div className="mt-3 flex flex-wrap gap-1 text-[11px] text-muted-foreground">
+                                                    <span className="rounded-md bg-muted px-2 py-1">{template.bindingHints?.length || 0} bindings</span>
+                                                    {template.routePattern && <span className="rounded-md bg-muted px-2 py-1">{template.routePattern}</span>}
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {frontendDesignLoading && (
+                                <div className="md:col-span-2 xl:col-span-3 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                                    Loading frontend design templates...
+                                </div>
+                            )}
+                            {frontendDesignError && (
+                                <div className="md:col-span-2 xl:col-span-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                    {frontendDesignError}
+                                </div>
+                            )}
                             {TEMPLATE_OPTIONS.map((tmpl) => (
                                     <label
                                         key={tmpl.id}
@@ -1989,15 +2166,15 @@ function NewPageRoute() {
                                 <dl className="grid gap-2 text-xs sm:grid-cols-3 lg:grid-cols-1">
                                     <div className="rounded-lg border border-border bg-card px-3 py-2">
                                         <dt className="font-medium text-muted-foreground">Canvas</dt>
-                                        <dd className="mt-1 font-semibold text-foreground">{DEFAULT_CANVAS_SIZE.width} x {DEFAULT_CANVAS_SIZE.height}</dd>
+                                        <dd className="mt-1 font-semibold text-foreground">{effectiveCanvasSize.width} x {effectiveCanvasSize.height}</dd>
                                     </div>
                                     <div className="rounded-lg border border-border bg-card px-3 py-2">
                                         <dt className="font-medium text-muted-foreground">Chrome</dt>
-                                        <dd className="mt-1 font-semibold text-foreground">{formData.template === 'blank' ? 'Library only' : 'Header, nav, footer'}</dd>
+                                        <dd className="mt-1 font-semibold text-foreground">{selectedFrontendTemplate ? 'Frontend contract' : formData.template === 'blank' ? 'Library only' : 'Header, nav, footer'}</dd>
                                     </div>
                                     <div className="rounded-lg border border-border bg-card px-3 py-2">
                                         <dt className="font-medium text-muted-foreground">Blocks</dt>
-                                        <dd className="mt-1 font-semibold text-foreground">{selectedTemplate.sections.length} starter sections</dd>
+                                        <dd className="mt-1 font-semibold text-foreground">{selectedFrontendTemplate ? `${selectedFrontendTemplate.bindingHints?.length || 0} bindings` : `${selectedTemplate.sections.length} starter sections`}</dd>
                                     </div>
                                 </dl>
                             </div>
@@ -2108,11 +2285,11 @@ function NewPageRoute() {
                         <dl className="mt-4 space-y-3 text-sm">
                             <div>
                                 <dt className="text-xs font-medium text-muted-foreground">Template</dt>
-                                <dd className="mt-1 font-semibold text-foreground">{selectedTemplate.name}</dd>
+                                <dd className="mt-1 font-semibold text-foreground">{effectiveTemplateName}</dd>
                             </div>
                             <div>
                                 <dt className="text-xs font-medium text-muted-foreground">Canvas</dt>
-                                <dd className="mt-1 text-foreground">{DEFAULT_CANVAS_SIZE.width} x {DEFAULT_CANVAS_SIZE.height}</dd>
+                                <dd className="mt-1 text-foreground">{effectiveCanvasSize.width} x {effectiveCanvasSize.height}</dd>
                             </div>
                             <div>
                                 <dt className="text-xs font-medium text-muted-foreground">Status</dt>
@@ -2133,12 +2310,21 @@ function NewPageRoute() {
                                 <Layout className="h-5 w-5" />
                             </span>
                             <div>
-                                <h2 className="text-sm font-semibold text-foreground">{selectedTemplate.name}</h2>
-                                <p className="mt-1 text-sm text-muted-foreground">{selectedTemplate.detail}</p>
+                                <h2 className="text-sm font-semibold text-foreground">{effectiveTemplateName}</h2>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    {selectedFrontendTemplate?.description || selectedTemplate.detail}
+                                </p>
                             </div>
                         </div>
                         <div className="mt-4 grid gap-2">
-                            {selectedTemplate.sections.map((section) => (
+                            {(selectedFrontendTemplate
+                                ? [
+                                    `${selectedFrontendTemplate.bindingHints?.length || 0} editable bindings`,
+                                    selectedFrontendTemplate.routePattern || 'Frontend route pattern',
+                                    frontendDesign?.source.label || frontendDesign?.source.type || 'Frontend design source',
+                                ]
+                                : selectedTemplate.sections
+                            ).map((section) => (
                                 <div key={section} className="rounded-lg border border-border bg-background px-3 py-2 text-sm">
                                     {section}
                                 </div>
@@ -2303,6 +2489,7 @@ const isRecoverablePageCreateDraft = (value: Partial<PageCreateAutosaveDraft>): 
         && typeof formData.ogImage === 'string'
         && typeof formData.noIndex === 'boolean'
         && typeof formData.noFollow === 'boolean'
+        && (formData.designTemplateId === undefined || typeof formData.designTemplateId === 'string')
     );
 };
 
@@ -2421,16 +2608,34 @@ function appendPageToNavigation(
 
 function createInitialPageContent(input: {
     template: PageTemplate;
+    frontendTemplate?: SiteFrontendDesignTemplate | null;
+    frontendDesign?: SiteFrontendDesignContract | null;
     title: string;
     slug: string;
     status: 'draft' | 'published' | 'scheduled';
     description: string;
 }) {
-    const elements = buildTemplateElements(input);
+    const elements = input.frontendTemplate
+        ? buildFrontendTemplateElements(input.frontendTemplate, input)
+        : buildTemplateElements(input);
+    const canvasSize = input.frontendTemplate?.canvasSize
+        ? {
+            ...DEFAULT_CANVAS_SIZE,
+            width: input.frontendTemplate.canvasSize.width,
+            height: input.frontendTemplate.canvasSize.height,
+        }
+        : {
+            ...DEFAULT_CANVAS_SIZE,
+            height: getCanvasHeightForElements(elements),
+        };
+    const customCSS = input.frontendTemplate
+        ? input.frontendDesign?.tokens?.customCss
+        : undefined;
+
     return JSON.parse(serializeCanvasContent(elements, {
-        ...DEFAULT_CANVAS_SIZE,
-        height: getCanvasHeightForElements(elements),
-    }, undefined, {
+        ...canvasSize,
+        height: Math.max(canvasSize.height, getCanvasHeightForElements(elements)),
+    }, customCSS, {
         documentId: `page_${input.slug || 'new-page'}`,
         kind: 'page',
         title: input.title,
@@ -2438,6 +2643,99 @@ function createInitialPageContent(input: {
         status: input.status,
         locale: 'en',
     }));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function buildFrontendTemplateElements(
+    template: SiteFrontendDesignTemplate,
+    input: { title: string; slug: string; description: string },
+): CanvasElement[] {
+    const content = isRecord(template.content) ? template.content : {};
+    const contentDocument = isRecord(content.contentDocument) ? content.contentDocument : {};
+
+    if (Array.isArray(content.elements)) {
+        return content.elements as CanvasElement[];
+    }
+
+    if (Array.isArray(contentDocument.elements)) {
+        return contentDocument.elements as CanvasElement[];
+    }
+
+    const canvasWidth = template.canvasSize?.width || DEFAULT_CANVAS_SIZE.width;
+    const canvasHeight = template.canvasSize?.height || 900;
+
+    return [
+        createCanvasElement('section', 0, 0, {
+            id: `frontend-template-${template.id}`,
+            width: canvasWidth,
+            height: Math.max(620, canvasHeight - 160),
+            props: {
+                backgroundColor: '#ffffff',
+                borderRadius: 0,
+                padding: 0,
+                frontendTemplateId: template.id,
+                frontendTemplateName: template.name,
+                routePattern: template.routePattern,
+            },
+            children: [
+                createCanvasElement('heading', 72, 72, {
+                    id: `frontend-template-${template.id}-heading`,
+                    width: Math.min(720, canvasWidth - 144),
+                    height: 96,
+                    props: {
+                        content: input.title || template.name,
+                        level: 'h1',
+                        fontSize: 48,
+                        fontWeight: '800',
+                        lineHeight: 1.1,
+                        color: '#111827',
+                        binding: 'page.title',
+                    },
+                }),
+                createCanvasElement('paragraph', 76, 190, {
+                    id: `frontend-template-${template.id}-description`,
+                    width: Math.min(680, canvasWidth - 152),
+                    height: 96,
+                    props: {
+                        content: input.description || template.description || 'This page was seeded from the connected frontend design contract.',
+                        fontSize: 18,
+                        lineHeight: 1.6,
+                        color: '#4b5563',
+                        binding: 'page.description',
+                    },
+                }),
+                createCanvasElement('box', 76, 340, {
+                    id: `frontend-template-${template.id}-editable-region`,
+                    width: Math.min(860, canvasWidth - 152),
+                    height: 180,
+                    props: {
+                        backgroundColor: '#f8fafc',
+                        borderColor: '#cbd5e1',
+                        borderWidth: 1,
+                        borderStyle: 'solid',
+                        borderRadius: 8,
+                        bindingHints: template.bindingHints || [],
+                    },
+                    children: [
+                        createCanvasElement('paragraph', 28, 30, {
+                            id: `frontend-template-${template.id}-editable-region-copy`,
+                            width: Math.min(760, canvasWidth - 220),
+                            height: 80,
+                            props: {
+                                content: 'Replace this placeholder with captured component content, mapped fields, or reusable sections.',
+                                fontSize: 16,
+                                lineHeight: 1.5,
+                                color: '#334155',
+                            },
+                        }),
+                    ],
+                }),
+            ],
+        }),
+    ];
 }
 
 function buildTemplateElements(input: {

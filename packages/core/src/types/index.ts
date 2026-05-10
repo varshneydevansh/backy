@@ -704,6 +704,18 @@ export interface PageMeta {
 
   /** Parent page title snapshot for custom frontends */
   parentPageTitle?: string;
+
+  /** Frontend design template used to seed this page */
+  frontendDesignTemplateId?: string;
+
+  /** Frontend design template name snapshot used to seed this page */
+  frontendDesignTemplateName?: string;
+
+  /** Frontend design source snapshot used to preserve custom frontend context */
+  frontendDesignSource?: SiteFrontendDesignContract['source'];
+
+  /** Editable binding hints captured from the frontend design template */
+  frontendDesignBindingHints?: Array<Record<string, unknown>>;
 }
 
 /**

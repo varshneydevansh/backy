@@ -47,6 +47,10 @@ interface PageMeta {
   noFollow?: boolean;
   parentPageId?: string | null;
   parentPageTitle?: string | null;
+  frontendDesignTemplateId?: string | null;
+  frontendDesignTemplateName?: string | null;
+  frontendDesignSource?: Record<string, unknown> | null;
+  frontendDesignBindingHints?: Array<Record<string, unknown>>;
 }
 
 interface CanvasElement {
@@ -2328,6 +2332,10 @@ function isPublished(
 
 function defaultNoIndexForStatus(status: StorePage['status'] | StoreBlogPost['status']): boolean {
   return status !== 'published' && status !== 'scheduled';
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function getPagination(total: number, limit: number, offset: number): Pagination {
@@ -5016,6 +5024,14 @@ export function createAdminPage(siteId: string, input: Record<string, unknown>):
       noFollow: parseBooleanInput(metaInput.noFollow, false),
       parentPageId: sanitizeString(metaInput.parentPageId) || null,
       parentPageTitle: sanitizeString(metaInput.parentPageTitle) || null,
+      frontendDesignTemplateId: sanitizeString(metaInput.frontendDesignTemplateId) || null,
+      frontendDesignTemplateName: sanitizeString(metaInput.frontendDesignTemplateName) || null,
+      frontendDesignSource: isObjectRecord(metaInput.frontendDesignSource)
+        ? clone(metaInput.frontendDesignSource)
+        : null,
+      frontendDesignBindingHints: Array.isArray(metaInput.frontendDesignBindingHints)
+        ? metaInput.frontendDesignBindingHints.filter(isObjectRecord).map(clone)
+        : undefined,
     },
     forms: Array.isArray(input.forms) ? input.forms.map(sanitizeString).filter(Boolean) : [],
     createdAt: now,
@@ -5104,6 +5120,22 @@ export function updateAdminPage(
           noFollow: metaInput.noFollow === undefined ? current.meta.noFollow : parseBooleanInput(metaInput.noFollow, false),
           parentPageId: metaInput.parentPageId === undefined ? current.meta.parentPageId : sanitizeString(metaInput.parentPageId) || null,
           parentPageTitle: metaInput.parentPageTitle === undefined ? current.meta.parentPageTitle : sanitizeString(metaInput.parentPageTitle) || null,
+          frontendDesignTemplateId: metaInput.frontendDesignTemplateId === undefined
+            ? current.meta.frontendDesignTemplateId
+            : sanitizeString(metaInput.frontendDesignTemplateId) || null,
+          frontendDesignTemplateName: metaInput.frontendDesignTemplateName === undefined
+            ? current.meta.frontendDesignTemplateName
+            : sanitizeString(metaInput.frontendDesignTemplateName) || null,
+          frontendDesignSource: metaInput.frontendDesignSource === undefined
+            ? current.meta.frontendDesignSource
+            : isObjectRecord(metaInput.frontendDesignSource)
+              ? clone(metaInput.frontendDesignSource)
+              : null,
+          frontendDesignBindingHints: metaInput.frontendDesignBindingHints === undefined
+            ? current.meta.frontendDesignBindingHints
+            : Array.isArray(metaInput.frontendDesignBindingHints)
+              ? metaInput.frontendDesignBindingHints.filter(isObjectRecord).map(clone)
+              : undefined,
         },
     forms: Array.isArray(input.forms) ? input.forms.map(sanitizeString).filter(Boolean) : current.forms,
     updatedAt: now,

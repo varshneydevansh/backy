@@ -16,6 +16,8 @@ const TEMPLATE_DESKTOP_SCREENSHOT_PATH = process.env.BACKY_PAGE_CREATE_TEMPLATE_
 const TEMPLATE_MOBILE_SCREENSHOT_PATH = process.env.BACKY_PAGE_CREATE_TEMPLATE_MOBILE_SCREENSHOT
   || path.join(os.tmpdir(), 'backy-page-create-templates-mobile.png');
 const EDITOR_TEMPLATE_SCREENSHOT_DIR = process.env.BACKY_PAGE_CREATE_EDITOR_TEMPLATE_SCREENSHOT_DIR || os.tmpdir();
+const FRONTEND_DESIGN_TEMPLATE_ID = 'smoke-page-contract-template';
+const FRONTEND_DESIGN_TEMPLATE_NAME = 'Smoke Contract Landing';
 
 const STARTER_TEMPLATE_BACKEND_CASES = [
   {
@@ -230,6 +232,100 @@ const createParentPage = async () => {
   });
   return payload.data.page;
 };
+
+const getFrontendDesign = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`);
+  const frontendDesign = payload.data?.frontendDesign;
+  assert(frontendDesign?.schemaVersion === 'backy.frontend-design.v1', `Unexpected frontend design response: ${JSON.stringify(payload).slice(0, 500)}`);
+  return frontendDesign;
+};
+
+const patchFrontendDesign = async (frontendDesign) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`, {
+    method: 'PATCH',
+    body: JSON.stringify({ frontendDesign }),
+  });
+  const updated = payload.data?.frontendDesign;
+  assert(updated?.schemaVersion === 'backy.frontend-design.v1', `Patch did not return frontend design: ${JSON.stringify(payload).slice(0, 500)}`);
+  return updated;
+};
+
+const smokeFrontendDesignContract = () => ({
+  schemaVersion: 'backy.frontend-design.v1',
+  status: 'synced',
+  source: {
+    type: 'custom-frontend',
+    label: 'Smoke page create frontend',
+    url: 'https://example.com/smoke-frontend',
+    repository: 'example/backy-smoke-frontend',
+    branch: 'main',
+  },
+  tokens: {
+    colors: {
+      primary: '#0f766e',
+      surface: '#ffffff',
+      text: '#111827',
+    },
+    fonts: {
+      heading: 'Inter',
+      body: 'Inter',
+    },
+    customCss: ':root { --backy-smoke-primary: #0f766e; }',
+  },
+  chrome: {
+    header: {
+      component: 'SmokeHeader',
+      source: 'site.navigation.primary',
+    },
+    navigation: {
+      component: 'SmokeNavigation',
+      source: 'site.navigation.primary',
+    },
+    footer: {
+      component: 'SmokeFooter',
+      source: 'site.navigation.footer',
+    },
+  },
+  templates: [
+    {
+      id: FRONTEND_DESIGN_TEMPLATE_ID,
+      type: 'page',
+      name: FRONTEND_DESIGN_TEMPLATE_NAME,
+      routePattern: '/smoke-contract',
+      description: 'Frontend contract template used by the page create smoke.',
+      canvasSize: { width: 1280, height: 960 },
+      bindingHints: [
+        { role: 'page.title', binding: 'page.title' },
+        { role: 'page.description', binding: 'page.description' },
+      ],
+    },
+    {
+      id: 'smoke-blog-contract-template',
+      type: 'blogPost',
+      name: 'Smoke Contract Blog',
+      routePattern: '/blog/{slug}',
+      canvasSize: { width: 1200, height: 900 },
+      bindingHints: [
+        { role: 'post.title', binding: 'post.title' },
+      ],
+    },
+  ],
+  editableMap: [
+    {
+      selector: '[data-backy-role="site-header"]',
+      role: 'site.header',
+      binding: 'site.navigation.primary',
+      fields: ['label', 'href'],
+    },
+    {
+      selector: '[data-backy-role="page-title"]',
+      role: 'page.title',
+      binding: 'page.title',
+      fields: ['content'],
+    },
+  ],
+  notes: 'Temporary contract for validating page creation from custom frontend templates.',
+});
 
 const fetchJson = async (endpoint) => {
   const response = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
@@ -448,32 +544,46 @@ const assertTemplateSwitching = async (client) => {
   const observed = [];
 
   for (const testCase of cases) {
-    const state = await evaluate(client, `(() => {
-      const input = document.querySelector('input[name="template"][value="${testCase.template}"]');
-      if (!(input instanceof HTMLInputElement)) {
-        return { clicked: false, template: ${JSON.stringify(testCase.template)} };
-      }
-      input.click();
-      return { clicked: true, template: input.value };
-    })()`);
-    assert(state.clicked, `Template input was not clickable: ${JSON.stringify(state)}`);
-    await sleep(250);
+    let nextState = null;
 
-    const nextState = await evaluate(client, `(() => {
-      const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
-      return {
-        template: ${JSON.stringify(testCase.template)},
-        selectedTemplatePreview: document.querySelector('[data-testid="page-selected-template-preview"]')?.getAttribute('data-template') || '',
-        activeTemplatePreview: document.querySelector('[data-testid="page-template-preview-${testCase.template}"]')?.getAttribute('data-active') || '',
-        navPlacement: document.querySelector('#page-navigation-placement-select')?.value || '',
-        selectedTemplateName: Array.from(document.querySelectorAll('#page-preview dd')).map((node) => node.textContent?.trim() || '')[0] || '',
-        payloadTemplate: payload.template || '',
-        forms: payload.forms || '',
-        dynamicData: payload.dynamicData || '',
-        siteChrome: payload.siteChrome || '',
-        body: document.body?.innerText?.slice(0, 220) || '',
-      };
-    })()`);
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      nextState = await evaluate(client, `(() => {
+        const input = document.querySelector('input[name="template"][value="${testCase.template}"]');
+        if (!(input instanceof HTMLInputElement)) {
+          return { clicked: false, reason: 'missing-input', template: ${JSON.stringify(testCase.template)} };
+        }
+        if (!input.disabled) {
+          (input.closest('label') || input).click();
+        }
+        const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
+        return {
+          clicked: !input.disabled,
+          disabled: input.disabled,
+          template: ${JSON.stringify(testCase.template)},
+          selectedTemplatePreview: document.querySelector('[data-testid="page-selected-template-preview"]')?.getAttribute('data-template') || '',
+          activeTemplatePreview: document.querySelector('[data-testid="page-template-preview-${testCase.template}"]')?.getAttribute('data-active') || '',
+          navPlacement: document.querySelector('#page-navigation-placement-select')?.value || '',
+          selectedTemplateName: Array.from(document.querySelectorAll('#page-preview dd')).map((node) => node.textContent?.trim() || '')[0] || '',
+          payloadTemplate: payload.template || '',
+          forms: payload.forms || '',
+          dynamicData: payload.dynamicData || '',
+          siteChrome: payload.siteChrome || '',
+          body: document.body?.innerText?.slice(0, 220) || '',
+        };
+      })()`);
+
+      if (
+        nextState.selectedTemplatePreview === testCase.template
+        && nextState.activeTemplatePreview === 'true'
+        && nextState.navPlacement === testCase.navPlacement
+        && nextState.selectedTemplateName === testCase.selectedTemplateName
+        && nextState.payloadTemplate === testCase.template
+      ) {
+        break;
+      }
+
+      await sleep(250);
+    }
 
     assert(nextState.selectedTemplatePreview === testCase.template, `Selected preview did not update for ${testCase.template}: ${JSON.stringify(nextState)}`);
     assert(nextState.activeTemplatePreview === 'true', `Active preview did not update for ${testCase.template}: ${JSON.stringify(nextState)}`);
@@ -700,6 +810,71 @@ const navigateToStarterTemplateCreate = async (client, testCase, slug) => {
   const url = `${ADMIN_BASE_URL}/pages/new?${query.toString()}`;
   await client.send('Page.navigate', { url });
   return waitForStarterTemplateCreateControls(client, testCase, slug, url);
+};
+
+const waitForFrontendDesignTemplateCreateControls = async (client, slug, title, url) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
+      const createButton = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.textContent || '').includes('Create Page')
+      ));
+      return {
+        ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
+        frontendPanel: Boolean(document.querySelector('[data-testid="page-frontend-template-options"]')),
+        frontendButtonActive: document.querySelector('[data-testid="page-frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}"]')?.getAttribute('data-active') || '',
+        title: document.querySelector('#page-title')?.value || '',
+        slug: document.querySelector('#page-slug')?.value || '',
+        payloadTemplateId: payload.template?.id || '',
+        payloadTemplateSource: payload.template?.source || '',
+        payloadTemplateName: payload.template?.name || '',
+        payloadContent: payload.content || '',
+        payloadSiteChrome: payload.siteChrome || '',
+        selectedTemplateName: Array.from(document.querySelectorAll('#page-preview dd')).map((node) => node.textContent?.trim() || '')[0] || '',
+        createButtonDisabled: createButton instanceof HTMLButtonElement ? createButton.disabled : null,
+        body: document.body?.innerText?.slice(0, 300) || '',
+      };
+    })()`);
+
+    if (
+      state.ready
+      && state.frontendPanel
+      && state.frontendButtonActive === 'true'
+      && state.title === title
+      && state.slug === slug
+      && state.payloadTemplateId === FRONTEND_DESIGN_TEMPLATE_ID
+      && state.payloadTemplateSource === 'frontend-design'
+      && state.payloadTemplateName === FRONTEND_DESIGN_TEMPLATE_NAME
+      && state.payloadContent.includes('frontend contract seed')
+      && state.payloadSiteChrome === 'captured from frontend design contract'
+      && state.selectedTemplateName === `${FRONTEND_DESIGN_TEMPLATE_NAME} frontend template`
+      && state.createButtonDisabled === false
+    ) {
+      return { url, state };
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Frontend design template create route did not render expected controls: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const navigateToFrontendDesignTemplateCreate = async (client, slug, title) => {
+  const query = new URLSearchParams({
+    siteId: SITE_ID,
+    template: 'blank',
+    designTemplate: FRONTEND_DESIGN_TEMPLATE_ID,
+    title,
+    slug,
+    description: 'Smoke page seeded from a connected frontend design contract.',
+  });
+  const url = `${ADMIN_BASE_URL}/pages/new?${query.toString()}`;
+  await client.send('Page.navigate', { url });
+  return waitForFrontendDesignTemplateCreateControls(client, slug, title, url);
 };
 
 const assertAutosaveWritten = async (client, slug, title, navLabel, seo, parentPageId) => {
@@ -979,6 +1154,57 @@ const assertStarterTemplatePageContent = async (pageId, testCase, slug) => {
   };
 };
 
+const assertFrontendDesignTemplatePageContent = async (pageId, slug, title) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const page = payload.data?.page;
+
+  assert(page, `Created frontend design page ${pageId} detail was not returned`);
+  assert(page.title === title, `Created frontend design title mismatch: ${JSON.stringify({ title: page.title, expected: title })}`);
+  assert(page.slug === slug, `Created frontend design slug mismatch: ${JSON.stringify({ slug: page.slug, expected: slug })}`);
+  assert(page.meta?.frontendDesignTemplateId === FRONTEND_DESIGN_TEMPLATE_ID, `Created page did not store frontend template id: ${JSON.stringify(page.meta)}`);
+  assert(page.meta?.frontendDesignTemplateName === FRONTEND_DESIGN_TEMPLATE_NAME, `Created page did not store frontend template name: ${JSON.stringify(page.meta)}`);
+  assert(page.meta?.frontendDesignSource?.type === 'custom-frontend', `Created page did not store frontend design source: ${JSON.stringify(page.meta)}`);
+  assert(Array.isArray(page.meta?.frontendDesignBindingHints) && page.meta.frontendDesignBindingHints.length === 2, `Created page did not store frontend binding hints: ${JSON.stringify(page.meta)}`);
+
+  const content = normalizeCreatedContent(page.content);
+  const elements = Array.isArray(content.elements) ? content.elements : [];
+  const allElements = flattenElements(elements);
+  const byId = new Map(allElements.map((element) => [element.id, element]));
+  const contentDocument = content.contentDocument || null;
+  const canvasSize = content.canvasSize || contentDocument?.metadata?.canvasSize || {};
+  const wrapper = byId.get(`frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}`);
+  const heading = byId.get(`frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}-heading`);
+  const editableRegion = byId.get(`frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}-editable-region`);
+
+  assert(wrapper?.type === 'section', `Frontend template wrapper section missing: ${JSON.stringify({ ids: allElements.map((element) => element.id).slice(0, 40) })}`);
+  assert(wrapper.props?.frontendTemplateId === FRONTEND_DESIGN_TEMPLATE_ID, `Frontend template wrapper metadata mismatch: ${JSON.stringify(wrapper)}`);
+  assert(heading?.props?.content === title, `Frontend template heading does not use page title: ${JSON.stringify(heading?.props)}`);
+  assert(Array.isArray(editableRegion?.props?.bindingHints) && editableRegion.props.bindingHints.length === 2, `Frontend template editable region missing binding hints: ${JSON.stringify(editableRegion?.props)}`);
+  assert(canvasSize.width === 1280 && canvasSize.height >= 960, `Frontend template canvas size mismatch: ${JSON.stringify(canvasSize)}`);
+  assert(contentDocument?.kind === 'page', `Frontend template contentDocument kind mismatch: ${JSON.stringify(contentDocument)}`);
+  assert(contentDocument?.slug === page.slug, `Frontend template contentDocument slug mismatch: ${JSON.stringify({ slug: page.slug, contentDocumentSlug: contentDocument?.slug })}`);
+  assert(typeof content.customCSS === 'string' && content.customCSS.includes('--backy-smoke-primary'), `Frontend template custom CSS was not persisted: ${JSON.stringify(content.customCSS)}`);
+
+  return {
+    pageId,
+    slug: page.slug,
+    meta: {
+      frontendDesignTemplateId: page.meta?.frontendDesignTemplateId,
+      frontendDesignTemplateName: page.meta?.frontendDesignTemplateName,
+      frontendDesignSourceType: page.meta?.frontendDesignSource?.type,
+      bindingHintCount: page.meta?.frontendDesignBindingHints?.length || 0,
+    },
+    content: {
+      rootElementCount: elements.length,
+      totalElementCount: allElements.length,
+      canvasSize,
+      wrapperId: wrapper.id,
+      heading: heading?.props?.content,
+      customCssStored: typeof content.customCSS === 'string',
+    },
+  };
+};
+
 const assertStarterTemplateEditorRender = async (client, testCase) => {
   const requiredElementIds = testCase.requiredElementIds;
   let renderState = null;
@@ -1077,6 +1303,23 @@ const createStarterTemplateBackends = async (client, createdPageIds) => {
   }
 
   return summaries;
+};
+
+const createFrontendDesignTemplateBackend = async (client, createdPageIds) => {
+  const slug = `smoke-frontend-design-template-${Date.now().toString(36)}`;
+  const title = 'Smoke Frontend Contract Page';
+  const routeState = await navigateToFrontendDesignTemplateCreate(client, slug, title);
+  const editState = await createPageFromUi(client);
+  const pageId = editState.path.split('/').filter(Boolean).at(-2);
+  createdPageIds.push(pageId);
+  const content = await assertFrontendDesignTemplatePageContent(pageId, slug, title);
+
+  return {
+    routeState: routeState.state,
+    editState,
+    pageId,
+    content,
+  };
 };
 
 const createPageFromUi = async (client) => {
@@ -1361,8 +1604,11 @@ const main = async () => {
   let pageId = null;
   const createdPageIds = [];
   let parentPage = null;
+  let originalFrontendDesign = null;
 
   try {
+    originalFrontendDesign = await getFrontendDesign();
+    await patchFrontendDesign(smokeFrontendDesignContract());
     parentPage = await createParentPage();
     await waitForCdp();
     const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
@@ -1405,6 +1651,7 @@ const main = async () => {
     const pageEditorFocus = await assertPageEditorFocusMode(client);
     const navigationItem = await assertNavigationContainsPage(pageId, navLabel, parentPage.id);
     const pageMeta = await assertCreatedPageSeo(pageId, seo, parentPage);
+    const frontendDesignTemplateBackend = await createFrontendDesignTemplateBackend(client, createdPageIds);
     const starterTemplateBackends = await createStarterTemplateBackends(client, createdPageIds);
 
     await captureScreenshot(client, SCREENSHOT_PATH);
@@ -1436,10 +1683,18 @@ const main = async () => {
       parentPageId: parentPage.id,
       navigationItem,
       pageMeta,
+      frontendDesignTemplateBackend,
       starterTemplateBackends,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
+    if (originalFrontendDesign) {
+      try {
+        await patchFrontendDesign(originalFrontendDesign);
+      } catch (error) {
+        console.warn('Unable to restore original frontend design contract:', error instanceof Error ? error.message : error);
+      }
+    }
     await cleanup({ client, childProcess, userDataDir, pageIds: createdPageIds, pageId, parentPageId: parentPage?.id || null });
   }
 };
