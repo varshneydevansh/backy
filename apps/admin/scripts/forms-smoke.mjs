@@ -234,6 +234,147 @@ const waitForCreatedForm = async (client, beforeIds) => {
   return null;
 };
 
+const getAdminForm = async (formId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}`);
+  return payload.data?.form || payload.form;
+};
+
+const editFormBuilderInUi = async (client, formId) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const setInputValue = (input, value) => {
+        const prototype = input instanceof HTMLTextAreaElement
+          ? HTMLTextAreaElement.prototype
+          : HTMLInputElement.prototype;
+        const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+        descriptor?.set?.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const panel = document.querySelector('[data-testid="form-builder-panel"]');
+      if (!panel) {
+        return { ok: false, reason: 'panel-missing', body: document.body?.innerText?.slice(0, 500) || '' };
+      }
+
+      const inputs = Array.from(panel.querySelectorAll('input'));
+      const textareas = Array.from(panel.querySelectorAll('textarea'));
+      const title = inputs.find((input) => input.value === 'Registration');
+      const machineName = inputs.find((input) => input.value.startsWith('registration-'));
+      const firstPlaceholder = inputs.find((input) => input.value === 'Ada Lovelace');
+      const addButton = Array.from(panel.querySelectorAll('button')).find((button) => (
+        (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Add field'
+      ));
+
+      if (!(title instanceof HTMLInputElement) || !(machineName instanceof HTMLInputElement) || !(firstPlaceholder instanceof HTMLInputElement) || !(addButton instanceof HTMLButtonElement)) {
+        return {
+          ok: false,
+          reason: 'controls-missing',
+          inputs: inputs.map((input) => input.value).slice(0, 20),
+          buttons: Array.from(panel.querySelectorAll('button')).map((button) => button.textContent || '').slice(0, 20),
+        };
+      }
+
+      title.focus();
+      setInputValue(title, 'Registration edited');
+
+      machineName.focus();
+      setInputValue(machineName, 'registration_smoke');
+
+      firstPlaceholder.focus();
+      setInputValue(firstPlaceholder, 'Grace Hopper');
+
+      addButton.click();
+      return { ok: true };
+    })()`);
+
+    if (result.ok) break;
+
+    if (attempt === 79) {
+      throw new Error(`Unable to edit form builder: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const setInputValue = (input, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        descriptor?.set?.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const panel = document.querySelector('[data-testid="form-builder-panel"]');
+      if (!panel) return { ok: false, reason: 'panel-missing' };
+      const fieldCards = Array.from(panel.querySelectorAll('.rounded-lg.border.border-border.bg-card.p-3'));
+      const fieldCard = fieldCards.find((candidate) => (
+        Array.from(candidate.querySelectorAll('input')).some((input) => input.value === 'field_6')
+      ));
+      const fieldInputs = Array.from((fieldCard || panel).querySelectorAll('input'));
+      const key = fieldInputs.find((input) => input.value === 'field_6');
+      const label = fieldInputs.find((input) => input.value === 'Field 6');
+      const saveButton = Array.from(panel.querySelectorAll('button')).find((button) => (
+        (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Save form'
+      ));
+      if (!(key instanceof HTMLInputElement) || !(label instanceof HTMLInputElement) || !(saveButton instanceof HTMLButtonElement)) {
+        return {
+          ok: false,
+          reason: 'new-field-controls-missing',
+          inputs: fieldInputs.map((input) => input.value).slice(-16),
+          buttons: Array.from(panel.querySelectorAll('button')).map((button) => button.textContent || '').slice(-10),
+        };
+      }
+
+      label.focus();
+      setInputValue(label, 'Company');
+
+      key.focus();
+      setInputValue(key, 'company');
+
+      if (saveButton.disabled) {
+        return { ok: false, reason: 'save-disabled', button: saveButton.textContent || '' };
+      }
+      saveButton.click();
+      return { ok: true };
+    })()`);
+
+    if (result.ok) break;
+
+    if (attempt === 79) {
+      throw new Error(`Unable to save form builder changes: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const saved = await evaluate(client, `(() => ({
+      notice: document.body?.innerText?.includes('Form settings and fields saved.') || false,
+      body: document.body?.innerText?.slice(0, 700) || '',
+    }))()`);
+    const form = await getAdminForm(formId);
+    const editedTitle = form?.title === 'Registration edited';
+    const company = form?.fields?.some((field) => field.key === 'company' && field.label === 'Company');
+    const placeholder = form?.fields?.some((field) => field.key === 'full_name' && field.placeholder === 'Grace Hopper');
+
+    if (saved.notice && editedTitle && company && placeholder) {
+      return { ...saved, editedTitle, company, placeholder };
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Form builder changes did not persist: ${JSON.stringify({
+        saved,
+        title: form?.title,
+        fields: form?.fields?.map((field) => ({ key: field.key, label: field.label, placeholder: field.placeholder })),
+      })}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const submitRegistration = async (formId) => {
   const payload = await requestApi(`/api/sites/${SITE_ID}/forms/${formId}/submissions`, {
     method: 'POST',
@@ -248,6 +389,7 @@ const submitRegistration = async (formId) => {
         phone: '+1 555 0199',
         member_type: 'Creator',
         consent: true,
+        company: 'Backy Smoke Co',
       },
     }),
   });
@@ -396,9 +538,19 @@ const main = async () => {
     await clickRegistrationCreateForm(client);
     const created = await waitForCreatedForm(client, beforeIds);
     createdFormId = created.form.id;
+    await editFormBuilderInUi(client, createdFormId);
 
     const definition = await requestApi(`/api/sites/${SITE_ID}/forms/${createdFormId}/definition`);
-    assert(definition.data?.form?.fields?.length === 5, 'Created registration definition did not expose five fields');
+    assert(definition.data?.form?.title === 'Registration edited', `Edited registration title did not persist: ${definition.data?.form?.title}`);
+    assert(definition.data?.form?.fields?.length === 6, 'Edited registration definition did not expose six fields');
+    assert(
+      definition.data.form.fields.some((field) => field.key === 'company' && field.label === 'Company'),
+      'Edited registration definition did not expose Company field',
+    );
+    assert(
+      definition.data.form.fields.some((field) => field.key === 'full_name' && field.placeholder === 'Grace Hopper'),
+      'Edited registration definition did not expose updated placeholder',
+    );
 
     const submitted = await submitRegistration(createdFormId);
     await refreshForms(client);
@@ -426,9 +578,9 @@ const main = async () => {
       url: `${ADMIN_BASE_URL}/forms?siteId=${SITE_ID}`,
       form: {
         id: createdFormId,
-        title: created.form.title,
-        fieldCount: created.form.fields.length,
-        contactShare: Boolean(created.form.contactShare?.enabled),
+        title: definition.data.form.title,
+        fieldCount: definition.data.form.fields.length,
+        contactShare: Boolean(definition.data.form.contactShare?.enabled),
       },
       submission: {
         id: submitted.id,

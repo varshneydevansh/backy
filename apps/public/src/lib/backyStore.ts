@@ -6110,6 +6110,62 @@ export function createAdminForm(input: Omit<FormDefinition, 'id' | 'createdAt' |
   return clone(form);
 }
 
+export function updateAdminForm(siteId: string, formId: string, input: Partial<Omit<FormDefinition, 'id' | 'siteId' | 'createdAt' | 'updatedAt'>>): FormDefinition | null {
+  ensurePersistedAdminContentLoaded();
+  const site = getSiteByIdOrSlug(siteId);
+  if (!site) {
+    return null;
+  }
+
+  const index = FORM_LIBRARY.findIndex((form) => form.siteId === site.id && normalizeIdentifier(form.id) === normalizeIdentifier(formId));
+  if (index === -1) {
+    return null;
+  }
+
+  const before = FORM_LIBRARY[index];
+  const updated: FormDefinition = {
+    ...before,
+    pageId: input.pageId !== undefined ? input.pageId : before.pageId,
+    postId: input.postId !== undefined ? input.postId : before.postId,
+    name: input.name !== undefined ? input.name.trim() : before.name,
+    title: input.title !== undefined ? input.title?.trim() || null : before.title,
+    description: input.description !== undefined ? input.description?.trim() || null : before.description,
+    audience: input.audience !== undefined ? input.audience : before.audience,
+    isActive: input.isActive !== undefined ? input.isActive : before.isActive,
+    fields: input.fields !== undefined ? input.fields : before.fields,
+    notificationEmail: input.notificationEmail !== undefined ? input.notificationEmail || null : before.notificationEmail,
+    notificationWebhook: input.notificationWebhook !== undefined ? input.notificationWebhook || null : before.notificationWebhook,
+    successRedirectUrl: input.successRedirectUrl !== undefined ? input.successRedirectUrl || null : before.successRedirectUrl,
+    successMessage: input.successMessage !== undefined ? input.successMessage || null : before.successMessage,
+    enableHoneypot: input.enableHoneypot !== undefined ? input.enableHoneypot : before.enableHoneypot,
+    enableCaptcha: input.enableCaptcha !== undefined ? input.enableCaptcha : before.enableCaptcha,
+    moderationMode: input.moderationMode !== undefined ? input.moderationMode : before.moderationMode,
+    contactShare: input.contactShare !== undefined ? input.contactShare : before.contactShare,
+    collectionTarget: input.collectionTarget !== undefined ? input.collectionTarget : before.collectionTarget,
+    updatedBy: input.updatedBy || 'admin',
+    updatedAt: new Date().toISOString(),
+  };
+
+  FORM_LIBRARY[index] = updated;
+  persistAdminContent();
+  recordAdminAuditLog({
+    siteId: site.id,
+    actorId: input.updatedBy || 'admin',
+    entity: 'form',
+    entityId: updated.id,
+    action: 'form.updated',
+    before: clone(before) as unknown as BackyJsonObject,
+    after: clone(updated) as unknown as BackyJsonObject,
+    metadata: {
+      name: updated.name,
+      fieldCount: updated.fields.length,
+      source: updated.pageId || updated.postId ? 'content-bound' : 'standalone',
+    },
+  });
+
+  return clone(updated);
+}
+
 export function deleteAdminForm(siteId: string, formId: string): FormDefinition | null {
   ensurePersistedAdminContentLoaded();
   const site = getSiteByIdOrSlug(siteId);

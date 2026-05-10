@@ -11,10 +11,13 @@ import {
   FileInput,
   Filter,
   Inbox,
+  Plus,
   RefreshCw,
+  Save,
   Search,
   ShieldCheck,
   Sparkles,
+  Trash2,
   XCircle,
 } from 'lucide-react';
 import {
@@ -22,6 +25,7 @@ import {
   getFormWithSubmissions,
   listForms,
   createForm,
+  updateForm,
   updateFormSubmission,
   type FormDefinition,
   type FormFieldDefinition,
@@ -61,6 +65,7 @@ const FORM_STATE_FILTERS: FormStateFilter[] = ['all', 'active', 'inactive'];
 const FORM_DESTINATION_FILTERS: FormDestinationFilter[] = ['all', 'contacts', 'collections', 'inbox-only'];
 const FORM_READINESS_FILTERS: FormReadinessFilter[] = ['all', 'ready', 'needs-work'];
 const SUBMISSION_STATUS_FILTERS: SubmissionStatusFilter[] = ['all', 'pending', 'approved', 'rejected', 'spam'];
+const FORM_FIELD_TYPES = ['text', 'email', 'number', 'textarea', 'select', 'checkbox', 'radio', 'date', 'tel', 'url', 'file'] as const;
 
 const isFormSourceFilter = (value: unknown): value is FormSourceFilter => (
   typeof value === 'string' && FORM_SOURCE_FILTERS.includes(value as FormSourceFilter)
@@ -355,6 +360,7 @@ function FormsRoute() {
   const [forms, setForms] = useState<FormDefinition[]>([]);
   const [inboxByForm, setInboxByForm] = useState<Record<string, FormInbox>>({});
   const [selectedFormId, setSelectedFormId] = useState<string | null>(routeSearch.formId || null);
+  const [formDraft, setFormDraft] = useState<FormDefinition | null>(null);
   const [formSearchQuery, setFormSearchQuery] = useState(routeSearch.q || '');
   const [formSourceFilter, setFormSourceFilter] = useState<FormSourceFilter>(routeSearch.source || 'all');
   const [formStateFilter, setFormStateFilter] = useState<FormStateFilter>(routeSearch.state || 'all');
@@ -365,9 +371,10 @@ function FormsRoute() {
   const [isLoading, setIsLoading] = useState(false);
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
   const [isCreatingTemplateId, setIsCreatingTemplateId] = useState<string | null>(null);
+  const [isSavingForm, setIsSavingForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isCreatingTemplateId);
+  const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isCreatingTemplateId) || isSavingForm;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -381,6 +388,8 @@ function FormsRoute() {
     () => forms.find((form) => form.id === selectedFormId) || forms[0] || null,
     [forms, selectedFormId],
   );
+  const selectedFormIsStandalone = Boolean(selectedForm && !selectedForm.pageId && !selectedForm.postId);
+  const formDraftDirty = Boolean(selectedForm && formDraft && JSON.stringify(buildFormUpdatePayload(formDraft)) !== JSON.stringify(buildFormUpdatePayload(selectedForm)));
   const selectedFormDefinitionUrl = selectedForm
     ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/definition`
     : '';
@@ -901,6 +910,117 @@ function FormsRoute() {
     void loadForms();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSiteId]);
+
+  useEffect(() => {
+    setFormDraft(selectedForm ? cloneFormDefinition(selectedForm) : null);
+  }, [selectedForm]);
+
+  const patchFormDraft = (patch: Partial<FormDefinition>) => {
+    setFormDraft((current) => (current ? { ...current, ...patch } : current));
+  };
+
+  const patchFormDraftField = (fieldIndex: number, patch: Partial<FormFieldDefinition>) => {
+    setFormDraft((current) => {
+      if (!current) return current;
+
+      return {
+        ...current,
+        fields: current.fields.map((field, index) => (
+          index === fieldIndex ? { ...field, ...patch } : field
+        )),
+      };
+    });
+  };
+
+  const addFormDraftField = () => {
+    setFormDraft((current) => {
+      if (!current) return current;
+      const nextNumber = current.fields.length + 1;
+      return {
+        ...current,
+        fields: [
+          ...current.fields,
+          {
+            key: `field_${nextNumber}`,
+            label: `Field ${nextNumber}`,
+            type: 'text',
+            required: false,
+          },
+        ],
+      };
+    });
+  };
+
+  const removeFormDraftField = (fieldIndex: number) => {
+    setFormDraft((current) => {
+      if (!current || current.fields.length <= 1) return current;
+      return {
+        ...current,
+        fields: current.fields.filter((_, index) => index !== fieldIndex),
+      };
+    });
+  };
+
+  const moveFormDraftField = (fieldIndex: number, direction: -1 | 1) => {
+    setFormDraft((current) => {
+      if (!current) return current;
+      const nextIndex = fieldIndex + direction;
+      if (nextIndex < 0 || nextIndex >= current.fields.length) return current;
+
+      const fields = [...current.fields];
+      const [field] = fields.splice(fieldIndex, 1);
+      fields.splice(nextIndex, 0, field);
+      return { ...current, fields };
+    });
+  };
+
+  const saveFormDraft = async () => {
+    if (isFormsBusy || !selectedForm || !formDraft || !selectedFormIsStandalone) return;
+
+    const payload = buildFormUpdatePayload(formDraft);
+    if (!payload.name.trim()) {
+      setError('Form name is required.');
+      setNotice(null);
+      return;
+    }
+    if (!payload.fields.length) {
+      setError('At least one field is required.');
+      setNotice(null);
+      return;
+    }
+    if (payload.fields.some((field) => !field.key.trim() || !field.label.trim())) {
+      setError('Every field needs a key and label.');
+      setNotice(null);
+      return;
+    }
+
+    setIsSavingForm(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const updated = await updateForm(activeSiteId, selectedForm.id, payload);
+      setForms((current) => current.map((form) => (form.id === updated.id ? updated : form)));
+      setInboxByForm((current) => {
+        const inbox = current[updated.id];
+        if (!inbox) return current;
+
+        return {
+          ...current,
+          [updated.id]: {
+            ...inbox,
+            form: updated,
+          },
+        };
+      });
+      setFormDraft(cloneFormDefinition(updated));
+      setNotice('Form settings and fields saved.');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save form');
+    } finally {
+      setIsSavingForm(false);
+    }
+  };
 
   const handleSubmissionStatus = async (submission: FormSubmission, status: FormSubmissionStatus) => {
     if (isFormsBusy) return;
@@ -1640,6 +1760,284 @@ function FormsRoute() {
                   }
                 />
                 <PanelContent>
+                  {formDraft && (
+                    <div className="mb-5 rounded-lg border border-border bg-background p-4" data-testid="form-builder-panel">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2 text-sm font-semibold">
+                            <FileInput className="size-4" />
+                            Form builder
+                          </div>
+                          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                            Edit the standalone form contract that custom frontends fetch from Backy. Page and blog form blocks remain editable from their canvas source.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {!selectedFormIsStandalone && (
+                            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                              Canvas-owned
+                            </span>
+                          )}
+                          {formDraftDirty && selectedFormIsStandalone && (
+                            <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                              Unsaved changes
+                            </span>
+                          )}
+                          <Button
+                            variant="outline"
+                            onClick={() => setFormDraft(cloneFormDefinition(selectedForm))}
+                            disabled={isFormsBusy || !formDraftDirty}
+                          >
+                            Reset
+                          </Button>
+                          <Button
+                            onClick={() => void saveFormDraft()}
+                            disabled={isFormsBusy || !selectedFormIsStandalone || !formDraftDirty}
+                            iconStart={<Save className="size-4" />}
+                          >
+                            {isSavingForm ? 'Saving...' : 'Save form'}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {!selectedFormIsStandalone && (
+                        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                          This form is generated from a page or blog canvas. Open the source canvas to change fields so the rendered page and API definition stay in sync.
+                        </div>
+                      )}
+
+                      <fieldset disabled={isFormsBusy || !selectedFormIsStandalone} className="mt-4 grid gap-4 disabled:opacity-60">
+                        <div className="grid gap-3 lg:grid-cols-2">
+                          <label className="grid gap-1.5 text-sm font-medium">
+                            Form title
+                            <input
+                              value={formDraft.title || ''}
+                              onChange={(event) => patchFormDraft({ title: event.target.value })}
+                              className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                            />
+                          </label>
+                          <label className="grid gap-1.5 text-sm font-medium">
+                            Machine name
+                            <input
+                              value={formDraft.name}
+                              onChange={(event) => patchFormDraft({ name: event.target.value })}
+                              className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 font-mono text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                            />
+                          </label>
+                          <label className="grid gap-1.5 text-sm font-medium lg:col-span-2">
+                            Description
+                            <textarea
+                              value={formDraft.description || ''}
+                              onChange={(event) => patchFormDraft({ description: event.target.value })}
+                              rows={2}
+                              className="min-h-20 resize-y rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                            />
+                          </label>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                          <label className="grid gap-1.5 text-sm font-medium">
+                            Audience
+                            <select
+                              value={formDraft.audience}
+                              onChange={(event) => patchFormDraft({ audience: event.target.value as FormDefinition['audience'] })}
+                              className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal"
+                            >
+                              <option value="public">Public</option>
+                              <option value="authenticated">Authenticated</option>
+                              <option value="adminOnly">Admin only</option>
+                            </select>
+                          </label>
+                          <label className="grid gap-1.5 text-sm font-medium">
+                            Moderation
+                            <select
+                              value={formDraft.moderationMode || 'manual'}
+                              onChange={(event) => patchFormDraft({ moderationMode: event.target.value as FormDefinition['moderationMode'] })}
+                              className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal"
+                            >
+                              <option value="manual">Manual review</option>
+                              <option value="auto-approve">Auto approve</option>
+                            </select>
+                          </label>
+                          <label className="grid gap-1.5 text-sm font-medium">
+                            Success message
+                            <input
+                              value={formDraft.successMessage || ''}
+                              onChange={(event) => patchFormDraft({ successMessage: event.target.value })}
+                              className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                            />
+                          </label>
+                          <label className="grid gap-1.5 text-sm font-medium">
+                            Redirect URL
+                            <input
+                              value={formDraft.successRedirectUrl || ''}
+                              onChange={(event) => patchFormDraft({ successRedirectUrl: event.target.value })}
+                              placeholder="/thanks"
+                              className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                            />
+                          </label>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                          <label className="flex min-h-11 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium">
+                            <input
+                              type="checkbox"
+                              checked={formDraft.isActive}
+                              onChange={(event) => patchFormDraft({ isActive: event.target.checked })}
+                            />
+                            Active
+                          </label>
+                          <label className="flex min-h-11 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium">
+                            <input
+                              type="checkbox"
+                              checked={formDraft.enableHoneypot !== false}
+                              onChange={(event) => patchFormDraft({ enableHoneypot: event.target.checked })}
+                            />
+                            Honeypot
+                          </label>
+                          <label className="flex min-h-11 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium">
+                            <input
+                              type="checkbox"
+                              checked={formDraft.enableCaptcha === true}
+                              onChange={(event) => patchFormDraft({ enableCaptcha: event.target.checked })}
+                            />
+                            Captcha
+                          </label>
+                          <label className="flex min-h-11 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(formDraft.contactShare?.enabled)}
+                              onChange={(event) => patchFormDraft({
+                                contactShare: {
+                                  enabled: event.target.checked,
+                                  nameField: formDraft.contactShare?.nameField || formDraft.fields.find((field) => field.key.includes('name'))?.key,
+                                  emailField: formDraft.contactShare?.emailField || formDraft.fields.find((field) => field.type === 'email')?.key,
+                                  phoneField: formDraft.contactShare?.phoneField || formDraft.fields.find((field) => field.type === 'tel')?.key,
+                                  notesField: formDraft.contactShare?.notesField,
+                                  dedupeByEmail: formDraft.contactShare?.dedupeByEmail !== false,
+                                },
+                              })}
+                            />
+                            Contact share
+                          </label>
+                        </div>
+
+                        <div className="rounded-lg border border-border bg-muted/30 p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <h3 className="text-sm font-semibold">Fields</h3>
+                              <p className="mt-1 text-xs text-muted-foreground">Keys drive API payloads, contact mapping, and collection writes. Keep them stable after launch.</p>
+                            </div>
+                            <Button size="sm" variant="outline" onClick={addFormDraftField} iconStart={<Plus className="size-4" />}>
+                              Add field
+                            </Button>
+                          </div>
+                          <div className="mt-3 grid gap-3">
+                            {formDraft.fields.map((field, fieldIndex) => (
+                              <div key={`${field.key}-${fieldIndex}`} className="rounded-lg border border-border bg-card p-3">
+                                <div className="grid gap-3 xl:grid-cols-[minmax(120px,0.8fr)_minmax(140px,1fr)_140px_110px_auto]">
+                                  <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                    Key
+                                    <input
+                                      value={field.key}
+                                      onChange={(event) => patchFormDraftField(fieldIndex, { key: normalizeFieldKey(event.target.value) })}
+                                      className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                    />
+                                  </label>
+                                  <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                    Label
+                                    <input
+                                      value={field.label}
+                                      onChange={(event) => patchFormDraftField(fieldIndex, { label: event.target.value })}
+                                      className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                    />
+                                  </label>
+                                  <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                    Type
+                                    <select
+                                      value={field.type}
+                                      onChange={(event) => patchFormDraftField(fieldIndex, { type: event.target.value })}
+                                      className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
+                                    >
+                                      {FORM_FIELD_TYPES.map((type) => (
+                                        <option key={type} value={type}>{type}</option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="flex min-h-10 items-end gap-2 text-sm font-medium">
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(field.required)}
+                                      onChange={(event) => patchFormDraftField(fieldIndex, { required: event.target.checked })}
+                                    />
+                                    Required
+                                  </label>
+                                  <div className="flex items-end gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => moveFormDraftField(fieldIndex, -1)}
+                                      disabled={fieldIndex === 0}
+                                      aria-label={`Move ${field.label} up`}
+                                    >
+                                      Up
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => moveFormDraftField(fieldIndex, 1)}
+                                      disabled={fieldIndex === formDraft.fields.length - 1}
+                                      aria-label={`Move ${field.label} down`}
+                                    >
+                                      Down
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="danger"
+                                      onClick={() => removeFormDraftField(fieldIndex)}
+                                      disabled={formDraft.fields.length <= 1}
+                                      iconStart={<Trash2 className="size-4" />}
+                                      aria-label={`Remove ${field.label}`}
+                                    >
+                                      Remove
+                                    </Button>
+                                  </div>
+                                </div>
+                                <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                                  <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                    Placeholder
+                                    <input
+                                      value={field.placeholder || ''}
+                                      onChange={(event) => patchFormDraftField(fieldIndex, { placeholder: event.target.value })}
+                                      className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                    />
+                                  </label>
+                                  <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                    Help text
+                                    <input
+                                      value={field.helpText || ''}
+                                      onChange={(event) => patchFormDraftField(fieldIndex, { helpText: event.target.value })}
+                                      className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                    />
+                                  </label>
+                                  <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                    Options
+                                    <input
+                                      value={(field.options || []).join(', ')}
+                                      onChange={(event) => patchFormDraftField(fieldIndex, { options: parseOptionsText(event.target.value) })}
+                                      placeholder="Option one, Option two"
+                                      className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+                                    />
+                                  </label>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </fieldset>
+                    </div>
+                  )}
+
                   <div className="mb-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
                     <div className="rounded-lg border border-border bg-muted/30 p-4">
                       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -2136,6 +2534,54 @@ const getFormLaunchReadinessScore = (form: FormDefinition): number => {
 
   return Math.round((readyCount / checks.length) * 100);
 };
+
+const cloneFormDefinition = (form: FormDefinition): FormDefinition => JSON.parse(JSON.stringify(form)) as FormDefinition;
+
+const normalizeFieldKey = (value: string): string => (
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9_ -]/g, '')
+    .replace(/[\s-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+);
+
+const parseOptionsText = (value: string): string[] | undefined => {
+  const options = value.split(',').map((option) => option.trim()).filter(Boolean);
+  return options.length > 0 ? options : undefined;
+};
+
+const normalizeOptionalText = (value: string | null | undefined): string | null => {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  return trimmed ? trimmed : null;
+};
+
+const buildFormUpdatePayload = (form: FormDefinition) => ({
+  name: form.name.trim(),
+  title: normalizeOptionalText(form.title),
+  description: normalizeOptionalText(form.description),
+  audience: form.audience,
+  isActive: form.isActive,
+  fields: form.fields.map((field, index) => ({
+    key: normalizeFieldKey(field.key) || `field_${index + 1}`,
+    label: field.label.trim() || `Field ${index + 1}`,
+    type: field.type || 'text',
+    required: Boolean(field.required),
+    ...(normalizeOptionalText(field.placeholder) ? { placeholder: normalizeOptionalText(field.placeholder) || undefined } : {}),
+    ...(normalizeOptionalText(field.helpText) ? { helpText: normalizeOptionalText(field.helpText) || undefined } : {}),
+    ...(normalizeOptionalText(field.defaultValue) ? { defaultValue: normalizeOptionalText(field.defaultValue) || undefined } : {}),
+    ...(field.options && field.options.length > 0 ? { options: field.options.map((option) => option.trim()).filter(Boolean) } : {}),
+    ...(field.validation && field.validation.length > 0 ? { validation: field.validation } : {}),
+  })),
+  notificationEmail: normalizeOptionalText(form.notificationEmail),
+  notificationWebhook: normalizeOptionalText(form.notificationWebhook),
+  successRedirectUrl: normalizeOptionalText(form.successRedirectUrl),
+  successMessage: normalizeOptionalText(form.successMessage),
+  enableHoneypot: form.enableHoneypot !== false,
+  enableCaptcha: form.enableCaptcha === true,
+  moderationMode: form.moderationMode || 'manual',
+  contactShare: form.contactShare?.enabled ? form.contactShare : { enabled: false },
+  collectionTarget: form.collectionTarget?.enabled ? form.collectionTarget : undefined,
+});
 
 const formatSubmissionValue = (value: unknown): string => {
   if (value === null || value === undefined || value === '') return 'Empty';

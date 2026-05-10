@@ -2590,6 +2590,28 @@ export async function createForm(
   return form;
 }
 
+export async function updateForm(
+  siteId: string,
+  formId: string,
+  input: Partial<FormDefinitionInput>,
+): Promise<FormDefinition> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiFormDetailResponse>(response);
+  const form = payload.data?.form || payload.form;
+
+  if (!response.ok || !payload.success || !form) {
+    throw new Error(payload.error?.message || 'Unable to update form');
+  }
+
+  return form;
+}
+
 export async function deleteForm(siteId: string, formId: string): Promise<void> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}`, {
     method: 'DELETE',

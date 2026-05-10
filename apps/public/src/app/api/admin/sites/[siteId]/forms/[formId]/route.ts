@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { deleteAdminForm, getFormById, getSiteByIdOrSlug } from '@/lib/backyStore';
+import type { FormDefinition, FormFieldDefinition } from '@backy-cms/core';
+import { deleteAdminForm, getFormById, getSiteByIdOrSlug, updateAdminForm } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -14,6 +15,124 @@ const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toSt
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
   NextResponse.json({ success: false, requestId, error: { code, message }, errorMessage: message }, { status })
 );
+
+const FIELD_TYPES = new Set(['text', 'email', 'number', 'textarea', 'select', 'checkbox', 'radio', 'date', 'tel', 'url', 'file']);
+
+const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+  try {
+    const body = await request.json();
+    return body && typeof body === 'object' && !Array.isArray(body)
+      ? body as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+};
+
+const textValue = (value: unknown): string => (
+  typeof value === 'string' ? value.trim() : ''
+);
+
+const nullableTextValue = (value: unknown): string | null => {
+  const text = textValue(value);
+  return text ? text : null;
+};
+
+const parseAudience = (value: unknown): FormDefinition['audience'] | undefined => (
+  value === 'public' || value === 'authenticated' || value === 'adminOnly' ? value : undefined
+);
+
+const parseModerationMode = (value: unknown): FormDefinition['moderationMode'] | undefined => (
+  value === 'manual' || value === 'auto-approve' ? value : undefined
+);
+
+const parseRecord = <TRecord extends Record<string, unknown>>(value: unknown): TRecord | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as TRecord
+    : undefined
+);
+
+const parseFieldOptions = (value: unknown): string[] | undefined => {
+  if (Array.isArray(value)) {
+    const options = value.map((option) => textValue(option)).filter(Boolean);
+    return options.length > 0 ? options : undefined;
+  }
+
+  if (typeof value === 'string') {
+    const options = value.split('\n').flatMap((part) => part.split(',')).map((option) => option.trim()).filter(Boolean);
+    return options.length > 0 ? options : undefined;
+  }
+
+  return undefined;
+};
+
+const sanitizeFieldKey = (value: unknown, fallback: string) => {
+  const base = textValue(value || fallback)
+    .toLowerCase()
+    .replace(/[^a-z0-9_ -]/g, '')
+    .replace(/[\s-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return base || fallback;
+};
+
+const parseFields = (value: unknown): FormFieldDefinition[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+
+  return value
+    .map((item, index) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+
+      const record = item as Record<string, unknown>;
+      const key = sanitizeFieldKey(record.key, `field_${index + 1}`);
+      const type = FIELD_TYPES.has(textValue(record.type)) ? textValue(record.type) as FormFieldDefinition['type'] : 'text';
+      const label = textValue(record.label) || key.replace(/_/g, ' ');
+      const field: FormFieldDefinition = {
+        key,
+        label,
+        type,
+        required: record.required === true,
+      };
+      const placeholder = nullableTextValue(record.placeholder);
+      const helpText = nullableTextValue(record.helpText);
+      const defaultValue = nullableTextValue(record.defaultValue);
+      const options = parseFieldOptions(record.options);
+
+      if (placeholder) field.placeholder = placeholder;
+      if (helpText) field.helpText = helpText;
+      if (defaultValue) field.defaultValue = defaultValue;
+      if (options) field.options = options;
+      if (Array.isArray(record.validation)) {
+        field.validation = record.validation as FormFieldDefinition['validation'];
+      }
+
+      return field;
+    })
+    .filter((field): field is FormFieldDefinition => Boolean(field));
+};
+
+const normalizePatchInput = (body: Record<string, unknown>): Partial<FormDefinition> => {
+  const input: Partial<FormDefinition> = {
+    updatedBy: 'admin',
+  };
+  if ('pageId' in body) input.pageId = nullableTextValue(body.pageId);
+  if ('postId' in body) input.postId = nullableTextValue(body.postId);
+  if ('name' in body) input.name = textValue(body.name);
+  if ('title' in body) input.title = nullableTextValue(body.title);
+  if ('description' in body) input.description = nullableTextValue(body.description);
+  if ('audience' in body) input.audience = parseAudience(body.audience) || 'public';
+  if ('isActive' in body) input.isActive = body.isActive !== false;
+  if ('fields' in body) input.fields = parseFields(body.fields) || [];
+  if ('notificationEmail' in body) input.notificationEmail = nullableTextValue(body.notificationEmail);
+  if ('notificationWebhook' in body) input.notificationWebhook = nullableTextValue(body.notificationWebhook);
+  if ('successRedirectUrl' in body) input.successRedirectUrl = nullableTextValue(body.successRedirectUrl);
+  if ('successMessage' in body) input.successMessage = nullableTextValue(body.successMessage);
+  if ('enableHoneypot' in body) input.enableHoneypot = body.enableHoneypot !== false;
+  if ('enableCaptcha' in body) input.enableCaptcha = body.enableCaptcha === true;
+  if ('moderationMode' in body) input.moderationMode = parseModerationMode(body.moderationMode) || 'manual';
+  if ('contactShare' in body) input.contactShare = parseRecord<FormDefinition['contactShare'] & Record<string, unknown>>(body.contactShare);
+  if ('collectionTarget' in body) input.collectionTarget = parseRecord<FormDefinition['collectionTarget'] & Record<string, unknown>>(body.collectionTarget);
+  return input;
+};
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -48,6 +167,50 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ success: true, requestId, data: { form }, form });
   } catch (error) {
     console.error('Admin form detail API error:', error);
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+  }
+}
+
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
+
+  try {
+    const { siteId, formId } = await params;
+    const body = await parseJsonBody(request);
+    const input = normalizePatchInput(body);
+
+    if ('name' in input && !input.name) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'Form name is required', requestId);
+    }
+
+    if ('fields' in input && (!input.fields || input.fields.length === 0)) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'At least one form field is required', requestId);
+    }
+
+    if (!shouldUseDemoStoreFallback()) {
+      const repositories = await getRequiredDatabaseRepositories();
+      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      if (!site) {
+        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const existing = await repositories.forms.getById(site.id, formId);
+      if (!existing) {
+        return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+      }
+
+      const updated = (await repositories.forms.update(site.id, formId, input)).item;
+      return NextResponse.json({ success: true, requestId, data: { form: updated }, form: updated });
+    }
+
+    const updated = updateAdminForm(siteId, formId, input);
+    if (!updated) {
+      return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+    }
+
+    return NextResponse.json({ success: true, requestId, data: { form: updated }, form: updated });
+  } catch (error) {
+    console.error('Admin form update API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }
