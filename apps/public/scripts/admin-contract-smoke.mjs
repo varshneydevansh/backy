@@ -3585,6 +3585,9 @@ try {
       assert(publicOpenApi.json?.components?.schemas?.ReusableSection?.properties?.metadata, `${publicOpenApi.url} missing reusable section metadata schema`);
       assert(publicOpenApi.json?.components?.schemas?.ReusableSection?.properties?.frontendDesign?.$ref === '#/components/schemas/ReusableSectionFrontendDesign', `${publicOpenApi.url} missing reusable section frontend design schema`);
       assert(publicOpenApi.json?.components?.schemas?.ReusableSectionFrontendDesign?.properties?.bindingHints, `${publicOpenApi.url} missing reusable section binding hints schema`);
+      assert(publicOpenApi.json?.components?.schemas?.CommerceProduct?.properties?.design?.$ref === '#/components/schemas/CommerceProductDesign', `${publicOpenApi.url} missing commerce product design schema`);
+      assert(publicOpenApi.json?.components?.schemas?.CommerceProductDesign?.properties?.templateId, `${publicOpenApi.url} missing commerce product template id schema`);
+      assert(publicOpenApi.json?.components?.schemas?.CommerceProductDesign?.properties?.frontendDesignTemplateId, `${publicOpenApi.url} missing commerce product legacy template id schema`);
       assert(publicOpenApi.json?.components?.schemas?.CommentReportEnvelope, `${publicOpenApi.url} missing comment report schema`);
       assert(publicOpenApi.json?.components?.schemas?.EventsEnvelope, `${publicOpenApi.url} missing interaction event schema`);
       assert(publicOpenApi.json?.components?.schemas?.RedirectRoute, `${publicOpenApi.url} missing redirect route schema`);

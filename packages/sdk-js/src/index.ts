@@ -253,6 +253,26 @@ export interface BackyCollectionRecord<TValues extends Record<string, unknown> =
   [key: string]: unknown;
 }
 
+export interface BackyCommerceProductDesign {
+  templateId?: string;
+  templateName?: string;
+  routePattern?: string;
+  source?: Record<string, unknown>;
+  chrome?: Record<string, unknown>;
+  tokens?: Record<string, unknown>;
+  customCss?: string;
+  bindingHints?: Array<Record<string, unknown>>;
+  frontendDesignTemplateId?: string;
+  frontendDesignTemplateName?: string;
+  frontendDesignRoutePattern?: string;
+  frontendDesignSource?: Record<string, unknown>;
+  frontendDesignChrome?: Record<string, unknown>;
+  frontendDesignTokens?: Record<string, unknown>;
+  frontendDesignCustomCss?: string;
+  frontendDesignBindingHints?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
 export interface BackyCommerceProduct {
   id: string;
   slug: string;
@@ -274,6 +294,7 @@ export interface BackyCommerceProduct {
   delivery?: Record<string, unknown>;
   checkout?: Record<string, unknown>;
   links?: Record<string, unknown>;
+  design?: BackyCommerceProductDesign;
   [key: string]: unknown;
 }
 
