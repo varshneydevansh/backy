@@ -67,6 +67,34 @@ const MEDIA_TYPE_FILTERS: MediaTypeFilter[] = ['all', 'image', 'video', 'audio',
 const MEDIA_VISIBILITY_FILTERS: MediaVisibilityFilter[] = ['all', 'public', 'private'];
 const MEDIA_USAGE_FILTERS: MediaUsageFilter[] = ['all', 'unused', 'referenced', 'replaced'];
 
+const MEDIA_UPLOAD_INTAKE_RULES = [
+  {
+    label: 'Images',
+    detail: 'Responsive delivery and transform URLs.',
+    examples: 'png, jpg, webp, svg',
+  },
+  {
+    label: 'Video/audio',
+    detail: 'Playable media for pages, posts, and products.',
+    examples: 'mp4, mov, mp3, wav',
+  },
+  {
+    label: 'Documents',
+    detail: 'Downloads, manuals, PDFs, and private files.',
+    examples: 'pdf, docx, csv, txt',
+  },
+  {
+    label: 'Fonts',
+    detail: 'Registered for editor typography and font manifests.',
+    examples: 'woff2, woff, ttf, otf',
+  },
+  {
+    label: 'Other files',
+    detail: 'Stored with metadata and delivery controls intact.',
+    examples: 'zip, json, custom',
+  },
+] as const;
+
 const isMediaTypeFilter = (value: unknown): value is MediaTypeFilter => (
   typeof value === 'string' && MEDIA_TYPE_FILTERS.includes(value as MediaTypeFilter)
 );
@@ -2109,6 +2137,31 @@ function MediaPage() {
                 disabled={isUploading}
                 className={isUploading ? 'opacity-60' : undefined}
               />
+            </div>
+
+            <div className="rounded-lg border border-border bg-muted/30 p-3" data-testid="media-upload-intake-rules">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Intake rules</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Backy accepts any file and classifies known formats for editor, API, and delivery workflows.
+                  </div>
+                </div>
+                <span className="rounded bg-background px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                  central
+                </span>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {MEDIA_UPLOAD_INTAKE_RULES.map((rule) => (
+                  <div key={rule.label} className="rounded-md border border-border bg-background px-3 py-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-foreground">{rule.label}</span>
+                      <span className="font-mono text-[11px] text-muted-foreground">{rule.examples}</span>
+                    </div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">{rule.detail}</div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2 pt-1 text-xs">

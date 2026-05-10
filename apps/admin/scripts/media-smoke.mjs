@@ -302,6 +302,8 @@ const assertMediaLayout = async (client, expectedText) => {
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="media-library-command-center"]')),
     hasDropzone: Boolean(document.querySelector('[data-testid="media-upload-dropzone"]')),
+    hasIntakeRules: Boolean(document.querySelector('[data-testid="media-upload-intake-rules"]')) &&
+      ['Images', 'Video/audio', 'Documents', 'Fonts', 'Other files'].every((label) => document.body?.innerText?.includes(label)),
     hasApi: document.body?.innerText?.includes('Frontend media API') || false,
     hasStorage: document.body?.innerText?.includes('Storage runtime') || document.body?.innerText?.includes('Media storage runtime') || false,
     hasStorageOperations: Boolean(document.querySelector('[data-testid="media-storage-operations"]')),
@@ -312,7 +314,7 @@ const assertMediaLayout = async (client, expectedText) => {
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Media page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasDropzone && layout.hasApi && layout.hasStorageOperations && layout.hasFolders && layout.hasBulk && layout.hasAsset && layout.hasSearch,
+    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasFolders && layout.hasBulk && layout.hasAsset && layout.hasSearch,
     `Media page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
