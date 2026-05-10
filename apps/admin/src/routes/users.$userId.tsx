@@ -15,7 +15,9 @@ import {
   ExternalLink,
   History,
   KeyRound,
+  LogOut,
   Mail,
+  Monitor,
   RefreshCw,
   Save,
   Shield,
@@ -35,6 +37,11 @@ import {
   updateUser as updateBackendUser,
   type AdminAuditLog,
 } from '@/lib/adminContentApi';
+import {
+  listAdminAuthSessions,
+  revokeAdminAuthSession,
+  type AdminSessionSummary,
+} from '@/lib/adminAuthApi';
 import { useAuthStore } from '@/stores/authStore';
 import { useStore, type User } from '@/stores/mockStore';
 
@@ -129,6 +136,7 @@ function EditUserPage() {
   const navigate = useNavigate();
   const { userId } = Route.useParams();
   const currentAdmin = useAuthStore((state) => state.user);
+  const currentSessionToken = useAuthStore((state) => state.session?.token || '');
   const { users, setUsers } = useStore();
   const user = users.find((item) => item.id === userId);
   const userDetailUrl = useMemo(() => `${getAdminApiBase()}/users/${userId}`, [userId]);
@@ -139,6 +147,10 @@ function EditUserPage() {
   const [userAuditLogs, setUserAuditLogs] = useState<AdminAuditLog[]>([]);
   const [isLoadingUserAudit, setIsLoadingUserAudit] = useState(false);
   const [userAuditError, setUserAuditError] = useState<string | null>(null);
+  const [userSessions, setUserSessions] = useState<AdminSessionSummary[]>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+  const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formData, setFormData] = useState<{
     fullName: string;
@@ -214,6 +226,36 @@ function EditUserPage() {
   useEffect(() => {
     void loadUserAuditLogs();
   }, [loadUserAuditLogs]);
+
+  const loadUserSessions = useCallback(async () => {
+    if (!user) {
+      setUserSessions([]);
+      return;
+    }
+
+    if (!currentSessionToken) {
+      setUserSessions([]);
+      setSessionNotice('Sign in with a valid admin session to review active sessions.');
+      return;
+    }
+
+    setIsLoadingSessions(true);
+    setSessionNotice(null);
+
+    try {
+      const sessions = await listAdminAuthSessions(currentSessionToken, { userId: user.id });
+      setUserSessions(sessions);
+    } catch (error) {
+      setUserSessions([]);
+      setSessionNotice(error instanceof Error ? error.message : 'Unable to load admin sessions.');
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  }, [currentSessionToken, user]);
+
+  useEffect(() => {
+    void loadUserSessions();
+  }, [loadUserSessions]);
 
   const selectedRole = useMemo(
     () => ROLE_OPTIONS.find((role) => role.value === formData.role) || ROLE_OPTIONS[2],
@@ -496,6 +538,23 @@ function EditUserPage() {
     anchor.remove();
     URL.revokeObjectURL(url);
     setNotice('User detail handoff manifest downloaded.');
+  };
+
+  const revokeSession = async (session: AdminSessionSummary) => {
+    if (!currentSessionToken || session.current || revokingSessionId) return;
+
+    setRevokingSessionId(session.id);
+    setSessionNotice(null);
+
+    try {
+      const result = await revokeAdminAuthSession(currentSessionToken, session.id);
+      setSessionNotice(result.revoked ? 'Admin session revoked.' : 'That session was already inactive.');
+      await loadUserSessions();
+    } catch (error) {
+      setSessionNotice(error instanceof Error ? error.message : 'Unable to revoke admin session.');
+    } finally {
+      setRevokingSessionId(null);
+    }
   };
 
   return (
@@ -899,6 +958,61 @@ function EditUserPage() {
             )}
           </section>
 
+          <section id="user-detail-sessions" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24" data-testid="user-detail-sessions">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <span className="rounded-lg bg-indigo-50 p-2 text-indigo-700">
+                  <Monitor className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">Admin sessions</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Active local-demo sessions for this account. Current sessions are protected from accidental revocation.
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void loadUserSessions()}
+                disabled={isLoadingSessions}
+                iconStart={<RefreshCw className={cn('size-3.5', isLoadingSessions && 'animate-spin')} />}
+              >
+                Refresh
+              </Button>
+            </div>
+
+            {sessionNotice && (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {sessionNotice}
+              </div>
+            )}
+
+            {isLoadingSessions ? (
+              <div className="mt-4 space-y-2" aria-label="Loading admin sessions">
+                {[0, 1].map((index) => (
+                  <div key={index} className="h-20 animate-pulse rounded-lg bg-muted" />
+                ))}
+              </div>
+            ) : userSessions.length === 0 ? (
+              <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
+                No active admin sessions are recorded for this user.
+              </div>
+            ) : (
+              <div className="mt-4 space-y-2">
+                {userSessions.map((session) => (
+                  <AdminSessionCard
+                    key={session.id}
+                    session={session}
+                    isRevoking={revokingSessionId === session.id}
+                    onRevoke={() => void revokeSession(session)}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+
           <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
@@ -1092,6 +1206,60 @@ function UserDetailAuditEvent({ log }: { log: AdminAuditLog }) {
           request {log.requestId}
         </p>
       )}
+    </article>
+  );
+}
+
+function AdminSessionCard({
+  session,
+  isRevoking,
+  onRevoke,
+}: {
+  session: AdminSessionSummary;
+  isRevoking: boolean;
+  onRevoke: () => void;
+}) {
+  return (
+    <article className="rounded-lg border border-border bg-background p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
+              {session.authMode}
+            </span>
+            {session.current && (
+              <span className="rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                Current session
+              </span>
+            )}
+            <h3 className="font-mono text-xs font-semibold text-foreground">session ...{session.id}</h3>
+          </div>
+          <dl className="mt-2 grid gap-1 text-xs text-muted-foreground">
+            <div className="flex justify-between gap-3">
+              <dt>Last seen</dt>
+              <dd className="font-medium text-foreground">{formatAuditDate(session.lastSeenAt)}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt>Issued</dt>
+              <dd>{formatAuditDate(session.issuedAt)}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt>Expires</dt>
+              <dd>{formatAuditDate(session.expiresAt)}</dd>
+            </div>
+          </dl>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={session.current || isRevoking}
+          onClick={onRevoke}
+          iconStart={<LogOut className="size-3.5" />}
+        >
+          {session.current ? 'Protected' : isRevoking ? 'Revoking...' : 'Revoke'}
+        </Button>
+      </div>
     </article>
   );
 }

@@ -183,10 +183,6 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const AUTH_STORAGE_SCRIPT = `
-localStorage.setItem('backy-auth-storage', JSON.stringify({ state: { user: { id: '1', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' } }, version: 0 }));
-`;
-
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
     expression,
@@ -212,6 +208,106 @@ const navigate = async (client, url, readyExpression, description) => {
     if (attempt === 119) {
       throw new Error(`${description} did not become ready: ${JSON.stringify(state)}`);
     }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const setInputValue = async (client, selector, value) => {
+  const result = await evaluate(client, `(() => {
+    const input = document.querySelector(${JSON.stringify(selector)});
+    if (!(input instanceof HTMLInputElement)) return { ok: false, reason: 'input-missing', selector: ${JSON.stringify(selector)} };
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, ${JSON.stringify(value)});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return { ok: true, value: input.value };
+  })()`);
+  assert(result.ok, `Unable to set ${selector}: ${JSON.stringify(result)}`);
+  return result;
+};
+
+const clickButton = async (client, label) => {
+  const result = await evaluate(client, `(() => {
+    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+      (candidate.textContent || '').trim() === ${JSON.stringify(label)}
+    ));
+    if (!(button instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        reason: 'button-missing',
+        buttons: Array.from(document.querySelectorAll('button')).map((candidate) => candidate.textContent || '').slice(0, 40),
+      };
+    }
+    if (button.disabled) return { ok: false, reason: 'button-disabled', label: ${JSON.stringify(label)} };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(result.ok, `Unable to click ${label}: ${JSON.stringify(result)}`);
+};
+
+const signInAdmin = async (client) => {
+  await navigate(
+    client,
+    `${ADMIN_BASE_URL}/login`,
+    `(() => ({
+      ready: document.body?.innerText?.includes('Authenticated admin access') &&
+        Boolean(document.querySelector('#email')) &&
+        Boolean(document.querySelector('#password')),
+      body: document.body?.innerText?.slice(0, 900) || '',
+    }))()`,
+    'Login page',
+  );
+
+  const loginResult = await evaluate(client, `(async () => {
+    const response = await fetch(${JSON.stringify(`${API_BASE_URL}/api/admin/auth/login`)}, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'admin@backy.io',
+        password: ${JSON.stringify(process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123')},
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.success === false || !payload.data?.user || !payload.data?.session) {
+      return { ok: false, status: response.status, payload };
+    }
+    localStorage.setItem('backy-auth-storage', JSON.stringify({
+      state: {
+        user: payload.data.user,
+        session: payload.data.session,
+      },
+      version: 0,
+    }));
+    return {
+      ok: true,
+      userEmail: payload.data.user.email,
+      hasToken: Boolean(payload.data.session.token),
+    };
+  })()`);
+  assert(loginResult.ok, `Unable to create browser admin session: ${JSON.stringify(loginResult).slice(0, 1000)}`);
+
+  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/` });
+
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const stored = JSON.parse(localStorage.getItem('backy-auth-storage') || '{}');
+      return {
+        ready: (
+          (window.location.pathname === '/' && Boolean(document.querySelector('[data-testid="dashboard-command-center"]'))) ||
+          Boolean(document.querySelector('[data-testid="dashboard-command-center"]'))
+        ) &&
+          stored?.state?.user?.email === 'admin@backy.io' &&
+          Boolean(stored?.state?.session?.token),
+        path: window.location.pathname,
+        hasToken: Boolean(stored?.state?.session?.token),
+        userEmail: stored?.state?.user?.email || '',
+        body: document.body?.innerText?.slice(0, 900) || '',
+      };
+    })()`);
+    if (state.ready) return state;
+    if (attempt === 119) throw new Error(`Dashboard after login did not become ready: ${JSON.stringify(state)}`);
     await sleep(250);
   }
 
@@ -413,6 +509,32 @@ const waitForUserDetailSelfProtection = async (client) => {
   throw new Error('User detail self-protection controls did not render for Admin User');
 };
 
+const waitForUserDetailSessions = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="user-detail-sessions"]');
+      const text = panel?.textContent || '';
+      const protectedButton = Array.from(panel?.querySelectorAll('button') || []).find((button) => (
+        (button.textContent || '').includes('Protected')
+      ));
+      return {
+        ready: Boolean(panel),
+        hasSessions: text.includes('Admin sessions'),
+        hasCurrent: text.includes('Current session'),
+        hasLocalDemo: text.includes('local-demo'),
+        protectedDisabled: protectedButton instanceof HTMLButtonElement && protectedButton.disabled,
+        text: text.slice(0, 1600),
+      };
+    })()`);
+    if (state.ready && state.hasSessions && state.hasCurrent && state.hasLocalDemo && state.protectedDisabled) {
+      return state;
+    }
+    await sleep(250);
+  }
+
+  throw new Error('User detail sessions panel did not show the protected current session');
+};
+
 const setUserDetailLifecycle = async (client, label) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
@@ -600,7 +722,7 @@ const main = async () => {
       deviceScaleFactor: 1,
       mobile: false,
     });
-    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: AUTH_STORAGE_SCRIPT });
+    await signInAdmin(client);
 
     await navigateToInvite(client);
     await fillInviteForm(client, { fullName: `${fullName} Preview`, email: `preview-${email}` });
@@ -609,6 +731,7 @@ const main = async () => {
     await waitForUsersSelfProtection(client);
     await openUserDetail(client, 'Admin User');
     await waitForUserDetailSelfProtection(client);
+    await waitForUserDetailSessions(client);
     await navigateToUsers(client);
     await waitForUsersPageUser(client, email);
 

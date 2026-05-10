@@ -17,11 +17,26 @@ export interface AdminSession {
   authMode: 'local-demo';
 }
 
+export interface AdminSessionSummary {
+  id: string;
+  user: AdminAuthUser;
+  issuedAt: string;
+  expiresAt: string;
+  lastSeenAt: string;
+  authMode: 'local-demo';
+  current: boolean;
+}
+
 type StoredSession = AdminSession & {
   lastSeenAt: string;
 };
 
-const ADMIN_SESSIONS = new Map<string, StoredSession>();
+const globalAdminSessionStore = globalThis as typeof globalThis & {
+  __BACKY_ADMIN_SESSIONS__?: Map<string, StoredSession>;
+};
+
+const ADMIN_SESSIONS = globalAdminSessionStore.__BACKY_ADMIN_SESSIONS__ ?? new Map<string, StoredSession>();
+globalAdminSessionStore.__BACKY_ADMIN_SESSIONS__ = ADMIN_SESSIONS;
 
 const DEMO_CREDENTIALS: Record<string, { password: string; userEmail: string; label: string }> = {
   'admin@backy.io': {
@@ -141,6 +156,69 @@ export function getAdminSession(token: string | null | undefined): AdminSession 
 export function revokeAdminSession(token: string | null | undefined): boolean {
   if (!token) return false;
   return ADMIN_SESSIONS.delete(token.trim());
+}
+
+export function listAdminSessions(options: {
+  currentToken?: string | null;
+  userId?: string;
+  email?: string;
+} = {}): AdminSessionSummary[] {
+  pruneExpiredSessions();
+
+  const currentToken = options.currentToken?.trim() || '';
+  const userId = options.userId?.trim() || '';
+  const email = normalizeEmail(options.email);
+
+  return Array.from(ADMIN_SESSIONS.values())
+    .filter((session) => {
+      const user = toAuthUser(getAdminUserById(session.user.id));
+      if (!user || user.status !== 'active') {
+        ADMIN_SESSIONS.delete(session.token);
+        return false;
+      }
+
+      session.user = user;
+
+      if (userId && user.id !== userId) return false;
+      if (email && user.email.toLowerCase() !== email) return false;
+      return true;
+    })
+    .sort((a, b) => Date.parse(b.lastSeenAt) - Date.parse(a.lastSeenAt))
+    .map((session) => ({
+      id: session.token.slice(-12),
+      user: session.user,
+      issuedAt: session.issuedAt,
+      expiresAt: session.expiresAt,
+      lastSeenAt: session.lastSeenAt,
+      authMode: session.authMode,
+      current: Boolean(currentToken && session.token === currentToken),
+    }));
+}
+
+export function revokeAdminSessionById(sessionId: string, currentToken?: string | null): {
+  revoked: boolean;
+  current: boolean;
+} {
+  pruneExpiredSessions();
+
+  const normalizedSessionId = sessionId.trim();
+  const normalizedCurrentToken = currentToken?.trim() || '';
+  if (!normalizedSessionId) {
+    return { revoked: false, current: false };
+  }
+
+  for (const [token] of ADMIN_SESSIONS.entries()) {
+    if (token.slice(-12) !== normalizedSessionId) continue;
+
+    const current = Boolean(normalizedCurrentToken && token === normalizedCurrentToken);
+    if (current) {
+      return { revoked: false, current: true };
+    }
+
+    return { revoked: ADMIN_SESSIONS.delete(token), current: false };
+  }
+
+  return { revoked: false, current: false };
 }
 
 export function getLocalRecoveryAccount(email: string) {

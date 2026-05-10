@@ -8,11 +8,43 @@ export interface AdminSession {
   authMode: 'local-demo';
 }
 
+export interface AdminSessionSummary {
+  id: string;
+  user: User & {
+    status?: 'active' | 'inactive' | 'invited' | 'suspended';
+  };
+  issuedAt: string;
+  expiresAt: string;
+  lastSeenAt: string;
+  authMode: 'local-demo';
+  current: boolean;
+}
+
 interface AdminAuthResponse {
   success: boolean;
   data?: {
     user: User;
     session: AdminSession;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface AdminSessionListResponse {
+  success: boolean;
+  data?: {
+    sessions: AdminSessionSummary[];
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface AdminSessionRevokeResponse {
+  success: boolean;
+  data?: {
+    revoked: boolean;
   };
   error?: {
     message?: string;
@@ -82,6 +114,43 @@ export async function logoutAdmin(token?: string | null) {
         }
       : undefined,
   }).catch(() => undefined);
+}
+
+export async function listAdminAuthSessions(token: string, filters: { userId?: string; email?: string } = {}) {
+  const params = new URLSearchParams();
+  if (filters.userId) params.set('userId', filters.userId);
+  if (filters.email) params.set('email', filters.email);
+  const query = params.toString();
+  const response = await fetch(`${getAdminApiBase()}/auth/sessions${query ? `?${query}` : ''}`, {
+    headers: {
+      authorization: `Bearer ${token}`,
+    },
+  });
+  const payload = await readJson<AdminSessionListResponse>(response);
+
+  if (!response.ok || !payload?.success || !payload.data) {
+    throw new Error(payload?.error?.message || 'Unable to load admin sessions');
+  }
+
+  return payload.data.sessions;
+}
+
+export async function revokeAdminAuthSession(token: string, sessionId: string) {
+  const response = await fetch(`${getAdminApiBase()}/auth/sessions`, {
+    method: 'DELETE',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ sessionId }),
+  });
+  const payload = await readJson<AdminSessionRevokeResponse>(response);
+
+  if (!response.ok || !payload?.success || !payload.data) {
+    throw new Error(payload?.error?.message || 'Unable to revoke admin session');
+  }
+
+  return payload.data;
 }
 
 export async function requestAdminPasswordRecovery(email: string) {
