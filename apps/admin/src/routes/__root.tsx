@@ -12,7 +12,7 @@
  */
 
 import { useNavigate, createRootRoute, Outlet, useRouterState } from '@tanstack/react-router';
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useRef } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { LoadingScreen } from '@/components/ui/LoadingScreen';
 import { useAuthStore } from '@/stores/authStore';
@@ -40,6 +40,9 @@ function RootComponent() {
   const routerState = useRouterState();
   const pathname = routerState.location.pathname;
   const isAuthenticated = useAuthStore((state) => !!state.user);
+  const sessionToken = useAuthStore((state) => state.session?.token || '');
+  const refreshSession = useAuthStore((state) => state.refreshSession);
+  const validatedSessionRef = useRef(false);
 
   // Routes that should NOT have the main layout
   const publicRoutes = ['/login', '/forgot-password', '/reset-password'];
@@ -50,6 +53,15 @@ function RootComponent() {
       navigate({ to: '/login', replace: true });
     }
   }, [isAuthenticated, isPublicRoute, navigate]);
+
+  useEffect(() => {
+    if (isPublicRoute || !isAuthenticated || !sessionToken || validatedSessionRef.current) {
+      return;
+    }
+
+    validatedSessionRef.current = true;
+    void refreshSession();
+  }, [isAuthenticated, isPublicRoute, refreshSession, sessionToken]);
 
   // Public routes render without layout
   if (isPublicRoute) {

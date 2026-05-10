@@ -1,0 +1,61 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { authenticateAdminCredentials } from '@/lib/admin-auth/sessionStore';
+
+export const runtime = 'nodejs';
+
+const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const errorResponse = (status: number, code: string, message: string, requestId: string) => (
+  NextResponse.json(
+    {
+      success: false,
+      requestId,
+      error: {
+        code,
+        message,
+      },
+    },
+    { status },
+  )
+);
+
+const parseJsonBody = async (request: NextRequest): Promise<Record<string, unknown>> => {
+  try {
+    const body = await request.json();
+    return body && typeof body === 'object' && !Array.isArray(body)
+      ? body as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+};
+
+export async function POST(request: NextRequest) {
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const body = await parseJsonBody(request);
+  const email = typeof body.email === 'string' ? body.email.trim() : '';
+  const password = typeof body.password === 'string' ? body.password : '';
+
+  if (!email || !email.includes('@') || !password) {
+    return errorResponse(400, 'VALIDATION_ERROR', 'A valid email and password are required.', requestId);
+  }
+
+  const session = authenticateAdminCredentials(email, password);
+  if (!session) {
+    return errorResponse(401, 'INVALID_CREDENTIALS', 'Invalid email or password.', requestId);
+  }
+
+  return NextResponse.json({
+    success: true,
+    requestId,
+    data: {
+      user: session.user,
+      session: {
+        token: session.token,
+        issuedAt: session.issuedAt,
+        expiresAt: session.expiresAt,
+        authMode: session.authMode,
+      },
+    },
+  });
+}

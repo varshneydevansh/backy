@@ -15,11 +15,12 @@ import { useEffect, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { CheckCircle2, Code2, Database, Eye, EyeOff, KeyRound, LayoutDashboard, Loader2, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { requestAdminPasswordRecovery } from '@/lib/adminAuthApi';
 import { cn } from '@/lib/utils';
 
 const DEMO_ACCOUNTS = [
   { email: 'admin@backy.io', password: 'admin123', label: 'Admin' },
-  { email: 'editor@backy.io', password: 'editor123', label: 'Editor' },
+  { email: 'jane@backy.io', password: 'editor123', label: 'Editor' },
 ];
 
 type ResetNotice = {
@@ -105,7 +106,7 @@ function LoginPage() {
     return Object.keys(errors).length === 0;
   };
 
-  const handleLocalPasswordRecovery = () => {
+  const handlePasswordRecovery = async () => {
     if (isLoginBusy) return;
 
     clearError();
@@ -123,25 +124,31 @@ function LoginPage() {
       return;
     }
 
-    const demoAccount = DEMO_ACCOUNTS.find((account) => account.email === normalizedEmail);
+    try {
+      const recovery = await requestAdminPasswordRecovery(normalizedEmail);
+      if (recovery.localRecovery?.demoPassword) {
+        setPassword(recovery.localRecovery.demoPassword);
+        setFormErrors((current) => {
+          const { password: _password, email: _email, ...rest } = current;
+          return rest;
+        });
+        setResetNotice({
+          tone: 'success',
+          message: `${recovery.localRecovery.label} local recovery is ready. The demo password was filled from the admin auth API, so you can sign in now.`,
+        });
+        return;
+      }
 
-    if (!demoAccount) {
       setResetNotice({
         tone: 'warning',
-        message: 'This account is not available in local demo auth. Ask a workspace owner to reset access from Users, or connect production email recovery in Settings.',
+        message: recovery.message || 'No local recovery credential is available. Connect production email recovery in Settings.',
       });
-      return;
+    } catch (error) {
+      setResetNotice({
+        tone: 'warning',
+        message: error instanceof Error ? error.message : 'Unable to request password recovery.',
+      });
     }
-
-    setPassword(demoAccount.password);
-    setFormErrors((current) => {
-      const { password: _password, email: _email, ...rest } = current;
-      return rest;
-    });
-    setResetNotice({
-      tone: 'success',
-      message: `${demoAccount.label} local recovery is ready. The demo password was filled, so you can sign in now.`,
-    });
   };
 
   /**
@@ -296,7 +303,7 @@ function LoginPage() {
                   <button
                     type="button"
                     className="text-sm font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={handleLocalPasswordRecovery}
+                    onClick={() => void handlePasswordRecovery()}
                     disabled={isLoginBusy}
                     data-testid="login-password-recovery"
                   >
@@ -382,10 +389,10 @@ function LoginPage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-semibold">Demo access</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">Use local accounts while auth delivery is being connected.</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Use seeded accounts while auth delivery is being connected.</p>
                 </div>
                 <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-                  Local
+                  API
                 </span>
               </div>
               <div className="mt-3 grid gap-2">

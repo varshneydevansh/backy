@@ -31,6 +31,7 @@ const isAllowedOrigin = (origin: string | null) => {
 };
 
 const isAdminApiRequest = (request: NextRequest) => request.nextUrl.pathname.startsWith('/api/admin/');
+const isAdminAuthRequest = (request: NextRequest) => request.nextUrl.pathname.startsWith('/api/admin/auth/');
 
 const shouldRequireAdminApiKey = () => (
   process.env.BACKY_REQUIRE_ADMIN_API_KEY === 'true'
@@ -84,7 +85,7 @@ const applyCorsHeaders = (headers: Headers, origin: string | null) => {
 
   headers.set('Access-Control-Allow-Origin', origin as string);
   headers.set('Access-Control-Allow-Methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS');
-  headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-Id, X-Backy-Admin-Key, X-API-Key');
+  headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-Id, X-Backy-Admin-Key, X-API-Key, X-Backy-Admin-Session');
   headers.set('Access-Control-Max-Age', '86400');
   headers.append('Vary', 'Origin');
 };
@@ -106,7 +107,7 @@ export function proxy(request: NextRequest) {
     return response;
   }
 
-  if (isAdminApiRequest(request) && shouldRequireAdminApiKey()) {
+  if (isAdminApiRequest(request) && !isAdminAuthRequest(request) && shouldRequireAdminApiKey()) {
     const expectedKey = getExpectedAdminApiKey();
     if (!expectedKey) {
       return adminAuthError(

@@ -4,7 +4,7 @@
  * ============================================================================
  *
  * Zustand store for managing authentication state.
- * Works with localStorage for development, can be swapped for real auth later.
+ * Login/session validation is handled by the admin auth API.
  *
  * @module AuthStore
  * @author Backy CMS Team
@@ -13,6 +13,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { fetchAdminSession, loginAdmin, logoutAdmin, type AdminSession } from '@/lib/adminAuthApi';
 
 // ============================================
 // TYPES
@@ -22,12 +23,13 @@ export interface User {
   id: string;
   email: string;
   fullName: string;
-  role: 'admin' | 'editor' | 'viewer';
+  role: 'owner' | 'admin' | 'editor' | 'viewer';
   avatarUrl?: string;
 }
 
 interface AuthState {
   user: User | null;
+  session: AdminSession | null;
   isLoading: boolean;
   error: string | null;
 }
@@ -35,35 +37,11 @@ interface AuthState {
 interface AuthActions {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => void;
+  refreshSession: () => Promise<void>;
   clearError: () => void;
 }
 
 type AuthStore = AuthState & AuthActions;
-
-// ============================================
-// MOCK USERS (for development)
-// ============================================
-
-const MOCK_USERS: Record<string, { password: string; user: User }> = {
-  'admin@backy.io': {
-    password: 'admin123',
-    user: {
-      id: '1',
-      email: 'admin@backy.io',
-      fullName: 'Admin User',
-      role: 'admin',
-    },
-  },
-  'editor@backy.io': {
-    password: 'editor123',
-    user: {
-      id: '2',
-      email: 'editor@backy.io',
-      fullName: 'Editor User',
-      role: 'editor',
-    },
-  },
-};
 
 // ============================================
 // STORE
@@ -76,6 +54,7 @@ export const useAuthStore = create<AuthStore>()(
       // STATE - isLoading starts FALSE so form works
       // ============================================
       user: null,
+      session: null,
       isLoading: false,
       error: null,
 
@@ -86,33 +65,60 @@ export const useAuthStore = create<AuthStore>()(
       signIn: async (email: string, password: string) => {
         set({ isLoading: true, error: null });
 
-        // Simulate network delay
-        await new Promise((resolve) => setTimeout(resolve, 800));
-
-        const mockUser = MOCK_USERS[email.toLowerCase()];
-
-        if (!mockUser || mockUser.password !== password) {
+        try {
+          const data = await loginAdmin(email, password);
           set({
-            error: 'Invalid email or password',
+            user: data.user,
+            session: data.session,
             isLoading: false,
+            error: null,
           });
-          throw new Error('Invalid credentials');
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Invalid email or password';
+          set({
+            error: message,
+            isLoading: false,
+            user: null,
+            session: null,
+          });
+          throw error;
         }
-
-        set({
-          user: mockUser.user,
-          isLoading: false,
-          error: null,
-        });
       },
 
       signOut: () => {
+        const token = useAuthStore.getState().session?.token;
+        void logoutAdmin(token);
         set({
           user: null,
+          session: null,
           isLoading: false,
           error: null,
         });
         // Redirect handled by component
+      },
+
+      refreshSession: async () => {
+        const token = useAuthStore.getState().session?.token;
+        if (!token) return;
+
+        set({ isLoading: true, error: null });
+        try {
+          const data = await fetchAdminSession(token);
+          set({
+            user: data.user,
+            session: data.session,
+            isLoading: false,
+            error: null,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Admin session expired';
+          set({
+            user: null,
+            session: null,
+            isLoading: false,
+            error: message,
+          });
+        }
       },
 
       clearError: () => {
@@ -123,6 +129,7 @@ export const useAuthStore = create<AuthStore>()(
       name: 'backy-auth-storage',
       partialize: (state) => ({
         user: state.user,
+        session: state.session,
       }),
     }
   )
@@ -136,7 +143,7 @@ export const selectIsAuthenticated = (state: AuthStore): boolean =>
   !!state.user;
 
 export const selectIsAdmin = (state: AuthStore): boolean =>
-  state.user?.role === 'admin';
+  state.user?.role === 'owner' || state.user?.role === 'admin';
 
 export const selectCanEdit = (state: AuthStore): boolean =>
-  state.user?.role === 'admin' || state.user?.role === 'editor';
+  state.user?.role === 'owner' || state.user?.role === 'admin' || state.user?.role === 'editor';
