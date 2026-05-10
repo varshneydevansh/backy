@@ -707,6 +707,18 @@ const generateUserDetailInviteLink = async (client, email) => {
     await sleep(250);
   }
 
+  const expiryResult = await evaluate(client, `(() => {
+    const panel = document.querySelector('[data-testid="user-detail-recovery"]');
+    const select = panel?.querySelector('select[aria-label="Invite link expiry"]');
+    if (!(select instanceof HTMLSelectElement)) {
+      return { ok: false, reason: 'invite-expiry-missing' };
+    }
+    select.value = '43200';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return { ok: true, value: select.value };
+  })()`);
+  assert(expiryResult.ok && expiryResult.value === '43200', `Unable to set invite expiry: ${JSON.stringify(expiryResult)}`);
+
   await clickButton(client, 'Generate invite link');
 
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -774,6 +786,18 @@ const generateUserDetailResetToken = async (client, email) => {
     }
     await sleep(250);
   }
+
+  const expiryResult = await evaluate(client, `(() => {
+    const panel = document.querySelector('[data-testid="user-detail-recovery"]');
+    const select = panel?.querySelector('select[aria-label="Reset link expiry"]');
+    if (!(select instanceof HTMLSelectElement)) {
+      return { ok: false, reason: 'reset-expiry-missing' };
+    }
+    select.value = '240';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return { ok: true, value: select.value };
+  })()`);
+  assert(expiryResult.ok && expiryResult.value === '240', `Unable to set reset expiry: ${JSON.stringify(expiryResult)}`);
 
   await clickButton(client, 'Generate reset token');
 
@@ -1099,12 +1123,12 @@ const main = async () => {
       `User permission override audit log was not recorded: ${JSON.stringify(recoveryAuditLogs).slice(0, 500)}`,
     );
     assert(
-      recoveryAuditLogs.some((log) => log.action === 'user.invite_token.create'),
-      `User invite token audit log was not recorded: ${JSON.stringify(recoveryAuditLogs).slice(0, 500)}`,
+      recoveryAuditLogs.some((log) => log.action === 'user.invite_token.create' && log.metadata?.expiresInMinutes === 43200),
+      `User invite token audit log with selected expiry was not recorded: ${JSON.stringify(recoveryAuditLogs).slice(0, 500)}`,
     );
     assert(
-      recoveryAuditLogs.some((log) => log.action === 'user.password_reset_token.create'),
-      `User reset token audit log was not recorded: ${JSON.stringify(recoveryAuditLogs).slice(0, 500)}`,
+      recoveryAuditLogs.some((log) => log.action === 'user.password_reset_token.create' && log.metadata?.expiresInMinutes === 240),
+      `User reset token audit log with selected expiry was not recorded: ${JSON.stringify(recoveryAuditLogs).slice(0, 500)}`,
     );
     assert(
       recoveryAuditLogs.some((log) => log.action === 'user.password_reset.accept'),

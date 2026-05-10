@@ -237,13 +237,18 @@ export async function revokeAdminAuthSession(token: string, sessionId: string) {
   return payload.data;
 }
 
-export async function createAdminPasswordResetToken(token: string, userId: string) {
+export async function createAdminPasswordResetToken(
+  token: string,
+  userId: string,
+  options: { expiresInMinutes?: number } = {},
+) {
   const response = await fetch(`${getAdminApiBase()}/users/${encodeURIComponent(userId)}/password-reset`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${token}`,
       'content-type': 'application/json',
     },
+    body: JSON.stringify(options),
   });
   const payload = await readJson<AdminPasswordResetTokenResponse>(response);
 
@@ -254,13 +259,18 @@ export async function createAdminPasswordResetToken(token: string, userId: strin
   return payload.data.reset;
 }
 
-export async function createAdminInviteToken(token: string, userId: string) {
+export async function createAdminInviteToken(
+  token: string,
+  userId: string,
+  options: { expiresInMinutes?: number } = {},
+) {
   const response = await fetch(`${getAdminApiBase()}/users/${encodeURIComponent(userId)}/invite-link`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${token}`,
       'content-type': 'application/json',
     },
+    body: JSON.stringify(options),
   });
   const payload = await readJson<AdminInviteTokenResponse>(response);
 

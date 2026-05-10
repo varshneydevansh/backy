@@ -25,6 +25,20 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   )
 );
 
+const normalizeExpiresInMinutes = (value: unknown): number | null => {
+  if (value === undefined || value === null || value === '') {
+    return 10080;
+  }
+
+  const minutes = Number(value);
+  if (!Number.isFinite(minutes)) {
+    return null;
+  }
+
+  const normalized = Math.round(minutes);
+  return normalized >= 30 && normalized <= 43200 ? normalized : null;
+};
+
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ userId: string }> },
@@ -36,6 +50,12 @@ export async function POST(
   }
 
   try {
+    const body = await request.json().catch(() => ({})) as { expiresInMinutes?: unknown };
+    const expiresInMinutes = normalizeExpiresInMinutes(body.expiresInMinutes);
+    if (!expiresInMinutes) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'Invite expiry must be between 30 minutes and 30 days.', requestId);
+    }
+
     const { userId } = await context.params;
     const repositories = !shouldUseDemoStoreFallback()
       ? await getRequiredDatabaseRepositories()
@@ -57,7 +77,7 @@ export async function POST(
       user,
       requestedById: access.session?.user.id || null,
       origin,
-      expiresInMinutes: 10080,
+      expiresInMinutes,
     });
 
     await recordAdminAudit({
@@ -71,6 +91,7 @@ export async function POST(
         status: user.status,
         inviteTokenId: invite.id,
         expiresAt: invite.expiresAt,
+        expiresInMinutes,
         requestedById: access.session?.user.id || null,
         deliveryConfigured: false,
       },

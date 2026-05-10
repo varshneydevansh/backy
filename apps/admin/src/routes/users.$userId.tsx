@@ -75,6 +75,19 @@ const STATUS_OPTIONS: Array<{ value: UserStatus; label: string; detail: string }
   { value: 'suspended', label: 'Suspended', detail: 'Blocked until an admin restores access.' },
 ];
 
+const INVITE_EXPIRY_OPTIONS = [
+  { value: 1440, label: '24 hours' },
+  { value: 10080, label: '7 days' },
+  { value: 43200, label: '30 days' },
+];
+
+const RESET_EXPIRY_OPTIONS = [
+  { value: 15, label: '15 minutes' },
+  { value: 60, label: '1 hour' },
+  { value: 240, label: '4 hours' },
+  { value: 1440, label: '24 hours' },
+];
+
 const ROLE_CAPABILITIES: Array<{ label: string; roles: UserRole[] }> = [
   { label: 'View dashboards, sites, content, submissions, and reports', roles: ['owner', 'admin', 'editor', 'viewer'] },
   { label: 'Create and edit pages, posts, forms, collections, and media', roles: ['owner', 'admin', 'editor'] },
@@ -171,9 +184,11 @@ function EditUserPage() {
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
   const [inviteToken, setInviteToken] = useState<AdminInviteToken | null>(null);
+  const [inviteExpiresInMinutes, setInviteExpiresInMinutes] = useState(10080);
   const [isCreatingInviteToken, setIsCreatingInviteToken] = useState(false);
   const [inviteTokenNotice, setInviteTokenNotice] = useState<string | null>(null);
   const [passwordResetToken, setPasswordResetToken] = useState<AdminPasswordResetToken | null>(null);
+  const [resetExpiresInMinutes, setResetExpiresInMinutes] = useState(60);
   const [isCreatingResetToken, setIsCreatingResetToken] = useState(false);
   const [resetTokenNotice, setResetTokenNotice] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -591,6 +606,7 @@ function EditUserPage() {
     recovery: {
       resetMailTo,
       inviteTokenEndpoint: `${userDetailUrl}/invite-link`,
+      inviteExpiresInMinutes,
       latestInviteToken: inviteToken
         ? {
             id: inviteToken.id,
@@ -600,6 +616,7 @@ function EditUserPage() {
           }
         : null,
       resetTokenEndpoint: `${userDetailUrl}/password-reset`,
+      resetExpiresInMinutes,
       latestResetToken: passwordResetToken
         ? {
             id: passwordResetToken.id,
@@ -679,7 +696,9 @@ function EditUserPage() {
     setInviteTokenNotice(null);
 
     try {
-      const invite = await createAdminInviteToken(currentSessionToken, user.id);
+      const invite = await createAdminInviteToken(currentSessionToken, user.id, {
+        expiresInMinutes: inviteExpiresInMinutes,
+      });
       setInviteToken(invite);
       setInviteTokenNotice(invite.deliveryConfigured
         ? 'Invite delivery was queued.'
@@ -703,7 +722,9 @@ function EditUserPage() {
     setResetTokenNotice(null);
 
     try {
-      const reset = await createAdminPasswordResetToken(currentSessionToken, user.id);
+      const reset = await createAdminPasswordResetToken(currentSessionToken, user.id, {
+        expiresInMinutes: resetExpiresInMinutes,
+      });
       setPasswordResetToken(reset);
       setResetTokenNotice(reset.deliveryConfigured
         ? 'Password reset delivery was queued.'
@@ -1246,6 +1267,38 @@ function EditUserPage() {
                 {resetTokenNotice}
               </div>
             )}
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="text-sm font-medium">Invite link expires</span>
+                <select
+                  aria-label="Invite link expiry"
+                  value={inviteExpiresInMinutes}
+                  disabled={isUserDetailBusy || isCreatingInviteToken}
+                  onChange={(event) => setInviteExpiresInMinutes(Number(event.target.value))}
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {INVITE_EXPIRY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <span className="mt-2 block text-xs leading-5 text-muted-foreground">Used when generating or resending an invite link.</span>
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium">Reset link expires</span>
+                <select
+                  aria-label="Reset link expiry"
+                  value={resetExpiresInMinutes}
+                  disabled={isUserDetailBusy || isCreatingResetToken}
+                  onChange={(event) => setResetExpiresInMinutes(Number(event.target.value))}
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {RESET_EXPIRY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <span className="mt-2 block text-xs leading-5 text-muted-foreground">Shorter reset links reduce credential recovery exposure.</span>
+              </label>
+            </div>
             <div className="mt-4 grid gap-2">
               <Button
                 type="button"
@@ -1254,7 +1307,7 @@ function EditUserPage() {
                 disabled={!canCreateInviteToken}
                 iconStart={<Mail className="size-4" />}
               >
-                {isCreatingInviteToken ? 'Generating...' : 'Generate invite link'}
+                {isCreatingInviteToken ? 'Generating...' : inviteToken ? 'Generate new invite link' : 'Generate invite link'}
               </Button>
               <Button
                 type="button"
@@ -1263,7 +1316,7 @@ function EditUserPage() {
                 disabled={!canCreateResetToken}
                 iconStart={<KeyRound className="size-4" />}
               >
-                {isCreatingResetToken ? 'Generating...' : 'Generate reset token'}
+                {isCreatingResetToken ? 'Generating...' : passwordResetToken ? 'Generate new reset token' : 'Generate reset token'}
               </Button>
               <a
                 href={resetMailTo}
