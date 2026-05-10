@@ -28,6 +28,7 @@ let createdSafeguardUserId = null;
 let originalUserAdminRole = null;
 let originalUserAdminStatus = null;
 let capturedTemplatePageId = null;
+let capturedTemplatePostId = null;
 let routeConflictCleanupPageId = null;
 let originalDeliveryMode = null;
 let originalSettingsIntegrations = null;
@@ -130,6 +131,10 @@ async function loginAdminApi() {
 async function cleanup() {
   if (createdSiteId && createdPostId) {
     await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (createdSiteId && capturedTemplatePostId) {
+    await request(`/api/admin/sites/${createdSiteId}/blog/${capturedTemplatePostId}`, { method: 'DELETE' }).catch(() => {});
   }
 
   if (createdSiteId && createdPageId) {
@@ -2171,7 +2176,23 @@ try {
           ],
         },
         content: {
-          elements: [],
+          elements: [
+            {
+              id: 'contract-blog-heading',
+              type: 'heading',
+              x: 56,
+              y: 72,
+              width: 620,
+              height: 80,
+              zIndex: 1,
+              props: {
+                content: 'Contract blog readiness',
+                level: 'h1',
+                fontSize: 40,
+                fontWeight: '700',
+              },
+            },
+          ],
           canvasSize: { width: 900, height: 720 },
         },
       }),
@@ -2335,6 +2356,59 @@ try {
     assert(Array.isArray(visibleScheduledPost.json?.data?.post?.frontendDesign?.bindingHints) && visibleScheduledPost.json.data.post.frontendDesign.bindingHints.length === 2, `${visibleScheduledPost.url} missing normalized blog binding hints`);
     assert(visibleScheduledPost.json?.post?.id === createdPostId, `${visibleScheduledPost.url} returned wrong scheduled post`);
 
+    const capturedBlogTemplate = await request(`/api/admin/sites/${createdSiteId}/frontend-design`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'capture-content-template',
+        resourceType: 'blogPost',
+        resourceId: createdPostId,
+        templateId: 'captured-blog-template',
+        templateName: 'Captured Blog Template',
+        routePattern: '/captured-journal/{slug}',
+      }),
+    });
+    assert(capturedBlogTemplate.response.status === 200, `${capturedBlogTemplate.url} expected blog content template capture`);
+    const capturedTemplate = capturedBlogTemplate.json?.data?.frontendDesign?.templates?.find((template) => template.id === 'captured-blog-template');
+    assert(capturedTemplate?.type === 'blogPost', `${capturedBlogTemplate.url} missing captured blog template type`);
+    assert(capturedTemplate?.routePattern === '/captured-journal/{slug}', `${capturedBlogTemplate.url} missing captured blog route pattern`);
+    assert(Array.isArray(capturedTemplate?.content?.elements) && capturedTemplate.content.elements.some((element) => element.id === 'contract-blog-heading'), `${capturedBlogTemplate.url} missing captured blog elements`);
+    assert(capturedTemplate?.content?.canvasSize?.width === 900, `${capturedBlogTemplate.url} missing captured blog canvas size`);
+    assert(Array.isArray(capturedTemplate?.bindingHints) && capturedTemplate.bindingHints.length === 2, `${capturedBlogTemplate.url} missing captured blog binding hints`);
+    if (capturedBlogTemplate.json?.data?.cacheInvalidation) {
+      assert(capturedBlogTemplate.json.data.cacheInvalidation.reason === 'site-frontend-design-template-captured', `${capturedBlogTemplate.url} missing blog template capture cache invalidation`);
+    }
+
+    const capturedTemplatePost = await request(`/api/admin/sites/${createdSiteId}/blog`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Captured Design Post',
+        slug: `${postSlug}-captured-design`,
+        excerpt: 'Generated from a captured blog frontend design template',
+        status: 'published',
+        authorId: 'user-admin',
+        frontendDesignTemplateId: 'captured-blog-template',
+      }),
+    });
+    assert(capturedTemplatePost.response.status === 201, `${capturedTemplatePost.url} expected post from captured template`);
+    capturedTemplatePostId = capturedTemplatePost.json?.data?.post?.id;
+    assert(capturedTemplatePostId, `${capturedTemplatePost.url} missing captured template post id`);
+    assert(capturedTemplatePost.json?.data?.post?.meta?.frontendDesignTemplateId === 'captured-blog-template', `${capturedTemplatePost.url} missing captured blog template provenance`);
+    assert(capturedTemplatePost.json?.data?.post?.meta?.frontendDesignRoutePattern === '/captured-journal/{slug}', `${capturedTemplatePost.url} missing captured blog route provenance`);
+    assert(Array.isArray(capturedTemplatePost.json?.data?.post?.content?.elements) && capturedTemplatePost.json.data.post.content.elements.some((element) => element.id === 'contract-blog-heading'), `${capturedTemplatePost.url} did not seed captured blog design elements`);
+    const publicCapturedTemplatePost = await request(`/api/sites/${createdSiteId}/blog?slug=${postSlug}-captured-design`);
+    assert(publicCapturedTemplatePost.response.status === 200, `${publicCapturedTemplatePost.url} expected public post from captured template`);
+    assert(publicCapturedTemplatePost.json?.data?.post?.frontendDesign?.templateId === 'captured-blog-template', `${publicCapturedTemplatePost.url} missing normalized captured blog frontend design`);
+    assert(publicCapturedTemplatePost.json?.data?.post?.frontendDesign?.routePattern === '/captured-journal/{slug}', `${publicCapturedTemplatePost.url} missing normalized captured blog route pattern`);
+    assert(Array.isArray(publicCapturedTemplatePost.json?.data?.post?.frontendDesign?.bindingHints) && publicCapturedTemplatePost.json.data.post.frontendDesign.bindingHints.length === 2, `${publicCapturedTemplatePost.url} missing normalized captured blog binding hints`);
+    await request(`/api/admin/sites/${createdSiteId}/blog/${capturedTemplatePostId}`, { method: 'DELETE' });
+    capturedTemplatePostId = null;
+
     const blogFrontendManifest = await request(`/api/sites/${createdSiteId}/manifest`);
     assert(blogFrontendManifest.response.status === 200, `${blogFrontendManifest.url} expected 200, got ${blogFrontendManifest.response.status}`);
     validateAiFrontendManifest(blogFrontendManifest.json, 'blog frontend design manifest');
@@ -2344,6 +2418,7 @@ try {
       post.frontendDesign?.tokens?.fonts?.heading === 'Newsreader' &&
       post.frontendDesign?.chrome?.header?.component === 'ContractBlogHeader'
     )), `${blogFrontendManifest.url} missing blog frontend design manifest`);
+    assert(blogFrontendManifest.json?.data?.site?.frontendDesign?.templates?.some((template) => template.id === 'captured-blog-template' && template.type === 'blogPost'), `${blogFrontendManifest.url} missing captured blog frontend template`);
 
     const visibleScheduledPostResolve = await request(`/api/sites/${createdSiteId}/resolve?path=/blog/${postSlug}`);
     assert(visibleScheduledPostResolve.response.status === 200, `${visibleScheduledPostResolve.url} expected past scheduled post route to be visible`);
