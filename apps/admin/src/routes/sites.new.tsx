@@ -132,6 +132,7 @@ function NewSitePage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [slugEdited, setSlugEdited] = useState(false);
+  const [createdSiteRecovery, setCreatedSiteRecovery] = useState<Site | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
@@ -336,6 +337,16 @@ function NewSitePage() {
     setError(null);
     setNotice('Site creation handoff manifest downloaded.');
   };
+  const openCreatedSiteRecovery = () => {
+    if (!createdSiteRecovery || isCreateBusy) return;
+
+    void navigate({ to: '/sites/$siteId', params: { siteId: createdSiteRecovery.id } });
+  };
+  const openCreatedSitePages = () => {
+    if (!createdSiteRecovery || isCreateBusy) return;
+
+    void navigate({ to: '/pages', search: { siteId: createdSiteRecovery.publicSiteId || createdSiteRecovery.id } });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -351,6 +362,7 @@ function NewSitePage() {
     setIsLoading(true);
     setError(null);
     setNotice(null);
+    setCreatedSiteRecovery(null);
 
     try {
       const created = await createSite({
@@ -360,7 +372,15 @@ function NewSitePage() {
         description: formData.description.trim(),
         status: formData.status,
       });
-      const createdPages = await seedStarterPages(created.publicSiteId || created.id, selectedBlueprint.pages, formData.status);
+      let createdPages: Awaited<ReturnType<typeof seedStarterPages>> = [];
+      let seedError: unknown = null;
+
+      try {
+        createdPages = await seedStarterPages(created.publicSiteId || created.id, selectedBlueprint.pages, formData.status);
+      } catch (starterPageError) {
+        seedError = starterPageError;
+      }
+
       const createdWithCount = {
         ...created,
         pageCount: Math.max(created.pageCount || 0, createdPages.length),
@@ -369,6 +389,17 @@ function NewSitePage() {
       if (createdPages.length > 0) {
         setPages([...createdPages, ...pages.filter((page) => !createdPages.some((createdPage) => createdPage.id === page.id))]);
       }
+
+      if (seedError) {
+        setCreatedSiteRecovery(createdWithCount);
+        setError(seedError instanceof Error
+          ? `${created.name} was created, but starter pages could not be seeded: ${seedError.message}`
+          : `${created.name} was created, but starter pages could not be seeded.`);
+        setNotice('The site record is safe. Open the site controls or pages to continue setup manually.');
+        setIsLoading(false);
+        return;
+      }
+
       navigate({ to: '/pages', search: { siteId: created.publicSiteId || created.id } });
     } catch (createError) {
       setError(createError instanceof Error
@@ -540,6 +571,34 @@ function NewSitePage() {
           {notice && (
             <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
               {notice}
+            </div>
+          )}
+          {createdSiteRecovery && (
+            <div className="mt-5 rounded-lg border border-teal-200 bg-teal-50 px-4 py-3">
+              <div className="text-sm font-semibold text-teal-950">Continue with {createdSiteRecovery.name}</div>
+              <div className="mt-1 text-sm text-teal-900">
+                The workspace exists even though starter pages need manual setup.
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={openCreatedSiteRecovery}
+                  disabled={isCreateBusy}
+                  className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Globe className="h-4 w-4" />
+                  Open site controls
+                </button>
+                <button
+                  type="button"
+                  onClick={openCreatedSitePages}
+                  disabled={isCreateBusy}
+                  className="inline-flex items-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-sm font-medium text-teal-950 transition hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <FileText className="h-4 w-4" />
+                  Open pages
+                </button>
+              </div>
             </div>
           )}
 
