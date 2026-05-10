@@ -4,7 +4,7 @@ type FrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type FrontendDesignTemplate = FrontendDesignContract['templates'][number];
 type FrontendDesignTemplateType = FrontendDesignTemplate['type'];
 type FrontendDesignEditableMapEntry = FrontendDesignContract['editableMap'][number];
-type ContentTemplateResourceType = Extract<FrontendDesignTemplateType, 'page' | 'blogPost' | 'form' | 'section'>;
+type ContentTemplateResourceType = Extract<FrontendDesignTemplateType, 'page' | 'blogPost' | 'form' | 'product' | 'collection' | 'section'>;
 
 const SCHEMA_VERSION = 'backy.frontend-design.v1';
 
@@ -357,9 +357,13 @@ export const buildFrontendDesignContractFromContentTemplate = (input: {
     ? `/blog/${input.resource.slug}`
     : input.resource.type === 'form'
       ? `/forms/${input.resource.slug}`
-      : input.resource.type === 'section'
-        ? `/sections/${input.resource.slug}`
-        : `/${input.resource.slug}`;
+      : input.resource.type === 'product'
+        ? `/products/${input.resource.slug}`
+        : input.resource.type === 'section'
+          ? `/sections/${input.resource.slug}`
+          : input.resource.type === 'collection'
+            ? `/${input.resource.slug}/:recordSlug`
+            : `/${input.resource.slug}`;
   const routePattern = input.routePattern
     || stringValue(meta.frontendDesignRoutePattern)
     || defaultRoutePattern;
@@ -422,7 +426,7 @@ export const buildFrontendDesignContractFromContentTemplate = (input: {
       ...inferredEditableMap,
       ...explicitEditableMap,
     ]),
-    notes: current.notes || 'Captured from content so new pages, posts, forms, and sections can retain frontend design details.',
+    notes: current.notes || 'Captured from content so new pages, posts, forms, products, collections, and sections can retain frontend design details.',
     updatedAt,
   };
 };

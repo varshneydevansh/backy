@@ -2555,6 +2555,25 @@ try {
     assert(createCollection.json?.data?.collection?.fields?.some((field) => field.key === 'title' && field.required === true), `${createCollection.url} missing title field schema`);
     createdCollectionId = createCollection.json.data.collection.id;
 
+    const capturedCollectionTemplate = await request(`/api/admin/sites/${createdSiteId}/frontend-design`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'capture-content-template',
+        resourceType: 'collection',
+        resourceId: createdCollectionId,
+        templateId: 'captured-collection-template',
+        templateName: 'Captured Collection Template',
+      }),
+    });
+    assert(capturedCollectionTemplate.response.status === 200, `${capturedCollectionTemplate.url} expected collection template capture 200`);
+    const capturedCollectionTemplateEntry = capturedCollectionTemplate.json?.data?.frontendDesign?.templates?.find((template) => template.id === 'captured-collection-template');
+    assert(capturedCollectionTemplateEntry?.type === 'collection', `${capturedCollectionTemplate.url} missing captured collection template`);
+    assert(capturedCollectionTemplateEntry?.content?.fields?.some((field) => field.key === 'title'), `${capturedCollectionTemplate.url} did not preserve collection fields`);
+    assert(capturedCollectionTemplateEntry?.routePattern === '/directory/:recordSlug', `${capturedCollectionTemplate.url} did not preserve collection route pattern`);
+
     const duplicateCollection = await request(`/api/admin/sites/${createdSiteId}/collections`, {
       method: 'POST',
       headers: {
@@ -3515,6 +3534,26 @@ try {
     assert(visiblePastProduct.json?.data?.products?.[0]?.slug === pastProductSlug, `${visiblePastProduct.url} returned wrong scheduled product`);
     assert(visiblePastProduct.json?.data?.products?.[0]?.status === 'scheduled', `${visiblePastProduct.url} expected scheduled product status`);
     assert(visiblePastProduct.json?.data?.products?.[0]?.inventory?.lowStock === true, `${visiblePastProduct.url} expected low-stock signal`);
+
+    const capturedProductTemplate = await request(`/api/admin/sites/${createdSiteId}/frontend-design`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'capture-content-template',
+        resourceType: 'product',
+        collectionId: commerceProductsCollectionId,
+        resourceId: commercePastProductRecordId,
+        templateId: 'captured-product-template',
+        templateName: 'Captured Product Template',
+      }),
+    });
+    assert(capturedProductTemplate.response.status === 200, `${capturedProductTemplate.url} expected product template capture 200`);
+    const capturedProductTemplateEntry = capturedProductTemplate.json?.data?.frontendDesign?.templates?.find((template) => template.id === 'captured-product-template');
+    assert(capturedProductTemplateEntry?.type === 'product', `${capturedProductTemplate.url} missing captured product template`);
+    assert(capturedProductTemplateEntry?.content?.values?.sku === `PAST-${unique}`, `${capturedProductTemplate.url} did not preserve product values`);
+    assert(capturedProductTemplateEntry?.routePattern === `/products/${pastProductSlug}`, `${capturedProductTemplate.url} did not preserve product route pattern`);
 
     const visibleCatalog = await request(`/api/sites/${createdSiteId}/commerce/catalog?limit=100`);
     assert(visibleCatalog.response.status === 200, `${visibleCatalog.url} expected 200, got ${visibleCatalog.response.status}`);

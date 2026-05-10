@@ -14,6 +14,8 @@ import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   getAdminBlogPostById,
   getAdminPageById,
+  getCollectionByIdOrSlug,
+  getCollectionRecordByIdOrSlug,
   getFormById,
   getPageSummary,
   getReusableSectionByIdOrSlug,
@@ -67,7 +69,7 @@ const toPageTemplates = (pages: Array<{ id: string; title: string; slug: string 
   }))
 );
 
-type TemplateCaptureResourceType = 'page' | 'blogPost' | 'form' | 'section';
+type TemplateCaptureResourceType = 'page' | 'blogPost' | 'form' | 'product' | 'collection' | 'section';
 
 type TemplateCaptureResource = {
   id: string;
@@ -79,10 +81,47 @@ type TemplateCaptureResource = {
   meta?: Record<string, unknown>;
 };
 
+type CollectionFieldLike = {
+  key: string;
+  label: string;
+  type: string;
+  required?: boolean;
+  options?: string[];
+  validation?: unknown;
+  referenceCollectionId?: string | null;
+};
+
+type CollectionLike = {
+  id: string;
+  name: string;
+  slug: string;
+  routePattern?: string | null;
+  listRoutePattern?: string | null;
+  description?: string | null;
+  status: string;
+  fields?: CollectionFieldLike[];
+  permissions?: {
+    publicRead?: boolean;
+    publicCreate?: boolean;
+    publicUpdate?: boolean;
+    publicDelete?: boolean;
+  };
+  metadata?: Record<string, unknown>;
+};
+
+type CollectionRecordLike = {
+  id: string;
+  slug: string;
+  status: string;
+  values: Record<string, unknown>;
+};
+
 const templateResourceType = (value: unknown): TemplateCaptureResourceType | null => {
   if (value === 'page' || value === 'pages') return 'page';
   if (value === 'blogPost' || value === 'post' || value === 'blog') return 'blogPost';
   if (value === 'form' || value === 'forms') return 'form';
+  if (value === 'product' || value === 'products') return 'product';
+  if (value === 'collection' || value === 'collections') return 'collection';
   if (value === 'section' || value === 'reusableSection' || value === 'reusable-section') return 'section';
   return null;
 };
@@ -136,12 +175,86 @@ const sectionEditableMap = (): Array<Record<string, unknown>> => [
   { role: 'section.metadata', binding: 'section.metadata', fields: ['name', 'description', 'category', 'tags'] },
 ];
 
+const collectionTemplateContent = (collection: CollectionLike): Record<string, unknown> => ({
+  id: collection.id,
+  name: collection.name,
+  slug: collection.slug,
+  description: collection.description || undefined,
+  routePattern: collection.routePattern || undefined,
+  listRoutePattern: collection.listRoutePattern || undefined,
+  status: collection.status,
+  fields: collection.fields || [],
+  permissions: collection.permissions,
+  metadata: collection.metadata || {},
+});
+
+const collectionBindingHints = (collection: CollectionLike): Array<Record<string, unknown>> => (
+  (collection.fields || []).map((field) => ({
+    role: 'collection.field',
+    binding: `collection.fields.${field.key}`,
+    fields: ['key', 'label', 'type', 'required', 'options', 'validation'],
+  }))
+);
+
+const collectionEditableMap = (collection: CollectionLike): Array<Record<string, unknown>> => [
+  { role: 'collection.schema', binding: 'collection.schema', fields: ['name', 'description', 'routePattern', 'listRoutePattern'] },
+  ...(collection.fields || []).map((field) => ({
+    role: 'collection.field',
+    binding: `collection.fields.${field.key}`,
+    fields: ['label', 'type', 'required', 'options', 'validation', 'referenceCollectionId'],
+  })),
+];
+
+const recordTitle = (record: CollectionRecordLike): string => {
+  const title = record.values.title || record.values.name || record.values.seoTitle;
+  return typeof title === 'string' && title.trim() ? title.trim() : record.slug;
+};
+
+const recordDescription = (record: CollectionRecordLike): string | null => {
+  const description = record.values.description || record.values.summary || record.values.excerpt;
+  return typeof description === 'string' && description.trim() ? description.trim() : null;
+};
+
+const collectionRecordTemplateContent = (
+  collection: CollectionLike,
+  record: CollectionRecordLike,
+): Record<string, unknown> => ({
+  id: record.id,
+  collectionId: collection.id,
+  collectionSlug: collection.slug,
+  slug: record.slug,
+  status: record.status,
+  values: record.values,
+  fields: collection.fields || [],
+});
+
+const recordBindingHints = (collection: CollectionLike): Array<Record<string, unknown>> => (
+  (collection.fields || []).map((field) => ({
+    role: collection.slug === 'products' ? 'product.field' : 'collection.record.field',
+    binding: `${collection.slug === 'products' ? 'product' : 'record'}.${field.key}`,
+    fields: [field.key],
+  }))
+);
+
+const recordEditableMap = (collection: CollectionLike): Array<Record<string, unknown>> => (
+  (collection.fields || []).map((field) => ({
+    role: collection.slug === 'products' ? 'product.field' : 'collection.record.field',
+    binding: `${collection.slug === 'products' ? 'product' : 'record'}.${field.key}`,
+    fields: [field.key],
+  }))
+);
+
+const stringBodyValue = (body: Record<string, unknown>, key: string): string | undefined => (
+  typeof body[key] === 'string' && body[key].trim() ? body[key].trim() : undefined
+);
+
 const repositoryTemplateResource = async (
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
   siteId: string,
   resourceType: TemplateCaptureResourceType,
   resourceId: string,
-): Promise<{ resource: TemplateCaptureResource; bindingHints?: Array<Record<string, unknown>>; editableMap?: Array<Record<string, unknown>> } | null> => {
+  options: { collectionId?: string } = {},
+): Promise<{ resource: TemplateCaptureResource; routePattern?: string; bindingHints?: Array<Record<string, unknown>>; editableMap?: Array<Record<string, unknown>> } | null> => {
   if (resourceType === 'page') {
     const page = await repositories.pages.getById(siteId, resourceId);
     return page ? {
@@ -189,6 +302,51 @@ const repositoryTemplateResource = async (
     } : null;
   }
 
+  if (resourceType === 'collection') {
+    const collection = await repositories.collections.getById(siteId, resourceId)
+      || await repositories.collections.getBySlug(siteId, resourceId);
+    return collection ? {
+      resource: {
+        id: collection.id,
+        type: 'collection',
+        title: collection.name,
+        slug: collection.slug,
+        description: collection.description,
+        content: collectionTemplateContent(collection),
+        meta: collection.metadata,
+      },
+      routePattern: collection.routePattern || collection.listRoutePattern || undefined,
+      bindingHints: collectionBindingHints(collection),
+      editableMap: collectionEditableMap(collection),
+    } : null;
+  }
+
+  if (resourceType === 'product') {
+    const collection = options.collectionId
+      ? await repositories.collections.getById(siteId, options.collectionId) || await repositories.collections.getBySlug(siteId, options.collectionId)
+      : await repositories.collections.getBySlug(siteId, 'products');
+    if (!collection) return null;
+
+    const record = await repositories.collections.getRecordById(siteId, collection.id, resourceId)
+      || await repositories.collections.getRecordBySlug(siteId, collection.id, resourceId);
+    return record ? {
+      resource: {
+        id: record.id,
+        type: collection.slug === 'products' ? 'product' : 'collection',
+        title: recordTitle(record),
+        slug: record.slug,
+        description: recordDescription(record),
+        content: collectionRecordTemplateContent(collection, record),
+        meta: record.values,
+      },
+      routePattern: collection.slug === 'products'
+        ? `/products/${record.slug}`
+        : collection.routePattern?.replace(':recordSlug', record.slug),
+      bindingHints: recordBindingHints(collection),
+      editableMap: recordEditableMap(collection),
+    } : null;
+  }
+
   const section = await repositories.reusableSections.getById(siteId, resourceId)
     || await repositories.reusableSections.getBySlug(siteId, resourceId);
   return section ? {
@@ -209,7 +367,8 @@ const demoTemplateResource = (
   siteId: string,
   resourceType: TemplateCaptureResourceType,
   resourceId: string,
-): { resource: TemplateCaptureResource; bindingHints?: Array<Record<string, unknown>>; editableMap?: Array<Record<string, unknown>> } | null => {
+  options: { collectionId?: string } = {},
+): { resource: TemplateCaptureResource; routePattern?: string; bindingHints?: Array<Record<string, unknown>>; editableMap?: Array<Record<string, unknown>> } | null => {
   if (resourceType === 'page') {
     const page = getAdminPageById(siteId, resourceId);
     return page ? {
@@ -254,6 +413,47 @@ const demoTemplateResource = (
       },
       bindingHints: formBindingHints(form),
       editableMap: formEditableMap(form),
+    } : null;
+  }
+
+  if (resourceType === 'collection') {
+    const collection = getCollectionByIdOrSlug(siteId, resourceId, { includeUnpublished: true });
+    return collection ? {
+      resource: {
+        id: collection.id,
+        type: 'collection',
+        title: collection.name,
+        slug: collection.slug,
+        description: collection.description,
+        content: collectionTemplateContent(collection),
+        meta: collection.metadata,
+      },
+      routePattern: collection.routePattern || collection.listRoutePattern || undefined,
+      bindingHints: collectionBindingHints(collection),
+      editableMap: collectionEditableMap(collection),
+    } : null;
+  }
+
+  if (resourceType === 'product') {
+    const collection = getCollectionByIdOrSlug(siteId, options.collectionId || 'products', { includeUnpublished: true });
+    if (!collection) return null;
+
+    const record = getCollectionRecordByIdOrSlug(siteId, collection.id, resourceId, { includeUnpublished: true });
+    return record ? {
+      resource: {
+        id: record.id,
+        type: collection.slug === 'products' ? 'product' : 'collection',
+        title: recordTitle(record),
+        slug: record.slug,
+        description: recordDescription(record),
+        content: collectionRecordTemplateContent(collection, record),
+        meta: record.values,
+      },
+      routePattern: collection.slug === 'products'
+        ? `/products/${record.slug}`
+        : collection.routePattern?.replace(':recordSlug', record.slug),
+      bindingHints: recordBindingHints(collection),
+      editableMap: recordEditableMap(collection),
     } : null;
   }
 
@@ -482,7 +682,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           return errorResponse(400, 'VALIDATION_ERROR', 'resourceType and resourceId are required for content template capture', requestId);
         }
 
-        const captured = await repositoryTemplateResource(repositories, site.id, resourceType, resourceId);
+        const captured = await repositoryTemplateResource(repositories, site.id, resourceType, resourceId, {
+          collectionId: stringBodyValue(body, 'collectionId') || stringBodyValue(body, 'collectionSlug'),
+        });
         if (!captured) {
           return errorResponse(404, 'CONTENT_NOT_FOUND', 'Content resource not found', requestId);
         }
@@ -492,7 +694,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           resource: captured.resource,
           templateId: typeof body.templateId === 'string' ? body.templateId.trim() : undefined,
           templateName: typeof body.templateName === 'string' ? body.templateName.trim() : undefined,
-          routePattern: typeof body.routePattern === 'string' ? body.routePattern.trim() : undefined,
+          routePattern: typeof body.routePattern === 'string' ? body.routePattern.trim() : captured.routePattern,
           source: typeof body.source === 'object' && body.source !== null && !Array.isArray(body.source)
             ? body.source as Record<string, unknown>
             : undefined,
@@ -578,7 +780,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, 'VALIDATION_ERROR', 'resourceType and resourceId are required for content template capture', requestId);
       }
 
-      const captured = demoTemplateResource(site.id, resourceType, resourceId);
+      const captured = demoTemplateResource(site.id, resourceType, resourceId, {
+        collectionId: stringBodyValue(body, 'collectionId') || stringBodyValue(body, 'collectionSlug'),
+      });
       if (!captured) {
         return errorResponse(404, 'CONTENT_NOT_FOUND', 'Content resource not found', requestId);
       }
@@ -588,7 +792,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         resource: captured.resource,
         templateId: typeof body.templateId === 'string' ? body.templateId.trim() : undefined,
         templateName: typeof body.templateName === 'string' ? body.templateName.trim() : undefined,
-        routePattern: typeof body.routePattern === 'string' ? body.routePattern.trim() : undefined,
+        routePattern: typeof body.routePattern === 'string' ? body.routePattern.trim() : captured.routePattern,
         source: typeof body.source === 'object' && body.source !== null && !Array.isArray(body.source)
           ? body.source as Record<string, unknown>
           : undefined,
