@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as UsersRouteImport } from './routes/users'
 import { Route as SitesRouteImport } from './routes/sites'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PagesRouteImport } from './routes/pages'
 import { Route as OrdersRouteImport } from './routes/orders'
@@ -46,6 +47,11 @@ const SitesRoute = SitesRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductsRoute = ProductsRouteImport.update({
@@ -162,6 +168,7 @@ export interface FileRoutesByFullPath {
   '/orders': typeof OrdersRoute
   '/pages': typeof PagesRouteWithChildren
   '/products': typeof ProductsRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/sites': typeof SitesRouteWithChildren
   '/users': typeof UsersRouteWithChildren
@@ -187,6 +194,7 @@ export interface FileRoutesByTo {
   '/orders': typeof OrdersRoute
   '/pages': typeof PagesRouteWithChildren
   '/products': typeof ProductsRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/sites': typeof SitesRouteWithChildren
   '/users': typeof UsersRouteWithChildren
@@ -213,6 +221,7 @@ export interface FileRoutesById {
   '/orders': typeof OrdersRoute
   '/pages': typeof PagesRouteWithChildren
   '/products': typeof ProductsRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/sites': typeof SitesRouteWithChildren
   '/users': typeof UsersRouteWithChildren
@@ -240,6 +249,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/pages'
     | '/products'
+    | '/reset-password'
     | '/settings'
     | '/sites'
     | '/users'
@@ -265,6 +275,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/pages'
     | '/products'
+    | '/reset-password'
     | '/settings'
     | '/sites'
     | '/users'
@@ -290,6 +301,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/pages'
     | '/products'
+    | '/reset-password'
     | '/settings'
     | '/sites'
     | '/users'
@@ -316,6 +328,7 @@ export interface RootRouteChildren {
   OrdersRoute: typeof OrdersRoute
   PagesRoute: typeof PagesRouteWithChildren
   ProductsRoute: typeof ProductsRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   SettingsRoute: typeof SettingsRoute
   SitesRoute: typeof SitesRouteWithChildren
   UsersRoute: typeof UsersRouteWithChildren
@@ -342,6 +355,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/products': {
@@ -548,6 +568,7 @@ const rootRouteChildren: RootRouteChildren = {
   OrdersRoute: OrdersRoute,
   PagesRoute: PagesRouteWithChildren,
   ProductsRoute: ProductsRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   SettingsRoute: SettingsRoute,
   SitesRoute: SitesRouteWithChildren,
   UsersRoute: UsersRouteWithChildren,

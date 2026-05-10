@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { getAdminSettings, getAdminUserByEmail, getAdminUserById, updateAdminUser } from '@/lib/backyStore';
 
 export interface AdminAuthUser {
@@ -65,6 +65,27 @@ export type AdminInviteAcceptResult =
       invite?: AdminInviteToken;
     };
 
+export type AdminPasswordResetResult =
+  | {
+      reset: true;
+      resetToken: AdminPasswordResetToken;
+      user: AdminAuthUser;
+      session: AdminSession;
+      previousStatus: AdminAuthUser['status'];
+    }
+  | {
+      reset: false;
+      reason: 'missing' | 'expired' | 'user-not-found' | 'email-mismatch' | 'inactive';
+      resetToken?: AdminPasswordResetToken;
+    };
+
+type LocalCredential = {
+  passwordHash: string;
+  salt: string;
+  userEmail: string;
+  label: string;
+};
+
 type StoredSession = AdminSession & {
   lastSeenAt: string;
 };
@@ -73,6 +94,7 @@ const globalAdminSessionStore = globalThis as typeof globalThis & {
   __BACKY_ADMIN_SESSIONS__?: Map<string, StoredSession>;
   __BACKY_ADMIN_PASSWORD_RESET_TOKENS__?: Map<string, AdminPasswordResetToken>;
   __BACKY_ADMIN_INVITE_TOKENS__?: Map<string, AdminInviteToken>;
+  __BACKY_ADMIN_LOCAL_CREDENTIALS__?: Map<string, LocalCredential>;
 };
 
 const ADMIN_SESSIONS = globalAdminSessionStore.__BACKY_ADMIN_SESSIONS__ ?? new Map<string, StoredSession>();
@@ -83,6 +105,9 @@ globalAdminSessionStore.__BACKY_ADMIN_PASSWORD_RESET_TOKENS__ = PASSWORD_RESET_T
 
 const INVITE_TOKENS = globalAdminSessionStore.__BACKY_ADMIN_INVITE_TOKENS__ ?? new Map<string, AdminInviteToken>();
 globalAdminSessionStore.__BACKY_ADMIN_INVITE_TOKENS__ = INVITE_TOKENS;
+
+const LOCAL_CREDENTIALS = globalAdminSessionStore.__BACKY_ADMIN_LOCAL_CREDENTIALS__ ?? new Map<string, LocalCredential>();
+globalAdminSessionStore.__BACKY_ADMIN_LOCAL_CREDENTIALS__ = LOCAL_CREDENTIALS;
 
 const DEMO_CREDENTIALS: Record<string, { password: string; userEmail: string; label: string }> = {
   'admin@backy.io': {
@@ -105,6 +130,17 @@ const DEMO_CREDENTIALS: Record<string, { password: string; userEmail: string; la
 const normalizeEmail = (value: unknown) => (
   typeof value === 'string' ? value.trim().toLowerCase() : ''
 );
+
+const hashPassword = (password: string, salt: string) => (
+  scryptSync(password, salt, 64).toString('hex')
+);
+
+const verifyPassword = (password: string, credential: LocalCredential) => {
+  const expected = Buffer.from(credential.passwordHash, 'hex');
+  const actual = Buffer.from(hashPassword(password, credential.salt), 'hex');
+
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+};
 
 const toAuthUser = (user: ReturnType<typeof getAdminUserById>): AdminAuthUser | null => {
   if (!user) return null;
@@ -163,6 +199,16 @@ export function authenticateAdminCredentials(email: string, password: string): A
   pruneExpiredSessions();
 
   const normalizedEmail = normalizeEmail(email);
+  const localCredential = LOCAL_CREDENTIALS.get(normalizedEmail);
+  if (localCredential && verifyPassword(password, localCredential)) {
+    const user = toAuthUser(getAdminUserByEmail(localCredential.userEmail));
+    if (!user || user.status !== 'active') {
+      return null;
+    }
+
+    return createAdminSessionForUser(user);
+  }
+
   const credential = DEMO_CREDENTIALS[normalizedEmail];
   if (!credential || credential.password !== password) {
     return null;
@@ -174,6 +220,21 @@ export function authenticateAdminCredentials(email: string, password: string): A
   }
 
   return createAdminSessionForUser(user);
+}
+
+export function setLocalAdminPassword(input: {
+  user: Pick<AdminAuthUser, 'email' | 'fullName'>;
+  password: string;
+}) {
+  const email = normalizeEmail(input.user.email);
+  const salt = randomUUID().replace(/-/g, '');
+
+  LOCAL_CREDENTIALS.set(email, {
+    passwordHash: hashPassword(input.password, salt),
+    salt,
+    userEmail: email,
+    label: input.user.fullName || email,
+  });
 }
 
 export function getAdminSession(token: string | null | undefined): AdminSession | null {
@@ -300,6 +361,59 @@ export function createAdminPasswordResetToken(input: {
   return resetToken;
 }
 
+export function resetAdminPasswordToken(
+  token: string | null | undefined,
+  password: string,
+): AdminPasswordResetResult {
+  pruneExpiredSessions();
+
+  const normalizedToken = token?.trim() || '';
+  const resetToken = normalizedToken ? PASSWORD_RESET_TOKENS.get(normalizedToken) : null;
+  if (!resetToken) {
+    return { reset: false, reason: 'missing' };
+  }
+
+  if (Date.parse(resetToken.expiresAt) <= Date.now()) {
+    PASSWORD_RESET_TOKENS.delete(normalizedToken);
+    return { reset: false, reason: 'expired', resetToken };
+  }
+
+  const currentUser = getAdminUserById(resetToken.userId);
+  if (!currentUser) {
+    PASSWORD_RESET_TOKENS.delete(normalizedToken);
+    return { reset: false, reason: 'user-not-found', resetToken };
+  }
+
+  if (currentUser.email.toLowerCase() !== resetToken.email.toLowerCase()) {
+    return { reset: false, reason: 'email-mismatch', resetToken };
+  }
+
+  if (currentUser.status === 'inactive' || currentUser.status === 'suspended') {
+    return { reset: false, reason: 'inactive', resetToken };
+  }
+
+  const previousStatus = currentUser.status;
+  const updated = updateAdminUser(currentUser.id, {
+    status: currentUser.status === 'invited' ? 'active' : currentUser.status,
+  });
+  const user = toAuthUser(updated);
+  if (!user) {
+    return { reset: false, reason: 'user-not-found', resetToken };
+  }
+
+  setLocalAdminPassword({ user, password });
+  PASSWORD_RESET_TOKENS.delete(normalizedToken);
+  const session = createAdminSessionForUser(user);
+
+  return {
+    reset: true,
+    resetToken,
+    user,
+    session,
+    previousStatus,
+  };
+}
+
 export function createAdminInviteToken(input: {
   user: Pick<AdminAuthUser, 'id' | 'email'>;
   requestedById?: string | null;
@@ -377,6 +491,18 @@ export function acceptAdminInviteToken(token: string | null | undefined): AdminI
 
 export function getLocalRecoveryAccount(email: string) {
   const normalizedEmail = normalizeEmail(email);
+  const localCredential = LOCAL_CREDENTIALS.get(normalizedEmail);
+  if (localCredential) {
+    const user = getAdminUserByEmail(localCredential.userEmail);
+    if (!user || user.status !== 'active') return null;
+
+    return {
+      email: normalizedEmail,
+      label: localCredential.label,
+      demoPassword: null,
+    };
+  }
+
   const credential = DEMO_CREDENTIALS[normalizedEmail];
   if (!credential) return null;
 

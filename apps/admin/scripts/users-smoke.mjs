@@ -779,6 +779,7 @@ const generateUserDetailResetToken = async (client, email) => {
         hasResetUrl: text.includes('/reset-password?token=bpr_'),
         hasTokenId: text.includes('reset_'),
         hasCopyControls: text.includes('Copy reset URL') && text.includes('Copy token'),
+        token: text.match(/bpr_[a-z0-9]+/)?.[0] || '',
         text: text.slice(0, 1800),
       };
     })()`);
@@ -792,6 +793,28 @@ const generateUserDetailResetToken = async (client, email) => {
   }
 
   return null;
+};
+
+const resetUserPasswordToken = async (token, userId, email, password) => {
+  assert(token, 'Password reset token was not captured from the detail page');
+  const payload = await requestApi('/api/admin/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
+  });
+
+  assert(payload.data?.reset === true, `Password reset endpoint did not accept token: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(payload.data?.session?.token, `Password reset endpoint did not return a session: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(payload.data?.user?.id === userId, `Password reset returned the wrong user: ${JSON.stringify(payload.data?.user).slice(0, 500)}`);
+
+  const loginResponse = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ email, password }),
+  });
+  const loginPayload = await loginResponse.json().catch(() => ({}));
+  assert(loginResponse.ok && loginPayload.data?.session?.token, `New password did not sign in: ${JSON.stringify(loginPayload).slice(0, 500)}`);
 };
 
 const setUserDetailLifecycle = async (client, label) => {
@@ -1002,7 +1025,8 @@ const main = async () => {
     await setUserDetailPermissionOverride(client, createdUserId);
     const inviteState = await generateUserDetailInviteLink(client, email);
     await acceptUserInviteToken(inviteState?.token, createdUserId);
-    await generateUserDetailResetToken(client, email);
+    const resetState = await generateUserDetailResetToken(client, email);
+    await resetUserPasswordToken(resetState?.token, createdUserId, email, `Reset-${suffix}-123`);
     const recoveryAuditLogs = await listUserAuditLogs(createdUserId);
     assert(
       recoveryAuditLogs.some((log) => log.action === 'user.invite.accept'),
@@ -1019,6 +1043,10 @@ const main = async () => {
     assert(
       recoveryAuditLogs.some((log) => log.action === 'user.password_reset_token.create'),
       `User reset token audit log was not recorded: ${JSON.stringify(recoveryAuditLogs).slice(0, 500)}`,
+    );
+    assert(
+      recoveryAuditLogs.some((log) => log.action === 'user.password_reset.accept'),
+      `User reset acceptance audit log was not recorded: ${JSON.stringify(recoveryAuditLogs).slice(0, 500)}`,
     );
     await navigateToUsers(client);
     await waitForUsersPageUser(client, email);

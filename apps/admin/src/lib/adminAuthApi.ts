@@ -75,6 +75,26 @@ interface AdminInviteAcceptResponse {
   };
 }
 
+interface AdminPasswordResetAcceptResponse {
+  success: boolean;
+  data?: {
+    reset: boolean;
+    user: User;
+    session: AdminSession;
+    resetToken: {
+      id: string;
+      email: string;
+      createdAt: string;
+      expiresAt: string;
+      requestedById?: string | null;
+      deliveryConfigured: false;
+    };
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 interface AdminSessionListResponse {
   success: boolean;
   data?: {
@@ -123,7 +143,7 @@ interface AdminPasswordRecoveryResponse {
     localRecovery?: {
       email: string;
       label: string;
-      demoPassword: string;
+      demoPassword: string | null;
     } | null;
     message?: string;
   };
@@ -263,6 +283,23 @@ export async function acceptAdminInvite(token: string) {
 
   if (!response.ok || !payload?.success || !payload.data) {
     throw new Error(payload?.error?.message || 'Unable to accept invite');
+  }
+
+  return payload.data;
+}
+
+export async function resetAdminPassword(token: string, password: string) {
+  const response = await fetch(`${getAdminApiBase()}/auth/reset-password`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ token, password }),
+  });
+  const payload = await readJson<AdminPasswordResetAcceptResponse>(response);
+
+  if (!response.ok || !payload?.success || !payload.data) {
+    throw new Error(payload?.error?.message || 'Unable to reset password');
   }
 
   return payload.data;
