@@ -6904,8 +6904,10 @@ export function createCollectionRecordFromFormSubmission(
     return acc;
   }, {});
 
-  if (fieldKeys.has('sourceSubmissionId')) {
-    mappedValues.sourceSubmissionId = submission.id;
+  const sourceSubmissionFieldKey = ['sourceSubmissionId', 'source_submission_id', 'sourcesubmissionid']
+    .find((key) => fieldKeys.has(key));
+  if (sourceSubmissionFieldKey) {
+    mappedValues[sourceSubmissionFieldKey] = submission.id;
   }
 
   const validationErrors = validateCollectionRecordValues(collection, mappedValues);

@@ -74,6 +74,43 @@ const deleteForm = async (formId) => {
   await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}`, { method: 'DELETE' });
 };
 
+const createCollection = async () => {
+  const suffix = Date.now().toString(36);
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: `Forms Smoke Registrations ${suffix}`,
+      slug: `forms-smoke-registrations-${suffix}`,
+      status: 'published',
+      permissions: {
+        publicRead: false,
+        publicCreate: true,
+        publicUpdate: false,
+        publicDelete: false,
+      },
+      fields: [
+        { key: 'full_name', label: 'Full name', type: 'text', required: true, unique: false, sortOrder: 10 },
+        { key: 'email', label: 'Email', type: 'email', required: true, unique: false, sortOrder: 20 },
+        { key: 'company', label: 'Company', type: 'text', required: true, unique: false, sortOrder: 30 },
+        { key: 'source_submission_id', label: 'Source submission', type: 'text', required: false, unique: false, sortOrder: 40 },
+      ],
+    }),
+  });
+  const collection = payload.data?.collection || payload.collection;
+  assert(collection?.id, `Unable to create smoke collection: ${JSON.stringify(payload).slice(0, 500)}`);
+  return collection;
+};
+
+const deleteCollection = async (collectionId) => {
+  if (!collectionId) return;
+  await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}`, { method: 'DELETE' });
+};
+
+const listCollectionRecords = async (collectionId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records?limit=100&status=all`);
+  return payload.data?.records || payload.records || [];
+};
+
 const fetchJson = async (endpoint) => {
   const response = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
   if (!response.ok) {
@@ -239,7 +276,7 @@ const getAdminForm = async (formId) => {
   return payload.data?.form || payload.form;
 };
 
-const editFormBuilderInUi = async (client, formId) => {
+const editFormBuilderInUi = async (client, formId, collectionId) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
       const setInputValue = (input, value) => {
@@ -356,17 +393,21 @@ const editFormBuilderInUi = async (client, formId) => {
       const fieldInputs = Array.from((fieldCard || panel).querySelectorAll('input'));
       const minLengthValue = fieldInputs.find((input) => (input.getAttribute('aria-label') || '').includes('Min length value'));
       const minLengthMessage = fieldInputs.find((input) => (input.getAttribute('aria-label') || '').includes('Min length message'));
+      const collectionWriteToggle = Array.from(panel.querySelectorAll('label')).find((label) => (
+        (label.textContent || '').includes('Collection write')
+      ))?.querySelector('input[type="checkbox"]');
       const saveButton = Array.from(panel.querySelectorAll('button')).find((button) => (
         (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Save form'
       ));
       if (
         !(minLengthValue instanceof HTMLInputElement) ||
         !(minLengthMessage instanceof HTMLInputElement) ||
+        !(collectionWriteToggle instanceof HTMLInputElement) ||
         !(saveButton instanceof HTMLButtonElement)
       ) {
         return {
           ok: false,
-          reason: 'validation-controls-missing',
+          reason: 'validation-or-collection-controls-missing',
           inputs: fieldInputs.map((input) => ({
             value: input.value,
             aria: input.getAttribute('aria-label') || '',
@@ -381,6 +422,63 @@ const editFormBuilderInUi = async (client, formId) => {
       minLengthMessage.focus();
       setInputValue(minLengthMessage, 'Company must be at least 4 characters.');
 
+      if (!collectionWriteToggle.checked) {
+        collectionWriteToggle.click();
+      }
+
+      return { ok: true };
+    })()`);
+
+    if (result.ok) break;
+
+    if (attempt === 79) {
+      throw new Error(`Unable to enable form collection target: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const selectValue = (select, value) => {
+        select.value = value;
+        select.dispatchEvent(new Event('input', { bubbles: true }));
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const panel = document.querySelector('[data-testid="form-builder-panel"]');
+      const collectionPanel = document.querySelector('[data-testid="form-collection-target-panel"]');
+      if (!panel || !collectionPanel) return { ok: false, reason: 'collection-panel-missing', body: document.body?.innerText?.slice(0, 700) || '' };
+
+      const collectionSelect = collectionPanel.querySelector('select[aria-label="Collection target collection"]');
+      const slugSelect = collectionPanel.querySelector('select[aria-label="Collection target slug field"]');
+      if (!(collectionSelect instanceof HTMLSelectElement) || !(slugSelect instanceof HTMLSelectElement)) {
+        return { ok: false, reason: 'target-selects-missing' };
+      }
+
+      selectValue(collectionSelect, ${JSON.stringify(collectionId)});
+      selectValue(slugSelect, 'email');
+
+      const mappings = {
+        'Map Full name to collection field': 'full_name',
+        'Map Email to collection field': 'email',
+        'Map Company to collection field': 'company',
+      };
+      for (const [aria, value] of Object.entries(mappings)) {
+        const select = collectionPanel.querySelector('select[aria-label="' + aria + '"]');
+        if (!(select instanceof HTMLSelectElement)) {
+          return {
+            ok: false,
+            reason: 'mapping-select-missing',
+            aria,
+            selects: Array.from(collectionPanel.querySelectorAll('select')).map((candidate) => candidate.getAttribute('aria-label') || ''),
+          };
+        }
+        selectValue(select, value);
+      }
+
+      const saveButton = Array.from(panel.querySelectorAll('button')).find((button) => (
+        (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Save form'
+      ));
       if (saveButton.disabled) {
         return { ok: false, reason: 'save-disabled', button: saveButton.textContent || '' };
       }
@@ -391,7 +489,7 @@ const editFormBuilderInUi = async (client, formId) => {
     if (result.ok) break;
 
     if (attempt === 79) {
-      throw new Error(`Unable to save form validation changes: ${JSON.stringify(result)}`);
+      throw new Error(`Unable to save form collection mapping changes: ${JSON.stringify(result)}`);
     }
 
     await sleep(250);
@@ -406,21 +504,31 @@ const editFormBuilderInUi = async (client, formId) => {
     const editedTitle = form?.title === 'Registration edited';
     const company = form?.fields?.some((field) => field.key === 'company' && field.label === 'Company');
     const companyValidation = form?.fields?.find((field) => field.key === 'company')?.validation || [];
+    const collectionTarget = form?.collectionTarget;
     const hasCompanyMinLength = companyValidation.some((rule) => (
       rule.type === 'minLength' &&
       Number(rule.value) === 4 &&
       rule.message === 'Company must be at least 4 characters.'
     ));
+    const hasCollectionMapping = (
+      collectionTarget?.enabled === true &&
+      collectionTarget.collectionId === collectionId &&
+      collectionTarget.slugField === 'email' &&
+      collectionTarget.fieldMap?.full_name === 'full_name' &&
+      collectionTarget.fieldMap?.email === 'email' &&
+      collectionTarget.fieldMap?.company === 'company'
+    );
     const placeholder = form?.fields?.some((field) => field.key === 'full_name' && field.placeholder === 'Grace Hopper');
 
-    if (saved.notice && editedTitle && company && hasCompanyMinLength && placeholder) {
-      return { ...saved, editedTitle, company, hasCompanyMinLength, placeholder };
+    if (saved.notice && editedTitle && company && hasCompanyMinLength && hasCollectionMapping && placeholder) {
+      return { ...saved, editedTitle, company, hasCompanyMinLength, hasCollectionMapping, placeholder };
     }
 
     if (attempt === 79) {
       throw new Error(`Form builder changes did not persist: ${JSON.stringify({
         saved,
         title: form?.title,
+        collectionTarget,
         fields: form?.fields?.map((field) => ({ key: field.key, label: field.label, placeholder: field.placeholder, validation: field.validation })),
       })}`);
     }
@@ -596,10 +704,12 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 
 const main = async () => {
   const beforeIds = new Set((await listForms()).map((form) => form.id));
+  const smokeCollection = await createCollection();
   const { childProcess, userDataDir } = launchChrome();
   let client;
   let createdFormId = null;
   let cleaned = false;
+  let collectionCleaned = false;
 
   try {
     await waitForCdp();
@@ -620,7 +730,7 @@ const main = async () => {
     await clickRegistrationCreateForm(client);
     const created = await waitForCreatedForm(client, beforeIds);
     createdFormId = created.form.id;
-    await editFormBuilderInUi(client, createdFormId);
+    await editFormBuilderInUi(client, createdFormId, smokeCollection.id);
 
     const definition = await requestApi(`/api/sites/${SITE_ID}/forms/${createdFormId}/definition`);
     assert(definition.data?.form?.title === 'Registration edited', `Edited registration title did not persist: ${definition.data?.form?.title}`);
@@ -637,12 +747,22 @@ const main = async () => {
       'Edited registration definition did not expose Company minLength validation',
     );
     assert(
+      definition.data.form.collectionTarget?.enabled === true &&
+      definition.data.form.collectionTarget.collectionId === smokeCollection.id &&
+      definition.data.form.collectionTarget.fieldMap?.company === 'company',
+      `Edited registration definition did not expose collection mapping: ${JSON.stringify(definition.data.form.collectionTarget)}`,
+    );
+    assert(
       definition.data.form.fields.some((field) => field.key === 'full_name' && field.placeholder === 'Grace Hopper'),
       'Edited registration definition did not expose updated placeholder',
     );
 
     const invalidSubmission = await submitInvalidRegistration(createdFormId);
     const submitted = await submitRegistration(createdFormId);
+    const records = await listCollectionRecords(smokeCollection.id);
+    const createdRecord = records.find((record) => record.values?.source_submission_id === submitted.id);
+    assert(createdRecord, `Collection record was not created for submission ${submitted.id}: ${JSON.stringify(records.slice(0, 5))}`);
+    assert(createdRecord.values?.company === 'Backy Smoke Co', `Collection record did not persist company value: ${JSON.stringify(createdRecord)}`);
     await refreshForms(client);
     const approved = await approveSubmissionInUi(client, createdFormId, submitted.id);
     const layout = await assertLayout(client);
@@ -671,6 +791,7 @@ const main = async () => {
         title: definition.data.form.title,
         fieldCount: definition.data.form.fields.length,
         contactShare: Boolean(definition.data.form.contactShare?.enabled),
+        collectionTarget: definition.data.form.collectionTarget,
         companyValidation: definition.data.form.fields.find((field) => field.key === 'company')?.validation || [],
       },
       invalidSubmissionRejected: Boolean(invalidSubmission.error || invalidSubmission.errorMessage),
@@ -678,6 +799,11 @@ const main = async () => {
         id: submitted.id,
         initialStatus: submitted.status,
         finalStatus: approved.status,
+      },
+      collectionRecord: {
+        id: createdRecord.id,
+        slug: createdRecord.slug,
+        collectionId: smokeCollection.id,
       },
       layout,
       cleaned,
@@ -687,6 +813,13 @@ const main = async () => {
     if (!cleaned && createdFormId) {
       await deleteForm(createdFormId).catch((error) => {
         console.warn('Unable to delete smoke form:', error instanceof Error ? error.message : error);
+      });
+    }
+    if (!collectionCleaned && smokeCollection?.id) {
+      await deleteCollection(smokeCollection.id).then(() => {
+        collectionCleaned = true;
+      }).catch((error) => {
+        console.warn('Unable to delete smoke collection:', error instanceof Error ? error.message : error);
       });
     }
 

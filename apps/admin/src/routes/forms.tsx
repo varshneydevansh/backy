@@ -23,10 +23,12 @@ import {
 import {
   getAdminApiBase,
   getFormWithSubmissions,
+  listCollections,
   listForms,
   createForm,
   updateForm,
   updateFormSubmission,
+  type Collection,
   type FormDefinition,
   type FormFieldDefinition,
   type FormSubmission,
@@ -372,6 +374,7 @@ function FormsRoute() {
   const { sites } = useStore();
   const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
   const [forms, setForms] = useState<FormDefinition[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [inboxByForm, setInboxByForm] = useState<Record<string, FormInbox>>({});
   const [selectedFormId, setSelectedFormId] = useState<string | null>(routeSearch.formId || null);
   const [formDraft, setFormDraft] = useState<FormDefinition | null>(null);
@@ -404,6 +407,13 @@ function FormsRoute() {
   );
   const selectedFormIsStandalone = Boolean(selectedForm && !selectedForm.pageId && !selectedForm.postId);
   const formDraftDirty = Boolean(selectedForm && formDraft && JSON.stringify(buildFormUpdatePayload(formDraft)) !== JSON.stringify(buildFormUpdatePayload(selectedForm)));
+  const writableCollections = useMemo(() => collections.filter((collection) => (
+    collection.status === 'published' && collection.permissions.publicCreate
+  )), [collections]);
+  const formDraftTargetCollection = useMemo(() => {
+    if (!formDraft?.collectionTarget?.collectionId) return null;
+    return collections.find((collection) => collection.id === formDraft.collectionTarget?.collectionId) || null;
+  }, [collections, formDraft?.collectionTarget?.collectionId]);
   const selectedFormDefinitionUrl = selectedForm
     ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/definition`
     : '';
@@ -809,7 +819,10 @@ function FormsRoute() {
     setNotice(null);
 
     try {
-      const loadedForms = await listForms(activeSiteId);
+      const [loadedForms, loadedCollections] = await Promise.all([
+        listForms(activeSiteId),
+        listCollections(activeSiteId).catch(() => []),
+      ]);
       const inboxPairs = await Promise.all(
         loadedForms.map(async (form) => {
           const detail = await getFormWithSubmissions(activeSiteId, form.id, { limit: 100 });
@@ -822,6 +835,7 @@ function FormsRoute() {
       );
       const nextInbox = Object.fromEntries(inboxPairs);
       setForms(loadedForms);
+      setCollections(loadedCollections);
       setInboxByForm(nextInbox);
       setSelectedFormId((current) => (
         current && loadedForms.some((form) => form.id === current)
@@ -979,6 +993,28 @@ function FormsRoute() {
             validation: validation.length > 0 ? validation : undefined,
           };
         }),
+      };
+    });
+  };
+
+  const patchFormDraftCollectionTarget = (patch: Partial<NonNullable<FormDefinition['collectionTarget']>>) => {
+    setFormDraft((current) => {
+      if (!current) return current;
+
+      const currentTarget = current.collectionTarget || {
+        enabled: false,
+        collectionId: '',
+        slugField: current.fields[0]?.key,
+        fieldMap: {},
+      };
+      const nextTarget = {
+        ...currentTarget,
+        ...patch,
+      };
+
+      return {
+        ...current,
+        collectionTarget: nextTarget.enabled ? nextTarget : { ...nextTarget, enabled: false },
       };
     });
   };
@@ -1971,7 +2007,116 @@ function FormsRoute() {
                             />
                             Contact share
                           </label>
+                          <label className="flex min-h-11 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(formDraft.collectionTarget?.enabled)}
+                              onChange={(event) => {
+                                const selectedCollection = formDraftTargetCollection || writableCollections[0] || collections[0];
+                                patchFormDraftCollectionTarget({
+                                  enabled: event.target.checked,
+                                  collectionId: formDraft.collectionTarget?.collectionId || selectedCollection?.id || '',
+                                  slugField: formDraft.collectionTarget?.slugField || formDraft.fields[0]?.key,
+                                  fieldMap: formDraft.collectionTarget?.fieldMap || buildDefaultCollectionFieldMap(formDraft, selectedCollection),
+                                });
+                              }}
+                            />
+                            Collection write
+                          </label>
                         </div>
+
+                        {formDraft.collectionTarget?.enabled && (
+                          <div className="rounded-lg border border-border bg-muted/30 p-3" data-testid="form-collection-target-panel">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <h3 className="text-sm font-semibold">Collection write target</h3>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  Route accepted submissions into a published public-create collection, with explicit form-field to collection-field mapping.
+                                </p>
+                              </div>
+                              <span className={cn(
+                                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                                formDraftTargetCollection?.permissions.publicCreate && formDraftTargetCollection.status === 'published'
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : 'bg-amber-50 text-amber-700',
+                              )}
+                              >
+                                {formDraftTargetCollection?.permissions.publicCreate && formDraftTargetCollection.status === 'published'
+                                  ? 'write ready'
+                                  : 'needs public create'}
+                              </span>
+                            </div>
+                            <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                Target collection
+                                <select
+                                  value={formDraft.collectionTarget.collectionId}
+                                  onChange={(event) => {
+                                    const nextCollection = collections.find((collection) => collection.id === event.target.value);
+                                    patchFormDraftCollectionTarget({
+                                      collectionId: event.target.value,
+                                      fieldMap: buildDefaultCollectionFieldMap(formDraft, nextCollection),
+                                    });
+                                  }}
+                                  className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal text-foreground"
+                                  aria-label="Collection target collection"
+                                >
+                                  <option value="">Select collection</option>
+                                  {collections.map((collection) => (
+                                    <option key={collection.id} value={collection.id}>
+                                      {collection.name} {collection.status === 'published' && collection.permissions.publicCreate ? '' : '(not public-create)'}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+                                Slug source field
+                                <select
+                                  value={formDraft.collectionTarget.slugField || ''}
+                                  onChange={(event) => patchFormDraftCollectionTarget({ slugField: event.target.value || undefined })}
+                                  className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal text-foreground"
+                                  aria-label="Collection target slug field"
+                                >
+                                  <option value="">Auto generated</option>
+                                  {formDraft.fields.map((field) => (
+                                    <option key={field.key} value={field.key}>{field.label} ({field.key})</option>
+                                  ))}
+                                </select>
+                              </label>
+                            </div>
+                            {formDraftTargetCollection ? (
+                              <div className="mt-3 grid gap-2">
+                                {formDraft.fields.map((field) => (
+                                  <label key={field.key} className="grid gap-1.5 rounded-lg border border-border bg-card p-3 text-xs font-semibold text-muted-foreground sm:grid-cols-[minmax(140px,0.8fr)_minmax(180px,1fr)] sm:items-center">
+                                    <span>{field.label} <span className="font-mono font-normal">({field.key})</span></span>
+                                    <select
+                                      value={formDraft.collectionTarget?.fieldMap?.[field.key] || ''}
+                                      onChange={(event) => patchFormDraftCollectionTarget({
+                                        fieldMap: {
+                                          ...(formDraft.collectionTarget?.fieldMap || {}),
+                                          [field.key]: event.target.value,
+                                        },
+                                      })}
+                                      className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
+                                      aria-label={`Map ${field.label} to collection field`}
+                                    >
+                                      <option value="">Do not write</option>
+                                      {formDraftTargetCollection.fields.map((collectionField) => (
+                                        <option key={collectionField.key} value={collectionField.key}>
+                                          {collectionField.label} ({collectionField.key})
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                Create or select a published public-create collection before enabling writes.
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         <div className="rounded-lg border border-border bg-muted/30 p-3">
                           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -2718,6 +2863,25 @@ const normalizeValidationRules = (field: FormFieldDefinition): FormValidationRul
   return rules.length > 0 ? rules : undefined;
 };
 
+const buildDefaultCollectionFieldMap = (
+  form: FormDefinition,
+  collection: Collection | null | undefined,
+): Record<string, string> => {
+  if (!collection) return {};
+
+  const collectionFields = collection.fields;
+  return Object.fromEntries(form.fields.map((field) => {
+    const normalizedFieldKey = field.key.toLowerCase();
+    const normalizedFieldLabel = field.label.toLowerCase();
+    const matched = collectionFields.find((collectionField) => (
+      collectionField.key.toLowerCase() === normalizedFieldKey ||
+      collectionField.label.toLowerCase() === normalizedFieldLabel
+    ));
+
+    return [field.key, matched?.key || ''];
+  }));
+};
+
 const buildFormUpdatePayload = (form: FormDefinition) => ({
   name: form.name.trim(),
   title: normalizeOptionalText(form.title),
@@ -2743,7 +2907,9 @@ const buildFormUpdatePayload = (form: FormDefinition) => ({
   enableCaptcha: form.enableCaptcha === true,
   moderationMode: form.moderationMode || 'manual',
   contactShare: form.contactShare?.enabled ? form.contactShare : { enabled: false },
-  collectionTarget: form.collectionTarget?.enabled ? form.collectionTarget : undefined,
+  collectionTarget: form.collectionTarget?.enabled
+    ? form.collectionTarget
+    : { enabled: false, collectionId: form.collectionTarget?.collectionId || '', fieldMap: form.collectionTarget?.fieldMap || {} },
 });
 
 const formatSubmissionValue = (value: unknown): string => {
