@@ -547,6 +547,29 @@ const assertPublishReviewModal = async (client, page, expectedSearch = page.titl
   return null;
 };
 
+const clearVisibleBulkSelection = async (client) => evaluate(client, `(() => {
+  const checkboxes = [...document.querySelectorAll('input[type="checkbox"]')]
+    .filter((input) => input.getAttribute('aria-label')?.startsWith('Select '));
+  checkboxes.forEach((checkbox) => {
+    if (checkbox.checked) {
+      checkbox.click();
+    }
+  });
+
+  const select = [...document.querySelectorAll('select')]
+    .find((candidate) => [...candidate.options].some((option) => option.value === 'publish' && option.textContent.includes('Publish selected')));
+  if (select) {
+    select.value = '';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  return {
+    clearedVisible: checkboxes.length,
+    selectedVisible: checkboxes.filter((checkbox) => checkbox.checked).length,
+    selectValue: select?.value || '',
+  };
+})()`);
+
 const assertBulkPublishReviewModal = async (client, page, expectedSearch = page.title) => {
   const url = `${ADMIN_BASE_URL}/pages?siteId=${encodeURIComponent(HIERARCHY_SITE_ID)}&q=${encodeURIComponent(expectedSearch)}`;
   await client.send('Page.navigate', { url });
@@ -577,6 +600,8 @@ const assertBulkPublishReviewModal = async (client, page, expectedSearch = page.
     await sleep(250);
   }
 
+  await clearVisibleBulkSelection(client);
+
   const prepared = await evaluate(client, `(() => {
     const checkbox = [...document.querySelectorAll('input[type="checkbox"]')]
       .find((input) => input.getAttribute('aria-label') === ${JSON.stringify(`Select ${page.title}`)});
@@ -602,19 +627,20 @@ const assertBulkPublishReviewModal = async (client, page, expectedSearch = page.
   let openedState = null;
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const opened = await evaluate(client, `(() => {
-      const applyButton = [...document.querySelectorAll('button')]
+      const modal = document.querySelector('[data-testid="pages-bulk-publish-modal"]');
+      const applyButton = modal ? null : [...document.querySelectorAll('button')]
         .find((button) => (
           button.textContent.includes('Publish selected')
           || button.textContent.includes('Review publish for 1 page')
           || button.textContent.includes('Publish 1 page')
         ));
-      if (applyButton && !applyButton.disabled) {
+      if (!modal && applyButton && !applyButton.disabled) {
         applyButton.click();
       }
       return {
-        hasButton: Boolean(applyButton),
+        hasButton: Boolean(applyButton || modal),
         disabled: applyButton?.disabled === true,
-        modalText: document.querySelector('[data-testid="pages-bulk-publish-modal"]')?.textContent || '',
+        modalText: modal?.textContent || document.querySelector('[data-testid="pages-bulk-publish-modal"]')?.textContent || '',
       };
     })()`);
 
@@ -651,7 +677,16 @@ const assertBulkPublishReviewModal = async (client, page, expectedSearch = page.
           .find((button) => button.textContent.trim() === 'Cancel')
           ?.click();
       })()`);
-      return { url, prepared, opened: openedState, state };
+      for (let cancelAttempt = 0; cancelAttempt < 40; cancelAttempt += 1) {
+        const cancelled = await evaluate(client, `(() => !document.querySelector('[data-testid="pages-bulk-publish-modal"]'))()`);
+        if (cancelled) {
+          const cleared = await clearVisibleBulkSelection(client);
+          return { url, prepared, opened: openedState, state, cleared };
+        }
+        await sleep(100);
+      }
+
+      throw new Error('Bulk publish review modal did not close after cancel.');
     }
 
     if (attempt === 79) {
@@ -662,6 +697,164 @@ const assertBulkPublishReviewModal = async (client, page, expectedSearch = page.
   }
 
   return null;
+};
+
+const assertBulkPublishMutation = async (client, page, expectedSearch = page.title) => {
+  const url = `${ADMIN_BASE_URL}/pages?siteId=${encodeURIComponent(HIERARCHY_SITE_ID)}&q=${encodeURIComponent(expectedSearch)}`;
+  await client.send('Page.navigate', { url });
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const checkbox = [...document.querySelectorAll('input[type="checkbox"]')]
+        .find((input) => input.getAttribute('aria-label') === ${JSON.stringify(`Select ${page.title}`)});
+      const row = [...document.querySelectorAll('tr')]
+        .find((candidate) => (candidate.textContent || '').includes(${JSON.stringify(page.title)}));
+      const select = [...document.querySelectorAll('select')]
+        .find((candidate) => [...candidate.options].some((option) => option.value === 'publish' && option.textContent.includes('Publish selected')));
+      return {
+        ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
+        checkbox: Boolean(checkbox),
+        rowText: row?.textContent || '',
+        select: Boolean(select),
+        body: document.body?.innerText?.slice(0, 900) || '',
+      };
+    })()`);
+
+    if (
+      state.ready
+      && state.checkbox
+      && state.select
+      && state.rowText.includes('Draft')
+    ) {
+      break;
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Bulk publish mutation controls were not ready for draft page: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  await clearVisibleBulkSelection(client);
+
+  const prepared = await evaluate(client, `(() => {
+    const checkbox = [...document.querySelectorAll('input[type="checkbox"]')]
+      .find((input) => input.getAttribute('aria-label') === ${JSON.stringify(`Select ${page.title}`)});
+    if (checkbox && !checkbox.checked) {
+      checkbox.click();
+    }
+
+    const select = [...document.querySelectorAll('select')]
+      .find((candidate) => [...candidate.options].some((option) => option.value === 'publish' && option.textContent.includes('Publish selected')));
+    if (select) {
+      select.value = 'publish';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    return {
+      prepared: Boolean(checkbox && select),
+      checked: checkbox?.checked === true,
+      selectValue: select?.value || '',
+    };
+  })()`);
+  assert(prepared.prepared && prepared.checked && prepared.selectValue === 'publish', `Unable to prepare bulk publish mutation controls: ${JSON.stringify(prepared)}`);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const opened = await evaluate(client, `(() => {
+      const modal = document.querySelector('[data-testid="pages-bulk-publish-modal"]');
+      const applyButton = modal ? null : [...document.querySelectorAll('button')]
+        .find((button) => (
+          button.textContent.includes('Publish selected')
+          || button.textContent.includes('Review publish for 1 page')
+          || button.textContent.includes('Publish 1 page')
+        ));
+      if (!modal && applyButton && !applyButton.disabled) {
+        applyButton.click();
+      }
+      return {
+        hasButton: Boolean(applyButton || modal),
+        disabled: applyButton?.disabled === true,
+        modalText: modal?.textContent || document.querySelector('[data-testid="pages-bulk-publish-modal"]')?.textContent || '',
+      };
+    })()`);
+
+    if (opened.modalText.includes('Publish 1 selected page?') && opened.modalText.includes(page.title)) {
+      break;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Bulk publish mutation modal did not open: ${JSON.stringify(opened)}`);
+    }
+
+    await sleep(250);
+  }
+
+  const confirmed = await evaluate(client, `(() => {
+    const modal = document.querySelector('[data-testid="pages-bulk-publish-modal"]');
+    const button = [...document.querySelectorAll('button')]
+      .find((candidate) => candidate.textContent.includes('Publish 1 page'));
+    if (button && !button.disabled) {
+      button.click();
+    }
+    return {
+      modalText: modal?.textContent || '',
+      clicked: Boolean(button),
+      disabled: button?.disabled === true,
+    };
+  })()`);
+  assert(confirmed.clicked && !confirmed.disabled, `Unable to confirm bulk publish mutation: ${JSON.stringify(confirmed)}`);
+
+  let uiState = null;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    uiState = await evaluate(client, `(() => {
+      const row = [...document.querySelectorAll('tr')]
+        .find((candidate) => (candidate.textContent || '').includes(${JSON.stringify(page.title)}));
+      return {
+        modalOpen: Boolean(document.querySelector('[data-testid="pages-bulk-publish-modal"]')),
+        notice: document.body?.innerText?.includes('1 page published.') || false,
+        rowText: row?.textContent || '',
+        selectedText: [...document.querySelectorAll('input[type="checkbox"]')]
+          .filter((input) => input.getAttribute('aria-label')?.startsWith('Select ') && input.checked)
+          .length,
+        bulkSelectValue: [...document.querySelectorAll('select')]
+          .find((candidate) => [...candidate.options].some((option) => option.value === 'publish' && option.textContent.includes('Publish selected')))
+          ?.value || '',
+      };
+    })()`);
+
+    if (
+      !uiState.modalOpen
+      && uiState.notice
+      && uiState.rowText.includes('Published')
+      && uiState.selectedText === 0
+      && uiState.bulkSelectValue === ''
+    ) {
+      break;
+    }
+
+    if (attempt === 119) {
+      throw new Error(`Bulk publish mutation did not update the UI: ${JSON.stringify(uiState)}`);
+    }
+
+    await sleep(250);
+  }
+
+  const apiPage = await requestApi(`/api/admin/sites/${HIERARCHY_SITE_ID}/pages/${page.id}`);
+  const status = apiPage.data?.page?.status;
+  assert(status === 'published', `Bulk publish mutation did not persist published status: ${JSON.stringify(apiPage.data?.page)}`);
+
+  return {
+    url,
+    prepared,
+    confirmed,
+    uiState,
+    api: {
+      pageId: page.id,
+      status,
+      publishedAt: apiPage.data?.page?.publishedAt || null,
+    },
+  };
 };
 
 const launchChrome = () => {
@@ -787,6 +980,10 @@ const main = async () => {
       client,
       hierarchyPages.parentPage,
     );
+    const bulkPublishMutation = await assertBulkPublishMutation(
+      client,
+      hierarchyPages.childPage,
+    );
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -814,6 +1011,7 @@ const main = async () => {
       childDelivery,
       publishReview,
       bulkPublishReview,
+      bulkPublishMutation,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
