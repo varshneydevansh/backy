@@ -193,6 +193,10 @@ const navigateToPageCreate = async (client, slug, title, navLabel, seo, parentPa
       ogImage: document.querySelector('#page-og-image')?.value || '',
       noIndex: Array.from(document.querySelectorAll('#page-seo input[type="checkbox"]'))[0]?.checked ?? null,
       noFollow: Array.from(document.querySelectorAll('#page-seo input[type="checkbox"]'))[1]?.checked ?? null,
+      templatePreviewCount: document.querySelectorAll('[data-testid^="page-template-preview-"]').length,
+      activeTemplatePreview: document.querySelector('[data-testid="page-template-preview-about"]')?.getAttribute('data-active') || '',
+      activeTemplateBlockCount: Number(document.querySelector('[data-testid="page-template-preview-about"]')?.getAttribute('data-block-count') || 0),
+      selectedTemplatePreview: document.querySelector('[data-testid="page-selected-template-preview"]')?.getAttribute('data-template') || '',
       body: document.body?.innerText?.slice(0, 240) || '',
     }))()`);
 
@@ -211,6 +215,10 @@ const navigateToPageCreate = async (client, slug, title, navLabel, seo, parentPa
       && state.ogImage === seo.ogImage
       && state.noIndex === true
       && state.noFollow === true
+      && state.templatePreviewCount === 7
+      && state.activeTemplatePreview === 'true'
+      && state.activeTemplateBlockCount > 0
+      && state.selectedTemplatePreview === 'about'
     ) {
       return { url, state };
     }

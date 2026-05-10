@@ -45,6 +45,15 @@ type PageTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'about' 
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 
+interface TemplatePreviewBlock {
+    label?: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    className: string;
+}
+
 interface PageCreateDraftState {
     title: string;
     slug: string;
@@ -272,6 +281,62 @@ const templateNavigationItems: Record<PageTemplate, string[]> = {
     about: ['Home', 'About', 'Contact'],
     contact: ['Home', 'About', 'Contact'],
     registration: ['Home', 'Register', 'Contact'],
+};
+
+const templatePreviewBlocks: Record<PageTemplate, TemplatePreviewBlock[]> = {
+    blank: [
+        { x: 12, y: 18, w: 42, h: 6, className: 'bg-slate-900' },
+        { x: 12, y: 30, w: 64, h: 4, className: 'bg-slate-300' },
+        { x: 12, y: 39, w: 52, h: 4, className: 'bg-slate-200' },
+        { label: 'Text', x: 12, y: 55, w: 28, h: 16, className: 'border-slate-300 bg-white' },
+    ],
+    landing: [
+        { label: 'Hero', x: 8, y: 16, w: 84, h: 34, className: 'border-teal-200 bg-teal-50' },
+        { x: 14, y: 25, w: 36, h: 5, className: 'bg-teal-800' },
+        { x: 14, y: 36, w: 24, h: 6, className: 'bg-emerald-500' },
+        { label: 'Cards', x: 8, y: 58, w: 24, h: 20, className: 'border-slate-200 bg-white' },
+        { x: 38, y: 58, w: 24, h: 20, className: 'border-slate-200 bg-white' },
+        { x: 68, y: 58, w: 24, h: 20, className: 'border-slate-200 bg-white' },
+    ],
+    storefront: [
+        { label: 'Product', x: 8, y: 16, w: 38, h: 34, className: 'border-amber-200 bg-amber-50' },
+        { x: 54, y: 20, w: 30, h: 5, className: 'bg-slate-900' },
+        { x: 54, y: 32, w: 24, h: 5, className: 'bg-emerald-500' },
+        { label: 'Grid', x: 8, y: 58, w: 24, h: 20, className: 'border-amber-200 bg-white' },
+        { x: 38, y: 58, w: 24, h: 20, className: 'border-amber-200 bg-white' },
+        { x: 68, y: 58, w: 24, h: 20, className: 'border-amber-200 bg-white' },
+    ],
+    'blog-index': [
+        { label: 'Feature', x: 8, y: 16, w: 84, h: 28, className: 'border-indigo-200 bg-indigo-50' },
+        { x: 14, y: 25, w: 32, h: 5, className: 'bg-indigo-800' },
+        { label: 'Posts', x: 8, y: 54, w: 84, h: 7, className: 'border-slate-200 bg-white' },
+        { x: 8, y: 65, w: 84, h: 7, className: 'border-slate-200 bg-white' },
+        { x: 8, y: 76, w: 84, h: 7, className: 'border-slate-200 bg-white' },
+    ],
+    about: [
+        { label: 'Story', x: 8, y: 16, w: 42, h: 30, className: 'border-cyan-200 bg-cyan-50' },
+        { x: 58, y: 20, w: 28, h: 5, className: 'bg-slate-900' },
+        { x: 58, y: 32, w: 28, h: 4, className: 'bg-slate-300' },
+        { label: 'Values', x: 8, y: 56, w: 26, h: 19, className: 'border-cyan-200 bg-white' },
+        { x: 38, y: 56, w: 26, h: 19, className: 'border-cyan-200 bg-white' },
+        { x: 68, y: 56, w: 24, h: 19, className: 'border-cyan-200 bg-white' },
+    ],
+    contact: [
+        { x: 8, y: 18, w: 30, h: 5, className: 'bg-slate-900' },
+        { x: 8, y: 30, w: 28, h: 4, className: 'bg-slate-300' },
+        { label: 'Form', x: 48, y: 16, w: 44, h: 62, className: 'border-emerald-200 bg-emerald-50' },
+        { x: 54, y: 28, w: 32, h: 6, className: 'bg-white' },
+        { x: 54, y: 40, w: 32, h: 6, className: 'bg-white' },
+        { x: 54, y: 58, w: 20, h: 7, className: 'bg-emerald-600' },
+    ],
+    registration: [
+        { label: 'Signup', x: 8, y: 16, w: 40, h: 34, className: 'border-violet-200 bg-violet-50' },
+        { x: 14, y: 27, w: 26, h: 5, className: 'bg-violet-800' },
+        { label: 'Fields', x: 56, y: 16, w: 36, h: 60, className: 'border-slate-200 bg-white' },
+        { x: 62, y: 28, w: 24, h: 6, className: 'bg-slate-100' },
+        { x: 62, y: 40, w: 24, h: 6, className: 'bg-slate-100' },
+        { x: 62, y: 58, w: 18, h: 7, className: 'bg-violet-600' },
+    ],
 };
 
 const isPageTemplate = (value: unknown): value is PageTemplate => (
@@ -1859,12 +1924,12 @@ function NewPageRoute() {
                             </div>
                         </div>
 
-                        <div className="grid gap-3 md:grid-cols-2">
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                             {TEMPLATE_OPTIONS.map((tmpl) => (
                                     <label
                                         key={tmpl.id}
                                         className={cn(
-                                            'flex cursor-pointer flex-col rounded-lg border p-4 transition-all hover:shadow-sm',
+                                            'flex cursor-pointer flex-col rounded-lg border p-3 transition-all hover:shadow-sm',
                                             formData.template === tmpl.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/50',
                                             isPageCreateBusy && 'cursor-not-allowed opacity-70'
                                         )}
@@ -1885,6 +1950,7 @@ function NewPageRoute() {
                                             )} />
                                             <span className="font-semibold">{tmpl.name}</span>
                                         </div>
+                                        <TemplateVisualPreview template={tmpl.id} active={formData.template === tmpl.id} />
                                         <span className="text-xs leading-5 text-muted-foreground">{tmpl.desc}</span>
                                         <span className="mt-3 flex flex-wrap gap-1">
                                             {tmpl.sections.map((section) => (
@@ -1895,6 +1961,30 @@ function NewPageRoute() {
                                         </span>
                                     </label>
                             ))}
+                        </div>
+
+                        <div className="grid gap-4 rounded-lg border border-border bg-muted/30 p-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(240px,0.9fr)]">
+                            <TemplateVisualPreview template={formData.template} active={true} size="large" testId="page-selected-template-preview" />
+                            <div className="space-y-3">
+                                <div>
+                                    <div className="text-sm font-semibold text-foreground">{selectedTemplate.name} canvas seed</div>
+                                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{selectedTemplate.detail}</p>
+                                </div>
+                                <dl className="grid gap-2 text-xs sm:grid-cols-3 lg:grid-cols-1">
+                                    <div className="rounded-lg border border-border bg-card px-3 py-2">
+                                        <dt className="font-medium text-muted-foreground">Canvas</dt>
+                                        <dd className="mt-1 font-semibold text-foreground">{DEFAULT_CANVAS_SIZE.width} x {DEFAULT_CANVAS_SIZE.height}</dd>
+                                    </div>
+                                    <div className="rounded-lg border border-border bg-card px-3 py-2">
+                                        <dt className="font-medium text-muted-foreground">Chrome</dt>
+                                        <dd className="mt-1 font-semibold text-foreground">{formData.template === 'blank' ? 'Library only' : 'Header, nav, footer'}</dd>
+                                    </div>
+                                    <div className="rounded-lg border border-border bg-card px-3 py-2">
+                                        <dt className="font-medium text-muted-foreground">Blocks</dt>
+                                        <dd className="mt-1 font-semibold text-foreground">{selectedTemplate.sections.length} starter sections</dd>
+                                    </div>
+                                </dl>
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -2105,6 +2195,68 @@ function PageCreationWorkflowStep({ index, label, detail }: { index: number; lab
             <div className="min-w-0">
                 <div className="text-xs font-semibold text-foreground">{label}</div>
                 <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{detail}</div>
+            </div>
+        </div>
+    );
+}
+
+function TemplateVisualPreview({
+    template,
+    active,
+    size = 'card',
+    testId,
+}: {
+    template: PageTemplate;
+    active: boolean;
+    size?: 'card' | 'large';
+    testId?: string;
+}) {
+    const hasChrome = template !== 'blank';
+    const blocks = templatePreviewBlocks[template];
+
+    return (
+        <div
+            data-testid={testId || `page-template-preview-${template}`}
+            data-active={active ? 'true' : 'false'}
+            data-template={template}
+            data-block-count={blocks.length}
+            className={cn(
+                'my-3 overflow-hidden rounded-lg border bg-background shadow-sm',
+                active ? 'border-primary/50' : 'border-border',
+            )}
+        >
+            <div className={cn('relative overflow-hidden bg-slate-50', size === 'large' ? 'h-44' : 'h-28')}>
+                <div className="absolute inset-0 opacity-70 [background-image:linear-gradient(#e2e8f0_1px,transparent_1px),linear-gradient(90deg,#e2e8f0_1px,transparent_1px)] [background-size:12px_12px]" />
+                {hasChrome && (
+                    <>
+                        <div className="absolute left-2 right-2 top-2 flex h-5 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 shadow-sm">
+                            <span className="h-2 w-2 rounded-full bg-primary" />
+                            <span className="h-1.5 w-8 rounded-full bg-slate-300" />
+                            <span className="ml-auto h-1.5 w-5 rounded-full bg-slate-200" />
+                            <span className="h-1.5 w-5 rounded-full bg-slate-200" />
+                        </div>
+                        <div className="absolute bottom-2 left-2 right-2 h-4 rounded-md border border-slate-200 bg-white/90" />
+                    </>
+                )}
+                {blocks.map((block, index) => (
+                    <div
+                        key={`${template}-preview-${index}`}
+                        className={cn(
+                            'absolute rounded-md border text-[9px] font-semibold leading-none text-slate-700 shadow-sm',
+                            block.className,
+                        )}
+                        style={{
+                            left: `${block.x}%`,
+                            top: `${block.y}%`,
+                            width: `${block.w}%`,
+                            height: `${block.h}%`,
+                        }}
+                    >
+                        {block.label && (
+                            <span className="absolute left-1 top-1 rounded bg-white/85 px-1 py-0.5">{block.label}</span>
+                        )}
+                    </div>
+                ))}
             </div>
         </div>
     );
