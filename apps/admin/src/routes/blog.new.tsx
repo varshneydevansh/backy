@@ -4,14 +4,16 @@
 
 import { useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, FileText, Globe, Image as ImageIcon, PenLine, RefreshCw, Save, SearchCheck, Tags, UserRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, Eye, FileText, Globe, Image as ImageIcon, PenLine, RefreshCw, Save, SearchCheck, Tags, UserRound, X } from 'lucide-react';
 import {
     createBlogPost,
+    createBlogPostPreview,
     getAdminApiBase,
     listBlogPosts,
     listBlogAuthors,
     listBlogCategories,
     listBlogTags,
+    type BlogPostInput,
     type BlogAuthor,
     type BlogCategory,
     type BlogTag,
@@ -184,6 +186,7 @@ function NewBlogPostPage() {
     const [isCheckingPosts, setIsCheckingPosts] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    const [isPreviewAfterCreateBusy, setIsPreviewAfterCreateBusy] = useState(false);
     const [routeCheckError, setRouteCheckError] = useState<string | null>(null);
     const [routeCheckRetry, setRouteCheckRetry] = useState(0);
     const [existingBlogPosts, setExistingBlogPosts] = useState<BlogPost[]>([]);
@@ -214,7 +217,7 @@ function NewBlogPostPage() {
     const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
     const [selectedAuthorId, setSelectedAuthorId] = useState(user?.id || 'admin');
-    const isCreateBusy = isLoading || isCheckingPosts;
+    const isCreateBusy = isLoading || isPreviewAfterCreateBusy || isCheckingPosts;
 
     const clearCreationFeedback = () => {
         setError((current) => current ? null : current);
@@ -384,12 +387,13 @@ function NewBlogPostPage() {
     ];
     const readyCount = readinessChecks.filter((check) => check.complete).length;
     const readinessScore = Math.round((readyCount / readinessChecks.length) * 100);
-    const canSubmit = title.trim().length > 0
+    const canCreateDraft = title.trim().length > 0
         && slugValue.trim().length > 0
         && !isCheckingPosts
         && !routeCheckError
         && !routeConflict
-        && canonicalValid
+        && canonicalValid;
+    const canSubmit = canCreateDraft
         && (status !== 'scheduled' || Boolean(scheduledAt));
     const submitLabel = status === 'published' ? 'Publish post' : status === 'scheduled' ? 'Schedule post' : 'Save draft';
     const createPayloadPreview = useMemo(() => ({
@@ -625,50 +629,24 @@ function NewBlogPostPage() {
         setNotice('Blog creation handoff manifest downloaded.');
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (isCreateBusy) return;
-
-        if (!canSubmit) {
-            setError(
-                isCheckingPosts
-                    ? 'Checking existing blog routes before saving'
-                    : routeCheckError
-                        ? 'Backy could not verify existing blog routes for this site. Retry the route check before saving.'
-                        : routeConflict
-                            ? `The ${routePath} route is already used by "${routeConflict.title}". Choose another slug or edit that post first.`
-                            : !canonicalValid
-                                ? 'Canonical path must start with / before saving'
-                            : status === 'scheduled' && !scheduledAt
-                                ? 'Choose a publish date before scheduling'
-                                : 'Add a title and URL slug before saving',
-            );
-            setNotice(null);
-            return;
-        }
-
-        setIsLoading(true);
-        setError(null);
-        setNotice(null);
-        setRouteCheckError(null);
-
-    // Serialize canvas elements for storage
+    const buildPostInput = (nextStatus: BlogPostInput['status'] = status): BlogPostInput => {
+        const resolvedStatus = nextStatus || status;
         const content = serializeCanvasContent(canvasElements, canvasSize, undefined, {
             documentId: `new-post-${slugValue || title || 'draft'}`,
             kind: 'post',
             title,
             slug: slugValue,
-            status,
+            status: resolvedStatus,
             locale: 'en',
         });
-        const input = {
+
+        return {
             title,
             slug: slugValue,
             excerpt,
-            status,
-            scheduledAt: status === 'scheduled' ? scheduledAt : null,
+            status: resolvedStatus,
+            scheduledAt: resolvedStatus === 'scheduled' ? scheduledAt : null,
             featuredImageId,
-            author: user?.fullName || 'Anonymous',
             authorId: selectedAuthorId || user?.id || 'admin',
             categoryIds: selectedCategoryIds,
             tagIds: selectedTagIds,
@@ -682,9 +660,76 @@ function NewBlogPostPage() {
                 noFollow,
             },
         };
+    };
+
+    const getCreateBlockedMessage = (mode: 'save' | 'preview') => (
+        isCheckingPosts
+            ? 'Checking existing blog routes before saving'
+            : routeCheckError
+                ? 'Backy could not verify existing blog routes for this site. Retry the route check before saving.'
+                : routeConflict
+                    ? `The ${routePath} route is already used by "${routeConflict.title}". Choose another slug or edit that post first.`
+                    : !canonicalValid
+                        ? 'Canonical path must start with / before saving'
+                        : mode === 'save' && status === 'scheduled' && !scheduledAt
+                            ? 'Choose a publish date before scheduling'
+                            : 'Add a title and URL slug before saving'
+    );
+
+    const handleCreatePreview = async () => {
+        if (isCreateBusy) return;
+
+        if (!canCreateDraft) {
+            setError(getCreateBlockedMessage('preview'));
+            setNotice(null);
+            return;
+        }
+
+        setIsPreviewAfterCreateBusy(true);
+        setError(null);
+        setNotice(null);
+        setRouteCheckError(null);
+
+        let created: BlogPost | null = null;
 
         try {
-            const created = await createBlogPost(activeSiteId, input);
+            created = await createBlogPost(activeSiteId, buildPostInput('draft'));
+            setPosts([created, ...posts.filter((post) => post.id !== created?.id)]);
+
+            const preview = await createBlogPostPreview(activeSiteId, created.id);
+            window.open(preview.url, '_blank', 'noopener,noreferrer');
+            navigate({ to: '/blog/$postId', params: { postId: created.id }, search: { siteId: activeSiteId } });
+        } catch (createError) {
+            if (created) {
+                navigate({ to: '/blog/$postId', params: { postId: created.id }, search: { siteId: activeSiteId } });
+                return;
+            }
+
+            setError(createError instanceof Error
+                ? `${createError.message}. The preview draft was not created.`
+                : 'Unable to create preview draft. The post was not persisted.');
+        } finally {
+            setIsPreviewAfterCreateBusy(false);
+        }
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (isCreateBusy) return;
+
+        if (!canSubmit) {
+            setError(getCreateBlockedMessage('save'));
+            setNotice(null);
+            return;
+        }
+
+        setIsLoading(true);
+        setError(null);
+        setNotice(null);
+        setRouteCheckError(null);
+
+        try {
+            const created = await createBlogPost(activeSiteId, buildPostInput(status));
             setPosts([created, ...posts.filter((post) => post.id !== created.id)]);
             navigate({ to: '/blog', search: { siteId: activeSiteId } });
         } catch (createError) {
@@ -782,6 +827,15 @@ function NewBlogPostPage() {
                                     iconStart={<Download className="size-4" />}
                                 >
                                     Download JSON
+                                </Button>
+                                <Button
+                                    type="button"
+                                    disabled={isCreateBusy || !canCreateDraft}
+                                    onClick={() => void handleCreatePreview()}
+                                    variant="outline"
+                                    iconStart={<Eye className="size-4" />}
+                                >
+                                    {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
                                 </Button>
                                 <Button type="submit" disabled={isCreateBusy || !canSubmit} variant="primary" iconStart={<Save className="size-4" />}>
                                     {isLoading ? 'Saving...' : isCheckingPosts ? 'Checking routes...' : submitLabel}
@@ -1153,6 +1207,16 @@ function NewBlogPostPage() {
                                 <div className="grid gap-2">
                                     <Button type="submit" disabled={isCreateBusy || !canSubmit} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
                                         {isLoading ? 'Saving...' : isCheckingPosts ? 'Checking routes...' : submitLabel}
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        onClick={() => void handleCreatePreview()}
+                                        disabled={isCreateBusy || !canCreateDraft}
+                                        variant="outline"
+                                        iconStart={<Eye className="size-4" />}
+                                        className="w-full"
+                                    >
+                                        {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
                                     </Button>
                                     <Button
                                         type="button"
