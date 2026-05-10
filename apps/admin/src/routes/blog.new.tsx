@@ -4,7 +4,7 @@
 
 import { useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, FileText, Globe, PenLine, RefreshCw, Save, Tags, UserRound } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, FileText, Globe, Image as ImageIcon, PenLine, RefreshCw, Save, Tags, UserRound, X } from 'lucide-react';
 import {
     createBlogPost,
     getAdminApiBase,
@@ -21,12 +21,14 @@ import { useStore, type BlogPost } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { CanvasEditor } from '@/components/editor/CanvasEditor';
 import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
+import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/Button';
 import { Notice } from '@/components/ui/Notice';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn } from '@/lib/utils';
+import { getPublicMediaFileUrl } from '@/lib/mediaApi';
 import { getCanvasHeightForElements, withPageChrome } from '@/lib/editorTemplateChrome';
 import type { CanvasElement } from '@/types/editor';
 import type { CanvasSize } from '@/types/editor';
@@ -68,6 +70,11 @@ const BLOG_CREATE_CONTROL_AREAS = [
         title: 'Site and author',
         detail: 'Target website and author profile for the new article.',
         href: '#blog-create-owner',
+    },
+    {
+        title: 'Featured media',
+        detail: 'Select the image used by blog lists, social previews, feeds, and custom frontend cards.',
+        href: '#blog-create-media',
     },
     {
         title: 'Taxonomy',
@@ -165,7 +172,7 @@ const createInitialBlogElements = (): CanvasElement[] => withPageChrome([
 function NewBlogPostPage() {
     const navigate = useNavigate();
     const search = Route.useSearch();
-    const { sites, posts, setPosts } = useStore();
+    const { sites, posts, media, setPosts } = useStore();
     const { user } = useAuthStore();
 
     const [isLoading, setIsLoading] = useState(false);
@@ -175,6 +182,7 @@ function NewBlogPostPage() {
     const [routeCheckError, setRouteCheckError] = useState<string | null>(null);
     const [routeCheckRetry, setRouteCheckRetry] = useState(0);
     const [existingBlogPosts, setExistingBlogPosts] = useState<BlogPost[]>([]);
+    const [isFeaturedMediaOpen, setIsFeaturedMediaOpen] = useState(false);
     const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
     const requestedSite = search.siteId
         ? sites.find((site) => siteMatchesIdentifier(site, search.siteId || ''))
@@ -188,6 +196,8 @@ function NewBlogPostPage() {
     const [excerpt, setExcerpt] = useState('');
     const [status, setStatus] = useState<'draft' | 'published' | 'scheduled'>('draft');
     const [scheduledAt, setScheduledAt] = useState<string | null>(null);
+    const [featuredImageId, setFeaturedImageId] = useState<string | null>(null);
+    const [ogImage, setOgImage] = useState('');
     const [categories, setCategories] = useState<BlogCategory[]>([]);
     const [tags, setTags] = useState<BlogTag[]>([]);
     const [authors, setAuthors] = useState<BlogAuthor[]>([]);
@@ -298,6 +308,8 @@ function NewBlogPostPage() {
         setActiveSiteId(nextSiteId);
         setSelectedCategoryIds([]);
         setSelectedTagIds([]);
+        setFeaturedImageId(null);
+        setOgImage('');
         clearCreationFeedback();
         navigate({ to: '/blog/new', search: { siteId: nextSiteId }, replace: true });
     };
@@ -340,11 +352,18 @@ function NewBlogPostPage() {
             : null,
         [existingBlogPosts, slugValue],
     );
+    const selectedFeaturedImage = featuredImageId
+        ? media.find((asset) => asset.id === featuredImageId) || null
+        : null;
+    const selectedFeaturedImageUrl = selectedFeaturedImage
+        ? selectedFeaturedImage.url || getPublicMediaFileUrl(selectedFeaturedImage.id, activeSiteId)
+        : null;
     const readinessChecks = [
         { label: 'Title', complete: title.trim().length > 0 },
         { label: 'Slug', complete: slugValue.trim().length > 0 },
         { label: 'Route', complete: !isCheckingPosts && !routeCheckError && !routeConflict },
         { label: 'Summary', complete: excerpt.trim().length >= 24 },
+        { label: 'Featured image', complete: Boolean(featuredImageId) },
         { label: 'Design', complete: canvasElements.length > 0 },
         { label: 'Schedule', complete: status !== 'scheduled' || Boolean(scheduledAt) },
     ];
@@ -368,6 +387,17 @@ function NewBlogPostPage() {
         excerpt: excerpt.trim(),
         status,
         scheduledAt: status === 'scheduled' ? scheduledAt : null,
+        featuredImageId,
+        featuredImage: selectedFeaturedImage
+            ? {
+                id: selectedFeaturedImage.id,
+                name: selectedFeaturedImage.name,
+                url: selectedFeaturedImageUrl,
+                altText: selectedFeaturedImage.altText || null,
+            }
+            : featuredImageId
+                ? { id: featuredImageId, name: null, url: null, altText: null }
+                : null,
         authorId: selectedAuthorId || user?.id || 'admin',
         categoryIds: selectedCategoryIds,
         tagIds: selectedTagIds,
@@ -383,6 +413,9 @@ function NewBlogPostPage() {
         canvasSize.width,
         existingBlogPosts.length,
         excerpt,
+        featuredImageId,
+        selectedFeaturedImage,
+        selectedFeaturedImageUrl,
         routeCheckError,
         routeConflict,
         scheduledAt,
@@ -435,6 +468,18 @@ function NewBlogPostPage() {
             excerpt: excerpt.trim(),
             status,
             scheduledAt: status === 'scheduled' ? scheduledAt : null,
+            featuredImageId,
+            featuredImage: selectedFeaturedImage
+                ? {
+                    id: selectedFeaturedImage.id,
+                    name: selectedFeaturedImage.name,
+                    url: selectedFeaturedImageUrl,
+                    altText: selectedFeaturedImage.altText || null,
+                    responsive: selectedFeaturedImage.responsive || null,
+                }
+                : featuredImageId
+                    ? { id: featuredImageId, name: null, url: null, altText: null, responsive: null }
+                    : null,
             author: selectedAuthor
                 ? { id: selectedAuthor.id, name: selectedAuthor.name }
                 : { id: selectedAuthorId || user?.id || 'admin', name: user?.fullName || 'Admin' },
@@ -475,8 +520,11 @@ function NewBlogPostPage() {
         routePath,
         scheduledAt,
         selectedAuthor,
+        selectedFeaturedImage,
+        selectedFeaturedImageUrl,
         selectedAuthorId,
         selectedCategoryIds,
+        featuredImageId,
         selectedSite?.name,
         selectedSite?.slug,
         selectedTagIds,
@@ -566,6 +614,7 @@ function NewBlogPostPage() {
             excerpt,
             status,
             scheduledAt: status === 'scheduled' ? scheduledAt : null,
+            featuredImageId,
             author: user?.fullName || 'Anonymous',
             authorId: selectedAuthorId || user?.id || 'admin',
             categoryIds: selectedCategoryIds,
@@ -574,6 +623,7 @@ function NewBlogPostPage() {
             meta: {
                 title,
                 description: excerpt,
+                ogImage: ogImage.trim() || selectedFeaturedImageUrl || null,
             },
         };
 
@@ -1001,6 +1051,70 @@ function NewBlogPostPage() {
                             </PanelContent>
                         </Panel>
 
+                        <Panel id="blog-create-media" className="scroll-mt-24">
+                            <PanelHeader
+                                title="Featured media"
+                                description="Image used by cards, feeds, Open Graph previews, and generated frontend lists."
+                                icon={<ImageIcon className="size-4" />}
+                            />
+                            <PanelContent className="space-y-4">
+                                <div className="overflow-hidden rounded-lg border border-border bg-background">
+                                    {selectedFeaturedImageUrl ? (
+                                        <img
+                                            src={selectedFeaturedImageUrl}
+                                            alt={selectedFeaturedImage?.altText || selectedFeaturedImage?.name || 'Featured post image'}
+                                            className="aspect-video w-full object-cover"
+                                        />
+                                    ) : (
+                                        <div className="flex aspect-video w-full items-center justify-center bg-muted text-muted-foreground">
+                                            <ImageIcon className="size-8" />
+                                        </div>
+                                    )}
+                                    <div className="space-y-1 px-3 py-3">
+                                        <div className="truncate text-sm font-semibold text-foreground">
+                                            {selectedFeaturedImage?.name || (featuredImageId ? featuredImageId : 'No featured image selected')}
+                                        </div>
+                                        <div className="text-xs leading-5 text-muted-foreground">
+                                            {selectedFeaturedImage
+                                                ? `${selectedFeaturedImage.type} · ${selectedFeaturedImage.visibility || 'public'} · ${selectedFeaturedImage.size}`
+                                                : 'Select or upload an image scoped to this new post workflow.'}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => setIsFeaturedMediaOpen(true)}
+                                        disabled={isCreateBusy}
+                                        iconStart={<ImageIcon className="size-4" />}
+                                    >
+                                        {featuredImageId ? 'Replace image' : 'Select image'}
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => {
+                                            if (isCreateBusy) return;
+
+                                            clearCreationFeedback();
+                                            setFeaturedImageId(null);
+                                            setOgImage('');
+                                        }}
+                                        disabled={isCreateBusy || !featuredImageId}
+                                        iconStart={<X className="size-4" />}
+                                    >
+                                        Clear image
+                                    </Button>
+                                </div>
+                                {featuredImageId && (
+                                    <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 font-mono text-xs text-muted-foreground">
+                                        featuredImageId: {featuredImageId}
+                                    </div>
+                                )}
+                            </PanelContent>
+                        </Panel>
+
                         <Panel id="blog-create-taxonomy" className="scroll-mt-24">
                             <PanelHeader title="Taxonomy" icon={<Tags className="size-4" />} />
                             <PanelContent className="space-y-5">
@@ -1084,6 +1198,34 @@ function NewBlogPostPage() {
                     </div>
 
                 </form>
+
+                <MediaLibraryModal
+                    isOpen={isFeaturedMediaOpen}
+                    onClose={() => {
+                        if (!isCreateBusy) {
+                            setIsFeaturedMediaOpen(false);
+                        }
+                    }}
+                    onSelect={(asset) => {
+                        if (isCreateBusy) return;
+
+                        const deliveryUrl = asset.url || getPublicMediaFileUrl(asset.id, activeSiteId);
+                        clearCreationFeedback();
+                        setFeaturedImageId(asset.id);
+                        setOgImage(deliveryUrl);
+                        setNotice(`Selected ${asset.name} as the featured image.`);
+                        setIsFeaturedMediaOpen(false);
+                    }}
+                    allowedTypes="image"
+                    initialUploadFilter="image"
+                    mediaContext={{
+                        siteId: activeSiteId,
+                        scope: 'post',
+                        targetId: slugValue || title || 'new-post',
+                        targetLabel: title || 'New blog post',
+                    }}
+                    allowScopeSwitcher={true}
+                />
             </div>
         </PageShell>
     );
