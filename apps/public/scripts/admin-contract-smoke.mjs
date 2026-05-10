@@ -23,6 +23,7 @@ let createdMediaId = null;
 let createdImageMediaId = null;
 let createdMediaFolderId = null;
 let createdReusableSectionId = null;
+let createdReusableInstancePageId = null;
 let createdSafeguardUserId = null;
 let originalUserAdminRole = null;
 let originalUserAdminStatus = null;
@@ -168,6 +169,10 @@ async function cleanup() {
 
   if (createdSiteId && createdReusableSectionId) {
     await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}`, { method: 'DELETE' }).catch(() => {});
+  }
+
+  if (createdSiteId && createdReusableInstancePageId) {
+    await request(`/api/admin/sites/${createdSiteId}/pages/${createdReusableInstancePageId}`, { method: 'DELETE' }).catch(() => {});
   }
 
   if (createdSiteId && createdMediaFolderId) {
@@ -1530,6 +1535,40 @@ try {
     assert(create.json?.data?.section?.content?.elements?.[0]?.children?.[0]?.id === 'contract-section-heading', `${create.url} did not preserve nested section content`);
     assert(create.json?.data?.section?.metadata?.reusableSection?.version === 1, `${create.url} missing initial reusable section version`);
     createdReusableSectionId = create.json.data.section.id;
+    const initialReusableSectionUpdatedAt = create.json.data.section.updatedAt;
+
+    const instanceRoot = JSON.parse(JSON.stringify(create.json.data.section.content.elements[0]));
+    instanceRoot.id = 'contract-section-instance-root';
+    instanceRoot.x = 24;
+    instanceRoot.y = 48;
+    instanceRoot.props = {
+      ...(instanceRoot.props || {}),
+      reusableSection: {
+        mode: 'synced',
+        sectionId: createdReusableSectionId,
+        slug: create.json.data.section.slug,
+        name: create.json.data.section.name,
+        sourceUpdatedAt: initialReusableSectionUpdatedAt,
+      },
+    };
+    const instancePage = await request(`/api/admin/sites/${createdSiteId}/pages`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Reusable Section Instance Page',
+        slug: `reusable-section-instance-${unique}`,
+        status: 'draft',
+        content: {
+          canvasSize: { width: 1200, height: 520 },
+          elements: [instanceRoot],
+        },
+      }),
+    });
+    assert(instancePage.response.status === 201, `${instancePage.url} expected 201, got ${instancePage.response.status}`);
+    createdReusableInstancePageId = instancePage.json?.data?.page?.id;
+    assert(createdReusableInstancePageId, `${instancePage.url} missing reusable section instance page id`);
 
     const duplicate = await request(`/api/admin/sites/${createdSiteId}/reusable-sections`, {
       method: 'POST',
@@ -1590,6 +1629,40 @@ try {
         name: 'Updated Contract Hero Section',
         tags: ['hero', 'updated'],
         status: 'archived',
+        content: {
+          canvasSize: { width: 1200, height: 420 },
+          elements: [
+            {
+              id: 'contract-section-root',
+              type: 'section',
+              x: 0,
+              y: 0,
+              width: 1200,
+              height: 420,
+              zIndex: 1,
+              props: {
+                backgroundColor: '#0f172a',
+              },
+              children: [
+                {
+                  id: 'contract-section-heading',
+                  type: 'heading',
+                  x: 72,
+                  y: 80,
+                  width: 620,
+                  height: 88,
+                  zIndex: 1,
+                  props: {
+                    content: 'Updated reusable section smoke',
+                    level: 'h2',
+                    fontSize: 42,
+                    color: '#ffffff',
+                  },
+                },
+              ],
+            },
+          ],
+        },
         updatedBy: 'contract-smoke',
       }),
     });
@@ -1618,6 +1691,50 @@ try {
     assert(versions.json?.data?.currentVersion === 2, `${versions.url} did not expose current reusable section version`);
     assert(versions.json?.data?.versions?.some((entry) => entry.current === true && entry.version === 2), `${versions.url} missing current reusable section version entry`);
     assert(versions.json?.data?.versions?.some((entry) => entry.version === 1 && entry.name === 'Admin Contract Hero Section'), `${versions.url} missing previous reusable section version entry`);
+
+    const staleInstances = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}/instances?targetType=page&targetId=${createdReusableInstancePageId}`);
+    assert(staleInstances.response.status === 200, `${staleInstances.url} expected 200, got ${staleInstances.response.status}`);
+    assert(staleInstances.json?.data?.totals?.targets === 1, `${staleInstances.url} expected one target with reusable section instance`);
+    assert(staleInstances.json?.data?.totals?.instances === 1, `${staleInstances.url} expected one reusable section instance`);
+    assert(staleInstances.json?.data?.totals?.stale === 1, `${staleInstances.url} expected stale reusable section instance`);
+
+    const dryRunRefreshInstances = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}/instances`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        targetType: 'page',
+        targetId: createdReusableInstancePageId,
+        dryRun: true,
+      }),
+    });
+    assert(dryRunRefreshInstances.response.status === 200, `${dryRunRefreshInstances.url} expected 200, got ${dryRunRefreshInstances.response.status}`);
+    assert(dryRunRefreshInstances.json?.data?.dryRun === true, `${dryRunRefreshInstances.url} expected dry run true`);
+    assert(dryRunRefreshInstances.json?.data?.totals?.instances === 1, `${dryRunRefreshInstances.url} expected one dry-run reusable section instance refresh`);
+
+    const refreshInstances = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}/instances`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        targetType: 'page',
+        targetId: createdReusableInstancePageId,
+        updatedBy: 'contract-smoke',
+      }),
+    });
+    assert(refreshInstances.response.status === 200, `${refreshInstances.url} expected 200, got ${refreshInstances.response.status}`);
+    assert(refreshInstances.json?.data?.totals?.targets === 1, `${refreshInstances.url} expected one reusable section refresh target`);
+    assert(refreshInstances.json?.data?.totals?.instances === 1, `${refreshInstances.url} expected one reusable section instance refresh`);
+    const refreshedInstancePage = await request(`/api/admin/sites/${createdSiteId}/pages/${createdReusableInstancePageId}`);
+    assert(refreshedInstancePage.response.status === 200, `${refreshedInstancePage.url} expected 200, got ${refreshedInstancePage.response.status}`);
+    assert(refreshedInstancePage.json?.data?.page?.content?.elements?.[0]?.id === 'contract-section-instance-root', `${refreshedInstancePage.url} did not preserve reusable instance root id`);
+    assert(refreshedInstancePage.json?.data?.page?.content?.elements?.[0]?.props?.reusableSection?.sourceUpdatedAt === update.json?.data?.section?.updatedAt, `${refreshedInstancePage.url} did not refresh reusable instance source timestamp`);
+    assert(refreshedInstancePage.json?.data?.page?.content?.elements?.[0]?.children?.[0]?.props?.content === 'Updated reusable section smoke', `${refreshedInstancePage.url} did not refresh reusable instance content`);
+    const freshInstances = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}/instances?targetType=page&targetId=${createdReusableInstancePageId}`);
+    assert(freshInstances.response.status === 200, `${freshInstances.url} expected 200, got ${freshInstances.response.status}`);
+    assert(freshInstances.json?.data?.totals?.stale === 0, `${freshInstances.url} expected refreshed reusable section instance to be current`);
 
     const restore = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}/versions/1/restore`, {
       method: 'POST',
@@ -1693,6 +1810,11 @@ try {
 
     const allList = await request(`/api/admin/sites/${createdSiteId}/reusable-sections?status=all`);
     assert(allList.json?.data?.sections?.some((section) => section.id === createdReusableSectionId), `${allList.url} missing archived section when status=all`);
+
+    const removeInstancePage = await request(`/api/admin/sites/${createdSiteId}/pages/${createdReusableInstancePageId}`, { method: 'DELETE' });
+    assert(removeInstancePage.response.status === 200, `${removeInstancePage.url} expected 200, got ${removeInstancePage.response.status}`);
+    assert(removeInstancePage.json?.data?.deleted === true, `${removeInstancePage.url} expected deleted true`);
+    createdReusableInstancePageId = null;
 
     const remove = await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${createdReusableSectionId}`, { method: 'DELETE' });
     assert(remove.response.status === 200, `${remove.url} expected 200, got ${remove.response.status}`);
