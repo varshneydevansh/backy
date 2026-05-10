@@ -20,6 +20,7 @@ import {
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
+import { seedCollectionRecordInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -295,7 +296,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
       }
 
-      const body = await parseJsonBody(request);
+      const rawBody = await parseJsonBody(request);
+      const seeded = seedCollectionRecordInputFromFrontendDesignTemplate({
+        siteSettings: site.settings,
+        body: rawBody,
+        templateType: collection.slug === 'products' ? 'product' : 'collection',
+      });
+      if (!seeded.ok) {
+        return errorResponse(400, seeded.code, seeded.message, requestId);
+      }
+      const body = seeded.body;
       const values = toRecord(body.values);
       const slug = normalizeSlug(body.slug || values.slug || values.title || values.name || 'record');
 
@@ -317,6 +327,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         collectionId: collection.id,
         slug,
         status: parseStatus(body.status) || 'draft',
+        ...(typeof body.scheduledAt === 'string' ? { scheduledAt: body.scheduledAt } : {}),
         values: toJsonRecord(values),
       })).item;
       const cacheInvalidation = await recordSiteCacheInvalidation(repositories, {
@@ -345,7 +356,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'COLLECTION_NOT_FOUND', 'Collection not found', requestId);
     }
 
-    const body = await parseJsonBody(request);
+    const rawBody = await parseJsonBody(request);
+    const seeded = seedCollectionRecordInputFromFrontendDesignTemplate({
+      siteSettings: site.settings,
+      body: rawBody,
+      templateType: collection.slug === 'products' ? 'product' : 'collection',
+    });
+    if (!seeded.ok) {
+      return errorResponse(400, seeded.code, seeded.message, requestId);
+    }
+    const body = seeded.body;
     const values = toRecord(body.values);
     const slug = normalizeSlug(body.slug || values.slug || values.title || values.name || 'record');
 

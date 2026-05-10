@@ -17,6 +17,7 @@ import {
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { buildInitialReusableSectionMetadata } from '@/lib/reusableSectionVersions';
+import { seedSectionInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
 import type { BackyJsonObject } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
@@ -162,7 +163,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const body = await parseJsonBody(request);
+      const rawBody = await parseJsonBody(request);
+      const seeded = seedSectionInputFromFrontendDesignTemplate({ siteSettings: site.settings, body: rawBody });
+      if (!seeded.ok) {
+        return errorResponse(400, seeded.code, seeded.message, requestId);
+      }
+      const body = seeded.body;
       const name = typeof body.name === 'string' ? body.name.trim() : '';
       const slug = normalizeSlug(body.slug || name);
 
@@ -237,7 +243,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const body = await parseJsonBody(request);
+    const rawBody = await parseJsonBody(request);
+    const seeded = seedSectionInputFromFrontendDesignTemplate({ siteSettings: site.settings, body: rawBody });
+    if (!seeded.ok) {
+      return errorResponse(400, seeded.code, seeded.message, requestId);
+    }
+    const body = seeded.body;
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const slug = normalizeSlug(body.slug || name);
 

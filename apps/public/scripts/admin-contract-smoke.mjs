@@ -2574,6 +2574,26 @@ try {
     assert(capturedCollectionTemplateEntry?.content?.fields?.some((field) => field.key === 'title'), `${capturedCollectionTemplate.url} did not preserve collection fields`);
     assert(capturedCollectionTemplateEntry?.routePattern === '/directory/:recordSlug', `${capturedCollectionTemplate.url} did not preserve collection route pattern`);
 
+    const createCollectionFromTemplate = await request(`/api/admin/sites/${createdSiteId}/collections`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        frontendDesignTemplateId: 'captured-collection-template',
+        name: 'Captured Template Collection',
+        slug: `${collectionSlug}-captured-template`,
+        listRoutePattern: `/directory-captured-${unique}`,
+        routePattern: `/directory-captured-${unique}/:recordSlug`,
+      }),
+    });
+    assert(createCollectionFromTemplate.response.status === 201, `${createCollectionFromTemplate.url} expected collection from captured template`);
+    const capturedTemplateCollectionId = createCollectionFromTemplate.json?.data?.collection?.id;
+    assert(capturedTemplateCollectionId, `${createCollectionFromTemplate.url} missing captured template collection id`);
+    assert(createCollectionFromTemplate.json?.data?.collection?.metadata?.frontendDesignTemplateId === 'captured-collection-template', `${createCollectionFromTemplate.url} missing captured collection provenance`);
+    assert(createCollectionFromTemplate.json?.data?.collection?.fields?.some((field) => field.key === 'title'), `${createCollectionFromTemplate.url} did not seed captured collection fields`);
+    await request(`/api/admin/sites/${createdSiteId}/collections/${capturedTemplateCollectionId}`, { method: 'DELETE' });
+
     const duplicateCollection = await request(`/api/admin/sites/${createdSiteId}/collections`, {
       method: 'POST',
       headers: {
@@ -2732,6 +2752,8 @@ try {
 
     let formWritePageId = null;
     let manifestReusableSectionId = null;
+    let capturedTemplateFormId = null;
+    let capturedTemplateSectionId = null;
     try {
       const unauthAdminForms = await fetch(`${baseUrl}/api/admin/sites/${createdSiteId}/forms`);
       const unauthAdminFormsJson = await unauthAdminForms.json().catch(() => ({}));
@@ -2892,6 +2914,23 @@ try {
       assert(capturedFormTemplateEntry?.type === 'form', `${capturedFormTemplate.url} missing captured form template`);
       assert(capturedFormTemplateEntry?.content?.fields?.some((field) => field.key === 'title'), `${capturedFormTemplate.url} did not preserve form fields`);
       assert(capturedFormTemplateEntry?.bindingHints?.some((hint) => hint.binding === 'form.fields.title'), `${capturedFormTemplate.url} missing captured form binding hints`);
+
+      const createFormFromTemplate = await request(`/api/admin/sites/${createdSiteId}/forms`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          frontendDesignTemplateId: 'captured-form-template',
+          name: `Captured Template Form ${unique}`,
+          title: 'Captured Template Form',
+        }),
+      });
+      assert(createFormFromTemplate.response.status === 201, `${createFormFromTemplate.url} expected form from captured template`);
+      capturedTemplateFormId = createFormFromTemplate.json?.data?.form?.id;
+      assert(capturedTemplateFormId, `${createFormFromTemplate.url} missing captured template form id`);
+      assert(createFormFromTemplate.json?.data?.form?.settings?.frontendDesignTemplateId === 'captured-form-template', `${createFormFromTemplate.url} missing captured form provenance`);
+      assert(createFormFromTemplate.json?.data?.form?.fields?.some((field) => field.key === 'title'), `${createFormFromTemplate.url} did not seed captured form fields`);
 
       const formWriteSubmission = await request(`/api/sites/${createdSiteId}/forms/contract-form-write/submissions`, {
         method: 'POST',
@@ -3107,6 +3146,23 @@ try {
       assert(capturedSectionTemplateEntry?.type === 'section', `${capturedSectionTemplate.url} missing captured section template`);
       assert(capturedSectionTemplateEntry?.content?.elements?.[0]?.id === 'frontend-contract-section-root', `${capturedSectionTemplate.url} did not preserve section canvas content`);
       assert(capturedSectionTemplateEntry?.routePattern === '/contract-section', `${capturedSectionTemplate.url} did not preserve section route pattern`);
+
+      const createSectionFromTemplate = await request(`/api/admin/sites/${createdSiteId}/reusable-sections`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          frontendDesignTemplateId: 'captured-section-template',
+          name: 'Captured Template Section',
+          slug: `captured-template-section-${unique}`,
+        }),
+      });
+      assert(createSectionFromTemplate.response.status === 201, `${createSectionFromTemplate.url} expected section from captured template`);
+      capturedTemplateSectionId = createSectionFromTemplate.json?.data?.section?.id;
+      assert(capturedTemplateSectionId, `${createSectionFromTemplate.url} missing captured template section id`);
+      assert(createSectionFromTemplate.json?.data?.section?.metadata?.frontendDesignTemplateId === 'captured-section-template', `${createSectionFromTemplate.url} missing captured section provenance`);
+      assert(createSectionFromTemplate.json?.data?.section?.content?.elements?.[0]?.id === 'frontend-contract-section-root', `${createSectionFromTemplate.url} did not seed captured section content`);
 
       const unauthSeo = await fetch(`${baseUrl}/api/admin/sites/${createdSiteId}/seo`);
       const unauthSeoJson = await unauthSeo.json().catch(() => ({}));
@@ -3415,8 +3471,14 @@ try {
         && rule.statusCode === 301
       )), `${publicOpenApi.url} missing redirect rule vendor extension`);
     } finally {
+      if (capturedTemplateSectionId) {
+        await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${capturedTemplateSectionId}`, { method: 'DELETE' }).catch(() => {});
+      }
       if (manifestReusableSectionId) {
         await request(`/api/admin/sites/${createdSiteId}/reusable-sections/${manifestReusableSectionId}`, { method: 'DELETE' }).catch(() => {});
+      }
+      if (capturedTemplateFormId) {
+        await request(`/api/admin/sites/${createdSiteId}/forms/${capturedTemplateFormId}`, { method: 'DELETE' }).catch(() => {});
       }
       if (formWritePageId) {
         await request(`/api/admin/sites/${createdSiteId}/pages/${formWritePageId}`, { method: 'DELETE' }).catch(() => {});
@@ -3554,6 +3616,33 @@ try {
     assert(capturedProductTemplateEntry?.type === 'product', `${capturedProductTemplate.url} missing captured product template`);
     assert(capturedProductTemplateEntry?.content?.values?.sku === `PAST-${unique}`, `${capturedProductTemplate.url} did not preserve product values`);
     assert(capturedProductTemplateEntry?.routePattern === `/products/${pastProductSlug}`, `${capturedProductTemplate.url} did not preserve product route pattern`);
+
+    const templateProductSlug = `admin-contract-template-product-${unique}`;
+    const createProductFromTemplate = await request(`/api/admin/sites/${createdSiteId}/collections/${commerceProductsCollectionId}/records`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        frontendDesignTemplateId: 'captured-product-template',
+        slug: templateProductSlug,
+        status: 'published',
+        values: {
+          title: 'Captured Template Product',
+          sku: `TEMPLATE-${unique}`,
+        },
+      }),
+    });
+    assert(createProductFromTemplate.response.status === 201, `${createProductFromTemplate.url} expected product from captured template`);
+    const capturedTemplateProductRecordId = createProductFromTemplate.json?.data?.record?.id;
+    assert(capturedTemplateProductRecordId, `${createProductFromTemplate.url} missing captured template product record id`);
+    assert(createProductFromTemplate.json?.data?.record?.values?.frontendDesignTemplateId === 'captured-product-template', `${createProductFromTemplate.url} missing captured product provenance`);
+    assert(createProductFromTemplate.json?.data?.record?.values?.price === 79, `${createProductFromTemplate.url} did not seed captured product values`);
+    assert(createProductFromTemplate.json?.data?.record?.values?.sku === `TEMPLATE-${unique}`, `${createProductFromTemplate.url} did not preserve explicit product overrides`);
+    const visibleTemplateProduct = await request(`/api/sites/${createdSiteId}/commerce/catalog?slug=${templateProductSlug}`);
+    assert(visibleTemplateProduct.response.status === 200, `${visibleTemplateProduct.url} expected visible product from captured template`);
+    assert(visibleTemplateProduct.json?.data?.products?.[0]?.design?.templateId === 'captured-product-template', `${visibleTemplateProduct.url} missing normalized captured product design`);
+    await request(`/api/admin/sites/${createdSiteId}/collections/${commerceProductsCollectionId}/records/${capturedTemplateProductRecordId}`, { method: 'DELETE' });
 
     const visibleCatalog = await request(`/api/sites/${createdSiteId}/commerce/catalog?limit=100`);
     assert(visibleCatalog.response.status === 200, `${visibleCatalog.url} expected 200, got ${visibleCatalog.response.status}`);

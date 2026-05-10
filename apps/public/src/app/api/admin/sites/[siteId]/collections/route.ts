@@ -23,6 +23,7 @@ import {
   normalizeCollectionListRoutePattern,
   normalizeCollectionRoutePattern,
 } from '@/lib/collectionRoutes';
+import { seedCollectionInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
 import { findCollectionRouteConflict } from '@/lib/routeConflicts';
 
 export const runtime = 'nodejs';
@@ -173,7 +174,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const body = await parseJsonBody(request);
+      const rawBody = await parseJsonBody(request);
+      const seeded = seedCollectionInputFromFrontendDesignTemplate({ siteSettings: site.settings, body: rawBody });
+      if (!seeded.ok) {
+        return errorResponse(400, seeded.code, seeded.message, requestId);
+      }
+      const body = seeded.body;
       const name = typeof body.name === 'string' ? body.name.trim() : '';
       const slug = normalizeSlug(body.slug || name);
 
@@ -248,7 +254,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const body = await parseJsonBody(request);
+    const rawBody = await parseJsonBody(request);
+    const seeded = seedCollectionInputFromFrontendDesignTemplate({ siteSettings: site.settings, body: rawBody });
+    if (!seeded.ok) {
+      return errorResponse(400, seeded.code, seeded.message, requestId);
+    }
+    const body = seeded.body;
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const slug = normalizeSlug(body.slug || name);
 

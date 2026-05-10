@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { FormDefinition, FormFieldDefinition } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { createAdminForm, getSiteByIdOrSlug, listFormsBySite } from '@/lib/backyStore';
+import { seedFormInputFromFrontendDesignTemplate } from '@/lib/frontendDesignContract';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -152,21 +153,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const body = await parseJsonBody(request);
-    const input = normalizeCreateInput(siteId, body);
-
-    if (!input.name || !input.title) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'Form name and title are required', requestId);
-    }
-
-    if (input.fields.length === 0) {
-      return errorResponse(400, 'VALIDATION_ERROR', 'At least one form field is required', requestId);
-    }
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
       if (!site) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      }
+
+      const seeded = seedFormInputFromFrontendDesignTemplate({ siteSettings: site.settings, body });
+      if (!seeded.ok) {
+        return errorResponse(400, seeded.code, seeded.message, requestId);
+      }
+
+      const input = normalizeCreateInput(site.id, seeded.body);
+      if (!input.name || !input.title) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Form name and title are required', requestId);
+      }
+
+      if (input.fields.length === 0) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'At least one form field is required', requestId);
       }
 
       const created = (await repositories.forms.create({
@@ -183,6 +189,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const site = getSiteByIdOrSlug(siteId);
     if (!site) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    }
+
+    const seeded = seedFormInputFromFrontendDesignTemplate({ siteSettings: site.settings, body });
+    if (!seeded.ok) {
+      return errorResponse(400, seeded.code, seeded.message, requestId);
+    }
+
+    const input = normalizeCreateInput(site.id, seeded.body);
+    if (!input.name || !input.title) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'Form name and title are required', requestId);
+    }
+
+    if (input.fields.length === 0) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'At least one form field is required', requestId);
     }
 
     const created = createAdminForm({

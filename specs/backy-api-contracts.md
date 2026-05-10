@@ -51,6 +51,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - `PATCH` accepts either the contract directly or `{ frontendDesign }`, normalizes it to `backy.frontend-design.v1`, persists it to site settings, and emits `frontendDesign.update` audit logs with before/after snapshots plus source/template/editable-map counts.
   - `POST` with `{ action: "capture-site-defaults" }` snapshots Backy-managed site defaults into a frontend design contract and emits `frontendDesign.capture` audit logs.
   - `POST` with `{ action: "capture-content-template", resourceType: "page" | "blogPost" | "form" | "product" | "collection" | "section", resourceId, collectionId?, templateId?, templateName?, routePattern? }` snapshots an existing page, blog post, form, product collection record, collection schema, or reusable section into a reusable frontend design template, preserves chrome/tokens/custom CSS/binding hints from frontend-design metadata, preserves structured form fields/settings, product values, collection fields/routes, and section canvas content, infers editable bindings from element props/data bindings, and emits `frontendDesign.template.capture` audit logs.
+  - Admin create APIs for pages, blog posts, forms, reusable sections, collections, and product records accept `frontendDesignTemplateId` or `designTemplateId`, seed missing content/schema/field/value data from the matching captured template, and store `frontendDesign*` provenance so custom frontends can continue creating content that keeps the connected frontend's chrome, tokens, routes, and editable bindings.
   - Database mode frontend-design mutations record `settings` cache invalidation events so public discovery/manifest consumers can revalidate the changed design contract.
 
 - `GET /api/sites/:siteId/openapi`
@@ -208,6 +209,7 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Admin collection records support `POST /api/admin/sites/:siteId/collections/:collectionId/records/bulk` for selected-record `updateStatus` and `delete` actions.
   - Admin record lists also support `GET /api/admin/sites/:siteId/collections/:collectionId/records?format=csv` with the same filters for backend-backed CSV export.
   - Admin collection records support `POST /api/admin/sites/:siteId/collections/:collectionId/records/import?upsert=true` for backend-validated CSV import.
+  - Admin collection creation can seed fields, permissions, route patterns, and metadata from a captured `collection` frontend design template. Product collection record creation can seed product values and design provenance from a captured `product` frontend design template; public commerce catalog products expose normalized `design.templateId`, `design.routePattern`, `design.source`, `design.tokens`, `design.chrome`, `design.customCss`, and `design.bindingHints` aliases while preserving legacy `frontendDesign*` fields.
   - Current implementation is backed by the same runtime JSON adapter as admin content. `/render` now surfaces dataset, binding, field, field option/reference, route pattern, and record manifests for collection-bound elements and generated dynamic item pages, but production completion still needs DB-backed indexes and authenticated visitor-write policies.
 
 - `GET /api/sites/:siteId/reusable-sections`
@@ -387,8 +389,9 @@ Current sites/pages admin endpoints are intentionally local file-backed. Product
   - Returns `{ success, requestId, data: { sections } }`.
 
 - `POST /api/admin/sites/:siteId/reusable-sections`
-  - Body: `{ name, slug?, description?, category?, status?, tags?, content, sourceElementId?, createdBy?, updatedBy? }`.
+  - Body: `{ name, slug?, description?, category?, status?, tags?, content, sourceElementId?, frontendDesignTemplateId?, designTemplateId?, createdBy?, updatedBy? }`.
   - Validates site existence, required name, required non-empty `content.elements`, and per-site slug conflicts.
+  - When `frontendDesignTemplateId` or `designTemplateId` points to a captured `section` template and content is omitted, Backy seeds the reusable section canvas and stores design provenance in `metadata.frontendDesign*`.
   - Stores normal canvas `content.elements` plus `canvasSize`, so saved sections can be inserted back into the same editor/rendering model.
   - Emits `reusableSection.create` admin audit logs with request-id correlation and the created section snapshot.
   - Returns `{ success, requestId, data: { section } }`.
@@ -463,6 +466,7 @@ Current reusable-section endpoints persist to `data/backy/admin-content.json` in
 - `GET /api/admin/sites/:siteId/forms/:formId/submissions`
 - `POST /api/admin/sites/:siteId/forms/:formId/submissions/:submissionId/review`
   - status transitions `pending|approved|rejected|spam`
+  - Form creation accepts `frontendDesignTemplateId` or `designTemplateId`; when it points to a captured `form` template, Backy seeds fields/settings and stores design provenance in `settings.frontendDesign*`.
 
 ### 3.6 Comments
 - `GET /api/admin/sites/:siteId/comments?targetType=page|post&status=`

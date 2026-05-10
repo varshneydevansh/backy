@@ -665,3 +665,236 @@ export const seedInputFromFrontendDesignTemplate = (
     },
   };
 };
+
+type FrontendDesignTemplateSeedResult = (
+  { ok: true; body: Record<string, unknown>; template?: FrontendDesignTemplate }
+  | { ok: false; code: string; message: string }
+);
+
+const explicitTemplateRequest = (body: Record<string, unknown>): boolean => (
+  Boolean(stringValue(body.frontendDesignTemplateId) || stringValue(body.designTemplateId))
+);
+
+const resolveTemplateSeed = (
+  siteSettings: SiteSettings | undefined,
+  body: Record<string, unknown>,
+  templateType: FrontendDesignTemplateType,
+): { ok: true; frontendDesign?: FrontendDesignContract; template?: FrontendDesignTemplate } | { ok: false; code: string; message: string } => {
+  const requestedTemplateId = templateRequestId(body);
+  if (!requestedTemplateId) {
+    return { ok: true };
+  }
+
+  const frontendDesign = siteSettings?.frontendDesign;
+  const template = findFrontendDesignTemplate(frontendDesign, templateType, requestedTemplateId);
+
+  if (!frontendDesign || !template) {
+    if (explicitTemplateRequest(body)) {
+      return {
+        ok: false,
+        code: 'FRONTEND_TEMPLATE_NOT_FOUND',
+        message: `Frontend design template "${requestedTemplateId}" is not configured for this site.`,
+      };
+    }
+
+    return { ok: true };
+  }
+
+  return { ok: true, frontendDesign, template };
+};
+
+const designProvenanceFields = (
+  frontendDesign: FrontendDesignContract,
+  template: FrontendDesignTemplate,
+  existing: unknown,
+): Record<string, unknown> => {
+  const current = cloneRecord(existing) || {};
+
+  return {
+    ...current,
+    frontendDesignTemplateId: stringValue(current.frontendDesignTemplateId) || template.id,
+    frontendDesignTemplateName: stringValue(current.frontendDesignTemplateName) || template.name,
+    frontendDesignRoutePattern: stringValue(current.frontendDesignRoutePattern) || template.routePattern,
+    frontendDesignSource: cloneRecord(current.frontendDesignSource) || cloneRecord(frontendDesign.source),
+    frontendDesignTokens: cloneRecord(current.frontendDesignTokens) || cloneRecord(frontendDesign.tokens),
+    frontendDesignChrome: cloneRecord(current.frontendDesignChrome) || cloneRecord(frontendDesign.chrome),
+    frontendDesignCustomCss: stringValue(current.frontendDesignCustomCss) || frontendDesign.tokens.customCss,
+    frontendDesignBindingHints: Array.isArray(current.frontendDesignBindingHints)
+      ? cloneArray(current.frontendDesignBindingHints)
+      : template.bindingHints ? cloneArray(template.bindingHints) : undefined,
+  };
+};
+
+const preferString = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    const text = stringValue(value);
+    if (text) return text;
+  }
+  return undefined;
+};
+
+const preferValue = <T>(...values: Array<T | undefined>): T | undefined => {
+  for (const value of values) {
+    if (value !== undefined) return value;
+  }
+  return undefined;
+};
+
+const nonEmptyArray = <T = unknown>(value: unknown): T[] | undefined => (
+  Array.isArray(value) && value.length > 0 ? cloneArray(value as T[]) : undefined
+);
+
+const templateContentRecord = (template: FrontendDesignTemplate): Record<string, unknown> => (
+  cloneRecord(template.content) || {}
+);
+
+export const seedFormInputFromFrontendDesignTemplate = (
+  input: {
+    siteSettings?: SiteSettings;
+    body: Record<string, unknown>;
+  },
+): FrontendDesignTemplateSeedResult => {
+  const seed = resolveTemplateSeed(input.siteSettings, input.body, 'form');
+  if (!seed.ok) return seed;
+  if (!seed.frontendDesign || !seed.template) {
+    return { ok: true, body: input.body };
+  }
+
+  const content = templateContentRecord(seed.template);
+  const fields = nonEmptyArray(content.fields);
+  const settings = {
+    ...(cloneRecord(content.settings) || {}),
+    ...(cloneRecord(input.body.settings) || {}),
+    ...designProvenanceFields(seed.frontendDesign, seed.template, input.body.settings),
+  };
+
+  return {
+    ok: true,
+    template: seed.template,
+    body: {
+      ...input.body,
+      name: preferString(input.body.name, content.name, content.title, seed.template.name),
+      title: preferString(input.body.title, content.title, content.name, seed.template.name),
+      description: preferValue(input.body.description, content.description),
+      audience: preferValue(input.body.audience, content.audience),
+      isActive: preferValue(input.body.isActive as boolean | undefined, content.isActive as boolean | undefined),
+      fields: nonEmptyArray(input.body.fields) || fields || [],
+      notificationEmail: preferValue(input.body.notificationEmail, content.notificationEmail),
+      notificationWebhook: preferValue(input.body.notificationWebhook, content.notificationWebhook),
+      successRedirectUrl: preferValue(input.body.successRedirectUrl, content.successRedirectUrl),
+      successMessage: preferValue(input.body.successMessage, content.successMessage),
+      enableHoneypot: preferValue(input.body.enableHoneypot as boolean | undefined, content.enableHoneypot as boolean | undefined),
+      enableCaptcha: preferValue(input.body.enableCaptcha as boolean | undefined, content.enableCaptcha as boolean | undefined),
+      moderationMode: preferValue(input.body.moderationMode, content.moderationMode),
+      contactShare: cloneRecord(input.body.contactShare) || cloneRecord(content.contactShare),
+      collectionTarget: cloneRecord(input.body.collectionTarget) || cloneRecord(content.collectionTarget),
+      settings,
+    },
+  };
+};
+
+export const seedSectionInputFromFrontendDesignTemplate = (
+  input: {
+    siteSettings?: SiteSettings;
+    body: Record<string, unknown>;
+  },
+): FrontendDesignTemplateSeedResult => {
+  const seed = resolveTemplateSeed(input.siteSettings, input.body, 'section');
+  if (!seed.ok) return seed;
+  if (!seed.frontendDesign || !seed.template) {
+    return { ok: true, body: input.body };
+  }
+
+  const content = templateContentRecord(seed.template);
+  const currentContent = cloneRecord(input.body.content);
+  const templateSection = cloneRecord(content.section);
+  const seededContent = currentContent && Array.isArray(currentContent.elements)
+    ? currentContent
+    : templateSection || content;
+
+  return {
+    ok: true,
+    template: seed.template,
+    body: {
+      ...input.body,
+      name: preferString(input.body.name, content.name, content.title, seed.template.name),
+      description: preferValue(input.body.description, content.description),
+      category: preferValue(input.body.category, content.category),
+      status: preferValue(input.body.status, content.status),
+      tags: nonEmptyArray(input.body.tags) || nonEmptyArray(content.tags),
+      content: seededContent,
+      metadata: designProvenanceFields(seed.frontendDesign, seed.template, input.body.metadata),
+    },
+  };
+};
+
+export const seedCollectionInputFromFrontendDesignTemplate = (
+  input: {
+    siteSettings?: SiteSettings;
+    body: Record<string, unknown>;
+  },
+): FrontendDesignTemplateSeedResult => {
+  const seed = resolveTemplateSeed(input.siteSettings, input.body, 'collection');
+  if (!seed.ok) return seed;
+  if (!seed.frontendDesign || !seed.template) {
+    return { ok: true, body: input.body };
+  }
+
+  const content = templateContentRecord(seed.template);
+
+  return {
+    ok: true,
+    template: seed.template,
+    body: {
+      ...input.body,
+      name: preferString(input.body.name, content.name, content.title, seed.template.name),
+      description: preferValue(input.body.description, content.description),
+      slug: preferString(input.body.slug, content.slug),
+      status: preferValue(input.body.status, content.status),
+      routePattern: preferValue(input.body.routePattern, content.routePattern, seed.template.routePattern),
+      listRoutePattern: preferValue(input.body.listRoutePattern, content.listRoutePattern),
+      fields: nonEmptyArray(input.body.fields) || nonEmptyArray(content.fields) || [],
+      permissions: cloneRecord(input.body.permissions) || cloneRecord(content.permissions),
+      metadata: {
+        ...(cloneRecord(content.metadata) || {}),
+        ...designProvenanceFields(seed.frontendDesign, seed.template, input.body.metadata),
+      },
+    },
+  };
+};
+
+export const seedCollectionRecordInputFromFrontendDesignTemplate = (
+  input: {
+    siteSettings?: SiteSettings;
+    body: Record<string, unknown>;
+    templateType?: 'product' | 'collection';
+  },
+): FrontendDesignTemplateSeedResult => {
+  const seed = resolveTemplateSeed(input.siteSettings, input.body, input.templateType || 'product');
+  if (!seed.ok) return seed;
+  if (!seed.frontendDesign || !seed.template) {
+    return { ok: true, body: input.body };
+  }
+
+  const content = templateContentRecord(seed.template);
+  const templateValues = cloneRecord(content.values) || {};
+  const currentValues = cloneRecord(input.body.values) || {};
+  const designValues = designProvenanceFields(seed.frontendDesign, seed.template, currentValues);
+  const values = {
+    ...templateValues,
+    ...currentValues,
+    ...designValues,
+  };
+
+  return {
+    ok: true,
+    template: seed.template,
+    body: {
+      ...input.body,
+      slug: preferString(input.body.slug, content.slug, templateValues.slug),
+      status: preferValue(input.body.status, content.status),
+      scheduledAt: preferValue(input.body.scheduledAt, content.scheduledAt),
+      values,
+    },
+  };
+};

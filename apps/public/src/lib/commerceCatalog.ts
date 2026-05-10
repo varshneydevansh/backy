@@ -54,6 +54,14 @@ export interface CommerceProduct {
     enabled: boolean;
   };
   design?: {
+    templateId?: string;
+    templateName?: string;
+    source?: Record<string, unknown>;
+    bindingHints?: Array<Record<string, unknown>>;
+    routePattern?: string;
+    tokens?: Record<string, unknown>;
+    chrome?: Record<string, unknown>;
+    customCss?: string;
     frontendDesignTemplateId?: string;
     frontendDesignTemplateName?: string;
     frontendDesignSource?: Record<string, unknown>;
@@ -341,6 +349,14 @@ const buildProductDesignContract = (values: Record<string, unknown>): CommercePr
   }
 
   return {
+    ...(templateId ? { templateId } : {}),
+    ...(templateName ? { templateName } : {}),
+    ...(source ? { source } : {}),
+    ...(bindingHints ? { bindingHints } : {}),
+    ...(routePattern ? { routePattern } : {}),
+    ...(tokens ? { tokens } : {}),
+    ...(chrome ? { chrome } : {}),
+    ...(customCss ? { customCss } : {}),
     ...(templateId ? { frontendDesignTemplateId: templateId } : {}),
     ...(templateName ? { frontendDesignTemplateName: templateName } : {}),
     ...(source ? { frontendDesignSource: source } : {}),
