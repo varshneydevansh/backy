@@ -6955,6 +6955,64 @@ export function getContactById(contactId: string): Contact | undefined {
   return contact ? clone(contact) : undefined;
 }
 
+export function createContactRecord(
+  input: Omit<Contact, 'id' | 'createdAt' | 'updatedAt'>,
+  options: { upsertByEmail?: boolean } = {},
+): { contact: Contact; existing: boolean } {
+  refreshPersistedInteractionStore();
+
+  const normalizedEmail = input.email ? normalizeIdentifier(input.email) : null;
+  const existing = options.upsertByEmail && normalizedEmail
+    ? contactStore.find((contact) => (
+        contact.siteId === input.siteId
+        && contact.formId === input.formId
+        && normalizeIdentifier(contact.email || '') === normalizedEmail
+      ))
+    : undefined;
+
+  if (existing) {
+    const updated: Contact = {
+      ...existing,
+      pageId: input.pageId ?? existing.pageId ?? null,
+      postId: input.postId ?? existing.postId ?? null,
+      name: input.name ?? existing.name ?? null,
+      email: input.email ?? existing.email ?? null,
+      phone: input.phone ?? existing.phone ?? null,
+      notes: input.notes ?? existing.notes ?? null,
+      sourceValues: input.sourceValues || existing.sourceValues || {},
+      status: input.status || existing.status,
+      sourceSubmissionId: input.sourceSubmissionId || existing.sourceSubmissionId,
+      requestId: input.requestId ?? existing.requestId ?? null,
+      sourceIpHash: input.sourceIpHash ?? existing.sourceIpHash ?? null,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setContactStore(contactStore.map((contact) => (contact.id === existing.id ? updated : contact)));
+    persistInteractionStore();
+    return { contact: clone(updated), existing: true };
+  }
+
+  const contact: Contact = {
+    ...input,
+    id: `contact-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    pageId: input.pageId ?? null,
+    postId: input.postId ?? null,
+    name: input.name ?? null,
+    email: input.email ?? null,
+    phone: input.phone ?? null,
+    notes: input.notes ?? null,
+    sourceValues: input.sourceValues || {},
+    sourceIpHash: input.sourceIpHash ?? null,
+    requestId: input.requestId ?? null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  setContactStore([contact, ...contactStore]);
+  persistInteractionStore();
+  return { contact: clone(contact), existing: false };
+}
+
 export function getSubmissionById(submissionId: string): FormSubmission | undefined {
   refreshPersistedInteractionStore();
 

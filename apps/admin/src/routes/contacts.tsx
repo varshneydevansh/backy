@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
@@ -17,10 +17,14 @@ import {
   Save,
   Search,
   ShieldCheck,
+  Upload,
   UserCheck,
+  UserPlus,
 } from 'lucide-react';
 import {
+  createFormContact,
   getAdminApiBase,
+  importFormContactsCsv,
   listFormContacts,
   listForms,
   updateContact,
@@ -50,6 +54,7 @@ interface ContactsSearch {
 
 const CONTACT_STATUS_FILTERS: ContactStatusFilter[] = ['all', 'new', 'contacted', 'qualified', 'archived'];
 const CONTACT_QUALITY_FILTERS: ContactQualityFilter[] = ['all', 'missing-email', 'missing-phone', 'needs-notes', 'has-source-values', 'ready-to-promote'];
+const CONTACT_IMPORT_COLUMNS = ['name', 'email', 'phone', 'status', 'notes', 'sourceValues'] as const;
 
 const isContactStatusFilter = (value: unknown): value is ContactStatusFilter => (
   typeof value === 'string' && CONTACT_STATUS_FILTERS.includes(value as ContactStatusFilter)
@@ -157,11 +162,19 @@ function ContactsRoute() {
   const [qualityFilter, setQualityFilter] = useState<ContactQualityFilter>(routeSearch.quality || 'all');
   const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
   const [bulkContactStatus, setBulkContactStatus] = useState<ContactStatus>('contacted');
+  const [contactDraft, setContactDraft] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    status: 'new' as ContactStatus,
+    notes: '',
+  });
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const contactImportInputRef = useRef<HTMLInputElement | null>(null);
   const isContactMutationBusy = updatingId !== null;
   const isContactsBusy = isLoading || isContactMutationBusy;
 
@@ -182,6 +195,12 @@ function ContactsRoute() {
     : '';
   const contactUpdateUrl = apiForm
     ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts/{contactId}`
+    : '';
+  const contactCreateUrl = apiForm
+    ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts`
+    : '';
+  const contactImportUrl = apiForm
+    ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts/import?upsertByEmail=true`
     : '';
   const allContacts = useMemo(
     () => Object.values(contactsByForm).flatMap((inbox) => inbox.contacts),
@@ -383,11 +402,15 @@ function ContactsRoute() {
     endpoints: {
       selectedContacts: contactsUrl,
       selectedUpdate: contactUpdateUrl,
+      selectedCreate: contactCreateUrl,
+      selectedImport: contactImportUrl,
       formContacts: forms.map((form) => ({
         formId: form.id,
         label: form.title || form.name || form.id,
         list: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts?limit=100`,
         update: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/{contactId}`,
+        create: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts`,
+        import: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/import?upsertByEmail=true`,
       })),
     },
     controlRoutes: {
@@ -480,6 +503,8 @@ function ContactsRoute() {
     allVisibleContactsSelected,
     apiForm,
     bulkContactStatus,
+    contactCreateUrl,
+    contactImportUrl,
     commandReadiness.checks,
     commandReadiness.score,
     contactUpdateUrl,
@@ -785,6 +810,128 @@ function ContactsRoute() {
     anchor.remove();
     URL.revokeObjectURL(url);
   };
+
+  const downloadContactImportTemplate = () => {
+    const rows = [
+      CONTACT_IMPORT_COLUMNS,
+      [
+        'Imported Lead',
+        'lead@example.com',
+        '+1 555 0199',
+        'new',
+        'Imported from offline event.',
+        JSON.stringify({ source: 'csv', campaign: 'spring-launch' }),
+      ],
+    ];
+    const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${activeSiteId}-contacts-template.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setNotice('Contact import template downloaded.');
+  };
+
+  const handleCreateContact = async () => {
+    if (isContactsBusy) return;
+    if (!apiForm) {
+      setError(null);
+      setNotice('Select one source form before creating a contact.');
+      return;
+    }
+
+    const name = contactDraft.name.trim();
+    const email = contactDraft.email.trim();
+    const phone = contactDraft.phone.trim();
+    const notes = contactDraft.notes.trim();
+    if (!name && !email && !phone) {
+      setNotice(null);
+      setError('Contact requires a name, email, or phone.');
+      return;
+    }
+
+    setUpdatingId('create-contact');
+    setError(null);
+    setNotice(null);
+
+    try {
+      const created = await createFormContact(activeSiteId, apiForm.id, {
+        name: name || null,
+        email: email || null,
+        phone: phone || null,
+        notes: notes || null,
+        status: contactDraft.status,
+        sourceValues: { source: 'manual' },
+        upsertByEmail: true,
+      });
+      setContactsByForm((current) => {
+        const inbox = current[apiForm.id];
+        if (!inbox) return current;
+        const exists = inbox.contacts.some((contact) => contact.id === created.id);
+
+        return {
+          ...current,
+          [apiForm.id]: {
+            ...inbox,
+            contacts: exists
+              ? inbox.contacts.map((contact) => (contact.id === created.id ? created : contact))
+              : [created, ...inbox.contacts],
+            total: exists ? inbox.total : inbox.total + 1,
+          },
+        };
+      });
+      setContactDraft({ name: '', email: '', phone: '', status: 'new', notes: '' });
+      setNotice(`${created.name || created.email || 'Contact'} saved to ${apiForm.title || apiForm.name}.`);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Unable to create contact');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleImportContacts = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (isContactsBusy) return;
+
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    if (!apiForm) {
+      setError(null);
+      setNotice('Select one source form before importing contacts.');
+      return;
+    }
+
+    setUpdatingId('import-contacts');
+    setError(null);
+    setNotice(null);
+
+    try {
+      const csv = await file.text();
+      const result = await importFormContactsCsv(activeSiteId, apiForm.id, csv, { upsertByEmail: true });
+      const refreshed = await listFormContacts(activeSiteId, apiForm.id, { limit: 100 });
+      setContactsByForm((current) => ({
+        ...current,
+        [apiForm.id]: {
+          form: apiForm,
+          contacts: refreshed.contacts,
+          total: refreshed.count,
+        },
+      }));
+      setSelectedFormId(apiForm.id);
+      setNotice(`Imported ${result.created} contact${result.created === 1 ? '' : 's'}${result.updated ? ` and updated ${result.updated}` : ''}${result.skipped ? `, ${result.skipped} skipped` : ''}.`);
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : 'Unable to import contacts');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const clearContactFilters = () => {
     if (isContactsBusy) return;
 
@@ -880,6 +1027,14 @@ function ContactsRoute() {
         </div>
       }
     >
+      <input
+        ref={contactImportInputRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        onChange={(event) => void handleImportContacts(event)}
+        aria-label="Import contacts CSV"
+      />
       {error && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {error}
@@ -927,6 +1082,18 @@ function ContactsRoute() {
               iconStart={<Download className="size-4" />}
             >
               Export CSV
+            </Button>
+            <Button variant="outline" onClick={downloadContactImportTemplate} disabled={isContactsBusy} iconStart={<FileText className="size-4" />}>
+              CSV template
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => contactImportInputRef.current?.click()}
+              disabled={!apiForm || isContactsBusy}
+              iconStart={<Upload className="size-4" />}
+              data-testid="contacts-import-csv"
+            >
+              Import CSV
             </Button>
             <Button onClick={() => void loadContacts()} disabled={isContactsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh contacts
@@ -1065,6 +1232,14 @@ function ContactsRoute() {
               >
                 Export CSV
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => contactImportInputRef.current?.click()}
+                disabled={!apiForm || isContactsBusy}
+                iconStart={<Upload className="size-4" />}
+              >
+                Import CSV
+              </Button>
               <Button variant="outline" onClick={openFormsWorkspace} disabled={isContactsBusy} iconStart={<Mail className="size-4" />}>
                 Forms
               </Button>
@@ -1166,9 +1341,11 @@ function ContactsRoute() {
                 <MetaTile label="Selected" value={`${selectedContactIds.length} contact${selectedContactIds.length === 1 ? '' : 's'}`} />
               </div>
 
-              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
                 <ApiSnippet label="List contacts" value={contactsUrl} />
                 <ApiSnippet label="Update contact" value={contactUpdateUrl} />
+                <ApiSnippet label="Create contact" value={contactCreateUrl} />
+                <ApiSnippet label="Import contacts" value={contactImportUrl} />
               </div>
             </div>
           ) : (
@@ -1189,6 +1366,112 @@ function ContactsRoute() {
               </div>
             </div>
           )}
+
+          <div className="mb-4 rounded-lg border border-border bg-card p-4" data-testid="contacts-create-contact">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <UserPlus className="size-4 text-primary" />
+                  Add contact
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {apiForm
+                    ? `Create or update one lead in ${apiForm.title || apiForm.name}.`
+                    : 'Select one source form before creating or importing contacts.'}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={downloadContactImportTemplate}
+                  disabled={isContactsBusy}
+                  iconStart={<FileText className="size-4" />}
+                  data-testid="contacts-import-template"
+                >
+                  CSV template
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => contactImportInputRef.current?.click()}
+                  disabled={!apiForm || isContactsBusy}
+                  iconStart={<Upload className="size-4" />}
+                >
+                  Import CSV
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_10rem]">
+              <label className="text-xs font-medium text-muted-foreground">
+                Name
+                <input
+                  value={contactDraft.name}
+                  disabled={!apiForm || isContactsBusy}
+                  onChange={(event) => setContactDraft((current) => ({ ...current, name: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="Lead name"
+                />
+              </label>
+              <label className="text-xs font-medium text-muted-foreground">
+                Email
+                <input
+                  value={contactDraft.email}
+                  disabled={!apiForm || isContactsBusy}
+                  onChange={(event) => setContactDraft((current) => ({ ...current, email: event.target.value }))}
+                  type="email"
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="lead@example.com"
+                />
+              </label>
+              <label className="text-xs font-medium text-muted-foreground">
+                Phone
+                <input
+                  value={contactDraft.phone}
+                  disabled={!apiForm || isContactsBusy}
+                  onChange={(event) => setContactDraft((current) => ({ ...current, phone: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="+1 555 0100"
+                />
+              </label>
+              <label className="text-xs font-medium text-muted-foreground">
+                Status
+                <select
+                  value={contactDraft.status}
+                  disabled={!apiForm || isContactsBusy}
+                  onChange={(event) => setContactDraft((current) => ({ ...current, status: event.target.value as ContactStatus }))}
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {CONTACT_STATUS_FILTERS.filter((status): status is ContactStatus => status !== 'all').map((status) => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
+              <label className="text-xs font-medium text-muted-foreground">
+                Notes
+                <textarea
+                  value={contactDraft.notes}
+                  disabled={!apiForm || isContactsBusy}
+                  onChange={(event) => setContactDraft((current) => ({ ...current, notes: event.target.value }))}
+                  rows={2}
+                  className="mt-1 w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="Follow-up context or source details."
+                />
+              </label>
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  disabled={!apiForm || isContactsBusy}
+                  onClick={() => void handleCreateContact()}
+                  iconStart={<UserPlus className="size-4" />}
+                >
+                  Save contact
+                </Button>
+              </div>
+            </div>
+          </div>
 
           <div id="contacts-actions" className="mb-4 flex flex-wrap items-center gap-3 scroll-mt-24">
             <div className="relative min-w-64 flex-1">

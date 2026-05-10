@@ -369,7 +369,12 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
             if (input.email !== undefined) updates.email = input.email;
             if (input.phone !== undefined) updates.phone = input.phone;
             if (input.notes !== undefined) updates.notes = input.notes;
+            if (input.pageId !== undefined) updates.pageId = input.pageId;
+            if (input.postId !== undefined) updates.postId = input.postId;
             if (input.sourceValues !== undefined) updates.sourceValues = input.sourceValues;
+            if (input.sourceSubmissionId !== undefined) updates.sourceSubmissionId = input.sourceSubmissionId;
+            if (input.requestId !== undefined) updates.requestId = input.requestId;
+            if (input.sourceIpHash !== undefined) updates.sourceIpHash = input.sourceIpHash;
 
             const [row] = await database.update(formContacts).set(updates).where(and(eq(formContacts.siteId, siteId), eq(formContacts.id, contactId))).returning() as ContactRow[];
             return { item: toContact(row) };

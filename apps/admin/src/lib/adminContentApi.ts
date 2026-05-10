@@ -626,10 +626,26 @@ interface ApiContactResponse {
   success: boolean;
   data?: {
     contact: Contact;
+    created?: boolean;
+    updated?: boolean;
   };
   contact?: Contact;
   error?: {
     message?: string;
+    details?: unknown;
+  };
+}
+
+interface ApiImportContactsResponse {
+  success: boolean;
+  data?: {
+    formId: string;
+    contacts: Contact[];
+    import: ContactImportResult;
+  };
+  error?: {
+    message?: string;
+    details?: unknown;
   };
 }
 
@@ -1348,6 +1364,31 @@ export interface ContactListResult {
   contacts: AdminContact[];
   count: number;
   pagination: ApiPagination;
+}
+
+export interface ContactInput {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  notes?: string | null;
+  status?: ContactStatus;
+  pageId?: string | null;
+  postId?: string | null;
+  requestId?: string | null;
+  sourceValues?: Record<string, unknown>;
+  upsertByEmail?: boolean;
+}
+
+export interface ContactImportResult {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: Array<{
+    row: number;
+    email?: string;
+    message: string;
+    details?: unknown;
+  }>;
 }
 
 export type CommentModerationStatus = CommentStatus;
@@ -2991,6 +3032,53 @@ export async function updateContact(
   }
 
   return contact;
+}
+
+export async function createFormContact(
+  siteId: string,
+  formId: string,
+  input: ContactInput,
+): Promise<AdminContact> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/contacts`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiContactResponse>(response);
+  const contact = payload.data?.contact || payload.contact;
+
+  if (!response.ok || !payload.success || !contact) {
+    throw new AdminContentApiError(payload.error?.message || 'Unable to create contact', payload.error?.details);
+  }
+
+  return contact;
+}
+
+export async function importFormContactsCsv(
+  siteId: string,
+  formId: string,
+  csv: string,
+  options: { upsertByEmail?: boolean } = {},
+): Promise<ContactImportResult> {
+  const query = new URLSearchParams();
+  if (options.upsertByEmail) query.set('upsertByEmail', 'true');
+
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/contacts/import?${query.toString()}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+    },
+    body: csv,
+  });
+  const payload = await readJson<ApiImportContactsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new AdminContentApiError(payload.error?.message || 'Unable to import contacts', payload.error?.details);
+  }
+
+  return payload.data.import;
 }
 
 export async function listComments(

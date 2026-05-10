@@ -125,6 +125,44 @@ const listContacts = async (formId) => {
   return payload.data?.contacts || payload.contacts || [];
 };
 
+const createContactDirectly = async (formId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/contacts`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Contacts Direct User',
+      email: 'contacts-direct@example.com',
+      phone: '+1 555 0191',
+      status: 'contacted',
+      notes: 'Created by contacts smoke API.',
+      sourceValues: { source: 'api-smoke' },
+      upsertByEmail: true,
+    }),
+  });
+  const contact = payload.data?.contact || payload.contact;
+  assert(contact?.id, `Direct contact create did not return a contact: ${JSON.stringify(payload).slice(0, 500)}`);
+  return contact;
+};
+
+const importContactsCsv = async (formId) => {
+  const csv = [
+    ['name', 'email', 'phone', 'status', 'notes', 'sourceValues'],
+    ['Contacts Imported User', 'contacts-import@example.com', '+1 555 0192', 'qualified', 'Imported by contacts smoke.', '{"source":"csv-smoke"}'],
+  ].map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const response = await fetch(`${API_BASE_URL}/api/admin/sites/${SITE_ID}/forms/${formId}/contacts/import?upsertByEmail=true`, {
+    method: 'POST',
+    headers: { 'content-type': 'text/csv; charset=utf-8' },
+    body: csv,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) {
+    throw new Error(`Contact CSV import failed: ${response.status} ${JSON.stringify(payload).slice(0, 500)}`);
+  }
+
+  const result = payload.data?.import;
+  assert(result?.created === 1, `Contact CSV import should create one contact: ${JSON.stringify(payload).slice(0, 500)}`);
+  return payload.data?.contacts?.[0];
+};
+
 const fetchJson = async (endpoint) => {
   const response = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
   if (!response.ok) {
@@ -386,14 +424,27 @@ const assertLayout = async (client) => {
   const layout = await evaluate(client, `(() => ({
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
-    hasCommandCenter: Boolean(document.querySelector('[data-testid="contacts-command-center"]')),
-    hasBulkActions: Boolean(document.querySelector('[data-testid="contacts-bulk-actions"]')),
-    hasInbox: document.body?.innerText?.includes('Lead Inbox') || false,
-    hasApi: document.body?.innerText?.includes('Contact pipeline API') || false,
-    hasLead: document.body?.innerText?.includes('contacts-smoke@example.com') || false,
+      hasCommandCenter: Boolean(document.querySelector('[data-testid="contacts-command-center"]')),
+      hasBulkActions: Boolean(document.querySelector('[data-testid="contacts-bulk-actions"]')),
+      hasCreateContact: Boolean(document.querySelector('[data-testid="contacts-create-contact"]')),
+      hasImportCsv: Boolean(document.querySelector('[data-testid="contacts-import-csv"]')),
+      hasImportTemplate: Boolean(document.querySelector('[data-testid="contacts-import-template"]')),
+      hasInbox: document.body?.innerText?.includes('Lead Inbox') || false,
+      hasApi: document.body?.innerText?.includes('Contact pipeline API') || false,
+      hasLead: document.body?.innerText?.includes('contacts-smoke@example.com') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Contacts page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasBulkActions && layout.hasInbox && layout.hasApi && layout.hasLead, `Contacts page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(
+    layout.hasCommandCenter
+    && layout.hasBulkActions
+    && layout.hasCreateContact
+    && layout.hasImportCsv
+    && layout.hasImportTemplate
+    && layout.hasInbox
+    && layout.hasApi
+    && layout.hasLead,
+    `Contacts page missing expected regions: ${JSON.stringify(layout)}`,
+  );
   return layout;
 };
 
@@ -444,11 +495,15 @@ const main = async () => {
   const { childProcess, userDataDir } = launchChrome();
 
   try {
+    const directContact = await createContactDirectly(form.id);
+    const importedContact = await importContactsCsv(form.id);
     const submission = await submitLead(form.id);
     const contacts = await listContacts(form.id);
     const contact = contacts.find((item) => item.email === 'contacts-smoke@example.com');
     assert(contact?.id, `Lead submission did not create a contact: ${JSON.stringify(contacts).slice(0, 500)}`);
     assert(contact.status === 'new', `New contact should start with new status: ${contact.status}`);
+    assert(contacts.some((item) => item.id === directContact.id && item.status === 'contacted'), 'Direct contact create did not persist.');
+    assert(contacts.some((item) => item.id === importedContact.id && item.status === 'qualified'), 'Imported contact did not persist.');
 
     await waitForCdp();
     const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
@@ -500,6 +555,14 @@ const main = async () => {
         id: updatedContact.id,
         status: updatedContact.status,
         notes: updatedContact.notes,
+      },
+      directContact: {
+        id: directContact.id,
+        status: directContact.status,
+      },
+      importedContact: {
+        id: importedContact.id,
+        status: importedContact.status,
       },
       layout,
       cleaned,
