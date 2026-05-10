@@ -173,6 +173,88 @@ const navigateToPageCreate = async (client, slug, title, navLabel) => {
   return null;
 };
 
+const assertAutosaveWritten = async (client, slug, title, navLabel) => {
+  let state = null;
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const raw = localStorage.getItem('backy:page-new:draft:v1');
+      const parsed = raw ? JSON.parse(raw) : null;
+      return {
+        hasDraft: Boolean(parsed),
+        title: parsed?.formData?.title || null,
+        slug: parsed?.formData?.slug || null,
+        template: parsed?.formData?.template || null,
+        navigationPlacement: parsed?.formData?.navigationPlacement || null,
+        navigationLabel: parsed?.formData?.navigationLabel || null,
+        badge: Array.from(document.querySelectorAll('span')).map((node) => node.textContent || '').find((text) => /Autosaved|Saving draft|Autosave/.test(text)) || '',
+      };
+    })()`);
+
+    if (state.hasDraft) {
+      break;
+    }
+
+    await sleep(250);
+  }
+
+  assert(state.hasDraft, `Autosave draft was not written: ${JSON.stringify(state)}`);
+  assert(state.title === title, `Autosave title mismatch: ${JSON.stringify(state)}`);
+  assert(state.slug === slug, `Autosave slug mismatch: ${JSON.stringify(state)}`);
+  assert(state.template === 'about', `Autosave template mismatch: ${JSON.stringify(state)}`);
+  assert(state.navigationPlacement === 'primary', `Autosave navigation placement mismatch: ${JSON.stringify(state)}`);
+  assert(state.navigationLabel === navLabel, `Autosave navigation label mismatch: ${JSON.stringify(state)}`);
+  return state;
+};
+
+const assertRecoveryRestore = async (client, slug, title, navLabel) => {
+  await client.send('Page.reload', { ignoreCache: true });
+  await sleep(500);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      recovery: Boolean(document.querySelector('[data-testid="page-create-recovery"]')),
+      restore: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Restore draft'),
+      body: document.body?.innerText?.slice(0, 260) || '',
+    }))()`);
+
+    if (state.recovery && state.restore) {
+      break;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Autosave recovery banner did not render: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  const restored = await evaluate(client, `(() => {
+    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').trim() === 'Restore draft');
+    if (!(button instanceof HTMLButtonElement)) {
+      return { clicked: false };
+    }
+    button.click();
+    return { clicked: true };
+  })()`);
+  assert(restored.clicked, `Restore draft button was not clickable: ${JSON.stringify(restored)}`);
+  await sleep(500);
+
+  const state = await evaluate(client, `(() => ({
+    title: document.querySelector('#page-title')?.value || '',
+    slug: document.querySelector('#page-slug')?.value || '',
+    navPlacement: document.querySelector('#page-navigation-placement-select')?.value || '',
+    navLabel: document.querySelector('#page-navigation-label')?.value || '',
+    notice: document.body?.innerText?.includes('Recovered local page draft.') || false,
+  }))()`);
+
+  assert(state.title === title, `Recovered draft title mismatch: ${JSON.stringify(state)}`);
+  assert(state.slug === slug, `Recovered draft slug mismatch: ${JSON.stringify(state)}`);
+  assert(state.navPlacement === 'primary', `Recovered draft navigation placement mismatch: ${JSON.stringify(state)}`);
+  assert(state.navLabel === navLabel, `Recovered draft navigation label mismatch: ${JSON.stringify(state)}`);
+  return state;
+};
+
 const createPageFromUi = async (client) => {
   let clicked = null;
   for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -200,10 +282,12 @@ const createPageFromUi = async (client) => {
     editState = await evaluate(client, `(() => ({
       path: window.location.pathname,
       search: window.location.search,
+      storedDraft: localStorage.getItem('backy:page-new:draft:v1'),
       body: document.body?.innerText?.slice(0, 260) || '',
     }))()`);
 
     if (editState.path.startsWith('/pages/') && editState.path.endsWith('/edit')) {
+      assert(editState.storedDraft === null, `Autosave draft was not cleared after create: ${JSON.stringify(editState)}`);
       return editState;
     }
 
@@ -328,6 +412,8 @@ const main = async () => {
     });
 
     const initialRender = await navigateToPageCreate(client, slug, title, navLabel);
+    const autosave = await assertAutosaveWritten(client, slug, title, navLabel);
+    const recovery = await assertRecoveryRestore(client, slug, title, navLabel);
     const editState = await createPageFromUi(client);
     pageId = editState.path.split('/').filter(Boolean).at(-2);
     const navigationItem = await assertNavigationContainsPage(pageId, navLabel);
@@ -348,6 +434,8 @@ const main = async () => {
       ok: true,
       url: initialRender.url,
       initialRender: initialRender.state,
+      autosave,
+      recovery,
       editState,
       pageId,
       navigationItem,

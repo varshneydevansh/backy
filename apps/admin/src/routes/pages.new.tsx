@@ -37,6 +37,27 @@ type PageTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'about' 
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 
+interface PageCreateDraftState {
+    title: string;
+    slug: string;
+    siteId: string;
+    template: PageTemplate;
+    status: PageCreationStatus;
+    scheduledAt: string | null;
+    isHomepage: boolean;
+    description: string;
+    navigationPlacement: PageNavigationPlacement;
+    navigationLabel: string;
+}
+
+interface PageCreateAutosaveDraft {
+    version: 1;
+    savedAt: string;
+    formData: PageCreateDraftState;
+}
+
+const PAGE_CREATE_AUTOSAVE_KEY = 'backy:page-new:draft:v1';
+
 const TEMPLATE_OPTIONS: Array<{
     id: PageTemplate;
     name: string;
@@ -245,6 +266,11 @@ function NewPageRoute() {
     const [notice, setNotice] = useState<string | null>(null);
     const [routeCheckError, setRouteCheckError] = useState<string | null>(null);
     const [routeCheckRetry, setRouteCheckRetry] = useState(0);
+    const [hasHydratedAutosave, setHasHydratedAutosave] = useState(false);
+    const [draftRecovery, setDraftRecovery] = useState<PageCreateAutosaveDraft | null>(null);
+    const [autosavePausedForRecovery, setAutosavePausedForRecovery] = useState(false);
+    const [lastAutosavedAt, setLastAutosavedAt] = useState<string | null>(null);
+    const [autosaveStatus, setAutosaveStatus] = useState('Autosave ready');
     const isPageCreateBusy = isLoading || isCheckingPages;
     const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
     const requestedSite = search.siteId
@@ -255,7 +281,7 @@ function NewPageRoute() {
     const templateDefaults = TEMPLATE_DEFAULTS[initialTemplate];
 
     // Default to first site if available
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<PageCreateDraftState>({
         title: search.title ?? templateDefaults.title,
         slug: search.isHomepage ? 'home' : search.slug ?? templateDefaults.slug,
         siteId: requestedSiteId,
@@ -293,6 +319,27 @@ function NewPageRoute() {
         setNotice(null);
         navigate({ to: '/pages/new', search: buildRouteSearchFromForm(nextFormData), replace: true });
     };
+
+    useEffect(() => {
+        try {
+            const storedDraft = window.localStorage.getItem(PAGE_CREATE_AUTOSAVE_KEY);
+            if (storedDraft) {
+                const parsedDraft = JSON.parse(storedDraft) as Partial<PageCreateAutosaveDraft>;
+                if (isRecoverablePageCreateDraft(parsedDraft)) {
+                    setDraftRecovery(parsedDraft);
+                    setAutosavePausedForRecovery(true);
+                    setAutosaveStatus('Recovered draft available');
+                    setLastAutosavedAt(parsedDraft.savedAt);
+                } else {
+                    window.localStorage.removeItem(PAGE_CREATE_AUTOSAVE_KEY);
+                }
+            }
+        } catch {
+            window.localStorage.removeItem(PAGE_CREATE_AUTOSAVE_KEY);
+        } finally {
+            setHasHydratedAutosave(true);
+        }
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -677,6 +724,100 @@ function NewPageRoute() {
         selectedTemplate.sections,
     ]);
     const creationHandoffText = useMemo(() => JSON.stringify(creationHandoff, null, 2), [creationHandoff]);
+    const hasAutosaveContent = useMemo(() => (
+        formData.title.trim().length > 0
+        || formData.slug.trim().length > 0
+        || formData.description.trim().length > 0
+        || formData.template !== 'blank'
+        || formData.status !== 'draft'
+        || Boolean(formData.scheduledAt)
+        || formData.isHomepage
+        || formData.navigationPlacement !== DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[formData.template]
+        || formData.navigationLabel.trim().length > 0
+    ), [
+        formData.description,
+        formData.isHomepage,
+        formData.navigationLabel,
+        formData.navigationPlacement,
+        formData.scheduledAt,
+        formData.slug,
+        formData.status,
+        formData.template,
+        formData.title,
+    ]);
+
+    useEffect(() => {
+        if (!hasHydratedAutosave || autosavePausedForRecovery || isLoading) {
+            return;
+        }
+
+        if (!hasAutosaveContent) {
+            window.localStorage.removeItem(PAGE_CREATE_AUTOSAVE_KEY);
+            setLastAutosavedAt(null);
+            setAutosaveStatus('Autosave ready');
+            return;
+        }
+
+        setAutosaveStatus('Saving draft...');
+        const autosaveTimer = window.setTimeout(() => {
+            try {
+                const savedAt = new Date().toISOString();
+                const draft: PageCreateAutosaveDraft = {
+                    version: 1,
+                    savedAt,
+                    formData,
+                };
+                window.localStorage.setItem(PAGE_CREATE_AUTOSAVE_KEY, JSON.stringify(draft));
+                setLastAutosavedAt(savedAt);
+                setAutosaveStatus(`Autosaved ${new Date(savedAt).toLocaleTimeString()}`);
+            } catch {
+                setAutosaveStatus('Autosave failed');
+            }
+        }, 800);
+
+        return () => window.clearTimeout(autosaveTimer);
+    }, [
+        autosavePausedForRecovery,
+        formData,
+        hasAutosaveContent,
+        hasHydratedAutosave,
+        isLoading,
+    ]);
+
+    const clearAutosavedDraft = () => {
+        window.localStorage.removeItem(PAGE_CREATE_AUTOSAVE_KEY);
+        setDraftRecovery(null);
+        setAutosavePausedForRecovery(false);
+        setLastAutosavedAt(null);
+        setAutosaveStatus('Autosave ready');
+    };
+
+    const restoreRecoveredDraft = () => {
+        if (!draftRecovery || isPageCreateBusy) return;
+
+        setFormData(draftRecovery.formData);
+        setDraftRecovery(null);
+        setAutosavePausedForRecovery(false);
+        setLastAutosavedAt(draftRecovery.savedAt);
+        setAutosaveStatus('Recovered draft restored');
+        setError(null);
+        setNotice('Recovered local page draft.');
+        navigate({ to: '/pages/new', search: buildRouteSearchFromForm(draftRecovery.formData), replace: true });
+    };
+
+    const discardRecoveredDraft = () => {
+        if (isPageCreateBusy) return;
+
+        clearAutosavedDraft();
+        setError(null);
+        setNotice('Recovered draft discarded.');
+    };
+
+    const autosaveLabel = draftRecovery
+        ? `Recovery from ${new Date(draftRecovery.savedAt).toLocaleTimeString()}`
+        : lastAutosavedAt
+            ? `Autosaved ${new Date(lastAutosavedAt).toLocaleTimeString()}`
+            : autosaveStatus;
 
     const copyCreationText = async (value: string, label: string) => {
         if (isPageCreateBusy) return;
@@ -771,6 +912,7 @@ function NewPageRoute() {
             } catch (navigationError) {
                 console.warn('Page was created, but navigation placement failed.', navigationError);
             }
+            clearAutosavedDraft();
             setPages([created, ...pages.filter((page) => page.id !== created.id)]);
             navigate({ to: '/pages/$pageId/edit', params: { pageId: created.id }, search: { siteId: formData.siteId } });
         } catch (createError) {
@@ -815,6 +957,17 @@ function NewPageRoute() {
                             )}
                             >
                                 {pageCreationReadiness.score}% ready
+                            </span>
+                            <span className={cn(
+                                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                                draftRecovery
+                                    ? 'bg-sky-50 text-sky-700'
+                                    : autosaveStatus === 'Autosave failed'
+                                        ? 'bg-red-50 text-red-700'
+                                        : 'bg-slate-100 text-slate-700',
+                            )}
+                            >
+                                {autosaveLabel}
                             </span>
                         </div>
                         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
@@ -952,6 +1105,34 @@ function NewPageRoute() {
                 {notice && (
                     <div className="xl:col-span-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
                         {notice}
+                    </div>
+                )}
+
+                {draftRecovery && (
+                    <div className="xl:col-span-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900" data-testid="page-create-recovery">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <span>
+                                Local autosave found a page draft from {new Date(draftRecovery.savedAt).toLocaleString()} for {draftRecovery.formData.siteId}.
+                            </span>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={discardRecoveredDraft}
+                                    disabled={isPageCreateBusy}
+                                    className="inline-flex items-center justify-center rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs font-semibold text-sky-900 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    Discard recovery
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={restoreRecoveredDraft}
+                                    disabled={isPageCreateBusy}
+                                    className="inline-flex items-center justify-center rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    Restore draft
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
 
@@ -1415,6 +1596,26 @@ function PageCreationWorkflowStep({ index, label, detail }: { index: number; lab
         </div>
     );
 }
+
+const isRecoverablePageCreateDraft = (value: Partial<PageCreateAutosaveDraft>): value is PageCreateAutosaveDraft => {
+    const formData = value.formData;
+
+    return (
+        value.version === 1
+        && typeof value.savedAt === 'string'
+        && Boolean(formData)
+        && typeof formData?.title === 'string'
+        && typeof formData.slug === 'string'
+        && typeof formData.siteId === 'string'
+        && isPageTemplate(formData.template)
+        && isPageCreationStatus(formData.status)
+        && (typeof formData.scheduledAt === 'string' || formData.scheduledAt === null)
+        && typeof formData.isHomepage === 'boolean'
+        && typeof formData.description === 'string'
+        && isPageNavigationPlacement(formData.navigationPlacement)
+        && typeof formData.navigationLabel === 'string'
+    );
+};
 
 async function applyPageNavigationPlacement(input: {
     siteId: string;
