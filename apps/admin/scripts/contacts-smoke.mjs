@@ -326,17 +326,74 @@ const updateContactInUi = async (client, contactId) => {
   throw new Error(`Contact ${contactId.id} did not become qualified`);
 };
 
+const archiveContactWithBulkAction = async (client, contactId) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="contacts-bulk-actions"]');
+      const card = Array.from(document.querySelectorAll('article')).find((candidate) => (
+        (candidate.textContent || '').includes('contacts-smoke@example.com')
+      ));
+      const checkbox = card?.querySelector('input[type="checkbox"][aria-label^="Select contact"]');
+      const status = panel?.querySelector('select[aria-label="Bulk contact lifecycle status"]');
+      const apply = Array.from(panel?.querySelectorAll('button') || []).find((button) => (
+        (button.textContent || '').includes('Apply lifecycle')
+      ));
+
+      if (!(panel instanceof HTMLElement) || !(card instanceof HTMLElement) || !(checkbox instanceof HTMLInputElement) || !(status instanceof HTMLSelectElement) || !(apply instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'bulk-controls-missing', body: document.body?.innerText?.slice(0, 800) || '' };
+      }
+
+      if (!checkbox.checked) {
+        checkbox.click();
+      }
+
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+      descriptor?.set?.call(status, 'archived');
+      status.dispatchEvent(new Event('input', { bubbles: true }));
+      status.dispatchEvent(new Event('change', { bubbles: true }));
+
+      if (apply.disabled) {
+        return { ok: false, reason: 'apply-disabled', selected: checkbox.checked, value: status.value };
+      }
+
+      apply.click();
+      return { ok: true };
+    })()`);
+
+    if (result.ok) break;
+
+    if (attempt === 79) {
+      throw new Error(`Unable to run bulk contact archive in UI: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const contacts = await listContacts(contactId.formId);
+    const contact = contacts.find((item) => item.id === contactId.id);
+    if (contact?.status === 'archived' && contact.notes === 'Qualified in contacts smoke.') {
+      return contact;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Contact ${contactId.id} did not archive through bulk lifecycle controls`);
+};
+
 const assertLayout = async (client) => {
   const layout = await evaluate(client, `(() => ({
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="contacts-command-center"]')),
+    hasBulkActions: Boolean(document.querySelector('[data-testid="contacts-bulk-actions"]')),
     hasInbox: document.body?.innerText?.includes('Lead Inbox') || false,
     hasApi: document.body?.innerText?.includes('Contact pipeline API') || false,
     hasLead: document.body?.innerText?.includes('contacts-smoke@example.com') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Contacts page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasInbox && layout.hasApi && layout.hasLead, `Contacts page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasBulkActions && layout.hasInbox && layout.hasApi && layout.hasLead, `Contacts page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
@@ -408,7 +465,8 @@ const main = async () => {
     });
 
     await navigateToContacts(client, form.id);
-    const updatedContact = await updateContactInUi(client, { id: contact.id, formId: form.id });
+    await updateContactInUi(client, { id: contact.id, formId: form.id });
+    const updatedContact = await archiveContactWithBulkAction(client, { id: contact.id, formId: form.id });
     const layout = await assertLayout(client);
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });

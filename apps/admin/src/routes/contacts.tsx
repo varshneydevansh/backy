@@ -155,6 +155,8 @@ function ContactsRoute() {
   const [selectedFormId, setSelectedFormId] = useState<string>(routeSearch.formId || 'all');
   const [statusFilter, setStatusFilter] = useState<ContactStatusFilter>(routeSearch.status || 'all');
   const [qualityFilter, setQualityFilter] = useState<ContactQualityFilter>(routeSearch.quality || 'all');
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const [bulkContactStatus, setBulkContactStatus] = useState<ContactStatus>('contacted');
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -224,6 +226,12 @@ function ContactsRoute() {
     statusFilter !== 'all' ||
     qualityFilter !== 'all',
   );
+  const selectedContactSet = useMemo(() => new Set(selectedContactIds), [selectedContactIds]);
+  const selectedContacts = useMemo(() => (
+    allContacts.filter((contact) => selectedContactSet.has(contact.id))
+  ), [allContacts, selectedContactSet]);
+  const allVisibleContactsSelected = filteredContacts.length > 0
+    && filteredContacts.every((contact) => selectedContactSet.has(contact.id));
   const exportSourceKeys = useMemo(() => (
     Array.from(new Set(filteredContacts.flatMap((contact) => (
       contact.sourceValues ? Object.keys(contact.sourceValues) : []
@@ -403,6 +411,12 @@ function ContactsRoute() {
       visible: filteredContacts.length,
       total: allContacts.length,
     },
+    selection: {
+      selected: selectedContactIds.length,
+      selectedIds: selectedContactIds,
+      allVisibleSelected: allVisibleContactsSelected,
+      bulkStatus: bulkContactStatus,
+    },
     selectedSourceForm: apiForm ? {
       id: apiForm.id,
       name: apiForm.name,
@@ -463,7 +477,9 @@ function ContactsRoute() {
     activeSite?.status,
     activeSiteId,
     allContacts,
+    allVisibleContactsSelected,
     apiForm,
+    bulkContactStatus,
     commandReadiness.checks,
     commandReadiness.score,
     contactUpdateUrl,
@@ -476,6 +492,7 @@ function ContactsRoute() {
     adminBaseUrl,
     qualityFilter,
     searchQuery,
+    selectedContactIds,
     selectedFormId,
     statusFilter,
   ]);
@@ -528,6 +545,8 @@ function ContactsRoute() {
 
       setForms(loadedForms);
       setContactsByForm(Object.fromEntries(inboxPairs));
+      const loadedContactIds = new Set(inboxPairs.flatMap(([, inbox]) => inbox.contacts.map((contact) => contact.id)));
+      setSelectedContactIds((current) => current.filter((id) => loadedContactIds.has(id)));
       setSelectedFormId((current) => (
         current === 'all' || loadedForms.some((form) => form.id === current)
           ? current
@@ -560,6 +579,7 @@ function ContactsRoute() {
     setSelectedFormId(routeSearch.formId || 'all');
     setStatusFilter(routeSearch.status || 'all');
     setQualityFilter(routeSearch.quality || 'all');
+    setSelectedContactIds([]);
   }, [
     routeSearch.formId,
     routeSearch.q,
@@ -604,6 +624,74 @@ function ContactsRoute() {
     }
   };
 
+  const updateContactInState = (updated: AdminContact) => {
+    setContactsByForm((current) => {
+      const inbox = current[updated.formId];
+      if (!inbox) return current;
+
+      return {
+        ...current,
+        [updated.formId]: {
+          ...inbox,
+          contacts: inbox.contacts.map((item) => (item.id === updated.id ? updated : item)),
+        },
+      };
+    });
+  };
+
+  const toggleContactSelection = (contactId: string, selected: boolean) => {
+    if (isContactsBusy) return;
+
+    setSelectedContactIds((current) => (
+      selected
+        ? Array.from(new Set([...current, contactId]))
+        : current.filter((id) => id !== contactId)
+    ));
+  };
+
+  const toggleVisibleContactSelection = (selected: boolean) => {
+    if (isContactsBusy) return;
+
+    const visibleIds = filteredContacts.map((contact) => contact.id);
+    setSelectedContactIds((current) => {
+      if (!selected) {
+        return current.filter((id) => !visibleIds.includes(id));
+      }
+
+      return Array.from(new Set([...current, ...visibleIds]));
+    });
+  };
+
+  const handleBulkContactStatus = async () => {
+    if (isContactsBusy) return;
+
+    const targets = selectedContacts.filter((contact) => contact.status !== bulkContactStatus);
+    if (targets.length === 0) {
+      setError(null);
+      setNotice(selectedContacts.length > 0
+        ? `Selected contacts are already ${bulkContactStatus}.`
+        : 'Select at least one visible contact before applying a lifecycle action.');
+      return;
+    }
+
+    setUpdatingId('bulk-contacts');
+    setError(null);
+    setNotice(null);
+
+    try {
+      const updatedContacts = await Promise.all(
+        targets.map((contact) => updateContact(activeSiteId, contact.formId, contact.id, { status: bulkContactStatus })),
+      );
+      updatedContacts.forEach(updateContactInState);
+      setSelectedContactIds([]);
+      setNotice(`${updatedContacts.length} contact${updatedContacts.length === 1 ? '' : 's'} moved to ${bulkContactStatus}.`);
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : 'Unable to update selected contacts');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const handleNotes = async (contact: AdminContact, notes: string) => {
     if (isContactsBusy) return;
 
@@ -613,18 +701,7 @@ function ContactsRoute() {
 
     try {
       const updated = await updateContact(activeSiteId, contact.formId, contact.id, { notes: notes.trim() || null });
-      setContactsByForm((current) => {
-        const inbox = current[contact.formId];
-        if (!inbox) return current;
-
-        return {
-          ...current,
-          [contact.formId]: {
-            ...inbox,
-            contacts: inbox.contacts.map((item) => (item.id === updated.id ? updated : item)),
-          },
-        };
-      });
+      updateContactInState(updated);
       setNotice(`Notes saved for ${updated.name || updated.email || 'contact'}.`);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'Unable to save contact notes');
@@ -715,6 +792,7 @@ function ContactsRoute() {
     setSelectedFormId('all');
     setStatusFilter('all');
     setQualityFilter('all');
+    setSelectedContactIds([]);
     updateContactsRouteSearch({
       formId: undefined,
       status: undefined,
@@ -768,6 +846,7 @@ function ContactsRoute() {
     setSelectedFormId('all');
     setStatusFilter('all');
     setQualityFilter('all');
+    setSelectedContactIds([]);
     navigate({ to: '/contacts', search: { siteId: nextSiteId }, replace: true });
   };
 
@@ -1084,7 +1163,7 @@ function ContactsRoute() {
               <div className="mt-4 grid gap-3 md:grid-cols-3">
                 <MetaTile label="API form" value={apiForm.title || apiForm.name || apiForm.id} />
                 <MetaTile label="Lead share" value={apiForm.contactShare?.enabled ? 'enabled' : 'off'} />
-                <MetaTile label="Visibility" value="private" />
+                <MetaTile label="Selected" value={`${selectedContactIds.length} contact${selectedContactIds.length === 1 ? '' : 's'}`} />
               </div>
 
               <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -1194,6 +1273,61 @@ function ContactsRoute() {
             )}
           </div>
 
+          <div className="mb-4 rounded-lg border border-border bg-card p-4" data-testid="contacts-bulk-actions">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleContactsSelected}
+                    disabled={isContactsBusy || filteredContacts.length === 0}
+                    onChange={(event) => toggleVisibleContactSelection(event.target.checked)}
+                    className="size-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Select visible contacts"
+                  />
+                  Select visible
+                </label>
+                <span className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
+                  {selectedContacts.length} selected
+                </span>
+                {selectedContactIds.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={isContactsBusy}
+                    onClick={() => setSelectedContactIds([])}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <select
+                  value={bulkContactStatus}
+                  disabled={isContactsBusy || selectedContacts.length === 0}
+                  onChange={(event) => setBulkContactStatus(event.target.value as ContactStatus)}
+                  className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="Bulk contact lifecycle status"
+                >
+                  {CONTACT_STATUS_FILTERS.filter((status): status is ContactStatus => status !== 'all').map((status) => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isContactsBusy || selectedContacts.length === 0}
+                  onClick={() => void handleBulkContactStatus()}
+                  iconStart={<CheckCircle2 className="size-4" />}
+                >
+                  Apply lifecycle
+                </Button>
+              </div>
+            </div>
+          </div>
+
           {isLoading && allContacts.length === 0 ? (
             <div className="flex h-64 items-center justify-center">
               <div className="size-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
@@ -1228,7 +1362,9 @@ function ContactsRoute() {
                   key={contact.id}
                   contact={contact}
                   form={formById.get(contact.formId)}
+                  selected={selectedContactSet.has(contact.id)}
                   disabled={isContactsBusy}
+                  onSelect={(selected) => toggleContactSelection(contact.id, selected)}
                   onStatus={(status) => void handleStatus(contact, status)}
                   onNotes={(notes) => void handleNotes(contact, notes)}
                 />
@@ -1307,13 +1443,17 @@ function ApiSnippet({ label, value }: { label: string; value: string }) {
 function ContactCard({
   contact,
   form,
+  selected,
   disabled,
+  onSelect,
   onStatus,
   onNotes,
 }: {
   contact: AdminContact;
   form?: FormDefinition;
+  selected: boolean;
   disabled: boolean;
+  onSelect: (selected: boolean) => void;
   onStatus: (status: ContactStatus) => void;
   onNotes: (notes: string) => void;
 }) {
@@ -1326,15 +1466,25 @@ function ContactCard({
   const notesChanged = notesDraft.trim() !== (contact.notes || '').trim();
 
   return (
-    <article className="rounded-lg border border-border bg-background p-4">
+    <article className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-semibold">{contact.name || contact.email || 'Unnamed contact'}</h3>
-            <StatusBadge status={contact.status} type={statusType(contact.status)} />
-          </div>
-          <div className="mt-1 text-sm text-muted-foreground">
-            {form?.title || form?.name || contact.formId}
+        <div className="flex min-w-0 items-start gap-3">
+          <input
+            type="checkbox"
+            checked={selected}
+            disabled={disabled}
+            onChange={(event) => onSelect(event.target.checked)}
+            className="mt-1 size-4 shrink-0 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label={`Select contact ${contact.name || contact.email || contact.id}`}
+          />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-semibold">{contact.name || contact.email || 'Unnamed contact'}</h3>
+              <StatusBadge status={contact.status} type={statusType(contact.status)} />
+            </div>
+            <div className="mt-1 text-sm text-muted-foreground">
+              {form?.title || form?.name || contact.formId}
+            </div>
           </div>
         </div>
         <div className="text-right text-xs text-muted-foreground">
