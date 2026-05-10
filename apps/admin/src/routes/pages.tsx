@@ -37,6 +37,7 @@ type PageLibraryFilter =
   | 'ready'
   | 'needs-attention'
   | 'blocked'
+  | 'route-conflicts'
   | 'homepage'
   | 'scheduled'
   | 'has-canvas'
@@ -61,6 +62,7 @@ const PAGE_HEALTH_FILTERS: PageLibraryFilter[] = [
   'ready',
   'needs-attention',
   'blocked',
+  'route-conflicts',
   'homepage',
   'scheduled',
   'has-canvas',
@@ -218,6 +220,9 @@ const PAGE_EXPORT_COLUMNS = [
   'path',
   'status',
   'is_homepage',
+  'route_status',
+  'route_issue',
+  'route_conflict_ids',
   'parent_id',
   'parent_title',
   'children_count',
@@ -242,6 +247,13 @@ const PAGE_EXPORT_COLUMNS = [
 ] as const;
 
 type PageCreationTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'contact' | 'registration';
+
+type PageRouteDiagnostic = {
+  path: string;
+  status: 'available' | 'warning' | 'conflict';
+  message: string;
+  conflictIds: string[];
+};
 
 const PAGE_CREATION_SHORTCUTS: Array<{
   key: PageCreationTemplate;
@@ -353,6 +365,10 @@ function PagesListView() {
     () => new Map(activeSitePages.map((page) => [page.id, page])),
     [activeSitePages],
   );
+  const pageRouteDiagnostics = useMemo(
+    () => buildPageRouteDiagnostics(activeSitePages),
+    [activeSitePages],
+  );
   const pageChildCountMap = useMemo(() => {
     const counts = new Map<string, number>();
     activeSitePages.forEach((page) => {
@@ -371,6 +387,7 @@ function PagesListView() {
         (healthFilter === 'ready' && readiness?.statusLabel === 'ready') ||
         (healthFilter === 'needs-attention' && readiness?.statusLabel === 'needs-attention') ||
         (healthFilter === 'blocked' && readiness?.statusLabel === 'blocked') ||
+        (healthFilter === 'route-conflicts' && pageRouteDiagnostics[page.id]?.status === 'conflict') ||
         (healthFilter === 'homepage' && (page.isHomepage || page.slug === 'home' || page.slug === '')) ||
         (healthFilter === 'scheduled' && (page.status === 'scheduled' || Boolean(page.scheduledAt))) ||
         (healthFilter === 'has-canvas' && elementCount > 0) ||
@@ -380,7 +397,7 @@ function PagesListView() {
 
       return matchesStatus && matchesHealth;
     }),
-    [activeSitePages, healthFilter, readinessMap, statusFilter],
+    [activeSitePages, healthFilter, pageRouteDiagnostics, readinessMap, statusFilter],
   );
   const pageMetrics = useMemo(
     () => ({
@@ -391,10 +408,11 @@ function PagesListView() {
       ready: activeSitePages.filter((page) => readinessMap[page.id]?.statusLabel === 'ready').length,
       needsAttention: activeSitePages.filter((page) => readinessMap[page.id]?.statusLabel === 'needs-attention').length,
       blocked: activeSitePages.filter((page) => readinessMap[page.id]?.statusLabel === 'blocked').length,
+      routeConflicts: activeSitePages.filter((page) => pageRouteDiagnostics[page.id]?.status === 'conflict').length,
       emptyCanvas: activeSitePages.filter((page) => readinessMap[page.id] && (readinessMap[page.id]?.elementCount || 0) === 0).length,
       unchecked: activeSitePages.filter((page) => !readinessMap[page.id]).length,
     }),
-    [activeSitePages, readinessMap],
+    [activeSitePages, pageRouteDiagnostics, readinessMap],
   );
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const adminBaseUrl = useMemo(() => getAdminBaseUrl(), []);
@@ -467,6 +485,13 @@ function PagesListView() {
           : `${pageMetrics.blocked} page${pageMetrics.blocked === 1 ? '' : 's'} blocked`,
         ready: pageMetrics.blocked === 0,
       },
+      {
+        label: 'Route conflicts',
+        detail: pageMetrics.routeConflicts === 0
+          ? 'No duplicate, invalid, or reserved page routes found.'
+          : `${pageMetrics.routeConflicts} page${pageMetrics.routeConflicts === 1 ? '' : 's'} need route cleanup before publishing.`,
+        ready: pageMetrics.routeConflicts === 0,
+      },
     ];
     const readyCount = checks.filter((check) => check.ready).length;
 
@@ -482,7 +507,7 @@ function PagesListView() {
         { label: 'Deliver', detail: 'Use public page, resolve, and render APIs for any custom frontend.' },
       ],
     };
-  }, [activeSitePages, pageMetrics.blocked, pageMetrics.published, readinessMap]);
+  }, [activeSitePages, pageMetrics.blocked, pageMetrics.published, pageMetrics.routeConflicts, readinessMap]);
 
   const setPageStatusFilter = (status: PageStatusFilter) => {
     if (isPageLibraryBusy) return;
@@ -500,6 +525,15 @@ function PagesListView() {
     setHealthFilter('blocked');
     setCurrentPage(1);
     updatePagesRouteSearch({ status: 'all', health: 'blocked', page: undefined });
+  };
+
+  const showRouteConflicts = () => {
+    if (isPageLibraryBusy) return;
+
+    setStatusFilter('all');
+    setHealthFilter('route-conflicts');
+    setCurrentPage(1);
+    updatePagesRouteSearch({ status: 'all', health: 'route-conflicts', page: undefined });
   };
 
   const copyPageApiText = async (value: string, label: string) => {
@@ -540,6 +574,9 @@ function PagesListView() {
         pagePath,
         page.status,
         Boolean(page.isHomepage),
+        pageRouteDiagnostics[page.id]?.status || 'available',
+        pageRouteDiagnostics[page.id]?.message || '',
+        pageRouteDiagnostics[page.id]?.conflictIds.join('; ') || '',
         page.parentId || '',
         getParentPageTitle(page, activeSitePageMap),
         pageChildCountMap.get(page.id) || 0,
@@ -716,6 +753,12 @@ function PagesListView() {
     setNotice(null);
 
     try {
+      const routeDiagnostic = pageRouteDiagnostics[page.id];
+      if (routeDiagnostic?.status === 'conflict') {
+        setError(`${page.title} is blocked: ${routeDiagnostic.message}`);
+        return;
+      }
+
       const readiness = await getPageReadiness(page.siteId || activeSiteId, page.id);
       setReadinessMap((current) => ({ ...current, [page.id]: readiness }));
       const blocker = getPublishBlocker(readiness);
@@ -809,6 +852,18 @@ function PagesListView() {
 
     try {
       if (bulkAction === 'publish') {
+        const routeBlockedPages = selectedPages
+          .map((page) => ({ page, route: pageRouteDiagnostics[page.id] }))
+          .filter((result): result is { page: Page; route: PageRouteDiagnostic } => result.route?.status === 'conflict');
+
+        if (routeBlockedPages.length > 0) {
+          setError(`${routeBlockedPages.length} selected page${routeBlockedPages.length === 1 ? ' is' : 's are'} route-blocked: ${routeBlockedPages
+            .slice(0, 3)
+            .map(({ page, route }) => `${page.title} - ${route.message}`)
+            .join('; ')}${routeBlockedPages.length > 3 ? '; ...' : ''}`);
+          return;
+        }
+
         const readinessResults = await Promise.all(
           selectedPages.map(async (page) => ({
             page,
@@ -903,6 +958,16 @@ function PagesListView() {
       )
     },
     {
+      key: 'slug',
+      label: 'Route',
+      render: (page) => (
+        <PageRouteCell
+          page={page}
+          diagnostic={pageRouteDiagnostics[page.id]}
+        />
+      )
+    },
+    {
       key: 'status',
       label: 'Status',
       sortable: true,
@@ -978,6 +1043,9 @@ function PagesListView() {
       render: (page) => {
         const readiness = readinessMap[page.id];
         const publishBlocker = readiness ? getPublishBlocker(readiness) : null;
+        const routeBlocker = pageRouteDiagnostics[page.id]?.status === 'conflict'
+          ? pageRouteDiagnostics[page.id]?.message
+          : null;
 
         return (
           <div className="flex items-center justify-end gap-2">
@@ -986,8 +1054,8 @@ function PagesListView() {
                 onClick={() => {
                   void handlePublishPage(page);
                 }}
-                disabled={isPageLibraryBusy || Boolean(publishBlocker)}
-                title={publishBlocker ? `Resolve before publishing: ${publishBlocker}` : 'Publish page'}
+                disabled={isPageLibraryBusy || Boolean(routeBlocker || publishBlocker)}
+                title={routeBlocker ? `Resolve route before publishing: ${routeBlocker}` : publishBlocker ? `Resolve before publishing: ${publishBlocker}` : 'Publish page'}
                 className="p-2 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <CheckCircle2 className="w-4 h-4" />
@@ -1140,11 +1208,16 @@ function PagesListView() {
   const selectedKnownPublishBlockers = useMemo(
     () => selectedPages
       .map((page) => {
+        const routeDiagnostic = pageRouteDiagnostics[page.id];
+        if (routeDiagnostic?.status === 'conflict') {
+          return { page, blocker: routeDiagnostic.message };
+        }
+
         const readiness = readinessMap[page.id];
         return readiness ? { page, blocker: getPublishBlocker(readiness) } : null;
       })
       .filter((result): result is { page: Page; blocker: string } => Boolean(result?.blocker)),
-    [readinessMap, selectedPages],
+    [pageRouteDiagnostics, readinessMap, selectedPages],
   );
   const bulkActionLabel = getBulkActionLabel(bulkAction, selectedPages.length, pendingBulkDelete);
   const bulkBusyLabel = getBulkBusyLabel(bulkAction);
@@ -1202,6 +1275,7 @@ function PagesListView() {
     pages: filteredPages.map((page) => {
       const revisionSummary = revisionSummaryMap[page.id];
       const latestRevision = revisionSummary?.latest || null;
+      const routeDiagnostic = pageRouteDiagnostics[page.id];
 
       return {
         id: page.id,
@@ -1210,6 +1284,12 @@ function PagesListView() {
         path: pagePublicPath(page),
         status: page.status,
         isHomepage: Boolean(page.isHomepage),
+        route: {
+          path: routeDiagnostic?.path || pagePublicPath(page),
+          status: routeDiagnostic?.status || 'available',
+          message: routeDiagnostic?.message || 'Route is available.',
+          conflictIds: routeDiagnostic?.conflictIds || [],
+        },
         hierarchy: {
           parentId: page.parentId || null,
           parentTitle: getParentPageTitle(page, activeSitePageMap) || null,
@@ -1272,6 +1352,7 @@ function PagesListView() {
     pageDesignReadiness.workflow,
     pageMetrics,
     pageChildCountMap,
+    pageRouteDiagnostics,
     filteredPages,
     publicPageBySlugUrl,
     publicPagesUrl,
@@ -1563,12 +1644,13 @@ function PagesListView() {
       </section>
 
       <div className="mb-6 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-        <div id="pages-health" className="grid gap-3 scroll-mt-24 md:grid-cols-4">
+        <div id="pages-health" className="grid gap-3 scroll-mt-24 md:grid-cols-5">
           {[
             { label: 'All', value: pageMetrics.total, onSelect: () => setPageStatusFilter('all'), active: statusFilter === 'all' && healthFilter === 'all' },
             { label: 'Published', value: pageMetrics.published, onSelect: () => setPageStatusFilter('published'), active: statusFilter === 'published' && healthFilter === 'all' },
             { label: 'Draft', value: pageMetrics.draft, onSelect: () => setPageStatusFilter('draft'), active: statusFilter === 'draft' && healthFilter === 'all' },
             { label: 'Blocked', value: pageMetrics.blocked, onSelect: showBlockedPages, active: healthFilter === 'blocked' },
+            { label: 'Routes', value: pageMetrics.routeConflicts, onSelect: showRouteConflicts, active: healthFilter === 'route-conflicts' },
           ].map((metric) => (
             <button
               key={metric.label}
@@ -1895,6 +1977,7 @@ function PagesListView() {
           <option value="ready">Ready pages</option>
           <option value="needs-attention">Needs attention</option>
           <option value="blocked">Blocked pages</option>
+          <option value="route-conflicts">Route conflicts</option>
           <option value="homepage">Homepage route</option>
           <option value="scheduled">Scheduled pages</option>
           <option value="has-canvas">Has canvas content</option>
@@ -2141,6 +2224,37 @@ function PageHierarchyCell({ page, parentPage, childCount }: { page: Page; paren
   );
 }
 
+function PageRouteCell({ page, diagnostic }: { page: Page; diagnostic: PageRouteDiagnostic | undefined }) {
+  const route = diagnostic || {
+    path: pagePublicPath(page),
+    status: 'available' as const,
+    message: 'Route is available.',
+    conflictIds: [],
+  };
+  const statusType = route.status === 'conflict' ? 'error' : route.status === 'warning' ? 'warning' : 'success';
+
+  return (
+    <div className="min-w-52 space-y-1" data-testid={`pages-route-${page.id}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <code className="rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
+          {route.path}
+        </code>
+        <StatusBadge
+          status={route.status === 'available' ? 'available' : route.status === 'warning' ? 'review' : 'conflict'}
+          type={statusType}
+        />
+      </div>
+      <div className={cn(
+        'text-xs leading-5',
+        route.status === 'conflict' ? 'text-destructive' : 'text-muted-foreground',
+      )}
+      >
+        {route.message}
+      </div>
+    </div>
+  );
+}
+
 function PageRevisionCell({
   page,
   summary,
@@ -2296,12 +2410,75 @@ const getAdminBaseUrl = (): string => {
   return `${base.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api/admin`;
 };
 
+const RESERVED_PAGE_ROUTE_PREFIXES = new Set(['api', 'sites', 'blog']);
+
 const pagePublicPath = (page: Page): string => {
   const slug = (page.slug || '').replace(/^\/+|\/+$/g, '');
   if (page.isHomepage) {
     return '/';
   }
   return !slug || slug === 'home' ? '/' : `/${slug}`;
+};
+
+const firstPagePathSegment = (path: string): string => (
+  path.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean)[0] || ''
+);
+
+const pageSlugIsValid = (page: Page): boolean => {
+  if (page.isHomepage) return true;
+
+  const slug = (page.slug || '').replace(/^\/+|\/+$/g, '');
+  if (!slug || slug === 'home') return true;
+
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
+};
+
+const buildPageRouteDiagnostics = (pages: Page[]): Record<string, PageRouteDiagnostic> => {
+  const pagesByPath = new Map<string, Page[]>();
+  pages.forEach((page) => {
+    const path = pagePublicPath(page);
+    pagesByPath.set(path, [...(pagesByPath.get(path) || []), page]);
+  });
+
+  return Object.fromEntries(pages.map((page) => {
+    const path = pagePublicPath(page);
+    const siblingPages = (pagesByPath.get(path) || []).filter((candidate) => candidate.id !== page.id);
+    const firstSegment = firstPagePathSegment(path);
+
+    if (!pageSlugIsValid(page)) {
+      return [page.id, {
+        path,
+        status: 'conflict',
+        message: 'Use lowercase letters, numbers, and hyphens for this page route.',
+        conflictIds: [],
+      }];
+    }
+
+    if (path !== '/' && RESERVED_PAGE_ROUTE_PREFIXES.has(firstSegment)) {
+      return [page.id, {
+        path,
+        status: 'conflict',
+        message: `The /${firstSegment} prefix is reserved by Backy routing.`,
+        conflictIds: [],
+      }];
+    }
+
+    if (siblingPages.length > 0) {
+      return [page.id, {
+        path,
+        status: 'conflict',
+        message: `Route also used by ${siblingPages.map((candidate) => candidate.title || candidate.slug).join(', ')}.`,
+        conflictIds: siblingPages.map((candidate) => candidate.id),
+      }];
+    }
+
+    return [page.id, {
+      path,
+      status: 'available',
+      message: 'Route is available.',
+      conflictIds: [],
+    }];
+  }));
 };
 
 const pageMetaString = (page: Page, key: string): string => {

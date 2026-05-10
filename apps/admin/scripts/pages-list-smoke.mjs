@@ -331,6 +331,37 @@ const waitForRevisionRow = async (client, page, expectedText, expectedSearch = p
   return null;
 };
 
+const waitForRouteRow = async (client, page, expectedText, expectedSearch = page.title) => {
+  const url = `${ADMIN_BASE_URL}/pages?siteId=${encodeURIComponent(HIERARCHY_SITE_ID)}&q=${encodeURIComponent(expectedSearch)}`;
+  await client.send('Page.navigate', { url });
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const route = document.querySelector('[data-testid="pages-route-${page.id}"]');
+      return {
+        ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
+        routeText: route?.textContent || '',
+        body: document.body?.innerText?.slice(0, 700) || '',
+      };
+    })()`);
+
+    if (
+      state.ready
+      && state.routeText.includes(expectedText)
+    ) {
+      return { url, state };
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Route row did not render expected text "${expectedText}": ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -427,6 +458,11 @@ const main = async () => {
       hierarchyPages.childPage,
       'Pages list revision smoke snapshot',
     );
+    const childRoute = await waitForRouteRow(
+      client,
+      hierarchyPages.childPage,
+      'Route is available.',
+    );
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -448,6 +484,7 @@ const main = async () => {
       childHierarchy,
       parentHierarchy,
       childRevisions,
+      childRoute,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
