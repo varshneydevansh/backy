@@ -21,6 +21,7 @@
     "test:orders": "node scripts/orders-smoke.mjs",
     "test:media": "node scripts/media-smoke.mjs",
     "test:collections": "node scripts/collections-smoke.mjs",
+    "test:reusable-sections": "node scripts/reusable-sections-smoke.mjs",
     "test:forms": "node scripts/forms-smoke.mjs",
     "test:contacts": "node scripts/contacts-smoke.mjs",
     "test:comments": "node scripts/comments-smoke.mjs",

@@ -514,6 +514,7 @@ export interface BackyReusableSection {
   status: BackyReusableSectionStatus;
   tags: string[];
   content: BackyJsonObject;
+  metadata?: BackyJsonObject;
   sourceElementId?: string | null;
   createdBy?: string | null;
   updatedBy?: string | null;
@@ -530,6 +531,7 @@ export interface BackyReusableSectionCreateInput {
   status?: BackyReusableSectionStatus;
   tags?: string[];
   content: BackyJsonObject;
+  metadata?: BackyJsonObject;
   sourceElementId?: string | null;
   createdBy?: string | null;
   updatedBy?: string | null;
@@ -543,6 +545,7 @@ export interface BackyReusableSectionUpdateInput {
   status?: BackyReusableSectionStatus;
   tags?: string[];
   content?: BackyJsonObject;
+  metadata?: BackyJsonObject;
   sourceElementId?: string | null;
   updatedBy?: string | null;
 }

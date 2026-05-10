@@ -1,11 +1,8 @@
-import { type ReactNode } from 'react';
+import { type HTMLAttributes, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-interface PanelProps {
+interface PanelProps extends HTMLAttributes<HTMLElement> {
   children: ReactNode;
-  className?: string;
-  id?: string;
-  role?: string;
 }
 
 interface PanelHeaderProps {
@@ -16,9 +13,13 @@ interface PanelHeaderProps {
   className?: string;
 }
 
-export function Panel({ children, className, id, role }: PanelProps) {
+interface PanelContentProps extends HTMLAttributes<HTMLDivElement> {
+  children: ReactNode;
+}
+
+export function Panel({ children, className, ...props }: PanelProps) {
   return (
-    <section id={id} role={role} className={cn('rounded-lg border border-border bg-card shadow-sm', className)}>
+    <section className={cn('rounded-lg border border-border bg-card shadow-sm', className)} {...props}>
       {children}
     </section>
   );
@@ -43,6 +44,6 @@ export function PanelHeader({ title, description, action, icon, className }: Pan
   );
 }
 
-export function PanelContent({ children, className }: PanelProps) {
-  return <div className={cn('p-5 pt-0', className)}>{children}</div>;
+export function PanelContent({ children, className, ...props }: PanelContentProps) {
+  return <div className={cn('p-5 pt-0', className)} {...props}>{children}</div>;
 }

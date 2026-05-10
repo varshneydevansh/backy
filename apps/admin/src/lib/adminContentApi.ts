@@ -936,6 +936,7 @@ interface ApiReusableSection {
   status: 'active' | 'archived';
   tags: string[];
   content: ApiReusableSectionContent;
+  metadata?: Record<string, unknown>;
   sourceElementId?: string | null;
   createdBy?: string | null;
   updatedBy?: string | null;
@@ -1642,6 +1643,7 @@ export interface ReusableSection {
   status: 'active' | 'archived';
   tags: string[];
   content: ReusableSectionContent;
+  metadata?: Record<string, unknown>;
   sourceElementId: string | null;
   createdBy: string | null;
   updatedBy: string | null;
@@ -1657,6 +1659,7 @@ export interface ReusableSectionInput {
   status?: 'active' | 'archived';
   tags?: string[];
   content: ReusableSectionContent;
+  metadata?: Record<string, unknown>;
   sourceElementId?: string | null;
   createdBy?: string | null;
   updatedBy?: string | null;
@@ -1944,6 +1947,7 @@ const toReusableSection = (section: ApiReusableSection): ReusableSection => ({
     customCSS: section.content?.customCSS,
     customJS: section.content?.customJS,
   },
+  metadata: section.metadata || {},
   sourceElementId: section.sourceElementId || null,
   createdBy: section.createdBy || null,
   updatedBy: section.updatedBy || null,

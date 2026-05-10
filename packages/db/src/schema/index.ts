@@ -501,6 +501,7 @@ export const reusableSections = pgTable('reusable_sections', {
     status: text('status').default('active').notNull(),
     tags: jsonb('tags').default([]).notNull(),
     content: jsonb('content').default({}).notNull(),
+    metadata: jsonb('metadata').default({}).notNull(),
     sourceElementId: text('source_element_id'),
     createdBy: text('created_by'),
     updatedBy: text('updated_by'),

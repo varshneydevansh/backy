@@ -61,6 +61,10 @@ const parseContent = (value: unknown): BackyJsonObject => (
   value && typeof value === 'object' && !Array.isArray(value) ? value as BackyJsonObject : {}
 );
 
+const parseMetadata = (value: unknown): BackyJsonObject | undefined => (
+  value && typeof value === 'object' && !Array.isArray(value) ? value as BackyJsonObject : undefined
+);
+
 const parseTags = (value: unknown): string[] => {
   if (Array.isArray(value)) {
     return Array.from(new Set(value.map((tag) => typeof tag === 'string' ? tag.trim() : '').filter(Boolean)));
@@ -156,6 +160,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ...(body.status === 'active' || body.status === 'archived' ? { status: body.status } : {}),
         ...(body.tags !== undefined ? { tags: parseTags(body.tags) } : {}),
         ...(body.content !== undefined ? { content: parseContent(body.content) } : {}),
+        ...(body.metadata !== undefined ? { metadata: parseMetadata(body.metadata) || {} } : {}),
         ...(body.sourceElementId !== undefined ? { sourceElementId: typeof body.sourceElementId === 'string' ? body.sourceElementId.trim() || null : null } : {}),
         ...(body.updatedBy !== undefined ? { updatedBy: typeof body.updatedBy === 'string' ? body.updatedBy.trim() || null : null } : {}),
       })).item;

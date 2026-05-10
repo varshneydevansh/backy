@@ -103,6 +103,10 @@ const normalizeContent = (value: unknown): BackyJsonObject => (
     isRecord(value) ? value as BackyJsonObject : {}
 );
 
+const normalizeMetadata = (value: unknown): BackyJsonObject => (
+    isRecord(value) ? value as BackyJsonObject : {}
+);
+
 const searchText = (section: BackyReusableSection, search: string): boolean => (
     [
         section.name,
@@ -123,6 +127,7 @@ const toReusableSection = (row: ReusableSectionRow): BackyReusableSection => ({
     status: normalizeStatus(row.status),
     tags: normalizeTags(row.tags),
     content: normalizeContent(row.content),
+    metadata: normalizeMetadata(row.metadata),
     sourceElementId: row.sourceElementId,
     createdBy: row.createdBy,
     updatedBy: row.updatedBy,
@@ -171,6 +176,7 @@ export function createReusableSectionRepository(db: DatabaseInstance): BackyReus
                 status: input.status || 'active',
                 tags: input.tags || [],
                 content: input.content,
+                metadata: input.metadata || {},
                 sourceElementId: input.sourceElementId || null,
                 createdBy: input.createdBy || null,
                 updatedBy: input.updatedBy || input.createdBy || null,
@@ -188,6 +194,7 @@ export function createReusableSectionRepository(db: DatabaseInstance): BackyReus
             if (input.status !== undefined) updates.status = input.status;
             if (input.tags !== undefined) updates.tags = input.tags;
             if (input.content !== undefined) updates.content = input.content;
+            if (input.metadata !== undefined) updates.metadata = input.metadata || {};
             if (input.sourceElementId !== undefined) updates.sourceElementId = input.sourceElementId;
             if (input.updatedBy !== undefined) updates.updatedBy = input.updatedBy;
 

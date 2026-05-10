@@ -26,6 +26,7 @@ import {
   Receipt,
   MessageSquare,
   Contact,
+  Layers3,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -82,6 +83,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: 'Blog', to: '/blog', icon: Newspaper },
       { label: 'Media', to: '/media', icon: Image },
       { label: 'Collections', to: '/collections', icon: Database },
+      { label: 'Sections', to: '/reusable-sections', icon: Layers3 },
     ],
   },
   {
@@ -114,6 +116,7 @@ const SITE_SCOPED_NAV_ROUTES = new Set([
   '/blog',
   '/media',
   '/collections',
+  '/reusable-sections',
   '/products',
   '/orders',
   '/forms',

@@ -317,6 +317,7 @@ interface StoreReusableSection {
   status: 'active' | 'archived';
   tags: string[];
   content: PageContent;
+  metadata?: Record<string, unknown>;
   sourceElementId: string | null;
   createdBy: string | null;
   updatedBy: string | null;
@@ -4582,6 +4583,7 @@ export function createReusableSection(siteId: string, input: Record<string, unkn
     status: parseStatusInput(input.status, ['active', 'archived'] as const, 'active'),
     tags: normalizeReusableSectionTags(input.tags),
     content: normalizeReusableSectionContent(input.content),
+    metadata: asJsonObject(input.metadata) || {},
     sourceElementId: sanitizeString(input.sourceElementId) || null,
     createdBy: sanitizeString(input.createdBy) || 'admin',
     updatedBy: sanitizeString(input.updatedBy) || sanitizeString(input.createdBy) || 'admin',
@@ -4618,6 +4620,7 @@ export function updateReusableSection(
       : parseStatusInput(input.status, ['active', 'archived'] as const, current.status),
     tags: input.tags === undefined ? current.tags : normalizeReusableSectionTags(input.tags, current.tags),
     content: input.content === undefined ? current.content : normalizeReusableSectionContent(input.content, current.content),
+    metadata: input.metadata === undefined ? current.metadata : asJsonObject(input.metadata) || {},
     sourceElementId: input.sourceElementId === undefined
       ? current.sourceElementId
       : sanitizeString(input.sourceElementId) || null,

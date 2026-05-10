@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as UsersRouteImport } from './routes/users'
 import { Route as SitesRouteImport } from './routes/sites'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ReusableSectionsRouteImport } from './routes/reusable-sections'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PagesRouteImport } from './routes/pages'
@@ -47,6 +48,11 @@ const SitesRoute = SitesRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReusableSectionsRoute = ReusableSectionsRouteImport.update({
+  id: '/reusable-sections',
+  path: '/reusable-sections',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -169,6 +175,7 @@ export interface FileRoutesByFullPath {
   '/pages': typeof PagesRouteWithChildren
   '/products': typeof ProductsRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/reusable-sections': typeof ReusableSectionsRoute
   '/settings': typeof SettingsRoute
   '/sites': typeof SitesRouteWithChildren
   '/users': typeof UsersRouteWithChildren
@@ -195,6 +202,7 @@ export interface FileRoutesByTo {
   '/pages': typeof PagesRouteWithChildren
   '/products': typeof ProductsRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/reusable-sections': typeof ReusableSectionsRoute
   '/settings': typeof SettingsRoute
   '/sites': typeof SitesRouteWithChildren
   '/users': typeof UsersRouteWithChildren
@@ -222,6 +230,7 @@ export interface FileRoutesById {
   '/pages': typeof PagesRouteWithChildren
   '/products': typeof ProductsRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/reusable-sections': typeof ReusableSectionsRoute
   '/settings': typeof SettingsRoute
   '/sites': typeof SitesRouteWithChildren
   '/users': typeof UsersRouteWithChildren
@@ -250,6 +259,7 @@ export interface FileRouteTypes {
     | '/pages'
     | '/products'
     | '/reset-password'
+    | '/reusable-sections'
     | '/settings'
     | '/sites'
     | '/users'
@@ -276,6 +286,7 @@ export interface FileRouteTypes {
     | '/pages'
     | '/products'
     | '/reset-password'
+    | '/reusable-sections'
     | '/settings'
     | '/sites'
     | '/users'
@@ -302,6 +313,7 @@ export interface FileRouteTypes {
     | '/pages'
     | '/products'
     | '/reset-password'
+    | '/reusable-sections'
     | '/settings'
     | '/sites'
     | '/users'
@@ -329,6 +341,7 @@ export interface RootRouteChildren {
   PagesRoute: typeof PagesRouteWithChildren
   ProductsRoute: typeof ProductsRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ReusableSectionsRoute: typeof ReusableSectionsRoute
   SettingsRoute: typeof SettingsRoute
   SitesRoute: typeof SitesRouteWithChildren
   UsersRoute: typeof UsersRouteWithChildren
@@ -355,6 +368,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reusable-sections': {
+      id: '/reusable-sections'
+      path: '/reusable-sections'
+      fullPath: '/reusable-sections'
+      preLoaderRoute: typeof ReusableSectionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -569,6 +589,7 @@ const rootRouteChildren: RootRouteChildren = {
   PagesRoute: PagesRouteWithChildren,
   ProductsRoute: ProductsRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ReusableSectionsRoute: ReusableSectionsRoute,
   SettingsRoute: SettingsRoute,
   SitesRoute: SitesRouteWithChildren,
   UsersRoute: UsersRouteWithChildren,
