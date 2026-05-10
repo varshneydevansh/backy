@@ -33,9 +33,12 @@ import {
   deleteUser as deleteBackendUser,
   getAdminApiBase,
   getUser as getBackendUser,
+  getUserPermissions,
   listAdminAuditLogs,
   updateUser as updateBackendUser,
+  type AdminPermissionGroup,
   type AdminAuditLog,
+  type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
 import {
   createAdminPasswordResetToken,
@@ -154,6 +157,9 @@ function EditUserPage() {
   const [userAuditLogs, setUserAuditLogs] = useState<AdminAuditLog[]>([]);
   const [isLoadingUserAudit, setIsLoadingUserAudit] = useState(false);
   const [userAuditError, setUserAuditError] = useState<string | null>(null);
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
+  const [isLoadingPermissions, setIsLoadingPermissions] = useState(false);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const [userSessions, setUserSessions] = useState<AdminSessionSummary[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
@@ -236,6 +242,25 @@ function EditUserPage() {
   useEffect(() => {
     void loadUserAuditLogs();
   }, [loadUserAuditLogs]);
+
+  const loadPermissionMatrix = useCallback(async () => {
+    setIsLoadingPermissions(true);
+    setPermissionError(null);
+
+    try {
+      const matrix = await getUserPermissions(userId);
+      setPermissionMatrix(matrix);
+    } catch (error) {
+      setPermissionError(error instanceof Error ? error.message : 'Unable to load user permission matrix.');
+      setPermissionMatrix(null);
+    } finally {
+      setIsLoadingPermissions(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    void loadPermissionMatrix();
+  }, [loadPermissionMatrix]);
 
   const loadUserSessions = useCallback(async () => {
     if (!user) {
@@ -511,6 +536,23 @@ function EditUserPage() {
       pendingChanges,
       hasUnsavedChanges,
     },
+    permissions: permissionMatrix
+      ? {
+          endpoint: `${userDetailUrl}/permissions`,
+          canSignIn: permissionMatrix.canSignIn,
+          allowed: permissionMatrix.summary.allowed,
+          total: permissionMatrix.summary.total,
+          groups: permissionMatrix.groups.map((group) => ({
+            key: group.key,
+            label: group.label,
+            allowed: group.permissions.filter((permission) => permission.allowed).length,
+            total: group.permissions.length,
+          })),
+        }
+      : {
+          endpoint: `${userDetailUrl}/permissions`,
+          status: 'not-loaded',
+        },
     recovery: {
       resetMailTo,
       resetTokenEndpoint: `${userDetailUrl}/password-reset`,
@@ -851,33 +893,73 @@ function EditUserPage() {
           </div>
 
           <div id="user-detail-permissions" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
-            <div className="flex items-start gap-3">
-              <span className="rounded-lg bg-slate-100 p-2 text-slate-700">
-                <KeyRound className="h-5 w-5" />
-              </span>
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Permission preview</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Use this before saving to understand what the selected role unlocks.</p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-3">
+                <span className="rounded-lg bg-slate-100 p-2 text-slate-700">
+                  <KeyRound className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-base font-semibold text-foreground">Backend permission matrix</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Role-derived permissions loaded from the users API, including status-based access blocking.
+                  </p>
+                </div>
               </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void loadPermissionMatrix()}
+                disabled={isLoadingPermissions}
+                iconStart={<RefreshCw className={cn('size-3.5', isLoadingPermissions && 'animate-spin')} />}
+              >
+                Refresh
+              </Button>
             </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
-              {ROLE_CAPABILITIES.map((capability) => {
-                const allowed = capability.roles.includes(formData.role);
-                return (
-                  <div
-                    key={capability.label}
-                    className={cn(
-                      'flex items-start gap-3 rounded-lg border p-3 text-sm',
-                      allowed ? 'border-emerald-200 bg-emerald-50/50 text-emerald-950' : 'border-border bg-muted/30 text-muted-foreground',
-                    )}
-                  >
-                    <CheckCircle2 className={cn('mt-0.5 h-4 w-4 shrink-0', allowed ? 'text-emerald-600' : 'text-muted-foreground')} />
-                    <span>{capability.label}</span>
+            {permissionError && (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {permissionError}
+              </div>
+            )}
+
+            {isLoadingPermissions ? (
+              <div className="mt-5 grid gap-3 md:grid-cols-2" aria-label="Loading permission matrix">
+                {[0, 1, 2, 3].map((index) => (
+                  <div key={index} className="h-28 animate-pulse rounded-lg bg-muted" />
+                ))}
+              </div>
+            ) : permissionMatrix ? (
+              <>
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border border-border bg-background p-3">
+                    <div className="text-xs font-medium text-muted-foreground">Effective role</div>
+                    <div className="mt-1 text-lg font-semibold text-foreground">{roleLabel(permissionMatrix.role)}</div>
                   </div>
-                );
-              })}
-            </div>
+                  <div className="rounded-lg border border-border bg-background p-3">
+                    <div className="text-xs font-medium text-muted-foreground">Status gate</div>
+                    <div className={cn('mt-1 text-lg font-semibold', permissionMatrix.canSignIn ? 'text-emerald-700' : 'text-amber-700')}>
+                      {permissionMatrix.canSignIn ? 'Can sign in' : `${permissionMatrix.status} only`}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background p-3">
+                    <div className="text-xs font-medium text-muted-foreground">Allowed capabilities</div>
+                    <div className="mt-1 text-lg font-semibold text-foreground">
+                      {permissionMatrix.summary.allowed}/{permissionMatrix.summary.total}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-5 grid gap-3 xl:grid-cols-2">
+                  {permissionMatrix.groups.map((group) => (
+                    <PermissionMatrixGroup key={group.key} group={group} />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="mt-5 rounded-lg border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
+                Permission matrix has not loaded yet.
+              </div>
+            )}
           </div>
         </section>
 
@@ -1387,6 +1469,51 @@ function AdminSessionCard({
         >
           {session.current ? 'Protected' : isRevoking ? 'Revoking...' : 'Revoke'}
         </Button>
+      </div>
+    </article>
+  );
+}
+
+function PermissionMatrixGroup({ group }: { group: AdminPermissionGroup }) {
+  const allowedCount = group.permissions.filter((permission) => permission.allowed).length;
+
+  return (
+    <article className="rounded-lg border border-border bg-background p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">{group.label}</h3>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{group.description}</p>
+        </div>
+        <span className={cn(
+          'rounded px-2 py-0.5 text-[11px] font-semibold',
+          allowedCount > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-muted text-muted-foreground',
+        )}
+        >
+          {allowedCount}/{group.permissions.length}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2">
+        {group.permissions.map((permission) => (
+          <div
+            key={permission.key}
+            className={cn(
+              'flex items-start gap-2 rounded-lg border px-2.5 py-2 text-xs',
+              permission.allowed
+                ? 'border-emerald-200 bg-emerald-50/50 text-emerald-950'
+                : 'border-border bg-muted/30 text-muted-foreground',
+            )}
+          >
+            {permission.allowed ? (
+              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+            ) : (
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            )}
+            <div>
+              <div className="font-medium">{permission.label}</div>
+              <div className="mt-0.5 leading-5">{permission.reason}</div>
+            </div>
+          </div>
+        ))}
       </div>
     </article>
   );

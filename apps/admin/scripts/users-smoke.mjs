@@ -205,6 +205,9 @@ const navigate = async (client, url, readyExpression, description) => {
     if (state.ready) {
       return state;
     }
+    if ((attempt === 40 || attempt === 80) && !(state.body || '').trim()) {
+      await client.send('Page.navigate', { url });
+    }
     if (attempt === 119) {
       throw new Error(`${description} did not become ready: ${JSON.stringify(state)}`);
     }
@@ -535,6 +538,33 @@ const waitForUserDetailSessions = async (client) => {
   throw new Error('User detail sessions panel did not show the protected current session');
 };
 
+const waitForUserDetailPermissionMatrix = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('#user-detail-permissions');
+      const text = panel?.textContent || '';
+      return {
+        ready: Boolean(panel),
+        hasMatrix: text.includes('Backend permission matrix'),
+        hasUsersAccess: text.includes('Users and access'),
+        hasSettings: text.includes('Settings and integrations'),
+        hasAllowedSummary: text.includes('Allowed capabilities') && text.includes('/'),
+        hasStatusGate: text.includes('Status gate'),
+        text: text.slice(0, 1800),
+      };
+    })()`);
+    if (state.ready && state.hasMatrix && state.hasUsersAccess && state.hasSettings && state.hasAllowedSummary && state.hasStatusGate) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`User detail permission matrix did not render: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const generateUserDetailResetToken = async (client, email) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => {
@@ -788,6 +818,7 @@ const main = async () => {
     await waitForUsersPageUser(client, email);
 
     await openUserDetail(client, fullName);
+    await waitForUserDetailPermissionMatrix(client);
     await generateUserDetailResetToken(client, email);
     const resetAuditLogs = await listUserAuditLogs(createdUserId);
     assert(

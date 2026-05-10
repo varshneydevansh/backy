@@ -369,6 +369,55 @@ interface ApiUserResponse {
   };
 }
 
+export type AdminPermissionCapability =
+  | 'view'
+  | 'create'
+  | 'edit'
+  | 'publish'
+  | 'delete'
+  | 'manage'
+  | 'export'
+  | 'configure';
+
+export interface AdminPermissionRule {
+  key: string;
+  label: string;
+  capability: AdminPermissionCapability;
+  allowed: boolean;
+  source: 'role' | 'status';
+  reason: string;
+}
+
+export interface AdminPermissionGroup {
+  key: string;
+  label: string;
+  description: string;
+  permissions: AdminPermissionRule[];
+}
+
+export interface AdminUserPermissionMatrix {
+  userId: string;
+  role: User['role'];
+  status: User['status'];
+  canSignIn: boolean;
+  summary: {
+    allowed: number;
+    total: number;
+    blockedByStatus: boolean;
+  };
+  groups: AdminPermissionGroup[];
+}
+
+interface ApiUserPermissionsResponse {
+  success: boolean;
+  data?: {
+    permissions: AdminUserPermissionMatrix;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiBlogPost {
   id: string;
   siteId: string;
@@ -2016,6 +2065,17 @@ export async function getUser(userId: string): Promise<User> {
   }
 
   return toStoreUser(payload.data.user);
+}
+
+export async function getUserPermissions(userId: string): Promise<AdminUserPermissionMatrix> {
+  const response = await adminFetch(`${getAdminApiBase()}/users/${userId}/permissions`);
+  const payload = await readJson<ApiUserPermissionsResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load user permissions');
+  }
+
+  return payload.data.permissions;
 }
 
 export async function createUser(input: UserInput): Promise<User> {
