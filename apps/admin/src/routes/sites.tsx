@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   AlertTriangle,
+  Archive,
   CheckCircle2,
   Code2,
   Copy,
@@ -24,6 +25,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import {
+  createSite as createSiteFromApi,
   deleteSite as deleteSiteFromApi,
   listPages,
   listSites,
@@ -45,6 +47,8 @@ export const Route = createFileRoute('/sites')({
 });
 
 type SiteStatusFilter = 'all' | Site['status'];
+type SiteDomainFilter = 'all' | 'custom' | 'backy';
+type SitePageCoverageFilter = 'all' | 'with-pages' | 'empty';
 
 const STATUS_OPTIONS: Array<{ value: Site['status']; label: string }> = [
   { value: 'published', label: 'Published' },
@@ -332,8 +336,11 @@ function SitesListView() {
   const [isLoading, setIsLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<SiteStatusFilter>('all');
+  const [domainFilter, setDomainFilter] = useState<SiteDomainFilter>('all');
+  const [pageCoverageFilter, setPageCoverageFilter] = useState<SitePageCoverageFilter>('all');
   const [updatingSiteId, setUpdatingSiteId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Site | null>(null);
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
   const isSiteMutationBusy = updatingSiteId !== null;
   const isSitesBusy = isLoading || isSiteMutationBusy;
   const publicApiBase = useMemo(() => getApiBaseUrl('public'), []);
@@ -372,18 +379,27 @@ function SitesListView() {
     const draft = sites.filter((site) => site.status === 'draft').length;
     const archived = sites.filter((site) => site.status === 'archived').length;
     const pages = sites.reduce((total, site) => total + (site.pageCount || 0), 0);
+    const customDomains = sites.filter((site) => site.customDomain).length;
 
     return [
       { label: 'Sites', value: sites.length, detail: `${published} public`, icon: Globe },
       { label: 'Pages controlled', value: pages, detail: 'Across all workspaces', icon: Layers3 },
       { label: 'Draft sites', value: draft, detail: 'Private until published', icon: Edit },
-      { label: 'Archived', value: archived, detail: 'Hidden from active work', icon: AlertTriangle },
+      { label: 'Custom domains', value: customDomains, detail: 'Domain-owned workspaces', icon: Server },
+      { label: 'Archived', value: archived, detail: 'Hidden from active work', icon: Archive },
     ];
   }, [sites]);
 
   const filteredSites = useMemo(() => (
-    statusFilter === 'all' ? sites : sites.filter((site) => site.status === statusFilter)
-  ), [sites, statusFilter]);
+    sites.filter((site) => {
+      if (statusFilter !== 'all' && site.status !== statusFilter) return false;
+      if (domainFilter === 'custom' && !site.customDomain) return false;
+      if (domainFilter === 'backy' && site.customDomain) return false;
+      if (pageCoverageFilter === 'with-pages' && (site.pageCount || 0) <= 0) return false;
+      if (pageCoverageFilter === 'empty' && (site.pageCount || 0) > 0) return false;
+      return true;
+    })
+  ), [domainFilter, pageCoverageFilter, sites, statusFilter]);
   const selectedApiSite = useMemo(() => filteredSites[0] || sites[0] || null, [filteredSites, sites]);
   const selectedApiSiteId = selectedApiSite?.publicSiteId || selectedApiSite?.id || '{siteId}';
   const adminSitesUrl = `${adminApiBase}/sites`;
@@ -466,8 +482,44 @@ function SitesListView() {
     }
   };
 
+  const handleDuplicateSite = async (site: Site) => {
+    if (isSitesBusy) return;
+
+    setUpdatingSiteId(site.id);
+    setNotice(null);
+
+    try {
+      const suffix = Date.now().toString(36).slice(-6);
+      const duplicated = await createSiteFromApi({
+        name: `${site.name} Copy`,
+        slug: `${site.slug}-copy-${suffix}`,
+        description: site.description
+          ? `${site.description}\n\nDuplicated from ${site.name}.`
+          : `Duplicated from ${site.name}.`,
+        customDomain: null,
+        status: 'draft',
+      });
+      setSites([duplicated, ...sites]);
+      setStatusFilter('all');
+      setDomainFilter('all');
+      setPageCoverageFilter('all');
+      setNotice(`${site.name} duplicated as ${duplicated.name}. Add domains, pages, and publish settings before going live.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Unable to duplicate site');
+    } finally {
+      setUpdatingSiteId(null);
+    }
+  };
+
+  const handleArchiveSite = async (site: Site) => {
+    if (isSitesBusy) return;
+
+    await handleStatusChange(site, 'archived');
+  };
+
   const handleDeleteSite = async () => {
     if (!pendingDelete || isSiteMutationBusy) return;
+    if (deleteConfirmationText.trim() !== pendingDelete.name) return;
 
     setUpdatingSiteId(pendingDelete.id);
     setNotice(null);
@@ -476,6 +528,7 @@ function SitesListView() {
       await deleteSiteFromApi(pendingDelete.publicSiteId || pendingDelete.id);
       deleteSite(pendingDelete.id);
       setPendingDelete(null);
+      setDeleteConfirmationText('');
     } catch (deleteError) {
       setNotice(deleteError instanceof Error ? deleteError.message : 'Unable to delete site');
     } finally {
@@ -604,8 +657,29 @@ function SitesListView() {
           </button>
           <button
             type="button"
+            onClick={() => void handleDuplicateSite(site)}
+            disabled={isSitesBusy}
+            className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label={`Duplicate ${site.name}`}
+            title="Duplicate site"
+          >
+            <Copy className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleArchiveSite(site)}
+            disabled={isSitesBusy || site.status === 'archived'}
+            className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label={`Archive ${site.name}`}
+            title="Archive site"
+          >
+            <Archive className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
             onClick={() => {
               if (!isSitesBusy) {
+                setDeleteConfirmationText('');
                 setPendingDelete(site);
               }
             }}
@@ -638,7 +712,7 @@ function SitesListView() {
     pageSize: 8,
   });
 
-  const hasActiveFilters = Boolean(searchQuery) || statusFilter !== 'all';
+  const hasActiveFilters = Boolean(searchQuery) || statusFilter !== 'all' || domainFilter !== 'all' || pageCoverageFilter !== 'all';
 
   const handleExportSites = () => {
     if (data.length === 0 || isSitesBusy) return;
@@ -687,6 +761,8 @@ function SitesListView() {
 
     setSearchQuery('');
     setStatusFilter('all');
+    setDomainFilter('all');
+    setPageCoverageFilter('all');
     setCurrentPage(1);
   };
   const openNewSite = () => {
@@ -1135,6 +1211,46 @@ function SitesListView() {
               </select>
             </label>
 
+            <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+              Domain
+              <select
+                value={domainFilter}
+                disabled={isSitesBusy}
+                onChange={(event) => {
+                  if (isSitesBusy) return;
+
+                  setDomainFilter(event.target.value as SiteDomainFilter);
+                  setCurrentPage(1);
+                }}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Filter sites by domain"
+              >
+                <option value="all">All domains</option>
+                <option value="custom">Custom domains</option>
+                <option value="backy">Backy preview domains</option>
+              </select>
+            </label>
+
+            <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+              Pages
+              <select
+                value={pageCoverageFilter}
+                disabled={isSitesBusy}
+                onChange={(event) => {
+                  if (isSitesBusy) return;
+
+                  setPageCoverageFilter(event.target.value as SitePageCoverageFilter);
+                  setCurrentPage(1);
+                }}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Filter sites by page coverage"
+              >
+                <option value="all">All page coverage</option>
+                <option value="with-pages">Has pages</option>
+                <option value="empty">No pages yet</option>
+              </select>
+            </label>
+
             <button
               type="button"
               onClick={() => void loadSites()}
@@ -1225,12 +1341,25 @@ function SitesListView() {
             <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
               Public address: <span className="font-medium text-foreground">{getDisplayDomain(pendingDelete)}</span>
             </div>
+            <label className="mt-4 block space-y-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                Type <span className="font-semibold text-foreground">{pendingDelete.name}</span> to confirm deletion
+              </span>
+              <input
+                value={deleteConfirmationText}
+                disabled={isSiteMutationBusy}
+                onChange={(event) => setDeleteConfirmationText(event.target.value)}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Confirm site deletion name"
+              />
+            </label>
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => {
                   if (!isSiteMutationBusy) {
                     setPendingDelete(null);
+                    setDeleteConfirmationText('');
                   }
                 }}
                 disabled={isSiteMutationBusy}
@@ -1241,7 +1370,7 @@ function SitesListView() {
               <button
                 type="button"
                 onClick={() => void handleDeleteSite()}
-                disabled={isSiteMutationBusy}
+                disabled={isSiteMutationBusy || deleteConfirmationText.trim() !== pendingDelete.name}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSiteMutationBusy ? 'Deleting...' : 'Delete site'}

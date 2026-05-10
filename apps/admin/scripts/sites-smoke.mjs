@@ -288,6 +288,88 @@ const setSiteStatusSelect = async (client, siteName, status) => {
   return null;
 };
 
+const setSitesFilter = async (client, ariaLabel, value) => {
+  const result = await evaluate(client, `(() => {
+    const control = document.querySelector('[aria-label="' + CSS.escape(${JSON.stringify(ariaLabel)}) + '"]');
+    const value = ${JSON.stringify(value)};
+    if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement)) {
+      return { ok: false, ariaLabel: ${JSON.stringify(ariaLabel)}, controls: Array.from(document.querySelectorAll('input, select')).map((candidate) => candidate.getAttribute('aria-label') || candidate.getAttribute('placeholder') || '').slice(0, 60) };
+    }
+    if (control.disabled) return { ok: false, reason: 'control-disabled', ariaLabel: ${JSON.stringify(ariaLabel)} };
+    const prototype = control instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+    setter?.call(control, String(value));
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+    return { ok: true, value: control.value };
+  })()`);
+  assert(result.ok, `Unable to set ${ariaLabel}: ${JSON.stringify(result)}`);
+  await sleep(250);
+  return result;
+};
+
+const exerciseSitesFilters = async (client, siteName) => {
+  await setSitesFilter(client, 'Search sites', siteName);
+  await waitForSitesPageSite(client, siteName);
+  await setSitesFilter(client, 'Filter sites by domain', 'custom');
+  await waitForSitesPageSite(client, siteName);
+  await setSitesFilter(client, 'Filter sites by page coverage', 'empty');
+  await waitForSitesPageSite(client, siteName);
+  await setSitesFilter(client, 'Filter sites by status', 'published');
+  await waitForSitesPageSite(client, siteName);
+  await setSitesFilter(client, 'Filter sites by status', 'all');
+  await setSitesFilter(client, 'Filter sites by domain', 'all');
+  await setSitesFilter(client, 'Filter sites by page coverage', 'all');
+  await setSitesFilter(client, 'Search sites', '');
+};
+
+const clickSiteAction = async (client, siteName, action) => {
+  await waitForSitesPageSite(client, siteName);
+  const result = await evaluate(client, `(() => {
+    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+      (candidate.getAttribute('aria-label') || '') === ${JSON.stringify(`${action} ${siteName}`)}
+    ));
+    if (!(button instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        action: ${JSON.stringify(action)},
+        buttons: Array.from(document.querySelectorAll('button')).map((candidate) => candidate.getAttribute('aria-label') || candidate.textContent || '').slice(0, 100),
+      };
+    }
+    if (button.disabled) return { ok: false, reason: 'action-disabled', action: ${JSON.stringify(action)} };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(result.ok, `Unable to click ${action} for ${siteName}: ${JSON.stringify(result)}`);
+  await sleep(350);
+  return result;
+};
+
+const duplicateSiteThroughUi = async (client, siteName, originalSlug) => {
+  await clickSiteAction(client, siteName, 'Duplicate');
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const sites = await listSites();
+    const duplicate = sites.find((site) => (
+      site.name === `${siteName} Copy` &&
+      site.slug.startsWith(`${originalSlug}-copy-`) &&
+      site.status === 'draft' &&
+      !site.customDomain
+    ));
+    if (duplicate) {
+      return duplicate;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Duplicated site was not created for ${siteName}`);
+};
+
+const archiveSiteThroughUi = async (client, siteName, slug) => {
+  await clickSiteAction(client, siteName, 'Archive');
+  return waitForSite(slug, (site) => site.status === 'archived');
+};
+
 const deleteSiteThroughUi = async (client, siteName) => {
   await waitForSitesPageSite(client, siteName);
   const openResult = await evaluate(client, `(() => {
@@ -305,6 +387,19 @@ const deleteSiteThroughUi = async (client, siteName) => {
     return { ok: true };
   })()`);
   assert(openResult.ok, `Unable to open site delete confirmation: ${JSON.stringify(openResult)}`);
+
+  const typedResult = await evaluate(client, `(() => {
+    const input = document.querySelector('[aria-label="Confirm site deletion name"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return { ok: false, reason: 'input-missing' };
+    }
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, ${JSON.stringify(siteName)});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return { ok: true, value: input.value };
+  })()`);
+  assert(typedResult.ok, `Unable to type delete confirmation: ${JSON.stringify(typedResult)}`);
 
   const confirmResult = await evaluate(client, `(() => {
     const dialog = Array.from(document.querySelectorAll('[class*="fixed"]')).find((candidate) => (
@@ -395,6 +490,7 @@ const main = async () => {
   let childProcess;
   let userDataDir;
   let createdSiteId;
+  let duplicatedSiteId;
   const suffix = Date.now().toString(36);
   const siteName = `Sites Smoke ${suffix}`;
   const slug = `sites-smoke-${suffix}`;
@@ -431,6 +527,14 @@ const main = async () => {
     await setSiteStatusSelect(client, siteName, 'published');
     const published = await waitForSite(slug, (site) => site.status === 'published' || site.isPublished === true);
     assert((await getSite(published.id)).status === 'published', 'Site status update did not persist through the admin API.');
+    await exerciseSitesFilters(client, siteName);
+
+    const duplicated = await duplicateSiteThroughUi(client, siteName, slug);
+    duplicatedSiteId = duplicated.id;
+    assert((await getSite(duplicated.id)).status === 'draft', 'Duplicated site did not persist as a draft through the admin API.');
+
+    await archiveSiteThroughUi(client, siteName, slug);
+    assert((await getSite(createdSiteId)).status === 'archived', 'Archive action did not persist through the admin API.');
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));
@@ -440,14 +544,21 @@ const main = async () => {
     await waitForSiteMissing(slug);
     createdSiteId = null;
 
+    await deleteSite(duplicatedSiteId);
+    duplicatedSiteId = null;
+
     console.log(JSON.stringify({
       ok: true,
       siteName,
       slug,
+      duplicatedSlug: duplicated.slug,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
     await cleanup({ client, childProcess, userDataDir, siteId: createdSiteId });
+    if (duplicatedSiteId) {
+      await deleteSite(duplicatedSiteId).catch(() => {});
+    }
   }
 };
 
