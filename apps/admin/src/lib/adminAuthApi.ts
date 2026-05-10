@@ -32,6 +32,18 @@ export interface AdminPasswordResetToken {
   resetUrl: string;
 }
 
+export interface AdminInviteToken {
+  id: string;
+  token: string;
+  userId: string;
+  email: string;
+  createdAt: string;
+  expiresAt: string;
+  requestedById?: string | null;
+  deliveryConfigured: false;
+  inviteUrl: string;
+}
+
 interface AdminAuthResponse {
   success: boolean;
   data?: {
@@ -67,6 +79,16 @@ interface AdminPasswordResetTokenResponse {
   success: boolean;
   data?: {
     reset: AdminPasswordResetToken;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
+interface AdminInviteTokenResponse {
+  success: boolean;
+  data?: {
+    invite: AdminInviteToken;
   };
   error?: {
     message?: string;
@@ -190,6 +212,23 @@ export async function createAdminPasswordResetToken(token: string, userId: strin
   }
 
   return payload.data.reset;
+}
+
+export async function createAdminInviteToken(token: string, userId: string) {
+  const response = await fetch(`${getAdminApiBase()}/users/${encodeURIComponent(userId)}/invite-link`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+  });
+  const payload = await readJson<AdminInviteTokenResponse>(response);
+
+  if (!response.ok || !payload?.success || !payload.data) {
+    throw new Error(payload?.error?.message || 'Unable to create invite link');
+  }
+
+  return payload.data.invite;
 }
 
 export async function requestAdminPasswordRecovery(email: string) {

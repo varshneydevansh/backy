@@ -39,6 +39,18 @@ export interface AdminPasswordResetToken {
   resetUrl: string;
 }
 
+export interface AdminInviteToken {
+  id: string;
+  token: string;
+  userId: string;
+  email: string;
+  createdAt: string;
+  expiresAt: string;
+  requestedById?: string | null;
+  deliveryConfigured: false;
+  inviteUrl: string;
+}
+
 type StoredSession = AdminSession & {
   lastSeenAt: string;
 };
@@ -46,6 +58,7 @@ type StoredSession = AdminSession & {
 const globalAdminSessionStore = globalThis as typeof globalThis & {
   __BACKY_ADMIN_SESSIONS__?: Map<string, StoredSession>;
   __BACKY_ADMIN_PASSWORD_RESET_TOKENS__?: Map<string, AdminPasswordResetToken>;
+  __BACKY_ADMIN_INVITE_TOKENS__?: Map<string, AdminInviteToken>;
 };
 
 const ADMIN_SESSIONS = globalAdminSessionStore.__BACKY_ADMIN_SESSIONS__ ?? new Map<string, StoredSession>();
@@ -53,6 +66,9 @@ globalAdminSessionStore.__BACKY_ADMIN_SESSIONS__ = ADMIN_SESSIONS;
 
 const PASSWORD_RESET_TOKENS = globalAdminSessionStore.__BACKY_ADMIN_PASSWORD_RESET_TOKENS__ ?? new Map<string, AdminPasswordResetToken>();
 globalAdminSessionStore.__BACKY_ADMIN_PASSWORD_RESET_TOKENS__ = PASSWORD_RESET_TOKENS;
+
+const INVITE_TOKENS = globalAdminSessionStore.__BACKY_ADMIN_INVITE_TOKENS__ ?? new Map<string, AdminInviteToken>();
+globalAdminSessionStore.__BACKY_ADMIN_INVITE_TOKENS__ = INVITE_TOKENS;
 
 const DEMO_CREDENTIALS: Record<string, { password: string; userEmail: string; label: string }> = {
   'admin@backy.io': {
@@ -264,6 +280,35 @@ export function createAdminPasswordResetToken(input: {
 
   PASSWORD_RESET_TOKENS.set(token, resetToken);
   return resetToken;
+}
+
+export function createAdminInviteToken(input: {
+  user: Pick<AdminAuthUser, 'id' | 'email'>;
+  requestedById?: string | null;
+  origin?: string;
+  expiresInMinutes?: number;
+}): AdminInviteToken {
+  const createdAt = new Date();
+  const expiresInMinutes = Number.isFinite(input.expiresInMinutes)
+    ? Math.min(Math.max(input.expiresInMinutes || 10080, 30), 43200)
+    : 10080;
+  const expiresAt = new Date(createdAt.getTime() + expiresInMinutes * 60 * 1000);
+  const token = `bit_${randomUUID().replace(/-/g, '')}`;
+  const origin = input.origin?.replace(/\/$/, '') || '';
+  const inviteToken: AdminInviteToken = {
+    id: `invite_${token.slice(-12)}`,
+    token,
+    userId: input.user.id,
+    email: input.user.email,
+    createdAt: createdAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    requestedById: input.requestedById || null,
+    deliveryConfigured: false,
+    inviteUrl: `${origin || '/admin'}/accept-invite?token=${encodeURIComponent(token)}`,
+  };
+
+  INVITE_TOKENS.set(token, inviteToken);
+  return inviteToken;
 }
 
 export function getLocalRecoveryAccount(email: string) {

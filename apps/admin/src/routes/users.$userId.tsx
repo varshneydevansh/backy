@@ -41,9 +41,11 @@ import {
   type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
 import {
+  createAdminInviteToken,
   createAdminPasswordResetToken,
   listAdminAuthSessions,
   revokeAdminAuthSession,
+  type AdminInviteToken,
   type AdminPasswordResetToken,
   type AdminSessionSummary,
 } from '@/lib/adminAuthApi';
@@ -164,6 +166,9 @@ function EditUserPage() {
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
+  const [inviteToken, setInviteToken] = useState<AdminInviteToken | null>(null);
+  const [isCreatingInviteToken, setIsCreatingInviteToken] = useState(false);
+  const [inviteTokenNotice, setInviteTokenNotice] = useState<string | null>(null);
   const [passwordResetToken, setPasswordResetToken] = useState<AdminPasswordResetToken | null>(null);
   const [isCreatingResetToken, setIsCreatingResetToken] = useState(false);
   const [resetTokenNotice, setResetTokenNotice] = useState<string | null>(null);
@@ -326,6 +331,12 @@ function EditUserPage() {
     !isCreatingResetToken &&
     formData.status !== 'inactive' &&
     formData.status !== 'suspended',
+  );
+  const canCreateInviteToken = Boolean(
+    currentSessionToken &&
+    !isUserDetailBusy &&
+    !isCreatingInviteToken &&
+    formData.status === 'invited',
   );
   const canSaveUserDetail = canSubmit && hasUnsavedChanges && !hasSelfAccessChanges;
   const accessReadiness = useMemo(() => {
@@ -555,6 +566,15 @@ function EditUserPage() {
         },
     recovery: {
       resetMailTo,
+      inviteTokenEndpoint: `${userDetailUrl}/invite-link`,
+      latestInviteToken: inviteToken
+        ? {
+            id: inviteToken.id,
+            expiresAt: inviteToken.expiresAt,
+            deliveryConfigured: inviteToken.deliveryConfigured,
+            inviteUrl: inviteToken.inviteUrl,
+          }
+        : null,
       resetTokenEndpoint: `${userDetailUrl}/password-reset`,
       latestResetToken: passwordResetToken
         ? {
@@ -622,6 +642,30 @@ function EditUserPage() {
       setSessionNotice(error instanceof Error ? error.message : 'Unable to revoke admin session.');
     } finally {
       setRevokingSessionId(null);
+    }
+  };
+
+  const createInviteToken = async () => {
+    if (!currentSessionToken || isCreatingInviteToken) {
+      setInviteTokenNotice('Sign in with a valid admin session to generate invite links.');
+      return;
+    }
+
+    setIsCreatingInviteToken(true);
+    setInviteTokenNotice(null);
+
+    try {
+      const invite = await createAdminInviteToken(currentSessionToken, user.id);
+      setInviteToken(invite);
+      setInviteTokenNotice(invite.deliveryConfigured
+        ? 'Invite delivery was queued.'
+        : 'Local invite link generated. Copy the invite URL for manual delivery.');
+      await loadUserAuditLogs();
+    } catch (error) {
+      setInviteToken(null);
+      setInviteTokenNotice(error instanceof Error ? error.message : 'Unable to generate invite link.');
+    } finally {
+      setIsCreatingInviteToken(false);
     }
   };
 
@@ -1153,16 +1197,30 @@ function EditUserPage() {
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Account recovery</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Generate a temporary reset handoff, then copy the URL or send manual reset instructions until email delivery is wired.
+                  Generate temporary invite or reset handoffs, then copy the URL until transactional email delivery is wired.
                 </p>
               </div>
             </div>
+            {inviteTokenNotice && (
+              <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">
+                {inviteTokenNotice}
+              </div>
+            )}
             {resetTokenNotice && (
               <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 {resetTokenNotice}
               </div>
             )}
             <div className="mt-4 grid gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void createInviteToken()}
+                disabled={!canCreateInviteToken}
+                iconStart={<Mail className="size-4" />}
+              >
+                {isCreatingInviteToken ? 'Generating...' : 'Generate invite link'}
+              </Button>
               <Button
                 type="button"
                 variant="primary"
@@ -1185,6 +1243,58 @@ function EditUserPage() {
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
             </div>
+            {inviteToken ? (
+              <div className="mt-4 rounded-lg border border-border bg-background p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-xs font-medium uppercase text-muted-foreground">Latest invite link</div>
+                    <div className="mt-1 font-mono text-xs font-semibold text-foreground">{inviteToken.id}</div>
+                  </div>
+                  <span className="rounded bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
+                    Manual delivery
+                  </span>
+                </div>
+                <dl className="mt-3 grid gap-2 text-xs text-muted-foreground">
+                  <div className="flex justify-between gap-3">
+                    <dt>Expires</dt>
+                    <dd className="font-medium text-foreground">{formatAuditDate(inviteToken.expiresAt)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt>Email</dt>
+                    <dd className="truncate font-medium text-foreground">{inviteToken.email}</dd>
+                  </div>
+                </dl>
+                <div className="mt-3 rounded-lg border border-border bg-muted/40 p-2 font-mono text-[11px] leading-5 text-muted-foreground break-all">
+                  {inviteToken.inviteUrl}
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void copyUserDetailText(inviteToken.inviteUrl, 'Invite URL')}
+                    disabled={isUserDetailBusy}
+                    iconStart={<Copy className="size-3.5" />}
+                  >
+                    Copy invite URL
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void copyUserDetailText(inviteToken.token, 'Invite token')}
+                    disabled={isUserDetailBusy}
+                    iconStart={<Copy className="size-3.5" />}
+                  >
+                    Copy invite token
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-3 py-4 text-sm text-muted-foreground">
+                No invite link has been generated in this session.
+              </div>
+            )}
             {passwordResetToken ? (
               <div className="mt-4 rounded-lg border border-border bg-background p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1240,6 +1350,11 @@ function EditUserPage() {
             {(formData.status === 'inactive' || formData.status === 'suspended') && (
               <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                 Activate or invite this account before issuing a new reset token.
+              </div>
+            )}
+            {formData.status !== 'invited' && (
+              <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                Set this account to invited before issuing a new invite link.
               </div>
             )}
             <div className="mt-4 grid gap-2">
@@ -1381,6 +1496,8 @@ function UserDetailAuditEvent({ log }: { log: AdminAuditLog }) {
         ? 'Updated'
         : log.action === 'user.password_reset_token.create'
           ? 'Reset token'
+          : log.action === 'user.invite_token.create'
+            ? 'Invite link'
           : log.action;
   const actionTone = log.action === 'delete'
     ? 'bg-red-50 text-red-700'
@@ -1388,6 +1505,8 @@ function UserDetailAuditEvent({ log }: { log: AdminAuditLog }) {
       ? 'bg-emerald-50 text-emerald-700'
       : log.action === 'user.password_reset_token.create'
         ? 'bg-amber-50 text-amber-700'
+        : log.action === 'user.invite_token.create'
+          ? 'bg-sky-50 text-sky-700'
         : 'bg-sky-50 text-sky-700';
 
   return (

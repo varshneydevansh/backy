@@ -565,6 +565,58 @@ const waitForUserDetailPermissionMatrix = async (client) => {
   return null;
 };
 
+const generateUserDetailInviteLink = async (client, email) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="user-detail-recovery"]');
+      const text = panel?.textContent || '';
+      const button = Array.from(panel?.querySelectorAll('button') || []).find((candidate) => (
+        (candidate.textContent || '').trim() === 'Generate invite link'
+      ));
+      return {
+        ready: Boolean(panel),
+        hasPanel: text.includes('Account recovery'),
+        hasEmail: document.body?.innerText?.includes(${JSON.stringify(email)}) || false,
+        buttonEnabled: button instanceof HTMLButtonElement && !button.disabled,
+        text: text.slice(0, 1600),
+      };
+    })()`);
+    if (state.ready && state.hasPanel && state.hasEmail && state.buttonEnabled) {
+      break;
+    }
+    if (attempt === 79) {
+      throw new Error(`User detail invite panel was not ready: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  await clickButton(client, 'Generate invite link');
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="user-detail-recovery"]');
+      const text = panel?.textContent || '';
+      return {
+        ready: Boolean(panel),
+        hasNotice: text.includes('Local invite link generated') || text.includes('Invite delivery was queued'),
+        hasInviteUrl: text.includes('/accept-invite?token=bit_'),
+        hasTokenId: text.includes('invite_'),
+        hasCopyControls: text.includes('Copy invite URL') && text.includes('Copy invite token'),
+        text: text.slice(0, 1800),
+      };
+    })()`);
+    if (state.ready && state.hasNotice && state.hasInviteUrl && state.hasTokenId && state.hasCopyControls) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Invite link UI did not render generated token: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const generateUserDetailResetToken = async (client, email) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => {
@@ -819,11 +871,16 @@ const main = async () => {
 
     await openUserDetail(client, fullName);
     await waitForUserDetailPermissionMatrix(client);
+    await generateUserDetailInviteLink(client, email);
     await generateUserDetailResetToken(client, email);
-    const resetAuditLogs = await listUserAuditLogs(createdUserId);
+    const recoveryAuditLogs = await listUserAuditLogs(createdUserId);
     assert(
-      resetAuditLogs.some((log) => log.action === 'user.password_reset_token.create'),
-      `User reset token audit log was not recorded: ${JSON.stringify(resetAuditLogs).slice(0, 500)}`,
+      recoveryAuditLogs.some((log) => log.action === 'user.invite_token.create'),
+      `User invite token audit log was not recorded: ${JSON.stringify(recoveryAuditLogs).slice(0, 500)}`,
+    );
+    assert(
+      recoveryAuditLogs.some((log) => log.action === 'user.password_reset_token.create'),
+      `User reset token audit log was not recorded: ${JSON.stringify(recoveryAuditLogs).slice(0, 500)}`,
     );
     await navigateToUsers(client);
     await waitForUsersPageUser(client, email);
