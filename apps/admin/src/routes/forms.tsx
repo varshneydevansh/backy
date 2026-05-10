@@ -300,6 +300,8 @@ const FORM_TEMPLATES: FormTemplateBlueprint[] = [
   },
 ];
 
+const REGISTRATION_FORM_TEMPLATE = FORM_TEMPLATES.find((template) => template.id === 'registration') ?? FORM_TEMPLATES[0];
+
 const FORM_FRONTEND_SYSTEMS = [
   {
     key: 'definition',
@@ -330,6 +332,24 @@ const FORM_FRONTEND_SYSTEMS = [
     key: 'files',
     title: 'File uploads',
     detail: 'File fields hand off media asset IDs or signed upload references for private/public storage flows.',
+  },
+] as const;
+
+const FORM_ACCOUNT_HANDOFF_STEPS = [
+  {
+    key: 'signup',
+    title: 'Account signup',
+    detail: 'Use the registration template to collect identity, email, phone, member type, and consent from any custom frontend.',
+  },
+  {
+    key: 'review',
+    title: 'Review and consent',
+    detail: 'Keep moderation manual by default so admins can approve registrations before they become contacts, members, or collection records.',
+  },
+  {
+    key: 'profile',
+    title: 'Profile handoff',
+    detail: 'Route approved values into Contacts or a mapped collection today; auth/session provisioning stays a dedicated user-account milestone.',
   },
 ] as const;
 
@@ -672,6 +692,18 @@ function FormsRoute() {
       total: forms.length,
     },
     frontendSystems: FORM_FRONTEND_SYSTEMS,
+    accountRegistration: {
+      templateId: REGISTRATION_FORM_TEMPLATE.id,
+      pageTemplate: REGISTRATION_FORM_TEMPLATE.pageTemplate,
+      title: REGISTRATION_FORM_TEMPLATE.title,
+      requiredFields: REGISTRATION_FORM_TEMPLATE.fields
+        .filter((field) => field.required)
+        .map((field) => field.key),
+      contactShare: REGISTRATION_FORM_TEMPLATE.contactShare,
+      handoffSteps: FORM_ACCOUNT_HANDOFF_STEPS,
+      currentCapability: 'Backy can capture, moderate, export, and route registration submissions into contacts or collections.',
+      remainingAccountMilestone: 'Authenticated member accounts, password/session lifecycle, and role assignment are still handled by the Users/Auth roadmap.',
+    },
     metrics,
     templates: FORM_TEMPLATES.map((template) => buildTemplateManifest(template)),
     selectedForm: selectedForm ? {
@@ -1474,6 +1506,50 @@ function FormsRoute() {
                     {system.key}
                   </span>
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="forms-account-contract">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Registration/account handoff</h3>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Backy can run signup-style public forms today: render the registration schema, capture consent, review submissions, and route approved values into contacts or collections. Authenticated member accounts remain a separate Users/Auth milestone.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => void createFormFromTemplate(REGISTRATION_FORM_TEMPLATE)}
+                disabled={isFormsBusy}
+                iconStart={<FileInput className="size-4" />}
+              >
+                {isCreatingTemplateId === REGISTRATION_FORM_TEMPLATE.id ? 'Creating...' : 'Create registration form'}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openFormPageTemplate(REGISTRATION_FORM_TEMPLATE.pageTemplate)}
+                disabled={isFormsBusy}
+                iconStart={<Sparkles className="size-4" />}
+              >
+                Start registration page
+              </Button>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-3">
+            {FORM_ACCOUNT_HANDOFF_STEPS.map((step, index) => (
+              <div key={step.key} className="rounded-lg border border-border bg-card p-3">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-[11px] font-semibold text-primary">
+                    {index + 1}
+                  </span>
+                  <div className="text-sm font-semibold text-foreground">{step.title}</div>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">{step.detail}</p>
               </div>
             ))}
           </div>

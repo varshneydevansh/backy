@@ -654,11 +654,14 @@ const assertLayout = async (client) => {
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="forms-command-center"]')),
+    hasAccountContract: Boolean(document.querySelector('[data-testid="forms-account-contract"]')) &&
+      document.body?.innerText?.includes('Registration/account handoff') &&
+      document.body?.innerText?.includes('Create registration form'),
     hasTemplates: document.body?.innerText?.includes('Form templates') || false,
     hasInbox: document.body?.innerText?.includes('Submission inbox') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Forms page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasTemplates && layout.hasInbox, `Forms page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasAccountContract && layout.hasTemplates && layout.hasInbox, `Forms page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
