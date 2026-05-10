@@ -14,9 +14,11 @@ import {
   createPagePreview,
   deletePage as deletePageFromApi,
   getPageReadiness,
+  getPageRevisionSummary,
   getSiteReadiness,
   listPages,
   publishPage,
+  type ContentRevisionSummary,
   type PageReadiness,
 } from '@/lib/adminContentApi';
 import { useStore, type Page } from '@/stores/mockStore';
@@ -221,6 +223,10 @@ const PAGE_EXPORT_COLUMNS = [
   'children_count',
   'navigation_placement',
   'navigation_label',
+  'revision_count',
+  'latest_revision_note',
+  'latest_revision_at',
+  'latest_revision_status',
   'scheduled_at',
   'last_updated',
   'readiness_score',
@@ -319,6 +325,8 @@ function PagesListView() {
   const [bulkAction, setBulkAction] = useState<'publish' | 'archive' | 'delete' | ''>('');
   const [isBulkBusy, setIsBulkBusy] = useState(false);
   const [readinessMap, setReadinessMap] = useState<Record<string, PageReadiness>>({});
+  const [revisionSummaryMap, setRevisionSummaryMap] = useState<Record<string, ContentRevisionSummary>>({});
+  const [isLoadingRevisions, setIsLoadingRevisions] = useState(false);
   const [previewingPageId, setPreviewingPageId] = useState<string | null>(null);
   const [mutatingPageId, setMutatingPageId] = useState<string | null>(null);
   const [pendingDeletePage, setPendingDeletePage] = useState<Page | null>(null);
@@ -537,6 +545,10 @@ function PagesListView() {
         pageChildCountMap.get(page.id) || 0,
         pageMetaString(page, 'navigationPlacement'),
         pageMetaString(page, 'navigationLabel'),
+        revisionSummaryMap[page.id]?.count ?? 0,
+        revisionSummaryMap[page.id]?.latest?.note || '',
+        revisionSummaryMap[page.id]?.latest?.createdAt || '',
+        revisionSummaryMap[page.id]?.latest?.snapshotStatus || '',
         page.scheduledAt || '',
         page.lastUpdated || '',
         readiness?.score ?? '',
@@ -611,6 +623,7 @@ function PagesListView() {
 
       setIsLoading(true);
       setIsLoadingReadiness(true);
+      setIsLoadingRevisions(true);
       setError(null);
 
       try {
@@ -618,14 +631,17 @@ function PagesListView() {
           listPages(siteId),
           getSiteReadiness(siteId).catch(() => null),
         ]);
+        const revisionSummaries = await loadPageRevisionSummaries(siteId, backendPages);
         setPages(backendPages);
         setSelectedPageIds((current) => new Set(backendPages.filter((page) => current.has(page.id)).map((page) => page.id)));
         setReadinessMap(Object.fromEntries((readiness?.pages || []).map((page) => [page.id, page])));
+        setRevisionSummaryMap(revisionSummaries);
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : 'Unable to load pages');
       } finally {
         setIsLoading(false);
         setIsLoadingReadiness(false);
+        setIsLoadingRevisions(false);
       }
     },
     [isPageLibraryBusy, setPages],
@@ -637,6 +653,7 @@ function PagesListView() {
     const loadPages = async () => {
       setIsLoading(true);
       setIsLoadingReadiness(true);
+      setIsLoadingRevisions(true);
       setError(null);
 
       try {
@@ -644,10 +661,12 @@ function PagesListView() {
           listPages(activeSiteId),
           getSiteReadiness(activeSiteId).catch(() => null),
         ]);
+        const revisionSummaries = await loadPageRevisionSummaries(activeSiteId, backendPages);
         if (!cancelled) {
           setPages(backendPages);
           setSelectedPageIds((current) => new Set(backendPages.filter((page) => current.has(page.id)).map((page) => page.id)));
           setReadinessMap(Object.fromEntries((readiness?.pages || []).map((page) => [page.id, page])));
+          setRevisionSummaryMap(revisionSummaries);
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -657,6 +676,7 @@ function PagesListView() {
         if (!cancelled) {
           setIsLoading(false);
           setIsLoadingReadiness(false);
+          setIsLoadingRevisions(false);
         }
       }
     };
@@ -707,6 +727,7 @@ function PagesListView() {
 
       const updated = await publishPage(page.siteId || activeSiteId, page.id);
       updatePage(page.id, updated);
+      void refreshPageRevisionSummary(page.siteId || activeSiteId, page.id, setRevisionSummaryMap);
       setNotice(`${updated.title || page.title} published.`);
     } catch (publishError) {
       setError(publishError instanceof Error ? publishError.message : 'Unable to publish page');
@@ -725,6 +746,7 @@ function PagesListView() {
     try {
       const updated = await archivePage(page.siteId || activeSiteId, page.id);
       updatePage(page.id, updated);
+      void refreshPageRevisionSummary(page.siteId || activeSiteId, page.id, setRevisionSummaryMap);
       setNotice(`${updated.title || page.title} archived.`);
     } catch (archiveError) {
       setError(archiveError instanceof Error ? archiveError.message : 'Unable to archive page');
@@ -749,6 +771,11 @@ function PagesListView() {
         return next;
       });
       setReadinessMap((current) => {
+        const next = { ...current };
+        delete next[page.id];
+        return next;
+      });
+      setRevisionSummaryMap((current) => {
         const next = { ...current };
         delete next[page.id];
         return next;
@@ -926,6 +953,18 @@ function PagesListView() {
           </span>
         );
       }
+    },
+    {
+      key: 'content',
+      label: 'Revisions',
+      render: (page) => (
+        <PageRevisionCell
+          page={page}
+          summary={revisionSummaryMap[page.id]}
+          isLoading={isLoadingRevisions}
+          activeSiteId={activeSiteId}
+        />
+      )
     },
     {
       key: 'lastUpdated',
@@ -1160,31 +1199,47 @@ function PagesListView() {
       totalPages,
       totalItems,
     },
-    pages: filteredPages.map((page) => ({
-      id: page.id,
-      title: page.title,
-      slug: page.slug,
-      path: pagePublicPath(page),
-      status: page.status,
-      isHomepage: Boolean(page.isHomepage),
-      hierarchy: {
-        parentId: page.parentId || null,
-        parentTitle: getParentPageTitle(page, activeSitePageMap) || null,
-        childCount: pageChildCountMap.get(page.id) || 0,
-      },
-      navigation: {
-        placement: pageMetaString(page, 'navigationPlacement') || null,
-        label: pageMetaString(page, 'navigationLabel') || null,
-      },
-      health: readinessMap[page.id]
-        ? {
-            score: readinessMap[page.id].score,
-            statusLabel: readinessMap[page.id].statusLabel,
-            elementCount: readinessMap[page.id].elementCount,
-          }
-        : null,
-      publicUrl: page.status === 'published' ? publicPageUrl(page) : null,
-    })),
+    pages: filteredPages.map((page) => {
+      const revisionSummary = revisionSummaryMap[page.id];
+      const latestRevision = revisionSummary?.latest || null;
+
+      return {
+        id: page.id,
+        title: page.title,
+        slug: page.slug,
+        path: pagePublicPath(page),
+        status: page.status,
+        isHomepage: Boolean(page.isHomepage),
+        hierarchy: {
+          parentId: page.parentId || null,
+          parentTitle: getParentPageTitle(page, activeSitePageMap) || null,
+          childCount: pageChildCountMap.get(page.id) || 0,
+        },
+        navigation: {
+          placement: pageMetaString(page, 'navigationPlacement') || null,
+          label: pageMetaString(page, 'navigationLabel') || null,
+        },
+        revisions: {
+          count: revisionSummary?.count ?? 0,
+          latest: latestRevision
+            ? {
+                id: latestRevision.id,
+                note: latestRevision.note,
+                createdAt: latestRevision.createdAt,
+                status: latestRevision.snapshotStatus,
+              }
+            : null,
+        },
+        health: readinessMap[page.id]
+          ? {
+              score: readinessMap[page.id].score,
+              statusLabel: readinessMap[page.id].statusLabel,
+              elementCount: readinessMap[page.id].elementCount,
+            }
+          : null,
+        publicUrl: page.status === 'published' ? publicPageUrl(page) : null,
+      };
+    }),
     selectedPage: apiPage
       ? {
           id: apiPage.id,
@@ -1223,6 +1278,7 @@ function PagesListView() {
     publicRenderUrl,
     publicResolveUrl,
     readinessMap,
+    revisionSummaryMap,
     searchQuery,
     selectedPages.length,
     siteSlug,
@@ -2085,6 +2141,58 @@ function PageHierarchyCell({ page, parentPage, childCount }: { page: Page; paren
   );
 }
 
+function PageRevisionCell({
+  page,
+  summary,
+  isLoading,
+  activeSiteId,
+}: {
+  page: Page;
+  summary: ContentRevisionSummary | undefined;
+  isLoading: boolean;
+  activeSiteId: string;
+}) {
+  if (isLoading && !summary) {
+    return <span className="text-xs text-muted-foreground">Checking revisions...</span>;
+  }
+
+  const count = summary?.count ?? 0;
+  const latest = summary?.latest ?? null;
+
+  return (
+    <div className="min-w-48 space-y-1" data-testid={`pages-revisions-${page.id}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={cn(
+          'rounded-full px-2 py-0.5 text-xs font-semibold',
+          count > 0 ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
+        )}
+        >
+          {count} revision{count === 1 ? '' : 's'}
+        </span>
+        <Link
+          to="/pages/$pageId/edit"
+          params={{ pageId: page.id }}
+          search={{ siteId: activeSiteId }}
+          hash="page-editor-revisions"
+          className="text-xs font-medium text-primary hover:underline"
+        >
+          Open history
+        </Link>
+      </div>
+      {latest ? (
+        <div className="text-xs leading-5 text-muted-foreground">
+          <span className="block max-w-56 truncate" title={latest.note || 'Revision snapshot'}>
+            {latest.note || 'Revision snapshot'}
+          </span>
+          <span>{formatDate(latest.createdAt)} · {latest.snapshotStatus}</span>
+        </div>
+      ) : (
+        <div className="text-xs text-muted-foreground">No saved snapshots yet.</div>
+      )}
+    </div>
+  );
+}
+
 function PageApiStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-border bg-muted/30 px-3 py-3">
@@ -2204,6 +2312,34 @@ const pageMetaString = (page: Page, key: string): string => {
 const getParentPageTitle = (page: Page, pageMap: Map<string, Page>): string => (
   page.parentId ? pageMap.get(page.parentId)?.title || pageMetaString(page, 'parentPageTitle') : ''
 );
+
+const loadPageRevisionSummaries = async (siteId: string, targetPages: Page[]): Promise<Record<string, ContentRevisionSummary>> => {
+  const results = await Promise.allSettled(
+    targetPages.map(async (page) => {
+      const summary = await getPageRevisionSummary(page.siteId || siteId, page.id);
+      return [page.id, summary] as const;
+    }),
+  );
+
+  return Object.fromEntries(
+    results
+      .filter((result): result is PromiseFulfilledResult<readonly [string, ContentRevisionSummary]> => result.status === 'fulfilled')
+      .map((result) => result.value),
+  );
+};
+
+const refreshPageRevisionSummary = async (
+  siteId: string,
+  pageId: string,
+  setRevisionSummaryMap: (updater: (current: Record<string, ContentRevisionSummary>) => Record<string, ContentRevisionSummary>) => void,
+) => {
+  try {
+    const summary = await getPageRevisionSummary(siteId, pageId);
+    setRevisionSummaryMap((current) => ({ ...current, [pageId]: summary }));
+  } catch {
+    // Revision summaries are supportive context; page mutations already report their own failures.
+  }
+};
 
 const getPublishBlocker = (readiness: PageReadiness): string | null => {
   if (readiness.statusLabel !== 'blocked') {

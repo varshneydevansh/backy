@@ -80,6 +80,16 @@ const createHierarchyPages = async () => {
       },
     }),
   });
+  await requestApi(`/api/admin/sites/${HIERARCHY_SITE_ID}/pages/${childPayload.data.page.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      title: childTitle,
+      slug: childSlug,
+      status: 'draft',
+      description: 'Temporary child page with a saved revision for pages list smoke.',
+      revisionNote: 'Pages list revision smoke snapshot',
+    }),
+  });
 
   return { parentPage, childPage: childPayload.data.page };
 };
@@ -290,6 +300,37 @@ const waitForHierarchyRow = async (client, page, expectedText, expectedSearch = 
   return null;
 };
 
+const waitForRevisionRow = async (client, page, expectedText, expectedSearch = page.title) => {
+  const url = `${ADMIN_BASE_URL}/pages?siteId=${encodeURIComponent(HIERARCHY_SITE_ID)}&q=${encodeURIComponent(expectedSearch)}`;
+  await client.send('Page.navigate', { url });
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const revisions = document.querySelector('[data-testid="pages-revisions-${page.id}"]');
+      return {
+        ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
+        revisionsText: revisions?.textContent || '',
+        body: document.body?.innerText?.slice(0, 700) || '',
+      };
+    })()`);
+
+    if (
+      state.ready
+      && state.revisionsText.includes(expectedText)
+    ) {
+      return { url, state };
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Revision row did not render expected text "${expectedText}": ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const launchChrome = () => {
   assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
 
@@ -381,6 +422,11 @@ const main = async () => {
       hierarchyPages.parentPage,
       '1 child page',
     );
+    const childRevisions = await waitForRevisionRow(
+      client,
+      hierarchyPages.childPage,
+      'Pages list revision smoke snapshot',
+    );
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -401,6 +447,7 @@ const main = async () => {
       registrationShortcut,
       childHierarchy,
       parentHierarchy,
+      childRevisions,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {

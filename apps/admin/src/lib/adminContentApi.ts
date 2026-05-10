@@ -301,6 +301,7 @@ interface ApiRevisionListResponse {
   success: boolean;
   data?: {
     revisions: ApiRevision[];
+    pagination?: ApiPagination;
   };
   error?: {
     message?: string;
@@ -1269,6 +1270,11 @@ export interface ContentRevision {
   snapshotStatus: Page['status'] | BlogPost['status'];
 }
 
+export interface ContentRevisionSummary {
+  count: number;
+  latest: ContentRevision | null;
+}
+
 export interface PreviewLink {
   previewToken: string;
   expiresAt: string;
@@ -2161,6 +2167,21 @@ export async function listPageRevisions(siteId: string, pageId: string): Promise
   }
 
   return payload.data.revisions.map(toContentRevision);
+}
+
+export async function getPageRevisionSummary(siteId: string, pageId: string): Promise<ContentRevisionSummary> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/revisions?limit=1`);
+  const payload = await readJson<ApiRevisionListResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load page revisions');
+  }
+
+  const revisions = payload.data.revisions.map(toContentRevision);
+  return {
+    count: payload.data.pagination?.total ?? revisions.length,
+    latest: revisions[0] || null,
+  };
 }
 
 export async function publishPage(siteId: string, pageId: string): Promise<Page> {
