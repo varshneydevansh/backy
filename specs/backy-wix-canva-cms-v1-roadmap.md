@@ -142,9 +142,9 @@ It explicitly excludes:
 10. `/blog.new`: post metadata + publish path
 11. `/blog.$postId`: revisioning and publication state
 12. `/media`: upload -> validation -> metadata edit -> storage urls
-13. `/users`: role matrix and invitation flows
-14. `/users.new`: invite token and provisioning states
-15. `/users.$userId`: active session and permission display
+13. `/users`: backend-backed access command center with users API handoff, search/role/status/access-review filters, inline role/status updates, delete confirmation, role permission summaries, registration handoff links, and smoke coverage through `test:users`; remaining work is real auth/RBAC, invite delivery, workspace/team scoping, sessions/activity, bulk actions, and audit events
+14. `/users.new`: invite command center with readiness checks, role/status selection, access preview, API payload preview, and backend user creation through `POST /api/admin/users`; remaining work is invite token/email delivery, accept-invite auth flow, resend/expiry controls, and deeper browser submit automation coverage
+15. `/users.$userId`: user access detail workspace with readiness checks, role/status editing, permission preview, lifecycle status actions, reset-email helper, API handoff, guarded removal, and smoke coverage through `test:users`; remaining work is session revocation, activity timeline, password reset token endpoint, UI self-protection safeguards, ownership transfer, and audit events
 16. `/settings`: backend-backed delivery mode, API keys, security policy, notification routing, theme/SEO defaults, handoff manifest, and Supabase/Vercel/storage metadata; remaining work is full auth/RBAC, secret lifecycle, deployment/domain history, billing/storage limits, and provider execution workflows
 17. `/products`: backend-backed product catalog workspace with schema setup/sync, public catalog API readiness, product editor, pricing, variants, inventory, delivery/checkout URLs, merchandising, SEO fields, CSV/handoff export, and smoke coverage through `test:commerce`; remaining work is payment providers, taxes, shipping, discounts, subscriptions, product page templates, customer linkage, and analytics
 18. `/orders`: backend-backed private order operations workspace with schema setup/sync, private order permissions, public checkout-intake contract, payment/fulfillment/tracking/refund/address fields, CSV/handoff export, and smoke coverage through `test:commerce`; remaining work is provider reconciliation, fulfillment integrations, notifications, fraud/risk controls, returns, and analytics
