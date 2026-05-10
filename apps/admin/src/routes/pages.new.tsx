@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Home, Layout, Menu, RefreshCw, Save, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Home, Image as ImageIcon, Layout, Menu, RefreshCw, Save, Search, Sparkles } from 'lucide-react';
 import { createPage, getAdminApiBase, getSiteNavigation, listPages, updateSiteNavigation } from '@/lib/adminContentApi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore, type Page } from '@/stores/mockStore';
@@ -31,6 +31,11 @@ interface NewPageSearch {
     isHomepage?: boolean;
     nav?: PageNavigationPlacement;
     navLabel?: string;
+    seoTitle?: string;
+    canonical?: string;
+    ogImage?: string;
+    noIndex?: boolean;
+    noFollow?: boolean;
 }
 
 type PageTemplate = 'blank' | 'landing' | 'storefront' | 'blog-index' | 'about' | 'contact' | 'registration';
@@ -48,6 +53,11 @@ interface PageCreateDraftState {
     description: string;
     navigationPlacement: PageNavigationPlacement;
     navigationLabel: string;
+    seoTitle: string;
+    canonicalPath: string;
+    ogImage: string;
+    noIndex: boolean;
+    noFollow: boolean;
 }
 
 interface PageCreateAutosaveDraft {
@@ -177,6 +187,11 @@ const PAGE_CREATION_AREAS = [
         href: '#page-preview',
     },
     {
+        title: 'SEO and social',
+        detail: 'Search title, canonical path, Open Graph image, and robots flags.',
+        href: '#page-seo',
+    },
+    {
         title: 'Create payload',
         detail: 'Review the metadata and canvas handoff that will be sent to the backend.',
         href: '#page-payload',
@@ -186,6 +201,21 @@ const PAGE_CREATION_AREAS = [
 const slugify = (value: string) => (
     value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 );
+
+const normalizeCanonicalPath = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return '/';
+
+    if (/^https?:\/\//i.test(trimmed)) {
+        try {
+            return new URL(trimmed).pathname || '/';
+        } catch {
+            return trimmed;
+        }
+    }
+
+    return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+};
 
 const getPagePublicPath = (page: Pick<Page, 'slug' | 'isHomepage'>) => (
     page.isHomepage || page.slug === 'home' || page.slug === ''
@@ -238,6 +268,11 @@ const normalizeNewPageSearch = (input: NewPageSearch): NewPageSearch => ({
     ...(input.isHomepage ? { isHomepage: true } : {}),
     ...(input.nav && input.nav !== DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[input.template || 'blank'] ? { nav: input.nav } : {}),
     ...(input.navLabel?.trim() ? { navLabel: input.navLabel.trim() } : {}),
+    ...(input.seoTitle?.trim() ? { seoTitle: input.seoTitle.trim() } : {}),
+    ...(input.canonical?.trim() ? { canonical: input.canonical.trim() } : {}),
+    ...(input.ogImage?.trim() ? { ogImage: input.ogImage.trim() } : {}),
+    ...(input.noIndex ? { noIndex: true } : {}),
+    ...(input.noFollow ? { noFollow: true } : {}),
 });
 
 export const Route = createFileRoute('/pages/new')({
@@ -252,6 +287,11 @@ export const Route = createFileRoute('/pages/new')({
         isHomepage: normalizedSearchBoolean(search.isHomepage),
         nav: isPageNavigationPlacement(search.nav) ? search.nav : undefined,
         navLabel: normalizedSearchString(search.navLabel),
+        seoTitle: normalizedSearchString(search.seoTitle),
+        canonical: normalizedSearchString(search.canonical),
+        ogImage: normalizedSearchString(search.ogImage),
+        noIndex: normalizedSearchBoolean(search.noIndex),
+        noFollow: normalizedSearchBoolean(search.noFollow),
     }),
     component: NewPageRoute,
 });
@@ -292,6 +332,11 @@ function NewPageRoute() {
         description: search.description ?? templateDefaults.description,
         navigationPlacement: search.nav || DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[initialTemplate],
         navigationLabel: search.navLabel ?? search.title ?? templateDefaults.title,
+        seoTitle: search.seoTitle ?? search.title ?? templateDefaults.title,
+        canonicalPath: search.canonical ?? '',
+        ogImage: search.ogImage ?? '',
+        noIndex: search.noIndex ?? false,
+        noFollow: search.noFollow ?? false,
     });
     const selectedSite = sites.find((site) => siteMatchesIdentifier(site, formData.siteId));
     const buildRouteSearchFromForm = (nextFormData: typeof formData): NewPageSearch => normalizeNewPageSearch({
@@ -305,6 +350,11 @@ function NewPageRoute() {
         isHomepage: nextFormData.isHomepage,
         nav: nextFormData.navigationPlacement,
         navLabel: nextFormData.navigationLabel,
+        seoTitle: nextFormData.seoTitle,
+        canonical: nextFormData.canonicalPath,
+        ogImage: nextFormData.ogImage,
+        noIndex: nextFormData.noIndex,
+        noFollow: nextFormData.noFollow,
     });
     const updatePageDraft = (next: Partial<typeof formData>) => {
         if (isPageCreateBusy) return;
@@ -409,6 +459,11 @@ function NewPageRoute() {
             isHomepage: search.isHomepage ?? false,
             navigationPlacement: search.nav || DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[nextTemplate],
             navigationLabel: search.navLabel ?? search.title ?? nextDefaults.title,
+            seoTitle: search.seoTitle ?? search.title ?? nextDefaults.title,
+            canonicalPath: search.canonical ?? '',
+            ogImage: search.ogImage ?? '',
+            noIndex: search.noIndex ?? false,
+            noFollow: search.noFollow ?? false,
         };
         setFormData((current) => {
             const hasChanged = (
@@ -422,6 +477,11 @@ function NewPageRoute() {
                 || nextFormData.isHomepage !== current.isHomepage
                 || nextFormData.navigationPlacement !== current.navigationPlacement
                 || nextFormData.navigationLabel !== current.navigationLabel
+                || nextFormData.seoTitle !== current.seoTitle
+                || nextFormData.canonicalPath !== current.canonicalPath
+                || nextFormData.ogImage !== current.ogImage
+                || nextFormData.noIndex !== current.noIndex
+                || nextFormData.noFollow !== current.noFollow
             );
 
             return hasChanged ? nextFormData : current;
@@ -440,6 +500,11 @@ function NewPageRoute() {
         search.title,
         search.nav,
         search.navLabel,
+        search.seoTitle,
+        search.canonical,
+        search.ogImage,
+        search.noIndex,
+        search.noFollow,
         sites,
     ]);
 
@@ -467,6 +532,7 @@ function NewPageRoute() {
             description: shouldApplyDescription ? nextDefaults.description : formData.description,
             navigationPlacement: DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[nextTemplate],
             navigationLabel: shouldApplyTitle ? nextDefaults.title : formData.navigationLabel || formData.title,
+            seoTitle: shouldApplyTitle ? nextDefaults.title : formData.seoTitle || formData.title,
         });
     };
     const selectedSiteIdentifiers = useMemo(
@@ -482,6 +548,10 @@ function NewPageRoute() {
         ? '/'
         : `/${slugify(formData.slug || formData.title || 'new-page')}`;
     const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
+    const normalizedCanonicalPath = normalizeCanonicalPath(formData.canonicalPath || routePreview);
+    const canonicalValid = normalizedCanonicalPath.startsWith('/');
+    const effectiveSeoTitle = formData.seoTitle.trim() || formData.title.trim();
+    const effectiveSeoDescription = formData.description.trim();
     const routeConflict = useMemo(
         () => selectedSitePages.find((page) => getPagePublicPath(page) === routePreview) || null,
         [routePreview, selectedSitePages],
@@ -500,6 +570,7 @@ function NewPageRoute() {
         && !routeConflict
         && !routeCheckError
         && hasNavigationLabel
+        && canonicalValid
         && (!formData.isHomepage || formData.slug.trim() || formData.title.trim()),
     );
     const submitBlockerMessage = useMemo(() => {
@@ -509,10 +580,11 @@ function NewPageRoute() {
         if (!selectedSite) return 'Select a target site before creating this page.';
         if (!formData.title.trim()) return 'Add a page title so Backy can create a named page and editor document.';
         if (routeConflict) return `The ${routePreview} route is already used by "${routeConflict.title}".`;
+        if (!canonicalValid) return 'Use a canonical path that starts with / or paste a valid site URL.';
         if (!hasSchedule) return 'Choose a publish date before creating a scheduled page.';
         if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this page to navigation.';
         return 'Review the required page basics before creating this page.';
-    }, [canSubmit, formData.title, hasNavigationLabel, hasSchedule, isCheckingPages, isLoading, routeCheckError, routeConflict, routePreview, selectedSite]);
+    }, [canSubmit, canonicalValid, formData.title, hasNavigationLabel, hasSchedule, isCheckingPages, isLoading, routeCheckError, routeConflict, routePreview, selectedSite]);
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'home' : slugify(formData.slug || formData.title || 'new-page');
         const hasStarterCanvas = selectedTemplate.sections.length > 0;
@@ -544,10 +616,17 @@ function NewPageRoute() {
             },
             {
                 label: 'SEO summary',
-                detail: formData.description.trim()
+                detail: effectiveSeoDescription
                     ? `${formData.description.trim().length} characters ready for route metadata`
                     : 'Add a short SEO description for frontend previews.',
-                ready: formData.description.trim().length > 0,
+                ready: effectiveSeoTitle.length > 0 && effectiveSeoDescription.length > 0 && canonicalValid,
+            },
+            {
+                label: 'Social metadata',
+                detail: formData.ogImage.trim()
+                    ? 'Open Graph image URL is set for social cards.'
+                    : 'Optional Open Graph image can be added before create.',
+                ready: true,
             },
             {
                 label: 'Canvas seed',
@@ -585,15 +664,23 @@ function NewPageRoute() {
         };
     }, [
         formData.description,
+        formData.ogImage,
         formData.isHomepage,
+        formData.canonicalPath,
+        formData.noIndex,
+        formData.noFollow,
         formData.scheduledAt,
         formData.siteId,
         formData.slug,
         formData.status,
         formData.navigationLabel,
         formData.navigationPlacement,
+        formData.seoTitle,
         formData.template,
         formData.title,
+        canonicalValid,
+        effectiveSeoDescription,
+        effectiveSeoTitle.length,
         hasSchedule,
         routeCheckError,
         routeConflict,
@@ -624,16 +711,32 @@ function NewPageRoute() {
         navigation: formData.navigationPlacement === 'none'
             ? { placement: 'none' }
             : { placement: formData.navigationPlacement, label: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page' },
+        seo: {
+            title: effectiveSeoTitle || 'Untitled page',
+            description: effectiveSeoDescription,
+            canonical: normalizedCanonicalPath,
+            ogImage: formData.ogImage.trim() || null,
+            robots: {
+                index: !formData.noIndex,
+                follow: !formData.noFollow,
+            },
+        },
     }), [
         formData.description,
         formData.isHomepage,
         formData.navigationLabel,
         formData.navigationPlacement,
+        formData.noFollow,
+        formData.noIndex,
+        formData.ogImage,
         formData.scheduledAt,
         formData.siteId,
         formData.status,
         formData.template,
         formData.title,
+        effectiveSeoDescription,
+        effectiveSeoTitle,
+        normalizedCanonicalPath,
         routeConflict,
         resolvedSlug,
         selectedSitePages.length,
@@ -679,6 +782,17 @@ function NewPageRoute() {
             navigationPlacement: formData.navigationPlacement,
             navigationLabel: formData.navigationLabel.trim() || formData.title.trim() || 'Untitled page',
         },
+        seo: {
+            title: effectiveSeoTitle || formData.title.trim() || 'Untitled page',
+            description: effectiveSeoDescription,
+            canonical: normalizedCanonicalPath,
+            ogImage: formData.ogImage.trim() || null,
+            robots: {
+                index: !formData.noIndex,
+                follow: !formData.noFollow,
+            },
+            renderPayloadKeys: ['seo.title', 'seo.description', 'seo.canonical', 'seo.openGraph.image', 'seo.robots'],
+        },
         canvas: {
             width: DEFAULT_CANVAS_SIZE.width,
             height: getCanvasHeightForElements(buildTemplateElements({
@@ -699,6 +813,7 @@ function NewPageRoute() {
             'Storefront and blog index templates seed dynamic data placeholders for products and posts.',
             'Non-blank templates seed editable header, navigation, and footer blocks so public frontend chrome is controlled from Backy.',
             'Navigation placement updates the site navigation settings after the page record is created.',
+            'SEO metadata is saved into page meta so render payloads, manifests, and custom frontends can use it immediately.',
             'The canvas seed is serialized before persistence so the editor never starts from a blank record unless the user intentionally keeps the starter sparse.',
         ],
     }), [
@@ -708,9 +823,17 @@ function NewPageRoute() {
         formData.isHomepage,
         formData.navigationLabel,
         formData.navigationPlacement,
+        formData.noFollow,
+        formData.noIndex,
+        formData.ogImage,
+        formData.scheduledAt,
         formData.siteId,
+        formData.status,
         formData.template,
         formData.title,
+        effectiveSeoDescription,
+        effectiveSeoTitle,
+        normalizedCanonicalPath,
         pageCreationReadiness.checks,
         pageCreationReadiness.score,
         resolvedSlug,
@@ -734,12 +857,22 @@ function NewPageRoute() {
         || formData.isHomepage
         || formData.navigationPlacement !== DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[formData.template]
         || formData.navigationLabel.trim().length > 0
+        || formData.seoTitle.trim().length > 0
+        || formData.canonicalPath.trim().length > 0
+        || formData.ogImage.trim().length > 0
+        || formData.noIndex
+        || formData.noFollow
     ), [
+        formData.canonicalPath,
         formData.description,
         formData.isHomepage,
         formData.navigationLabel,
         formData.navigationPlacement,
+        formData.noFollow,
+        formData.noIndex,
+        formData.ogImage,
         formData.scheduledAt,
+        formData.seoTitle,
         formData.slug,
         formData.status,
         formData.template,
@@ -891,8 +1024,12 @@ function NewPageRoute() {
             description: formData.description,
             isHomepage: formData.isHomepage,
             meta: {
-                title,
+                title: effectiveSeoTitle || title,
                 description: formData.description,
+                canonical: normalizedCanonicalPath,
+                ogImage: formData.ogImage.trim() || undefined,
+                noIndex: formData.noIndex,
+                noFollow: formData.noFollow,
                 template: formData.template,
                 navigationPlacement: formData.navigationPlacement,
                 navigationLabel: formData.navigationLabel.trim() || title,
@@ -1186,6 +1323,7 @@ function NewPageRoute() {
                                         title: e.target.value,
                                         slug: formData.slug ? formData.slug : slugify(e.target.value),
                                         navigationLabel: formData.navigationLabel ? formData.navigationLabel : e.target.value,
+                                        seoTitle: formData.seoTitle ? formData.seoTitle : e.target.value,
                                     })}
                                     placeholder="About us"
                                     disabled={isPageCreateBusy}
@@ -1330,6 +1468,116 @@ function NewPageRoute() {
                                     ? 'The page record will be created without changing site navigation.'
                                     : `Backy will append this page to the ${formData.navigationPlacement} menu after the page record is created.`}
                             </div>
+                        </div>
+                    </div>
+
+                    <div id="page-seo" className="space-y-5 rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
+                        <div className="flex items-start gap-3">
+                            <span className="rounded-lg bg-blue-50 p-2 text-blue-700">
+                                <Search className="h-5 w-5" />
+                            </span>
+                            <div>
+                                <h2 className="text-base font-semibold text-foreground">SEO and social metadata</h2>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    These values are saved into page meta and exposed through the public render payload for custom frontends.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="rounded-lg border border-border bg-card p-4">
+                            <div className="text-blue-700 text-lg hover:underline">
+                                {effectiveSeoTitle || 'Page Title'}
+                            </div>
+                            <div className="mt-1 text-sm text-green-700">
+                                {selectedSite?.slug || selectedSite?.name || 'site'}{normalizedCanonicalPath}
+                            </div>
+                            <div className="mt-1 text-sm leading-5 text-muted-foreground">
+                                {effectiveSeoDescription || 'Page description will appear here...'}
+                            </div>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div>
+                                <label htmlFor="page-seo-title" className="mb-2 block text-sm font-medium">Search title</label>
+                                <input
+                                    id="page-seo-title"
+                                    type="text"
+                                    value={formData.seoTitle}
+                                    onChange={(event) => updatePageDraft({ seoTitle: event.target.value })}
+                                    placeholder={formData.title || 'Search result title'}
+                                    disabled={isPageCreateBusy}
+                                    className="w-full rounded-lg border bg-card px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                                />
+                                <div className="mt-1 text-xs text-muted-foreground">{effectiveSeoTitle.length} characters</div>
+                            </div>
+
+                            <div>
+                                <label htmlFor="page-canonical-path" className="mb-2 block text-sm font-medium">Canonical path</label>
+                                <input
+                                    id="page-canonical-path"
+                                    type="text"
+                                    value={formData.canonicalPath}
+                                    onChange={(event) => updatePageDraft({ canonicalPath: event.target.value })}
+                                    placeholder={routePreview}
+                                    disabled={isPageCreateBusy}
+                                    className="w-full rounded-lg border bg-card px-4 py-2.5 font-mono text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                                />
+                                <div className={cn('mt-1 text-xs', canonicalValid ? 'text-muted-foreground' : 'text-amber-700')}>
+                                    {normalizedCanonicalPath}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label htmlFor="page-og-image" className="mb-2 block text-sm font-medium">Open Graph image URL</label>
+                            <div className="relative">
+                                <ImageIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                <input
+                                    id="page-og-image"
+                                    type="url"
+                                    value={formData.ogImage}
+                                    onChange={(event) => updatePageDraft({ ogImage: event.target.value })}
+                                    placeholder="https://..."
+                                    disabled={isPageCreateBusy}
+                                    className="w-full rounded-lg border bg-card py-2.5 pl-10 pr-4 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-2">
+                            <label className={cn(
+                                'flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 transition hover:bg-accent',
+                                isPageCreateBusy && 'cursor-not-allowed opacity-70',
+                            )}>
+                                <input
+                                    type="checkbox"
+                                    checked={formData.noIndex}
+                                    onChange={(event) => updatePageDraft({ noIndex: event.target.checked })}
+                                    disabled={isPageCreateBusy}
+                                    className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-ring"
+                                />
+                                <span>
+                                    <span className="block text-sm font-semibold">No index</span>
+                                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">Ask search engines not to index this page.</span>
+                                </span>
+                            </label>
+
+                            <label className={cn(
+                                'flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 transition hover:bg-accent',
+                                isPageCreateBusy && 'cursor-not-allowed opacity-70',
+                            )}>
+                                <input
+                                    type="checkbox"
+                                    checked={formData.noFollow}
+                                    onChange={(event) => updatePageDraft({ noFollow: event.target.checked })}
+                                    disabled={isPageCreateBusy}
+                                    className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-ring"
+                                />
+                                <span>
+                                    <span className="block text-sm font-semibold">No follow</span>
+                                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">Ask search engines not to follow links from this page.</span>
+                                </span>
+                            </label>
                         </div>
                     </div>
 
@@ -1614,6 +1862,11 @@ const isRecoverablePageCreateDraft = (value: Partial<PageCreateAutosaveDraft>): 
         && typeof formData.description === 'string'
         && isPageNavigationPlacement(formData.navigationPlacement)
         && typeof formData.navigationLabel === 'string'
+        && typeof formData.seoTitle === 'string'
+        && typeof formData.canonicalPath === 'string'
+        && typeof formData.ogImage === 'string'
+        && typeof formData.noIndex === 'boolean'
+        && typeof formData.noFollow === 'boolean'
     );
 };
 

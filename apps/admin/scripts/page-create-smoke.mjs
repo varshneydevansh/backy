@@ -137,13 +137,18 @@ const evaluate = async (client, expression) => {
   return result.result.value;
 };
 
-const navigateToPageCreate = async (client, slug, title, navLabel) => {
+const navigateToPageCreate = async (client, slug, title, navLabel, seo) => {
   const query = new URLSearchParams({
     siteId: SITE_ID,
     template: 'about',
     title,
     slug,
     navLabel,
+    seoTitle: seo.title,
+    canonical: seo.canonical,
+    ogImage: seo.ogImage,
+    noIndex: 'true',
+    noFollow: 'true',
   });
   const url = `${ADMIN_BASE_URL}/pages/new?${query.toString()}`;
   await client.send('Page.navigate', { url });
@@ -156,10 +161,27 @@ const navigateToPageCreate = async (client, slug, title, navLabel) => {
       slug: document.querySelector('#page-slug')?.value || '',
       navPlacement: document.querySelector('#page-navigation-placement-select')?.value || '',
       navLabel: document.querySelector('#page-navigation-label')?.value || '',
+      seoTitle: document.querySelector('#page-seo-title')?.value || '',
+      canonical: document.querySelector('#page-canonical-path')?.value || '',
+      ogImage: document.querySelector('#page-og-image')?.value || '',
+      noIndex: Array.from(document.querySelectorAll('#page-seo input[type="checkbox"]'))[0]?.checked ?? null,
+      noFollow: Array.from(document.querySelectorAll('#page-seo input[type="checkbox"]'))[1]?.checked ?? null,
       body: document.body?.innerText?.slice(0, 240) || '',
     }))()`);
 
-    if (state.ready && state.nav && state.title === title && state.slug === slug && state.navPlacement === 'primary' && state.navLabel === navLabel) {
+    if (
+      state.ready
+      && state.nav
+      && state.title === title
+      && state.slug === slug
+      && state.navPlacement === 'primary'
+      && state.navLabel === navLabel
+      && state.seoTitle === seo.title
+      && state.canonical === seo.canonical
+      && state.ogImage === seo.ogImage
+      && state.noIndex === true
+      && state.noFollow === true
+    ) {
       return { url, state };
     }
 
@@ -173,7 +195,7 @@ const navigateToPageCreate = async (client, slug, title, navLabel) => {
   return null;
 };
 
-const assertAutosaveWritten = async (client, slug, title, navLabel) => {
+const assertAutosaveWritten = async (client, slug, title, navLabel, seo) => {
   let state = null;
 
   for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -187,6 +209,11 @@ const assertAutosaveWritten = async (client, slug, title, navLabel) => {
         template: parsed?.formData?.template || null,
         navigationPlacement: parsed?.formData?.navigationPlacement || null,
         navigationLabel: parsed?.formData?.navigationLabel || null,
+        seoTitle: parsed?.formData?.seoTitle || null,
+        canonicalPath: parsed?.formData?.canonicalPath || null,
+        ogImage: parsed?.formData?.ogImage || null,
+        noIndex: parsed?.formData?.noIndex ?? null,
+        noFollow: parsed?.formData?.noFollow ?? null,
         badge: Array.from(document.querySelectorAll('span')).map((node) => node.textContent || '').find((text) => /Autosaved|Saving draft|Autosave/.test(text)) || '',
       };
     })()`);
@@ -204,10 +231,15 @@ const assertAutosaveWritten = async (client, slug, title, navLabel) => {
   assert(state.template === 'about', `Autosave template mismatch: ${JSON.stringify(state)}`);
   assert(state.navigationPlacement === 'primary', `Autosave navigation placement mismatch: ${JSON.stringify(state)}`);
   assert(state.navigationLabel === navLabel, `Autosave navigation label mismatch: ${JSON.stringify(state)}`);
+  assert(state.seoTitle === seo.title, `Autosave SEO title mismatch: ${JSON.stringify(state)}`);
+  assert(state.canonicalPath === seo.canonical, `Autosave canonical mismatch: ${JSON.stringify(state)}`);
+  assert(state.ogImage === seo.ogImage, `Autosave OG image mismatch: ${JSON.stringify(state)}`);
+  assert(state.noIndex === true, `Autosave noIndex mismatch: ${JSON.stringify(state)}`);
+  assert(state.noFollow === true, `Autosave noFollow mismatch: ${JSON.stringify(state)}`);
   return state;
 };
 
-const assertRecoveryRestore = async (client, slug, title, navLabel) => {
+const assertRecoveryRestore = async (client, slug, title, navLabel, seo) => {
   await client.send('Page.reload', { ignoreCache: true });
   await sleep(500);
 
@@ -245,6 +277,11 @@ const assertRecoveryRestore = async (client, slug, title, navLabel) => {
     slug: document.querySelector('#page-slug')?.value || '',
     navPlacement: document.querySelector('#page-navigation-placement-select')?.value || '',
     navLabel: document.querySelector('#page-navigation-label')?.value || '',
+    seoTitle: document.querySelector('#page-seo-title')?.value || '',
+    canonical: document.querySelector('#page-canonical-path')?.value || '',
+    ogImage: document.querySelector('#page-og-image')?.value || '',
+    noIndex: Array.from(document.querySelectorAll('#page-seo input[type="checkbox"]'))[0]?.checked ?? null,
+    noFollow: Array.from(document.querySelectorAll('#page-seo input[type="checkbox"]'))[1]?.checked ?? null,
     notice: document.body?.innerText?.includes('Recovered local page draft.') || false,
   }))()`);
 
@@ -252,7 +289,26 @@ const assertRecoveryRestore = async (client, slug, title, navLabel) => {
   assert(state.slug === slug, `Recovered draft slug mismatch: ${JSON.stringify(state)}`);
   assert(state.navPlacement === 'primary', `Recovered draft navigation placement mismatch: ${JSON.stringify(state)}`);
   assert(state.navLabel === navLabel, `Recovered draft navigation label mismatch: ${JSON.stringify(state)}`);
+  assert(state.seoTitle === seo.title, `Recovered draft SEO title mismatch: ${JSON.stringify(state)}`);
+  assert(state.canonical === seo.canonical, `Recovered draft canonical mismatch: ${JSON.stringify(state)}`);
+  assert(state.ogImage === seo.ogImage, `Recovered draft OG image mismatch: ${JSON.stringify(state)}`);
+  assert(state.noIndex === true, `Recovered draft noIndex mismatch: ${JSON.stringify(state)}`);
+  assert(state.noFollow === true, `Recovered draft noFollow mismatch: ${JSON.stringify(state)}`);
   return state;
+};
+
+const assertCreatedPageSeo = async (pageId, seo) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const page = payload.data?.page;
+
+  assert(page, `Created page ${pageId} detail was not returned`);
+  assert(page.meta?.title === seo.title, `Created page SEO title mismatch: ${JSON.stringify(page.meta)}`);
+  assert(page.meta?.canonical === seo.normalizedCanonical, `Created page canonical mismatch: ${JSON.stringify(page.meta)}`);
+  assert(page.meta?.ogImage === seo.ogImage, `Created page OG image mismatch: ${JSON.stringify(page.meta)}`);
+  assert(page.meta?.noIndex === true, `Created page noIndex mismatch: ${JSON.stringify(page.meta)}`);
+  assert(page.meta?.noFollow === true, `Created page noFollow mismatch: ${JSON.stringify(page.meta)}`);
+
+  return page.meta;
 };
 
 const createPageFromUi = async (client) => {
@@ -392,6 +448,12 @@ const main = async () => {
   const slug = `page-create-smoke-${Date.now().toString(36)}`;
   const title = 'Smoke Page Create';
   const navLabel = 'Smoke Nav Page';
+  const seo = {
+    title: 'Smoke Page SEO Title',
+    canonical: `https://example.com/${slug}`,
+    normalizedCanonical: `/${slug}`,
+    ogImage: 'https://example.com/smoke-page-og.jpg',
+  };
   const { childProcess, userDataDir } = launchChrome();
   let client;
   let pageId = null;
@@ -411,12 +473,13 @@ const main = async () => {
       source: AUTH_STORAGE_SCRIPT,
     });
 
-    const initialRender = await navigateToPageCreate(client, slug, title, navLabel);
-    const autosave = await assertAutosaveWritten(client, slug, title, navLabel);
-    const recovery = await assertRecoveryRestore(client, slug, title, navLabel);
+    const initialRender = await navigateToPageCreate(client, slug, title, navLabel, seo);
+    const autosave = await assertAutosaveWritten(client, slug, title, navLabel, seo);
+    const recovery = await assertRecoveryRestore(client, slug, title, navLabel, seo);
     const editState = await createPageFromUi(client);
     pageId = editState.path.split('/').filter(Boolean).at(-2);
     const navigationItem = await assertNavigationContainsPage(pageId, navLabel);
+    const pageMeta = await assertCreatedPageSeo(pageId, seo);
 
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
@@ -439,6 +502,7 @@ const main = async () => {
       editState,
       pageId,
       navigationItem,
+      pageMeta,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
