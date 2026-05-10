@@ -40,9 +40,11 @@ import {
   listPages,
   listSites,
   listUsers,
+  validateSettingsInfrastructure,
   type AdminAuditLog,
   type Collection,
   type FormDefinition,
+  type SettingsInfrastructureDiagnostic,
   type SiteReadiness,
   type SiteSettingsInput,
 } from '@/lib/adminContentApi';
@@ -458,6 +460,58 @@ function DashboardWorkflowStep({ index, label, detail }: { index: number; label:
   );
 }
 
+const infrastructureStatusTone = {
+  ready: 'border-success/25 bg-success/10 text-success',
+  warning: 'border-warning/25 bg-warning/10 text-warning',
+  blocked: 'border-destructive/25 bg-destructive/10 text-destructive',
+} satisfies Record<SettingsInfrastructureDiagnostic['status'], string>;
+
+function DashboardInfrastructureDiagnosticCard({ diagnostic }: { diagnostic: SettingsInfrastructureDiagnostic }) {
+  const Icon = diagnostic.status === 'ready' ? CheckCircle2 : AlertTriangle;
+  const requiredFailures = diagnostic.checks.filter((check) => check.required && !check.ready).length;
+
+  return (
+    <div className="rounded-lg border border-border bg-background p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Icon className={cn('size-4 shrink-0', diagnostic.status === 'ready' ? 'text-success' : diagnostic.status === 'warning' ? 'text-warning' : 'text-destructive')} />
+            <h3 className="text-sm font-semibold text-foreground">{diagnostic.label}</h3>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{diagnostic.summary}</p>
+        </div>
+        <span className={cn('shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold capitalize', infrastructureStatusTone[diagnostic.status])}>
+          {diagnostic.status}
+        </span>
+      </div>
+
+      <div className="mt-3 grid gap-2">
+        {diagnostic.checks.map((check) => (
+          <div key={check.label} className="flex items-start justify-between gap-3 rounded-md bg-muted/40 px-2.5 py-2">
+            <span className="min-w-0">
+              <span className="block text-xs font-medium text-foreground">{check.label}</span>
+              <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{check.detail}</span>
+            </span>
+            <span className={cn(
+              'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold',
+              check.ready ? 'bg-success/10 text-success' : check.required ? 'bg-destructive/10 text-destructive' : 'bg-warning/10 text-warning',
+            )}
+            >
+              {check.ready ? 'ready' : check.required ? 'required' : 'optional'}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {diagnostic.missing.length > 0 && (
+        <p className={cn('mt-3 rounded-md px-2.5 py-2 text-xs leading-5', requiredFailures > 0 ? 'bg-destructive/10 text-destructive' : 'bg-warning/10 text-warning')}>
+          Missing: {diagnostic.missing.join(', ')}
+        </p>
+      )}
+    </div>
+  );
+}
+
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
   return env[key]?.trim() ?? '';
@@ -529,7 +583,9 @@ function Index() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedSiteId, setSelectedSiteId] = useState(search.siteId || '');
-  const isDashboardBusy = isLoading;
+  const [infrastructureDiagnostics, setInfrastructureDiagnostics] = useState<SettingsInfrastructureDiagnostic[]>([]);
+  const [isCheckingInfrastructure, setIsCheckingInfrastructure] = useState(false);
+  const isDashboardBusy = isLoading || isCheckingInfrastructure;
 
   const loadDashboard = useCallback(async () => {
     setIsLoading(true);
@@ -538,7 +594,7 @@ function Index() {
     try {
       const [sites, users, settings, auditResult] = await Promise.all([
         listSites(),
-        listUsers(),
+        listUsers().catch(() => [] as User[]),
         getSettings(),
         listAdminAuditLogs({ limit: 8 }),
       ]);
@@ -583,6 +639,7 @@ function Index() {
         readiness: readinessBySite.filter((item): item is SiteReadiness => Boolean(item)),
         source: 'backend',
       });
+      setInfrastructureDiagnostics([]);
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : 'Unable to load backend dashboard data';
       setError(message);
@@ -601,6 +658,7 @@ function Index() {
         auditLogs: fallbackAuditLogs(fallbackStore.sites, fallbackStore.pages, fallbackStore.posts),
         source: 'fallback',
       });
+      setInfrastructureDiagnostics([]);
     } finally {
       setIsLoading(false);
     }
@@ -773,6 +831,13 @@ function Index() {
     vercel,
   ]);
   const frontendHandoffText = useMemo(() => JSON.stringify(frontendHandoff, null, 2), [frontendHandoff]);
+  const infrastructureDiagnosticSummary = useMemo(() => {
+    const ready = infrastructureDiagnostics.filter((item) => item.status === 'ready').length;
+    const warning = infrastructureDiagnostics.filter((item) => item.status === 'warning').length;
+    const blocked = infrastructureDiagnostics.filter((item) => item.status === 'blocked').length;
+
+    return { ready, warning, blocked, total: infrastructureDiagnostics.length };
+  }, [infrastructureDiagnostics]);
   const platformReadiness = useMemo(() => {
     const activeUsers = dashboard.users.filter((item) => item.status === 'active').length;
     const activeAdmins = dashboard.users.filter((item) => (
@@ -919,6 +984,29 @@ function Index() {
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
+  };
+
+  const runInfrastructureCheck = async () => {
+    if (!dashboard.settings || isCheckingInfrastructure) return;
+
+    setIsCheckingInfrastructure(true);
+    setNotice(null);
+    setError(null);
+
+    try {
+      const result = await validateSettingsInfrastructure({
+        deliveryMode: dashboard.settings.deliveryMode,
+        integrations: dashboard.settings.integrations,
+      });
+      setInfrastructureDiagnostics(result.diagnostics);
+      const blocked = result.diagnostics.filter((item) => item.status === 'blocked').length;
+      const warning = result.diagnostics.filter((item) => item.status === 'warning').length;
+      setNotice(`Infrastructure check complete: ${blocked} blocked, ${warning} warning.`);
+    } catch (checkError) {
+      setError(checkError instanceof Error ? checkError.message : 'Unable to validate infrastructure settings.');
+    } finally {
+      setIsCheckingInfrastructure(false);
+    }
   };
 
   const stats = [
@@ -1281,6 +1369,56 @@ function Index() {
                 ))}
               </div>
             </div>
+          </div>
+
+          <div className="mt-5 rounded-lg border border-border bg-muted/20 p-4" data-testid="dashboard-infrastructure-diagnostics">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Database className="size-4 text-primary" />
+                  <h3 className="text-sm font-semibold">Infrastructure diagnostics</h3>
+                </div>
+                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                  Run the same Settings validator from the dashboard to verify database, storage, Supabase, and Vercel wiring before frontend handoff.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {infrastructureDiagnosticSummary.total > 0 && (
+                  <span className="rounded-full bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    {infrastructureDiagnosticSummary.ready} ready · {infrastructureDiagnosticSummary.warning} warning · {infrastructureDiagnosticSummary.blocked} blocked
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={runInfrastructureCheck}
+                  disabled={isDashboardBusy || !dashboard.settings}
+                  aria-label="Run dashboard infrastructure check"
+                  className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isCheckingInfrastructure ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                  Run infrastructure check
+                </button>
+                <Link
+                  to="/settings"
+                  search={{ tab: 'infrastructure' }}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+                >
+                  Open infrastructure <ArrowUpRight className="size-3.5" />
+                </Link>
+              </div>
+            </div>
+
+            {infrastructureDiagnostics.length === 0 ? (
+              <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
+                No dashboard infrastructure check has run in this session. Use the check to reveal exact missing runtime fields for Supabase, storage, database persistence, and Vercel deployment.
+              </div>
+            ) : (
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {infrastructureDiagnostics.map((diagnostic) => (
+                  <DashboardInfrastructureDiagnosticCard key={diagnostic.area} diagnostic={diagnostic} />
+                ))}
+              </div>
+            )}
           </div>
         </section>
 

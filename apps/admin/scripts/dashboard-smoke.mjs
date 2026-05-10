@@ -286,6 +286,51 @@ const clickDashboardRefresh = async (client) => {
   return null;
 };
 
+const runDashboardInfrastructureCheck = async (client) => {
+  const result = await evaluate(client, `(() => {
+    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+      (candidate.getAttribute('aria-label') || '') === 'Run dashboard infrastructure check' ||
+      (candidate.textContent || '').includes('Run infrastructure check')
+    ));
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'button-missing', buttons: Array.from(document.querySelectorAll('button')).map((candidate) => candidate.textContent || '').slice(0, 60) };
+    }
+    if (button.disabled) return { ok: false, reason: 'button-disabled', text: button.textContent || '' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(result.ok, `Unable to run dashboard infrastructure check: ${JSON.stringify(result)}`);
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="dashboard-infrastructure-diagnostics"]');
+      const text = panel?.textContent || '';
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.getAttribute('aria-label') || '') === 'Run dashboard infrastructure check' ||
+        (candidate.textContent || '').includes('Run infrastructure check')
+      ));
+      return {
+        ready: Boolean(panel) &&
+          text.includes('Database runtime') &&
+          text.includes('Media storage') &&
+          text.includes('Supabase connection') &&
+          text.includes('Vercel deployment'),
+        disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        text: text.slice(0, 1200),
+      };
+    })()`);
+    if (state.ready && state.disabled === false) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Dashboard infrastructure diagnostics did not render: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
 const assertDashboardLayout = async (client, siteName) => {
   const layout = await evaluate(client, `(() => ({
     width: window.innerWidth,
@@ -295,6 +340,7 @@ const assertDashboardLayout = async (client, siteName) => {
     hasSite: Array.from(document.querySelectorAll('#dashboard-active-site option')).some((option) => option.textContent?.includes(${JSON.stringify(siteName)})),
     hasStats: Boolean(document.querySelector('#dashboard-stats')),
     hasReadiness: Boolean(document.querySelector('#dashboard-readiness')) && document.body?.innerText?.includes('Backy platform readiness'),
+    hasInfrastructureDiagnostics: Boolean(document.querySelector('[data-testid="dashboard-infrastructure-diagnostics"]') && document.body?.innerText?.includes('Infrastructure diagnostics')),
     hasWorkflows: Boolean(document.querySelector('#dashboard-workflows')) && document.body?.innerText?.includes('Build and manage'),
     hasAttention: Boolean(document.querySelector('#dashboard-attention')) && document.body?.innerText?.includes('Needs attention'),
     hasActivity: Boolean(document.querySelector('#dashboard-activity')) && document.body?.innerText?.includes('Recent backend activity'),
@@ -311,6 +357,7 @@ const assertDashboardLayout = async (client, siteName) => {
       layout.hasSite &&
       layout.hasStats &&
       layout.hasReadiness &&
+      layout.hasInfrastructureDiagnostics &&
       layout.hasWorkflows &&
       layout.hasAttention &&
       layout.hasActivity &&
@@ -339,6 +386,7 @@ const assertDashboardLinks = async (client) => {
       ['Form builder', '/forms'],
       ['Member access', '/users'],
       ['Open API and delivery settings', '/settings'],
+      ['Open infrastructure', '/settings'],
       ['Manage frontend datasets', '/collections'],
     ];
     const missing = required.filter(([text, href]) => !hrefs.some((item) => item.text.includes(text) && item.href.includes(href)));
@@ -429,6 +477,7 @@ const main = async () => {
     await assertDashboardLayout(client, siteName);
     await assertDashboardLinks(client);
     await clickDashboardRefresh(client);
+    await runDashboardInfrastructureCheck(client);
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));
