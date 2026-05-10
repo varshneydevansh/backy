@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { buildSignedMediaPath, createSignedMediaAccess } from '@/lib/mediaSigning';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -41,6 +42,10 @@ const parseJsonBody = async (request: NextRequest): Promise<Record<string, unkno
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'media.view' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, mediaId } = await params;

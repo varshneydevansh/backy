@@ -5,6 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   getAdminBlogPostById,
@@ -127,6 +128,10 @@ const buildMediaBindingUpdate = (
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'media.create' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, mediaId } = await params;

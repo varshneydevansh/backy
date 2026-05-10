@@ -380,6 +380,21 @@ try {
   });
 
   await record('admin media font upload registers public font asset', async () => {
+    const unauthMediaList = await fetch(`${baseUrl}/api/admin/sites/${createdSiteId}/media`);
+    const unauthMediaListJson = await unauthMediaList.json().catch(() => ({}));
+    assert(unauthMediaList.status === 401, `Media admin API should reject missing auth, got ${unauthMediaList.status}`);
+    assert(unauthMediaListJson?.success === false && unauthMediaListJson?.error?.code === 'UNAUTHORIZED', `Media admin API missing auth envelope: ${JSON.stringify(unauthMediaListJson).slice(0, 500)}`);
+
+    const unauthUploadFormData = new FormData();
+    unauthUploadFormData.set('file', new Blob(['unauthorized-font'], { type: 'font/woff2' }), 'UnauthorizedFont.woff2');
+    const unauthUpload = await fetch(`${baseUrl}/api/admin/sites/${createdSiteId}/media`, {
+      method: 'POST',
+      body: unauthUploadFormData,
+    });
+    const unauthUploadJson = await unauthUpload.json().catch(() => ({}));
+    assert(unauthUpload.status === 401, `Media upload API should reject missing auth, got ${unauthUpload.status}`);
+    assert(unauthUploadJson?.success === false && unauthUploadJson?.error?.code === 'UNAUTHORIZED', `Media upload API missing auth envelope: ${JSON.stringify(unauthUploadJson).slice(0, 500)}`);
+
     const formData = new FormData();
     formData.set('file', new Blob(['contract-font'], { type: 'font/woff2' }), 'ContractSans.woff2');
     formData.set('visibility', 'public');

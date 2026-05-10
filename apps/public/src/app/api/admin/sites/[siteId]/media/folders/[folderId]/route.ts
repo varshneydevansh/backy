@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { deleteMediaFolder, getSiteByIdOrSlug, listMediaFolders, updateMediaFolder } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
@@ -49,6 +50,10 @@ const listDemoMediaFolder = (siteId: string, folderId: string) => (
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'media.create' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, folderId } = await params;
@@ -135,6 +140,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'media.delete' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, folderId } = await params;

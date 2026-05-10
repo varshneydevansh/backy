@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { createMediaFolder, getSiteByIdOrSlug, listMediaFolders } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
@@ -44,6 +45,10 @@ const numberFromInput = (value: unknown): number | undefined => {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'media.view' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId } = await params;
@@ -76,6 +81,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'media.create' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId } = await params;

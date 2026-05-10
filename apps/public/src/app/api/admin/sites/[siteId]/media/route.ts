@@ -7,6 +7,7 @@
 
 import { extname } from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { createMediaItem, getMediaList, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
@@ -220,6 +221,10 @@ const errorResponse = (status: number, code: string, message: string, requestId:
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'media.view' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId } = await params;
@@ -311,6 +316,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'media.create' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId } = await params;

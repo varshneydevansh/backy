@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { getMediaById, getMediaList, getSiteByIdOrSlug, updateMediaItem } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
@@ -113,6 +114,10 @@ const mediaUsageBytes = (items: Array<{ sizeBytes?: number; metadata?: unknown }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = requireAdminAccess(request, requestId, { permission: 'media.create' });
+  if (access instanceof NextResponse) {
+    return access;
+  }
 
   try {
     const { siteId, mediaId } = await params;
