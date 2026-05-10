@@ -16,6 +16,155 @@ const TEMPLATE_DESKTOP_SCREENSHOT_PATH = process.env.BACKY_PAGE_CREATE_TEMPLATE_
 const TEMPLATE_MOBILE_SCREENSHOT_PATH = process.env.BACKY_PAGE_CREATE_TEMPLATE_MOBILE_SCREENSHOT
   || path.join(os.tmpdir(), 'backy-page-create-templates-mobile.png');
 
+const STARTER_TEMPLATE_BACKEND_CASES = [
+  {
+    template: 'landing',
+    title: 'Smoke Landing Template',
+    slugBase: 'smoke-landing-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'landing',
+    navigationItem: 'Features',
+    headingId: 'landing-hero-heading',
+    minRootElementCount: 4,
+    minTotalElementCount: 20,
+    minCanvasHeight: 1000,
+    requiredElementIds: [
+      'landing-site-header',
+      'landing-site-navigation',
+      'landing-site-footer',
+      'landing-hero-section',
+      'landing-hero-heading',
+      'landing-hero-copy',
+      'landing-hero-button',
+      'landing-feature-section',
+      'landing-feature-0',
+      'landing-feature-1',
+      'landing-feature-2',
+    ],
+  },
+  {
+    template: 'storefront',
+    title: 'Smoke Storefront Template',
+    slugBase: 'smoke-storefront-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'storefront',
+    navigationItem: 'Shop',
+    headingId: 'storefront-heading',
+    minRootElementCount: 4,
+    minTotalElementCount: 22,
+    minCanvasHeight: 1000,
+    requiredElementIds: [
+      'storefront-site-header',
+      'storefront-site-navigation',
+      'storefront-site-footer',
+      'storefront-hero-section',
+      'storefront-featured-product',
+      'storefront-products-section',
+      'storefront-product-card-0',
+      'storefront-product-card-1',
+      'storefront-product-card-2',
+    ],
+    dataBindingElementIds: [
+      'storefront-hero-section',
+      'storefront-featured-product',
+      'storefront-products-section',
+      'storefront-product-card-0',
+    ],
+  },
+  {
+    template: 'blog-index',
+    title: 'Smoke Blog Index Template',
+    slugBase: 'smoke-blog-index-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'blog-index',
+    navigationItem: 'Blog',
+    headingId: 'blog-index-heading',
+    minRootElementCount: 4,
+    minTotalElementCount: 20,
+    minCanvasHeight: 1000,
+    requiredElementIds: [
+      'blog-index-site-header',
+      'blog-index-site-navigation',
+      'blog-index-site-footer',
+      'blog-index-hero-section',
+      'blog-index-featured-card',
+      'blog-index-list-section',
+      'blog-index-post-row-0',
+      'blog-index-post-row-1',
+      'blog-index-post-row-2',
+    ],
+    dataBindingElementIds: [
+      'blog-index-hero-section',
+      'blog-index-featured-card',
+      'blog-index-list-section',
+      'blog-index-post-row-0',
+    ],
+  },
+  {
+    template: 'contact',
+    title: 'Smoke Contact Template',
+    slugBase: 'smoke-contact-template',
+    expectedNavigationPlacement: 'footer',
+    chromePrefix: 'contact',
+    navigationItem: 'Contact',
+    headingId: 'contact-heading',
+    minRootElementCount: 5,
+    minTotalElementCount: 14,
+    minCanvasHeight: 850,
+    requiredElementIds: [
+      'contact-site-header',
+      'contact-site-navigation',
+      'contact-site-footer',
+      'contact-heading',
+      'contact-copy',
+      'contact-form-card',
+      'contact-name',
+      'contact-email',
+      'contact-message',
+      'contact-submit',
+    ],
+    formElementIds: ['contact-form-card'],
+  },
+  {
+    template: 'registration',
+    title: 'Smoke Registration Template',
+    slugBase: 'smoke-registration-template',
+    expectedNavigationPlacement: 'primary',
+    chromePrefix: 'registration',
+    navigationItem: 'Register',
+    headingId: 'registration-heading',
+    minRootElementCount: 3,
+    minTotalElementCount: 20,
+    minCanvasHeight: 1000,
+    requiredElementIds: [
+      'registration-site-header',
+      'registration-site-navigation',
+      'registration-site-footer',
+      'registration-hero-section',
+      'registration-note',
+      'registration-form-card',
+      'registration-name',
+      'registration-email',
+      'registration-phone',
+      'registration-member-type',
+      'registration-consent',
+      'registration-submit',
+    ],
+    formElementIds: ['registration-form-card'],
+  },
+  {
+    template: 'blank',
+    title: 'Smoke Blank Template',
+    slugBase: 'smoke-blank-template',
+    expectedNavigationPlacement: 'none',
+    headingId: 'blank-heading',
+    minRootElementCount: 2,
+    minTotalElementCount: 2,
+    minCanvasHeight: 800,
+    requiredElementIds: ['blank-heading', 'blank-intro'],
+  },
+];
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const assert = (condition, message) => {
@@ -438,6 +587,67 @@ const navigateToPageCreate = async (client, slug, title, navLabel, seo, parentPa
   return waitForPageCreateControls(client, slug, title, navLabel, seo, parentPageId, url);
 };
 
+const waitForStarterTemplateCreateControls = async (client, testCase, slug, url) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
+      const createButton = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.textContent || '').includes('Create Page')
+      ));
+      return {
+        ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
+        title: document.querySelector('#page-title')?.value || '',
+        slug: document.querySelector('#page-slug')?.value || '',
+        selectedTemplatePreview: document.querySelector('[data-testid="page-selected-template-preview"]')?.getAttribute('data-template') || '',
+        activeTemplatePreview: document.querySelector('[data-testid="page-template-preview-${testCase.template}"]')?.getAttribute('data-active') || '',
+        activeTemplateBlockCount: Number(document.querySelector('[data-testid="page-template-preview-${testCase.template}"]')?.getAttribute('data-block-count') || 0),
+        navPlacement: document.querySelector('#page-navigation-placement-select')?.value || '',
+        payloadTemplate: payload.template || '',
+        payloadSiteChrome: payload.siteChrome || '',
+        payloadForms: payload.forms || '',
+        payloadDynamicData: payload.dynamicData || '',
+        createButtonDisabled: createButton instanceof HTMLButtonElement ? createButton.disabled : null,
+        body: document.body?.innerText?.slice(0, 260) || '',
+      };
+    })()`);
+
+    if (
+      state.ready
+      && state.title === testCase.title
+      && state.slug === slug
+      && state.selectedTemplatePreview === testCase.template
+      && state.activeTemplatePreview === 'true'
+      && state.activeTemplateBlockCount > 0
+      && state.navPlacement === testCase.expectedNavigationPlacement
+      && state.payloadTemplate === testCase.template
+      && state.createButtonDisabled === false
+    ) {
+      return { url, state };
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Starter template create route did not render expected controls for ${testCase.template}: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const navigateToStarterTemplateCreate = async (client, testCase, slug) => {
+  const query = new URLSearchParams({
+    siteId: SITE_ID,
+    template: testCase.template,
+    title: testCase.title,
+    slug,
+    description: `Smoke coverage for the ${testCase.template} page starter.`,
+  });
+  const url = `${ADMIN_BASE_URL}/pages/new?${query.toString()}`;
+  await client.send('Page.navigate', { url });
+  return waitForStarterTemplateCreateControls(client, testCase, slug, url);
+};
+
 const assertAutosaveWritten = async (client, slug, title, navLabel, seo, parentPageId) => {
   let state = null;
 
@@ -644,6 +854,100 @@ const assertCreatedPageSeo = async (pageId, seo, parentPage) => {
   };
 };
 
+const assertStarterTemplatePageContent = async (pageId, testCase, slug) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const page = payload.data?.page;
+
+  assert(page, `Created ${testCase.template} page ${pageId} detail was not returned`);
+  assert(page.title === testCase.title, `Created ${testCase.template} title mismatch: ${JSON.stringify({ title: page.title, expected: testCase.title })}`);
+  assert(page.slug === slug, `Created ${testCase.template} slug mismatch: ${JSON.stringify({ slug: page.slug, expected: slug })}`);
+
+  const content = normalizeCreatedContent(page.content);
+  const elements = Array.isArray(content.elements) ? content.elements : [];
+  const allElements = flattenElements(elements);
+  const byId = new Map(allElements.map((element) => [element.id, element]));
+  const contentDocument = content.contentDocument || null;
+  const canvasSize = content.canvasSize || contentDocument?.metadata?.canvasSize || {};
+  const missingElementIds = testCase.requiredElementIds.filter((id) => !byId.has(id));
+  const heading = byId.get(testCase.headingId);
+
+  assert(elements.length >= testCase.minRootElementCount, `Created ${testCase.template} should have enough root canvas elements: ${JSON.stringify({ rootCount: elements.length, ids: elements.map((element) => element.id) })}`);
+  assert(allElements.length >= testCase.minTotalElementCount, `Created ${testCase.template} should include nested editable elements: ${JSON.stringify({ count: allElements.length, ids: allElements.map((element) => element.id).slice(0, 40) })}`);
+  assert(missingElementIds.length === 0, `Created ${testCase.template} is missing expected editable elements: ${JSON.stringify({ missingElementIds, availableIds: allElements.map((element) => element.id).slice(0, 50) })}`);
+  assert(canvasSize.width === 1200 && canvasSize.height >= testCase.minCanvasHeight, `Created ${testCase.template} canvas size mismatch: ${JSON.stringify(canvasSize)}`);
+  assert(heading?.props?.content === page.title, `Created ${testCase.template} heading does not use page title: ${JSON.stringify(heading?.props)}`);
+
+  if (testCase.chromePrefix) {
+    const headerNavigation = byId.get(`${testCase.chromePrefix}-site-navigation`);
+    const footerNavigation = byId.get(`${testCase.chromePrefix}-footer-navigation`);
+    assert(Array.isArray(headerNavigation?.props?.navItems) && headerNavigation.props.navItems.includes(testCase.navigationItem), `Created ${testCase.template} header navigation missing expected item: ${JSON.stringify(headerNavigation?.props)}`);
+    assert(Array.isArray(footerNavigation?.props?.navItems) && footerNavigation.props.navItems.includes(testCase.navigationItem), `Created ${testCase.template} footer navigation missing expected item: ${JSON.stringify(footerNavigation?.props)}`);
+  }
+
+  for (const formElementId of testCase.formElementIds || []) {
+    const element = byId.get(formElementId);
+    assert(element?.type === 'form', `Created ${testCase.template} expected ${formElementId} to be a form: ${JSON.stringify(element)}`);
+    assert(typeof element.props?.formId === 'string' && element.props.formId.includes(slug), `Created ${testCase.template} form id should include page slug: ${JSON.stringify(element.props)}`);
+    assert(element.props?.formActive === true, `Created ${testCase.template} form should be active: ${JSON.stringify(element.props)}`);
+  }
+
+  for (const bindingElementId of testCase.dataBindingElementIds || []) {
+    const element = byId.get(bindingElementId);
+    assert(Array.isArray(element?.dataBindings) && element.dataBindings.length > 0, `Created ${testCase.template} expected data bindings on ${bindingElementId}: ${JSON.stringify(element)}`);
+  }
+
+  assert(contentDocument?.kind === 'page', `Created ${testCase.template} contentDocument kind mismatch: ${JSON.stringify(contentDocument)}`);
+  assert(contentDocument?.slug === page.slug, `Created ${testCase.template} contentDocument slug mismatch: ${JSON.stringify({ slug: page.slug, contentDocumentSlug: contentDocument?.slug })}`);
+  assert(contentDocument?.status === page.status, `Created ${testCase.template} contentDocument status mismatch: ${JSON.stringify({ status: page.status, contentDocumentStatus: contentDocument?.status })}`);
+
+  return {
+    template: testCase.template,
+    pageId,
+    slug: page.slug,
+    meta: {
+      title: page.meta?.title,
+      canonical: page.meta?.canonical,
+    },
+    content: {
+      rootElementCount: elements.length,
+      totalElementCount: allElements.length,
+      canvasSize,
+      requiredElementIds: testCase.requiredElementIds,
+      dataBindingElementIds: testCase.dataBindingElementIds || [],
+      formElementIds: testCase.formElementIds || [],
+      contentDocument: {
+        id: contentDocument?.id,
+        kind: contentDocument?.kind,
+        slug: contentDocument?.slug,
+        status: contentDocument?.status,
+      },
+    },
+  };
+};
+
+const createStarterTemplateBackends = async (client, createdPageIds) => {
+  const summaries = [];
+
+  for (const [index, testCase] of STARTER_TEMPLATE_BACKEND_CASES.entries()) {
+    const slug = `${testCase.slugBase}-${Date.now().toString(36)}-${index}`;
+    const routeState = await navigateToStarterTemplateCreate(client, testCase, slug);
+    const editState = await createPageFromUi(client);
+    const pageId = editState.path.split('/').filter(Boolean).at(-2);
+    createdPageIds.push(pageId);
+    const content = await assertStarterTemplatePageContent(pageId, testCase, slug);
+
+    summaries.push({
+      template: testCase.template,
+      routeState: routeState.state,
+      editState,
+      pageId,
+      content,
+    });
+  }
+
+  return summaries;
+};
+
 const createPageFromUi = async (client) => {
   let clicked = null;
   for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -754,18 +1058,20 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, pageId, parentPageId }) => {
-  if (pageId) {
+const cleanup = async ({ client, childProcess, userDataDir, pageIds = [], pageId, parentPageId }) => {
+  const uniquePageIds = Array.from(new Set([...pageIds, pageId].filter(Boolean)));
+
+  for (const createdPageId of uniquePageIds) {
     try {
-      await removePageFromNavigation(pageId);
+      await removePageFromNavigation(createdPageId);
     } catch (error) {
-      console.warn(`Unable to remove smoke page ${pageId} from navigation:`, error instanceof Error ? error.message : error);
+      console.warn(`Unable to remove smoke page ${createdPageId} from navigation:`, error instanceof Error ? error.message : error);
     }
 
     try {
-      await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`, { method: 'DELETE' });
+      await requestApi(`/api/admin/sites/${SITE_ID}/pages/${createdPageId}`, { method: 'DELETE' });
     } catch (error) {
-      console.warn(`Unable to delete smoke page ${pageId}:`, error instanceof Error ? error.message : error);
+      console.warn(`Unable to delete smoke page ${createdPageId}:`, error instanceof Error ? error.message : error);
     }
   }
 
@@ -826,6 +1132,7 @@ const main = async () => {
   const { childProcess, userDataDir } = launchChrome();
   let client;
   let pageId = null;
+  const createdPageIds = [];
   let parentPage = null;
 
   try {
@@ -865,8 +1172,10 @@ const main = async () => {
     const recovery = await assertRecoveryRestore(client, slug, title, navLabel, seo, parentPage.id);
     const editState = await createPageFromUi(client);
     pageId = editState.path.split('/').filter(Boolean).at(-2);
+    createdPageIds.push(pageId);
     const navigationItem = await assertNavigationContainsPage(pageId, navLabel, parentPage.id);
     const pageMeta = await assertCreatedPageSeo(pageId, seo, parentPage);
+    const starterTemplateBackends = await createStarterTemplateBackends(client, createdPageIds);
 
     await captureScreenshot(client, SCREENSHOT_PATH);
 
@@ -895,10 +1204,11 @@ const main = async () => {
       parentPageId: parentPage.id,
       navigationItem,
       pageMeta,
+      starterTemplateBackends,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
-    await cleanup({ client, childProcess, userDataDir, pageId, parentPageId: parentPage?.id || null });
+    await cleanup({ client, childProcess, userDataDir, pageIds: createdPageIds, pageId, parentPageId: parentPage?.id || null });
   }
 };
 
