@@ -51,7 +51,7 @@ const findPublicMediaForStoragePath = async (siteId: string, storagePath: string
       siteId: site.id,
       visibility: 'public',
       type: 'all',
-      limit: 1000,
+      limit: 10000,
       offset: 0,
     });
     const media = result.items.find((item) => mediaMatchesStoragePath(site.id, item, storagePath)) || null;
@@ -65,7 +65,7 @@ const findPublicMediaForStoragePath = async (siteId: string, storagePath: string
 
   const result = getMediaList(site.id, {
     visibility: 'public',
-    limit: 1000,
+    limit: 10000,
     offset: 0,
   });
   const media = result.media.find((item) => mediaMatchesStoragePath(site.id, item, storagePath)) || null;
