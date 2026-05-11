@@ -291,6 +291,18 @@ const createSmokePage = async () => {
             },
           },
           {
+            id: 'smoke-spacer',
+            type: 'spacer',
+            x: 120,
+            y: 860,
+            width: 220,
+            height: 32,
+            zIndex: 5,
+            props: {
+              backgroundColor: '#ffffff',
+            },
+          },
+          {
             id: 'smoke-box',
             type: 'box',
             x: 460,
@@ -3422,6 +3434,53 @@ const assertPersistedNavBehavior = async (pageId) => {
   return props;
 };
 
+const testSpacerBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-spacer');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-layout-width', '260');
+  await setFormControlByTestId(client, 'editor-layout-height', '48');
+  await setFormControlByTestId(client, 'editor-spacer-background-color', '#f1f5f9');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const node = document.querySelector('[data-element-id="smoke-spacer"]');
+    const surface = node?.firstElementChild;
+    const nodeStyle = node ? getComputedStyle(node) : null;
+    const style = surface ? getComputedStyle(surface) : null;
+    return {
+      width: value('editor-layout-width'),
+      height: value('editor-layout-height'),
+      backgroundColor: value('editor-spacer-background-color'),
+      previewBackgroundColor: style?.backgroundColor || '',
+      previewAriaHidden: surface?.getAttribute('aria-hidden') || '',
+      previewWidth: nodeStyle?.width || '',
+      previewHeight: nodeStyle?.height || '',
+    };
+  })()`);
+
+  assert(state.width === '260' && state.previewWidth === '260px', `Spacer width mismatch: ${JSON.stringify(state)}`);
+  assert(state.height === '48' && state.previewHeight === '48px', `Spacer height mismatch: ${JSON.stringify(state)}`);
+  assert(state.backgroundColor === '#f1f5f9' && /241,\s*245,\s*249/.test(state.previewBackgroundColor), `Spacer background mismatch: ${JSON.stringify(state)}`);
+  assert(state.previewAriaHidden === 'true', `Spacer aria-hidden mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedSpacerBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const spacer = findCanvasElement(elements, 'smoke-spacer');
+  const props = spacer?.props || {};
+
+  assert(spacer?.type === 'spacer', `Persisted smoke-spacer missing: ${JSON.stringify(spacer)}`);
+  assert(spacer.width === 260, `Persisted spacer width mismatch: ${JSON.stringify(spacer)}`);
+  assert(spacer.height === 48, `Persisted spacer height mismatch: ${JSON.stringify(spacer)}`);
+  assert(props.backgroundColor === '#f1f5f9', `Persisted spacer background mismatch: ${JSON.stringify(props)}`);
+
+  return { width: spacer.width, height: spacer.height, props };
+};
+
 const testInputFieldBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-input');
   await switchToPropertiesPanel(client);
@@ -4233,9 +4292,9 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
-    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav') {
+    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav' || COMPONENT_SMOKE === 'spacer') {
       assert(tempPageId, `${COMPONENT_SMOKE} component smoke requires an internally created smoke page`);
       const targetElementId = COMPONENT_SMOKE === 'divider'
         ? 'smoke-divider'
@@ -4243,14 +4302,18 @@ const main = async () => {
           ? 'smoke-columns'
           : COMPONENT_SMOKE === 'nav'
             ? 'smoke-nav'
-            : 'smoke-list';
+            : COMPONENT_SMOKE === 'spacer'
+              ? 'smoke-spacer'
+              : 'smoke-list';
       const behaviorControls = COMPONENT_SMOKE === 'divider'
         ? await testDividerBehaviorControls(client)
         : COMPONENT_SMOKE === 'columns'
           ? await testColumnsBehaviorControls(client)
           : COMPONENT_SMOKE === 'nav'
             ? await testNavBehaviorControls(client)
-            : await testListBehaviorControls(client);
+            : COMPONENT_SMOKE === 'spacer'
+              ? await testSpacerBehaviorControls(client)
+              : await testListBehaviorControls(client);
       await clickSave(client);
       const savedStatus = await waitForEditorMutationReady(client, `after ${COMPONENT_SMOKE} component smoke save`);
       const persistedBehavior = COMPONENT_SMOKE === 'divider'
@@ -4259,7 +4322,9 @@ const main = async () => {
           ? await assertPersistedColumnsBehavior(tempPageId)
           : COMPONENT_SMOKE === 'nav'
             ? await assertPersistedNavBehavior(tempPageId)
-            : await assertPersistedListBehavior(tempPageId);
+            : COMPONENT_SMOKE === 'spacer'
+              ? await assertPersistedSpacerBehavior(tempPageId)
+              : await assertPersistedListBehavior(tempPageId);
       let reloadedState = null;
       let reloadClient = null;
       try {
@@ -4416,6 +4481,9 @@ const main = async () => {
     const navBehaviorControls = EDITOR_PATH
       ? null
       : await testNavBehaviorControls(client);
+    const spacerBehaviorControls = EDITOR_PATH
+      ? null
+      : await testSpacerBehaviorControls(client);
     const inputFieldBehaviorControls = EDITOR_PATH
       ? null
       : await testInputFieldBehaviorControls(client);
@@ -4475,6 +4543,7 @@ const main = async () => {
     let persistedDividerBehavior = null;
     let persistedColumnsBehavior = null;
     let persistedNavBehavior = null;
+    let persistedSpacerBehavior = null;
     let persistedInputFieldBehavior = null;
     let persistedTextareaFieldBehavior = null;
     let persistedSelectFieldBehavior = null;
@@ -4485,7 +4554,7 @@ const main = async () => {
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -4556,6 +4625,9 @@ const main = async () => {
       persistedNavBehavior = navBehaviorControls
         ? await assertPersistedNavBehavior(tempPageId)
         : null;
+      persistedSpacerBehavior = spacerBehaviorControls
+        ? await assertPersistedSpacerBehavior(tempPageId)
+        : null;
       persistedInputFieldBehavior = inputFieldBehaviorControls
         ? await assertPersistedInputFieldBehavior(tempPageId)
         : null;
@@ -4587,7 +4659,7 @@ const main = async () => {
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -4696,6 +4768,7 @@ const main = async () => {
       dividerBehaviorControls,
       columnsBehaviorControls,
       navBehaviorControls,
+      spacerBehaviorControls,
       inputFieldBehaviorControls,
       textareaFieldBehaviorControls,
       selectFieldBehaviorControls,
@@ -4719,6 +4792,7 @@ const main = async () => {
       persistedDividerBehavior,
       persistedColumnsBehavior,
       persistedNavBehavior,
+      persistedSpacerBehavior,
       persistedInputFieldBehavior,
       persistedTextareaFieldBehavior,
       persistedSelectFieldBehavior,

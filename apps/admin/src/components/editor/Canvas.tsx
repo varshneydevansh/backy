@@ -2592,11 +2592,10 @@ function CanvasElementComponent({
               ...sharedStyle,
               width: '100%',
               height: '100%',
-              backgroundColor: isPreview
-                ? 'transparent'
-                : p.backgroundColor ?? sharedStyle.backgroundColor ?? 'rgba(0,0,0,0.05)',
+              backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? (isPreview ? 'transparent' : 'rgba(0,0,0,0.05)'),
               border: isPreview ? 'none' : sharedStyle.border ?? '1px dashed #d1d5db',
             }}
+            aria-hidden="true"
           />
         );
 

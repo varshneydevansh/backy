@@ -2419,6 +2419,16 @@ function ContentProperties({
           <p className="text-xs text-muted-foreground">
             This is a spacer element for layout purposes. Adjust its size in the Layout section.
           </p>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Background Color
+            </label>
+            <ColorInput
+              value={element.props.backgroundColor || '#ffffff'}
+              onChange={(value) => onChange({ backgroundColor: value })}
+              testId="editor-spacer-background-color"
+            />
+          </div>
         </div>
       )}
 

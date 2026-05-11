@@ -1423,7 +1423,20 @@ function ColumnsElement({ element, isPreview, siteId, pageId, postId }: ElementR
  * Render a spacer element
  */
 function SpacerElement({ element }: ElementRendererProps) {
-  return <div style={{ height: element.height, width: '100%' }} />;
+  const { props, styles } = element;
+
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        width: '100%',
+        height: '100%',
+        backgroundColor: getNameClass(props.backgroundColor),
+        borderRadius: getLength(props.borderRadius),
+        ...styles,
+      }}
+    />
+  );
 }
 
 /**
