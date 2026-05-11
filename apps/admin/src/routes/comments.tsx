@@ -18,12 +18,15 @@ import {
 } from 'lucide-react';
 import {
   getAdminSite,
+  deleteCommentBlocklistEntries,
   listBlogPosts,
+  listCommentBlocklist,
   listComments,
   listPages,
   updateSite,
   updateComments,
   type AdminComment,
+  type AdminCommentBlocklistEntry,
   type CommentModerationStatus,
   type CommentModerationTarget,
 } from '@/lib/adminContentApi';
@@ -78,6 +81,11 @@ const COMMENT_CONTROL_AREAS = [
     title: 'Bulk decisions',
     detail: 'Approve, reject, mark spam, block authors, and store review reasons.',
     href: '#comments-actions',
+  },
+  {
+    title: 'Author blocklist',
+    detail: 'Review blocked email/IP identities and remove entries after appeal.',
+    href: '#comments-blocklist',
   },
 ] as const;
 
@@ -176,6 +184,10 @@ function CommentsRoute() {
   const routerState = useRouterState();
   const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
   const [comments, setComments] = useState<AdminComment[]>([]);
+  const [blocklist, setBlocklist] = useState<AdminCommentBlocklistEntry[]>([]);
+  const [blocklistCount, setBlocklistCount] = useState(0);
+  const [blocklistTypeFilter, setBlocklistTypeFilter] = useState<'all' | 'email' | 'ip'>('all');
+  const [blocklistSearch, setBlocklistSearch] = useState('');
   const [targets, setTargets] = useState<CommentTargetSummary[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<CommentStatusFilter>('all');
@@ -189,9 +201,10 @@ function CommentsRoute() {
   const [isLoading, setIsLoading] = useState(false);
   const [updatingIds, setUpdatingIds] = useState<string[]>([]);
   const [isSavingPolicy, setIsSavingPolicy] = useState(false);
+  const [deletingBlocklistIds, setDeletingBlocklistIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const isCommentMutationBusy = updatingIds.length > 0;
+  const isCommentMutationBusy = updatingIds.length > 0 || deletingBlocklistIds.length > 0;
   const isCommentsBusy = isLoading || isCommentMutationBusy || isSavingPolicy;
 
   const activeSite = useMemo(
@@ -219,6 +232,7 @@ function CommentsRoute() {
   }, [activeSiteId, publicBaseUrl, searchQuery, sortFilter, statusFilter, targetTypeFilter]);
   const moderationBulkUpdateUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments`;
   const moderationSingleUpdateUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/{commentId}`;
+  const blocklistUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/blocklist`;
   const filteredComments = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
 
@@ -262,6 +276,20 @@ function CommentsRoute() {
       return sortFilter === 'oldest' ? leftTime - rightTime : rightTime - leftTime;
     });
   }, [comments, searchQuery, sortFilter, statusFilter, targetByKey, targetTypeFilter, triageFilter]);
+  const filteredBlocklist = useMemo(() => {
+    const normalizedSearch = blocklistSearch.trim().toLowerCase();
+
+    return blocklist.filter((entry) => {
+      const matchesType = blocklistTypeFilter === 'all' || entry.type === blocklistTypeFilter;
+      const matchesSearch = !normalizedSearch || [
+        entry.value,
+        entry.reason,
+        entry.actor,
+        entry.requestId,
+      ].some((value) => String(value || '').toLowerCase().includes(normalizedSearch));
+      return matchesType && matchesSearch;
+    });
+  }, [blocklist, blocklistSearch, blocklistTypeFilter]);
   const hasActiveCommentFilters = Boolean(
     searchQuery.trim() ||
     statusFilter !== 'all' ||
@@ -322,6 +350,13 @@ function CommentsRoute() {
         ready: commentPolicyDraft.enabled && !commentPolicyDirty,
       },
       {
+        label: 'Author blocklist',
+        detail: blocklistCount > 0
+          ? `${blocklistCount} blocked author identit${blocklistCount === 1 ? 'y' : 'ies'} available for review.`
+          : 'No blocked author identities currently stored.',
+        ready: true,
+      },
+      {
         label: 'Bulk controls',
         detail: hasSelection ? `${selectedIds.length} selected for moderation.` : 'Approve, reject, spam, block, and export actions are available.',
         ready: true,
@@ -344,7 +379,7 @@ function CommentsRoute() {
         { label: 'Serve', detail: 'Only approved comments should reach public frontend comment feeds.' },
       ],
     };
-  }, [activeSite, commentPolicyDirty, commentPolicyDraft.blockedTerms.length, commentPolicyDraft.enabled, commentPolicyDraft.moderationMode, hasSelection, metrics.flagged, metrics.pending, selectedIds.length, targets.length]);
+  }, [activeSite, blocklistCount, commentPolicyDirty, commentPolicyDraft.blockedTerms.length, commentPolicyDraft.enabled, commentPolicyDraft.moderationMode, hasSelection, metrics.flagged, metrics.pending, selectedIds.length, targets.length]);
   const moderationHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -357,6 +392,7 @@ function CommentsRoute() {
       list: moderationListUrl,
       bulkUpdate: moderationBulkUpdateUrl,
       singleUpdate: moderationSingleUpdateUrl,
+      blocklist: blocklistUrl,
       publicPageThread: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/pages/{pageId}/comments`,
       publicBlogThread: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/blog/{postId}/comments`,
       reportReasons: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/report-reasons`,
@@ -381,11 +417,28 @@ function CommentsRoute() {
       query: searchQuery.trim(),
       visible: filteredComments.length,
       total: comments.length,
+      blocklist: filteredBlocklist.length,
+      blocklistTotal: blocklistCount,
     },
     moderationStates: ['pending', 'approved', 'rejected', 'spam', 'blocked'],
     sitePolicy: {
       ...commentPolicyDraft,
       dirty: commentPolicyDirty,
+    },
+    blocklist: {
+      count: blocklistCount,
+      visible: filteredBlocklist.length,
+      type: blocklistTypeFilter,
+      query: blocklistSearch.trim(),
+      entries: blocklist.map((entry) => ({
+        id: entry.id,
+        type: entry.type,
+        value: entry.value,
+        reason: entry.reason,
+        actor: entry.actor || null,
+        requestId: entry.requestId || null,
+        createdAt: entry.createdAt,
+      })),
     },
     selectedCommentIds: selectedIds,
     targets: targets.map((target) => ({
@@ -444,10 +497,16 @@ function CommentsRoute() {
     activeSite?.status,
     activeSiteId,
     allVisibleSelected,
+    blocklist,
+    blocklistCount,
+    blocklistSearch,
+    blocklistTypeFilter,
+    blocklistUrl,
     commentPolicyDirty,
     commentPolicyDraft,
     comments,
     filteredComments,
+    filteredBlocklist.length,
     metrics,
     moderationBulkUpdateUrl,
     moderationListUrl,
@@ -470,6 +529,13 @@ function CommentsRoute() {
   const spamReason = moderationReasonText || 'Marked as spam.';
   const blockReason = moderationReasonText || 'Blocked from moderation queue.';
 
+  const refreshBlocklist = async () => {
+    const result = await listCommentBlocklist(activeSiteId, { limit: 100 });
+    setBlocklist(result.blocklist);
+    setBlocklistCount(result.count);
+    return result;
+  };
+
   const loadComments = async () => {
     if (isCommentsBusy) return;
 
@@ -478,15 +544,18 @@ function CommentsRoute() {
     setNotice(null);
 
     try {
-      const [commentResult, pages, posts, siteDetail] = await Promise.all([
+      const [commentResult, pages, posts, siteDetail, blocklistResult] = await Promise.all([
         listComments(activeSiteId, { status: 'all', limit: 100, sort: 'newest' }),
         listPages(activeSiteId).catch(() => []),
         listBlogPosts(activeSiteId).catch(() => []),
         getAdminSite(activeSiteId).catch(() => null),
+        refreshBlocklist().catch(() => ({ blocklist: [], count: 0 })),
       ]);
       const nextPolicy = normalizeCommentPolicyDraft(siteDetail?.settings?.commentPolicy);
 
       setComments(commentResult.comments);
+      setBlocklist(blocklistResult.blocklist || []);
+      setBlocklistCount(blocklistResult.count || 0);
       setCommentPolicyDraft(nextPolicy);
       setSavedCommentPolicy(nextPolicy);
       setTargets([
@@ -570,12 +639,34 @@ function CommentsRoute() {
       setComments((current) => current.map((comment) => (
         result.updated.find((updated) => updated.id === comment.id) || comment
       )));
+      if (status === 'blocked') {
+        await refreshBlocklist();
+      }
       setSelectedIds((current) => current.filter((id) => !commentIds.includes(id)));
       setNotice(`${result.updatedCount} comment${result.updatedCount === 1 ? '' : 's'} marked ${status}.`);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'Unable to update comments');
     } finally {
       setUpdatingIds([]);
+    }
+  };
+
+  const handleDeleteBlocklistEntries = async (ids: string[]) => {
+    if (ids.length === 0 || isCommentsBusy) return;
+
+    setDeletingBlocklistIds(ids);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const result = await deleteCommentBlocklistEntries(activeSiteId, ids);
+      setBlocklist((current) => current.filter((entry) => !result.deleted.some((deleted) => deleted.id === entry.id)));
+      setBlocklistCount((current) => Math.max(0, current - result.deletedCount));
+      setNotice(`${result.deletedCount} author blocklist entr${result.deletedCount === 1 ? 'y' : 'ies'} removed.`);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to remove author blocklist entries');
+    } finally {
+      setDeletingBlocklistIds([]);
     }
   };
 
@@ -878,7 +969,7 @@ function CommentsRoute() {
         <div className="mt-4 rounded-lg border border-border bg-background p-4">
           <h3 className="text-sm font-semibold">Comments control map</h3>
           <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, moderation health, API handoff, queue review, and bulk decisions.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
             {COMMENT_CONTROL_AREAS.map((area) => (
               <a
                 key={area.title}
@@ -1096,6 +1187,133 @@ function CommentsRoute() {
         <Metric label="Approved" value={metrics.approved} icon={<CheckCircle2 className="size-4" />} />
         <Metric label="Flagged" value={metrics.flagged} icon={<Flag className="size-4" />} />
       </div>
+
+      <Panel id="comments-blocklist" className="mb-6 scroll-mt-24" data-testid="comments-blocklist-panel">
+        <PanelHeader
+          title="Author blocklist"
+          description={`${filteredBlocklist.length}/${blocklistCount} blocked identities visible`}
+          icon={<CircleSlash className="size-4" />}
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isCommentsBusy}
+                onClick={() => void copyCommentApiText(blocklistUrl, 'Comment blocklist URL')}
+                iconStart={<Copy className="size-4" />}
+              >
+                Copy URL
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isCommentsBusy}
+                onClick={() => void refreshBlocklist()}
+                iconStart={<RefreshCw className="size-4" />}
+              >
+                Refresh blocklist
+              </Button>
+            </div>
+          }
+        />
+        <PanelContent>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Code2 className="size-4" />
+                Comment blocklist API
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Blocking a comment stores the author email and source IP hash where available so future moderation UIs can review or remove the identity lock.
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <MetaTile label="Visibility" value="private" />
+                <MetaTile label="Entries" value={`${blocklistCount}`} />
+                <MetaTile label="Visible" value={`${filteredBlocklist.length}`} />
+              </div>
+              <div className="mt-4">
+                <ApiSnippet label="List/delete blocklist" value={blocklistUrl} />
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  aria-label="Comment blocklist type filter"
+                  value={blocklistTypeFilter}
+                  disabled={isCommentsBusy}
+                  onChange={(event) => setBlocklistTypeFilter(event.target.value as typeof blocklistTypeFilter)}
+                  className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <option value="all">All identities</option>
+                  <option value="email">Email</option>
+                  <option value="ip">IP hash</option>
+                </select>
+                <div className="relative min-w-56 flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="search"
+                    aria-label="Search comment blocklist"
+                    value={blocklistSearch}
+                    disabled={isCommentsBusy}
+                    onChange={(event) => setBlocklistSearch(event.target.value)}
+                    placeholder="Search identity, reason, actor, request..."
+                    className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {filteredBlocklist.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
+                    <CircleSlash className="mx-auto size-8 text-muted-foreground" />
+                    <div className="mt-3 text-sm font-medium text-foreground">No blocked authors match this view</div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      Block a comment to create an appealable author identity entry.
+                    </div>
+                  </div>
+                ) : filteredBlocklist.map((entry) => {
+                  const isDeleting = deletingBlocklistIds.includes(entry.id);
+                  return (
+                    <div key={entry.id} className="rounded-lg border border-border bg-card px-3 py-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold uppercase text-muted-foreground">
+                              {entry.type}
+                            </span>
+                            <span className="break-all font-mono text-sm font-semibold text-foreground">{entry.value}</span>
+                          </div>
+                          <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                            {entry.reason || 'manual-block'}
+                            {entry.actor ? ` by ${entry.actor}` : ''}
+                            {entry.createdAt ? ` at ${formatDate(entry.createdAt)}` : ''}
+                          </div>
+                          {entry.requestId ? (
+                            <div className="mt-1 max-w-full truncate font-mono text-xs text-muted-foreground">
+                              {entry.requestId}
+                            </div>
+                          ) : null}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isCommentsBusy || isDeleting}
+                          onClick={() => void handleDeleteBlocklistEntries([entry.id])}
+                          iconStart={<Trash2 className="size-4" />}
+                          aria-label={`Remove blocklist entry ${entry.value}`}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </PanelContent>
+      </Panel>
 
       <Panel id="comments-queue" className="scroll-mt-24">
         <PanelHeader

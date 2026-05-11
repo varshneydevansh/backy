@@ -857,6 +857,38 @@ interface ApiUpdateCommentsResponse {
   };
 }
 
+interface ApiListCommentBlocklistResponse {
+  success: boolean;
+  data?: {
+    siteId: string;
+    blocklist: AdminCommentBlocklistEntry[];
+    count: number;
+    pagination?: ApiPagination;
+  };
+  blocklist?: AdminCommentBlocklistEntry[];
+  count?: number;
+  pagination?: ApiPagination;
+  error?: {
+    message?: string;
+  };
+}
+
+interface ApiDeleteCommentBlocklistResponse {
+  success: boolean;
+  data?: {
+    siteId: string;
+    deleted: AdminCommentBlocklistEntry[];
+    deletedCount: number;
+    missingIds: string[];
+  };
+  deleted?: AdminCommentBlocklistEntry[];
+  deletedCount?: number;
+  missingIds?: string[];
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiSettings {
   deliveryMode: SiteSettingsInput['deliveryMode'];
   apiKeys: {
@@ -1779,6 +1811,17 @@ export type CommentModerationSort = 'newest' | 'oldest';
 
 export type AdminComment = Comment;
 
+export interface AdminCommentBlocklistEntry {
+  id: string;
+  siteId: string;
+  type: 'email' | 'ip';
+  value: string;
+  reason: string;
+  actor?: string | null;
+  requestId?: string | null;
+  createdAt: string;
+}
+
 export interface CommentListFilters {
   status?: CommentStatus | 'all';
   targetType?: CommentModerationTarget;
@@ -1794,6 +1837,19 @@ export interface CommentListFilters {
 
 export interface CommentListResult {
   comments: AdminComment[];
+  count: number;
+  pagination: ApiPagination;
+}
+
+export interface CommentBlocklistFilters {
+  type?: 'email' | 'ip' | 'all';
+  q?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface CommentBlocklistResult {
+  blocklist: AdminCommentBlocklistEntry[];
   count: number;
   pagination: ApiPagination;
 }
@@ -3916,6 +3972,63 @@ export async function updateComments(
   return {
     updated,
     updatedCount: payload.data?.updatedCount ?? payload.updatedCount ?? updated.length,
+    missingIds: payload.data?.missingIds || payload.missingIds || [],
+  };
+}
+
+export async function listCommentBlocklist(
+  siteId: string,
+  filters: CommentBlocklistFilters = {},
+): Promise<CommentBlocklistResult> {
+  const query = new URLSearchParams();
+  query.set('limit', String(filters.limit || 100));
+  query.set('offset', String(filters.offset || 0));
+  if (filters.type && filters.type !== 'all') query.set('type', filters.type);
+  if (filters.q) query.set('q', filters.q);
+
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/comments/blocklist?${query.toString()}`);
+  const payload = await readJson<ApiListCommentBlocklistResponse>(response);
+  const blocklist = payload.data?.blocklist || payload.blocklist;
+  const count = payload.data?.count ?? payload.count ?? blocklist?.length ?? 0;
+  const pagination = payload.data?.pagination || payload.pagination || {
+    total: count,
+    limit: filters.limit || blocklist?.length || 100,
+    offset: filters.offset || 0,
+    hasMore: false,
+  };
+
+  if (!response.ok || !payload.success || !blocklist) {
+    throw new Error(payload.error?.message || 'Unable to load comment blocklist');
+  }
+
+  return {
+    blocklist,
+    count,
+    pagination,
+  };
+}
+
+export async function deleteCommentBlocklistEntries(
+  siteId: string,
+  ids: string[],
+): Promise<{ deleted: AdminCommentBlocklistEntry[]; deletedCount: number; missingIds: string[] }> {
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/comments/blocklist`, {
+    method: 'DELETE',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ ids }),
+  });
+  const payload = await readJson<ApiDeleteCommentBlocklistResponse>(response);
+  const deleted = payload.data?.deleted || payload.deleted;
+
+  if (!response.ok || !payload.success || !deleted) {
+    throw new Error(payload.error?.message || 'Unable to remove comment blocklist entries');
+  }
+
+  return {
+    deleted,
+    deletedCount: payload.data?.deletedCount ?? payload.deletedCount ?? deleted.length,
     missingIds: payload.data?.missingIds || payload.missingIds || [],
   };
 }

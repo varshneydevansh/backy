@@ -11,6 +11,8 @@ const SITE_ID = process.env.BACKY_COMMENTS_SMOKE_SITE_ID || 'site-demo';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_COMMENTS_CDP_PORT || 9381);
 const SCREENSHOT_PATH = process.env.BACKY_COMMENTS_SCREENSHOT || path.join(os.tmpdir(), 'backy-comments-smoke.png');
+let apiAdminSessionToken = '';
+let apiAdminSessionData = null;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -25,6 +27,7 @@ const requestApi = async (endpoint, options = {}) => {
     ...options,
     headers: {
       'content-type': 'application/json',
+      ...(apiAdminSessionToken ? { authorization: `Bearer ${apiAdminSessionToken}` } : {}),
       ...(options.headers || {}),
     },
   });
@@ -35,6 +38,28 @@ const requestApi = async (endpoint, options = {}) => {
   }
 
   return payload;
+};
+
+const loginAdminApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: 'admin@backy.io',
+      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.success === false || !payload.data?.session?.token) {
+    throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
+  }
+
+  apiAdminSessionToken = payload.data.session.token;
+  apiAdminSessionData = payload.data;
+  return payload.data;
 };
 
 const createPage = async () => {
@@ -134,6 +159,24 @@ const listComments = async (requestId) => {
   return payload.data?.comments || payload.comments || [];
 };
 
+const listBlocklist = async (q = '') => {
+  const query = new URLSearchParams({
+    limit: '100',
+  });
+  if (q) query.set('q', q);
+  const payload = await requestApi(`/api/sites/${SITE_ID}/comments/blocklist?${query.toString()}`);
+  return payload.data?.blocklist || payload.blocklist || [];
+};
+
+const deleteBlocklistEntries = async (ids) => {
+  if (!ids.length) return { deleted: [] };
+  const payload = await requestApi(`/api/sites/${SITE_ID}/comments/blocklist`, {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
+  });
+  return payload.data || payload;
+};
+
 const waitForCommentStatus = async (commentId, requestId, status) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const comments = await listComments(requestId);
@@ -158,6 +201,31 @@ const waitForCommentReports = async (commentId, requestId, expectedCount) => {
   }
 
   throw new Error(`Comment ${commentId} did not reach report count ${expectedCount}`);
+};
+
+const waitForBlocklistEntry = async (value) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const blocklist = await listBlocklist(value);
+    const entry = blocklist.find((item) => item.value === value);
+    if (entry) {
+      return entry;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Blocklist entry ${value} was not created`);
+};
+
+const waitForBlocklistRemoved = async (value) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const blocklist = await listBlocklist(value);
+    if (!blocklist.some((item) => item.value === value)) {
+      return;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Blocklist entry ${value} was not removed`);
 };
 
 const reportComment = async ({ commentId, reason, requestId }) => {
@@ -287,9 +355,19 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const AUTH_STORAGE_SCRIPT = `
-localStorage.setItem('backy-auth-storage', JSON.stringify({ state: { user: { id: '1', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' } }, version: 0 }));
-`;
+const getAuthStorageScript = () => {
+  const user = apiAdminSessionData?.user || {
+    id: 'user-admin',
+    email: 'admin@backy.io',
+    fullName: 'Admin User',
+    role: 'admin',
+  };
+  const session = apiAdminSessionData?.session || {
+    token: apiAdminSessionToken,
+  };
+
+  return `localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({ state: { user, session }, version: 0 }))});`;
+};
 
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
@@ -418,6 +496,39 @@ const resolveReportsInUi = async (client, authorName) => {
   }
 };
 
+const removeBlocklistEntryInUi = async (client, value) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="comments-blocklist-panel"]');
+      if (!panel) return { ok: false, reason: 'panel-missing', body: document.body?.innerText?.slice(0, 1200) || '' };
+      const button = Array.from(panel.querySelectorAll('button')).find((candidate) => (
+        (candidate.getAttribute('aria-label') || '') === ${JSON.stringify(`Remove blocklist entry ${value}`)}
+      ));
+      if (!(button instanceof HTMLButtonElement)) {
+        return {
+          ok: false,
+          reason: 'remove-button-missing',
+          text: panel.textContent || '',
+          buttons: Array.from(panel.querySelectorAll('button')).map((candidate) => candidate.getAttribute('aria-label') || candidate.textContent || ''),
+        };
+      }
+      if (button.disabled) return { ok: false, reason: 'button-disabled' };
+      button.click();
+      return { ok: true };
+    })()`);
+
+    if (result.ok) {
+      return;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Unable to remove blocklist entry ${value}: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+};
+
 const savePolicyInUi = async (client, blockedTermsText) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
@@ -466,12 +577,13 @@ const assertLayout = async (client) => {
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="comments-command-center"]')),
+    hasBlocklist: Boolean(document.querySelector('[data-testid="comments-blocklist-panel"]')),
     hasQueue: document.body?.innerText?.includes('Moderation Queue') || false,
     hasApi: document.body?.innerText?.includes('Comment moderation API') || false,
     hasBulk: document.body?.innerText?.includes('Bulk decisions') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Comments page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasQueue && layout.hasApi && layout.hasBulk, `Comments page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasBlocklist && layout.hasQueue && layout.hasApi && layout.hasBulk, `Comments page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
@@ -528,15 +640,18 @@ const main = async () => {
   let userDataDir;
   let page;
   const requestIds = [];
+  const blocklistIdsToCleanup = new Set();
   let restoredPolicy = false;
 
   try {
+    await loginAdminApi();
     page = await createPage();
     const suffix = Date.now().toString(36);
     const approveRequestId = `comments-smoke-approve-${suffix}`;
     const rejectRequestId = `comments-smoke-reject-${suffix}`;
     const reportRequestId = `comments-smoke-report-${suffix}`;
-    requestIds.push(approveRequestId, rejectRequestId, reportRequestId);
+    const blockRequestId = `comments-smoke-block-${suffix}`;
+    requestIds.push(approveRequestId, rejectRequestId, reportRequestId, blockRequestId);
 
     const approveComment = await submitComment({
       pageId: page.id,
@@ -559,6 +674,13 @@ const main = async () => {
       content: 'Please resolve this temporary reported page comment from the moderation smoke.',
       requestId: reportRequestId,
     });
+    const blockedComment = await submitComment({
+      pageId: page.id,
+      authorName: 'Comments Smoke Block',
+      authorEmail: 'comments-block@example.com',
+      content: 'Please block this temporary page comment from the moderation smoke.',
+      requestId: blockRequestId,
+    });
     await reportComment({
       commentId: reportedComment.id,
       reason: 'harassment',
@@ -578,9 +700,9 @@ const main = async () => {
       deviceScaleFactor: 1,
       mobile: false,
     });
-    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: AUTH_STORAGE_SCRIPT });
+    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: getAuthStorageScript() });
 
-    await navigateToComments(client, ['Comments Smoke Approve', 'Comments Smoke Reject', 'Comments Smoke Report']);
+    await navigateToComments(client, ['Comments Smoke Approve', 'Comments Smoke Reject', 'Comments Smoke Report', 'Comments Smoke Block']);
     await savePolicyInUi(client, 'bannedphrase');
     for (let attempt = 0; attempt < 80; attempt += 1) {
       const site = await getAdminSite();
@@ -635,6 +757,16 @@ const main = async () => {
     const resolvedReport = await waitForCommentReports(reportedComment.id, reportRequestId, 0);
     assert(!resolvedReport.reportReasons?.length, `Report reasons were not cleared: ${JSON.stringify(resolvedReport)}`);
 
+    await moderateCommentInUi(client, 'Comments Smoke Block', 'blocked', 'harassment');
+    const blocked = await waitForCommentStatus(blockedComment.id, blockRequestId, 'blocked');
+    assert(blocked.blockReason === 'harassment', `Block reason did not persist: ${JSON.stringify(blocked)}`);
+    const blocklistEntry = await waitForBlocklistEntry('comments-block@example.com');
+    blocklistIdsToCleanup.add(blocklistEntry.id);
+    await navigateToComments(client, ['Comments Smoke Block']);
+    await removeBlocklistEntryInUi(client, 'comments-block@example.com');
+    await waitForBlocklistRemoved('comments-block@example.com');
+    blocklistIdsToCleanup.delete(blocklistEntry.id);
+
     await assertLayout(client);
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
       fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));
@@ -669,9 +801,15 @@ const main = async () => {
       approvedCommentId: approveComment.id,
       rejectedCommentId: rejectComment.id,
       resolvedReportCommentId: reportedComment.id,
+      blockedCommentId: blockedComment.id,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
+    if (blocklistIdsToCleanup.size > 0) {
+      await deleteBlocklistEntries(Array.from(blocklistIdsToCleanup)).catch((error) => {
+        console.warn('Unable to clean comment blocklist entries:', error instanceof Error ? error.message : error);
+      });
+    }
     if (!restoredPolicy) {
       await patchSiteCommentPolicy({
         enabled: true,
