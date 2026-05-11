@@ -285,6 +285,24 @@ const createSmokePage = async () => {
             },
           },
           {
+            id: 'smoke-select',
+            type: 'select',
+            x: 860,
+            y: 610,
+            width: 280,
+            height: 96,
+            zIndex: 5,
+            props: {
+              label: 'Initial select',
+              name: 'initial_select',
+              options: ['Option 1', 'Option 2'],
+              placeholder: 'Choose',
+              required: false,
+              borderRadius: 4,
+              borderColor: '#d1d5db',
+            },
+          },
+          {
             id: 'smoke-repeater',
             type: 'repeater',
             x: 520,
@@ -3172,6 +3190,75 @@ const assertPersistedTextareaFieldBehavior = async (pageId) => {
   return props;
 };
 
+const testSelectFieldBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-select');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-field-label', 'Smoke select label');
+  await setFormControlByTestId(client, 'editor-field-name', 'smoke_plan');
+  await setCheckboxByTestId(client, 'editor-field-required', true);
+  await setFormControlByTestId(client, 'editor-field-placeholder', 'Choose a plan');
+  await setFormControlByTestId(client, 'editor-field-help-text', 'Select the plan that fits.');
+  await setFormControlByTestId(client, 'editor-field-options', 'Starter\nGrowth\nScale');
+  await setFormControlByTestId(client, 'editor-select-default-value', 'Growth');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const checked = (testId) => {
+      const input = document.querySelector('[data-testid="' + testId + '"]');
+      return input instanceof HTMLInputElement ? input.checked : null;
+    };
+    const node = document.querySelector('[data-element-id="smoke-select"]');
+    const label = node?.querySelector('label');
+    const select = node?.querySelector('select');
+    const help = node?.querySelector('p');
+    return {
+      label: value('editor-field-label'),
+      name: value('editor-field-name'),
+      required: checked('editor-field-required'),
+      placeholder: value('editor-field-placeholder'),
+      helpText: value('editor-field-help-text'),
+      optionsText: value('editor-field-options'),
+      defaultValue: value('editor-select-default-value'),
+      previewLabel: label?.textContent || '',
+      previewName: select?.getAttribute('name') || '',
+      previewRequired: select instanceof HTMLSelectElement ? select.required : null,
+      previewValue: select instanceof HTMLSelectElement ? select.value : '',
+      previewOptions: select ? Array.from(select.options).map((option) => option.value) : [],
+      previewHelpText: help?.textContent || '',
+    };
+  })()`);
+
+  assert(state.label === 'Smoke select label' && state.previewLabel.includes('Smoke select label'), `Select label mismatch: ${JSON.stringify(state)}`);
+  assert(state.name === 'smoke_plan' && state.previewName === 'smoke_plan', `Select name mismatch: ${JSON.stringify(state)}`);
+  assert(state.required === true && state.previewRequired === true && state.previewLabel.includes('*'), `Select required mismatch: ${JSON.stringify(state)}`);
+  assert(state.placeholder === 'Choose a plan', `Select placeholder control mismatch: ${JSON.stringify(state)}`);
+  assert(state.helpText === 'Select the plan that fits.' && state.previewHelpText === 'Select the plan that fits.', `Select help text mismatch: ${JSON.stringify(state)}`);
+  assert(state.optionsText === 'Starter\nGrowth\nScale', `Select options control mismatch: ${JSON.stringify(state)}`);
+  assert(JSON.stringify(state.previewOptions) === JSON.stringify(['Starter', 'Growth', 'Scale']), `Select preview options mismatch: ${JSON.stringify(state)}`);
+  assert(state.defaultValue === 'Growth' && state.previewValue === 'Growth', `Select default value mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedSelectFieldBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const select = findCanvasElement(elements, 'smoke-select');
+  const props = select?.props || {};
+
+  assert(select?.type === 'select', `Persisted smoke-select missing: ${JSON.stringify(select)}`);
+  assert(props.label === 'Smoke select label', `Persisted select label mismatch: ${JSON.stringify(props)}`);
+  assert(props.name === 'smoke_plan', `Persisted select name mismatch: ${JSON.stringify(props)}`);
+  assert(props.required === true, `Persisted select required mismatch: ${JSON.stringify(props)}`);
+  assert(props.placeholder === 'Choose a plan', `Persisted select placeholder mismatch: ${JSON.stringify(props)}`);
+  assert(props.helpText === 'Select the plan that fits.', `Persisted select help text mismatch: ${JSON.stringify(props)}`);
+  assert(Array.isArray(props.options) && JSON.stringify(props.options) === JSON.stringify(['Starter', 'Growth', 'Scale']), `Persisted select options mismatch: ${JSON.stringify(props)}`);
+  assert(props.defaultValue === 'Growth', `Persisted select default value mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const testButtonLinkBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-child-button');
   await switchToPropertiesPanel(client);
@@ -3679,7 +3766,7 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-repeater']);
 
     const clickAdd = await testComponentClickAdd(client, 'divider');
 
@@ -3799,6 +3886,9 @@ const main = async () => {
     const textareaFieldBehaviorControls = EDITOR_PATH
       ? null
       : await testTextareaFieldBehaviorControls(client);
+    const selectFieldBehaviorControls = EDITOR_PATH
+      ? null
+      : await testSelectFieldBehaviorControls(client);
     const buttonLinkBehaviorControls = EDITOR_PATH
       ? null
       : await testButtonLinkBehaviorControls(client);
@@ -3824,12 +3914,13 @@ const main = async () => {
     let persistedImageBehavior = null;
     let persistedInputFieldBehavior = null;
     let persistedTextareaFieldBehavior = null;
+    let persistedSelectFieldBehavior = null;
     let persistedButtonLinkBehavior = null;
     let persistedVideoBehavior = null;
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -3891,6 +3982,9 @@ const main = async () => {
       persistedTextareaFieldBehavior = textareaFieldBehaviorControls
         ? await assertPersistedTextareaFieldBehavior(tempPageId)
         : null;
+      persistedSelectFieldBehavior = selectFieldBehaviorControls
+        ? await assertPersistedSelectFieldBehavior(tempPageId)
+        : null;
       persistedButtonLinkBehavior = buttonLinkBehaviorControls
         ? await assertPersistedButtonLinkBehavior(tempPageId)
         : null;
@@ -3907,7 +4001,7 @@ const main = async () => {
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -4013,6 +4107,7 @@ const main = async () => {
       imageBehaviorControls,
       inputFieldBehaviorControls,
       textareaFieldBehaviorControls,
+      selectFieldBehaviorControls,
       buttonLinkBehaviorControls,
       videoBehaviorControls,
       embedBehaviorControls,
@@ -4028,6 +4123,7 @@ const main = async () => {
       persistedImageBehavior,
       persistedInputFieldBehavior,
       persistedTextareaFieldBehavior,
+      persistedSelectFieldBehavior,
       persistedButtonLinkBehavior,
       persistedVideoBehavior,
       persistedEmbedBehavior,

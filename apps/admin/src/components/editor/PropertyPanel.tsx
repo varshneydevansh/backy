@@ -1402,6 +1402,7 @@ function ContentProperties({
                   options: event.target.value.split('\n').map((value) => value.trim()).filter(Boolean),
                 })}
                 rows={4}
+                data-testid="editor-field-options"
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background resize-none',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1420,6 +1421,7 @@ function ContentProperties({
                 type="text"
                 value={element.props.defaultValue || ''}
                 onChange={(e) => onChange({ defaultValue: e.target.value })}
+                data-testid="editor-select-default-value"
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                   'focus:outline-none focus:ring-2 focus:ring-ring'

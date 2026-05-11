@@ -2384,28 +2384,67 @@ function SelectElement({ element }: ElementRendererProps) {
   const options = parseOptionValues(props.options);
   const name = getNameClass(props.name) || `field-${element.id}`;
   const defaultValue = parseAttributeString(props.defaultValue);
+  const label = getNameClass(props.label);
+  const helpText = getNameClass(props.helpText);
 
   return (
-    <select
-      name={name}
-      required={getBoolean(props.required)}
-      defaultValue={defaultValue || ''}
+    <div
       style={{
-        padding: '12px 16px',
-        border: getNameClass(props.border) || '1px solid #d1d5db',
-        borderRadius: getLength(props.borderRadius, '8px'),
-        fontSize: getLength(props.fontSize, '16px'),
+        display: 'flex',
+        flexDirection: 'column',
+        gap: getLength(props.fieldGap, '6px'),
         width: '100%',
-        ...styles,
+        height: '100%',
       }}
     >
-      {options.length === 0 ? <option value="">Select</option> : null}
-      {options.map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
-    </select>
+      {label ? (
+        <label
+          htmlFor={`field-${element.id}`}
+          style={{
+            color: getNameClass(props.labelColor) || getNameClass(props.color) || '#374151',
+            fontWeight: getNameClass(props.labelFontWeight) || 500,
+            fontSize: getLength(props.labelFontSize, '14px'),
+          }}
+        >
+          {label}
+          {getBoolean(props.required) ? ' *' : ''}
+        </label>
+      ) : null}
+      <select
+        id={`field-${element.id}`}
+        name={name}
+        required={getBoolean(props.required)}
+        disabled={getBoolean(props.disabled)}
+        defaultValue={defaultValue || ''}
+        style={{
+          padding: '12px 16px',
+          border: getNameClass(props.border) || '1px solid #d1d5db',
+          borderRadius: getLength(props.borderRadius, '8px'),
+          fontSize: getLength(props.fontSize, '16px'),
+          width: '100%',
+          ...styles,
+        }}
+      >
+        {options.length === 0 ? <option value="">Select</option> : null}
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+      {helpText ? (
+        <p
+          style={{
+            margin: 0,
+            color: getNameClass(props.helpTextColor) || '#6b7280',
+            fontSize: getLength(props.helpTextFontSize, '12px'),
+            lineHeight: 1.4,
+          }}
+        >
+          {helpText}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

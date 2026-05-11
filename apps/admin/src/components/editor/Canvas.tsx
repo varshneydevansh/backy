@@ -2428,6 +2428,7 @@ function CanvasElementComponent({
                 value={p.value ?? p.defaultValue ?? selectOptions[0] ?? ''}
                 disabled={!isPreview}
                 required={Boolean(p.required)}
+                name={typeof p.name === 'string' ? p.name : undefined}
                 style={{
                   ...sharedStyle,
                   width: '100%',
