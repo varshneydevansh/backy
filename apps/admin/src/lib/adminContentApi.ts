@@ -650,6 +650,17 @@ interface ApiFormEmbedBlockResponse {
   };
 }
 
+interface ApiFormsAnalyticsResponse {
+  success: boolean;
+  data?: {
+    analytics: FormsAnalytics;
+    generatedAt: string;
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiListFormDeliveryEventsResponse {
   success: boolean;
   data?: {
@@ -1470,6 +1481,43 @@ export interface FormConsentRetentionResult {
   due: number;
   anonymized: number;
   submissions: FormSubmission[];
+}
+
+export interface FormsAnalytics {
+  summary: {
+    forms: number;
+    activeForms: number;
+    inactiveForms: number;
+    submissions: number;
+    pending: number;
+    approved: number;
+    rejected: number;
+    spam: number;
+    routedToCollections: number;
+    conversionRate: number;
+    spamRate: number;
+  };
+  trend: Array<{
+    date: string;
+    total: number;
+    pending: number;
+    approved: number;
+    rejected: number;
+    spam: number;
+  }>;
+  forms: Array<{
+    formId: string;
+    name: string;
+    title: string | null;
+    isActive: boolean;
+    submissions: number;
+    pending: number;
+    approved: number;
+    rejected: number;
+    spam: number;
+    routedToCollections: number;
+    lastSubmittedAt: string | null;
+  }>;
 }
 
 export type ContactStatus = Contact['status'];
@@ -3209,6 +3257,24 @@ export async function createFormEmbedBlock(
   }
 
   return toReusableSection(section);
+}
+
+export async function getFormsAnalytics(
+  siteId: string,
+  filters: { days?: number } = {},
+): Promise<FormsAnalytics> {
+  const query = new URLSearchParams();
+  if (filters.days) query.set('days', String(filters.days));
+
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/analytics${query.toString() ? `?${query}` : ''}`);
+  const payload = await readJson<ApiFormsAnalyticsResponse>(response);
+  const analytics = payload.data?.analytics;
+
+  if (!response.ok || !payload.success || !analytics) {
+    throw new Error(payload.error?.message || 'Unable to load forms analytics');
+  }
+
+  return analytics;
 }
 
 export async function listFormDeliveryEvents(

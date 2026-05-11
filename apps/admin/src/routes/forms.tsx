@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
+  BarChart3,
   CheckCircle2,
   ClipboardList,
   Code2,
@@ -26,6 +27,7 @@ import {
   getFormWithSubmissions,
   applyFormConsentRetention,
   createFormEmbedBlock,
+  getFormsAnalytics,
   listFormDeliveryEvents,
   listCollections,
   listForms,
@@ -38,6 +40,7 @@ import {
   type FormDefinition,
   type FormDeliveryEvent,
   type FormFieldDefinition,
+  type FormsAnalytics,
   type FormSubmission,
   type FormSubmissionStatus,
 } from '@/lib/adminContentApi';
@@ -464,6 +467,7 @@ function FormsRoute() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [inboxByForm, setInboxByForm] = useState<Record<string, FormInbox>>({});
   const [deliveryEventsByForm, setDeliveryEventsByForm] = useState<Record<string, FormDeliveryEvent[]>>({});
+  const [formsAnalytics, setFormsAnalytics] = useState<FormsAnalytics | null>(null);
   const [selectedFormId, setSelectedFormId] = useState<string | null>(routeSearch.formId || null);
   const [formDraft, setFormDraft] = useState<FormDefinition | null>(null);
   const [formSearchQuery, setFormSearchQuery] = useState(routeSearch.q || '');
@@ -737,13 +741,23 @@ function FormsRoute() {
   }, [selectedConsentRecords, selectedConsentSettings.deleteAfterDays, selectedConsentSettings.retentionDays]);
   const metrics = useMemo(() => {
     const submissions = Object.values(inboxByForm).flatMap((item) => item.submissions);
+    const summary = formsAnalytics?.summary;
     return {
-      forms: forms.length,
-      active: forms.filter((form) => form.isActive).length,
-      pending: submissions.filter((submission) => submission.status === 'pending').length,
-      spam: submissions.filter((submission) => submission.status === 'spam').length,
+      forms: summary?.forms ?? forms.length,
+      active: summary?.activeForms ?? forms.filter((form) => form.isActive).length,
+      submissions: summary?.submissions ?? submissions.length,
+      pending: summary?.pending ?? submissions.filter((submission) => submission.status === 'pending').length,
+      approved: summary?.approved ?? submissions.filter((submission) => submission.status === 'approved').length,
+      spam: summary?.spam ?? submissions.filter((submission) => submission.status === 'spam').length,
+      routedToCollections: summary?.routedToCollections ?? submissions.filter((submission) => Boolean(submission.collectionRecord)).length,
+      conversionRate: summary?.conversionRate ?? 0,
+      spamRate: summary?.spamRate ?? 0,
     };
-  }, [forms, inboxByForm]);
+  }, [forms, formsAnalytics?.summary, inboxByForm]);
+  const selectedFormAnalytics = useMemo(
+    () => selectedForm ? formsAnalytics?.forms.find((entry) => entry.formId === selectedForm.id) || null : null,
+    [formsAnalytics?.forms, selectedForm],
+  );
   const formCommandReadiness = useMemo(() => {
     if (selectedForm) {
       return selectedFormReadiness;
@@ -997,9 +1011,10 @@ function FormsRoute() {
     setNotice(null);
 
     try {
-      const [loadedForms, loadedCollections] = await Promise.all([
+      const [loadedForms, loadedCollections, loadedAnalytics] = await Promise.all([
         listForms(activeSiteId),
         listCollections(activeSiteId).catch(() => []),
+        getFormsAnalytics(activeSiteId, { days: 14 }).catch(() => null),
       ]);
       const inboxPairs = await Promise.all(
         loadedForms.map(async (form) => {
@@ -1026,6 +1041,7 @@ function FormsRoute() {
       setCollections(loadedCollections);
       setInboxByForm(nextInbox);
       setDeliveryEventsByForm(Object.fromEntries(deliveryPairs));
+      setFormsAnalytics(loadedAnalytics);
       setSelectedFormId((current) => (
         current && loadedForms.some((form) => form.id === current)
           ? current
@@ -2036,11 +2052,13 @@ function FormsRoute() {
         </span>
       </div>
 
-      <div id="forms-metrics" className="mb-6 grid gap-3 scroll-mt-24 md:grid-cols-4">
+      <div id="forms-metrics" className="mb-6 grid gap-3 scroll-mt-24 md:grid-cols-6">
         {[
           { label: 'Forms', value: metrics.forms, icon: FileInput },
           { label: 'Active', value: metrics.active, icon: ShieldCheck },
+          { label: 'Submissions', value: metrics.submissions, icon: ClipboardList },
           { label: 'Pending', value: metrics.pending, icon: Inbox },
+          { label: 'Approved', value: metrics.approved, icon: CheckCircle2 },
           { label: 'Spam', value: metrics.spam, icon: XCircle },
         ].map((metric) => {
           const Icon = metric.icon;
@@ -2055,6 +2073,55 @@ function FormsRoute() {
           );
         })}
       </div>
+
+      <section className="mb-6 rounded-lg border border-border bg-card p-4" data-testid="forms-analytics-panel">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <BarChart3 className="size-4" />
+              Submission analytics
+            </div>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              Backend aggregates across all loaded forms for moderation, collection routing, and launch-health review.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+            <span className="rounded-full bg-muted px-2.5 py-1">{metrics.conversionRate}% approved</span>
+            <span className="rounded-full bg-muted px-2.5 py-1">{metrics.spamRate}% spam</span>
+            <span className="rounded-full bg-muted px-2.5 py-1">{metrics.routedToCollections} routed</span>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+          <div className="rounded-lg border border-border bg-background p-3" data-testid="forms-analytics-trend">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <span className="text-xs font-semibold text-muted-foreground">Last 14 days</span>
+              <span className="font-mono text-xs text-muted-foreground">{formsAnalytics?.trend.reduce((sum, point) => sum + point.total, 0) || 0} submissions</span>
+            </div>
+            <FormTrendBars trend={formsAnalytics?.trend || []} />
+          </div>
+          <div className="rounded-lg border border-border bg-background p-3" data-testid="forms-analytics-top-forms">
+            <div className="mb-3 text-xs font-semibold text-muted-foreground">Top forms</div>
+            <div className="grid gap-2">
+              {(formsAnalytics?.forms || []).slice(0, 4).map((entry) => (
+                <div key={entry.formId} className="flex items-center justify-between gap-3 rounded border border-border px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">{entry.title || entry.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {entry.pending} pending · {entry.routedToCollections} routed
+                    </div>
+                  </div>
+                  <div className="font-mono text-sm font-semibold">{entry.submissions}</div>
+                </div>
+              ))}
+              {(!formsAnalytics || formsAnalytics.forms.length === 0) && (
+                <div className="rounded border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+                  No form analytics yet.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
 
       <Panel id="forms-templates" className="mb-6 scroll-mt-24">
         <PanelHeader
@@ -3362,6 +3429,8 @@ function FormsRoute() {
                     <MetaTile label="Webhook" value={selectedForm.notificationWebhook ? 'configured' : 'off'} />
                     <MetaTile label="Success redirect" value={selectedForm.successRedirectUrl || 'message only'} />
                     <MetaTile label="Active state" value={selectedForm.isActive ? 'active' : 'inactive'} />
+                    <MetaTile label="Total submissions" value={String(selectedFormAnalytics?.submissions ?? selectedInbox?.total ?? 0)} />
+                    <MetaTile label="Routed records" value={String(selectedFormAnalytics?.routedToCollections ?? 0)} />
                   </div>
 
                   <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -3532,6 +3601,38 @@ function MetaTile({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-border bg-background px-3 py-3">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="mt-1 truncate text-sm font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function FormTrendBars({ trend }: { trend: FormsAnalytics['trend'] }) {
+  const max = Math.max(1, ...trend.map((point) => point.total));
+
+  if (trend.length === 0) {
+    return (
+      <div className="flex h-24 items-center justify-center rounded border border-dashed border-border text-sm text-muted-foreground">
+        No submission trend data.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid h-28 items-end gap-1" style={{ gridTemplateColumns: `repeat(${trend.length}, minmax(0, 1fr))` }}>
+      {trend.map((point) => {
+        const height = Math.max(6, Math.round((point.total / max) * 96));
+        return (
+          <div key={point.date} className="flex min-w-0 flex-col items-center gap-1">
+            <div
+              className="w-full rounded-t bg-primary/70"
+              style={{ height }}
+              title={`${point.date}: ${point.total} submissions`}
+            />
+            <span className="w-full truncate text-center font-mono text-[10px] text-muted-foreground">
+              {point.date.slice(5)}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

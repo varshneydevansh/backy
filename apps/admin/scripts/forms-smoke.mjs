@@ -241,6 +241,11 @@ const listReusableSections = async () => {
   return payload.data?.sections || payload.sections || [];
 };
 
+const getFormsAnalytics = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/analytics?days=14`);
+  return payload.data?.analytics;
+};
+
 const getFormWithSubmissions = async (formId) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/submissions?limit=100`);
   return {
@@ -394,12 +399,13 @@ const navigateToForms = async (client) => {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const state = await evaluate(client, `(() => ({
       ready: Boolean(document.querySelector('[data-testid="forms-command-center"]')),
+      analytics: Boolean(document.querySelector('[data-testid="forms-analytics-panel"]')),
       templates: document.body?.innerText?.includes('Form templates') || false,
       registration: document.body?.innerText?.includes('Registration') || false,
       body: document.body?.innerText?.slice(0, 500) || '',
     }))()`);
 
-    if (state.ready && state.templates && state.registration) {
+    if (state.ready && state.analytics && state.templates && state.registration) {
       return state;
     }
 
@@ -1099,18 +1105,34 @@ const waitForEmailNotification = async (formId, submission) => {
 };
 
 const assertDeliveryPanelShowsEmail = async (client, submissionId) => {
-  const result = await evaluate(client, `(() => {
-    const panel = document.querySelector('[data-testid="forms-webhook-delivery-panel"]');
-    const text = panel?.textContent?.replace(/\\s+/g, ' ').trim() || '';
-    return {
-      ok: Boolean(panel) &&
-        text.includes(${JSON.stringify(submissionId)}) &&
-        text.includes('email') &&
-        text.includes('mailto:forms-smoke-leads@example.com'),
-      text: text.slice(0, 800),
-    };
-  })()`);
-  assert(result.ok, `Delivery panel did not render email notification event: ${JSON.stringify(result)}`);
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="forms-webhook-delivery-panel"]');
+      const text = panel?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+      if (panel && ${attempt % 20 === 0 ? 'true' : 'false'}) {
+        const refresh = Array.from(panel.querySelectorAll('button')).find((button) => (
+          button instanceof HTMLButtonElement &&
+          !button.disabled &&
+          (button.textContent || '').replace(/\\s+/g, ' ').trim().includes('Refresh delivery')
+        ));
+        refresh?.click();
+      }
+      return {
+        ok: Boolean(panel) &&
+          text.includes(${JSON.stringify(submissionId)}) &&
+          text.includes('email') &&
+          text.includes('mailto:forms-smoke-leads@example.com'),
+        text: text.slice(0, 800),
+      };
+    })()`);
+    if (result.ok) {
+      return;
+    }
+    if (attempt === 79) {
+      throw new Error(`Delivery panel did not render email notification event: ${JSON.stringify(result)}`);
+    }
+    await sleep(250);
+  }
 };
 
 const retryEmailDeliveryInUi = async (client, formId, submission) => {
@@ -1391,6 +1413,29 @@ const createEmbedBlockInUi = async (client, formId) => {
   return null;
 };
 
+const assertFormsAnalytics = async (client, formId, submissionId) => {
+  const analytics = await getFormsAnalytics();
+  const form = analytics?.forms?.find((entry) => entry.formId === formId);
+  assert(analytics?.summary?.submissions >= 1, `Forms analytics did not count submissions: ${JSON.stringify(analytics)}`);
+  assert(form?.submissions >= 1, `Forms analytics did not count selected form: ${JSON.stringify(analytics?.forms)}`);
+  assert(
+    analytics.trend.some((point) => point.total >= 1),
+    `Forms analytics trend did not include a submission: ${JSON.stringify(analytics.trend)}`,
+  );
+
+  const state = await evaluate(client, `(() => ({
+    panel: Boolean(document.querySelector('[data-testid="forms-analytics-panel"]')),
+    trend: Boolean(document.querySelector('[data-testid="forms-analytics-trend"]')),
+    topForms: Boolean(document.querySelector('[data-testid="forms-analytics-top-forms"]')),
+    body: document.body?.innerText || '',
+  }))()`);
+  assert(state.panel && state.trend && state.topForms, `Forms analytics panel missing expected regions: ${JSON.stringify(state).slice(0, 800)}`);
+  assert(state.body.includes('Submission analytics'), 'Forms analytics title is not rendered');
+  assert(state.body.includes(submissionId) || state.body.includes('Registration edited'), 'Forms analytics/top form context is not rendered');
+
+  return analytics;
+};
+
 const approveSubmissionInUi = async (client, formId, submissionId) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
@@ -1440,6 +1485,8 @@ const assertLayout = async (client) => {
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="forms-command-center"]')),
+    hasAnalytics: Boolean(document.querySelector('[data-testid="forms-analytics-panel"]')) &&
+      document.body?.innerText?.includes('Submission analytics'),
     hasAccountContract: Boolean(document.querySelector('[data-testid="forms-account-contract"]')) &&
       document.body?.innerText?.includes('Registration/account handoff') &&
       document.body?.innerText?.includes('Create registration form'),
@@ -1449,7 +1496,7 @@ const assertLayout = async (client) => {
     hasInbox: document.body?.innerText?.includes('Submission inbox') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Forms page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasAccountContract && layout.hasDeliveryPanel && layout.hasTemplates && layout.hasInbox, `Forms page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasAccountContract && layout.hasDeliveryPanel && layout.hasTemplates && layout.hasInbox, `Forms page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
@@ -1586,6 +1633,7 @@ const main = async () => {
     webhookFailure = await waitForWebhookDelivery(webhookReceiver, createdFormId, submitted, 'failed');
     emailDelivery = await waitForEmailNotification(createdFormId, submitted);
     await refreshForms(client);
+    const formsAnalytics = await assertFormsAnalytics(client, createdFormId, submitted.id);
     await assertDeliveryPanelShowsEmail(client, submitted.id);
     if (EXPECTED_EMAIL_INITIAL_STATUS === 'failed') {
       emailRetry = await retryEmailDeliveryInUi(client, createdFormId, submitted);
@@ -1663,6 +1711,12 @@ const main = async () => {
         scanned: consentRetention.scannedSubmissions,
         due: consentRetention.due,
         anonymized: consentRetention.anonymized,
+      },
+      analytics: {
+        submissions: formsAnalytics.summary.submissions,
+        approved: formsAnalytics.summary.approved,
+        spam: formsAnalytics.summary.spam,
+        routedToCollections: formsAnalytics.summary.routedToCollections,
       },
       collectionRecord: {
         id: createdRecord.id,
