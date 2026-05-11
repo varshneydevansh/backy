@@ -241,6 +241,7 @@ const reorderSelectedSiblingStack = (
 
 const formatChangeCount = (count: number) => `${count} unsaved ${count === 1 ? 'change' : 'changes'}`;
 
+const EDITOR_AUTOSAVE_DELAY_MS = 5000;
 const RESPONSIVE_GEOMETRY_FIELDS = ['x', 'y', 'width', 'height', 'zIndex', 'rotation'] as const;
 const RESPONSIVE_LAYER_STATE_FIELDS = ['visible', 'locked'] as const;
 const RESPONSIVE_LAYOUT_FIELDS = [...RESPONSIVE_GEOMETRY_FIELDS, ...RESPONSIVE_LAYER_STATE_FIELDS] as const;
@@ -3360,10 +3361,16 @@ export function CanvasEditor({
       return false;
     }
 
+    if (!silent && autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+      autosaveTimeoutRef.current = null;
+      setAutosaveDueAt(null);
+    }
+
     setIsSaving(true);
     setSaveStatus(silent ? 'autosaving' : 'saving');
     try {
-      await Promise.resolve(onSave(elements, nextSettings, size));
+      await Promise.resolve(onSave(elementsRef.current, nextSettings, size));
       if (changeSequenceRef.current === saveSequence) {
         setHasUnsavedChanges(false);
         setSaveStatus('saved');
@@ -3394,7 +3401,7 @@ export function CanvasEditor({
     } finally {
       setIsSaving(false);
     }
-  }, [elements, isSaving, onSave, pageSettings, size, validateSettings]);
+  }, [isSaving, onSave, pageSettings, size, validateSettings]);
 
   const handleSettingsSave = useCallback(async (newSettings: PageSettings) => {
     setPageSettings(newSettings);
@@ -3624,12 +3631,12 @@ export function CanvasEditor({
       clearTimeout(autosaveTimeoutRef.current);
     }
 
-    const dueAt = new Date(Date.now() + 2000);
+    const dueAt = new Date(Date.now() + EDITOR_AUTOSAVE_DELAY_MS);
     setAutosaveDueAt(dueAt);
 
     autosaveTimeoutRef.current = window.setTimeout(() => {
       void handleSaveWrapper(undefined, true);
-    }, 2000);
+    }, EDITOR_AUTOSAVE_DELAY_MS);
 
     return () => {
       if (autosaveTimeoutRef.current) {
@@ -4290,6 +4297,8 @@ export function CanvasEditor({
                   disabled={isSaving}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm bg-slate-950 text-white hover:bg-slate-800 disabled:opacity-70 disabled:cursor-not-allowed"
                   title="Save Page (Ctrl+S)"
+                  aria-label="Save page"
+                  data-testid="editor-save-page"
                 >
                   <Save className="w-4 h-4" />
                   {isSaving ? 'Saving...' : 'Save'}

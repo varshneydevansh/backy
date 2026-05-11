@@ -12,6 +12,7 @@ const EDITOR_PATH = process.env.BACKY_EDITOR_SMOKE_PATH || '';
 const COMPONENT_SMOKE = process.env.BACKY_EDITOR_COMPONENT_SMOKE || '';
 const CLIPBOARD_SMOKE = process.env.BACKY_EDITOR_CLIPBOARD_SMOKE === '1';
 const Z_ORDER_SMOKE = process.env.BACKY_EDITOR_Z_ORDER_SMOKE === '1';
+const SAVE_SMOKE = process.env.BACKY_EDITOR_SAVE_SMOKE === '1';
 const PAGE_SETTINGS_SMOKE = process.env.BACKY_EDITOR_PAGE_SETTINGS_SMOKE === '1';
 const DELETE_SMOKE = process.env.BACKY_EDITOR_DELETE_SMOKE === '1';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -1103,6 +1104,7 @@ const pressKey = async (client, key, options = {}) => {
     c: 'KeyC',
     d: 'KeyD',
     g: 'KeyG',
+    s: 'KeyS',
     v: 'KeyV',
     x: 'KeyX',
     z: 'KeyZ',
@@ -2296,17 +2298,60 @@ const activateTextEditing = async (client, elementId) => {
 };
 
 const clickSave = async (client) => {
-  const clicked = await evaluate(client, `(() => {
-    const button = Array.from(document.querySelectorAll('button')).find((candidate) => {
-      const label = (candidate.textContent || '').trim();
-      return label === 'Save' || label === 'Saving...';
-    });
-    if (!button) return false;
-    button.click();
-    return true;
-  })()`);
+  let lastState = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    lastState = await evaluate(client, `(() => {
+      const candidates = Array.from(document.querySelectorAll('button'));
+      const button = candidates.find((candidate) => candidate.getAttribute('data-testid') === 'editor-save-page') ||
+        candidates.find((candidate) => (candidate.textContent || '').trim() === 'Save');
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'missing' };
+      }
+      button.scrollIntoView({ block: 'center', inline: 'center' });
 
-  assert(clicked, 'Unable to find Save button in editor');
+      const rect = button.getBoundingClientRect();
+      const style = window.getComputedStyle(button);
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      const visible =
+        rect.width > 0 &&
+        rect.height > 0 &&
+        x >= 0 &&
+        y >= 0 &&
+        x <= window.innerWidth &&
+        y <= window.innerHeight &&
+        style.visibility !== 'hidden' &&
+        style.display !== 'none' &&
+        hit instanceof Element &&
+        hit.closest('button') === button;
+
+      return {
+        ok: visible && !button.disabled,
+        reason: button.disabled ? 'disabled' : visible ? '' : 'not-visible',
+        text: (button.textContent || '').trim(),
+        saveState: document.querySelector('[data-testid="editor-save-status"]')?.getAttribute('data-save-state') || '',
+      };
+    })()`);
+
+    if (lastState?.ok) {
+      const clicked = await evaluate(client, `(() => {
+        const candidates = Array.from(document.querySelectorAll('button'));
+        const button = candidates.find((candidate) => candidate.getAttribute('data-testid') === 'editor-save-page') ||
+          candidates.find((candidate) => (candidate.textContent || '').trim() === 'Save');
+        if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+        button.click();
+        return true;
+      })()`);
+      assert(clicked, `Unable to click Save button: ${JSON.stringify(lastState)}`);
+      await sleep(250);
+      return;
+    }
+
+    await sleep(150);
+  }
+
+  throw new Error(`Unable to click enabled Save button: ${JSON.stringify(lastState)}`);
 };
 
 const readEditorSaveStatus = async (client) => {
@@ -2348,7 +2393,7 @@ const waitForEditorMutationReady = async (client, label = 'editor mutation readi
   for (let attempt = 0; attempt < 60; attempt += 1) {
     lastState = await evaluate(client, `(() => {
       const status = document.querySelector('[data-testid="editor-save-status"]');
-      const saveButton = Array.from(document.querySelectorAll('button')).find((candidate) => {
+      const saveButton = document.querySelector('[data-testid="editor-save-page"]') || Array.from(document.querySelectorAll('button')).find((candidate) => {
         const label = (candidate.textContent || '').trim();
         return label === 'Save' || label === 'Saving...';
       });
@@ -2427,6 +2472,100 @@ const waitForPersistedCanvasState = async (pageId, expectedState) => {
   }
 
   throw new Error(`Saved canvas state did not match editor state. Expected ${JSON.stringify(expectedState)}, got ${JSON.stringify(lastState)}`);
+};
+
+const testSaveEditingControls = async (client, pageId, editorPath) => {
+  const elementId = 'smoke-top-edge';
+
+  await waitForElementPresence(client, elementId, true, 'before save smoke');
+  const initialStatus = await waitForEditorSaveStatus(
+    client,
+    (status) => status.saveState === 'saved' && status.pendingChanges === 0,
+    'initial saved status before save smoke',
+  );
+  assert(
+    Boolean(initialStatus.lastSavedAt) || initialStatus.saveMode === '',
+    `Initial save status did not settle before save smoke: ${JSON.stringify(initialStatus)}`,
+  );
+
+  await waitForEditorMutationReady(client, 'before toolbar save smoke');
+  await clickSave(client);
+  const toolbarSavedStatus = await waitForEditorSaveStatus(
+    client,
+    (status) => (
+      status.saveState === 'saved' &&
+      status.saveMode === 'manual' &&
+      status.pendingChanges === 0 &&
+      Boolean(status.lastSavedAt)
+    ),
+    'manual status after toolbar save smoke',
+  );
+  assert(
+    toolbarSavedStatus.saveState === 'saved' &&
+      toolbarSavedStatus.saveMode === 'manual' &&
+      toolbarSavedStatus.pendingChanges === 0 &&
+      Boolean(toolbarSavedStatus.lastSavedAt),
+    `Toolbar save did not expose manual saved metadata: ${JSON.stringify(toolbarSavedStatus)}`,
+  );
+
+  const beforeShortcutSave = await readEditorElementState(client, [elementId]);
+  const shortcutDrag = await dragElement(client, elementId, 30, 20);
+  const afterShortcutNudge = await readEditorElementState(client, [elementId]);
+  assert(
+    afterShortcutNudge[elementId].x !== beforeShortcutSave[elementId].x ||
+      afterShortcutNudge[elementId].y !== beforeShortcutSave[elementId].y,
+    `Save smoke shortcut drag did not move ${elementId}: ${JSON.stringify({ beforeShortcutSave, afterShortcutNudge, shortcutDrag })}`,
+  );
+  await blurActiveElement(client);
+  await pressKey(client, 's', { ctrlKey: true });
+  const shortcutSavedStatus = await waitForEditorSaveStatus(
+    client,
+    (status) => (
+      status.saveState === 'saved' &&
+      status.saveMode === 'manual' &&
+      status.pendingChanges === 0 &&
+      Boolean(status.lastSavedAt)
+    ),
+    'manual status after keyboard save smoke',
+  );
+  assert(
+    shortcutSavedStatus.saveState === 'saved' &&
+      shortcutSavedStatus.saveMode === 'manual' &&
+      shortcutSavedStatus.pendingChanges === 0 &&
+      Boolean(shortcutSavedStatus.lastSavedAt),
+    `Ctrl/Cmd+S save did not expose manual saved metadata: ${JSON.stringify(shortcutSavedStatus)}`,
+  );
+  const persistedAfterShortcut = await waitForPersistedCanvasState(pageId, afterShortcutNudge);
+
+  let reloadClient = null;
+  let reloadedState = null;
+  try {
+    reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
+    await waitForEditorElements(reloadClient, [elementId]);
+    reloadedState = await readEditorElementState(reloadClient, [elementId]);
+    assertElementState(reloadedState, afterShortcutNudge, 'save smoke reload');
+  } finally {
+    if (reloadClient) {
+      try {
+        await reloadClient.send('Page.close');
+      } catch {
+        // Chrome may already be closing during cleanup.
+      }
+      reloadClient.close();
+    }
+  }
+
+  return {
+    elementId,
+    initialStatus,
+    toolbarSavedStatus,
+    beforeShortcutSave: beforeShortcutSave[elementId],
+    shortcutDrag,
+    afterShortcutNudge: afterShortcutNudge[elementId],
+    shortcutSavedStatus,
+    persistedAfterShortcut,
+    reloadedState,
+  };
 };
 
 const dragElement = async (client, elementId, deltaX, deltaY, options = {}) => {
@@ -5803,8 +5942,8 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const tempReusableSectionId = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE ? null : await createSmokeReusableSection();
-  const tempCollection = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE ? null : await createSmokeCollection();
+  const tempReusableSectionId = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE ? null : await createSmokeReusableSection();
+  const tempCollection = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
   const { childProcess, userDataDir } = launchChrome();
   let client;
@@ -5859,6 +5998,19 @@ const main = async () => {
         targetElementId,
         zOrderControls,
         savedStatus,
+      }, null, 2));
+      return;
+    }
+
+    if (SAVE_SMOKE) {
+      assert(!EDITOR_PATH, 'Save smoke currently requires an internally created smoke page');
+      const saveEditing = await testSaveEditingControls(client, tempPageId, editorPath);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'save',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        saveEditing,
       }, null, 2));
       return;
     }

@@ -167,6 +167,7 @@ function PageEditorRoute() {
   const [pendingRestoreRevision, setPendingRestoreRevision] = useState<ContentRevision | null>(null);
   const [isWorkspaceFocus, setIsWorkspaceFocus] = useState(routeSearch.focus === 'canvas');
   const isPageEditorWorkflowBusy = isWorkflowBusy || isPreviewBusy || readinessLoading;
+  const isPageEditorSaveBusy = isLoadingPage || isWorkflowBusy || isPreviewBusy;
   const isPageEditorBusy = isLoadingPage || isPageEditorWorkflowBusy;
 
   useEffect(() => {
@@ -619,8 +620,8 @@ function PageEditorRoute() {
     settings: PageSettings,
     canvasSize: CanvasSize = initialCanvasSize
   ) => {
-    if (isPageEditorBusy) {
-      const message = 'Wait for the page load, preview, readiness, publish, archive, or restore workflow before saving.';
+    if (isPageEditorSaveBusy) {
+      const message = 'Wait for the page load, preview, publish, archive, or restore workflow before saving.';
       setSaveWarning(message);
       throw new Error(message);
     }

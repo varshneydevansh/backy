@@ -21,7 +21,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 7 | Preview Mode | ✅ | Toggle to preview |
 | 8 | Breakpoint Toggle | ⚠️ | Desktop/Tablet/Mobile - UI only |
 | 9 | Undo/Redo Buttons | ✅ | Toolbar and shortcut undo/redo restore distinct canvas states |
-| 10 | Save Button | ❌ | UI exists, not functional |
+| 10 | Save Button | ✅ | Manual save and Ctrl/Cmd+S persist canvas JSON with status metadata and reload hydration coverage |
 | 11 | Page Settings | ✅ | Modal edits title, slug, status/schedule, SEO, JSON-LD, keywords, and social image with persistence coverage |
 | 12 | Z-Index Control | ✅ | PropertyPanel input plus toolbar bring/send forward/back controls with undo/redo coverage |
 | 13 | Delete Element | ✅ | Toolbar and Delete/Backspace remove unlocked selections with undo/redo and persistence coverage |
@@ -186,14 +186,12 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ### 10. Save Button
 **File:** `pages.$pageId.edit.tsx`
-**Current State:** ❌ Not Functional
-- Button exists
-- No save logic
-- **Required Implementation:**
-    - API call to save page
-    - Convert elements to JSON
-    - Store in database
-    - Show success/error toast
+**Current State:** ✅ Working
+- Toolbar Save calls the page editor save path and persists the current canvas element tree plus page settings.
+- Ctrl/Cmd+S invokes the same save path in edit and preview modes.
+- Save status exposes dirty/saving/autosaving/saved/error states, pending-change count, last saved timestamp, save mode, and error detail.
+- Manual saves store canvas JSON through the admin page API and reload into the editor with the saved element layout.
+- `BACKY_EDITOR_SAVE_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers toolbar save, Ctrl/Cmd+S, persisted page payload, and reload hydration.
 
 ### 11. Page Settings Button
 **File:** `pages.$pageId.edit.tsx`
@@ -363,8 +361,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 ## Missing Features List
 **Critical (Must Have)**
 - ✅ Delete element
-- ❌ Save page to database
-- ❌ Load existing page on edit
+- ✅ Save page to database
+- ✅ Load existing page on edit
 - ❌ Undo/Redo functionality
 - ⚠️ Fix RichTextEditor reset
 - ⚠️ Finalize selected-text style persistence (font family/decoration on partially selected ranges)
@@ -407,8 +405,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Implement undo/redo
 
 **Phase 2: Core Functionality**
-- Save page to database
-- Load existing page
+- Save page to database ✅
+- Load existing page ✅
 - Duplicate element
 
 **Phase 3: Usability**
