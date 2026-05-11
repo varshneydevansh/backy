@@ -238,6 +238,109 @@ const content: PageContent = {
         boxShadow: '0 11px 22px rgba(14, 116, 144, 0.25)',
       },
     },
+    {
+      id: 'styled-input',
+      type: 'input',
+      x: 264,
+      y: 440,
+      width: 260,
+      height: 96,
+      props: {
+        label: 'Email field',
+        name: 'styled_email',
+        inputType: 'email',
+        required: true,
+        placeholder: 'hello@example.com',
+        pattern: '.+@example[.]com',
+        minLength: 6,
+        maxLength: 64,
+        defaultValue: 'team@example.com',
+        helpText: 'Use your work email.',
+        padding: 13,
+        borderWidth: 3,
+        borderStyle: 'dashed',
+        borderColor: '#db2777',
+        borderRadius: 11,
+        backgroundColor: '#fdf2f8',
+        color: '#831843',
+        boxShadow: '0 5px 12px rgba(219, 39, 119, 0.2)',
+      },
+    },
+    {
+      id: 'styled-textarea',
+      type: 'textarea',
+      x: 544,
+      y: 440,
+      width: 260,
+      height: 120,
+      props: {
+        label: 'Message field',
+        name: 'styled_message',
+        required: true,
+        placeholder: 'Tell us more',
+        rows: 5,
+        minLength: 10,
+        maxLength: 240,
+        defaultValue: 'Textarea body',
+        helpText: 'Minimum ten characters.',
+        padding: 15,
+        borderWidth: 2,
+        borderStyle: 'solid',
+        borderColor: '#059669',
+        borderRadius: 12,
+        backgroundColor: '#ecfdf5',
+        color: '#064e3b',
+        boxShadow: '0 6px 16px rgba(5, 150, 105, 0.22)',
+      },
+    },
+    {
+      id: 'styled-select',
+      type: 'select',
+      x: 824,
+      y: 460,
+      width: 220,
+      height: 96,
+      props: {
+        label: 'Plan field',
+        name: 'styled_plan',
+        required: true,
+        options: ['Starter', 'Growth', 'Scale'],
+        defaultValue: 'Growth',
+        helpText: 'Choose a plan.',
+        padding: 12,
+        borderWidth: 2,
+        borderStyle: 'double',
+        borderColor: '#4f46e5',
+        borderRadius: 10,
+        backgroundColor: '#eef2ff',
+        color: '#312e81',
+        boxShadow: '0 4px 10px rgba(79, 70, 229, 0.2)',
+      },
+    },
+    {
+      id: 'styled-checkbox',
+      type: 'checkbox',
+      x: 24,
+      y: 590,
+      width: 240,
+      height: 120,
+      props: {
+        label: 'Channels field',
+        name: 'styled_channels',
+        required: true,
+        options: ['Email', 'SMS'],
+        value: 'SMS',
+        defaultValue: 'SMS',
+        helpText: 'Pick channels.',
+        padding: 10,
+        borderWidth: 2,
+        borderStyle: 'solid',
+        borderColor: '#7c2d12',
+        borderRadius: 8,
+        backgroundColor: '#fff7ed',
+        boxShadow: '0 5px 14px rgba(124, 45, 18, 0.2)',
+      },
+    },
   ],
 };
 
@@ -299,6 +402,28 @@ assert(html.includes('title="Styled map"'), `Map title was not rendered: ${html}
 assert(html.includes('q=Mumbai+India'), `Map address was not rendered: ${html}`);
 assert(html.includes('z=17'), `Map zoom was not rendered: ${html}`);
 assert(html.includes('border-color:#0e7490'), `Map border color was not rendered: ${html}`);
+assert(html.includes('name="styled_email"'), `Input name was not rendered: ${html}`);
+assert(html.includes('type="email"'), `Input type was not rendered: ${html}`);
+assert(html.includes('pattern=".+@example[.]com"'), `Input pattern was not rendered: ${html}`);
+assert(html.includes('minLength="6"'), `Input minLength was not rendered: ${html}`);
+assert(html.includes('maxLength="64"'), `Input maxLength was not rendered: ${html}`);
+assert(html.includes('value="team@example.com"'), `Input default value was not rendered: ${html}`);
+assert(html.includes('border:3px dashed #db2777'), `Input border was not rendered: ${html}`);
+assert(html.includes('background-color:#fdf2f8'), `Input background was not rendered: ${html}`);
+assert(html.includes('box-shadow:0 5px 12px rgba(219, 39, 119, 0.2)'), `Input shadow was not rendered: ${html}`);
+assert(html.includes('name="styled_message"'), `Textarea name was not rendered: ${html}`);
+assert(html.includes('rows="5"'), `Textarea rows were not rendered: ${html}`);
+assert(html.includes('Textarea body'), `Textarea default value was not rendered: ${html}`);
+assert(html.includes('border:2px solid #059669'), `Textarea border was not rendered: ${html}`);
+assert(html.includes('box-shadow:0 6px 16px rgba(5, 150, 105, 0.22)'), `Textarea shadow was not rendered: ${html}`);
+assert(html.includes('name="styled_plan"'), `Select name was not rendered: ${html}`);
+assert(html.includes('<option value="Growth" selected="">Growth</option>'), `Select default value was not rendered: ${html}`);
+assert(html.includes('border:2px double #4f46e5'), `Select border was not rendered: ${html}`);
+assert(html.includes('box-shadow:0 4px 10px rgba(79, 70, 229, 0.2)'), `Select shadow was not rendered: ${html}`);
+assert(html.includes('name="styled_channels"'), `Checkbox name was not rendered: ${html}`);
+assert(html.includes('checked="" value="SMS"') || html.includes('value="SMS" checked=""'), `Checkbox default value was not rendered: ${html}`);
+assert(html.includes('border-color:#7c2d12'), `Checkbox wrapper border was not rendered: ${html}`);
+assert(html.includes('box-shadow:0 5px 14px rgba(124, 45, 18, 0.2)'), `Checkbox wrapper shadow was not rendered: ${html}`);
 
 console.log(JSON.stringify({
   ok: true,
@@ -315,5 +440,9 @@ console.log(JSON.stringify({
     styledNav: true,
     styledEmbed: true,
     styledMap: true,
+    styledInput: true,
+    styledTextarea: true,
+    styledSelect: true,
+    styledCheckbox: true,
   },
 }, null, 2));

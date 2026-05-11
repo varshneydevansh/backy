@@ -707,6 +707,19 @@ function getAppearanceStyle(props: Record<string, unknown>): React.CSSProperties
   };
 }
 
+function getFieldControlStyle(props: Record<string, unknown>): React.CSSProperties {
+  return {
+    padding: getLength(props.padding, '12px 16px'),
+    border: getNameClass(props.border) || `${getLength(props.borderWidth, '1px')} ${getNameClass(props.borderStyle) || 'solid'} ${getNameClass(props.borderColor) || '#d1d5db'}`,
+    borderRadius: getLength(props.borderRadius, '8px'),
+    fontSize: getLength(props.fontSize, '16px'),
+    color: getNameClass(props.color),
+    backgroundColor: getNameClass(props.backgroundColor) || '#ffffff',
+    boxShadow: getNameClass(props.boxShadow) || undefined,
+    margin: getLength(props.margin),
+  };
+}
+
 function parseOptionValues(raw: unknown): string[] {
   const values = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(/\r?\n/) : [];
   const parsed = values
@@ -2517,10 +2530,7 @@ function InputElement({ element }: ElementRendererProps) {
         maxLength={maxLength}
         defaultValue={getNameClass(props.defaultValue)}
         style={{
-          padding: '12px 16px',
-          border: getNameClass(props.border) || '1px solid #d1d5db',
-          borderRadius: getLength(props.borderRadius, '8px'),
-          fontSize: getLength(props.fontSize, '16px'),
+          ...getFieldControlStyle(props as Record<string, unknown>),
           width: '100%',
           minHeight: getLength(props.inputHeight, '40px'),
           ...styles,
@@ -2590,10 +2600,7 @@ function TextareaElement({ element }: ElementRendererProps) {
         minLength={Number.isFinite(minLength) ? minLength : undefined}
         maxLength={maxLength}
         style={{
-          padding: '12px 16px',
-          border: getNameClass(props.border) || '1px solid #d1d5db',
-          borderRadius: getLength(props.borderRadius, '8px'),
-          fontSize: getLength(props.fontSize, '16px'),
+          ...getFieldControlStyle(props as Record<string, unknown>),
           width: '100%',
           resize: getSafeResize(props.resize),
           ...styles,
@@ -2656,10 +2663,7 @@ function SelectElement({ element }: ElementRendererProps) {
         disabled={getBoolean(props.disabled)}
         defaultValue={defaultValue || ''}
         style={{
-          padding: '12px 16px',
-          border: getNameClass(props.border) || '1px solid #d1d5db',
-          borderRadius: getLength(props.borderRadius, '8px'),
-          fontSize: getLength(props.fontSize, '16px'),
+          ...getFieldControlStyle(props as Record<string, unknown>),
           width: '100%',
           ...styles,
         }}
@@ -2706,6 +2710,7 @@ function CheckboxOrRadioElement({ element, isPreview }: ElementRendererProps) {
     display: 'flex',
     flexDirection: 'column',
     gap: getLength(props.fieldGap, '8px'),
+    ...getAppearanceStyle(props as Record<string, unknown>),
     ...styles,
   };
   const legendStyle: React.CSSProperties = {
