@@ -50,29 +50,51 @@ const parseRecord = <TRecord extends Record<string, unknown>>(value: unknown): T
     : undefined
 );
 
-const normalizeCreateInput = (siteId: string, body: Record<string, unknown>) => ({
-  siteId,
-  pageId: textValue(body.pageId) || null,
-  postId: textValue(body.postId) || null,
-  name: textValue(body.name || body.title),
-  title: textValue(body.title || body.name),
-  description: textValue(body.description) || null,
-  audience: parseAudience(body.audience),
-  isActive: body.isActive !== false,
-  fields: parseFields(body.fields),
-  notificationEmail: textValue(body.notificationEmail) || null,
-  notificationWebhook: textValue(body.notificationWebhook) || null,
-  successRedirectUrl: textValue(body.successRedirectUrl) || null,
-  successMessage: textValue(body.successMessage) || 'Submission received.',
-  enableHoneypot: body.enableHoneypot !== false,
-  enableCaptcha: body.enableCaptcha === true,
-  moderationMode: parseModerationMode(body.moderationMode),
-  contactShare: parseRecord<FormDefinition['contactShare'] & Record<string, unknown>>(body.contactShare),
-  collectionTarget: parseRecord<FormDefinition['collectionTarget'] & Record<string, unknown>>(body.collectionTarget),
-  settings: parseRecord<Record<string, unknown>>(body.settings) || {},
-  createdBy: 'admin',
-  updatedBy: 'admin',
+const mergeFormSettings = (
+  settings: Record<string, unknown>,
+  spamSettings?: FormDefinition['spamSettings'] & Record<string, unknown>,
+  consentSettings?: FormDefinition['consentSettings'] & Record<string, unknown>,
+): Record<string, unknown> => ({
+  ...settings,
+  ...(spamSettings
+    ? { spam: { ...(parseRecord<Record<string, unknown>>(settings.spam) || {}), ...spamSettings } }
+    : {}),
+  ...(consentSettings
+    ? { consent: { ...(parseRecord<Record<string, unknown>>(settings.consent) || {}), ...consentSettings } }
+    : {}),
 });
+
+const normalizeCreateInput = (siteId: string, body: Record<string, unknown>) => {
+  const settings = parseRecord<Record<string, unknown>>(body.settings) || {};
+  const spamSettings = parseRecord<FormDefinition['spamSettings'] & Record<string, unknown>>(body.spamSettings);
+  const consentSettings = parseRecord<FormDefinition['consentSettings'] & Record<string, unknown>>(body.consentSettings);
+
+  return {
+    siteId,
+    pageId: textValue(body.pageId) || null,
+    postId: textValue(body.postId) || null,
+    name: textValue(body.name || body.title),
+    title: textValue(body.title || body.name),
+    description: textValue(body.description) || null,
+    audience: parseAudience(body.audience),
+    isActive: body.isActive !== false,
+    fields: parseFields(body.fields),
+    notificationEmail: textValue(body.notificationEmail) || null,
+    notificationWebhook: textValue(body.notificationWebhook) || null,
+    successRedirectUrl: textValue(body.successRedirectUrl) || null,
+    successMessage: textValue(body.successMessage) || 'Submission received.',
+    enableHoneypot: body.enableHoneypot !== false,
+    enableCaptcha: body.enableCaptcha === true,
+    spamSettings,
+    consentSettings,
+    moderationMode: parseModerationMode(body.moderationMode),
+    contactShare: parseRecord<FormDefinition['contactShare'] & Record<string, unknown>>(body.contactShare),
+    collectionTarget: parseRecord<FormDefinition['collectionTarget'] & Record<string, unknown>>(body.collectionTarget),
+    settings: mergeFormSettings(settings, spamSettings, consentSettings),
+    createdBy: 'admin',
+    updatedBy: 'admin',
+  };
+};
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();

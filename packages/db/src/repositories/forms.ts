@@ -119,32 +119,38 @@ const normalizedContactStatus = (value: unknown): Contact['status'] => (
     value === 'contacted' || value === 'qualified' || value === 'archived' ? value : 'new'
 );
 
-const toForm = (row: FormRow): FormDefinition => ({
-    id: row.id,
-    siteId: row.siteId,
-    pageId: row.pageId,
-    postId: row.postId,
-    name: row.name,
-    title: row.title,
-    description: row.description,
-    audience: normalizedAudience(row.audience),
-    isActive: row.isActive,
-    fields: Array.isArray(row.fields) ? row.fields as FormDefinition['fields'] : [],
-    notificationEmail: row.notificationEmail,
-    notificationWebhook: row.notificationWebhook,
-    successRedirectUrl: row.successRedirectUrl,
-    successMessage: row.successMessage,
-    enableHoneypot: row.enableHoneypot,
-    enableCaptcha: row.enableCaptcha,
-    moderationMode: normalizedModerationMode(row.moderationMode),
-    contactShare: isRecord(row.contactShare) ? row.contactShare as FormDefinition['contactShare'] : undefined,
-    collectionTarget: isRecord(row.collectionTarget) ? row.collectionTarget as FormDefinition['collectionTarget'] : undefined,
-    settings: isRecord(row.settings) ? row.settings : {},
-    createdBy: row.createdBy,
-    updatedBy: row.updatedBy,
-    createdAt: toIso(row.createdAt),
-    updatedAt: toIso(row.updatedAt),
-});
+const toForm = (row: FormRow): FormDefinition => {
+    const settings = isRecord(row.settings) ? row.settings : {};
+
+    return {
+        id: row.id,
+        siteId: row.siteId,
+        pageId: row.pageId,
+        postId: row.postId,
+        name: row.name,
+        title: row.title,
+        description: row.description,
+        audience: normalizedAudience(row.audience),
+        isActive: row.isActive,
+        fields: Array.isArray(row.fields) ? row.fields as FormDefinition['fields'] : [],
+        notificationEmail: row.notificationEmail,
+        notificationWebhook: row.notificationWebhook,
+        successRedirectUrl: row.successRedirectUrl,
+        successMessage: row.successMessage,
+        enableHoneypot: row.enableHoneypot,
+        enableCaptcha: row.enableCaptcha,
+        spamSettings: isRecord(settings.spam) ? settings.spam as FormDefinition['spamSettings'] : undefined,
+        consentSettings: isRecord(settings.consent) ? settings.consent as FormDefinition['consentSettings'] : undefined,
+        moderationMode: normalizedModerationMode(row.moderationMode),
+        contactShare: isRecord(row.contactShare) ? row.contactShare as FormDefinition['contactShare'] : undefined,
+        collectionTarget: isRecord(row.collectionTarget) ? row.collectionTarget as FormDefinition['collectionTarget'] : undefined,
+        settings,
+        createdBy: row.createdBy,
+        updatedBy: row.updatedBy,
+        createdAt: toIso(row.createdAt),
+        updatedAt: toIso(row.updatedAt),
+    };
+};
 
 const toSubmission = (row: SubmissionRow): FormSubmission => ({
     id: row.id,

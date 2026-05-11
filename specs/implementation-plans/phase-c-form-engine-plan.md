@@ -84,9 +84,10 @@ Make forms production-safe for self-hosted and external-frontend consumers: stri
 - **Acceptance Criteria**:
   - Admin export includes status + actor + timestamps.
   - `/forms` detects consent-like checkbox fields, summarizes granted/missing consent records, and exports a dedicated consent CSV with status, submitted timestamp, request ID, source page/post, IP hash, and user-agent provenance.
+  - `/forms` persists per-form consent export/retention policy settings for policy label, retention days, deletion days, privacy request email, and whether consent exports include IP/user-agent provenance.
 - **Validation**:
   - Export two status slices and compare deterministic ordering.
-  - `test:forms` verifies the rendered consent export panel and export action for the registration template consent field.
+  - `test:forms` verifies the rendered consent export panel, retention policy summary, export metadata, and export action for the registration template consent field.
 
 ## Testing Strategy
 - 4-layer verification:

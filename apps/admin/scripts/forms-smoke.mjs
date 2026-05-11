@@ -568,6 +568,11 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
       const spamRateMax = panel.querySelector('[data-testid="form-spam-rate-limit-max-input"]');
       const spamDuplicateWindow = panel.querySelector('[data-testid="form-spam-duplicate-window-seconds-input"]');
       const spamBlockedTerms = panel.querySelector('[data-testid="form-spam-blocked-terms-input"]');
+      const consentRetention = panel.querySelector('[data-testid="form-consent-retention-days-input"]');
+      const consentDeleteAfter = panel.querySelector('[data-testid="form-consent-delete-after-days-input"]');
+      const consentRequestEmail = panel.querySelector('[data-testid="form-consent-request-email-input"]');
+      const consentPolicyLabel = panel.querySelector('[data-testid="form-consent-policy-label-input"]');
+      const consentExportIp = panel.querySelector('[data-testid="form-consent-export-ip-toggle"]');
       const addButton = Array.from(panel.querySelectorAll('button')).find((button) => (
         (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Add field'
       ));
@@ -583,6 +588,11 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
         !(spamRateMax instanceof HTMLInputElement) ||
         !(spamDuplicateWindow instanceof HTMLInputElement) ||
         !(spamBlockedTerms instanceof HTMLTextAreaElement) ||
+        !(consentRetention instanceof HTMLInputElement) ||
+        !(consentDeleteAfter instanceof HTMLInputElement) ||
+        !(consentRequestEmail instanceof HTMLInputElement) ||
+        !(consentPolicyLabel instanceof HTMLInputElement) ||
+        !(consentExportIp instanceof HTMLInputElement) ||
         !(addButton instanceof HTMLButtonElement)
       ) {
         return {
@@ -622,6 +632,22 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
 
       spamBlockedTerms.focus();
       setInputValue(spamBlockedTerms, 'blocky-spam');
+
+      consentRetention.focus();
+      setInputValue(consentRetention, '30');
+
+      consentDeleteAfter.focus();
+      setInputValue(consentDeleteAfter, '365');
+
+      consentRequestEmail.focus();
+      setInputValue(consentRequestEmail, 'privacy@example.com');
+
+      consentPolicyLabel.focus();
+      setInputValue(consentPolicyLabel, 'Registration consent policy');
+
+      if (consentExportIp.checked) {
+        consentExportIp.click();
+      }
 
       addButton.click();
       return { ok: true };
@@ -832,9 +858,17 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
       Array.isArray(spam.blockedTerms) &&
       spam.blockedTerms.includes('blocky-spam')
     );
+    const consent = form?.settings?.consent || form?.consentSettings || {};
+    const consentSettings = (
+      Number(consent.retentionDays) === 30 &&
+      Number(consent.deleteAfterDays) === 365 &&
+      consent.requestEmail === 'privacy@example.com' &&
+      consent.policyLabel === 'Registration consent policy' &&
+      consent.exportIncludesIp === false
+    );
 
-    if (saved.notice && editedTitle && company && hasCompanyMinLength && hasCollectionMapping && placeholder && notificationTargets && spamSettings) {
-      return { ...saved, editedTitle, company, hasCompanyMinLength, hasCollectionMapping, placeholder, notificationTargets, spamSettings };
+    if (saved.notice && editedTitle && company && hasCompanyMinLength && hasCollectionMapping && placeholder && notificationTargets && spamSettings && consentSettings) {
+      return { ...saved, editedTitle, company, hasCompanyMinLength, hasCollectionMapping, placeholder, notificationTargets, spamSettings, consentSettings };
     }
 
     if (attempt === 79) {
@@ -845,6 +879,7 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
         notificationWebhook: form?.notificationWebhook,
         collectionTarget,
         spam,
+        consent,
         fields: form?.fields?.map((field) => ({ key: field.key, label: field.label, placeholder: field.placeholder, validation: field.validation })),
       })}`);
     }
@@ -1151,6 +1186,10 @@ const assertConsentExportInUi = async (client, submissionId) => {
         text.includes('Consent fields') &&
         text.includes('Granted') &&
         text.includes('1') &&
+        text.includes('Delete/anonymize after 365 days') &&
+        text.includes('Privacy requests: privacy@example.com') &&
+        text.includes('Exports omit IP hash and user-agent') &&
+        text.includes('Registration consent policy') &&
         button instanceof HTMLButtonElement &&
         !button.disabled,
       text: text.slice(0, 800),

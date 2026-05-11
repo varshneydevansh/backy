@@ -79,6 +79,7 @@ const FORM_FIELD_TYPES = ['text', 'email', 'number', 'textarea', 'select', 'chec
 type FormValidationRule = NonNullable<FormFieldDefinition['validation']>[number];
 type FormValidationRuleType = 'minLength' | 'maxLength' | 'pattern' | 'min' | 'max';
 type FormSpamSettings = NonNullable<FormDefinition['spamSettings']>;
+type FormConsentSettings = NonNullable<FormDefinition['consentSettings']>;
 const FORM_VALIDATION_RULES: Array<{
   type: FormValidationRuleType;
   label: string;
@@ -97,6 +98,13 @@ const DEFAULT_FORM_SPAM_SETTINGS: Required<FormSpamSettings> = {
   rateLimitMax: 8,
   duplicateWindowMs: 600_000,
   blockedTerms: [],
+};
+const DEFAULT_FORM_CONSENT_SETTINGS: Required<FormConsentSettings> = {
+  policyLabel: 'Consent retained for audit and contact permission.',
+  retentionDays: 365,
+  deleteAfterDays: 730,
+  requestEmail: '',
+  exportIncludesIp: true,
 };
 
 const readNumberSetting = (value: unknown, fallback: number): number => {
@@ -118,6 +126,25 @@ const readFormSpamSettings = (form?: FormDefinition | null): Required<FormSpamSe
     blockedTerms: Array.isArray(merged.blockedTerms)
       ? merged.blockedTerms.map((term) => String(term).trim()).filter(Boolean).slice(0, 100)
       : [],
+  };
+};
+
+const readFormConsentSettings = (form?: FormDefinition | null): Required<FormConsentSettings> => {
+  const settingsRecord = isPlainRecord(form?.settings) ? form.settings : {};
+  const settingsConsent = isPlainRecord(settingsRecord.consent) ? settingsRecord.consent : {};
+  const directConsent = isPlainRecord(form?.consentSettings) ? form.consentSettings : {};
+  const merged = { ...settingsConsent, ...directConsent } as Record<string, unknown>;
+
+  return {
+    policyLabel: typeof merged.policyLabel === 'string' && merged.policyLabel.trim()
+      ? merged.policyLabel.trim()
+      : DEFAULT_FORM_CONSENT_SETTINGS.policyLabel,
+    retentionDays: Math.max(0, Math.round(readNumberSetting(merged.retentionDays, DEFAULT_FORM_CONSENT_SETTINGS.retentionDays))),
+    deleteAfterDays: Math.max(0, Math.round(readNumberSetting(merged.deleteAfterDays, DEFAULT_FORM_CONSENT_SETTINGS.deleteAfterDays))),
+    requestEmail: typeof merged.requestEmail === 'string' ? merged.requestEmail.trim() : '',
+    exportIncludesIp: typeof merged.exportIncludesIp === 'boolean'
+      ? merged.exportIncludesIp
+      : DEFAULT_FORM_CONSENT_SETTINGS.exportIncludesIp,
   };
 };
 
@@ -686,6 +713,23 @@ function FormsRoute() {
     granted: selectedConsentRecords.filter((record) => record.granted).length,
     missing: selectedConsentRecords.filter((record) => !record.granted).length,
   }), [selectedConsentFields.length, selectedConsentRecords]);
+  const selectedConsentSettings = useMemo(
+    () => readFormConsentSettings(selectedForm),
+    [selectedForm],
+  );
+  const selectedConsentRetentionMetrics = useMemo(() => {
+    const now = Date.now();
+    const deleteDue = selectedConsentRecords.filter(({ submission }) => {
+      const deleteAt = addDaysIso(submission.submittedAt, selectedConsentSettings.deleteAfterDays);
+      return deleteAt ? Date.parse(deleteAt) <= now : false;
+    }).length;
+    const reviewDue = selectedConsentRecords.filter(({ submission }) => {
+      const retentionAt = addDaysIso(submission.submittedAt, selectedConsentSettings.retentionDays);
+      return retentionAt ? Date.parse(retentionAt) <= now : false;
+    }).length;
+
+    return { reviewDue, deleteDue };
+  }, [selectedConsentRecords, selectedConsentSettings.deleteAfterDays, selectedConsentSettings.retentionDays]);
   const metrics = useMemo(() => {
     const submissions = Object.values(inboxByForm).flatMap((item) => item.submissions);
     return {
@@ -1185,6 +1229,26 @@ function FormsRoute() {
     });
   };
 
+  const patchFormDraftConsentSettings = (patch: Partial<FormConsentSettings>) => {
+    setFormDraft((current) => {
+      if (!current) return current;
+
+      const currentConsent = readFormConsentSettings(current);
+      const nextConsent = {
+        ...currentConsent,
+        ...patch,
+      };
+      return {
+        ...current,
+        consentSettings: nextConsent,
+        settings: {
+          ...(current.settings || {}),
+          consent: nextConsent,
+        },
+      };
+    });
+  };
+
   const patchFormDraftField = (fieldIndex: number, patch: Partial<FormFieldDefinition>) => {
     setFormDraft((current) => {
       if (!current) return current;
@@ -1489,6 +1553,10 @@ function FormsRoute() {
       'field_label',
       'consent_value',
       'consent_granted',
+      'policy_label',
+      'retention_due_at',
+      'delete_due_at',
+      'privacy_request_email',
       'ip_hash',
       'user_agent',
       'page_id',
@@ -1506,8 +1574,12 @@ function FormsRoute() {
       field.label,
       formatSubmissionValue(value),
       granted ? 'true' : 'false',
-      submission.ipHash || '',
-      submission.userAgent || '',
+      selectedConsentSettings.policyLabel,
+      addDaysIso(submission.submittedAt, selectedConsentSettings.retentionDays) || '',
+      addDaysIso(submission.submittedAt, selectedConsentSettings.deleteAfterDays) || '',
+      selectedConsentSettings.requestEmail || '',
+      selectedConsentSettings.exportIncludesIp ? submission.ipHash || '' : '',
+      selectedConsentSettings.exportIncludesIp ? submission.userAgent || '' : '',
       submission.pageId || '',
       submission.postId || '',
     ]);
@@ -2611,6 +2683,82 @@ function FormsRoute() {
                           </label>
                         </div>
 
+                        <div data-testid="form-consent-settings-panel" className="rounded-lg border border-border bg-muted/30 p-3">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <h3 className="text-sm font-semibold">Consent retention</h3>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Control how consent evidence appears in exports and when it should be reviewed or deleted.
+                              </p>
+                            </div>
+                            <span className="rounded-md bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+                              Export enforced
+                            </span>
+                          </div>
+                          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                            <label className="grid gap-1.5 text-sm font-medium">
+                              Retain for days
+                              <input
+                                type="number"
+                                min={0}
+                                max={3650}
+                                value={readFormConsentSettings(formDraft).retentionDays}
+                                onChange={(event) => patchFormDraftConsentSettings({ retentionDays: Number(event.target.value) })}
+                                data-testid="form-consent-retention-days-input"
+                                className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                              />
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-medium">
+                              Delete after days
+                              <input
+                                type="number"
+                                min={0}
+                                max={3650}
+                                value={readFormConsentSettings(formDraft).deleteAfterDays}
+                                onChange={(event) => patchFormDraftConsentSettings({ deleteAfterDays: Number(event.target.value) })}
+                                data-testid="form-consent-delete-after-days-input"
+                                className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                              />
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-medium xl:col-span-2">
+                              Privacy request email
+                              <input
+                                type="email"
+                                value={readFormConsentSettings(formDraft).requestEmail || ''}
+                                onChange={(event) => patchFormDraftConsentSettings({ requestEmail: event.target.value })}
+                                data-testid="form-consent-request-email-input"
+                                placeholder="privacy@example.com"
+                                className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                              />
+                            </label>
+                          </div>
+                          <label className="mt-3 grid gap-1.5 text-sm font-medium">
+                            Policy label
+                            <input
+                              type="text"
+                              value={readFormConsentSettings(formDraft).policyLabel}
+                              onChange={(event) => patchFormDraftConsentSettings({ policyLabel: event.target.value })}
+                              data-testid="form-consent-policy-label-input"
+                              className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                            />
+                          </label>
+                          <label className="mt-3 flex items-start gap-2 text-sm font-medium">
+                            <input
+                              type="checkbox"
+                              checked={readFormConsentSettings(formDraft).exportIncludesIp}
+                              onChange={(event) => patchFormDraftConsentSettings({ exportIncludesIp: event.target.checked })}
+                              data-testid="form-consent-export-ip-toggle"
+                              className="mt-1"
+                            />
+                            <span>
+                              Include IP hash and user-agent in consent exports
+                              <span className="block text-xs font-normal leading-5 text-muted-foreground">
+                                Turn off when exports should be privacy-minimized for routine audits.
+                              </span>
+                            </span>
+                          </label>
+                        </div>
+
                         {formDraft.collectionTarget?.enabled && (
                           <div className="rounded-lg border border-border bg-muted/30 p-3" data-testid="form-collection-target-panel">
                             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -3164,6 +3312,15 @@ function FormsRoute() {
                       <MetaTile label="Consent records" value={String(selectedConsentMetrics.records)} />
                       <MetaTile label="Granted" value={String(selectedConsentMetrics.granted)} />
                       <MetaTile label="Missing/false" value={String(selectedConsentMetrics.missing)} />
+                      <MetaTile label="Review due" value={String(selectedConsentRetentionMetrics.reviewDue)} />
+                      <MetaTile label="Deletion due" value={String(selectedConsentRetentionMetrics.deleteDue)} />
+                      <MetaTile label="Retention days" value={String(selectedConsentSettings.retentionDays)} />
+                      <MetaTile label="Policy" value={selectedConsentSettings.policyLabel} />
+                    </div>
+                    <div className="mt-3 rounded-lg border border-border bg-background px-3 py-2 text-xs leading-5 text-muted-foreground" data-testid="forms-consent-policy-summary">
+                      Delete/anonymize after {selectedConsentSettings.deleteAfterDays} days.
+                      {selectedConsentSettings.requestEmail ? ` Privacy requests: ${selectedConsentSettings.requestEmail}.` : ' No privacy request email configured.'}
+                      {selectedConsentSettings.exportIncludesIp ? ' Exports include IP hash and user-agent.' : ' Exports omit IP hash and user-agent.'}
                     </div>
                     {selectedConsentFields.length === 0 ? (
                       <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
@@ -3573,6 +3730,14 @@ const parseLines = (value: string): string[] => (
   value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean)
 );
 
+const addDaysIso = (dateValue: string | null | undefined, days: number): string | null => {
+  const timestamp = Date.parse(dateValue || '');
+  if (!Number.isFinite(timestamp)) return null;
+  const date = new Date(timestamp);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString();
+};
+
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 );
@@ -3819,11 +3984,14 @@ const buildDefaultCollectionFieldMap = (
 const buildFormUpdatePayload = (form: FormDefinition) => ({
   ...(() => {
     const spamSettings = readFormSpamSettings(form);
+    const consentSettings = readFormConsentSettings(form);
     return {
       spamSettings,
+      consentSettings,
       settings: {
         ...(form.settings || {}),
         spam: spamSettings,
+        consent: consentSettings,
       },
     };
   })(),

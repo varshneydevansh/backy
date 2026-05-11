@@ -1332,6 +1332,13 @@ export interface FormDefinition {
     duplicateWindowMs?: number;
     blockedTerms?: string[];
   };
+  consentSettings?: {
+    policyLabel?: string;
+    retentionDays?: number;
+    deleteAfterDays?: number;
+    requestEmail?: string | null;
+    exportIncludesIp?: boolean;
+  };
   notificationWebhook?: string | null;
   moderationMode?: 'manual' | 'auto-approve';
   contactShare?: {

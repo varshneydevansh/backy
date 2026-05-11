@@ -53,6 +53,39 @@ const parseRecord = <TRecord extends Record<string, unknown>>(value: unknown): T
     : undefined
 );
 
+const mergeFormSettings = (
+  settings: Record<string, unknown>,
+  spamSettings?: FormDefinition['spamSettings'] & Record<string, unknown>,
+  consentSettings?: FormDefinition['consentSettings'] & Record<string, unknown>,
+): Record<string, unknown> => ({
+  ...settings,
+  ...(spamSettings
+    ? { spam: { ...(parseRecord<Record<string, unknown>>(settings.spam) || {}), ...spamSettings } }
+    : {}),
+  ...(consentSettings
+    ? { consent: { ...(parseRecord<Record<string, unknown>>(settings.consent) || {}), ...consentSettings } }
+    : {}),
+});
+
+const mergeSettingsPatch = (
+  base: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Record<string, unknown> => {
+  const spamPatch = parseRecord<Record<string, unknown>>(patch.spam);
+  const consentPatch = parseRecord<Record<string, unknown>>(patch.consent);
+
+  return {
+    ...base,
+    ...patch,
+    ...(spamPatch
+      ? { spam: { ...(parseRecord<Record<string, unknown>>(base.spam) || {}), ...spamPatch } }
+      : {}),
+    ...(consentPatch
+      ? { consent: { ...(parseRecord<Record<string, unknown>>(base.consent) || {}), ...consentPatch } }
+      : {}),
+  };
+};
+
 const parseFieldOptions = (value: unknown): string[] | undefined => {
   if (Array.isArray(value)) {
     const options = value.map((option) => textValue(option)).filter(Boolean);
@@ -115,6 +148,10 @@ const normalizePatchInput = (body: Record<string, unknown>): Partial<FormDefinit
   const input: Partial<FormDefinition> = {
     updatedBy: 'admin',
   };
+  const settings = parseRecord<Record<string, unknown>>(body.settings) || {};
+  const spamSettings = parseRecord<FormDefinition['spamSettings'] & Record<string, unknown>>(body.spamSettings);
+  const consentSettings = parseRecord<FormDefinition['consentSettings'] & Record<string, unknown>>(body.consentSettings);
+
   if ('pageId' in body) input.pageId = nullableTextValue(body.pageId);
   if ('postId' in body) input.postId = nullableTextValue(body.postId);
   if ('name' in body) input.name = textValue(body.name);
@@ -129,10 +166,14 @@ const normalizePatchInput = (body: Record<string, unknown>): Partial<FormDefinit
   if ('successMessage' in body) input.successMessage = nullableTextValue(body.successMessage);
   if ('enableHoneypot' in body) input.enableHoneypot = body.enableHoneypot !== false;
   if ('enableCaptcha' in body) input.enableCaptcha = body.enableCaptcha === true;
+  if ('spamSettings' in body) input.spamSettings = spamSettings;
+  if ('consentSettings' in body) input.consentSettings = consentSettings;
   if ('moderationMode' in body) input.moderationMode = parseModerationMode(body.moderationMode) || 'manual';
   if ('contactShare' in body) input.contactShare = parseRecord<FormDefinition['contactShare'] & Record<string, unknown>>(body.contactShare);
   if ('collectionTarget' in body) input.collectionTarget = parseRecord<FormDefinition['collectionTarget'] & Record<string, unknown>>(body.collectionTarget);
-  if ('settings' in body) input.settings = parseRecord<Record<string, unknown>>(body.settings) || {};
+  if ('settings' in body || spamSettings || consentSettings) {
+    input.settings = mergeFormSettings(settings, spamSettings, consentSettings);
+  }
   return input;
 };
 
@@ -209,7 +250,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
       }
 
-      const updated = (await repositories.forms.update(site.id, formId, input)).item;
+      const updateInput = input.settings
+        ? {
+          ...input,
+          settings: mergeSettingsPatch(
+            parseRecord<Record<string, unknown>>(existing.settings) || {},
+            input.settings,
+          ),
+        }
+        : input;
+      const updated = (await repositories.forms.update(site.id, formId, updateInput)).item;
       return NextResponse.json({ success: true, requestId, data: { form: updated }, form: updated });
     }
 

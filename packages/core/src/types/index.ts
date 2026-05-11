@@ -1148,6 +1148,24 @@ export interface FormDefinition {
     blockedTerms?: string[];
   };
 
+  /** Optional per-form consent retention/export controls */
+  consentSettings?: {
+    /** Human-readable policy/legal basis displayed in exports */
+    policyLabel?: string;
+
+    /** Days consent evidence should be retained before review */
+    retentionDays?: number;
+
+    /** Days after submission when consent evidence should be deleted/anonymized */
+    deleteAfterDays?: number;
+
+    /** Email inbox for privacy or deletion requests */
+    requestEmail?: string | null;
+
+    /** Whether consent exports may include IP/user-agent provenance */
+    exportIncludesIp?: boolean;
+  };
+
   /** Optional webhook URL invoked on form submission */
   notificationWebhook?: string | null;
 

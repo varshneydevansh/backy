@@ -6412,6 +6412,8 @@ export function createAdminForm(input: Omit<FormDefinition, 'id' | 'createdAt' |
     successMessage: input.successMessage || 'Submission received.',
     enableHoneypot: input.enableHoneypot !== false,
     enableCaptcha: input.enableCaptcha === true,
+    spamSettings: input.spamSettings,
+    consentSettings: input.consentSettings,
     moderationMode: input.moderationMode || 'manual',
     contactShare: input.contactShare,
     collectionTarget: input.collectionTarget,
@@ -6454,6 +6456,20 @@ export function updateAdminForm(siteId: string, formId: string, input: Partial<O
   }
 
   const before = FORM_LIBRARY[index];
+  const inputSettings = isObjectRecord(input.settings) ? input.settings : undefined;
+  const beforeSettings = isObjectRecord(before.settings) ? before.settings : {};
+  const nextSettings = inputSettings
+    ? {
+      ...beforeSettings,
+      ...inputSettings,
+      ...(isObjectRecord(inputSettings.spam)
+        ? { spam: { ...(isObjectRecord(beforeSettings.spam) ? beforeSettings.spam : {}), ...inputSettings.spam } }
+        : {}),
+      ...(isObjectRecord(inputSettings.consent)
+        ? { consent: { ...(isObjectRecord(beforeSettings.consent) ? beforeSettings.consent : {}), ...inputSettings.consent } }
+        : {}),
+    }
+    : before.settings;
   const updated: FormDefinition = {
     ...before,
     pageId: input.pageId !== undefined ? input.pageId : before.pageId,
@@ -6470,10 +6486,12 @@ export function updateAdminForm(siteId: string, formId: string, input: Partial<O
     successMessage: input.successMessage !== undefined ? input.successMessage || null : before.successMessage,
     enableHoneypot: input.enableHoneypot !== undefined ? input.enableHoneypot : before.enableHoneypot,
     enableCaptcha: input.enableCaptcha !== undefined ? input.enableCaptcha : before.enableCaptcha,
+    spamSettings: input.spamSettings !== undefined ? input.spamSettings : before.spamSettings,
+    consentSettings: input.consentSettings !== undefined ? input.consentSettings : before.consentSettings,
     moderationMode: input.moderationMode !== undefined ? input.moderationMode : before.moderationMode,
     contactShare: input.contactShare !== undefined ? input.contactShare : before.contactShare,
     collectionTarget: input.collectionTarget !== undefined ? input.collectionTarget : before.collectionTarget,
-    settings: input.settings !== undefined ? input.settings : before.settings,
+    settings: nextSettings,
     updatedBy: input.updatedBy || 'admin',
     updatedAt: new Date().toISOString(),
   };
