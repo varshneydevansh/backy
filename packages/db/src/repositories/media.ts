@@ -98,7 +98,13 @@ const firstOrNull = async <TRow>(query: PromiseLike<unknown[]>): Promise<TRow | 
 };
 
 const toStringArray = (value: unknown): string[] => (
-    Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.length > 0) : []
+    Array.isArray(value)
+        ? Array.from(new Map(value
+            .flatMap((item) => (typeof item === 'string' ? item.split(/[,\n]/g) : []))
+            .map((item) => item.trim().replace(/\s+/g, ' '))
+            .filter(Boolean)
+            .map((item) => [item.toLowerCase(), item])).values())
+        : []
 );
 
 const normalizeUuid = (value: string | null | undefined): string | null => {

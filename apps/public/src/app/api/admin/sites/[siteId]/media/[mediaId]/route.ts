@@ -251,7 +251,13 @@ const deleteUploadedFile = async (
 };
 
 const stringArrayFromInput = (value: unknown): string[] | undefined => (
-  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : undefined
+  Array.isArray(value)
+    ? Array.from(new Map(value
+      .flatMap((item) => (typeof item === 'string' ? item.split(/[,\n]/g) : []))
+      .map((item) => item.trim().replace(/\s+/g, ' '))
+      .filter(Boolean)
+      .map((item) => [item.toLowerCase(), item])).values())
+    : undefined
 );
 
 const metadataFromInput = (value: unknown): Record<string, unknown> | undefined => (
