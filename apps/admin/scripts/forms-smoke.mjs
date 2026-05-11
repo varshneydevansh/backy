@@ -12,6 +12,8 @@ const SITE_ID = process.env.BACKY_FORMS_SMOKE_SITE_ID || 'site-demo';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_FORMS_CDP_PORT || 9379);
 const SCREENSHOT_PATH = process.env.BACKY_FORMS_SCREENSHOT || path.join(os.tmpdir(), 'backy-forms-smoke.png');
+const EXPECTED_EMAIL_PROVIDER = process.env.BACKY_FORMS_SMOKE_EXPECT_EMAIL_PROVIDER || 'local-outbox';
+const EXPECTED_EMAIL_STATUS_CODE = Number(process.env.BACKY_FORMS_SMOKE_EXPECT_EMAIL_STATUS_CODE || (EXPECTED_EMAIL_PROVIDER === 'local-outbox' ? 202 : 200));
 const FRONTEND_FORM_TEMPLATE_ID = 'smoke-form-contract-template';
 const FRONTEND_FORM_TEMPLATE_NAME = 'Smoke Frontend Intake';
 let apiAdminSessionToken = '';
@@ -969,9 +971,11 @@ const waitForEmailNotification = async (formId, submission) => {
 
     if (queued && completed) {
       assert(completed.target === 'mailto:forms-smoke-leads@example.com', `Email notification target mismatch: ${JSON.stringify(completed)}`);
-      assert(completed.metadata?.provider === 'local-outbox', `Email notification provider mismatch: ${JSON.stringify(completed)}`);
-      assert(completed.metadata?.outboxOnly === true, `Email notification did not record local outbox handoff: ${JSON.stringify(completed)}`);
-      assert(Number(completed.statusCode) === 202, `Email notification did not record accepted status: ${JSON.stringify(completed)}`);
+      assert(completed.metadata?.provider === EXPECTED_EMAIL_PROVIDER, `Email notification provider mismatch: ${JSON.stringify(completed)}`);
+      if (EXPECTED_EMAIL_PROVIDER === 'local-outbox') {
+        assert(completed.metadata?.outboxOnly === true, `Email notification did not record local outbox handoff: ${JSON.stringify(completed)}`);
+      }
+      assert(Number(completed.statusCode) === EXPECTED_EMAIL_STATUS_CODE, `Email notification did not record expected status: ${JSON.stringify(completed)}`);
       return {
         delivery: completed,
         events: emailEvents,
