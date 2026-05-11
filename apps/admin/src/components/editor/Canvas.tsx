@@ -55,6 +55,19 @@ const toOpacity = (value: unknown): number | undefined => {
   return undefined;
 };
 
+const toNumericAttribute = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
+};
+
 const sanitizeText = (value: unknown): string => {
   if (typeof value === 'string') {
     return value.trim();
@@ -2350,6 +2363,8 @@ function CanvasElementComponent({
           const helpText = formatHelpText(p.helpText);
           const required = getBoolean(p.required);
           const disabled = getBoolean(p.disabled);
+          const minLength = toNumericAttribute(p.minLength);
+          const maxLength = toNumericAttribute(p.maxLength);
           return (
             <div style={{
               display: 'flex',
@@ -2378,8 +2393,8 @@ function CanvasElementComponent({
                 required={required}
                 name={typeof p.name === 'string' ? p.name : undefined}
                 pattern={typeof p.pattern === 'string' && p.pattern.trim() ? p.pattern : undefined}
-                minLength={typeof p.minLength === 'number' && Number.isFinite(p.minLength) ? p.minLength : undefined}
-                maxLength={typeof p.maxLength === 'number' && Number.isFinite(p.maxLength) ? p.maxLength : undefined}
+                minLength={minLength}
+                maxLength={maxLength}
                 style={{
                   ...sharedStyle,
                   width: '100%',
@@ -2414,6 +2429,9 @@ function CanvasElementComponent({
           const helpText = formatHelpText(p.helpText);
           const required = getBoolean(p.required);
           const disabled = getBoolean(p.disabled);
+          const rows = toNumericAttribute(p.rows);
+          const minLength = toNumericAttribute(p.minLength);
+          const maxLength = toNumericAttribute(p.maxLength);
           return (
             <div style={{
               display: 'flex',
@@ -2435,14 +2453,14 @@ function CanvasElementComponent({
                 </label>
               ) : null}
               <textarea
-                rows={Number(p.rows) || 4}
+                rows={rows || 4}
                 placeholder={p.placeholder ?? 'Enter text...'}
                 value={p.value ?? p.defaultValue ?? ''}
                 disabled={!isPreview || disabled}
                 required={required}
                 name={typeof p.name === 'string' ? p.name : undefined}
-                minLength={typeof p.minLength === 'number' && Number.isFinite(p.minLength) ? p.minLength : undefined}
-                maxLength={typeof p.maxLength === 'number' && Number.isFinite(p.maxLength) ? p.maxLength : undefined}
+                minLength={minLength}
+                maxLength={maxLength}
                 style={{
                   ...sharedStyle,
                   width: '100%',
