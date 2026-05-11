@@ -6,17 +6,21 @@ import {
     type BackyMediaListInput,
     type BackyMediaRepository,
     type BackyMediaUpdateInput,
+    type BackyMediaVersionCreateInput,
+    type BackyMediaVersionListInput,
     type BackyRepositoryMutationResult,
     type MediaFolder,
     type MediaItem,
     type MediaMetadata,
     type MediaScope,
+    type MediaVersion,
     type MediaVisibility,
 } from '@backy-cms/core';
 import { and, desc, eq } from 'drizzle-orm';
 import {
     media,
     mediaFolders,
+    mediaVersions,
 } from '../schema';
 import type { DatabaseInstance } from '../adapters';
 
@@ -51,6 +55,7 @@ type ReturningQuery = {
 
 type MediaRow = typeof media.$inferSelect;
 type MediaFolderRow = typeof mediaFolders.$inferSelect;
+type MediaVersionRow = typeof mediaVersions.$inferSelect;
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 10000;
@@ -188,6 +193,26 @@ const toMediaFolder = (row: MediaFolderRow): MediaFolder => ({
     createdAt: toIso(row.createdAt),
 });
 
+const toMediaVersion = (row: MediaVersionRow): MediaVersion => ({
+    id: row.id,
+    siteId: row.siteId,
+    mediaId: row.mediaId,
+    filename: row.filename,
+    originalName: row.originalName,
+    mimeType: row.mimeType,
+    sizeBytes: row.sizeBytes,
+    type: row.type,
+    url: row.url,
+    thumbnailUrl: row.thumbnailUrl,
+    storagePath: row.storagePath,
+    storageProvider: row.storageProvider,
+    replacedAt: toIso(row.replacedAt),
+    replacedBy: row.replacedBy,
+    reason: row.reason,
+    metadata: normalizeMetadata(row.metadata),
+    createdAt: toIso(row.createdAt),
+});
+
 const metadataWithPolicy = (
     metadata: MediaMetadata | undefined,
     input: {
@@ -287,8 +312,39 @@ export function createMediaRepository(db: DatabaseInstance): BackyMediaRepositor
         },
 
         async delete(siteId: string, mediaId: string): Promise<boolean> {
+            await database.delete(mediaVersions).where(and(eq(mediaVersions.siteId, siteId), eq(mediaVersions.mediaId, mediaId)));
             await database.delete(media).where(and(eq(media.siteId, siteId), eq(media.id, mediaId)));
             return true;
+        },
+
+        async listVersions(input: BackyMediaVersionListInput): Promise<BackyListResult<MediaVersion>> {
+            const rows = await database
+                .select()
+                .from(mediaVersions)
+                .where(and(eq(mediaVersions.siteId, input.siteId), eq(mediaVersions.mediaId, input.mediaId)))
+                .orderBy(desc(mediaVersions.replacedAt)) as MediaVersionRow[];
+            return paginate(rows.map(toMediaVersion), input.limit, input.offset);
+        },
+
+        async createVersion(input: BackyMediaVersionCreateInput): Promise<BackyRepositoryMutationResult<MediaVersion>> {
+            const [row] = await database.insert(mediaVersions).values({
+                siteId: input.siteId,
+                mediaId: input.mediaId,
+                filename: input.filename,
+                originalName: input.originalName,
+                mimeType: input.mimeType,
+                sizeBytes: input.sizeBytes,
+                type: input.type,
+                url: input.url,
+                thumbnailUrl: input.thumbnailUrl || null,
+                storagePath: input.storagePath || null,
+                storageProvider: input.storageProvider || null,
+                replacedAt: input.replacedAt ? new Date(input.replacedAt) : new Date(),
+                replacedBy: input.replacedBy || null,
+                reason: input.reason || null,
+                metadata: input.metadata || {},
+            }).returning() as MediaVersionRow[];
+            return { item: toMediaVersion(row) };
         },
 
         async listFolders(siteId: string): Promise<MediaFolder[]> {

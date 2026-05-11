@@ -34,6 +34,7 @@ import {
   formSubmissions,
   media,
   mediaFolders,
+  mediaVersions,
   pages,
   platformSettings,
   previewTokens,
@@ -69,6 +70,7 @@ const tableName = (table) => {
   if (table === formContacts) return 'formContacts';
   if (table === media) return 'media';
   if (table === mediaFolders) return 'mediaFolders';
+  if (table === mediaVersions) return 'mediaVersions';
   throw new Error('Unknown table passed to fake DB');
 };
 
@@ -94,6 +96,7 @@ const createFakeDb = () => {
     formContacts: [],
     media: [],
     mediaFolders: [],
+    mediaVersions: [],
   };
   const counters = {
     activityLogs: 0,
@@ -116,6 +119,7 @@ const createFakeDb = () => {
     formContacts: 0,
     media: 0,
     mediaFolders: 0,
+    mediaVersions: 0,
   };
 
   const now = () => new Date().toISOString();
@@ -277,6 +281,28 @@ const createFakeDb = () => {
         parentId: null,
         name: 'Untitled folder',
         sortOrder: 0,
+        createdAt: timestamp,
+        ...values,
+      };
+    }
+    if (name === 'mediaVersions') {
+      return {
+        id: nextId(name),
+        siteId: 'site_default',
+        mediaId: 'media_1',
+        filename: 'previous.jpg',
+        originalName: 'Previous Image.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 64000,
+        type: 'image',
+        url: '/uploads/sites/repo-contract/previous.jpg',
+        thumbnailUrl: null,
+        storagePath: null,
+        storageProvider: null,
+        replacedAt: timestamp,
+        replacedBy: null,
+        reason: null,
+        metadata: {},
         createdAt: timestamp,
         ...values,
       };
@@ -812,11 +838,34 @@ const updatedMedia = (await mediaRepository.update(site.id, mediaItem.id, {
 assert(updatedMedia.altText === 'Updated hero image', 'Expected media alt update');
 assert(updatedMedia.visibility === 'private', 'Expected media visibility update');
 assert(updatedMedia.tags.includes('updated'), 'Expected media tags update');
+const mediaVersion = (await mediaRepository.createVersion({
+  siteId: site.id,
+  mediaId: mediaItem.id,
+  filename: mediaItem.filename,
+  originalName: mediaItem.originalName,
+  mimeType: mediaItem.mimeType,
+  sizeBytes: mediaItem.sizeBytes,
+  type: mediaItem.type,
+  url: mediaItem.url,
+  thumbnailUrl: mediaItem.thumbnailUrl,
+  storagePath: '/uploads/sites/repo-contract/hero.jpg',
+  storageProvider: 'local',
+  replacedAt: new Date().toISOString(),
+  replacedBy: 'user_admin',
+  reason: 'Repository contract replacement',
+  metadata: {
+    source: 'repository-contract',
+  },
+})).item;
+assert(mediaVersion.mediaId === mediaItem.id && mediaVersion.originalName === mediaItem.originalName, 'Expected media version create');
+const listedMediaVersions = await mediaRepository.listVersions({ siteId: site.id, mediaId: mediaItem.id });
+assert(listedMediaVersions.items.length === 1 && listedMediaVersions.items[0].id === mediaVersion.id, 'Expected media version list');
 assert((await mediaRepository.listFolders(site.id)).some((folder) => folder.id === mediaFolder.id), 'Expected media folders');
 assert((await mediaRepository.getFolderById(site.id, mediaFolder.id))?.name === 'Brand assets', 'Expected media folder getById');
 assert(await mediaRepository.deleteFolder(site.id, mediaFolder.id), 'Expected media folder delete');
 assert((await mediaRepository.getById(site.id, mediaItem.id))?.folderId === null, 'Expected media folder delete to detach media assets');
 assert(await mediaRepository.delete(site.id, mediaItem.id), 'Expected media delete');
+assert((await mediaRepository.listVersions({ siteId: site.id, mediaId: mediaItem.id })).items.length === 0, 'Expected media delete to remove retained versions');
 
 const collection = (await collectionRepository.create({
   siteId: site.id,

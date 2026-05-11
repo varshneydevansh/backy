@@ -10,6 +10,7 @@ import type {
   FormSubmission,
   MediaFolder,
   MediaItem,
+  MediaVersion,
   Page,
   PageMeta,
   PublishStatus,
@@ -415,12 +416,35 @@ export interface BackyMediaUpdateInput {
   tags?: string[];
 }
 
+export interface BackyMediaVersionCreateInput {
+  siteId: string;
+  mediaId: string;
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  type: MediaItem['type'];
+  url: string;
+  thumbnailUrl?: string | null;
+  storagePath?: string | null;
+  storageProvider?: string | null;
+  replacedAt: string;
+  replacedBy?: string | null;
+  reason?: string | null;
+  metadata?: MediaItem['metadata'];
+}
+
 export interface BackyMediaListInput extends BackyPaginationInput {
   siteId: string;
   type?: MediaItem['type'] | 'all';
   folderId?: string | null;
   visibility?: MediaItem['visibility'] | 'all';
   search?: string;
+}
+
+export interface BackyMediaVersionListInput extends BackyPaginationInput {
+  siteId: string;
+  mediaId: string;
 }
 
 export interface BackyMediaFolderCreateInput {
@@ -798,6 +822,8 @@ export interface BackyMediaRepository {
   create(input: BackyMediaCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<MediaItem>>;
   update(siteId: string, mediaId: string, input: BackyMediaUpdateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<MediaItem>>;
   delete(siteId: string, mediaId: string, context?: BackyRepositoryContext): Promise<boolean>;
+  listVersions(input: BackyMediaVersionListInput, context?: BackyRepositoryContext): Promise<BackyListResult<MediaVersion>>;
+  createVersion(input: BackyMediaVersionCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<MediaVersion>>;
   listFolders(siteId: string, context?: BackyRepositoryContext): Promise<MediaFolder[]>;
   getFolderById(siteId: string, folderId: string, context?: BackyRepositoryContext): Promise<MediaFolder | null>;
   createFolder(input: BackyMediaFolderCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<MediaFolder>>;

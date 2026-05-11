@@ -581,6 +581,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media item not found', requestId);
     }
 
+    const versionRecord = repositories
+      ? (await repositories.media.createVersion({
+          siteId: site.id,
+          mediaId,
+          filename: previousVersion.filename,
+          originalName: previousVersion.originalName,
+          mimeType: previousVersion.mimeType,
+          sizeBytes: previousVersion.sizeBytes,
+          type: previousVersion.type,
+          url: previousVersion.url,
+          thumbnailUrl: previousVersion.thumbnailUrl,
+          storagePath: previousVersion.storagePath,
+          storageProvider: previousVersion.storageProvider,
+          replacedAt,
+          replacedBy,
+          reason,
+          metadata: {
+            source: 'media.replace',
+            retainedMetadataVersionId: previousVersion.id,
+          },
+        })).item
+      : null;
+
     await recordAdminAudit({
       repositories,
       siteId: site.id,
@@ -620,6 +643,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         quota: mediaQuotaPayload(siteMediaQuotaBytes, nextUsageBytes),
         replacement: {
           previousVersion,
+          versionRecord,
           retainedVersions: replacementVersions.length,
         },
       },

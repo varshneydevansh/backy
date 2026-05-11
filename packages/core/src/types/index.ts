@@ -975,6 +975,35 @@ export interface MediaItem {
 }
 
 /**
+ * Retained media file version created when an asset is replaced.
+ */
+export interface MediaVersion {
+  /** Unique version identifier */
+  id: string;
+
+  /** Site this version belongs to */
+  siteId: string;
+
+  /** Stable media asset id this version belongs to */
+  mediaId: string;
+
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  type: MediaType;
+  url: string;
+  thumbnailUrl: string | null;
+  storagePath: string | null;
+  storageProvider: string | null;
+  replacedAt: string;
+  replacedBy: string | null;
+  reason: string | null;
+  metadata: MediaMetadata;
+  createdAt: string;
+}
+
+/**
  * Media scope for usage isolation.
  */
 export type MediaScope = 'global' | 'page' | 'post';

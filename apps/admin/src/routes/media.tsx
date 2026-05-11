@@ -33,6 +33,7 @@ import {
   getPublicMediaFileUrl,
   listMediaLibrary,
   listMediaFolders,
+  listMediaVersions,
   prepareMediaTransforms,
   replaceMedia,
   updateMediaFolder,
@@ -40,15 +41,18 @@ import {
   uploadMedia,
   type MediaQuota,
   type MediaFolder,
+  type MediaVersionRecord,
   type SignedMediaUrl,
 } from '@/lib/mediaApi';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatBytes } from '@/lib/utils';
+import { useAuthStore } from '@/stores/authStore';
 import { useStore, type MediaAsset } from '@/stores/mockStore';
 
 type MediaTypeFilter = 'all' | MediaAsset['type'];
 type MediaVisibilityFilter = 'all' | 'public' | 'private';
 type MediaUsageFilter = 'all' | 'unused' | 'referenced' | 'replaced';
+type MediaAuditActionFilter = 'all' | 'create' | 'update' | 'media.replace' | 'media.bind' | 'media.unbind' | 'delete';
 type MediaIntegrationSettings = NonNullable<SiteSettingsInput['integrations']>;
 type MediaStorageSettings = NonNullable<MediaIntegrationSettings['storage']>;
 type MediaSupabaseSettings = NonNullable<MediaIntegrationSettings['supabase']>;
@@ -68,6 +72,15 @@ interface MediaSearch {
 const MEDIA_TYPE_FILTERS: MediaTypeFilter[] = ['all', 'image', 'video', 'audio', 'file', 'font', 'other'];
 const MEDIA_VISIBILITY_FILTERS: MediaVisibilityFilter[] = ['all', 'public', 'private'];
 const MEDIA_USAGE_FILTERS: MediaUsageFilter[] = ['all', 'unused', 'referenced', 'replaced'];
+const MEDIA_AUDIT_ACTION_FILTERS: Array<{ value: MediaAuditActionFilter; label: string }> = [
+  { value: 'all', label: 'All activity' },
+  { value: 'create', label: 'Uploads' },
+  { value: 'update', label: 'Metadata edits' },
+  { value: 'media.replace', label: 'Replacements' },
+  { value: 'media.bind', label: 'Bindings' },
+  { value: 'media.unbind', label: 'Unbindings' },
+  { value: 'delete', label: 'Deletes' },
+];
 const MEDIA_IMAGE_OBJECT_FIT_OPTIONS: MediaImageObjectFit[] = ['cover', 'contain'];
 const MEDIA_IMAGE_ASPECT_RATIO_OPTIONS: Array<{ value: MediaImageAspectRatio; label: string; cssValue: string }> = [
   { value: 'original', label: 'Original', cssValue: '1 / 1' },
@@ -411,9 +424,13 @@ function MediaPage() {
   const [assetDeliveryError, setAssetDeliveryError] = useState<string | null>(null);
   const [assetReferenceError, setAssetReferenceError] = useState<string | null>(null);
   const [assetReplacementError, setAssetReplacementError] = useState<string | null>(null);
+  const [assetVersionRecords, setAssetVersionRecords] = useState<MediaVersionRecord[]>([]);
+  const [assetVersionSource, setAssetVersionSource] = useState<'database' | 'metadata' | null>(null);
+  const [isLoadingAssetVersions, setIsLoadingAssetVersions] = useState(false);
   const [assetAuditLogs, setAssetAuditLogs] = useState<AdminAuditLog[]>([]);
   const [isLoadingAssetAudit, setIsLoadingAssetAudit] = useState(false);
   const [assetAuditError, setAssetAuditError] = useState<string | null>(null);
+  const [assetAuditActionFilter, setAssetAuditActionFilter] = useState<MediaAuditActionFilter>('all');
   const [signedUrl, setSignedUrl] = useState<SignedMediaUrl | null>(null);
   const [mediaQuota, setMediaQuota] = useState<MediaQuota | undefined>();
   const [runtimeStorage, setRuntimeStorage] = useState<SiteSettingsInput['runtimeStorage']>();
@@ -478,6 +495,7 @@ function MediaPage() {
     visibility: 'public' as 'public' | 'private',
   });
   const sites = useStore((state) => state.sites);
+  const currentAdmin = useAuthStore((state) => state.user);
   const files = useStore((state) => state.media);
   const pages = useStore((state) => state.pages);
   const posts = useStore((state) => state.posts);
@@ -645,10 +663,21 @@ function MediaPage() {
       : undefined,
     [selectedAsset, siteId],
   );
-  const replacementVersions = useMemo(
+  const metadataReplacementVersions = useMemo(
     () => getReplacementVersions(selectedAsset?.metadata),
     [selectedAsset?.metadata],
   );
+  const dbReplacementVersions = useMemo(
+    () => getReplacementVersionsFromRecords(assetVersionRecords),
+    [assetVersionRecords],
+  );
+  const replacementVersions = assetVersionSource === 'database'
+    ? dbReplacementVersions
+    : assetVersionSource === 'metadata'
+      ? metadataReplacementVersions
+      : dbReplacementVersions.length > 0
+        ? dbReplacementVersions
+        : metadataReplacementVersions;
   const selectedDeliveryAnalytics = useMemo(
     () => getMediaDeliveryAnalytics(selectedAsset?.metadata),
     [selectedAsset?.metadata],
@@ -656,6 +685,10 @@ function MediaPage() {
   const selectedMediaSecurity = useMemo(
     () => getMediaSecurityPolicy(selectedAsset?.metadata),
     [selectedAsset?.metadata],
+  );
+  const mediaAccessRows = useMemo(
+    () => getMediaAccessRows(currentAdmin?.role),
+    [currentAdmin?.role],
   );
   const mediaAnalytics = useMemo(() => getMediaAnalytics(files), [files]);
   const displayedFiles = useMemo(() => {
@@ -931,6 +964,17 @@ function MediaPage() {
       referenced: mediaAnalytics.referencedAssets,
       unused: mediaAnalytics.unusedAssets,
     },
+    providerDelivery: mediaAnalytics.providerRows.map((row) => ({
+      provider: row.provider,
+      assets: row.count,
+      publicAssets: row.publicCount,
+      privateAssets: row.privateCount,
+      bytes: row.bytes,
+      backyRequests: row.requests,
+      backyBytesServed: row.bytesServed,
+      lastBackyDelivery: row.lastDeliveredAt,
+      directCdnAnalytics: row.provider === 'local' || row.provider === 'unknown' ? 'not-configured' : 'provider-console',
+    })),
     folders: folderOptions.map((folder) => ({
       id: folder.id,
       name: folder.name,
@@ -992,6 +1036,7 @@ function MediaPage() {
     mediaAnalytics.publicAssets,
     mediaAnalytics.referencedAssets,
     mediaAnalytics.unusedAssets,
+    mediaAnalytics.providerRows,
     mediaQuota,
     publicMediaDetailUrl,
     publicMediaFontsUrl,
@@ -1006,6 +1051,10 @@ function MediaPage() {
   const mediaHandoffText = useMemo(() => JSON.stringify(mediaHandoff, null, 2), [mediaHandoff]);
   const storageSettings = settingsIntegrations?.storage || {};
   const supabaseSettings = settingsIntegrations?.supabase || {};
+  const selectedProviderInsight = useMemo(
+    () => selectedAsset ? getMediaProviderInsight(selectedAsset, runtimeStorage, storageSettings) : undefined,
+    [runtimeStorage, selectedAsset, storageSettings],
+  );
 
   const loadLibrary = useCallback(async () => {
     setIsLoading(true);
@@ -1298,9 +1347,27 @@ function MediaPage() {
     setAssetReferenceError(null);
     setAssetAuditError(null);
     setAssetReplacementError(null);
+    setAssetVersionRecords([]);
+    setAssetVersionSource(null);
+    setIsLoadingAssetVersions(false);
     setSignedUrl(null);
     setBindingTargetId('');
   }, [selectedAsset?.id]);
+
+  const loadAssetVersions = useCallback(async (mediaId: string) => {
+    setIsLoadingAssetVersions(true);
+
+    try {
+      const result = await listMediaVersions(mediaId, siteId);
+      setAssetVersionRecords(result.versions);
+      setAssetVersionSource(result.source);
+    } catch {
+      setAssetVersionRecords([]);
+      setAssetVersionSource(null);
+    } finally {
+      setIsLoadingAssetVersions(false);
+    }
+  }, [siteId]);
 
   const loadAssetAuditLogs = useCallback(async (mediaId: string) => {
     setIsLoadingAssetAudit(true);
@@ -1311,6 +1378,7 @@ function MediaPage() {
         siteId,
         entity: 'media',
         entityId: mediaId,
+        action: assetAuditActionFilter === 'all' ? undefined : assetAuditActionFilter,
         limit: 8,
       });
       setAssetAuditLogs(result.logs);
@@ -1320,7 +1388,7 @@ function MediaPage() {
     } finally {
       setIsLoadingAssetAudit(false);
     }
-  }, [siteId]);
+  }, [assetAuditActionFilter, siteId]);
 
   const selectedAssetId = selectedAsset?.id;
 
@@ -1333,7 +1401,8 @@ function MediaPage() {
     }
 
     void loadAssetAuditLogs(selectedAssetId);
-  }, [loadAssetAuditLogs, selectedAssetId]);
+    void loadAssetVersions(selectedAssetId);
+  }, [loadAssetAuditLogs, loadAssetVersions, selectedAssetId]);
 
   useEffect(() => {
     setBindingTargetId('');
@@ -1817,6 +1886,7 @@ function MediaPage() {
       applyUpdatedAsset(updated);
       void loadLibrary();
       void loadAssetAuditLogs(updated.id);
+      void loadAssetVersions(updated.id);
     } catch (replaceError) {
       setAssetReplacementError(replaceError instanceof Error ? replaceError.message : 'Unable to replace this asset.');
     } finally {
@@ -3069,6 +3139,57 @@ function MediaPage() {
                 </div>
               )}
             </div>
+
+            <div className="rounded-lg border border-border bg-background p-4 lg:col-span-2">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Provider delivery</p>
+                  <p className="text-xs text-muted-foreground">
+                    Storage provider mix, Backy-served requests, and the boundary where direct CDN/storage analytics take over.
+                  </p>
+                </div>
+                <span className="rounded bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">
+                  {mediaAnalytics.providerRows.length} provider{mediaAnalytics.providerRows.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              {mediaAnalytics.providerRows.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
+                  Provider analytics will appear after assets are loaded.
+                </p>
+              ) : (
+                <div className="grid gap-2">
+                  {mediaAnalytics.providerRows.map((row) => (
+                    <div key={row.provider} className="grid gap-3 rounded-lg border border-border bg-muted/20 px-3 py-3 md:grid-cols-[140px_minmax(0,1fr)_120px_130px] md:items-center">
+                      <div>
+                        <div className="text-sm font-medium capitalize">{row.provider}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {row.publicCount} public · {row.privateCount} private
+                        </div>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-background">
+                        <div
+                          className="h-full rounded-full bg-primary"
+                          style={{ width: `${mediaAnalytics.totalAssets > 0 ? Math.max(4, Math.round((row.count / mediaAnalytics.totalAssets) * 100)) : 0}%` }}
+                        />
+                      </div>
+                      <div className="font-mono text-xs text-muted-foreground">
+                        {row.count} assets · {formatBytes(row.bytes)}
+                      </div>
+                      <div className="font-mono text-xs text-muted-foreground">
+                        {row.requests} req · {formatBytes(row.bytesServed)}
+                      </div>
+                      <div className="text-xs text-muted-foreground md:col-span-4">
+                        {row.requests > 0
+                          ? `Last Backy delivery ${formatAuditDate(row.lastDeliveredAt || '')}.`
+                          : row.provider === 'local' || row.provider === 'unknown'
+                            ? 'No Backy delivery requests recorded yet.'
+                            : 'Direct CDN/storage hits are read from the provider console; Backy records only routed file and transform endpoints.'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </PanelContent>
       </Panel>
@@ -4016,6 +4137,48 @@ function MediaPage() {
                     </div>
                   </div>
                 )}
+
+                {selectedProviderInsight && (
+                  <div className="mt-3 rounded-lg border border-border bg-background p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium">Provider and CDN boundary</div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {selectedProviderInsight.deliveryMode === 'provider-public-base'
+                            ? 'A provider public base URL is configured for direct storage/CDN delivery.'
+                            : selectedProviderInsight.deliveryMode === 'local'
+                              ? 'Local storage is proxied through Backy development delivery.'
+                              : 'Backy is the delivery boundary until a provider public base URL is configured.'}
+                        </div>
+                      </div>
+                      <span className="rounded bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">
+                        {selectedProviderInsight.provider}
+                      </span>
+                    </div>
+                    <dl className="mt-3 grid gap-3 text-xs md:grid-cols-3">
+                      <div>
+                        <dt className="text-muted-foreground">Storage path</dt>
+                        <dd className="mt-1 break-all font-mono">{selectedProviderInsight.storagePath || 'not recorded'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">CDN analytics</dt>
+                        <dd className="mt-1 font-medium">
+                          {selectedProviderInsight.cdnAnalyticsStatus === 'tracked-by-backy'
+                            ? 'Backy counters active'
+                            : selectedProviderInsight.cdnAnalyticsStatus === 'provider-console-required'
+                              ? 'Provider console required'
+                              : 'Not configured'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">Delivery URL</dt>
+                        <dd className="mt-1 break-all font-mono">
+                          {selectedProviderInsight.directProviderUrl || selectedProviderInsight.publicUrl || 'not available'}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                )}
               </div>
 
               <div className="md:col-span-2 rounded-xl border border-border bg-muted/30 p-4">
@@ -4024,6 +4187,13 @@ function MediaPage() {
                     <div className="font-medium">Replacement history</div>
                     <div className="text-xs text-muted-foreground">
                       Swap the stored file while keeping this asset ID stable for pages, posts, products, and custom frontends.
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {isLoadingAssetVersions
+                        ? 'Loading retained versions...'
+                        : assetVersionSource === 'database'
+                          ? 'DB-backed retained versions'
+                          : 'Metadata retained versions'}
                     </div>
                   </div>
                   <label className={cn(
@@ -4607,15 +4777,44 @@ function MediaPage() {
                       Audit trail for this asset across uploads, edits, references, and delivery changes.
                     </div>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    disabled={isLoadingAssetAudit}
-                    onClick={() => void loadAssetAuditLogs(selectedAsset.id)}
-                  >
-                    Refresh
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      value={assetAuditActionFilter}
+                      onChange={(event) => setAssetAuditActionFilter(event.target.value as MediaAuditActionFilter)}
+                      className="rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                      aria-label="Filter media activity"
+                    >
+                      {MEDIA_AUDIT_ACTION_FILTERS.map((filter) => (
+                        <option key={filter.value} value={filter.value}>{filter.label}</option>
+                      ))}
+                    </select>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={isLoadingAssetAudit}
+                      onClick={() => void loadAssetAuditLogs(selectedAsset.id)}
+                    >
+                      Refresh
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mb-3 grid gap-2 md:grid-cols-2 lg:grid-cols-4">
+                  {mediaAccessRows.map((row) => (
+                    <div key={row.permission} className="rounded-lg border border-border bg-background px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">{row.label}</span>
+                        <span className={cn(
+                          'rounded px-2 py-0.5 text-[11px] font-medium',
+                          row.allowed ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                        )}>
+                          {row.allowed ? 'Allowed' : 'Restricted'}
+                        </span>
+                      </div>
+                      <div className="mt-1 font-mono text-[11px] text-muted-foreground">{row.permission}</div>
+                    </div>
+                  ))}
                 </div>
 
                 {assetAuditError && (
@@ -4634,25 +4833,40 @@ function MediaPage() {
                   </div>
                 ) : (
                   <div className="grid gap-2">
-                    {assetAuditLogs.map((log) => (
-                      <div key={log.id} className="rounded-lg border border-border bg-background px-3 py-3">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium">{mediaAuditTitle(log)}</p>
-                            <p className="mt-1 text-xs text-muted-foreground">{mediaAuditDescription(log)}</p>
+                    {assetAuditLogs.map((log) => {
+                      const details = mediaAuditDetails(log);
+
+                      return (
+                        <div key={log.id} className="rounded-lg border border-border bg-background px-3 py-3">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium">{mediaAuditTitle(log)}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">{mediaAuditDescription(log)}</p>
+                            </div>
+                            <time className="shrink-0 font-mono text-xs text-muted-foreground" dateTime={log.createdAt}>
+                              {formatAuditDate(log.createdAt)}
+                            </time>
                           </div>
-                          <time className="shrink-0 font-mono text-xs text-muted-foreground" dateTime={log.createdAt}>
-                            {formatAuditDate(log.createdAt)}
-                          </time>
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                          <span className="rounded bg-muted px-2 py-1">Actor {log.actorId || 'admin'}</span>
-                          {log.requestId && (
-                            <span className="rounded bg-muted px-2 py-1 font-mono">{log.requestId}</span>
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                            <span className="rounded bg-muted px-2 py-1">{mediaAuditPermission(log.action)}</span>
+                            <span className="rounded bg-muted px-2 py-1">Actor {log.actorId || 'admin'}</span>
+                            {log.requestId && (
+                              <span className="rounded bg-muted px-2 py-1 font-mono">{log.requestId}</span>
+                            )}
+                          </div>
+                          {details.length > 0 && (
+                            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                              {details.map((detail) => (
+                                <div key={detail.label} className="rounded bg-muted px-2 py-1.5 text-xs">
+                                  <div className="font-medium text-muted-foreground">{detail.label}</div>
+                                  <div className="mt-1 break-all font-mono text-[11px] text-foreground">{detail.value}</div>
+                                </div>
+                              ))}
+                            </div>
                           )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -5057,6 +5271,16 @@ type MediaAnalytics = {
     asset: MediaAsset;
     bytes: number;
   }>;
+  providerRows: Array<{
+    provider: string;
+    count: number;
+    publicCount: number;
+    privateCount: number;
+    bytes: number;
+    requests: number;
+    bytesServed: number;
+    lastDeliveredAt?: string;
+  }>;
 };
 
 type MediaSafetyScan = {
@@ -5128,6 +5352,16 @@ type MediaDeliveryAnalytics = {
   }>;
 };
 
+type MediaProviderInsight = {
+  provider: string;
+  storagePath?: string;
+  publicBaseUrl?: string;
+  publicUrl?: string;
+  directProviderUrl?: string;
+  deliveryMode: 'backy-proxy' | 'provider-public-base' | 'local';
+  cdnAnalyticsStatus: 'tracked-by-backy' | 'provider-console-required' | 'not-configured';
+};
+
 const numberValue = (value: unknown) => (
   Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0
 );
@@ -5164,6 +5398,50 @@ const getMediaDeliveryAnalytics = (metadata: Record<string, unknown> | undefined
             requests: numberValue(variant.requests),
           }))
       : [],
+  };
+};
+
+const mediaMetadataText = (metadata: Record<string, unknown> | undefined, key: string): string => (
+  typeof metadata?.[key] === 'string' && metadata[key].trim().length > 0 ? metadata[key].trim() : ''
+);
+
+const storageProviderForAsset = (asset: MediaAsset): string => (
+  mediaMetadataText(asset.metadata, 'storageProvider') ||
+  asset.responsive?.storageProvider ||
+  'unknown'
+);
+
+const getMediaProviderInsight = (
+  asset: MediaAsset,
+  runtimeStorage: SiteSettingsInput['runtimeStorage'] | undefined,
+  storageSettings: MediaStorageSettings,
+): MediaProviderInsight => {
+  const provider = storageProviderForAsset(asset);
+  const storagePath = mediaMetadataText(asset.metadata, 'storagePath');
+  const publicBaseUrl = runtimeStorage?.publicUrl || storageSettings.publicBaseUrl || '';
+  const directProviderUrl = publicBaseUrl && storagePath
+    ? `${publicBaseUrl.replace(/\/$/, '')}/${storagePath.replace(/^\//, '')}`
+    : undefined;
+  const deliveryMode = provider === 'local'
+    ? 'local'
+    : directProviderUrl
+      ? 'provider-public-base'
+      : 'backy-proxy';
+  const deliveryAnalytics = getMediaDeliveryAnalytics(asset.metadata);
+  const cdnAnalyticsStatus = deliveryAnalytics && deliveryAnalytics.totalRequests > 0
+    ? 'tracked-by-backy'
+    : provider !== 'local' && provider !== 'unknown'
+      ? 'provider-console-required'
+      : 'not-configured';
+
+  return {
+    provider,
+    ...(storagePath ? { storagePath } : {}),
+    ...(publicBaseUrl ? { publicBaseUrl } : {}),
+    publicUrl: asset.url,
+    ...(directProviderUrl ? { directProviderUrl } : {}),
+    deliveryMode,
+    cdnAnalyticsStatus,
   };
 };
 
@@ -5270,6 +5548,15 @@ const replacementBytesForAsset = (asset: MediaAsset): number => (
 const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
   const totalBytes = assets.reduce((total, asset) => total + assetSizeBytes(asset), 0);
   const byType = new Map<MediaAsset['type'], { count: number; bytes: number }>();
+  const byProvider = new Map<string, {
+    count: number;
+    publicCount: number;
+    privateCount: number;
+    bytes: number;
+    requests: number;
+    bytesServed: number;
+    lastDeliveredAt?: string;
+  }>();
   let publicAssets = 0;
   let privateAssets = 0;
   let referencedAssets = 0;
@@ -5284,6 +5571,29 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
     byType.set(asset.type, {
       count: current.count + 1,
       bytes: current.bytes + bytes,
+    });
+    const provider = storageProviderForAsset(asset);
+    const delivery = getMediaDeliveryAnalytics(asset.metadata);
+    const currentProvider = byProvider.get(provider) || {
+      count: 0,
+      publicCount: 0,
+      privateCount: 0,
+      bytes: 0,
+      requests: 0,
+      bytesServed: 0,
+      lastDeliveredAt: undefined,
+    };
+    byProvider.set(provider, {
+      count: currentProvider.count + 1,
+      publicCount: currentProvider.publicCount + (asset.visibility === 'private' ? 0 : 1),
+      privateCount: currentProvider.privateCount + (asset.visibility === 'private' ? 1 : 0),
+      bytes: currentProvider.bytes + bytes,
+      requests: currentProvider.requests + (delivery?.totalRequests || 0),
+      bytesServed: currentProvider.bytesServed + (delivery?.bytesServed || 0),
+      lastDeliveredAt: [currentProvider.lastDeliveredAt, delivery?.lastDeliveredAt]
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        .sort()
+        .at(-1),
     });
 
     if (asset.visibility === 'private') privateAssets += 1;
@@ -5323,6 +5633,12 @@ const getMediaAnalytics = (assets: MediaAsset[]): MediaAnalytics => {
       .map((asset) => ({ asset, bytes: assetSizeBytes(asset) }))
       .sort((a, b) => b.bytes - a.bytes)
       .slice(0, 4),
+    providerRows: Array.from(byProvider.entries())
+      .map(([provider, value]) => ({
+        provider,
+        ...value,
+      }))
+      .sort((a, b) => b.requests - a.requests || b.bytes - a.bytes || b.count - a.count),
   };
 };
 
@@ -5336,6 +5652,19 @@ type ReplacementVersion = {
   createdAt?: string;
   replacedAt?: string;
 };
+
+const getReplacementVersionsFromRecords = (records: MediaVersionRecord[]): ReplacementVersion[] => (
+  records.map((record) => ({
+    id: record.id,
+    filename: record.filename,
+    originalName: record.originalName,
+    mimeType: record.mimeType,
+    sizeBytes: Number.isFinite(Number(record.sizeBytes)) ? Number(record.sizeBytes) : undefined,
+    url: record.url,
+    createdAt: record.createdAt,
+    replacedAt: record.replacedAt,
+  }))
+);
 
 const getReplacementVersions = (metadata: Record<string, unknown> | undefined): ReplacementVersion[] => {
   const versions = metadata?.replacementVersions;
@@ -5372,6 +5701,28 @@ const formatReplacementSize = (sizeBytes: number | undefined) => (
   Number.isFinite(sizeBytes) ? formatBytes(sizeBytes || 0) : 'Unknown size'
 );
 
+type MediaPermissionKey = 'media.view' | 'media.create' | 'media.configure' | 'media.delete' | 'activity.export';
+type MediaAdminRole = 'owner' | 'admin' | 'editor' | 'viewer';
+
+const MEDIA_ACCESS_RULES: Array<{
+  permission: MediaPermissionKey;
+  label: string;
+  roles: MediaAdminRole[];
+}> = [
+  { permission: 'media.view', label: 'View library', roles: ['owner', 'admin', 'editor', 'viewer'] },
+  { permission: 'media.create', label: 'Upload and organize', roles: ['owner', 'admin', 'editor'] },
+  { permission: 'media.configure', label: 'Configure storage', roles: ['owner', 'admin'] },
+  { permission: 'media.delete', label: 'Delete assets', roles: ['owner', 'admin'] },
+  { permission: 'activity.export', label: 'Read audit feed', roles: ['owner', 'admin'] },
+];
+
+const getMediaAccessRows = (role: string | undefined) => (
+  MEDIA_ACCESS_RULES.map((rule) => ({
+    ...rule,
+    allowed: Boolean(role && rule.roles.includes(role as MediaAdminRole)),
+  }))
+);
+
 const auditRecord = (value: unknown): Record<string, unknown> | undefined => (
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
 );
@@ -5402,6 +5753,93 @@ const mediaAuditTitle = (log: AdminAuditLog) => {
   if (log.action === 'media.unbind') return 'Asset removed from content';
   if (log.action === 'media.replace') return 'Asset file replaced';
   return log.action;
+};
+
+const mediaAuditPermission = (action: string): MediaPermissionKey => {
+  if (action === 'delete') return 'media.delete';
+  if (action === 'media.signed-url' || action === 'media.delivery') return 'media.view';
+  if (action === 'media.configure') return 'media.configure';
+  if (action === 'create' || action === 'update' || action === 'media.bind' || action === 'media.unbind' || action === 'media.replace') {
+    return 'media.create';
+  }
+  return 'activity.export';
+};
+
+const auditValue = (record: Record<string, unknown> | undefined, key: string): string => {
+  const value = record?.[key];
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  return '';
+};
+
+const compactAuditJson = (value: unknown): string => {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+
+  try {
+    const text = JSON.stringify(value);
+    return text.length > 140 ? `${text.slice(0, 137)}...` : text;
+  } catch {
+    return '';
+  }
+};
+
+const mediaAuditDetails = (log: AdminAuditLog): Array<{ label: string; value: string }> => {
+  const metadata = auditRecord(log.metadata);
+  const before = auditRecord(log.before);
+  const after = auditRecord(log.after);
+  const changedKeys = Array.isArray(metadata?.changedKeys)
+    ? metadata.changedKeys.filter((key): key is string => typeof key === 'string')
+    : [];
+  const details: Array<{ label: string; value: string }> = [];
+
+  if (changedKeys.length > 0) {
+    details.push({ label: 'Changed fields', value: changedKeys.join(', ') });
+  }
+
+  const previousFilename = auditText(metadata?.previousFilename) || auditValue(before, 'originalName') || auditValue(before, 'filename');
+  const replacementFilename = auditText(metadata?.replacementFilename) || auditValue(after, 'originalName') || auditValue(after, 'filename');
+  if (log.action === 'media.replace' && (previousFilename || replacementFilename)) {
+    details.push({ label: 'Before', value: previousFilename || 'Previous file' });
+    details.push({ label: 'After', value: replacementFilename || 'Replacement file' });
+  }
+
+  const beforeVisibility = auditValue(before, 'visibility');
+  const afterVisibility = auditValue(after, 'visibility');
+  if (beforeVisibility && afterVisibility && beforeVisibility !== afterVisibility) {
+    details.push({ label: 'Visibility', value: `${beforeVisibility} -> ${afterVisibility}` });
+  }
+
+  const targetType = auditText(metadata?.targetType);
+  const targetId = auditText(metadata?.targetId);
+  const usageType = auditText(metadata?.usageType);
+  if (targetType || targetId || usageType) {
+    details.push({ label: 'Reference', value: [targetType, targetId, usageType].filter(Boolean).join(' / ') });
+  }
+
+  const reason = auditText(metadata?.reason);
+  if (reason) {
+    details.push({ label: 'Reason', value: reason });
+  }
+
+  const safetyStatus = auditText(metadata?.safetyStatus);
+  if (safetyStatus) {
+    details.push({ label: 'Safety', value: safetyStatus });
+  }
+
+  const beforeSize = Number(metadata?.previousSizeBytes);
+  const afterSize = Number(metadata?.replacementSizeBytes);
+  if (Number.isFinite(beforeSize) && Number.isFinite(afterSize)) {
+    details.push({ label: 'Size', value: `${formatBytes(beforeSize)} -> ${formatBytes(afterSize)}` });
+  }
+
+  if (details.length === 0 && metadata && Object.keys(metadata).length > 0) {
+    details.push({ label: 'Metadata', value: compactAuditJson(metadata) });
+  }
+
+  return details.slice(0, 4);
 };
 
 const mediaAuditDescription = (log: AdminAuditLog) => {

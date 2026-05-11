@@ -372,12 +372,13 @@ const assertMediaLayout = async (client, expectedText) => {
     hasStorageOperations: Boolean(document.querySelector('[data-testid="media-storage-operations"]')),
     hasFolders: document.body?.innerText?.includes('Folders') || false,
     hasBulk: document.body?.innerText?.includes('Bulk organize') || document.body?.innerText?.includes('Select visible assets') || false,
+    hasProviderDelivery: document.body?.innerText?.includes('Provider delivery') || false,
     hasAsset: document.body?.innerText?.includes(${JSON.stringify(expectedText)}) || false,
     hasSearch: Boolean(document.querySelector('input[aria-label="Search media"]')),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Media page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasFolders && layout.hasBulk && layout.hasAsset && layout.hasSearch,
+    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasAsset && layout.hasSearch,
     `Media page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
@@ -447,7 +448,11 @@ const openMediaDetails = async (client, assetName) => {
         document.body?.innerText?.includes(${JSON.stringify(assetName)}) &&
         document.body?.innerText?.includes('Safety scan') &&
         document.body?.innerText?.includes('Delivery') &&
-        document.body?.innerText?.includes('Activity'),
+        document.body?.innerText?.includes('Provider and CDN boundary') &&
+        document.body?.innerText?.includes('Activity') &&
+        document.body?.innerText?.includes('Read audit feed') &&
+        document.body?.innerText?.includes('activity.export') &&
+        Boolean(document.querySelector('select[aria-label="Filter media activity"]')),
       body: document.body?.innerText?.slice(0, 1200) || '',
     }))()`);
     if (state.ready) {
@@ -455,6 +460,35 @@ const openMediaDetails = async (client, assetName) => {
     }
     if (attempt === 99) {
       throw new Error(`Media details did not render: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const assertMediaActivityDetails = async (client, expectedText) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const filter = document.querySelector('select[aria-label="Filter media activity"]');
+      if (filter instanceof HTMLSelectElement) {
+        filter.value = 'media.replace';
+        filter.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      return {
+        hasFilter: filter instanceof HTMLSelectElement,
+        hasPermission: document.body?.innerText?.includes('media.create') || false,
+        hasBefore: document.body?.innerText?.includes('Before') || false,
+        hasAfter: document.body?.innerText?.includes('After') || false,
+        hasExpected: document.body?.innerText?.includes(${JSON.stringify(expectedText)}) || false,
+        body: document.body?.innerText?.slice(0, 2200) || '',
+      };
+    })()`);
+    if (state.hasFilter && state.hasPermission && state.hasBefore && state.hasAfter && state.hasExpected) {
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`Media activity details did not render: ${JSON.stringify(state)}`);
     }
     await sleep(250);
   }
@@ -980,6 +1014,19 @@ const main = async () => {
       item.metadata.replacementVersions[0]?.originalName === imageName
     ));
     assert(replacedImage.id === publicImage.id, 'Media replacement changed the stable asset id.');
+    const versionsPayload = await requestApi(`/api/admin/sites/${SITE_ID}/media/${publicImage.id}/versions`);
+    const retainedVersions = versionsPayload.data?.versions || [];
+    assert(retainedVersions.length >= 1, 'Media versions endpoint did not return retained replacement history.');
+    assert(versionsPayload.data?.pagination?.limit > 0, 'Media versions endpoint returned a non-positive page size.');
+    assert(
+      retainedVersions.some((version) => version.originalName === imageName),
+      `Media versions endpoint did not include the original image: ${JSON.stringify(retainedVersions).slice(0, 500)}`,
+    );
+    assert(
+      versionsPayload.data?.source === 'database' || versionsPayload.data?.source === 'metadata',
+      `Media versions endpoint did not report a valid source: ${JSON.stringify(versionsPayload.data).slice(0, 500)}`,
+    );
+    await assertMediaActivityDetails(client, imageName);
     await prepareVariantsThroughDetails(client);
     const transformedImage = await waitForMedia(marker, (item) => (
       item.id === publicImage.id &&

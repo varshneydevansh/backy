@@ -36,7 +36,7 @@ export type PublishStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 export type DomainStatus = 'pending' | 'active' | 'error' | 'expired';
 
 /** Media file type */
-export type MediaType = 'image' | 'video' | 'audio' | 'document' | 'other';
+export type MediaType = 'image' | 'video' | 'audio' | 'document' | 'font' | 'other';
 
 // ==========================================================================
 // PROFILES - User profiles extending auth
@@ -304,6 +304,34 @@ export const media = pgTable('media', {
     uploadedBy: uuid('uploaded_by').references(() => profiles.id),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+/**
+ * Media versions retained when an asset file is replaced.
+ */
+export const mediaVersions = pgTable('media_versions', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    siteId: uuid('site_id')
+        .references(() => sites.id, { onDelete: 'cascade' })
+        .notNull(),
+    mediaId: uuid('media_id')
+        .references(() => media.id, { onDelete: 'cascade' })
+        .notNull(),
+
+    filename: text('filename').notNull(),
+    originalName: text('original_name').notNull(),
+    mimeType: text('mime_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    type: text('type').$type<MediaType>().default('other').notNull(),
+    url: text('url').notNull(),
+    thumbnailUrl: text('thumbnail_url'),
+    storagePath: text('storage_path'),
+    storageProvider: text('storage_provider'),
+    replacedAt: timestamp('replaced_at').defaultNow().notNull(),
+    replacedBy: text('replaced_by'),
+    reason: text('reason'),
+    metadata: jsonb('metadata').default({}).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
 /**
@@ -706,6 +734,7 @@ export const sitesRelations = relations(sites, ({ one, many }) => ({
     pages: many(pages),
     blogPosts: many(blogPosts),
     media: many(media),
+    mediaVersions: many(mediaVersions),
     collections: many(contentCollections),
     forms: many(formDefinitions),
     comments: many(comments),
@@ -737,10 +766,22 @@ export const blogPostsRelations = relations(blogPosts, ({ one }) => ({
     }),
 }));
 
-export const mediaRelations = relations(media, ({ one }) => ({
+export const mediaRelations = relations(media, ({ one, many }) => ({
     site: one(sites, {
         fields: [media.siteId],
         references: [sites.id],
+    }),
+    versions: many(mediaVersions),
+}));
+
+export const mediaVersionsRelations = relations(mediaVersions, ({ one }) => ({
+    site: one(sites, {
+        fields: [mediaVersions.siteId],
+        references: [sites.id],
+    }),
+    media: one(media, {
+        fields: [mediaVersions.mediaId],
+        references: [media.id],
     }),
 }));
 

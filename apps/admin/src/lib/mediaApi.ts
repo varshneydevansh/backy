@@ -67,6 +67,44 @@ interface ApiMediaResponse {
   };
 }
 
+export interface MediaVersionRecord {
+  id?: string;
+  siteId?: string;
+  mediaId?: string;
+  filename?: string;
+  originalName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  type?: ApiMediaItem['type'];
+  url?: string;
+  thumbnailUrl?: string | null;
+  storagePath?: string | null;
+  storageProvider?: string | null;
+  createdAt?: string;
+  replacedAt?: string;
+  replacedBy?: string | null;
+  reason?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+interface ApiMediaVersionsResponse {
+  success: boolean;
+  data?: {
+    mediaId: string;
+    source: 'database' | 'metadata';
+    versions: MediaVersionRecord[];
+    pagination?: {
+      total: number;
+      limit: number;
+      offset: number;
+      hasMore: boolean;
+    };
+  };
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiMediaBindResponse {
   success: boolean;
   data?: {
@@ -563,6 +601,23 @@ export async function replaceMedia(
   }
 
   return toMediaAsset(payload.data.media);
+}
+
+export async function listMediaVersions(
+  mediaId: string,
+  siteId = getDefaultMediaSiteId(),
+): Promise<{ versions: MediaVersionRecord[]; source: 'database' | 'metadata' }> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/${mediaId}/versions`);
+  const payload = await response.json() as ApiMediaVersionsResponse;
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || 'Unable to load media versions');
+  }
+
+  return {
+    versions: payload.data.versions,
+    source: payload.data.source,
+  };
 }
 
 export async function prepareMediaTransforms(
