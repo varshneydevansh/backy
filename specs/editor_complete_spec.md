@@ -33,7 +33,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 19 | Grid/Snap | ✅ | 10px grid snap |
 | 20 | Layers Panel | ✅ | Hierarchical rows support select/multi-select, drag reorder, visibility, lock, duplicate/delete, nesting/outdent, save persistence |
 | 21 | Copy/Paste | ✅ | Copy, cut, paste, duplicate, undo, and redo are covered by editor smoke |
-| 22 | Keyboard Shortcuts | ⚠️ | Core editor shortcuts are implemented; broader shortcut map still needs parity review |
+| 22 | Keyboard Shortcuts | ✅ | Core canvas shortcuts for save, selection, clipboard, duplicate, delete, nudge, undo/redo, grouping, and guarded focus are covered by focused smoke |
 | 23 | Markdown Shortcuts | ✅ | `#`, `-`, `*`, `1.` conversions implemented in shared editor |
 
 ## Canvas Element Parity Matrix (Current)
@@ -283,21 +283,27 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Focused clipboard smoke verifies copy, paste, undo, redo, duplicate, cut, paste, and manual save.
 
 ### 21. Keyboard Shortcuts
-**Current State:** ⚠️ Partially implemented
-**Required Shortcuts:**
+**Current State:** ✅ Core editor shortcuts implemented and covered
+**Working Shortcuts:**
 | Shortcut | Action |
 |---|---|
-| Delete / Backspace | Delete selected |
-| Ctrl+D | Duplicate |
-| Ctrl+C | Copy |
-| Ctrl+V | Paste |
-| Ctrl+Z | Undo |
-| Ctrl+Shift+Z | Redo |
-| Ctrl+S | Save |
-| Arrow keys | Nudge 1px |
-| Shift+Arrow | Nudge 10px |
-| Escape | Deselect |
-| Ctrl+A | Select all |
+| Delete / Backspace | Delete selected unlocked elements |
+| Ctrl/Cmd+D | Duplicate selected unlocked sibling elements |
+| Ctrl/Cmd+C | Copy selected unlocked sibling element trees |
+| Ctrl/Cmd+X | Cut selected unlocked sibling element trees |
+| Ctrl/Cmd+V | Paste with fresh ids, offset, compatible nesting, and history integration |
+| Ctrl/Cmd+Z | Undo canvas mutations |
+| Ctrl/Cmd+Shift+Z | Redo canvas mutations |
+| Ctrl/Cmd+S | Manual save with persisted canvas verification |
+| Arrow keys | Nudge selected elements 1px |
+| Shift+Arrow | Nudge selected elements 10px |
+| Escape | Deselect canvas elements |
+| Ctrl/Cmd+A | Select all unlocked siblings in the active canvas scope |
+| Ctrl/Cmd+G | Group selected sibling elements |
+| Ctrl/Cmd+Shift+G | Ungroup selected group |
+
+- Shortcut handling is guarded so focused form controls and dialogs do not trigger canvas nudge, delete, grouping, or save actions.
+- Focused smoke coverage: `BACKY_EDITOR_SHORTCUTS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 
 ### 22. Markdown-like Text Shortcuts
 **File:** `packages/editor/src/index.tsx`
@@ -363,21 +369,21 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ✅ Delete element
 - ✅ Save page to database
 - ✅ Load existing page on edit
-- ❌ Undo/Redo functionality
+- ✅ Undo/Redo functionality
 - ⚠️ Fix RichTextEditor reset
 - ⚠️ Finalize selected-text style persistence (font family/decoration on partially selected ranges)
 
 **Important (Should Have)**
 - ✅ Page Settings modal
-- ❌ Duplicate element
+- ✅ Duplicate element
 - ✅ Z-Index quick controls (bring/send forward/back)
-- ❌ Keyboard shortcuts
+- ✅ Keyboard shortcuts
 - ❌ Emoji picker for icons
 - ✅ Layers panel
 
 **Nice to Have**
 - ❌ Multi-select elements
-- ❌ Copy/Paste
+- ✅ Copy/Paste
 - ❌ Alignment guides
 - ❌ Zoom controls
 - ⚠️ Responsive breakpoint editing
@@ -407,10 +413,10 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Phase 2: Core Functionality**
 - Save page to database ✅
 - Load existing page ✅
-- Duplicate element
+- Duplicate element ✅
 
 **Phase 3: Usability**
-- Keyboard shortcuts
+- Keyboard shortcuts ✅
 - Emoji picker
 - Layers panel ✅
 - Multi-select

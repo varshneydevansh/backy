@@ -3505,6 +3505,14 @@ export function CanvasEditor({
         return;
       }
 
+      // Escape (Deselect canvas elements)
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setSelectedId(null);
+        setSelectedIds([]);
+        return;
+      }
+
       // Ctrl+A / Cmd+A (Select all unlocked siblings in the active canvas scope)
       if ((e.ctrlKey || e.metaKey) && key === 'a') {
         e.preventDefault();

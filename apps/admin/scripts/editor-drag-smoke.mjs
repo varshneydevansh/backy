@@ -16,6 +16,7 @@ const SAVE_SMOKE = process.env.BACKY_EDITOR_SAVE_SMOKE === '1';
 const PAGE_SETTINGS_SMOKE = process.env.BACKY_EDITOR_PAGE_SETTINGS_SMOKE === '1';
 const DELETE_SMOKE = process.env.BACKY_EDITOR_DELETE_SMOKE === '1';
 const LAYERS_SMOKE = process.env.BACKY_EDITOR_LAYERS_SMOKE === '1';
+const SHORTCUTS_SMOKE = process.env.BACKY_EDITOR_SHORTCUTS_SMOKE === '1';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
@@ -1101,6 +1102,7 @@ const pressKey = async (client, key, options = {}) => {
     ArrowDown: 'ArrowDown',
     Delete: 'Delete',
     Backspace: 'Backspace',
+    Escape: 'Escape',
     a: 'KeyA',
     c: 'KeyC',
     d: 'KeyD',
@@ -1117,6 +1119,7 @@ const pressKey = async (client, key, options = {}) => {
     ArrowDown: 40,
     Delete: 46,
     Backspace: 8,
+    Escape: 27,
     a: 65,
     c: 67,
     d: 68,
@@ -1965,7 +1968,8 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
 };
 
 const testKeyboardNudge = async (client, elementId) => {
-  await selectElement(client, elementId);
+  await selectLayerById(client, elementId);
+  await blurActiveElement(client);
   const before = await readEditorElementState(client, [elementId]);
   await pressKey(client, 'ArrowRight', { shiftKey: true });
   await pressKey(client, 'ArrowDown', { shiftKey: true });
@@ -1985,6 +1989,48 @@ const testKeyboardNudge = async (client, elementId) => {
       x: after[elementId].x - before[elementId].x,
       y: after[elementId].y - before[elementId].y,
     },
+  };
+};
+
+const readShortcutSelectionState = async (client, label) => evaluate(client, `(() => {
+  const selectedLayers = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
+    .map((node) => node.getAttribute('data-layer-id'))
+    .filter(Boolean);
+  const inspectorSelection = document.querySelector('[data-testid="editor-inspector-selection"]');
+  const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
+
+  return {
+    label: ${JSON.stringify(label)},
+    selectedLayers,
+    hasInspectorSelection: Boolean(inspectorSelection),
+    hasMultiSelection: Boolean(multiSelection),
+    inspectorText: inspectorSelection?.textContent || '',
+    multiSelectionText: multiSelection?.textContent || '',
+  };
+})()`);
+
+const testEscapeDeselectShortcut = async (client, elementId) => {
+  await selectLayerIds(client, [elementId]);
+  const before = await readShortcutSelectionState(client, 'before escape');
+  assert(
+    before.selectedLayers.includes(elementId) && before.hasInspectorSelection,
+    `Escape shortcut setup did not select ${elementId}: ${JSON.stringify(before)}`,
+  );
+
+  await blurActiveElement(client);
+  await pressKey(client, 'Escape');
+  const after = await readShortcutSelectionState(client, 'after escape');
+  assert(
+    after.selectedLayers.length === 0 &&
+      after.hasInspectorSelection === false &&
+      after.hasMultiSelection === false,
+    `Escape shortcut did not clear editor selection: ${JSON.stringify(after)}`,
+  );
+
+  return {
+    elementId,
+    before,
+    after,
   };
 };
 
@@ -2114,6 +2160,7 @@ const testClipboardEditingControls = async (client, elementId) => {
   );
 
   await pressKey(client, 'x', { ctrlKey: true });
+  await waitForEditorMutationReady(client, 'after clipboard cut');
   const afterCut = await readClipboardEditingState(client, 'after cut');
   assert(
     afterCut.elementCount === before.elementCount + 1,
@@ -2250,7 +2297,8 @@ const testEditorShortcutGuards = async (client, elementId) => {
 };
 
 const testUndoRedoAfterKeyboardNudge = async (client, elementId) => {
-  await selectElement(client, elementId);
+  await selectLayerById(client, elementId);
+  await blurActiveElement(client);
   const before = await readEditorElementState(client, [elementId]);
   await pressKey(client, 'ArrowRight', { shiftKey: true });
   const nudged = await readEditorElementState(client, [elementId]);
@@ -2675,6 +2723,60 @@ const testSaveEditingControls = async (client, pageId, editorPath) => {
     shortcutSavedStatus,
     persistedAfterShortcut,
     reloadedState,
+  };
+};
+
+const testKeyboardShortcutControls = async (client, pageId) => {
+  const shiftNudge = await testKeyboardNudge(client, 'smoke-image');
+  const undoRedo = await testUndoRedoAfterKeyboardNudge(client, 'smoke-top-edge');
+  const escapeDeselect = await testEscapeDeselectShortcut(client, 'smoke-icon');
+  const siblingScopeSelection = await testSiblingScopeSelectionShortcut(client, ['smoke-heading', 'smoke-image']);
+  const grouping = await testLayerGrouping(client, ['smoke-heading', 'smoke-image']);
+  const clipboard = await testClipboardEditingControls(client, 'smoke-heading');
+  const shortcutGuards = await testEditorShortcutGuards(client, 'smoke-heading');
+
+  const saveElementId = 'smoke-map';
+  await waitForEditorMutationReady(client, 'before keyboard shortcuts save');
+  const beforeShortcutSave = await readEditorElementState(client, [saveElementId]);
+  await selectLayerById(client, saveElementId);
+  await blurActiveElement(client);
+  await pressKey(client, 'ArrowRight', { shiftKey: true });
+  const afterShortcutSave = await readEditorElementState(client, [saveElementId]);
+  assert(
+    afterShortcutSave[saveElementId].x === beforeShortcutSave[saveElementId].x + 10 &&
+      afterShortcutSave[saveElementId].y === beforeShortcutSave[saveElementId].y,
+    `Keyboard shortcuts save nudge did not move ${saveElementId}: ${JSON.stringify({ beforeShortcutSave, afterShortcutSave })}`,
+  );
+
+  await blurActiveElement(client);
+  await pressKey(client, 's', { ctrlKey: true });
+  const shortcutSavedStatus = await waitForEditorSaveStatus(
+    client,
+    (status) => (
+      status.saveState === 'saved' &&
+      status.saveMode === 'manual' &&
+      status.pendingChanges === 0 &&
+      Boolean(status.lastSavedAt)
+    ),
+    'manual status after keyboard shortcuts save',
+  );
+  const persistedAfterShortcutSave = await waitForPersistedCanvasState(pageId, afterShortcutSave);
+
+  return {
+    shiftNudge,
+    undoRedo,
+    escapeDeselect,
+    siblingScopeSelection,
+    grouping,
+    clipboard,
+    shortcutGuards,
+    shortcutSave: {
+      elementId: saveElementId,
+      before: beforeShortcutSave[saveElementId],
+      after: afterShortcutSave[saveElementId],
+      status: shortcutSavedStatus,
+      persisted: persistedAfterShortcutSave[saveElementId],
+    },
   };
 };
 
@@ -6136,8 +6238,8 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const tempReusableSectionId = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE ? null : await createSmokeReusableSection();
-  const tempCollection = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE ? null : await createSmokeCollection();
+  const tempReusableSectionId = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE ? null : await createSmokeReusableSection();
+  const tempCollection = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
   const { childProcess, userDataDir } = launchChrome();
   let client;
@@ -6231,6 +6333,19 @@ const main = async () => {
         mode: 'layers',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         layersPanel,
+      }, null, 2));
+      return;
+    }
+
+    if (SHORTCUTS_SMOKE) {
+      assert(!EDITOR_PATH, 'Keyboard shortcuts smoke currently requires an internally created smoke page');
+      const keyboardShortcuts = await testKeyboardShortcutControls(client, tempPageId);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'shortcuts',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        keyboardShortcuts,
       }, null, 2));
       return;
     }
