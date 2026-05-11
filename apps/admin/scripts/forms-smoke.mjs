@@ -1214,14 +1214,26 @@ const assertConsentExportInUi = async (client, submissionId) => {
 
 const assertConsentRetentionApi = async (formId, submissionId) => {
   const futureNow = new Date(Date.now() + 400 * 24 * 60 * 60 * 1000).toISOString();
-  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/consent-retention`, {
+  const formDryRunPayload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/consent-retention`, {
     method: 'POST',
-    body: JSON.stringify({ now: futureNow, actor: 'forms-smoke' }),
+    body: JSON.stringify({ now: futureNow, dryRun: true, actor: 'forms-smoke' }),
+  });
+  const formDryRun = formDryRunPayload.data || {};
+  assert(formDryRun.scanned >= 1, `Per-form consent retention dry run did not scan submissions: ${JSON.stringify(formDryRun)}`);
+  assert(formDryRun.due >= 1, `Per-form consent retention dry run did not find due submissions: ${JSON.stringify(formDryRun)}`);
+
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/consent-retention`, {
+    method: 'POST',
+    body: JSON.stringify({ now: futureNow, actor: 'forms-smoke-scheduled' }),
   });
   const result = payload.data || {};
-  assert(result.scanned >= 1, `Consent retention did not scan submissions: ${JSON.stringify(result)}`);
+  assert(result.scannedSubmissions >= 1, `Consent retention did not scan submissions: ${JSON.stringify(result)}`);
   assert(result.due >= 1, `Consent retention did not find due submissions: ${JSON.stringify(result)}`);
   assert(result.anonymized >= 1, `Consent retention did not anonymize submissions: ${JSON.stringify(result)}`);
+  assert(
+    Array.isArray(result.results) && result.results.some((item) => item.formId === formId && item.anonymized >= 1),
+    `Scheduled consent retention did not report the target form: ${JSON.stringify(result.results)}`,
+  );
 
   const detail = await getFormWithSubmissions(formId);
   const updated = detail.submissions.find((submission) => submission.id === submissionId);
@@ -1230,7 +1242,7 @@ const assertConsentRetentionApi = async (formId, submissionId) => {
   assert(updated.ipHash === null || updated.ipHash === undefined, `Submission ipHash was not scrubbed: ${JSON.stringify(updated)}`);
   assert(updated.userAgent === null || updated.userAgent === undefined, `Submission userAgent was not scrubbed: ${JSON.stringify(updated)}`);
   assert(
-    typeof updated.adminNotes === 'string' && updated.adminNotes.includes('Consent evidence anonymized by forms-smoke'),
+    typeof updated.adminNotes === 'string' && updated.adminNotes.includes('Consent evidence anonymized by forms-smoke-scheduled'),
     `Anonymization audit note missing: ${JSON.stringify(updated.adminNotes)}`,
   );
   return { ...result, submission: updated };
@@ -1576,7 +1588,7 @@ const main = async () => {
         retryStatusCode: emailRetry?.delivery?.statusCode || null,
       },
       consentRetention: {
-        scanned: consentRetention.scanned,
+        scanned: consentRetention.scannedSubmissions,
         due: consentRetention.due,
         anonymized: consentRetention.anonymized,
       },

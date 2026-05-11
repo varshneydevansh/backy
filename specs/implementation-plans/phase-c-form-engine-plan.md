@@ -86,9 +86,10 @@ Make forms production-safe for self-hosted and external-frontend consumers: stri
   - `/forms` detects consent-like checkbox fields, summarizes granted/missing consent records, and exports a dedicated consent CSV with status, submitted timestamp, request ID, source page/post, IP hash, and user-agent provenance.
   - `/forms` persists per-form consent export/retention policy settings for policy label, retention days, deletion days, privacy request email, and whether consent exports include IP/user-agent provenance.
   - `/forms` can apply the deletion policy to due submissions, anonymizing consent checkbox values and IP/user-agent provenance while retaining non-consent submission fields.
+  - Admin automation can run site-wide consent retention across all forms through `POST /api/admin/sites/:siteId/forms/consent-retention`.
 - **Validation**:
   - Export two status slices and compare deterministic ordering.
-  - `test:forms` verifies the rendered consent export panel, retention policy summary, export metadata, export action, and retention anonymization API for the registration template consent field.
+  - `test:forms` verifies the rendered consent export panel, retention policy summary, export metadata, export action, per-form dry run, and site-wide retention anonymization for the registration template consent field.
 
 ## Testing Strategy
 - 4-layer verification:
