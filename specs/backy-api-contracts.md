@@ -468,7 +468,9 @@ Current reusable-section endpoints persist to `data/backy/admin-content.json` in
 - `POST /api/admin/sites/:siteId/forms/:formId/clone`
 - `GET /api/admin/sites/:siteId/forms/:formId/submissions`
 - `POST /api/admin/sites/:siteId/forms/:formId/submissions/:submissionId/review`
+- `POST /api/admin/sites/:siteId/forms/:formId/submissions/:submissionId/webhook-retry`
   - status transitions `pending|approved|rejected|spam`
+  - Webhook retry replays the configured form submission webhook for non-spam/non-rejected submissions, returns `{ success, requestId, data: { delivery, submission } }`, and records retry queued/succeeded/failed interaction events with `x-backy-webhook-retry`.
   - Form creation accepts `frontendDesignTemplateId` or `designTemplateId`; when it points to a captured `form` template, Backy seeds fields/settings and stores design provenance in `settings.frontendDesign*`.
 
 ### 3.6 Comments

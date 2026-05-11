@@ -24,8 +24,9 @@ const assert = (condition, message) => {
   }
 };
 
-const startWebhookReceiver = async () => new Promise((resolve, reject) => {
+const startWebhookReceiver = async ({ failFirstFormSubmission = false } = {}) => new Promise((resolve, reject) => {
   const deliveries = [];
+  let failedFormSubmission = false;
   const server = http.createServer((request, response) => {
     let body = '';
     request.setEncoding('utf8');
@@ -45,6 +46,21 @@ const startWebhookReceiver = async () => new Promise((resolve, reject) => {
         headers: request.headers,
         payload,
       });
+      const shouldFail = failFirstFormSubmission &&
+        !failedFormSubmission &&
+        payload &&
+        typeof payload === 'object' &&
+        payload.submissionId &&
+        payload.formId &&
+        payload.retry !== true &&
+        !payload.kind;
+      if (shouldFail) {
+        failedFormSubmission = true;
+        response.writeHead(503, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ ok: false, retryable: true }));
+        return;
+      }
+
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ ok: true }));
     });
@@ -896,21 +912,32 @@ const assertOpenApiFormSubmissionContract = async () => {
   );
 };
 
-const waitForWebhookDelivery = async (receiver, formId, submission) => {
+const waitForWebhookDelivery = async (receiver, formId, submission, expectedStatus = 'succeeded', requestId = submission.requestId) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const delivery = receiver.deliveries.find((item) => item.payload?.submissionId === submission.id && item.payload?.formId === formId);
-    const payload = await requestApi(`/api/sites/${SITE_ID}/events?kind=form-submission&formId=${encodeURIComponent(formId)}&requestId=${encodeURIComponent(submission.requestId)}&limit=20`);
+    const delivery = receiver.deliveries.find((item) => (
+      item.payload?.submissionId === submission.id &&
+      item.payload?.formId === formId &&
+      !item.payload?.kind &&
+      (expectedStatus === 'succeeded' ? item.payload.retry === true || item.headers['x-backy-webhook-retry'] === 'true' : item.payload.retry !== true)
+    ));
+    const payload = await requestApi(`/api/sites/${SITE_ID}/events?kind=form-submission&formId=${encodeURIComponent(formId)}&requestId=${encodeURIComponent(requestId)}&limit=20`);
     const events = payload.data?.events || payload.events || [];
     const queued = events.find((event) => event.status === 'queued' && event.submissionId === submission.id);
-    const succeeded = events.find((event) => event.status === 'succeeded' && event.submissionId === submission.id && Number(event.statusCode) === 200);
+    const completed = events.find((event) => event.status === expectedStatus && event.submissionId === submission.id);
 
-    if (delivery && queued && succeeded) {
+    if (delivery && queued && completed) {
       assert(
         delivery.headers['x-backy-site-id'] === SITE_ID &&
           delivery.headers['x-backy-form-id'] === formId &&
           delivery.headers['x-backy-submission-id'] === submission.id,
         `Webhook receiver did not get Backy headers: ${JSON.stringify(delivery.headers)}`,
       );
+      if (expectedStatus === 'succeeded') {
+        assert(delivery.headers['x-backy-webhook-retry'] === 'true', `Retry webhook header missing: ${JSON.stringify(delivery.headers)}`);
+        assert(Number(completed.statusCode) === 200, `Retry event did not record status 200: ${JSON.stringify(completed)}`);
+      } else {
+        assert(Number(completed.statusCode) === 503, `Initial failed event did not record status 503: ${JSON.stringify(completed)}`);
+      }
       return {
         delivery,
         events,
@@ -921,6 +948,18 @@ const waitForWebhookDelivery = async (receiver, formId, submission) => {
   }
 
   throw new Error(`Webhook delivery did not complete for ${submission.id}: ${JSON.stringify(receiver.deliveries.slice(-5))}`);
+};
+
+const retryWebhookDelivery = async (formId, submission) => {
+  const requestId = `forms-smoke-retry-${Date.now().toString(36)}`;
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/submissions/${submission.id}/webhook-retry`, {
+    method: 'POST',
+    headers: { 'x-request-id': requestId },
+    body: JSON.stringify({ requestId }),
+  });
+  const delivery = payload.data?.delivery || payload.delivery;
+  assert(delivery?.status === 'succeeded' && Number(delivery.statusCode) === 200, `Webhook retry did not succeed: ${JSON.stringify(payload).slice(0, 500)}`);
+  return { requestId, delivery };
 };
 
 const refreshForms = async (client) => {
@@ -1044,7 +1083,7 @@ const main = async () => {
   await patchFrontendDesign(smokeFrontendDesignContract());
   const beforeIds = new Set((await listForms()).map((form) => form.id));
   const smokeCollection = await createCollection();
-  const webhookReceiver = await startWebhookReceiver();
+  const webhookReceiver = await startWebhookReceiver({ failFirstFormSubmission: true });
   const { childProcess, userDataDir } = launchChrome();
   let client;
   let frontendCreatedFormId = null;
@@ -1053,6 +1092,8 @@ const main = async () => {
   let cleaned = false;
   let collectionCleaned = false;
   let frontendTemplateForm = null;
+  let webhookFailure = null;
+  let webhookRetry = null;
   let webhookDelivery = null;
 
   try {
@@ -1119,7 +1160,9 @@ const main = async () => {
 
     const invalidSubmission = await submitInvalidRegistration(createdFormId);
     const submitted = await submitRegistration(createdFormId);
-    webhookDelivery = await waitForWebhookDelivery(webhookReceiver, createdFormId, submitted);
+    webhookFailure = await waitForWebhookDelivery(webhookReceiver, createdFormId, submitted, 'failed');
+    webhookRetry = await retryWebhookDelivery(createdFormId, submitted);
+    webhookDelivery = await waitForWebhookDelivery(webhookReceiver, createdFormId, submitted, 'succeeded', webhookRetry.requestId);
     const records = await listCollectionRecords(smokeCollection.id);
     const createdRecord = records.find((record) => record.values?.source_submission_id === submitted.id);
     assert(createdRecord, `Collection record was not created for submission ${submitted.id}: ${JSON.stringify(records.slice(0, 5))}`);
@@ -1171,7 +1214,9 @@ const main = async () => {
       },
       webhook: {
         deliveries: webhookReceiver.deliveries.length,
-        eventStatuses: webhookDelivery.events.map((event) => event.status),
+        initialEventStatuses: webhookFailure.events.map((event) => event.status),
+        retryEventStatuses: webhookDelivery.events.map((event) => event.status),
+        retryStatusCode: webhookRetry.delivery.statusCode,
       },
       collectionRecord: {
         id: createdRecord.id,
