@@ -668,6 +668,14 @@ export interface BackyPageListOptions extends BackyListOptions {
   siteId?: string;
 }
 
+export interface BackyFormListOptions {
+  pageId?: string;
+  postId?: string;
+  active?: boolean;
+  requestId?: string;
+  siteId?: string;
+}
+
 export interface BackyCollectionRecordListOptions extends BackyListOptions {
   slug?: string;
   q?: string;
@@ -1338,8 +1346,21 @@ export class BackyClient {
     });
   }
 
-  forms(options: { pageId?: string; postId?: string; active?: boolean } = {}): Promise<BackyEnvelope<{ forms: BackyFormDefinition[]; total?: number; pagination?: BackyPagination }>> {
-    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms`, { query: options });
+  forms(options: BackyFormListOptions = {}): Promise<BackyEnvelope<{ forms: BackyFormDefinition[]; total?: number; pagination?: BackyPagination }>> {
+    const { requestId, siteId, ...query } = options;
+    return this.request(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/forms`, {
+      query,
+      requestId,
+    });
+  }
+
+  formsCached(options: BackyFormListOptions & BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ forms: BackyFormDefinition[]; total?: number; pagination?: BackyPagination }>>> {
+    const { requestId, etag, siteId, ...query } = options;
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/forms`, {
+      query,
+      ifNoneMatch: etag,
+      requestId,
+    });
   }
 
   form(formId: string): Promise<BackyEnvelope<{ form: BackyFormDefinition; endpoints: BackyFormEndpoints }>> {
@@ -1509,6 +1530,13 @@ export class BackyClient {
 
   reportReasons(): Promise<BackyEnvelope<{ reasons: string[] }>> {
     return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/report-reasons`);
+  }
+
+  reportReasonsCached(options: BackyConditionalOptions = {}): Promise<BackyConditionalResult<BackyEnvelope<{ reasons: string[] }>>> {
+    return this.requestConditionalJson(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/comments/report-reasons`, {
+      ifNoneMatch: options.etag,
+      requestId: options.requestId,
+    });
   }
 
   reportComment(commentId: string, input: { reason: string; details?: string; reporterEmail?: string; requestId?: string }): Promise<BackyEnvelope<{ comment: BackyComment; report?: Record<string, unknown> }>> {

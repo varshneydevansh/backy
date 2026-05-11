@@ -555,6 +555,12 @@ if (reusableSections.data.sections.length > 0) {
 
 const forms = await client.forms();
 assert(Array.isArray(forms.data.forms), 'forms() missing forms array');
+const cachedForms = await client.formsCached();
+assert(cachedForms.notModified === false, 'formsCached() first request should return a body');
+assert(Array.isArray(cachedForms.body.data.forms), 'formsCached() missing forms array');
+assert(cachedForms.meta.etag, 'formsCached() missing response ETag');
+const revalidatedForms = await client.formsCached({ etag: cachedForms.meta.etag });
+assert(revalidatedForms.notModified === true, 'formsCached() did not return notModified for matching ETag');
 if (forms.data.forms.length > 0) {
   const definition = await client.formDefinition(forms.data.forms[0].id);
   assert(definition.data.schemaVersion === 'backy.form-definition.v1', 'formDefinition() missing schema version');
@@ -565,6 +571,15 @@ if (forms.data.forms.length > 0) {
   const revalidatedDefinition = await client.formDefinitionCached(forms.data.forms[0].id, { etag: cachedDefinition.meta.etag });
   assert(revalidatedDefinition.notModified === true, 'formDefinitionCached() did not return notModified for matching ETag');
 }
+
+const reportReasons = await client.reportReasons();
+assert(reportReasons.data.reasons?.includes?.('spam'), 'reportReasons() missing spam reason');
+const cachedReportReasons = await client.reportReasonsCached();
+assert(cachedReportReasons.notModified === false, 'reportReasonsCached() first request should return a body');
+assert(cachedReportReasons.body.data.reasons?.includes?.('spam'), 'reportReasonsCached() missing spam reason');
+assert(cachedReportReasons.meta.etag, 'reportReasonsCached() missing response ETag');
+const revalidatedReportReasons = await client.reportReasonsCached({ etag: cachedReportReasons.meta.etag });
+assert(revalidatedReportReasons.notModified === true, 'reportReasonsCached() did not return notModified for matching ETag');
 
 const comments = await client.siteComments({ limit: 5 });
 assert(Array.isArray(comments.data.comments), 'siteComments() missing comments array');
@@ -863,8 +878,11 @@ console.log(JSON.stringify({
     'reusableSectionsCached',
     'reusableSectionCached',
     'forms',
+    'formsCached',
     'formDefinition',
     'formDefinitionCached',
+    'reportReasons',
+    'reportReasonsCached',
     'siteComments',
     'events',
     ...(commerceCatalogChecked ? ['commerceCatalog', 'commerceCatalogCached'] : []),

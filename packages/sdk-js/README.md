@@ -88,6 +88,20 @@ if (categoriesSecond.notModified) {
   console.log('Reuse your cached blog category archive metadata.');
 }
 
+const formsFirst = await backy.formsCached();
+const formsSecond = await backy.formsCached({ etag: formsFirst.meta.etag });
+
+if (formsSecond.notModified) {
+  console.log('Reuse your cached form directory.');
+}
+
+const reportReasonsFirst = await backy.reportReasonsCached();
+const reportReasonsSecond = await backy.reportReasonsCached({ etag: reportReasonsFirst.meta.etag });
+
+if (reportReasonsSecond.notModified) {
+  console.log('Reuse your cached comment report reasons.');
+}
+
 const seoFirst = await backy.seoCached();
 const seoSecond = await backy.seoCached({ etag: seoFirst.meta.etag });
 
