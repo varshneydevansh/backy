@@ -1248,6 +1248,7 @@ const assertStarterTemplateEditorRender = async (client, testCase) => {
       document.querySelector('#page-editor-canvas')?.scrollIntoView({ block: 'start' });
       const canvas = document.querySelector('[data-testid="editor-canvas"]');
       const elements = Array.from(canvas?.querySelectorAll('[data-element-id]') || []);
+      const bodyText = document.body?.innerText || '';
       const requiredElementIds = ${JSON.stringify(requiredElementIds)};
       const byId = new Map(elements.map((element) => [element.getAttribute('data-element-id'), element]));
       const requiredRects = requiredElementIds.map((id) => {
@@ -1272,13 +1273,15 @@ const assertStarterTemplateEditorRender = async (client, testCase) => {
         canvasOffsetWidth: canvas?.clientWidth || 0,
         canvasOffsetHeight: canvas?.clientHeight || 0,
         renderedElementCount: elements.length,
+        hasLayerTotalsMeta: /\\d+\\s+layers?\\s+\\/\\s+\\d+\\s+root/.test(bodyText),
+        hasContainerMeta: /\\d+\\s+containers?/.test(bodyText),
         renderedElementIds: elements.map((element) => element.getAttribute('data-element-id')).filter(Boolean),
         missingElementIds: requiredRects.filter((rect) => !rect.present).map((rect) => rect.id),
         collapsedElementIds: requiredRects.filter((rect) => rect.present && (rect.width <= 0 || rect.height <= 0)).map((rect) => rect.id),
         requiredRects,
         emptyStateVisible: document.body?.innerText?.includes('Drop components onto the canvas') || false,
         horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
-        body: document.body?.innerText?.slice(0, 260) || '',
+        body: bodyText.slice(0, 260),
       };
     })()`);
 
@@ -1303,6 +1306,8 @@ const assertStarterTemplateEditorRender = async (client, testCase) => {
 
   assert(renderState.canvasOffsetWidth === 1200, `Created ${testCase.template} editor canvas width mismatch: ${JSON.stringify(renderState)}`);
   assert(renderState.canvasOffsetHeight >= testCase.minCanvasHeight, `Created ${testCase.template} editor canvas height mismatch: ${JSON.stringify(renderState)}`);
+  assert(renderState.hasLayerTotalsMeta, `Created ${testCase.template} editor missing total/root layer metadata: ${JSON.stringify(renderState)}`);
+  assert(renderState.hasContainerMeta, `Created ${testCase.template} editor missing container layer metadata: ${JSON.stringify(renderState)}`);
   assert(renderState.horizontalOverflow <= 4, `Created ${testCase.template} editor route has horizontal page overflow: ${JSON.stringify(renderState)}`);
 
   const screenshotPath = path.join(EDITOR_TEMPLATE_SCREENSHOT_DIR, `backy-page-create-editor-${testCase.template}.png`);

@@ -96,6 +96,40 @@ const getPagePublicPath = (page: Pick<Page, 'slug' | 'isHomepage'>) => (
     : `/${slugify(page.slug)}`
 );
 
+type CanvasTreeStats = {
+  rootLayerCount: number;
+  totalLayerCount: number;
+  containerLayerCount: number;
+  maxDepth: number;
+};
+
+const getCanvasTreeStats = (elements: CanvasElement[]): CanvasTreeStats => {
+  let totalLayerCount = 0;
+  let containerLayerCount = 0;
+  let maxDepth = 0;
+
+  const visit = (nodes: CanvasElement[], depth: number) => {
+    nodes.forEach((element) => {
+      totalLayerCount += 1;
+      maxDepth = Math.max(maxDepth, depth);
+
+      if (element.children?.length) {
+        containerLayerCount += 1;
+        visit(element.children, depth + 1);
+      }
+    });
+  };
+
+  visit(elements, elements.length > 0 ? 1 : 0);
+
+  return {
+    rootLayerCount: elements.length,
+    totalLayerCount,
+    containerLayerCount,
+    maxDepth,
+  };
+};
+
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 function PageEditorRoute() {
@@ -291,6 +325,9 @@ function PageEditorRoute() {
     ];
   }, [initialElements, page?.id, page?.title]);
 
+  const editorElements = initialElements.length ? initialElements : fallbackElements;
+  const canvasTreeStats = useMemo(() => getCanvasTreeStats(editorElements), [editorElements]);
+
   const parseSerializedContent = (serialized: string): unknown => {
     try {
       return JSON.parse(serialized);
@@ -335,7 +372,9 @@ function PageEditorRoute() {
     .filter((check) => check.status !== 'pass')
     .slice(0, 3) || [];
   const isReadinessBlocked = pageReadiness?.statusLabel === 'blocked';
-  const elementCount = initialElements.length || fallbackElements.length;
+  const elementCount = canvasTreeStats.rootLayerCount;
+  const totalElementCount = canvasTreeStats.totalLayerCount;
+  const containerLayerCount = canvasTreeStats.containerLayerCount;
   const backendReadinessDetail = pageReadiness
     ? `${pageReadiness.score}% ${pageReadiness.statusLabel.replace('-', ' ')}.`
     : readinessError || 'Run readiness before publishing.';
@@ -410,8 +449,17 @@ function PageEditorRoute() {
     },
     {
       label: 'Canvas content',
-      detail: elementCount > 0 ? `${elementCount} root layer${elementCount === 1 ? '' : 's'} ready for render.` : 'Add at least one element to the page.',
-      ready: elementCount > 0,
+      detail: totalElementCount > 0
+        ? `${totalElementCount} total layer${totalElementCount === 1 ? '' : 's'} across ${elementCount} root layer${elementCount === 1 ? '' : 's'}.`
+        : 'Add at least one element to the page.',
+      ready: totalElementCount > 0,
+    },
+    {
+      label: 'Nested layout',
+      detail: containerLayerCount > 0
+        ? `${containerLayerCount} container/group layer${containerLayerCount === 1 ? '' : 's'} support nested editing.`
+        : 'No grouped or nested containers yet.',
+      ready: true,
     },
     {
       label: 'SEO handoff',
@@ -485,6 +533,9 @@ function PageEditorRoute() {
       width: initialCanvasSize.width,
       height: initialCanvasSize.height,
       rootLayerCount: elementCount,
+      totalLayerCount: totalElementCount,
+      containerLayerCount,
+      maxDepth: canvasTreeStats.maxDepth,
       fallbackSeeded: initialElements.length === 0,
       mediaContext: {
         siteId,
@@ -911,7 +962,7 @@ function PageEditorRoute() {
             <EditorMetaTile label="Site" value={`${selectedSite?.name || siteId} (${siteId})`} />
             <EditorMetaTile label="Route" value={page.slug ? `/${page.slug}` : 'No slug'} />
             <EditorMetaTile label="Canvas" value={`${initialCanvasSize.width} x ${initialCanvasSize.height}px`} />
-            <EditorMetaTile label="Elements" value={`${elementCount}`} />
+            <EditorMetaTile label="Layers" value={`${totalElementCount} total / ${elementCount} root`} />
             <EditorMetaTile label="Status" value={page.status} />
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -956,7 +1007,10 @@ function PageEditorRoute() {
                   {initialCanvasSize.width} x {initialCanvasSize.height}px
                 </span>
                 <span className="rounded bg-muted px-2 py-1">
-                  {elementCount} root layer{elementCount === 1 ? '' : 's'}
+                  {totalElementCount} layer{totalElementCount === 1 ? '' : 's'} / {elementCount} root
+                </span>
+                <span className="rounded bg-muted px-2 py-1">
+                  {containerLayerCount} container{containerLayerCount === 1 ? '' : 's'}
                 </span>
                 <span className="rounded bg-muted px-2 py-1">
                   Cmd/Ctrl+G grouping
@@ -994,7 +1048,7 @@ function PageEditorRoute() {
             <CanvasEditor
               key={`${page.id}:${editorResetVersion}`}
               mode="page"
-              initialElements={initialElements.length ? initialElements : fallbackElements}
+              initialElements={editorElements}
               initialSize={initialCanvasSize}
               initialSettings={initialSettings}
               onSave={handleSave}
