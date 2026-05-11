@@ -273,6 +273,24 @@ const createSmokePage = async () => {
             },
           },
           {
+            id: 'smoke-nav',
+            type: 'nav',
+            x: 980,
+            y: 535,
+            width: 360,
+            height: 72,
+            zIndex: 5,
+            props: {
+              navItems: ['Home', 'About', 'Contact'],
+              navDirection: 'horizontal',
+              gap: 18,
+              ariaLabel: 'Initial nav',
+              backgroundColor: 'transparent',
+              color: '#111827',
+              padding: 12,
+            },
+          },
+          {
             id: 'smoke-box',
             type: 'box',
             x: 460,
@@ -3329,6 +3347,81 @@ const assertPersistedColumnsBehavior = async (pageId) => {
   return props;
 };
 
+const normalizeNavItem = (item) => {
+  if (typeof item === 'string') {
+    const [label, ...hrefParts] = item.split(':');
+    return {
+      label: label.trim(),
+      href: hrefParts.join(':').trim() || '',
+    };
+  }
+
+  if (item && typeof item === 'object') {
+    return {
+      label: String(item.label || item.title || item.name || '').trim(),
+      href: String(item.href || item.url || item.path || '').trim(),
+    };
+  }
+
+  return { label: '', href: '' };
+};
+
+const testNavBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-nav');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-nav-items', 'Docs: /docs\nPricing: /pricing\nContact: /contact');
+  await setFormControlByTestId(client, 'editor-nav-direction', 'vertical');
+  await setFormControlByTestId(client, 'editor-nav-gap', '22');
+  await setFormControlByTestId(client, 'editor-nav-aria-label', 'Smoke primary navigation');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const nav = document.querySelector('[data-element-id="smoke-nav"] nav');
+    const style = nav ? getComputedStyle(nav) : null;
+    const links = Array.from(nav?.querySelectorAll('a') || []).map((link) => ({
+      label: link.textContent?.trim() || '',
+      href: link.getAttribute('href') || '',
+    }));
+    return {
+      items: value('editor-nav-items'),
+      direction: value('editor-nav-direction'),
+      gap: value('editor-nav-gap'),
+      ariaLabel: value('editor-nav-aria-label'),
+      previewAriaLabel: nav?.getAttribute('aria-label') || '',
+      previewFlexDirection: style?.flexDirection || '',
+      previewGap: style?.gap || '',
+      links,
+    };
+  })()`);
+
+  assert(state.items.includes('Docs: /docs') && state.items.includes('Pricing: /pricing'), `Nav items control mismatch: ${JSON.stringify(state)}`);
+  assert(state.direction === 'vertical' && state.previewFlexDirection === 'column', `Nav direction mismatch: ${JSON.stringify(state)}`);
+  assert(state.gap === '22' && state.previewGap === '22px', `Nav gap mismatch: ${JSON.stringify(state)}`);
+  assert(state.ariaLabel === 'Smoke primary navigation' && state.previewAriaLabel === 'Smoke primary navigation', `Nav aria label mismatch: ${JSON.stringify(state)}`);
+  assert(state.links.length === 3 && state.links[0].label === 'Docs' && state.links[1].label === 'Pricing', `Nav links mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedNavBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const nav = findCanvasElement(elements, 'smoke-nav');
+  const props = nav?.props || {};
+  const navItems = Array.isArray(props.navItems) ? props.navItems.map(normalizeNavItem) : [];
+
+  assert(nav?.type === 'nav', `Persisted smoke-nav missing: ${JSON.stringify(nav)}`);
+  assert(navItems.length === 3, `Persisted nav items length mismatch: ${JSON.stringify(props)}`);
+  assert(navItems[0].label === 'Docs' && navItems[0].href === '/docs', `Persisted nav first item mismatch: ${JSON.stringify(props)}`);
+  assert(navItems[1].label === 'Pricing' && navItems[1].href === '/pricing', `Persisted nav second item mismatch: ${JSON.stringify(props)}`);
+  assert(props.navDirection === 'vertical', `Persisted nav direction mismatch: ${JSON.stringify(props)}`);
+  assert(props.gap === 22, `Persisted nav gap mismatch: ${JSON.stringify(props)}`);
+  assert(props.ariaLabel === 'Smoke primary navigation', `Persisted nav aria label mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const testInputFieldBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-input');
   await switchToPropertiesPanel(client);
@@ -4140,27 +4233,33 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
-    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns') {
+    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav') {
       assert(tempPageId, `${COMPONENT_SMOKE} component smoke requires an internally created smoke page`);
       const targetElementId = COMPONENT_SMOKE === 'divider'
         ? 'smoke-divider'
         : COMPONENT_SMOKE === 'columns'
           ? 'smoke-columns'
-          : 'smoke-list';
+          : COMPONENT_SMOKE === 'nav'
+            ? 'smoke-nav'
+            : 'smoke-list';
       const behaviorControls = COMPONENT_SMOKE === 'divider'
         ? await testDividerBehaviorControls(client)
         : COMPONENT_SMOKE === 'columns'
           ? await testColumnsBehaviorControls(client)
-          : await testListBehaviorControls(client);
+          : COMPONENT_SMOKE === 'nav'
+            ? await testNavBehaviorControls(client)
+            : await testListBehaviorControls(client);
       await clickSave(client);
       const savedStatus = await waitForEditorMutationReady(client, `after ${COMPONENT_SMOKE} component smoke save`);
       const persistedBehavior = COMPONENT_SMOKE === 'divider'
         ? await assertPersistedDividerBehavior(tempPageId)
         : COMPONENT_SMOKE === 'columns'
           ? await assertPersistedColumnsBehavior(tempPageId)
-          : await assertPersistedListBehavior(tempPageId);
+          : COMPONENT_SMOKE === 'nav'
+            ? await assertPersistedNavBehavior(tempPageId)
+            : await assertPersistedListBehavior(tempPageId);
       let reloadedState = null;
       let reloadClient = null;
       try {
@@ -4314,6 +4413,9 @@ const main = async () => {
     const columnsBehaviorControls = EDITOR_PATH
       ? null
       : await testColumnsBehaviorControls(client);
+    const navBehaviorControls = EDITOR_PATH
+      ? null
+      : await testNavBehaviorControls(client);
     const inputFieldBehaviorControls = EDITOR_PATH
       ? null
       : await testInputFieldBehaviorControls(client);
@@ -4372,6 +4474,7 @@ const main = async () => {
     let persistedListBehavior = null;
     let persistedDividerBehavior = null;
     let persistedColumnsBehavior = null;
+    let persistedNavBehavior = null;
     let persistedInputFieldBehavior = null;
     let persistedTextareaFieldBehavior = null;
     let persistedSelectFieldBehavior = null;
@@ -4382,7 +4485,7 @@ const main = async () => {
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -4450,6 +4553,9 @@ const main = async () => {
       persistedColumnsBehavior = columnsBehaviorControls
         ? await assertPersistedColumnsBehavior(tempPageId)
         : null;
+      persistedNavBehavior = navBehaviorControls
+        ? await assertPersistedNavBehavior(tempPageId)
+        : null;
       persistedInputFieldBehavior = inputFieldBehaviorControls
         ? await assertPersistedInputFieldBehavior(tempPageId)
         : null;
@@ -4481,7 +4587,7 @@ const main = async () => {
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -4589,6 +4695,7 @@ const main = async () => {
       listBehaviorControls,
       dividerBehaviorControls,
       columnsBehaviorControls,
+      navBehaviorControls,
       inputFieldBehaviorControls,
       textareaFieldBehaviorControls,
       selectFieldBehaviorControls,
@@ -4611,6 +4718,7 @@ const main = async () => {
       persistedListBehavior,
       persistedDividerBehavior,
       persistedColumnsBehavior,
+      persistedNavBehavior,
       persistedInputFieldBehavior,
       persistedTextareaFieldBehavior,
       persistedSelectFieldBehavior,

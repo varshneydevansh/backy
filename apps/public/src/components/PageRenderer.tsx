@@ -782,6 +782,36 @@ function toFormInputValueList(raw: unknown): string[] {
     .filter((item) => item.length > 0);
 }
 
+function parseNavigationItems(raw: unknown): Array<{ label: string; href: string }> {
+  const entries = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(/\r?\n/) : [];
+
+  return entries
+    .map((entry, index) => {
+      if (typeof entry === 'string') {
+        const [labelPart, ...hrefParts] = entry.split(':');
+        const label = labelPart.trim();
+        const href = hrefParts.join(':').trim() || `#${label.toLowerCase().replace(/[^a-z0-9]+/g, '-') || index}`;
+        return label ? { label, href } : null;
+      }
+
+      if (entry && typeof entry === 'object') {
+        const record = entry as Record<string, unknown>;
+        const label = parseAttributeString(record.label)
+          || parseAttributeString(record.title)
+          || parseAttributeString(record.name)
+          || `Item ${index + 1}`;
+        const href = parseAttributeString(record.href)
+          || parseAttributeString(record.url)
+          || parseAttributeString(record.path)
+          || '#';
+        return { label, href };
+      }
+
+      return null;
+    })
+    .filter((item): item is { label: string; href: string } => Boolean(item));
+}
+
 function getNameClass(value: unknown): string {
   if (typeof value === 'string') {
     return value;
@@ -1295,6 +1325,59 @@ function ContainerElement({ element, isPreview, siteId, pageId, postId }: Elemen
         />
       ))}
     </div>
+  );
+}
+
+/**
+ * Render a navigation element
+ */
+function NavElement({ element, isPreview, siteId, pageId, postId }: ElementRendererProps) {
+  const { props, styles, children } = element;
+  const items = parseNavigationItems(props.navItems);
+  const isVertical = props.navDirection === 'vertical';
+
+  return (
+    <nav
+      aria-label={getNameClass(props.ariaLabel) || 'Page navigation'}
+      style={{
+        display: 'flex',
+        flexDirection: isVertical ? 'column' : 'row',
+        alignItems: props.alignItems as React.CSSProperties['alignItems'] || (isVertical ? 'stretch' : 'center'),
+        justifyContent: props.justifyContent as React.CSSProperties['justifyContent'] || (isVertical ? 'flex-start' : 'center'),
+        gap: getLength(props.gap, '18px'),
+        padding: getLength(props.padding),
+        backgroundColor: getNameClass(props.backgroundColor),
+        color: getNameClass(props.color) || '#111827',
+        borderRadius: getLength(props.borderRadius),
+        ...styles,
+      }}
+    >
+      {children && children.length > 0 ? children.map((child) => (
+        <ElementRenderer
+          key={child.id}
+          element={child}
+          isPreview={isPreview}
+          siteId={siteId}
+          pageId={pageId}
+          postId={postId}
+        />
+      )) : items.map((item) => (
+        <a
+          key={`${item.label}-${item.href}`}
+          href={item.href || '#'}
+          style={{
+            color: 'inherit',
+            fontSize: getLength(props.fontSize, '14px'),
+            fontWeight: getNameClass(props.fontWeight) || '600',
+            lineHeight: getLength(props.lineHeight, '1.2'),
+            textDecoration: getNameClass(props.textDecoration) || 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {item.label}
+        </a>
+      ))}
+    </nav>
   );
 }
 
@@ -2699,7 +2782,7 @@ const ELEMENT_RENDERERS: Record<
   container: ContainerElement,
   header: ContainerElement,
   footer: ContainerElement,
-  nav: ContainerElement,
+  nav: NavElement,
   section: ContainerElement,
   columns: ColumnsElement,
   spacer: SpacerElement,

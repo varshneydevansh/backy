@@ -1086,6 +1086,7 @@ function ContentProperties({
             <textarea
               value={formatNavigationItems(element.props.navItems)}
               onChange={(e) => onChange({ navItems: parseNavigationItems(e.target.value) })}
+              data-testid="editor-nav-items"
               rows={5}
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background resize-none',
@@ -1102,6 +1103,7 @@ function ContentProperties({
               <select
                 value={element.props.navDirection || 'horizontal'}
                 onChange={(e) => onChange({ navDirection: e.target.value })}
+                data-testid="editor-nav-direction"
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1120,6 +1122,7 @@ function ContentProperties({
                 min={0}
                 value={toNumber(element.props.gap, 18)}
                 onChange={(e) => onChange({ gap: e.target.value === '' ? 0 : Number(e.target.value) })}
+                data-testid="editor-nav-gap"
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1135,6 +1138,7 @@ function ContentProperties({
               type="text"
               value={element.props.ariaLabel || ''}
               onChange={(e) => onChange({ ariaLabel: e.target.value })}
+              data-testid="editor-nav-aria-label"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
