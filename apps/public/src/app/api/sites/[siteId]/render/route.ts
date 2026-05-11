@@ -205,6 +205,7 @@ const repositoryCollectionToStoreCollection = (collection: BackyCollection): Sto
     publicUpdate: collection.permissions.publicUpdate === true,
     publicDelete: collection.permissions.publicDelete === true,
   },
+  metadata: isRecord(collection.metadata) ? collection.metadata : undefined,
   createdAt: collection.createdAt,
   updatedAt: collection.updatedAt,
 });

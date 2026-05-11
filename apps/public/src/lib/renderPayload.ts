@@ -1534,7 +1534,7 @@ export function buildPublicCollectionListRenderPayload(
         themeTokens: buildThemeTokens(site),
       },
       navigation,
-      frontendDesign: buildRenderFrontendDesign(site),
+      frontendDesign: buildRenderFrontendDesign(site, collection.metadata),
       route: {
         type: 'dynamicList',
         path: options.path,
@@ -1635,7 +1635,7 @@ export function buildPublicCollectionItemRenderPayload(
         themeTokens: buildThemeTokens(site),
       },
       navigation,
-      frontendDesign: buildRenderFrontendDesign(site),
+      frontendDesign: buildRenderFrontendDesign(site, record.values),
       route: {
         type: 'dynamicItem',
         path: options.path,

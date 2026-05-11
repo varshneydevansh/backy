@@ -2859,6 +2859,7 @@ try {
         frontendDesignTemplateId: 'captured-collection-template',
         name: 'Captured Template Collection',
         slug: `${collectionSlug}-captured-template`,
+        status: 'published',
         listRoutePattern: `/directory-captured-${unique}`,
         routePattern: `/directory-captured-${unique}/:recordSlug`,
       }),
@@ -2868,6 +2869,11 @@ try {
     assert(capturedTemplateCollectionId, `${createCollectionFromTemplate.url} missing captured template collection id`);
     assert(createCollectionFromTemplate.json?.data?.collection?.metadata?.frontendDesignTemplateId === 'captured-collection-template', `${createCollectionFromTemplate.url} missing captured collection provenance`);
     assert(createCollectionFromTemplate.json?.data?.collection?.fields?.some((field) => field.key === 'title'), `${createCollectionFromTemplate.url} did not seed captured collection fields`);
+    const capturedTemplateCollectionRender = await request(`/api/sites/${createdSiteId}/render?path=${encodeURIComponent(`/directory-captured-${unique}`)}`);
+    assert(capturedTemplateCollectionRender.response.status === 200, `${capturedTemplateCollectionRender.url} expected captured collection render`);
+    validateAiRenderPayload(capturedTemplateCollectionRender.json, 'captured collection render payload');
+    assert(capturedTemplateCollectionRender.json?.data?.frontendDesign?.content?.templateId === 'captured-collection-template', `${capturedTemplateCollectionRender.url} missing render collection frontend design provenance`);
+    assert(capturedTemplateCollectionRender.json?.data?.frontendDesign?.content?.routePattern === '/directory/:recordSlug', `${capturedTemplateCollectionRender.url} missing render collection frontend route pattern`);
     await request(`/api/admin/sites/${createdSiteId}/collections/${capturedTemplateCollectionId}`, { method: 'DELETE' });
 
     const duplicateCollection = await request(`/api/admin/sites/${createdSiteId}/collections`, {
@@ -3969,6 +3975,11 @@ try {
     const visibleTemplateProduct = await request(`/api/sites/${createdSiteId}/commerce/catalog?slug=${templateProductSlug}`);
     assert(visibleTemplateProduct.response.status === 200, `${visibleTemplateProduct.url} expected visible product from captured template`);
     assert(visibleTemplateProduct.json?.data?.products?.[0]?.design?.templateId === 'captured-product-template', `${visibleTemplateProduct.url} missing normalized captured product design`);
+    const visibleTemplateProductRender = await request(`/api/sites/${createdSiteId}/render?path=${encodeURIComponent(`/products/${templateProductSlug}`)}`);
+    assert(visibleTemplateProductRender.response.status === 200, `${visibleTemplateProductRender.url} expected visible product render from captured template`);
+    validateAiRenderPayload(visibleTemplateProductRender.json, 'captured product render payload');
+    assert(visibleTemplateProductRender.json?.data?.frontendDesign?.content?.templateId === 'captured-product-template', `${visibleTemplateProductRender.url} missing render product frontend design provenance`);
+    assert(visibleTemplateProductRender.json?.data?.frontendDesign?.content?.routePattern === `/products/${pastProductSlug}`, `${visibleTemplateProductRender.url} missing render product frontend route pattern`);
     await request(`/api/admin/sites/${createdSiteId}/collections/${commerceProductsCollectionId}/records/${capturedTemplateProductRecordId}`, { method: 'DELETE' });
 
     const visibleCatalog = await request(`/api/sites/${createdSiteId}/commerce/catalog?limit=100`);
