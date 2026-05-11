@@ -22,6 +22,7 @@ import {
   getEmailDeliveryConfig,
   sendEmailMessage,
 } from '@/lib/formEmailDelivery';
+import { verifyFormCaptcha } from '@/lib/formCaptcha';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -51,6 +52,16 @@ type WebhookEventKind = 'form-submission' | 'contact-shared' | 'contact-status';
 type NotificationDeliveryStatus = 'queued' | 'succeeded' | 'failed';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+const CAPTCHA_TRANSPORT_KEYS = new Set([
+  'captcha',
+  'captchaToken',
+  'captchaResponse',
+  'turnstileToken',
+  'hcaptchaToken',
+  'recaptchaToken',
+  'g-recaptcha-response',
+  'cf-turnstile-response',
+]);
 
 const privateResponse = <TBody>(body: TBody, requestId: string, status = 200) => (
   publicContractJson(body, {
@@ -115,6 +126,32 @@ function parseRequestId(raw: string | null): string | undefined {
   return normalized.length ? normalized : undefined;
 }
 
+function parseCaptchaToken(rawRecord: Record<string, unknown>): string | undefined {
+  const directToken = [
+    rawRecord.captchaToken,
+    rawRecord.captchaResponse,
+    rawRecord.turnstileToken,
+    rawRecord.hcaptchaToken,
+    rawRecord.recaptchaToken,
+    rawRecord['g-recaptcha-response'],
+    rawRecord['cf-turnstile-response'],
+  ].find((value) => typeof value === 'string' && value.trim().length > 0);
+  if (typeof directToken === 'string') {
+    return directToken.trim();
+  }
+
+  const captcha = rawRecord.captcha;
+  if (captcha && typeof captcha === 'object' && !Array.isArray(captcha)) {
+    const nested = captcha as Record<string, unknown>;
+    const nestedToken = [nested.token, nested.response].find((value) => typeof value === 'string' && value.trim().length > 0);
+    if (typeof nestedToken === 'string') {
+      return nestedToken.trim();
+    }
+  }
+
+  return undefined;
+}
+
 function parseRequestBody(raw: unknown) {
   if (!raw || typeof raw !== 'object') {
     return null;
@@ -132,7 +169,8 @@ function parseRequestBody(raw: unknown) {
           key !== 'postId' &&
           key !== 'requestId' &&
           key !== 'rateLimitBypass' &&
-          key !== 'startedAt'
+          key !== 'startedAt' &&
+          !CAPTCHA_TRANSPORT_KEYS.has(key)
         ) {
           acc[key] = value;
         }
@@ -186,6 +224,7 @@ function parseRequestBody(raw: unknown) {
       : typeof (raw as { startedAt?: unknown }).startedAt === 'string'
         ? (raw as { startedAt: string }).startedAt
         : undefined,
+    captchaToken: parseCaptchaToken(rawRecord),
     contactShareOverride: contactShareOverride && Object.keys(contactShareOverride).length > 0
       ? contactShareOverride
       : undefined,
@@ -212,6 +251,59 @@ function extractIpHash(request: NextRequest): string | null {
     .split(',')
     .map((value) => value.trim())
     .find(Boolean) || null;
+}
+
+async function captchaErrorResponseIfNeeded(params: {
+  form: FormDefinition;
+  captchaToken?: string;
+  requestId: string;
+  siteId: string;
+  ipHash: string | null;
+}) {
+  if (params.form.enableCaptcha !== true) {
+    return null;
+  }
+
+  const verification = await verifyFormCaptcha({
+    token: params.captchaToken,
+    remoteIp: params.ipHash,
+    requestId: params.requestId,
+    siteId: params.siteId,
+    formId: params.form.id,
+  });
+
+  if (verification.ok) {
+    return null;
+  }
+
+  const code = verification.errorCode || 'CAPTCHA_FAILED';
+  const message = verification.message || 'Captcha verification failed.';
+  const status = code === 'CAPTCHA_NOT_CONFIGURED' || code === 'CAPTCHA_UNAVAILABLE' || code === 'CAPTCHA_TIMEOUT'
+    ? 503
+    : 422;
+
+  return contractResponse(
+    {
+      success: false,
+      requestId: params.requestId,
+      error: {
+        code,
+        message,
+      },
+      errorMessage: message,
+      status: 'rejected',
+      validation: [],
+      spamFlags: ['captcha'],
+      captcha: {
+        provider: verification.provider,
+        errorCode: code,
+        errorCodes: verification.errorCodes || [],
+      },
+      message,
+    },
+    params.requestId,
+    status,
+  );
 }
 
 const toJsonRecord = (value: Record<string, unknown>): Record<string, BackyJsonValue> => (
@@ -885,6 +977,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const requestId = normalizeRequestId(parsed.requestId);
       const ipHash = extractIpHash(request);
+      const captchaResponse = await captchaErrorResponseIfNeeded({
+        form,
+        captchaToken: parsed.captchaToken,
+        requestId,
+        siteId: site.id,
+        ipHash,
+      });
+      if (captchaResponse) {
+        return captchaResponse;
+      }
+
       const classification = validateAndClassifyFormSubmission(
         form,
         parsed.values,
@@ -1020,6 +1123,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const requestId = normalizeRequestId(parsed.requestId);
     const ipHash = extractIpHash(request);
+    const captchaResponse = await captchaErrorResponseIfNeeded({
+      form,
+      captchaToken: parsed.captchaToken,
+      requestId,
+      siteId: site.id,
+      ipHash,
+    });
+    if (captchaResponse) {
+      return captchaResponse;
+    }
+
     const classification = validateAndClassifyFormSubmission(
       form,
       parsed.values,

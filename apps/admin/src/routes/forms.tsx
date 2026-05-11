@@ -389,7 +389,7 @@ const FORM_FRONTEND_SYSTEMS = [
   {
     key: 'spam',
     title: 'Spam protection',
-    detail: 'Honeypot, captcha readiness, moderation mode, spam queue, and reviewer status controls.',
+    detail: 'Honeypot, captcha provider verification, moderation mode, spam queue, and reviewer status controls.',
   },
   {
     key: 'contacts',
@@ -590,8 +590,8 @@ function FormsRoute() {
       {
         label: 'Spam guard',
         detail: hasSpamGuard
-          ? [selectedForm.enableHoneypot ? 'honeypot' : null, selectedForm.enableCaptcha ? 'captcha' : null].filter(Boolean).join(' + ')
-          : 'Enable honeypot or captcha before exposing high-traffic forms.',
+          ? [selectedForm.enableHoneypot ? 'honeypot' : null, selectedForm.enableCaptcha ? 'captcha provider' : null].filter(Boolean).join(' + ')
+          : 'Enable honeypot or captcha verification before exposing high-traffic forms.',
         ready: hasSpamGuard,
       },
       {
@@ -2745,7 +2745,7 @@ function FormsRoute() {
                               checked={formDraft.enableCaptcha === true}
                               onChange={(event) => patchFormDraft({ enableCaptcha: event.target.checked })}
                             />
-                            Captcha
+                            Captcha provider
                           </label>
                           <label className="flex min-h-11 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium">
                             <input
@@ -3461,7 +3461,7 @@ function FormsRoute() {
                     <MetaTile label="Moderation" value={selectedForm.moderationMode || 'manual'} />
                     <MetaTile label="Spam guard" value={[
                       selectedForm.enableHoneypot ? 'honeypot' : null,
-                      selectedForm.enableCaptcha ? 'captcha' : null,
+                      selectedForm.enableCaptcha ? 'captcha provider' : null,
                     ].filter(Boolean).join(' + ') || 'none'} />
                     <MetaTile label="Lead share" value={selectedForm.contactShare?.enabled ? 'enabled' : 'off'} />
                     <MetaTile label="Collection write" value={selectedForm.collectionTarget?.enabled ? selectedForm.collectionTarget.collectionId : 'off'} />

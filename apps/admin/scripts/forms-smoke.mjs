@@ -305,6 +305,94 @@ const deleteForm = async (formId) => {
   await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}`, { method: 'DELETE' });
 };
 
+const createCaptchaSmokeForm = async () => {
+  const suffix = Date.now().toString(36);
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: `captcha-smoke-${suffix}`,
+      title: 'Captcha smoke',
+      description: 'Temporary form for captcha provider smoke coverage.',
+      audience: 'public',
+      isActive: true,
+      moderationMode: 'auto-approve',
+      enableHoneypot: true,
+      enableCaptcha: true,
+      fields: [
+        { key: 'email', label: 'Email', type: 'email', required: true },
+        { key: 'message', label: 'Message', type: 'textarea', required: false },
+      ],
+    }),
+  });
+  const form = payload.data?.form || payload.form;
+  assert(form?.id, `Captcha smoke form was not created: ${JSON.stringify(payload).slice(0, 500)}`);
+  return form;
+};
+
+const assertCaptchaProviderHook = async () => {
+  let formId = null;
+
+  try {
+    const form = await createCaptchaSmokeForm();
+    formId = form.id;
+
+    const missingResponse = await fetch(`${API_BASE_URL}/api/sites/${SITE_ID}/forms/${formId}/submissions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        requestId: `forms-captcha-missing-${Date.now().toString(36)}`,
+        rateLimitBypass: true,
+        startedAt: Date.now() - 3000,
+        honeypot: '',
+        values: {
+          email: 'forms-captcha-missing@example.com',
+        },
+      }),
+    });
+    const missingPayload = await missingResponse.json().catch(() => ({}));
+    const missingSerialized = JSON.stringify(missingPayload);
+    assert(missingResponse.status === 422, `Captcha-protected form should reject missing token with 422: ${missingResponse.status} ${missingSerialized}`);
+    assert(missingPayload?.error?.code === 'CAPTCHA_REQUIRED', `Missing captcha token should return CAPTCHA_REQUIRED: ${missingSerialized}`);
+    assert(
+      missingPayload.spamFlags?.includes('captcha') || missingPayload.captcha?.errorCode === 'CAPTCHA_REQUIRED',
+      `Missing captcha token response should expose captcha metadata: ${missingSerialized}`,
+    );
+
+    const requestId = `forms-captcha-valid-${Date.now().toString(36)}`;
+    const validPayload = await requestApi(`/api/sites/${SITE_ID}/forms/${formId}/submissions`, {
+      method: 'POST',
+      body: JSON.stringify({
+        requestId,
+        rateLimitBypass: true,
+        startedAt: Date.now() - 3000,
+        honeypot: '',
+        captchaToken: process.env.BACKY_FORM_CAPTCHA_MOCK_TOKEN || 'backy-captcha-pass',
+        email: 'forms-captcha-valid@example.com',
+        message: 'Valid captcha smoke submission.',
+      }),
+    });
+
+    const submission = validPayload.data?.submission || validPayload.submission;
+    assert(submission?.id, `Captcha-protected form did not accept a valid token: ${JSON.stringify(validPayload).slice(0, 500)}`);
+    assert(submission.status === 'approved', `Captcha smoke submission should auto-approve: ${JSON.stringify(submission).slice(0, 500)}`);
+    assert(submission.values?.email === 'forms-captcha-valid@example.com', `Captcha smoke direct field-key payload did not persist email: ${JSON.stringify(submission.values)}`);
+    assert(!Object.prototype.hasOwnProperty.call(submission.values || {}, 'captchaToken'), `Captcha token leaked into submitted values: ${JSON.stringify(submission.values)}`);
+
+    return {
+      formId,
+      submissionId: submission.id,
+      missingCode: missingPayload.error?.code,
+      provider: missingPayload.captcha?.provider || 'mock',
+    };
+  } finally {
+    if (formId) {
+      await deleteForm(formId).catch((error) => {
+        console.warn('Unable to delete captcha smoke form:', error instanceof Error ? error.message : error);
+      });
+    }
+  }
+};
+
 const deleteReusableSection = async (sectionId) => {
   if (!sectionId) return;
   await requestApi(`/api/admin/sites/${SITE_ID}/reusable-sections/${sectionId}`, { method: 'DELETE' });
@@ -1052,6 +1140,14 @@ const assertOpenApiFormSubmissionContract = async () => {
     `Form submission OpenAPI request schema does not expose payload aliases: ${JSON.stringify(requestSchema)}`,
   );
   assert(
+    requestSchema?.properties?.captchaToken &&
+      requestSchema.properties.turnstileToken &&
+      requestSchema.properties.hcaptchaToken &&
+      requestSchema.properties['g-recaptcha-response'] &&
+      requestSchema.properties['cf-turnstile-response'],
+    `Form submission OpenAPI request schema does not expose captcha token aliases: ${JSON.stringify(requestSchema)}`,
+  );
+  assert(
     requestSchema.additionalProperties === true,
     `Form submission OpenAPI request schema does not allow direct field-key payloads: ${JSON.stringify(requestSchema)}`,
   );
@@ -1629,6 +1725,7 @@ const main = async () => {
   const originalFrontendDesign = await getFrontendDesign();
   await patchFrontendDesign(smokeFrontendDesignContract());
   const beforeIds = new Set((await listForms()).map((form) => form.id));
+  const captchaHook = await assertCaptchaProviderHook();
   const smokeCollection = await createCollection();
   const webhookReceiver = await startWebhookReceiver({ failFirstFormSubmission: true });
   const { childProcess, userDataDir } = launchChrome();
@@ -1804,6 +1901,7 @@ const main = async () => {
         spam: formsAnalytics.summary.spam,
         routedToCollections: formsAnalytics.summary.routedToCollections,
       },
+      captchaHook,
       auditTrail,
       collectionRecord: {
         id: createdRecord.id,
