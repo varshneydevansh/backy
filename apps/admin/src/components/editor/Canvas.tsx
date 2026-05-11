@@ -2601,6 +2601,10 @@ function CanvasElementComponent({
             p.defaultValue !== undefined ? p.defaultValue : p.value
           );
           const selectedSet = new Set(selectedValues);
+          const fallbackOptionValue = element.type === 'radio'
+            ? selectedValues[0] || sanitizeText(p.value) || 'on'
+            : sanitizeText(p.value) || 'on';
+          const choiceItems = optionItems.length > 0 ? optionItems : [fallbackOptionValue];
           return (
             <div
               style={{
@@ -2635,10 +2639,11 @@ function CanvasElementComponent({
                 boxSizing: 'border-box',
               }}
               >
-                {(optionItems.length ? optionItems : ['Option A']).map((option, optionIndex) => {
+                {choiceItems.map((option, optionIndex) => {
                   const isChecked = element.type === 'radio'
                     ? selectedValues[0] === option
                     : selectedSet.has(option);
+                  const optionLabel = optionItems.length > 0 ? option : fieldLabel || 'Option';
 
                   return (
                     <label
@@ -2658,7 +2663,7 @@ function CanvasElementComponent({
                           pointerEvents: isPreview ? 'auto' : 'none',
                         }}
                       />
-                      <span>{option}</span>
+                      <span>{optionLabel}</span>
                     </label>
                   );
                 })}
