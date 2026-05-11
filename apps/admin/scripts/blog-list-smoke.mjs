@@ -11,6 +11,8 @@ const SITE_ID = process.env.BACKY_BLOG_LIST_SMOKE_SITE_ID || 'site-demo';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_BLOG_LIST_CDP_PORT || 9388);
 const SCREENSHOT_PATH = process.env.BACKY_BLOG_LIST_SCREENSHOT || path.join(os.tmpdir(), 'backy-blog-list-smoke.png');
+const VISUAL_SCREENSHOT_DIR = process.env.BACKY_BLOG_LIST_VISUAL_DIR || path.join(os.tmpdir(), 'backy-blog-list-visual');
+const DESKTOP_VISUAL_SCREENSHOT_PATH = path.join(VISUAL_SCREENSHOT_DIR, 'backy-blog-list-desktop.png');
 let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -356,6 +358,17 @@ const evaluate = async (client, expression) => {
   return result.result.value;
 };
 
+const captureScreenshot = async (client, screenshotPath, options = {}) => {
+  fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
+  const screenshot = await client.send('Page.captureScreenshot', {
+    format: 'png',
+    captureBeyondViewport: true,
+    ...options,
+  });
+  fs.writeFileSync(screenshotPath, Buffer.from(screenshot.data, 'base64'));
+  return screenshotPath;
+};
+
 const navigateToBlog = async (client, title) => {
   await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/blog?siteId=${encodeURIComponent(SITE_ID)}` });
 
@@ -414,6 +427,68 @@ const assertBlogListLayout = async (client, { title, categoryName, tagName, auth
 
   assert(Object.values(state).every(Boolean), `Blog list layout missing expected regions: ${JSON.stringify(state)}`);
   return state;
+};
+
+const assertBlogVisualState = async (client, label, screenshotPath, { title } = {}) => {
+  await evaluate(client, `(() => {
+    window.scrollTo(0, 0);
+    return true;
+  })()`);
+  await sleep(250);
+
+  const state = await evaluate(client, `(() => {
+    const bodyText = document.body?.innerText || '';
+    const commandCenter = document.querySelector('[data-testid="blog-command-center"]');
+    const taxonomyManager = document.querySelector('[data-testid="blog-taxonomy-manager"]');
+    const postsRegion = document.querySelector('#blog-posts');
+    const filtersRegion = document.querySelector('#blog-filters');
+    const bulkRegion = document.querySelector('#blog-bulk');
+    const apiSnippetLabels = Array.from(document.querySelectorAll('#blog-api code, #blog-api [data-testid], #blog-api *'))
+      .map((node) => node.textContent || '')
+      .join('\\n');
+    const tableRows = Array.from(document.querySelectorAll('#blog-posts tbody tr'));
+    const commandRect = commandCenter?.getBoundingClientRect();
+    const postsRect = postsRegion?.getBoundingClientRect();
+    const taxonomyRect = taxonomyManager?.getBoundingClientRect();
+    const expectedTitle = ${JSON.stringify(title || '')};
+
+    return {
+      label: ${JSON.stringify(label)},
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      documentWidth: document.documentElement.scrollWidth,
+      horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      commandVisible: Boolean(commandRect && commandRect.width > 320 && commandRect.height > 120),
+      filtersVisible: Boolean(filtersRegion),
+      bulkVisible: Boolean(bulkRegion),
+      postsVisible: Boolean(postsRect && postsRect.width > 320 && postsRect.height > 180),
+      taxonomyVisible: Boolean(taxonomyRect && taxonomyRect.width > 280 && taxonomyRect.height > 180),
+      tableRows: tableRows.length,
+      hasExpectedPost: expectedTitle ? bodyText.includes(expectedTitle) : true,
+      hasApiContract: bodyText.includes('Blog API contract'),
+      hasPublicPostsSnippet: bodyText.includes('/api/sites/${SITE_ID}/blog'),
+      hasSearchFeedSnippet: bodyText.includes('Search feed') && bodyText.includes('?q='),
+      hasArchiveFeedSnippet: bodyText.includes('Archive feed') && bodyText.includes('?year=') && bodyText.includes('&month='),
+      hasTaxonomyControls: bodyText.includes('Taxonomy manager') || bodyText.includes('Categories') && bodyText.includes('Tags'),
+      hasSeoControls: Boolean(document.querySelector('[data-testid^="blog-post-seo-noindex-"]')),
+      hasCommentSummary: Boolean(document.querySelector('[data-testid^="blog-post-comments-"]')),
+      hasFrameworkOverlay: /Failed to compile|Unhandled Runtime Error|Vite Error|Internal Server Error/i.test(bodyText),
+      apiSnippetLabels: apiSnippetLabels.slice(0, 1200),
+      body: bodyText.slice(0, 3000),
+    };
+  })()`);
+
+  assert(state.commandVisible, `${label} command center was not visibly rendered: ${JSON.stringify(state)}`);
+  assert(state.filtersVisible && state.bulkVisible, `${label} filter or bulk controls missing: ${JSON.stringify(state)}`);
+  assert(state.postsVisible && state.tableRows >= 1 && state.hasExpectedPost, `${label} post table did not render the expected smoke post: ${JSON.stringify(state)}`);
+  assert(state.taxonomyVisible && state.hasTaxonomyControls, `${label} taxonomy manager was not visibly rendered: ${JSON.stringify(state)}`);
+  assert(state.hasApiContract && state.hasPublicPostsSnippet, `${label} API contract snippets missing: ${JSON.stringify(state)}`);
+  assert(state.hasSearchFeedSnippet && state.hasArchiveFeedSnippet, `${label} search/archive feed snippets missing: ${JSON.stringify(state)}`);
+  assert(state.hasSeoControls && state.hasCommentSummary, `${label} row SEO/comment controls missing: ${JSON.stringify(state)}`);
+  assert(state.horizontalOverflow <= 4, `${label} has horizontal overflow: ${JSON.stringify(state)}`);
+  assert(!state.hasFrameworkOverlay, `${label} rendered a framework/runtime overlay: ${JSON.stringify(state)}`);
+
+  await captureScreenshot(client, screenshotPath);
+  return { ...state, screenshotPath };
 };
 
 const setInputValue = async (client, selector, value) => evaluate(client, `(() => {
@@ -835,6 +910,7 @@ const main = async () => {
 
     await navigateToBlog(client, title);
     await assertBlogListLayout(client, { title, categoryName, tagName, authorName: author?.name || null });
+    const visualState = await assertBlogVisualState(client, 'blog list desktop', DESKTOP_VISUAL_SCREENSHOT_PATH, { title });
     await assertRowSeoAndComments(client, { postId });
     await toggleNoIndexInUi(client, postId);
     const taxonomyUi = await manageTaxonomyInUi(client, suffix);
@@ -845,9 +921,7 @@ const main = async () => {
     await assertPublicPost(slug, categoryId, tagId);
     const archiveFeed = await assertPublicSearchAndArchiveFeeds({ slug, title, publishedAt: publishedPost.publishedAt });
 
-    await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
-      fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(result.data, 'base64'));
-    });
+    await captureScreenshot(client, SCREENSHOT_PATH);
 
     await deleteBlogPost(postId);
     postId = null;
@@ -865,6 +939,11 @@ const main = async () => {
       tagSlug,
       taxonomyUi,
       archiveFeed,
+      visualState: {
+        screenshotPath: visualState.screenshotPath,
+        horizontalOverflow: visualState.horizontalOverflow,
+        tableRows: visualState.tableRows,
+      },
       previewUrl: previewUrls[previewUrls.length - 1],
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
