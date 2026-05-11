@@ -28,6 +28,9 @@ import {
   normalizeListContent,
 } from './listUtils';
 
+const SELECTED_LAYER_EDIT_Z_INDEX = 10001;
+const ACTIVE_SELECTED_LAYER_EDIT_Z_INDEX = 10002;
+
 const toCssLength = (value: unknown): string | number | undefined => {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return `${value}px`;
@@ -1059,6 +1062,13 @@ type ResizeInteraction = {
 
 const getPointerDetails = (event: React.PointerEvent | React.MouseEvent) => {
   if ('pointerId' in event && event.pointerId !== undefined) {
+    if (event.pointerType === 'mouse') {
+      return {
+        inputType: 'mouse' as const,
+        pointerId: undefined,
+      };
+    }
+
     return {
       inputType: 'pointer' as const,
       pointerId: event.pointerId,
@@ -1076,16 +1086,14 @@ const matchesInteractionInput = (
   interaction: Pick<DragInteraction | ResizeInteraction, 'inputType' | 'pointerId'>,
 ) => {
   if (interaction.inputType === 'mouse') {
-    return !('pointerId' in event);
+    return !('pointerId' in event) || (event instanceof PointerEvent && event.pointerType === 'mouse');
   }
 
   if (!('pointerId' in event)) {
     return true;
   }
 
-  return 'pointerId' in event && (
-    interaction.pointerId === undefined || event.pointerId === interaction.pointerId
-  );
+  return interaction.pointerId === undefined || event.pointerId === interaction.pointerId;
 };
 
 // ============================================
@@ -1161,6 +1169,14 @@ export function Canvas({
     if (!element) return false;
     return !!element.closest('[data-role="canvas-resize-handle"]');
   }, [getTargetElement]);
+
+  const isInteractiveHandleAtPoint = useCallback((x: number, y: number) => {
+    if (typeof document === 'undefined') {
+      return false;
+    }
+
+    return isInteractiveHandle(document.elementFromPoint(x, y));
+  }, [isInteractiveHandle]);
 
   const isTextEditorInteraction = useCallback((target: EventTarget | null) => {
     const element = getTargetElement(target);
@@ -1287,6 +1303,7 @@ export function Canvas({
       if (isPreview || disabled) return;
       if ('button' in e && e.button !== 0) return;
       if (dragStateRef.current || resizeStateRef.current) return;
+      if (isInteractiveHandle(e.target) || isInteractiveHandleAtPoint(e.clientX, e.clientY)) return;
 
       const eventTarget = getTargetElement(e.target);
       const hitElementId = eventTarget?.closest?.('[data-element-id]')?.getAttribute('data-element-id');
@@ -1298,8 +1315,6 @@ export function Canvas({
 
       const clickedElement = findElementById(elements, elementId);
       if (!clickedElement) return;
-
-      if (isInteractiveHandle(e.target)) return;
 
       if (clickedElement.locked) {
         e.preventDefault();
@@ -1368,7 +1383,7 @@ export function Canvas({
       setDragState(nextDragState);
       setResizeState(null);
     },
-    [disabled, elements, exitTextEditingForTransform, isInteractiveHandle, isTextEditorInteraction, isPreview, onSelect, selectedIds, size.height, size.width]
+    [disabled, elements, exitTextEditingForTransform, isInteractiveHandle, isInteractiveHandleAtPoint, isTextEditorInteraction, isPreview, onSelect, selectedIds, size.height, size.width]
   );
 
   /**
@@ -1381,7 +1396,11 @@ export function Canvas({
 
       e.stopPropagation();
       e.preventDefault();
-      if (resizeStateRef.current || dragStateRef.current) return;
+      if (resizeStateRef.current) return;
+      if (dragStateRef.current) {
+        dragStateRef.current = null;
+        setDragState(null);
+      }
 
       const element = findElementById(elements, elementId);
       if (!element || element.locked) return;
@@ -1599,32 +1618,15 @@ export function Canvas({
   }, [exitTextEditingForTransform, onElementsChange, selectedId]);
 
   useEffect(() => {
-    if (!dragState && !resizeState) {
+    if (isPreview || disabled) {
       return;
     }
 
-    if (dragState?.inputType === 'pointer') {
-      window.addEventListener('pointermove', handleGlobalElementMove);
-      window.addEventListener('pointerup', handleGlobalElementUp);
-      window.addEventListener('pointercancel', handleGlobalElementUp);
-    }
-
-    if (dragState?.inputType === 'mouse') {
-      window.addEventListener('mousemove', handleGlobalElementMove);
-      window.addEventListener('mouseup', handleGlobalElementUp);
-    }
-
-    if (resizeState?.inputType === 'pointer') {
-      window.addEventListener('pointermove', handleGlobalElementMove);
-      window.addEventListener('pointerup', handleGlobalElementUp);
-      window.addEventListener('pointercancel', handleGlobalElementUp);
-    }
-
-    if (resizeState?.inputType === 'mouse') {
-      window.addEventListener('mousemove', handleGlobalElementMove);
-      window.addEventListener('mouseup', handleGlobalElementUp);
-    }
-
+    window.addEventListener('pointermove', handleGlobalElementMove);
+    window.addEventListener('pointerup', handleGlobalElementUp);
+    window.addEventListener('pointercancel', handleGlobalElementUp);
+    window.addEventListener('mousemove', handleGlobalElementMove);
+    window.addEventListener('mouseup', handleGlobalElementUp);
     return () => {
       window.removeEventListener('pointermove', handleGlobalElementMove);
       window.removeEventListener('pointerup', handleGlobalElementUp);
@@ -1632,7 +1634,7 @@ export function Canvas({
       window.removeEventListener('mousemove', handleGlobalElementMove);
       window.removeEventListener('mouseup', handleGlobalElementUp);
     };
-  }, [dragState, handleGlobalElementMove, handleGlobalElementUp, resizeState]);
+  }, [disabled, handleGlobalElementMove, handleGlobalElementUp, isPreview]);
 
   const handleCanvasElementDrop = useCallback(
     (event: React.DragEvent, forcedParentId?: string) => {
@@ -3570,6 +3572,14 @@ function CanvasElementComponent({
 
   const isTextElement = isTextEditableElement(normalizeCanvasElementType(element.type) as CanvasElement['type']);
   const isBeingMoved = draggingId === element.id;
+  const shouldShowTransformControls = isSelected && (
+    selectedIds.length <= 1 || element.id === selectedId
+  );
+  const editorZIndex = !isPreview && !disabled && isSelected
+    ? element.id === selectedId
+      ? ACTIVE_SELECTED_LAYER_EDIT_Z_INDEX
+      : SELECTED_LAYER_EDIT_Z_INDEX
+    : element.zIndex || 1;
 
   return (
       <div
@@ -3583,6 +3593,7 @@ function CanvasElementComponent({
         (isLocked || disabled) && !isPreview && 'cursor-default'
       )}
       data-element-id={element.id}
+      data-selected-ids={isSelected ? selectedIds.join(',') : undefined}
       data-backy-text-editor={isTextElement ? 'true' : undefined}
       data-backy-text-editor-editable={String(isTextElement && isEditingEnabled)}
       style={{
@@ -3593,7 +3604,7 @@ function CanvasElementComponent({
         top: element.y,
         width: element.width,
         height: element.height,
-        zIndex: element.zIndex || 1,
+        zIndex: editorZIndex,
         transform: element.rotation ? `rotate(${element.rotation}deg)` : undefined,
         opacity: isHidden && !isPreview ? 0.25 : sharedStyle.opacity ?? 1,
         pointerEvents: isHidden && !isSelected ? 'none' : undefined,
@@ -3617,7 +3628,7 @@ function CanvasElementComponent({
       {renderContent()}
 
       {/* Resize Handles (only when selected and not in preview) */}
-      {isSelected && !isPreview && !disabled && (
+      {shouldShowTransformControls && !isPreview && !disabled && (
         <>
           <div
             className="pointer-events-auto absolute -top-8 left-0 z-[90] flex cursor-move touch-none select-none items-center gap-2 rounded bg-sky-600 px-2 py-1 text-[11px] font-medium text-white shadow-sm"
@@ -3640,10 +3651,10 @@ function CanvasElementComponent({
           </div>
           {!isLocked && (
             <>
-              <ResizeHandle position="nw" onMouseDown={(e) => onResizeStart(e, element.id, 'nw')} />
-              <ResizeHandle position="ne" onMouseDown={(e) => onResizeStart(e, element.id, 'ne')} />
-              <ResizeHandle position="sw" onMouseDown={(e) => onResizeStart(e, element.id, 'sw')} />
-              <ResizeHandle position="se" onMouseDown={(e) => onResizeStart(e, element.id, 'se')} />
+              <ResizeHandle position="nw" onResizeStart={(e) => onResizeStart(e, element.id, 'nw')} />
+              <ResizeHandle position="ne" onResizeStart={(e) => onResizeStart(e, element.id, 'ne')} />
+              <ResizeHandle position="sw" onResizeStart={(e) => onResizeStart(e, element.id, 'sw')} />
+              <ResizeHandle position="se" onResizeStart={(e) => onResizeStart(e, element.id, 'se')} />
             </>
           )}
         </>
@@ -3658,10 +3669,10 @@ function CanvasElementComponent({
 
 interface ResizeHandleProps {
   position: 'nw' | 'ne' | 'sw' | 'se';
-  onMouseDown: (e: React.MouseEvent | React.PointerEvent) => void;
+  onResizeStart: (e: React.MouseEvent | React.PointerEvent) => void;
 }
 
-function ResizeHandle({ position, onMouseDown }: ResizeHandleProps) {
+function ResizeHandle({ position, onResizeStart }: ResizeHandleProps) {
   const positionStyles: Record<string, React.CSSProperties> = {
     nw: { top: -4, left: -4, cursor: 'nw-resize' },
     ne: { top: -4, right: -4, cursor: 'ne-resize' },
@@ -3675,8 +3686,8 @@ function ResizeHandle({ position, onMouseDown }: ResizeHandleProps) {
       style={positionStyles[position]}
       data-role="canvas-resize-handle"
       data-resize-handle={position}
-      onPointerDown={onMouseDown}
-      onMouseDown={onMouseDown}
+      onPointerDown={onResizeStart}
+      onMouseDown={onResizeStart}
     />
   );
 }

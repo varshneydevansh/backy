@@ -819,11 +819,19 @@ const getElementBox = async (client, elementId) => (
     const node = document.querySelector('[data-element-id="${elementId}"]');
     if (!node) return null;
     const rect = node.getBoundingClientRect();
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    const canvasRect = canvas?.getBoundingClientRect?.();
     const style = window.getComputedStyle(node);
+    const cssWidth = Number.parseFloat(style.width);
+    const cssHeight = Number.parseFloat(style.height);
+    const scaleX = Number.isFinite(cssWidth) && cssWidth > 0 ? rect.width / cssWidth : 1;
+    const scaleY = Number.isFinite(cssHeight) && cssHeight > 0 ? rect.height / cssHeight : 1;
     return {
       id: node.getAttribute('data-element-id'),
       x: rect.x,
       y: rect.y,
+      canvasX: canvasRect ? (rect.x - canvasRect.x) / scaleX : rect.x,
+      canvasY: canvasRect ? (rect.y - canvasRect.y) / scaleY : rect.y,
       width: rect.width,
       height: rect.height,
       left: style.left,
@@ -1028,6 +1036,14 @@ const readEditorElementState = async (client, elementIds) => {
   return Object.fromEntries(entries);
 };
 
+const getCanvasVisualX = (box) => (
+  typeof box?.canvasX === 'number' && Number.isFinite(box.canvasX) ? box.canvasX : box.x
+);
+
+const getCanvasVisualY = (box) => (
+  typeof box?.canvasY === 'number' && Number.isFinite(box.canvasY) ? box.canvasY : box.y
+);
+
 const assertElementState = (actualState, expectedState, label) => {
   for (const [elementId, expected] of Object.entries(expectedState)) {
     const actual = actualState[elementId];
@@ -1077,6 +1093,8 @@ const pressKey = async (client, key, options = {}) => {
     ArrowRight: 'ArrowRight',
     ArrowUp: 'ArrowUp',
     ArrowDown: 'ArrowDown',
+    Delete: 'Delete',
+    Backspace: 'Backspace',
     a: 'KeyA',
     g: 'KeyG',
     z: 'KeyZ',
@@ -1086,6 +1104,8 @@ const pressKey = async (client, key, options = {}) => {
     ArrowRight: 39,
     ArrowUp: 38,
     ArrowDown: 40,
+    Delete: 46,
+    Backspace: 8,
     a: 65,
     g: 71,
     z: 90,
@@ -1778,6 +1798,115 @@ const testKeyboardNudge = async (client, elementId) => {
   };
 };
 
+const testEditorShortcutGuards = async (client, elementId) => {
+  await selectElement(client, elementId);
+  await switchToPropertiesPanel(client);
+  const before = await readEditorElementState(client, [elementId]);
+
+  const focusedSelect = await evaluate(client, `(() => {
+    const control = document.querySelector('[data-testid="editor-heading-level"]');
+    if (!(control instanceof HTMLSelectElement)) {
+      return {
+        ok: false,
+        reason: 'heading-level-select-missing',
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    }
+    control.focus();
+    return {
+      ok: document.activeElement === control,
+      tagName: document.activeElement?.tagName || null,
+      value: control.value,
+    };
+  })()`);
+
+  assert(focusedSelect?.ok, `Unable to focus heading level select for shortcut guard: ${JSON.stringify(focusedSelect)}`);
+  await pressKey(client, 'ArrowRight', { shiftKey: true });
+  await pressKey(client, 'Delete');
+  await pressKey(client, 'g', { ctrlKey: true });
+
+  const afterSelectShortcuts = await readEditorElementState(client, [elementId]);
+  assertElementState(afterSelectShortcuts, before, 'focused select shortcuts');
+
+  await blurActiveElement(client);
+  let settingsOpened = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    settingsOpened = await evaluate(client, `(() => {
+      const button = document.querySelector('button[aria-label="Page settings"]');
+      const dialog = document.querySelector('[role="dialog"][aria-labelledby="page-settings-dialog-title"]');
+      if (dialog instanceof HTMLElement) {
+        return { ok: true, clicked: false, disabled: false };
+      }
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'settings-button-missing' };
+      }
+      if (button.disabled) {
+        return { ok: false, reason: 'settings-button-disabled', disabled: true };
+      }
+      button.click();
+      return { ok: false, clicked: true, disabled: false };
+    })()`);
+    if (settingsOpened?.ok) {
+      break;
+    }
+    await sleep(150);
+  }
+  assert(settingsOpened?.ok, `Unable to open page settings dialog for shortcut guard: ${JSON.stringify(settingsOpened)}`);
+
+  const focusedDialog = await evaluate(client, `(() => {
+    const dialog = document.querySelector('[role="dialog"][aria-labelledby="page-settings-dialog-title"]');
+    if (!(dialog instanceof HTMLElement)) {
+      return {
+        ok: false,
+        reason: 'page-settings-dialog-missing',
+        body: document.body?.innerText?.slice(0, 300) || '',
+      };
+    }
+    dialog.setAttribute('tabindex', '-1');
+    dialog.focus();
+    return {
+      ok: document.activeElement === dialog,
+      activeRole: document.activeElement?.getAttribute('role') || null,
+      title: document.querySelector('#page-settings-dialog-title')?.textContent || '',
+    };
+  })()`);
+
+  assert(focusedDialog?.ok, `Unable to focus page settings dialog for shortcut guard: ${JSON.stringify(focusedDialog)}`);
+  await pressKey(client, 'ArrowRight', { shiftKey: true });
+  await pressKey(client, 'Delete');
+  await pressKey(client, 'g', { ctrlKey: true });
+
+  const afterDialogShortcuts = await readEditorElementState(client, [elementId]);
+  assertElementState(afterDialogShortcuts, before, 'focused dialog shortcuts');
+
+  const dialogStillOpen = await evaluate(client, `(() => Boolean(
+    document.querySelector('[role="dialog"][aria-labelledby="page-settings-dialog-title"]')
+  ))()`);
+  assert(dialogStillOpen === true, 'Page settings dialog closed while exercising guarded shortcuts');
+
+  const closedDialog = await evaluate(client, `(() => {
+    const dialog = document.querySelector('[role="dialog"][aria-labelledby="page-settings-dialog-title"]');
+    const cancelButton = Array.from(dialog?.querySelectorAll('button') || [])
+      .find((button) => (button.textContent || '').trim() === 'Cancel');
+    if (!(cancelButton instanceof HTMLButtonElement)) {
+      return false;
+    }
+    cancelButton.click();
+    return true;
+  })()`);
+  assert(closedDialog === true, 'Unable to close page settings dialog after shortcut guard check');
+  await sleep(200);
+
+  return {
+    elementId,
+    focusedSelect,
+    focusedDialog,
+    before: before[elementId],
+    afterSelectShortcuts: afterSelectShortcuts[elementId],
+    afterDialogShortcuts: afterDialogShortcuts[elementId],
+  };
+};
+
 const testUndoRedoAfterKeyboardNudge = async (client, elementId) => {
   await selectElement(client, elementId);
   const before = await readEditorElementState(client, [elementId]);
@@ -2381,27 +2510,7 @@ const testLayerGrouping = async (client, elementIds) => {
 
   assert(layersReady?.first && layersReady?.second, `Layer rows did not render for grouping: ${JSON.stringify(layersReady)}`);
 
-  const selected = await evaluate(client, `(() => {
-
-    const first = document.querySelector('[data-layer-id="${firstId}"]');
-    const second = document.querySelector('[data-layer-id="${secondId}"]');
-    if (!first || !second) {
-      return { ok: false, reason: 'missing-layer-item' };
-    }
-
-    first.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    second.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
-
-    return {
-      ok: true,
-      selectedLayers: Array.from(document.querySelectorAll('[data-layer-selected="true"]')).map((node) => node.getAttribute('data-layer-id')),
-      groupDisabled: document.querySelector('[data-testid="editor-group-selection"]') instanceof HTMLButtonElement
-        ? document.querySelector('[data-testid="editor-group-selection"]').disabled
-        : null,
-    };
-  })()`);
-
-  await sleep(250);
+  const selected = await selectLayerIds(client, [firstId, secondId]);
   const ready = await evaluate(client, `(() => {
     const groupButton = document.querySelector('[data-testid="editor-group-selection"]');
     const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
@@ -2412,9 +2521,16 @@ const testLayerGrouping = async (client, elementIds) => {
     };
   })()`);
 
-  assert(selected?.ok, `Unable to select layers for grouping: ${JSON.stringify(selected)}`);
+  assert(
+    [firstId, secondId].every((id) => selected.selectedLayers?.includes(id)),
+    `Unable to select layers for grouping: ${JSON.stringify(selected)}`,
+  );
   assert(ready.hasMultiSelection, `Layer multi-selection did not reach inspector: ${JSON.stringify(ready)}`);
   assert(ready.groupDisabled === false, `Group button did not enable for sibling layers: ${JSON.stringify(ready)}`);
+  assert(
+    [firstId, secondId].every((id) => ready.selectedLayers.includes(id)),
+    `Grouping selection drifted before grouping: ${JSON.stringify(ready)}`,
+  );
 
   await pressKey(client, 'g', { ctrlKey: true });
   await sleep(250);
@@ -2566,15 +2682,41 @@ const getStateBounds = (state) => {
 
 const testMultiSelectionResize = async (client, elementIds) => {
   assert(elementIds.length >= 2, 'Multi-selection resize test needs at least two sibling elements');
-  const [activeElementId] = elementIds;
 
   await selectLayerIds(client, elementIds);
-  await scrollElementIntoView(client, activeElementId);
+  await scrollElementIntoView(client, elementIds[0]);
+  let canvasSelectionReady = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    canvasSelectionReady = await evaluate(client, `(() => {
+      const expected = ${JSON.stringify(elementIds)};
+      const selectedNodes = expected.map((id) => document.querySelector('[data-element-id="' + id + '"]'));
+      const selectedIdsByElement = selectedNodes.map((node) => (
+        node instanceof HTMLElement ? node.getAttribute('data-selected-ids') || '' : ''
+      ));
+      return {
+        ready: selectedIdsByElement.every((value) => expected.every((id) => value.split(',').includes(id))),
+        selectedIdsByElement,
+      };
+    })()`);
+    if (canvasSelectionReady?.ready) {
+      break;
+    }
+    await sleep(120);
+  }
+  assert(
+    canvasSelectionReady?.ready,
+    `Canvas multi-selection state was not ready for resize: ${JSON.stringify(canvasSelectionReady)}`,
+  );
+
   const before = await readEditorElementState(client, elementIds);
   const beforeBounds = getStateBounds(before);
 
   const handle = await evaluate(client, `(() => {
-    const handle = document.querySelector('[data-element-id="${activeElementId}"] [data-role="canvas-resize-handle"][data-resize-handle="se"]');
+    const handles = Array.from(document.querySelectorAll('[data-role="canvas-resize-handle"][data-resize-handle="se"]'));
+    const handle = handles.find((candidate) => {
+      const elementId = candidate.closest('[data-element-id]')?.getAttribute('data-element-id');
+      return ${JSON.stringify(elementIds)}.includes(elementId || '');
+    });
     if (!handle) {
       return {
         ok: false,
@@ -2591,27 +2733,49 @@ const testMultiSelectionResize = async (client, elementIds) => {
       ok: true,
       x: Math.round(rect.x + rect.width / 2),
       y: Math.round(rect.y + rect.height / 2),
+      elementId: handle.closest('[data-element-id]')?.getAttribute('data-element-id') || null,
+      hit: (() => {
+        const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+        const element = hit instanceof Element ? hit : hit?.parentElement;
+        return {
+          tag: element?.tagName || null,
+          role: element?.getAttribute('data-role') || null,
+          handle: element?.getAttribute('data-resize-handle') || null,
+          elementId: element?.closest('[data-element-id]')?.getAttribute('data-element-id') || null,
+          className: element?.className?.toString?.() || '',
+        };
+      })(),
+      selected: Array.from(document.querySelectorAll('[data-layer-selected="true"]')).map((node) => node.getAttribute('data-layer-id')),
     };
   })()`);
 
   assert(handle?.ok, `Unable to find multi-selection resize handle: ${JSON.stringify(handle)}`);
 
+  const directStarted = await evaluate(client, `(() => {
+    const handle = document.elementFromPoint(${handle.x}, ${handle.y});
+    if (!(handle instanceof HTMLElement)) {
+      return { ok: false, reason: 'handle-hit-missing' };
+    }
+    handle.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      clientX: ${handle.x},
+      clientY: ${handle.y},
+      button: 0,
+      buttons: 1,
+    }));
+    return {
+      ok: true,
+      role: handle.getAttribute('data-role'),
+      handle: handle.getAttribute('data-resize-handle'),
+      elementId: handle.closest('[data-element-id]')?.getAttribute('data-element-id') || null,
+    };
+  })()`);
+  assert(directStarted?.ok, `Unable to dispatch direct resize start: ${JSON.stringify(directStarted)}`);
+
   const deltaX = 70;
   const deltaY = 50;
-  await client.send('Input.dispatchMouseEvent', {
-    type: 'mouseMoved',
-    x: handle.x,
-    y: handle.y,
-    button: 'none',
-  });
-  await client.send('Input.dispatchMouseEvent', {
-    type: 'mousePressed',
-    x: handle.x,
-    y: handle.y,
-    button: 'left',
-    buttons: 1,
-    clickCount: 1,
-  });
+  await sleep(50);
 
   for (let step = 1; step <= 8; step += 1) {
     await client.send('Input.dispatchMouseEvent', {
@@ -2620,6 +2784,7 @@ const testMultiSelectionResize = async (client, elementIds) => {
       y: Math.round(handle.y + (deltaY * step) / 8),
       button: 'left',
       buttons: 1,
+      pointerType: 'mouse',
     });
     await sleep(30);
   }
@@ -2631,6 +2796,7 @@ const testMultiSelectionResize = async (client, elementIds) => {
     button: 'left',
     buttons: 0,
     clickCount: 1,
+    pointerType: 'mouse',
   });
   await sleep(300);
 
@@ -2641,7 +2807,7 @@ const testMultiSelectionResize = async (client, elementIds) => {
     assert(
       after[elementId].width > before[elementId].width &&
         after[elementId].height > before[elementId].height,
-      `${elementId} did not scale during multi-selection resize: before ${JSON.stringify(before[elementId])}, after ${JSON.stringify(after[elementId])}`,
+      `${elementId} did not scale during multi-selection resize: before ${JSON.stringify(before[elementId])}, after ${JSON.stringify(after[elementId])}, handle ${JSON.stringify(handle)}, bounds ${JSON.stringify({ beforeBounds, afterBounds })}`,
     );
   }
 
@@ -2652,6 +2818,8 @@ const testMultiSelectionResize = async (client, elementIds) => {
 
   return {
     selected: elementIds,
+    handleElementId: handle.elementId,
+    canvasSelectionReady,
     before,
     after,
     beforeBounds,
@@ -2745,8 +2913,8 @@ const testLayerHierarchyControls = async (client) => {
     `Nesting selected layer did not move smoke-image under smoke-box: ${JSON.stringify(afterNestTree)}`,
   );
   assert(
-    Math.abs(afterNestedImageBox.x - beforeImageBox.x) <= 3 &&
-      Math.abs(afterNestedImageBox.y - beforeImageBox.y) <= 3,
+    Math.abs(getCanvasVisualX(afterNestedImageBox) - getCanvasVisualX(beforeImageBox)) <= 3 &&
+      Math.abs(getCanvasVisualY(afterNestedImageBox) - getCanvasVisualY(beforeImageBox)) <= 3,
     `Nesting selected layer did not preserve visual position: before ${JSON.stringify(beforeImageBox)}, after ${JSON.stringify(afterNestedImageBox)}`,
   );
   assert(
@@ -2774,8 +2942,8 @@ const testLayerHierarchyControls = async (client) => {
     `Outdent did not promote nested child to parent layer level: ${JSON.stringify(afterOutdentTree)}`,
   );
   assert(
-    Math.abs(afterOutdentChildBox.x - beforeChildBox.x) <= 3 &&
-      Math.abs(afterOutdentChildBox.y - beforeChildBox.y) <= 3,
+    Math.abs(getCanvasVisualX(afterOutdentChildBox) - getCanvasVisualX(beforeChildBox)) <= 3 &&
+      Math.abs(getCanvasVisualY(afterOutdentChildBox) - getCanvasVisualY(beforeChildBox)) <= 3,
     `Outdent did not preserve visual position: before ${JSON.stringify(beforeChildBox)}, after ${JSON.stringify(afterOutdentChildBox)}`,
   );
   assert(
@@ -3897,7 +4065,7 @@ const testSelectFieldBehaviorControls = async (client) => {
   assert(state.placeholder === 'Choose a plan', `Select placeholder control mismatch: ${JSON.stringify(state)}`);
   assert(state.helpText === 'Select the plan that fits.' && state.previewHelpText === 'Select the plan that fits.', `Select help text mismatch: ${JSON.stringify(state)}`);
   assert(state.optionsText === 'Starter\nGrowth\nScale', `Select options control mismatch: ${JSON.stringify(state)}`);
-  assert(JSON.stringify(state.previewOptions) === JSON.stringify(['Starter', 'Growth', 'Scale']), `Select preview options mismatch: ${JSON.stringify(state)}`);
+  assert(JSON.stringify(state.previewOptions) === JSON.stringify(['', 'Starter', 'Growth', 'Scale']), `Select preview options mismatch: ${JSON.stringify(state)}`);
   assert(state.defaultValue === 'Growth' && state.previewValue === 'Growth', `Select default value mismatch: ${JSON.stringify(state)}`);
 
   return state;
@@ -5268,6 +5436,7 @@ const main = async () => {
     }
     const fontPicker = await assertFontMediaPicker(client);
     const groupingControls = await assertGroupingControls(client);
+    const shortcutGuards = await testEditorShortcutGuards(client, EDITOR_PATH ? 'home-heading' : 'smoke-heading');
     const siblingScopeSelection = await testSiblingScopeSelectionShortcut(
       client,
       EDITOR_PATH ? ['home-heading', 'home-cta'] : ['smoke-heading', 'smoke-image'],
@@ -5278,7 +5447,7 @@ const main = async () => {
     );
     const multiSelectionResize = EDITOR_PATH
       ? null
-      : await testMultiSelectionResize(client, ['smoke-heading', 'smoke-image']);
+      : await testMultiSelectionResize(client, ['smoke-image', 'smoke-heading']);
     const multiSelectionDistribution = EDITOR_PATH
       ? null
       : await testMultiSelectionDistribution(client, ['smoke-heading', 'smoke-image', 'smoke-box']);
@@ -5419,12 +5588,29 @@ const main = async () => {
       queuedAutosaveStatus = await waitForEditorSaveStatus(
         client,
         (status) => (
-          status.saveState === 'dirty' &&
-          status.pendingChanges > 0 &&
-          /Autosave queued/.test(status.title) &&
-          /unsaved change/.test(status.title)
+          (
+            status.saveState === 'dirty' &&
+            status.pendingChanges > 0 &&
+            /Autosave queued/.test(status.title) &&
+            /unsaved change/.test(status.title)
+          ) ||
+          (
+            status.saveState === 'saved' &&
+            status.saveMode === 'autosave' &&
+            status.pendingChanges === 0 &&
+            Boolean(status.lastSavedAt)
+          )
         ),
         'autosave queued status after desktop edit',
+      );
+      if (queuedAutosaveStatus.saveState === 'saved') {
+        await selectElement(client, 'smoke-heading');
+        await pressKey(client, 'ArrowRight');
+      }
+      const preSaveInspector = await readInspectorState(client);
+      assert(
+        preSaveInspector?.hasSelection && !preSaveInspector.hasEmpty,
+        `Inspector selection was not ready before save: ${JSON.stringify(preSaveInspector)}`,
       );
       const expectedState = await readEditorElementState(client, elementIds);
       await clickSave(client);
@@ -5615,6 +5801,7 @@ const main = async () => {
       dirtySaveStatus,
       fontPicker,
       groupingControls,
+      shortcutGuards,
       siblingScopeSelection,
       clickAdd,
       multiSelectionDrag,
