@@ -14,6 +14,8 @@ const PORT = Number(process.env.BACKY_FORMS_CDP_PORT || 9379);
 const SCREENSHOT_PATH = process.env.BACKY_FORMS_SCREENSHOT || path.join(os.tmpdir(), 'backy-forms-smoke.png');
 const EXPECTED_EMAIL_PROVIDER = process.env.BACKY_FORMS_SMOKE_EXPECT_EMAIL_PROVIDER || 'local-outbox';
 const EXPECTED_EMAIL_STATUS_CODE = Number(process.env.BACKY_FORMS_SMOKE_EXPECT_EMAIL_STATUS_CODE || (EXPECTED_EMAIL_PROVIDER === 'local-outbox' ? 202 : 200));
+const EXPECTED_EMAIL_INITIAL_STATUS = process.env.BACKY_FORMS_SMOKE_EXPECT_EMAIL_INITIAL_STATUS || 'succeeded';
+const EXPECTED_EMAIL_RETRY_STATUS_CODE = Number(process.env.BACKY_FORMS_SMOKE_EXPECT_EMAIL_RETRY_STATUS_CODE || EXPECTED_EMAIL_STATUS_CODE);
 const FRONTEND_FORM_TEMPLATE_ID = 'smoke-form-contract-template';
 const FRONTEND_FORM_TEMPLATE_NAME = 'Smoke Frontend Intake';
 let apiAdminSessionToken = '';
@@ -967,12 +969,12 @@ const waitForEmailNotification = async (formId, submission) => {
     const events = payload.data?.events || payload.events || [];
     const emailEvents = events.filter((event) => event.submissionId === submission.id && event.metadata?.channel === 'email');
     const queued = emailEvents.find((event) => event.status === 'queued');
-    const completed = emailEvents.find((event) => event.status === 'succeeded');
+    const completed = emailEvents.find((event) => event.status === EXPECTED_EMAIL_INITIAL_STATUS);
 
     if (queued && completed) {
       assert(completed.target === 'mailto:forms-smoke-leads@example.com', `Email notification target mismatch: ${JSON.stringify(completed)}`);
       assert(completed.metadata?.provider === EXPECTED_EMAIL_PROVIDER, `Email notification provider mismatch: ${JSON.stringify(completed)}`);
-      if (EXPECTED_EMAIL_PROVIDER === 'local-outbox') {
+      if (EXPECTED_EMAIL_PROVIDER === 'local-outbox' && EXPECTED_EMAIL_INITIAL_STATUS === 'succeeded') {
         assert(completed.metadata?.outboxOnly === true, `Email notification did not record local outbox handoff: ${JSON.stringify(completed)}`);
       }
       assert(Number(completed.statusCode) === EXPECTED_EMAIL_STATUS_CODE, `Email notification did not record expected status: ${JSON.stringify(completed)}`);
@@ -1001,6 +1003,68 @@ const assertDeliveryPanelShowsEmail = async (client, submissionId) => {
     };
   })()`);
   assert(result.ok, `Delivery panel did not render email notification event: ${JSON.stringify(result)}`);
+};
+
+const retryEmailDeliveryInUi = async (client, formId, submission) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const submissionId = ${JSON.stringify(submission.id)};
+      const panel = document.querySelector('[data-testid="forms-webhook-delivery-panel"]');
+      const button = panel
+        ? Array.from(panel.querySelectorAll('button')).find((candidate) => (
+          (candidate.getAttribute('aria-label') || '') === 'Retry email notification delivery ' + submissionId &&
+          candidate instanceof HTMLButtonElement &&
+          !candidate.disabled
+        ))
+        : null;
+      if (button instanceof HTMLButtonElement && !button.disabled) {
+        button.click();
+        return { ok: true, clicked: true };
+      }
+      return {
+        ok: false,
+        hasPanel: Boolean(panel),
+        panelText: panel?.textContent?.replace(/\\s+/g, ' ').trim().slice(0, 500) || null,
+        buttons: panel ? Array.from(panel.querySelectorAll('button')).map((candidate) => ({
+          label: candidate.getAttribute('aria-label') || candidate.textContent || '',
+          disabled: candidate.disabled,
+        })) : [],
+      };
+    })()`);
+
+    if (result.ok) {
+      break;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Unable to retry email delivery in UI: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const payload = await requestApi(`/api/sites/${SITE_ID}/events?kind=form-submission&formId=${encodeURIComponent(formId)}&limit=50`);
+    const events = payload.data?.events || payload.events || [];
+    const delivery = events.find((event) => (
+      event.status === 'succeeded' &&
+      event.submissionId === submission.id &&
+      event.metadata?.channel === 'email' &&
+      event.metadata?.retry === true
+    ));
+
+    if (delivery) {
+      assert(Number(delivery.statusCode) === EXPECTED_EMAIL_RETRY_STATUS_CODE, `UI email retry event did not record expected status: ${JSON.stringify(delivery)}`);
+      return {
+        delivery,
+        events,
+      };
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`UI email retry did not record a successful retry event for ${submission.id}`);
 };
 
 const assertConsentExportInUi = async (client, submissionId) => {
@@ -1086,7 +1150,8 @@ const retryWebhookDeliveryInUi = async (client, formId, submission) => {
     const delivery = events.find((event) => (
       event.status === 'succeeded' &&
       event.submissionId === submission.id &&
-      event.metadata?.retry === true
+      event.metadata?.retry === true &&
+      event.metadata?.channel !== 'email'
     ));
 
     if (delivery) {
@@ -1239,6 +1304,7 @@ const main = async () => {
   let webhookRetry = null;
   let webhookDelivery = null;
   let emailDelivery = null;
+  let emailRetry = null;
 
   try {
     await waitForCdp();
@@ -1308,6 +1374,9 @@ const main = async () => {
     emailDelivery = await waitForEmailNotification(createdFormId, submitted);
     await refreshForms(client);
     await assertDeliveryPanelShowsEmail(client, submitted.id);
+    if (EXPECTED_EMAIL_INITIAL_STATUS === 'failed') {
+      emailRetry = await retryEmailDeliveryInUi(client, createdFormId, submitted);
+    }
     await assertConsentExportInUi(client, submitted.id);
     webhookRetry = await retryWebhookDeliveryInUi(client, createdFormId, submitted);
     webhookDelivery = await waitForWebhookDelivery(webhookReceiver, createdFormId, submitted, 'succeeded', webhookRetry.delivery.requestId);
@@ -1371,6 +1440,7 @@ const main = async () => {
         provider: emailDelivery.delivery.metadata?.provider,
         statusCode: emailDelivery.delivery.statusCode,
         eventStatuses: emailDelivery.events.map((event) => event.status),
+        retryStatusCode: emailRetry?.delivery?.statusCode || null,
       },
       collectionRecord: {
         id: createdRecord.id,

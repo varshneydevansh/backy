@@ -28,6 +28,7 @@ import {
   listCollections,
   listForms,
   createForm,
+  retryFormEmailDelivery,
   retryFormWebhookDelivery,
   updateForm,
   updateFormSubmission,
@@ -1320,20 +1321,23 @@ function FormsRoute() {
   const handleRetryDeliveryEvent = async (event: FormDeliveryEvent) => {
     if (isFormsBusy || !selectedForm || !event.submissionId) return;
 
+    const channel = typeof event.metadata?.channel === 'string' ? event.metadata.channel : 'webhook';
     setIsRetryingDeliveryId(event.id);
     setError(null);
     setNotice(null);
 
     try {
-      const result = await retryFormWebhookDelivery(activeSiteId, selectedForm.id, event.submissionId);
+      const result = channel === 'email'
+        ? await retryFormEmailDelivery(activeSiteId, selectedForm.id, event.submissionId)
+        : await retryFormWebhookDelivery(activeSiteId, selectedForm.id, event.submissionId);
       await refreshFormDeliveryEvents(selectedForm.id);
       if (result.delivery.status === 'succeeded') {
-        setNotice(`Webhook retry succeeded for ${event.submissionId}.`);
+        setNotice(`${channel === 'email' ? 'Email' : 'Webhook'} retry succeeded for ${event.submissionId}.`);
       } else {
-        setError(result.delivery.error || `Webhook retry finished with ${result.delivery.status}.`);
+        setError(result.delivery.error || `${channel === 'email' ? 'Email' : 'Webhook'} retry finished with ${result.delivery.status}.`);
       }
     } catch (retryError) {
-      setError(retryError instanceof Error ? retryError.message : 'Unable to retry webhook delivery');
+      setError(retryError instanceof Error ? retryError.message : `Unable to retry ${channel === 'email' ? 'email' : 'webhook'} delivery`);
     } finally {
       setIsRetryingDeliveryId(null);
     }
@@ -3222,9 +3226,9 @@ function FormDeliveryEventCard({
   onRetry: () => void;
 }) {
   const channel = typeof event.metadata?.channel === 'string' ? event.metadata.channel : 'webhook';
-  const retryable = event.status === 'failed' && channel !== 'email' && Boolean(event.submissionId);
+  const retryable = event.status === 'failed' && Boolean(event.submissionId);
   const isRetryEvent = event.metadata?.retry === true;
-  const actionLabel = channel === 'email' ? 'Email' : isRetrying ? 'Retrying' : 'Retry';
+  const actionLabel = isRetrying ? 'Retrying' : channel === 'email' ? 'Retry email' : 'Retry';
   const statusClass = event.status === 'succeeded'
     ? 'bg-success/10 text-success'
     : event.status === 'failed'
@@ -3282,7 +3286,7 @@ function FormDeliveryEventCard({
           onClick={onRetry}
           iconStart={<RefreshCw className={cn('size-4', isRetrying && 'animate-spin')} />}
           aria-label={channel === 'email'
-            ? `Email notification delivery ${event.submissionId || event.id}`
+            ? `Retry email notification delivery ${event.submissionId || event.id}`
             : `Retry webhook delivery ${event.submissionId || event.id}`}
           data-testid="forms-webhook-retry-button"
         >

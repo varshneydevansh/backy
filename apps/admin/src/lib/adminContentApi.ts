@@ -3174,6 +3174,35 @@ export async function retryFormWebhookDelivery(
   };
 }
 
+export async function retryFormEmailDelivery(
+  siteId: string,
+  formId: string,
+  submissionId: string,
+): Promise<{ requestId: string; delivery: FormWebhookRetryDelivery; submission: FormSubmission }> {
+  const requestId = `forms-ui-email-retry-${Date.now().toString(36)}`;
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/submissions/${submissionId}/email-retry`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-request-id': requestId,
+    },
+    body: JSON.stringify({ requestId }),
+  });
+  const payload = await readJson<ApiFormSubmissionResponse>(response);
+  const delivery = payload.data?.delivery || payload.delivery;
+  const submission = payload.data?.submission || payload.submission;
+
+  if (!response.ok || !payload.success || !delivery || !submission) {
+    throw new Error(payload.error?.message || 'Unable to retry email delivery');
+  }
+
+  return {
+    requestId: payload.requestId || requestId,
+    delivery,
+    submission,
+  };
+}
+
 export async function listFormContacts(
   siteId: string,
   formId: string,
