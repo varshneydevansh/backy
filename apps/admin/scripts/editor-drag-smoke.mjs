@@ -2070,7 +2070,7 @@ const waitForPersistedCanvasState = async (pageId, expectedState) => {
   throw new Error(`Saved canvas state did not match editor state. Expected ${JSON.stringify(expectedState)}, got ${JSON.stringify(lastState)}`);
 };
 
-const dragElement = async (client, elementId, deltaX, deltaY) => {
+const dragElement = async (client, elementId, deltaX, deltaY, options = {}) => {
   await scrollElementIntoView(client, elementId);
   const before = await getElementBox(client, elementId);
   assert(before, `Missing draggable element ${elementId}`);
@@ -2135,10 +2135,12 @@ const dragElement = async (client, elementId, deltaX, deltaY) => {
   assert(after, `Element ${elementId} disappeared after drag`);
 
   const delta = measureDragDelta(before, after, deltaX, deltaY);
-  assertDragDelta(
-    delta,
-    `${elementId} did not drag correctly; before ${JSON.stringify(before)}; start ${startX},${startY}; hit ${JSON.stringify(hitTarget)}`,
-  );
+  if (!options.skipDeltaAssert) {
+    assertDragDelta(
+      delta,
+      `${elementId} did not drag correctly; before ${JSON.stringify(before)}; start ${startX},${startY}; hit ${JSON.stringify(hitTarget)}`,
+    );
+  }
 
   return {
     elementId,
@@ -2432,11 +2434,28 @@ const testLayerGrouping = async (client, elementIds) => {
   await pressKey(client, 'g', { ctrlKey: true, shiftKey: true });
   await sleep(250);
   const after = await readEditorElementState(client, [firstId, secondId]);
+  const ungroupedSelection = await evaluate(client, `(() => {
+    const selectedLayers = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
+      .map((node) => node.getAttribute('data-layer-id'))
+      .filter(Boolean);
+    const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
+    return {
+      selectedLayers,
+      hasMultiSelection: Boolean(multiSelection),
+      inspectorText: multiSelection?.textContent || '',
+    };
+  })()`);
   assertElementState(after, before, 'group/ungroup roundtrip');
+  assert(
+    ungroupedSelection.hasMultiSelection &&
+      [firstId, secondId].every((id) => ungroupedSelection.selectedLayers.includes(id)),
+    `Ungroup did not preserve expanded child multi-selection: ${JSON.stringify(ungroupedSelection)}`,
+  );
 
   return {
     selected: ready,
     grouped,
+    ungroupedSelection,
     before,
     after,
   };
@@ -2736,6 +2755,15 @@ const testLayerHierarchyControls = async (client) => {
     `Nested image did not convert to parent-relative coordinates: ${JSON.stringify({ beforeState, afterNestedState })}`,
   );
 
+  const nestedDrag = await dragElement(client, 'smoke-image', 500, 0, { skipDeltaAssert: true });
+  const afterNestedDragState = await readEditorElementState(client, ['smoke-image', 'smoke-box']);
+  const maxNestedImageX = Math.max(0, afterNestedDragState['smoke-box'].width - afterNestedDragState['smoke-image'].width);
+  assert(
+    afterNestedDragState['smoke-image'].x >= 0 &&
+      afterNestedDragState['smoke-image'].x <= maxNestedImageX + 1,
+    `Nested image drag did not clamp to parent-relative bounds: ${JSON.stringify({ afterNestedState, afterNestedDragState, nestedDrag })}`,
+  );
+
   const outdentClick = await clickLayerAction(client, 'outdent', 'smoke-child-button');
   const afterOutdentTree = await readLayerTreeState(client, ['smoke-child-button', 'smoke-box']);
   const afterOutdentChildBox = await getElementBox(client, 'smoke-child-button');
@@ -2758,9 +2786,11 @@ const testLayerHierarchyControls = async (client) => {
 
   return {
     nestedClick,
+    nestedDrag,
     outdentClick,
     beforeState,
     afterNestedState,
+    afterNestedDragState,
     afterNestTree,
     afterOutdentState,
     afterOutdentTree,
