@@ -12,6 +12,7 @@ const EDITOR_PATH = process.env.BACKY_EDITOR_SMOKE_PATH || '';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
+const SMOKE_IMAGE_SRC = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22340%22%20height%3D%22240%22%3E%3Crect%20width%3D%22340%22%20height%3D%22240%22%20fill%3D%22%23e0f2fe%22%2F%3E%3Ccircle%20cx%3D%22270%22%20cy%3D%2260%22%20r%3D%2236%22%20fill%3D%22%230ea5e9%22%2F%3E%3Cpath%20d%3D%22M24%20208l92-92%2066%2066%2038-38%2096%2064z%22%20fill%3D%22%230f766e%22%2F%3E%3C%2Fsvg%3E';
 const SMOKE_VIDEO_SRC = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
 const SMOKE_VIDEO_POSTER = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22320%22%20height%3D%22180%22%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22%230f172a%22%2F%3E%3C%2Fsvg%3E';
 const SMOKE_EMBED_SRC = `${API_BASE_URL}/api/sites`;
@@ -129,7 +130,7 @@ const createSmokePage = async () => {
             height: 170,
             zIndex: 2,
             props: {
-              src: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085',
+              src: SMOKE_IMAGE_SRC,
               alt: 'Workspace',
               objectFit: 'cover',
             },
@@ -2874,6 +2875,74 @@ const assertPersistedRepeater = async (pageId, collectionId) => {
   return props;
 };
 
+const testImageBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-image');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-image-src', SMOKE_IMAGE_SRC);
+  await setFormControlByTestId(client, 'editor-image-alt', 'Smoke image alt');
+  await setFormControlByTestId(client, 'editor-image-title', 'Smoke image title');
+  await setFormControlByTestId(client, 'editor-image-object-fit', 'contain');
+  await setFormControlByTestId(client, 'editor-image-object-position', '25% 75%');
+  await setFormControlByTestId(client, 'editor-image-loading', 'eager');
+  await setFormControlByTestId(client, 'editor-image-decoding', 'async');
+  await setFormControlByTestId(client, 'editor-image-referrer-policy', 'origin');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const node = document.querySelector('[data-element-id="smoke-image"]');
+    const image = node?.querySelector('img');
+    return {
+      src: value('editor-image-src'),
+      alt: value('editor-image-alt'),
+      title: value('editor-image-title'),
+      objectFit: value('editor-image-object-fit'),
+      objectPosition: value('editor-image-object-position'),
+      loading: value('editor-image-loading'),
+      decoding: value('editor-image-decoding'),
+      referrerPolicy: value('editor-image-referrer-policy'),
+      previewSrc: image?.getAttribute('src') || '',
+      previewAlt: image?.getAttribute('alt') || '',
+      previewTitle: image?.getAttribute('title') || '',
+      previewLoading: image?.getAttribute('loading') || '',
+      previewDecoding: image?.getAttribute('decoding') || '',
+      previewReferrerPolicy: image?.getAttribute('referrerpolicy') || '',
+      previewObjectFit: image ? getComputedStyle(image).objectFit : '',
+      previewObjectPosition: image ? getComputedStyle(image).objectPosition : '',
+    };
+  })()`);
+
+  assert(state.src === SMOKE_IMAGE_SRC && state.previewSrc === SMOKE_IMAGE_SRC, `Image src control mismatch: ${JSON.stringify(state)}`);
+  assert(state.alt === 'Smoke image alt' && state.previewAlt === 'Smoke image alt', `Image alt control mismatch: ${JSON.stringify(state)}`);
+  assert(state.title === 'Smoke image title' && state.previewTitle === 'Smoke image title', `Image title control mismatch: ${JSON.stringify(state)}`);
+  assert(state.objectFit === 'contain' && state.previewObjectFit === 'contain', `Image object-fit mismatch: ${JSON.stringify(state)}`);
+  assert(state.objectPosition === '25% 75%' && state.previewObjectPosition === '25% 75%', `Image object-position mismatch: ${JSON.stringify(state)}`);
+  assert(state.loading === 'eager' && state.previewLoading === 'eager', `Image loading control mismatch: ${JSON.stringify(state)}`);
+  assert(state.decoding === 'async' && state.previewDecoding === 'async', `Image decoding control mismatch: ${JSON.stringify(state)}`);
+  assert(state.referrerPolicy === 'origin' && state.previewReferrerPolicy === 'origin', `Image referrer policy mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedImageBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const image = findCanvasElement(elements, 'smoke-image');
+  const props = image?.props || {};
+
+  assert(image?.type === 'image', `Persisted smoke-image missing: ${JSON.stringify(image)}`);
+  assert(props.src === SMOKE_IMAGE_SRC, `Persisted image src mismatch: ${JSON.stringify(props)}`);
+  assert(props.alt === 'Smoke image alt', `Persisted image alt mismatch: ${JSON.stringify(props)}`);
+  assert(props.title === 'Smoke image title', `Persisted image title mismatch: ${JSON.stringify(props)}`);
+  assert(props.objectFit === 'contain', `Persisted image objectFit mismatch: ${JSON.stringify(props)}`);
+  assert(props.objectPosition === '25% 75%', `Persisted image objectPosition mismatch: ${JSON.stringify(props)}`);
+  assert(props.loading === 'eager', `Persisted image loading mismatch: ${JSON.stringify(props)}`);
+  assert(props.decoding === 'async', `Persisted image decoding mismatch: ${JSON.stringify(props)}`);
+  assert(props.referrerPolicy === 'origin', `Persisted image referrer policy mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const testButtonLinkBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-child-button');
   await switchToPropertiesPanel(client);
@@ -3492,6 +3561,9 @@ const main = async () => {
     const repeaterControls = tempCollection
       ? await testRepeaterControls(client, tempCollection.id)
       : null;
+    const imageBehaviorControls = EDITOR_PATH
+      ? null
+      : await testImageBehaviorControls(client);
     const buttonLinkBehaviorControls = EDITOR_PATH
       ? null
       : await testButtonLinkBehaviorControls(client);
@@ -3514,6 +3586,7 @@ const main = async () => {
     let queuedAutosaveStatus = null;
     let persistedDataBinding = null;
     let persistedRepeater = null;
+    let persistedImageBehavior = null;
     let persistedButtonLinkBehavior = null;
     let persistedVideoBehavior = null;
     let persistedEmbedBehavior = null;
@@ -3571,6 +3644,9 @@ const main = async () => {
         : null;
       persistedRepeater = tempCollection
         ? await assertPersistedRepeater(tempPageId, tempCollection.id)
+        : null;
+      persistedImageBehavior = imageBehaviorControls
+        ? await assertPersistedImageBehavior(tempPageId)
         : null;
       persistedButtonLinkBehavior = buttonLinkBehaviorControls
         ? await assertPersistedButtonLinkBehavior(tempPageId)
@@ -3691,6 +3767,7 @@ const main = async () => {
       afterReusableMutationReady,
       dataBindingQueryControls,
       repeaterControls,
+      imageBehaviorControls,
       buttonLinkBehaviorControls,
       videoBehaviorControls,
       embedBehaviorControls,
@@ -3703,6 +3780,7 @@ const main = async () => {
       persistedState,
       persistedDataBinding,
       persistedRepeater,
+      persistedImageBehavior,
       persistedButtonLinkBehavior,
       persistedVideoBehavior,
       persistedEmbedBehavior,

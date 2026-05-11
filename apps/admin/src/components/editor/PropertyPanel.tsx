@@ -694,6 +694,7 @@ function ContentProperties({
                 type="text"
                 value={element.props.src || ''}
                 onChange={(e) => onChange({ src: e.target.value })}
+                data-testid="editor-image-src"
                 className={cn(
                   'flex-1 px-2 py-1.5 text-sm rounded-md border bg-background',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -724,6 +725,7 @@ function ContentProperties({
               type="text"
               value={element.props.alt || ''}
               onChange={(e) => onChange({ alt: e.target.value })}
+              data-testid="editor-image-alt"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -738,6 +740,7 @@ function ContentProperties({
             <select
               value={element.props.objectFit || 'cover'}
               onChange={(e) => onChange({ objectFit: e.target.value })}
+              data-testid="editor-image-object-fit"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -747,6 +750,99 @@ function ContentProperties({
               <option value="contain">Contain</option>
               <option value="fill">Fill</option>
               <option value="none">None</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Title
+            </label>
+            <input
+              type="text"
+              value={element.props.title || ''}
+              onChange={(e) => onChange({ title: e.target.value })}
+              data-testid="editor-image-title"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Optional tooltip title"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Object Position
+            </label>
+            <input
+              type="text"
+              value={element.props.objectPosition || ''}
+              onChange={(e) => onChange({ objectPosition: e.target.value })}
+              data-testid="editor-image-object-position"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="center center"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Loading
+              </label>
+              <select
+                value={element.props.loading || 'lazy'}
+                onChange={(e) => onChange({ loading: e.target.value })}
+                data-testid="editor-image-loading"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+              >
+                <option value="lazy">Lazy</option>
+                <option value="eager">Eager</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Decoding
+              </label>
+              <select
+                value={element.props.decoding || 'auto'}
+                onChange={(e) => onChange({ decoding: e.target.value })}
+                data-testid="editor-image-decoding"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+              >
+                <option value="auto">Auto</option>
+                <option value="async">Async</option>
+                <option value="sync">Sync</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Referrer Policy
+            </label>
+            <select
+              value={element.props.referrerPolicy || ''}
+              onChange={(e) => onChange({ referrerPolicy: e.target.value || undefined })}
+              data-testid="editor-image-referrer-policy"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              <option value="">Browser default</option>
+              <option value="no-referrer">No referrer</option>
+              <option value="no-referrer-when-downgrade">No referrer when downgrade</option>
+              <option value="origin">Origin</option>
+              <option value="origin-when-cross-origin">Origin when cross-origin</option>
+              <option value="same-origin">Same origin</option>
+              <option value="strict-origin">Strict origin</option>
+              <option value="strict-origin-when-cross-origin">Strict origin when cross-origin</option>
+              <option value="unsafe-url">Unsafe URL</option>
             </select>
           </div>
         </div>

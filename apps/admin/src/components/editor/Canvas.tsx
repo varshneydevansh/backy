@@ -65,6 +65,7 @@ const sanitizeText = (value: unknown): string => {
 
 const DEFAULT_IFRAME_ALLOW = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
 const IFRAME_LOADING_VALUES = ['lazy', 'eager'] as const;
+const IMAGE_DECODING_VALUES = ['async', 'sync', 'auto'] as const;
 const IFRAME_REFERRER_POLICIES = [
   'no-referrer',
   'no-referrer-when-downgrade',
@@ -78,6 +79,7 @@ const IFRAME_REFERRER_POLICIES = [
 
 type IframeLoading = (typeof IFRAME_LOADING_VALUES)[number];
 type IframeReferrerPolicy = (typeof IFRAME_REFERRER_POLICIES)[number];
+type ImageDecoding = (typeof IMAGE_DECODING_VALUES)[number];
 
 const normalizeIframeAllow = (value: unknown): string => sanitizeText(value) || DEFAULT_IFRAME_ALLOW;
 
@@ -88,6 +90,13 @@ const normalizeIframeLoading = (value: unknown): IframeLoading => {
   return IFRAME_LOADING_VALUES.includes(normalized as IframeLoading)
     ? normalized as IframeLoading
     : 'lazy';
+};
+
+const normalizeImageDecoding = (value: unknown): ImageDecoding => {
+  const normalized = sanitizeText(value).toLowerCase();
+  return IMAGE_DECODING_VALUES.includes(normalized as ImageDecoding)
+    ? normalized as ImageDecoding
+    : 'auto';
 };
 
 const normalizeIframeReferrerPolicy = (value: unknown): IframeReferrerPolicy | undefined => {
@@ -1975,12 +1984,17 @@ function CanvasElementComponent({
           <img
             src={p.src ?? 'https://via.placeholder.com/300x200?text=Add+Image'}
             alt={p.alt ?? ''}
+            title={sanitizeText(p.title) || undefined}
+            loading={normalizeIframeLoading(p.loading)}
+            decoding={normalizeImageDecoding(p.decoding)}
+            referrerPolicy={normalizeIframeReferrerPolicy(p.referrerPolicy)}
             draggable={false}
             style={{
               ...sharedStyle,
               width: '100%',
               height: '100%',
               objectFit: p.objectFit ?? 'cover',
+              objectPosition: sanitizeText(p.objectPosition) || 'center center',
               borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 0),
               pointerEvents: 'none', // Prevents image from capturing mouse events
               userSelect: 'none',
