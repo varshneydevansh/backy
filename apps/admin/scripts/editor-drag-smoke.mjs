@@ -10,6 +10,7 @@ const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:
 const SITE_ID = process.env.BACKY_EDITOR_SMOKE_SITE_ID || 'site-demo';
 const EDITOR_PATH = process.env.BACKY_EDITOR_SMOKE_PATH || '';
 const COMPONENT_SMOKE = process.env.BACKY_EDITOR_COMPONENT_SMOKE || '';
+const CLIPBOARD_SMOKE = process.env.BACKY_EDITOR_CLIPBOARD_SMOKE === '1';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
@@ -1096,7 +1097,11 @@ const pressKey = async (client, key, options = {}) => {
     Delete: 'Delete',
     Backspace: 'Backspace',
     a: 'KeyA',
+    c: 'KeyC',
+    d: 'KeyD',
     g: 'KeyG',
+    v: 'KeyV',
+    x: 'KeyX',
     z: 'KeyZ',
   };
   const virtualKeyByKey = {
@@ -1107,7 +1112,11 @@ const pressKey = async (client, key, options = {}) => {
     Delete: 46,
     Backspace: 8,
     a: 65,
+    c: 67,
+    d: 68,
     g: 71,
+    v: 86,
+    x: 88,
     z: 90,
   };
   const modifiers =
@@ -1146,6 +1155,63 @@ const clickButtonByAriaLabel = async (client, ariaLabel) => {
 
   assert(clicked, `Unable to click button with aria-label ${ariaLabel}`);
   await sleep(250);
+};
+
+const clickEnabledButtonByAriaLabel = async (client, ariaLabel) => {
+  const interactiveButtonPredicate = `
+          const rect = candidate.getBoundingClientRect();
+          const style = window.getComputedStyle(candidate);
+          const x = rect.left + rect.width / 2;
+          const y = rect.top + rect.height / 2;
+          const hit = document.elementFromPoint(x, y);
+          return rect.width > 0 &&
+            rect.height > 0 &&
+            x >= 0 &&
+            y >= 0 &&
+            x <= window.innerWidth &&
+            y <= window.innerHeight &&
+            style.visibility !== 'hidden' &&
+            style.display !== 'none' &&
+            hit instanceof Element &&
+            hit.closest('button') === candidate;`;
+  let lastState = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    lastState = await evaluate(client, `(() => {
+      const button = Array.from(document.querySelectorAll('button[aria-label="${ariaLabel}"]'))
+        .find((candidate) => {
+${interactiveButtonPredicate}
+        });
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'missing' };
+      }
+      if (button.disabled) {
+        return {
+          ok: false,
+          reason: 'disabled',
+          saveState: document.querySelector('[data-testid="editor-save-status"]')?.getAttribute('data-save-state') || '',
+        };
+      }
+      return { ok: true };
+    })()`);
+
+    if (lastState?.ok) {
+      const clicked = await evaluate(client, `(() => {
+        const button = Array.from(document.querySelectorAll('button[aria-label="${ariaLabel}"]'))
+          .find((candidate) => {
+${interactiveButtonPredicate}
+          });
+        if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+        button.click();
+        return true;
+      })()`);
+      assert(clicked, `Unable to click enabled button with aria-label ${ariaLabel}: ${JSON.stringify(lastState)}`);
+      await sleep(350);
+      return lastState;
+    }
+    await sleep(100);
+  }
+
+  throw new Error(`Unable to click enabled button with aria-label ${ariaLabel}: ${JSON.stringify(lastState)}`);
 };
 
 const setLayoutNumberInput = async (client, label, value) => {
@@ -1303,6 +1369,15 @@ const blurActiveElement = async (client) => {
     return true;
   })()`);
   await sleep(100);
+};
+
+const scrollEditorToolbarIntoView = async (client) => {
+  await evaluate(client, `(() => {
+    const undo = document.querySelector('button[aria-label="Undo"]');
+    undo?.scrollIntoView?.({ block: 'center', inline: 'center' });
+    return true;
+  })()`);
+  await sleep(150);
 };
 
 const switchToPropertiesPanel = async (client) => {
@@ -1795,6 +1870,158 @@ const testKeyboardNudge = async (client, elementId) => {
       x: after[elementId].x - before[elementId].x,
       y: after[elementId].y - before[elementId].y,
     },
+  };
+};
+
+const readClipboardEditingState = async (client, label) => {
+  const state = await evaluate(client, `(() => {
+    const buttonState = (ariaLabel) => {
+      const button = Array.from(document.querySelectorAll('button[aria-label="' + ariaLabel + '"]'))
+        .find((candidate) => {
+          const rect = candidate.getBoundingClientRect();
+          const style = window.getComputedStyle(candidate);
+          return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+        });
+      return button instanceof HTMLButtonElement
+        ? {
+            exists: true,
+            disabled: button.disabled,
+            title: button.getAttribute('title') || '',
+          }
+        : { exists: false, disabled: null, title: '' };
+    };
+    const selectedLayerIds = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
+      .map((node) => node.getAttribute('data-layer-id'))
+      .filter(Boolean);
+
+    const elementIds = Array.from(document.querySelectorAll('[data-element-id]'))
+      .map((node) => node.getAttribute('data-element-id'))
+      .filter(Boolean);
+    const activeElement = document.activeElement instanceof HTMLElement
+      ? {
+          tagName: document.activeElement.tagName,
+          ariaLabel: document.activeElement.getAttribute('aria-label') || '',
+          role: document.activeElement.getAttribute('role') || '',
+          testId: document.activeElement.getAttribute('data-testid') || '',
+          elementId: document.activeElement.closest('[data-element-id]')?.getAttribute('data-element-id') || '',
+          isContentEditable: document.activeElement.isContentEditable,
+      }
+      : null;
+    const saveStatus = document.querySelector('[data-testid="editor-save-status"]');
+
+    return {
+      label: ${JSON.stringify(label)},
+      elementCount: new Set(elementIds).size,
+      elementIds,
+      activeElement,
+      saveStatus: {
+        text: saveStatus?.textContent || '',
+        title: saveStatus?.getAttribute('title') || '',
+        state: saveStatus?.getAttribute('data-save-state') || '',
+        mode: saveStatus?.getAttribute('data-save-mode') || '',
+        pendingChanges: Number(saveStatus?.getAttribute('data-pending-changes') || 0),
+      },
+      copy: buttonState('Copy'),
+      cut: buttonState('Cut'),
+      paste: buttonState('Paste'),
+      duplicate: buttonState('Duplicate'),
+      undo: buttonState('Undo'),
+      redo: buttonState('Redo'),
+      selectedLayerIds,
+      selectedText: document.querySelector('[data-testid="editor-inspector-selection"]')?.textContent || '',
+      multiSelectedText: document.querySelector('[data-testid="editor-inspector-multi-selection"]')?.textContent || '',
+    };
+  })()`);
+
+  assert(state.copy.exists, `Clipboard copy control missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.cut.exists, `Clipboard cut control missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.paste.exists, `Clipboard paste control missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.duplicate.exists, `Clipboard duplicate control missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.undo.exists, `Undo control missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.redo.exists, `Redo control missing during ${label}: ${JSON.stringify(state)}`);
+  return state;
+};
+
+const waitForClipboardElementCount = async (client, expectedCount, label) => {
+  let lastState = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    lastState = await readClipboardEditingState(client, label);
+    if (lastState.elementCount === expectedCount) {
+      return lastState;
+    }
+    await sleep(100);
+  }
+
+  throw new Error(`${label} did not reach ${expectedCount} unique elements: ${JSON.stringify(lastState)}`);
+};
+
+const testClipboardEditingControls = async (client, elementId) => {
+  await selectLayerById(client, elementId);
+  await blurActiveElement(client);
+
+  const before = await readClipboardEditingState(client, 'before copy');
+  assert(before.copy.disabled === false, `Copy should be enabled for selected ${elementId}: ${JSON.stringify(before)}`);
+  assert(before.cut.disabled === false, `Cut should be enabled for selected ${elementId}: ${JSON.stringify(before)}`);
+  assert(before.duplicate.disabled === false, `Duplicate should be enabled for selected ${elementId}: ${JSON.stringify(before)}`);
+
+  await pressKey(client, 'c', { ctrlKey: true });
+  const afterCopy = await readClipboardEditingState(client, 'after copy');
+  assert(afterCopy.paste.disabled === false, `Paste should be enabled after copy: ${JSON.stringify(afterCopy)}`);
+
+  await pressKey(client, 'v', { ctrlKey: true });
+  const afterPaste = await readClipboardEditingState(client, 'after paste');
+  assert(
+    afterPaste.elementCount === before.elementCount + 1,
+    `Paste should add one canvas element: before ${JSON.stringify(before)}, after ${JSON.stringify(afterPaste)}`,
+  );
+  assert(afterPaste.undo.disabled === false, `Undo should be enabled after paste: ${JSON.stringify(afterPaste)}`);
+
+  await waitForEditorMutationReady(client, 'before clipboard paste undo');
+  await scrollEditorToolbarIntoView(client);
+  await blurActiveElement(client);
+  await clickEnabledButtonByAriaLabel(client, 'Undo');
+  await waitForEditorMutationReady(client, 'after clipboard paste undo');
+  const afterUndoPaste = await waitForClipboardElementCount(client, before.elementCount, 'after paste undo');
+
+  await waitForEditorMutationReady(client, 'before clipboard paste redo');
+  await scrollEditorToolbarIntoView(client);
+  await blurActiveElement(client);
+  await clickEnabledButtonByAriaLabel(client, 'Redo');
+  await waitForEditorMutationReady(client, 'after clipboard paste redo');
+  const afterRedoPaste = await waitForClipboardElementCount(client, before.elementCount + 1, 'after paste redo');
+
+  await blurActiveElement(client);
+  await pressKey(client, 'd', { ctrlKey: true });
+  const afterDuplicate = await readClipboardEditingState(client, 'after duplicate');
+  assert(
+    afterDuplicate.elementCount === before.elementCount + 2,
+    `Duplicate should add one additional canvas element: ${JSON.stringify(afterDuplicate)}`,
+  );
+
+  await pressKey(client, 'x', { ctrlKey: true });
+  const afterCut = await readClipboardEditingState(client, 'after cut');
+  assert(
+    afterCut.elementCount === before.elementCount + 1,
+    `Cut should remove the selected duplicate and retain the earlier paste: ${JSON.stringify(afterCut)}`,
+  );
+  assert(afterCut.paste.disabled === false, `Paste should stay enabled after cut: ${JSON.stringify(afterCut)}`);
+
+  await pressKey(client, 'v', { ctrlKey: true });
+  const afterCutPaste = await readClipboardEditingState(client, 'after cut paste');
+  assert(
+    afterCutPaste.elementCount === before.elementCount + 2,
+    `Paste after cut should reinsert the cut element: ${JSON.stringify(afterCutPaste)}`,
+  );
+
+  return {
+    before,
+    afterCopy,
+    afterPaste,
+    afterUndoPaste,
+    afterRedoPaste,
+    afterDuplicate,
+    afterCut,
+    afterCutPaste,
   };
 };
 
@@ -5180,8 +5407,8 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const tempReusableSectionId = EDITOR_PATH ? null : await createSmokeReusableSection();
-  const tempCollection = EDITOR_PATH ? null : await createSmokeCollection();
+  const tempReusableSectionId = EDITOR_PATH || CLIPBOARD_SMOKE ? null : await createSmokeReusableSection();
+  const tempCollection = EDITOR_PATH || CLIPBOARD_SMOKE ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
   const { childProcess, userDataDir } = launchChrome();
   let client;
@@ -5205,6 +5432,23 @@ const main = async () => {
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
       : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+
+    if (CLIPBOARD_SMOKE) {
+      const targetElementId = EDITOR_PATH ? 'home-heading' : 'smoke-heading';
+      const clipboardEditing = await testClipboardEditingControls(client, targetElementId);
+      await clickSave(client);
+      const savedStatus = await waitForEditorMutationReady(client, 'after clipboard smoke save');
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'clipboard',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        targetElementId,
+        clipboardEditing,
+        savedStatus,
+      }, null, 2));
+      return;
+    }
 
     const componentSmokeHandlers = {
       image: {
@@ -5434,6 +5678,7 @@ const main = async () => {
         `Dirty save status did not expose autosave queue details: ${JSON.stringify(dirtySaveStatus)}`,
       );
     }
+    const clipboardEditing = await testClipboardEditingControls(client, EDITOR_PATH ? 'home-heading' : 'smoke-heading');
     const fontPicker = await assertFontMediaPicker(client);
     const groupingControls = await assertGroupingControls(client);
     const shortcutGuards = await testEditorShortcutGuards(client, EDITOR_PATH ? 'home-heading' : 'smoke-heading');
@@ -5799,6 +6044,7 @@ const main = async () => {
       nonDragUndoRedo,
       inspector,
       dirtySaveStatus,
+      clipboardEditing,
       fontPicker,
       groupingControls,
       shortcutGuards,

@@ -20,20 +20,20 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 6 | Element Selection | ✅ | Click to select |
 | 7 | Preview Mode | ✅ | Toggle to preview |
 | 8 | Breakpoint Toggle | ⚠️ | Desktop/Tablet/Mobile - UI only |
-| 9 | Undo/Redo Buttons | ❌ | UI exists, not functional |
+| 9 | Undo/Redo Buttons | ✅ | Toolbar and shortcut undo/redo restore distinct canvas states |
 | 10 | Save Button | ❌ | UI exists, not functional |
 | 11 | Page Settings | ❌ | Button exists, not functional |
 | 12 | Z-Index Control | ⚠️ | In PropertyPanel but no bring front/back |
 | 13 | Delete Element | ❌ | No way to delete |
-| 14 | Duplicate Element | ❌ | Not implemented |
+| 14 | Duplicate Element | ✅ | Toolbar and Ctrl+D duplicate selected sibling elements with offset |
 | 15 | Rich Text Editing | ⚠️ | List/selected-text flow improved with list toggle/indent tools, markdown shortcut updates, and text-mark rendering fixes; full parity still pending (multi-line selection transforms, table/blockquote parity) |
 | 16 | Font Selection | ✅ | Font family and size now apply from shared style props on canvas render |
 | 17 | Animation Controls | ✅ | Animation panel is connected in PropertyPanel and persisted on element payloads; animation contract now uses `fadeIn/slideIn/scaleIn/rotate/bounce/custom` to match renderer payload |
 | 18 | Emoji Picker | ❌ | Not implemented |
 | 19 | Grid/Snap | ✅ | 10px grid snap |
 | 20 | Layers Panel | ❌ | Not implemented |
-| 21 | Copy/Paste | ❌ | Not implemented |
-| 22 | Keyboard Shortcuts | ❌ | Not implemented |
+| 21 | Copy/Paste | ✅ | Copy, cut, paste, duplicate, undo, and redo are covered by editor smoke |
+| 22 | Keyboard Shortcuts | ⚠️ | Core editor shortcuts are implemented; broader shortcut map still needs parity review |
 | 23 | Markdown Shortcuts | ✅ | `#`, `-`, `*`, `1.` conversions implemented in shared editor |
 
 ## Canvas Element Parity Matrix (Current)
@@ -178,33 +178,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ### 9. Undo/Redo
 **File:** `pages.$pageId.edit.tsx`
-**Current State:** ❌ Not Functional
-- Buttons exist in toolbar
-- State tracking exists (historyIndex)
-- No actual undo/redo logic
-- **Required Implementation:**
-    ```typescript
-    const [history, setHistory] = useState<CanvasElement[][]>([[]]);
-    const [historyIndex, setHistoryIndex] = useState(0);
-    const pushHistory = (newElements: CanvasElement[]) => {
-      const newHistory = history.slice(0, historyIndex + 1);
-      newHistory.push(newElements);
-      setHistory(newHistory);
-      setHistoryIndex(newHistory.length - 1);
-    };
-    const undo = () => {
-      if (historyIndex > 0) {
-        setHistoryIndex(historyIndex - 1);
-        setElements(history[historyIndex - 1]);
-      }
-    };
-    const redo = () => {
-      if (historyIndex < history.length - 1) {
-        setHistoryIndex(historyIndex + 1);
-        setElements(history[historyIndex + 1]);
-      }
-    };
-    ```
+**Current State:** ✅ Working
+- Toolbar Undo/Redo buttons restore prior and later canvas states.
+- Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z are wired through the editor shortcut handler.
+- History tracks selection snapshots alongside canvas elements and skips representation-only rich-text normalization churn.
+- `BACKY_EDITOR_CLIPBOARD_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers paste undo/redo as a focused regression.
 
 ### 10. Save Button
 **File:** `pages.$pageId.edit.tsx`
@@ -266,26 +244,10 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
     ```
 
 ### 14. Duplicate Element
-**Current State:** ❌ Not Implemented
-- **Required Implementation:**
-    - Duplicate button in PropertyPanel
-    - Keyboard: Ctrl+D
-    - Offset duplicate by 20px
-    ```typescript
-    const duplicateElement = (id: string) => {
-      const element = elements.find(el => el.id === id);
-      if (element) {
-        const duplicate = {
-          ...element,
-          id: generateId(),
-          x: element.x + 20,
-          y: element.y + 20,
-        };
-        setElements([...elements, duplicate]);
-        setSelectedId(duplicate.id);
-      }
-    };
-    ```
+**Current State:** ✅ Working
+- Duplicate toolbar action and Ctrl/Cmd+D duplicate selected unlocked sibling elements.
+- Duplicates receive fresh ids, are offset by 20px, and become the active selection.
+- Clipboard smoke covers duplicate after copy/paste/redo sequencing.
 
 ### 15. Rich Text Editing
 **File:** `BackyEditor` + `RichTextFormatting.tsx` + `ActiveEditorContext.tsx`
@@ -338,12 +300,11 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
     - Click to select element
 
 ### 20. Copy/Paste
-**Current State:** ❌ Not Implemented
-- **Required Implementation:**
-    - Ctrl+C to copy selected element(s)
-    - Ctrl+V to paste
-    - Ctrl+X to cut
-    - Store in clipboard state
+**Current State:** ✅ Working
+- Ctrl/Cmd+C copies selected unlocked sibling element trees into editor clipboard state.
+- Ctrl/Cmd+X cuts selected unlocked sibling element trees and keeps them available for paste.
+- Ctrl/Cmd+V pastes with fresh ids, 20px offset, nesting support for compatible selected parents, and history integration.
+- Focused clipboard smoke verifies copy, paste, undo, redo, duplicate, cut, paste, and manual save.
 
 ### 21. Keyboard Shortcuts
 **Current State:** ⚠️ Partially implemented

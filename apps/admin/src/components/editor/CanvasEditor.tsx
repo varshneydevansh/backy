@@ -222,6 +222,116 @@ const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
 
 const jsonEqual = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
+const stableComparableValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(stableComparableValue);
+  }
+
+  if (!isPlainRecord(value)) {
+    return value;
+  }
+
+  return Object.keys(value)
+    .sort()
+    .reduce<Record<string, unknown>>((acc, key) => {
+      const nextValue = stableComparableValue(value[key]);
+      if (nextValue !== undefined) {
+        acc[key] = nextValue;
+      }
+      return acc;
+    }, {});
+};
+
+const extractRichTextPlainText = (value: unknown): string | null => {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    const parts = value
+      .map(extractRichTextPlainText)
+      .filter((part): part is string => part !== null);
+    return parts.length > 0 ? parts.join('') : null;
+  }
+
+  if (isPlainRecord(value)) {
+    const ownText = typeof value.text === 'string' ? value.text : '';
+    const childrenText = extractRichTextPlainText(value.children);
+    const combined = `${ownText}${childrenText || ''}`;
+    return combined ? combined : null;
+  }
+
+  return null;
+};
+
+const normalizeHistoryProps = (props: Record<string, unknown>): Record<string, unknown> => (
+  Object.keys(props)
+    .sort()
+    .reduce<Record<string, unknown>>((acc, key) => {
+      if (key === 'content') {
+        const plainText = extractRichTextPlainText(props[key]);
+        acc[key] = plainText ?? stableComparableValue(props[key]);
+        return acc;
+      }
+
+      const value = stableComparableValue(props[key]);
+      if (value !== undefined) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {})
+);
+
+const normalizeHistoryElement = (element: CanvasElement): Record<string, unknown> => {
+  const next: Record<string, unknown> = {
+    id: element.id,
+    type: element.type,
+    x: element.x,
+    y: element.y,
+    width: element.width,
+    height: element.height,
+    zIndex: element.zIndex,
+  };
+
+  if (element.rotation !== undefined) next.rotation = element.rotation;
+  if (element.visible === false) next.visible = false;
+  if (element.locked === true) next.locked = true;
+  if (element.parentId) next.parentId = element.parentId;
+
+  const props = normalizeHistoryProps(element.props || {});
+  if (Object.keys(props).length > 0) {
+    next.props = props;
+  }
+
+  const styles = stableComparableValue(element.styles || {});
+  if (isPlainRecord(styles) && Object.keys(styles).length > 0) {
+    next.styles = styles;
+  }
+
+  const responsive = stableComparableValue(element.responsive || {});
+  if (isPlainRecord(responsive) && Object.keys(responsive).length > 0) {
+    next.responsive = responsive;
+  }
+
+  if (element.animation !== undefined && element.animation !== null) {
+    next.animation = stableComparableValue(element.animation);
+  }
+
+  if (element.dataBindings?.length) {
+    next.dataBindings = stableComparableValue(element.dataBindings);
+  }
+
+  if (element.children?.length) {
+    next.children = element.children.map(normalizeHistoryElement);
+  }
+
+  return next;
+};
+
+const historyElementsEqual = (a: CanvasElement[], b: CanvasElement[]) => (
+  jsonEqual(a.map(normalizeHistoryElement), b.map(normalizeHistoryElement))
+);
+
 const getReusableSectionInstanceMeta = (value: unknown): ReusableSectionInstanceMeta | null => {
   if (!isPlainRecord(value)) {
     return null;
@@ -740,6 +850,7 @@ export function CanvasEditor({
 
   // Canvas state
   const [elements, setElements] = useState<CanvasElement[]>(initialElements);
+  const elementsRef = useRef<CanvasElement[]>(initialElements);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [size, setSize] = useState<CanvasSize>(initialSize || DEFAULT_CANVAS_SIZE);
@@ -763,6 +874,7 @@ export function CanvasEditor({
   const changeSequenceRef = useRef(0);
   const pendingTransformRef = useRef<{
     elements: CanvasElement[];
+    previousElements: CanvasElement[];
     selectedId: string | null;
     selectedIds: string[];
   } | null>(null);
@@ -772,7 +884,16 @@ export function CanvasEditor({
     { elements: initialElements, selectedId: null, selectedIds: [] },
   ]);
   const [historyIndex, setHistoryIndex] = useState(0);
+  const historyRef = useRef<EditorHistoryEntry[]>([
+    { elements: initialElements, selectedId: null, selectedIds: [] },
+  ]);
   const historyIndexRef = useRef(0);
+  const isApplyingHistoryRef = useRef(false);
+
+  useEffect(() => {
+    historyRef.current = history;
+    historyIndexRef.current = historyIndex;
+  }, [history, historyIndex]);
 
   // Settings State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -1136,10 +1257,6 @@ export function CanvasEditor({
     void loadReusableSections();
   }, [loadReusableSections]);
 
-  useEffect(() => {
-    historyIndexRef.current = historyIndex;
-  }, [historyIndex]);
-
   const updateElementById = (
     items: CanvasElement[],
     targetId: string,
@@ -1451,65 +1568,112 @@ export function CanvasEditor({
       targetState.selectedIds,
     );
 
+    isApplyingHistoryRef.current = true;
+    elementsRef.current = targetState.elements;
     setElements(targetState.elements);
     setSelectedIds(nextSelection.selectedIds);
     setSelectedId(nextSelection.selectedId);
+    window.setTimeout(() => {
+      isApplyingHistoryRef.current = false;
+    }, 0);
   }, [resolveSelectionSnapshot]);
 
   const addToHistory = useCallback((
     newElements: CanvasElement[],
     selectedSnapshot: string | null = selectedId,
     selectedIdsSnapshot: string[] = selectedIds,
+    previousElements?: CanvasElement[],
   ) => {
     const nextSelection = resolveSelectionSnapshot(newElements, selectedSnapshot, selectedIdsSnapshot);
-    setHistory((prevHistory) => {
-      const baseIndex = Math.max(0, Math.min(historyIndexRef.current, prevHistory.length - 1));
-      const nextHistory = prevHistory.slice(0, baseIndex + 1);
-      nextHistory.push({
-        elements: newElements,
-        selectedId: nextSelection.selectedId,
-        selectedIds: nextSelection.selectedIds,
-      });
-
-      // Limit history size to 50
-      if (nextHistory.length > 50) {
-        nextHistory.shift();
+    const baseIndex = Math.max(0, Math.min(historyIndexRef.current, historyRef.current.length - 1));
+    const nextHistory = historyRef.current.slice(0, baseIndex + 1);
+    const historyTail = nextHistory[nextHistory.length - 1];
+    const pushHistoryEntry = (entry: EditorHistoryEntry) => {
+      const tail = nextHistory[nextHistory.length - 1];
+      if (tail && historyElementsEqual(tail.elements, entry.elements)) {
+        nextHistory[nextHistory.length - 1] = entry;
+        return;
       }
 
-      const nextIndex = nextHistory.length - 1;
-      setHistoryIndex(nextIndex);
-      historyIndexRef.current = nextIndex;
-      return nextHistory;
+      nextHistory.push(entry);
+    };
+
+    if (previousElements && historyTail && !historyElementsEqual(historyTail.elements, previousElements)) {
+      const previousSelection = resolveSelectionSnapshot(previousElements, selectedId, selectedIds);
+      pushHistoryEntry({
+        elements: previousElements,
+        selectedId: previousSelection.selectedId,
+        selectedIds: previousSelection.selectedIds,
+      });
+    }
+
+    pushHistoryEntry({
+      elements: newElements,
+      selectedId: nextSelection.selectedId,
+      selectedIds: nextSelection.selectedIds,
     });
+
+    // Limit history size to 50
+    if (nextHistory.length > 50) {
+      nextHistory.splice(0, nextHistory.length - 50);
+    }
+
+    const nextIndex = nextHistory.length - 1;
+    historyRef.current = nextHistory;
+    historyIndexRef.current = nextIndex;
+    setHistory(nextHistory);
+    setHistoryIndex(nextIndex);
   }, [resolveSelectionSnapshot, selectedId, selectedIds]);
 
   /**
    * Undo
    */
   const handleUndo = useCallback(() => {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1;
-      const targetState = history[newIndex];
-      setHistoryIndex(newIndex);
-      historyIndexRef.current = newIndex;
-      applyHistoryEntry(targetState);
-      markChanges();
+    const currentHistory = historyRef.current;
+    const currentIndex = Math.max(0, Math.min(historyIndexRef.current, currentHistory.length - 1));
+
+    if (currentIndex <= 0) {
+      return;
     }
-  }, [applyHistoryEntry, history, historyIndex, markChanges]);
+
+    let newIndex = currentIndex - 1;
+    while (
+      newIndex > 0 &&
+      historyElementsEqual(currentHistory[newIndex].elements, currentHistory[currentIndex].elements)
+    ) {
+      newIndex -= 1;
+    }
+    const targetState = currentHistory[newIndex];
+    historyIndexRef.current = newIndex;
+    applyHistoryEntry(targetState);
+    markChanges();
+    setHistoryIndex(newIndex);
+  }, [applyHistoryEntry, markChanges]);
 
   /**
    * Redo
    */
   const handleRedo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
-      const newIndex = historyIndex + 1;
-      const targetState = history[newIndex];
-      setHistoryIndex(newIndex);
-      historyIndexRef.current = newIndex;
-      applyHistoryEntry(targetState);
-      markChanges();
+    const currentHistory = historyRef.current;
+    const currentIndex = Math.max(0, Math.min(historyIndexRef.current, currentHistory.length - 1));
+
+    if (currentIndex >= currentHistory.length - 1) {
+      return;
     }
-  }, [applyHistoryEntry, history, historyIndex, markChanges]);
+
+    let newIndex = currentIndex + 1;
+    while (
+      newIndex < currentHistory.length - 1 &&
+      historyElementsEqual(currentHistory[newIndex].elements, currentHistory[currentIndex].elements)
+    ) {
+      newIndex += 1;
+    }
+    const targetState = currentHistory[newIndex];
+    historyIndexRef.current = newIndex;
+    applyHistoryEntry(targetState);
+    markChanges();
+    setHistoryIndex(newIndex);
+  }, [applyHistoryEntry, markChanges]);
 
   /**
    * Wrapper for updating elements with history
@@ -1525,23 +1689,19 @@ export function CanvasEditor({
       return;
     }
 
-    let didUpdate = false;
+    if (isApplyingHistoryRef.current) {
+      return;
+    }
 
-    setElements((currentElements) => {
-      const nextElements = typeof nextElementsOrFn === 'function'
-        ? nextElementsOrFn(currentElements)
-        : nextElementsOrFn;
+    const currentElements = elementsRef.current;
+    const nextElements = typeof nextElementsOrFn === 'function'
+      ? nextElementsOrFn(currentElements)
+      : nextElementsOrFn;
 
-      if (nextElements === currentElements) {
-        return currentElements;
-      }
-
-      didUpdate = true;
-      addToHistory(nextElements, selectedSnapshot, selectedIdsSnapshot);
-      return nextElements;
-    });
-
-    if (didUpdate) {
+    if (nextElements !== currentElements && !historyElementsEqual(nextElements, currentElements)) {
+      elementsRef.current = nextElements;
+      setElements(nextElements);
+      addToHistory(nextElements, selectedSnapshot, selectedIdsSnapshot, currentElements);
       markChanges();
     }
   }, [addToHistory, isCanvasMutationDisabled, markChanges, selectedId, selectedIds]);
@@ -1573,11 +1733,11 @@ export function CanvasEditor({
   }, [findElementEntry, selectedId, selectedIds]);
 
   const handleCopy = useCallback(() => {
-    const entries = getSelectedSiblingEntries(elements);
+    const entries = getSelectedSiblingEntries(elementsRef.current);
     if (entries.length > 0) {
       setClipboardElements(entries.map((entry) => JSON.parse(JSON.stringify(entry.element)) as CanvasElement));
     }
-  }, [elements, getSelectedSiblingEntries]);
+  }, [getSelectedSiblingEntries]);
 
   const cloneElementTreeWithFreshIds = useCallback(
     (sourceElement: CanvasElement, x = 20, y = 20, parentId: string | null = null): CanvasElement => {
@@ -1616,13 +1776,18 @@ export function CanvasEditor({
    */
   const handlePaste = useCallback(() => {
     if (clipboardElements.length > 0) {
-      const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
+      if (isCanvasMutationDisabled) {
+        return;
+      }
+
+      const previousElements = elementsRef.current;
+      const selectedElement = selectedId ? findElementById(previousElements, selectedId) : null;
       const canNest = selectedElement && !selectedElement.locked && canAcceptNestedDrop(selectedElement.type);
       const parentId = canNest ? selectedElement.id : null;
       const pastedElements = clipboardElements.map((clipboardElement) => (
         cloneElementTreeWithFreshIds(clipboardElement, 20, 20, parentId)
       ));
-      let nextElements = elements;
+      let nextElements = previousElements;
       let inserted = false;
 
       if (canNest) {
@@ -1632,7 +1797,7 @@ export function CanvasEditor({
           inserted = inserted || insertResult.updated;
         }
       } else {
-        nextElements = [...elements, ...pastedElements];
+        nextElements = [...previousElements, ...pastedElements];
         inserted = pastedElements.length > 0;
       }
 
@@ -1644,15 +1809,27 @@ export function CanvasEditor({
       const pastedIds = pastedElements.map((element) => element.id);
       setSelectedIds(pastedIds);
       setSelectedId(firstPastedId);
-      updateElementsWithHistory(nextElements, firstPastedId, pastedIds);
+      elementsRef.current = nextElements;
+      setElements(nextElements);
+      addToHistory(nextElements, firstPastedId, pastedIds, previousElements);
+      markChanges();
     }
-  }, [clipboardElements, cloneElementTreeWithFreshIds, elements, findElementById, selectedId, updateElementsWithHistory]);
+  }, [
+    addToHistory,
+    clipboardElements,
+    cloneElementTreeWithFreshIds,
+    findElementById,
+    isCanvasMutationDisabled,
+    markChanges,
+    selectedId,
+  ]);
 
   const handleDuplicate = useCallback(() => {
-    const entries = getSelectedSiblingEntries(elements, { requireUnlocked: true });
+    const currentElements = elementsRef.current;
+    const entries = getSelectedSiblingEntries(currentElements, { requireUnlocked: true });
     if (entries.length === 0) return;
 
-    let nextElements = elements;
+    let nextElements = currentElements;
     const duplicatedIds: string[] = [];
     for (const entry of entries) {
       const duplicate = cloneElementTreeWithFreshIds(entry.element, 20, 20, entry.parentId);
@@ -1668,7 +1845,7 @@ export function CanvasEditor({
     setSelectedIds(duplicatedIds);
     setSelectedId(duplicatedIds[0] ?? null);
     updateElementsWithHistory(nextElements, duplicatedIds[0] ?? null, duplicatedIds);
-  }, [cloneElementTreeWithFreshIds, elements, getSelectedSiblingEntries, updateElementsWithHistory]);
+  }, [cloneElementTreeWithFreshIds, getSelectedSiblingEntries, updateElementsWithHistory]);
 
   const handleLayerSelect = useCallback((ids: string[]) => {
     const nextIds = ids.filter((id) => !!findElementById(elements, id));
@@ -2348,14 +2525,21 @@ export function CanvasEditor({
       return;
     }
 
-    const nextBaseElements = mergeDisplayedElementsIntoBreakpoint(elements, newElements, breakpoint);
+    if (isApplyingHistoryRef.current) {
+      pendingTransformRef.current = null;
+      return;
+    }
+
+    const nextBaseElements = mergeDisplayedElementsIntoBreakpoint(elementsRef.current, newElements, breakpoint);
 
     if (options?.transient) {
       pendingTransformRef.current = {
         elements: nextBaseElements,
+        previousElements: pendingTransformRef.current?.previousElements || elementsRef.current,
         selectedId: options.selectedId ?? selectedId,
         selectedIds,
       };
+      elementsRef.current = nextBaseElements;
       setElements(nextBaseElements);
       markChanges();
       return;
@@ -2370,15 +2554,16 @@ export function CanvasEditor({
 
       const selectedSnapshot = pendingTransform.selectedId;
       const selectedIdsSnapshot = pendingTransform.selectedIds;
+      elementsRef.current = pendingTransform.elements;
       setElements(pendingTransform.elements);
-      addToHistory(pendingTransform.elements, selectedSnapshot, selectedIdsSnapshot);
+      addToHistory(pendingTransform.elements, selectedSnapshot, selectedIdsSnapshot, pendingTransform.previousElements);
       markChanges();
       return;
     }
 
     pendingTransformRef.current = null;
     updateElementsWithHistory(nextBaseElements);
-  }, [addToHistory, breakpoint, elements, isCanvasMutationDisabled, markChanges, selectedId, selectedIds, updateElementsWithHistory]);
+  }, [addToHistory, breakpoint, isCanvasMutationDisabled, markChanges, selectedId, selectedIds, updateElementsWithHistory]);
 
   /**
    * Handle element update from property panel
@@ -3120,13 +3305,17 @@ export function CanvasEditor({
     const nextElements = getInitialElements();
     const nextSettings = getInitialSettings();
 
+    elementsRef.current = nextElements;
     setElements(nextElements);
     setPageSettings(nextSettings);
     setSize(initialSize || DEFAULT_CANVAS_SIZE);
     setBreakpoint('desktop');
     setSelectedId(null);
     setClipboardElements([]);
-    setHistory([{ elements: nextElements, selectedId: null, selectedIds: [] }]);
+    const nextHistory = [{ elements: nextElements, selectedId: null, selectedIds: [] }];
+    historyRef.current = nextHistory;
+    historyIndexRef.current = 0;
+    setHistory(nextHistory);
     setHistoryIndex(0);
     setHasUnsavedChanges(false);
     setSaveStatus('saved');
