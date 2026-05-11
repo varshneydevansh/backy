@@ -2393,6 +2393,9 @@ function CanvasElementComponent({
                 required={required}
                 name={typeof p.name === 'string' ? p.name : undefined}
                 pattern={typeof p.pattern === 'string' && p.pattern.trim() ? p.pattern : undefined}
+                min={sanitizeText(p.min) || undefined}
+                max={sanitizeText(p.max) || undefined}
+                step={sanitizeText(p.step) || undefined}
                 minLength={minLength}
                 maxLength={maxLength}
                 style={{
