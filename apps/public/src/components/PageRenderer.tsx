@@ -595,6 +595,14 @@ function getLength(value: unknown, fallback = ''): string {
   return typeof value === 'number' ? `${value}px` : `${value}`;
 }
 
+function getLineHeight(value: unknown, fallback: React.CSSProperties['lineHeight'] = 'normal'): React.CSSProperties['lineHeight'] {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+
+  return typeof value === 'number' ? value : `${value}`;
+}
+
 function getBoolean(value: unknown): boolean {
   return Boolean(value);
 }
@@ -675,7 +683,7 @@ function getTypographyStyle(props: Record<string, unknown>): React.CSSProperties
     fontWeight: getNameClass(props.fontWeight),
     color: getNameClass(props.color),
     textAlign: props.textAlign as React.CSSProperties['textAlign'] || 'left',
-    lineHeight: getLength(props.lineHeight, 'normal'),
+    lineHeight: getLineHeight(props.lineHeight),
     textTransform: getNameClass(props.textTransform),
     letterSpacing: getLength(props.letterSpacing),
     wordSpacing: getLength(props.wordSpacing),

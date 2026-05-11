@@ -1237,6 +1237,25 @@ const setCheckboxByTestId = async (client, testId, checked) => {
   return changed;
 };
 
+const clickControlByTestId = async (client, testId) => {
+  const clicked = await evaluate(client, `(() => {
+    const control = document.querySelector('[data-testid="${testId}"]');
+    if (!(control instanceof HTMLElement)) {
+      return {
+        ok: false,
+        testId: ${JSON.stringify(testId)},
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    }
+    control.click();
+    return { ok: true, testId: ${JSON.stringify(testId)} };
+  })()`);
+
+  assert(clicked?.ok, `Unable to click ${testId}: ${JSON.stringify(clicked)}`);
+  await sleep(250);
+  return clicked;
+};
+
 const blurActiveElement = async (client) => {
   await evaluate(client, `(() => {
     if (document.activeElement instanceof HTMLElement) {
@@ -4362,6 +4381,109 @@ const assertPersistedBoxBehavior = async (pageId) => {
   return props;
 };
 
+const testHeadingTypographyControls = async (client) => {
+  await selectLayerById(client, 'smoke-heading');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-heading-level', 'h3');
+  await setFormControlByTestId(client, 'editor-style-font-size', '42');
+  await setFormControlByTestId(client, 'editor-style-font-weight', '700');
+  await setFormControlByTestId(client, 'editor-style-line-height', '1.2');
+  await clickControlByTestId(client, 'editor-style-text-align-center');
+  await setFormControlByTestId(client, 'editor-style-text-transform', 'uppercase');
+  await setFormControlByTestId(client, 'editor-style-letter-spacing', '2');
+  await setFormControlByTestId(client, 'editor-style-word-spacing', '4');
+  await setFormControlByTestId(client, 'editor-style-text-indent', '6');
+  await setFormControlByTestId(client, 'editor-style-text-shadow', '1px 2px 3px rgba(15, 23, 42, 0.35)');
+  await setFormControlByTestId(client, 'editor-style-text-color', '#dc2626');
+  await setFormControlByTestId(client, 'editor-style-background-color', '#fff7ed');
+  await setFormControlByTestId(client, 'editor-style-text-decoration', 'underline');
+  await setFormControlByTestId(client, 'editor-style-font-style', 'italic');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const headingRoot = document.querySelector('[data-element-id="smoke-heading"]');
+    const preview = headingRoot?.querySelector('[contenteditable="true"]') || headingRoot?.firstElementChild?.firstElementChild || headingRoot?.firstElementChild;
+    const style = preview ? getComputedStyle(preview) : null;
+    return {
+      level: value('editor-heading-level'),
+      fontSize: value('editor-style-font-size'),
+      fontWeight: value('editor-style-font-weight'),
+      lineHeight: value('editor-style-line-height'),
+      textTransform: value('editor-style-text-transform'),
+      letterSpacing: value('editor-style-letter-spacing'),
+      wordSpacing: value('editor-style-word-spacing'),
+      textIndent: value('editor-style-text-indent'),
+      textShadow: value('editor-style-text-shadow'),
+      color: value('editor-style-text-color'),
+      backgroundColor: value('editor-style-background-color'),
+      textDecoration: value('editor-style-text-decoration'),
+      fontStyle: value('editor-style-font-style'),
+      previewText: headingRoot?.textContent || '',
+      previewFontSize: style?.fontSize || '',
+      previewFontWeight: style?.fontWeight || '',
+      previewLineHeight: style?.lineHeight || '',
+      previewTextAlign: style?.textAlign || '',
+      previewTextTransform: style?.textTransform || '',
+      previewLetterSpacing: style?.letterSpacing || '',
+      previewWordSpacing: style?.wordSpacing || '',
+      previewTextIndent: style?.textIndent || '',
+      previewTextShadow: style?.textShadow || '',
+      previewColor: style?.color || '',
+      previewBackgroundColor: style?.backgroundColor || '',
+      previewTextDecoration: style?.textDecorationLine || '',
+      previewFontStyle: style?.fontStyle || '',
+    };
+  })()`);
+
+  assert(state.level === 'h3', `Heading level control mismatch: ${JSON.stringify(state)}`);
+  assert(state.previewText.includes('Drag Smoke Heading'), `Heading preview text missing: ${JSON.stringify(state)}`);
+  assert(state.fontSize === '42' && state.previewFontSize === '42px', `Heading font size mismatch: ${JSON.stringify(state)}`);
+  assert(state.fontWeight === '700' && state.previewFontWeight === '700', `Heading font weight mismatch: ${JSON.stringify(state)}`);
+  assert(state.lineHeight === '1.2', `Heading line height control mismatch: ${JSON.stringify(state)}`);
+  assert(state.previewTextAlign === 'center', `Heading text align mismatch: ${JSON.stringify(state)}`);
+  assert(state.textTransform === 'uppercase' && state.previewTextTransform === 'uppercase', `Heading transform mismatch: ${JSON.stringify(state)}`);
+  assert(state.letterSpacing === '2' && state.previewLetterSpacing === '2px', `Heading letter spacing mismatch: ${JSON.stringify(state)}`);
+  assert(state.wordSpacing === '4' && state.previewWordSpacing === '4px', `Heading word spacing mismatch: ${JSON.stringify(state)}`);
+  assert(state.textIndent === '6' && state.previewTextIndent === '6px', `Heading text indent mismatch: ${JSON.stringify(state)}`);
+  assert(
+    state.textShadow === '1px 2px 3px rgba(15, 23, 42, 0.35)' &&
+      /rgba\(15,\s*23,\s*42,\s*0\.35\)/.test(state.previewTextShadow),
+    `Heading text shadow mismatch: ${JSON.stringify(state)}`,
+  );
+  assert(state.color === '#dc2626' && /220,\s*38,\s*38/.test(state.previewColor), `Heading color mismatch: ${JSON.stringify(state)}`);
+  assert(state.backgroundColor === '#fff7ed' && /255,\s*247,\s*237/.test(state.previewBackgroundColor), `Heading background mismatch: ${JSON.stringify(state)}`);
+  assert(state.textDecoration === 'underline' && state.previewTextDecoration.includes('underline'), `Heading decoration mismatch: ${JSON.stringify(state)}`);
+  assert(state.fontStyle === 'italic' && state.previewFontStyle === 'italic', `Heading font style mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedHeadingTypography = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const heading = findCanvasElement(elements, 'smoke-heading');
+  const props = heading?.props || {};
+
+  assert(heading?.type === 'heading', `Persisted smoke-heading missing: ${JSON.stringify(heading)}`);
+  assert(props.level === 'h3', `Persisted heading level mismatch: ${JSON.stringify(props)}`);
+  assert(props.fontSize === 42, `Persisted heading font size mismatch: ${JSON.stringify(props)}`);
+  assert(props.fontWeight === '700', `Persisted heading font weight mismatch: ${JSON.stringify(props)}`);
+  assert(props.lineHeight === 1.2, `Persisted heading line height mismatch: ${JSON.stringify(props)}`);
+  assert(props.textAlign === 'center', `Persisted heading text align mismatch: ${JSON.stringify(props)}`);
+  assert(props.textTransform === 'uppercase', `Persisted heading transform mismatch: ${JSON.stringify(props)}`);
+  assert(props.letterSpacing === 2, `Persisted heading letter spacing mismatch: ${JSON.stringify(props)}`);
+  assert(props.wordSpacing === 4, `Persisted heading word spacing mismatch: ${JSON.stringify(props)}`);
+  assert(props.textIndent === 6, `Persisted heading indent mismatch: ${JSON.stringify(props)}`);
+  assert(props.textShadow === '1px 2px 3px rgba(15, 23, 42, 0.35)', `Persisted heading shadow mismatch: ${JSON.stringify(props)}`);
+  assert(props.color === '#dc2626', `Persisted heading color mismatch: ${JSON.stringify(props)}`);
+  assert(props.backgroundColor === '#fff7ed', `Persisted heading background mismatch: ${JSON.stringify(props)}`);
+  assert(props.textDecoration === 'underline', `Persisted heading decoration mismatch: ${JSON.stringify(props)}`);
+  assert(props.fontStyle === 'italic', `Persisted heading font style mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const testVideoBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-video');
   await switchToPropertiesPanel(client);
@@ -4819,7 +4941,7 @@ const main = async () => {
       ? ['home-heading', 'home-cta']
       : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
-    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav' || COMPONENT_SMOKE === 'spacer' || COMPONENT_SMOKE === 'quote' || COMPONENT_SMOKE === 'link' || COMPONENT_SMOKE === 'form' || COMPONENT_SMOKE === 'comment' || COMPONENT_SMOKE === 'box') {
+    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav' || COMPONENT_SMOKE === 'spacer' || COMPONENT_SMOKE === 'quote' || COMPONENT_SMOKE === 'link' || COMPONENT_SMOKE === 'form' || COMPONENT_SMOKE === 'comment' || COMPONENT_SMOKE === 'box' || COMPONENT_SMOKE === 'heading') {
       assert(tempPageId, `${COMPONENT_SMOKE} component smoke requires an internally created smoke page`);
       const targetElementId = COMPONENT_SMOKE === 'divider'
         ? 'smoke-divider'
@@ -4839,6 +4961,8 @@ const main = async () => {
                       ? 'smoke-comment'
                       : COMPONENT_SMOKE === 'box'
                         ? 'smoke-box'
+                        : COMPONENT_SMOKE === 'heading'
+                          ? 'smoke-heading'
                   : 'smoke-list';
       const behaviorControls = COMPONENT_SMOKE === 'divider'
         ? await testDividerBehaviorControls(client)
@@ -4858,6 +4982,8 @@ const main = async () => {
                       ? await testCommentBehaviorControls(client)
                       : COMPONENT_SMOKE === 'box'
                         ? await testBoxBehaviorControls(client)
+                        : COMPONENT_SMOKE === 'heading'
+                          ? await testHeadingTypographyControls(client)
                   : await testListBehaviorControls(client);
       await clickSave(client);
       const savedStatus = await waitForEditorMutationReady(client, `after ${COMPONENT_SMOKE} component smoke save`);
@@ -4879,6 +5005,8 @@ const main = async () => {
                       ? await assertPersistedCommentBehavior(tempPageId)
                       : COMPONENT_SMOKE === 'box'
                         ? await assertPersistedBoxBehavior(tempPageId)
+                        : COMPONENT_SMOKE === 'heading'
+                          ? await assertPersistedHeadingTypography(tempPageId)
                   : await assertPersistedListBehavior(tempPageId);
       let reloadedState = null;
       let reloadClient = null;
@@ -5088,6 +5216,9 @@ const main = async () => {
     const boxBehaviorControls = EDITOR_PATH
       ? null
       : await testBoxBehaviorControls(client);
+    const headingTypographyControls = EDITOR_PATH
+      ? null
+      : await testHeadingTypographyControls(client);
     const videoBehaviorControls = EDITOR_PATH
       ? null
       : await testVideoBehaviorControls(client);
@@ -5125,6 +5256,7 @@ const main = async () => {
     let persistedFormBehavior = null;
     let persistedCommentBehavior = null;
     let persistedBoxBehavior = null;
+    let persistedHeadingTypography = null;
     let persistedVideoBehavior = null;
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
@@ -5235,6 +5367,9 @@ const main = async () => {
         : null;
       persistedBoxBehavior = boxBehaviorControls
         ? await assertPersistedBoxBehavior(tempPageId)
+        : null;
+      persistedHeadingTypography = headingTypographyControls
+        ? await assertPersistedHeadingTypography(tempPageId)
         : null;
       persistedVideoBehavior = videoBehaviorControls
         ? await assertPersistedVideoBehavior(tempPageId)
@@ -5370,6 +5505,7 @@ const main = async () => {
       formBehaviorControls,
       commentBehaviorControls,
       boxBehaviorControls,
+      headingTypographyControls,
       videoBehaviorControls,
       embedBehaviorControls,
       mapBehaviorControls,
@@ -5399,6 +5535,7 @@ const main = async () => {
       persistedFormBehavior,
       persistedCommentBehavior,
       persistedBoxBehavior,
+      persistedHeadingTypography,
       persistedVideoBehavior,
       persistedEmbedBehavior,
       persistedMapBehavior,

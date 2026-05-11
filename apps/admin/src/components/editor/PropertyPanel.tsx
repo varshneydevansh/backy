@@ -1644,6 +1644,7 @@ function ContentProperties({
             onChange={(e) =>
               onChange({ level: e.target.value as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' })
             }
+            data-testid="editor-heading-level"
             className={cn(
               'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
               'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -2883,6 +2884,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
               value={element.props.fontSize || 16}
               onChange={(value) => onChange({ fontSize: value })}
               suffix="px"
+              testId="editor-style-font-size"
             />
           </div>
 
@@ -2893,6 +2895,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
             <select
               value={element.props.fontWeight || 'normal'}
               onChange={(e) => onChange({ fontWeight: e.target.value })}
+              data-testid="editor-style-font-weight"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -2920,6 +2923,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
           <NumberInput
             value={element.props.lineHeight || 1.5}
             onChange={(value) => onChange({ lineHeight: value })}
+            testId="editor-style-line-height"
           />
         </div>
 
@@ -2932,6 +2936,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
                 <button
                   key={align}
                   onClick={() => onChange({ textAlign: align })}
+                  data-testid={`editor-style-text-align-${align}`}
                   className={cn(
                     'flex-1 px-2 py-1 text-xs rounded-md border capitalize',
                     element.props.textAlign === align
@@ -2952,6 +2957,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
             <select
               value={element.props.textTransform || 'none'}
               onChange={(e) => onChange({ textTransform: e.target.value })}
+              data-testid="editor-style-text-transform"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -2973,6 +2979,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
                 value={toNumber(element.props.letterSpacing)}
                 onChange={(value) => onChange({ letterSpacing: value })}
                 suffix="px"
+                testId="editor-style-letter-spacing"
               />
             </div>
             <div>
@@ -2983,6 +2990,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
                 value={toNumber(element.props.wordSpacing)}
                 onChange={(value) => onChange({ wordSpacing: value })}
                 suffix="px"
+                testId="editor-style-word-spacing"
               />
             </div>
           </div>
@@ -2995,6 +3003,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
               value={toNumber(element.props.textIndent)}
               onChange={(value) => onChange({ textIndent: value })}
               suffix="px"
+              testId="editor-style-text-indent"
             />
           </div>
 
@@ -3006,6 +3015,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
               type="text"
               value={element.props.textShadow || ''}
               onChange={(e) => onChange({ textShadow: e.target.value })}
+              data-testid="editor-style-text-shadow"
               placeholder="0 0 4px rgba(0,0,0,0.2)"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
@@ -3025,6 +3035,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
           <ColorInput
             value={element.props.color || '#000000'}
             onChange={(value) => onChange({ color: value })}
+            testId="editor-style-text-color"
           />
         </div>
       )}
@@ -3049,6 +3060,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
             <select
               value={element.props.textDecoration || 'none'}
               onChange={(e) => onChange({ textDecoration: e.target.value })}
+              data-testid="editor-style-text-decoration"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -3068,6 +3080,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
             <select
               value={element.props.fontStyle || 'normal'}
               onChange={(e) => onChange({ fontStyle: e.target.value })}
+              data-testid="editor-style-font-style"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'

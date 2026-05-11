@@ -20,6 +20,18 @@ const content: PageContent = {
       height: 64,
       props: {
         level: 'h2',
+        fontSize: 42,
+        fontWeight: '700',
+        color: '#dc2626',
+        textAlign: 'center',
+        lineHeight: 1.2,
+        textTransform: 'uppercase',
+        letterSpacing: 2,
+        wordSpacing: 4,
+        textShadow: '1px 2px 3px rgba(15, 23, 42, 0.35)',
+        textIndent: 6,
+        textDecoration: 'underline',
+        fontStyle: 'italic',
         content: [
           {
             type: 'h2',
@@ -101,6 +113,18 @@ const content: PageContent = {
 const html = renderToStaticMarkup(<PageRenderer content={content} isPreview />);
 
 assert(html.includes('Slate Heading Rendered'), `Heading Slate content was not rendered: ${html}`);
+assert(html.includes('font-size:42px'), `Heading font size was not rendered: ${html}`);
+assert(html.includes('font-weight:700'), `Heading font weight was not rendered: ${html}`);
+assert(html.includes('color:#dc2626'), `Heading text color was not rendered: ${html}`);
+assert(html.includes('text-align:center'), `Heading text align was not rendered: ${html}`);
+assert(html.includes('line-height:1.2'), `Heading line height was not rendered: ${html}`);
+assert(html.includes('text-transform:uppercase'), `Heading text transform was not rendered: ${html}`);
+assert(html.includes('letter-spacing:2px'), `Heading letter spacing was not rendered: ${html}`);
+assert(html.includes('word-spacing:4px'), `Heading word spacing was not rendered: ${html}`);
+assert(html.includes('text-shadow:1px 2px 3px rgba(15, 23, 42, 0.35)'), `Heading text shadow was not rendered: ${html}`);
+assert(html.includes('text-indent:6px'), `Heading text indent was not rendered: ${html}`);
+assert(html.includes('text-decoration:underline'), `Heading text decoration was not rendered: ${html}`);
+assert(html.includes('font-style:italic'), `Heading font style was not rendered: ${html}`);
 assert(html.includes('Slate paragraph for custom frontend output.'), `Paragraph Slate content was not rendered: ${html}`);
 assert(html.includes('Slate quote for public renderer.'), `Quote Slate content was not rendered: ${html}`);
 assert(html.includes('Renderer Smoke'), `Quote citation was not rendered: ${html}`);
@@ -116,6 +140,7 @@ console.log(JSON.stringify({
   ok: true,
   rendered: {
     heading: true,
+    headingTypography: true,
     paragraph: true,
     quote: true,
     citation: true,
