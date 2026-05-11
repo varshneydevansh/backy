@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, FileText, Globe, Home, Image as ImageIcon, Layout, Menu, RefreshCw, Save, Search, Sparkles } from 'lucide-react';
-import { createPage, getAdminApiBase, getSiteFrontendDesign, getSiteNavigation, listPages, updateSiteNavigation } from '@/lib/adminContentApi';
+import { createPage, getAdminApiBase, getPage, getSiteFrontendDesign, getSiteNavigation, listPages, updateSiteNavigation } from '@/lib/adminContentApi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore, type Page } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
@@ -781,6 +781,39 @@ function NewPageRoute() {
         () => selectedSitePages.find((page) => page.id === formData.parentPageId) || null,
         [formData.parentPageId, selectedSitePages],
     );
+    useEffect(() => {
+        const parentPageId = formData.parentPageId.trim();
+
+        if (!parentPageId || selectedParentPage || !formData.siteId) {
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadSelectedParentPage = async () => {
+            try {
+                const parentPage = await getPage(formData.siteId, parentPageId);
+
+                if (cancelled) {
+                    return;
+                }
+
+                const currentPages = useStore.getState().pages;
+                setPages([parentPage, ...currentPages.filter((page) => page.id !== parentPage.id)]);
+                setRouteCheckError(null);
+            } catch (parentLoadError) {
+                if (!cancelled) {
+                    setRouteCheckError(parentLoadError instanceof Error ? parentLoadError.message : 'Unable to load selected parent page.');
+                }
+            }
+        };
+
+        void loadSelectedParentPage();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [formData.parentPageId, formData.siteId, selectedParentPage, setPages]);
     const selectableParentPages = useMemo(
         () => selectedSitePages
             .filter((page) => page.status !== 'archived')
