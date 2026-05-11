@@ -576,6 +576,16 @@ interface FormValidationDetail {
   message: string;
 }
 
+const FORM_CAPTCHA_TOKEN_FIELDS = [
+  'captchaToken',
+  'captchaResponse',
+  'turnstileToken',
+  'hcaptchaToken',
+  'recaptchaToken',
+  'g-recaptcha-response',
+  'cf-turnstile-response',
+];
+
 interface ElementRendererContext {
   isPreview?: boolean;
   siteId?: string;
@@ -774,6 +784,24 @@ function parseFormValidationDetails(raw: unknown): FormValidationDetail[] {
       return { field, message };
     })
     .filter((detail): detail is FormValidationDetail => Boolean(detail));
+}
+
+function readFormValue(values: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = values[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+
+    if (Array.isArray(value)) {
+      const found = value.find((item) => typeof item === 'string' && item.trim().length > 0);
+      if (typeof found === 'string') {
+        return found.trim();
+      }
+    }
+  }
+
+  return '';
 }
 
 function parseAttributeString(value: unknown): string | undefined {
@@ -1834,7 +1862,11 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
 
   const isBackyAction = Boolean(backyAction && configuredAction === backyAction);
   const method = ((props.method as string) || 'POST').toUpperCase();
-  const enableHoneypot = Boolean(props.enableHoneypot);
+  const formActive = props.formActive !== false && getNameClass(props.formActive).toLowerCase() !== 'false';
+  const rawAudience = getNameClass(props.formAudience);
+  const formAudience = rawAudience === 'authenticated' || rawAudience === 'adminOnly' ? rawAudience : 'public';
+  const enableHoneypot = parseBooleanSetting(props.enableHoneypot, false);
+  const enableCaptcha = parseBooleanSetting(props.enableCaptcha, false);
   const successRedirectUrl = getNameClass(props.successRedirectUrl || props.redirectUrl);
   const successMessage =
     getNameClass((props as { successMessage?: unknown }).successMessage) ||
@@ -1845,6 +1877,13 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     if (isPreview) {
       event.preventDefault();
+      return;
+    }
+
+    if (!formActive) {
+      event.preventDefault();
+      setSubmitState('error');
+      setSubmitMessage('This form is not accepting submissions.');
       return;
     }
 
@@ -1882,10 +1921,12 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
 
       values[normalized] = [existing as string, valueAsText];
     });
+    const captchaToken = readFormValue(values, FORM_CAPTCHA_TOKEN_FIELDS);
 
     const body = {
       values,
       ...(enableHoneypot ? { honeypot: getNameClass(values.honeypot) } : {}),
+      ...(enableCaptcha && captchaToken ? { captchaToken } : {}),
       ...(contactShareOverride ? { contactShareOverride } : {}),
       startedAt,
       requestId: requestId.current,
@@ -1967,6 +2008,11 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
         action={configuredAction}
         method={method}
         encType="multipart/form-data"
+        aria-disabled={!formActive || undefined}
+        data-backy-form-id={resolvedFormId}
+        data-backy-form-active={formActive ? 'true' : 'false'}
+        data-backy-form-audience={formAudience}
+        data-backy-captcha-required={enableCaptcha ? 'true' : 'false'}
         style={{
           display: 'flex',
           flexDirection: 'column',
@@ -1994,6 +2040,16 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
             tabIndex={-1}
             aria-hidden="true"
             style={{ display: 'none' }}
+          />
+        ) : null}
+
+        {enableCaptcha ? (
+          <input
+            type="hidden"
+            name="captchaToken"
+            data-backy-captcha-token=""
+            value=""
+            readOnly
           />
         ) : null}
 

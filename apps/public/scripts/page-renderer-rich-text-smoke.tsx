@@ -373,8 +373,11 @@ const content: PageContent = {
       props: {
         formId: 'contact_form',
         formTitle: 'Contact Form',
+        formActive: true,
+        formAudience: 'authenticated',
         method: 'POST',
         enableHoneypot: true,
+        enableCaptcha: true,
         gap: 12,
         borderWidth: 2,
         borderStyle: 'solid',
@@ -439,6 +442,7 @@ const content: PageContent = {
       props: {
         formId: 'custom_action_form',
         formTitle: 'Custom Action Form',
+        formActive: false,
         actionUrl: '/api/custom-lead-submit',
         method: 'POST',
         enableHoneypot: true,
@@ -557,9 +561,16 @@ assert(html.includes('name="honeypot"'), `Form honeypot was not rendered: ${html
 assert(html.includes('name="pageId"'), `Form page hidden input was not rendered: ${html}`);
 assert(html.includes('value="page_renderer_smoke"'), `Form page hidden value was not rendered: ${html}`);
 assert(html.includes('Contact Form'), `Form title was not rendered: ${html}`);
+assert(html.includes('data-backy-form-id="contact_form"'), `Form id contract attribute was not rendered: ${html}`);
+assert(html.includes('data-backy-form-active="true"'), `Form active contract attribute was not rendered: ${html}`);
+assert(html.includes('data-backy-form-audience="authenticated"'), `Form audience contract attribute was not rendered: ${html}`);
+assert(html.includes('data-backy-captcha-required="true"'), `Form captcha contract attribute was not rendered: ${html}`);
+assert(html.includes('name="captchaToken"'), `Form captcha token transport field was not rendered: ${html}`);
 assert(html.includes('action="/api/custom-lead-submit"'), `Custom form action was not rendered: ${html}`);
 assert(html.includes('Custom Action Form'), `Custom form title was not rendered: ${html}`);
 assert(html.includes('name="custom_email"'), `Custom form child input was not rendered: ${html}`);
+assert(html.includes('data-backy-form-active="false"'), `Inactive custom form state was not rendered: ${html}`);
+assert(html.includes('aria-disabled="true"'), `Inactive custom form aria state was not rendered: ${html}`);
 assert((html.match(/name="pageId"/g) || []).length === 1, `Custom form should not receive Backy page hidden inputs: ${html}`);
 assert(!html.includes('/api/sites/site_renderer_smoke/forms/custom_action_form/submissions'), `Custom form was converted to Backy action: ${html}`);
 assert(html.includes('data-backy-repeater="renderer_smoke_repeater"'), `Repeater dataset id was not rendered: ${html}`);
