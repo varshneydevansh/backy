@@ -17,6 +17,7 @@ const PAGE_SETTINGS_SMOKE = process.env.BACKY_EDITOR_PAGE_SETTINGS_SMOKE === '1'
 const DELETE_SMOKE = process.env.BACKY_EDITOR_DELETE_SMOKE === '1';
 const LAYERS_SMOKE = process.env.BACKY_EDITOR_LAYERS_SMOKE === '1';
 const SHORTCUTS_SMOKE = process.env.BACKY_EDITOR_SHORTCUTS_SMOKE === '1';
+const MULTI_SELECT_SMOKE = process.env.BACKY_EDITOR_MULTI_SELECT_SMOKE === '1';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
@@ -1066,32 +1067,66 @@ const assertElementState = (actualState, expectedState, label) => {
   }
 };
 
-const selectElement = async (client, elementId) => {
+const getInputModifiers = (options = {}) => (
+  (options.shiftKey ? 8 : 0) |
+  (options.ctrlKey ? 2 : 0) |
+  (options.metaKey ? 4 : 0)
+);
+
+const dispatchModifierKeys = async (client, options = {}, type) => {
+  const keys = [
+    options.shiftKey ? { key: 'Shift', code: 'ShiftLeft', virtualKey: 16 } : null,
+    options.ctrlKey ? { key: 'Control', code: 'ControlLeft', virtualKey: 17 } : null,
+    options.metaKey ? { key: 'Meta', code: 'MetaLeft', virtualKey: 91 } : null,
+  ].filter(Boolean);
+  const modifiers = type === 'keyUp' ? 0 : getInputModifiers(options);
+
+  for (const key of keys) {
+    await client.send('Input.dispatchKeyEvent', {
+      type: type === 'keyDown' ? 'rawKeyDown' : 'keyUp',
+      key: key.key,
+      code: key.code,
+      windowsVirtualKeyCode: key.virtualKey,
+      nativeVirtualKeyCode: key.virtualKey,
+      modifiers,
+    });
+  }
+};
+
+const selectElement = async (client, elementId, options = {}) => {
+  await scrollElementIntoView(client, elementId);
   const box = await getElementBox(client, elementId);
   assert(box, `Missing selectable element ${elementId}`);
+  const modifiers = getInputModifiers(options);
+  const point = await getElementDragStartPoint(client, elementId, box);
 
+  await dispatchModifierKeys(client, options, 'keyDown');
   await client.send('Input.dispatchMouseEvent', {
     type: 'mouseMoved',
-    x: Math.round(box.x + Math.min(box.width / 2, 60)),
-    y: Math.round(box.y + Math.min(box.height / 2, 24)),
+    x: point.x,
+    y: point.y,
     button: 'none',
+    modifiers,
   });
   await client.send('Input.dispatchMouseEvent', {
     type: 'mousePressed',
-    x: Math.round(box.x + Math.min(box.width / 2, 60)),
-    y: Math.round(box.y + Math.min(box.height / 2, 24)),
+    x: point.x,
+    y: point.y,
     button: 'left',
     buttons: 1,
     clickCount: 1,
+    modifiers,
   });
   await client.send('Input.dispatchMouseEvent', {
     type: 'mouseReleased',
-    x: Math.round(box.x + Math.min(box.width / 2, 60)),
-    y: Math.round(box.y + Math.min(box.height / 2, 24)),
+    x: point.x,
+    y: point.y,
     button: 'left',
     buttons: 0,
     clickCount: 1,
+    modifiers,
   });
+  await dispatchModifierKeys(client, options, 'keyUp');
   await sleep(150);
 };
 
@@ -1129,10 +1164,7 @@ const pressKey = async (client, key, options = {}) => {
     x: 88,
     z: 90,
   };
-  const modifiers =
-    (options.shiftKey ? 8 : 0) |
-    (options.ctrlKey ? 2 : 0) |
-    (options.metaKey ? 4 : 0);
+  const modifiers = getInputModifiers(options);
 
   await client.send('Input.dispatchKeyEvent', {
     type: 'keyDown',
@@ -3640,6 +3672,82 @@ const testMultiSelectionCanvasDrag = async (client, elementIds) => {
   };
 };
 
+const testCanvasShiftMultiSelect = async (client, elementIds) => {
+  assert(elementIds.length >= 2, 'Canvas shift multi-select test needs at least two elements');
+  const [firstId, secondId] = elementIds;
+
+  await selectElement(client, firstId);
+  const shiftClick = await evaluate(client, `(() => {
+    const node = document.querySelector('[data-element-id="${secondId}"]');
+    if (!(node instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-node' };
+    }
+
+    const rect = node.getBoundingClientRect();
+    const x = Math.round(rect.left + Math.min(rect.width / 2, 60));
+    const y = Math.round(rect.top + Math.min(rect.height / 2, 24));
+    const dispatch = (EventConstructor, type, buttons) => {
+      node.dispatchEvent(new EventConstructor(type, {
+        bubbles: true,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+        button: 0,
+        buttons,
+        shiftKey: true,
+      }));
+    };
+
+    if (typeof PointerEvent === 'function') {
+      dispatch(PointerEvent, 'pointerdown', 1);
+      dispatch(PointerEvent, 'pointerup', 0);
+    }
+    dispatch(MouseEvent, 'mousedown', 1);
+    dispatch(MouseEvent, 'mouseup', 0);
+    dispatch(MouseEvent, 'click', 0);
+
+    return {
+      ok: true,
+      x,
+      y,
+      hitElementId: document.elementFromPoint(x, y)?.closest('[data-element-id]')?.getAttribute('data-element-id') || null,
+    };
+  })()`);
+  assert(shiftClick?.ok, `Unable to dispatch canvas shift-click: ${JSON.stringify(shiftClick)}`);
+  await sleep(250);
+
+  const selected = await evaluate(client, `(() => {
+    const expected = ${JSON.stringify(elementIds)};
+    const selectedNodes = expected.map((id) => document.querySelector('[data-element-id="' + id + '"]'));
+    const selectedIdsByElement = Object.fromEntries(selectedNodes.map((node, index) => [
+      expected[index],
+      node instanceof HTMLElement ? node.getAttribute('data-selected-ids') || '' : '',
+    ]));
+    const selectedLayers = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
+      .map((node) => node.getAttribute('data-layer-id'))
+      .filter(Boolean);
+    const multiSelection = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
+    const groupButton = document.querySelector('[data-testid="editor-group-selection"]');
+
+    return {
+      selectedIdsByElement,
+      selectedLayers,
+      hasMultiSelection: Boolean(multiSelection),
+      inspectorText: multiSelection?.textContent || '',
+      groupDisabled: groupButton instanceof HTMLButtonElement ? groupButton.disabled : null,
+    };
+  })()`);
+
+  assert(
+    elementIds.every((id) => selected.selectedIdsByElement[id]?.split(',').includes(id)),
+    `Canvas shift multi-select did not mark all selected elements: ${JSON.stringify(selected)}`,
+  );
+  assert(selected.hasMultiSelection, `Canvas shift multi-select did not show multi-selection inspector: ${JSON.stringify(selected)}`);
+  assert(selected.groupDisabled === false, `Canvas shift multi-select did not enable group action: ${JSON.stringify(selected)}`);
+
+  return selected;
+};
+
 const getStateBounds = (state) => {
   const entries = Object.values(state);
   const minX = Math.min(...entries.map((entry) => entry.x));
@@ -3868,6 +3976,22 @@ const testMultiSelectionDistribution = async (client, elementIds) => {
     afterVertical,
     horizontalGaps,
     verticalGaps,
+  };
+};
+
+const testMultiSelectionControls = async (client) => {
+  const canvasShiftSelection = await testCanvasShiftMultiSelect(client, ['smoke-heading', 'smoke-image']);
+  const canvasDrag = await testMultiSelectionCanvasDrag(client, ['smoke-heading', 'smoke-image']);
+  const canvasResize = await testMultiSelectionResize(client, ['smoke-image', 'smoke-heading']);
+  const distribution = await testMultiSelectionDistribution(client, ['smoke-heading', 'smoke-image', 'smoke-box']);
+  const grouping = await testLayerGrouping(client, ['smoke-heading', 'smoke-image']);
+
+  return {
+    canvasShiftSelection,
+    canvasDrag,
+    canvasResize,
+    distribution,
+    grouping,
   };
 };
 
@@ -6259,8 +6383,8 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const tempReusableSectionId = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE ? null : await createSmokeReusableSection();
-  const tempCollection = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE ? null : await createSmokeCollection();
+  const tempReusableSectionId = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE ? null : await createSmokeReusableSection();
+  const tempCollection = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || MULTI_SELECT_SMOKE ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
   const { childProcess, userDataDir } = launchChrome();
   let client;
@@ -6367,6 +6491,19 @@ const main = async () => {
         mode: 'shortcuts',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         keyboardShortcuts,
+      }, null, 2));
+      return;
+    }
+
+    if (MULTI_SELECT_SMOKE) {
+      assert(!EDITOR_PATH, 'Multi-select smoke currently requires an internally created smoke page');
+      const multiSelect = await testMultiSelectionControls(client);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'multi-select',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        multiSelect,
       }, null, 2));
       return;
     }

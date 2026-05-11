@@ -139,10 +139,12 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Click to select
 - Click canvas to deselect
 - Selected element shows ring highlight
+- Shift/Cmd/Ctrl-click on the canvas toggles multi-selection.
+- Multi-selection supports group/ungroup, drag, resize, alignment/distribution controls, and selected sibling operations.
+- Locked layers remain selectable but are skipped by destructive/transform actions.
+- Focused smoke coverage: `BACKY_EDITOR_MULTI_SELECT_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - **Issues:** None
 - **Improvements Needed:**
-    - Multi-select with Shift+click
-    - Select all (Ctrl+A)
     - Tab to cycle through elements
 
 ### 7. Preview Mode
@@ -381,7 +383,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ✅ Layers panel
 
 **Nice to Have**
-- ❌ Multi-select elements
+- ✅ Multi-select elements
 - ✅ Copy/Paste
 - ❌ Alignment guides
 - ❌ Zoom controls
@@ -390,7 +392,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Group-level breakpoint reset controls now make desktop inheritance explicit for layout, layer, content, and style.
   - Mobile and tablet persistence are covered by editor smoke; still needs visual regression thresholds.
 - ❌ Media upload modal
-- ❌ Element locking
+- ✅ Element locking
 - ⚠️ Page templates
   - Static composed library presets now exist for hero, feature-grid, and lead-capture form sections.
   - Backend reusable-section APIs now persist saved canvas section patterns, the editor library can load active saved sections, save the selected element tree, insert saved sections as synced canvas instances, refresh a selected synced instance from its saved source, detach an instance into an independent editable copy, and expose active sections through public APIs, manifest/OpenAPI, and the SDK.
@@ -418,7 +420,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Keyboard shortcuts ✅
 - Emoji picker ✅
 - Layers panel ✅
-- Multi-select
+- Multi-select ✅
 
 **Phase 4: Polish**
 - Copy/Paste

@@ -1316,6 +1316,14 @@ export function Canvas({
       const clickedElement = findElementById(elements, elementId);
       if (!clickedElement) return;
 
+      if (e.shiftKey || e.metaKey || e.ctrlKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggleSelect?.(elementId);
+        exitTextEditingForTransform();
+        return;
+      }
+
       if (clickedElement.locked) {
         e.preventDefault();
         e.stopPropagation();
@@ -1383,7 +1391,7 @@ export function Canvas({
       setDragState(nextDragState);
       setResizeState(null);
     },
-    [disabled, elements, exitTextEditingForTransform, isInteractiveHandle, isInteractiveHandleAtPoint, isTextEditorInteraction, isPreview, onSelect, selectedIds, size.height, size.width]
+    [disabled, elements, exitTextEditingForTransform, isInteractiveHandle, isInteractiveHandleAtPoint, isTextEditorInteraction, isPreview, onSelect, onToggleSelect, selectedIds, size.height, size.width]
   );
 
   /**
