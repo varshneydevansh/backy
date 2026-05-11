@@ -821,6 +821,10 @@ function getNameClass(value: unknown): string {
 }
 
 const getSlateText = (node: unknown): string => {
+  if (Array.isArray(node)) {
+    return node.map(getSlateText).filter(Boolean).join('\n');
+  }
+
   if (!node || typeof node !== 'object') {
     return '';
   }
@@ -1109,16 +1113,30 @@ const normalizeMapUrl = (addressOrUrl: unknown, zoom?: unknown): string => {
  */
 function TextElement({ element }: ElementRendererProps) {
   const { props, styles } = element;
+  const htmlContent = getNameClass(props.content);
+  const textContent = getSlateText(props.content) || getNameClass(props.text);
+
+  const tagProps = {
+    style: {
+      ...styles,
+      ...getTypographyStyle(props as Record<string, unknown>),
+    },
+  };
+
+  if (htmlContent) {
+    return React.createElement(
+      getSafeTag(props.tag),
+      {
+        ...tagProps,
+        dangerouslySetInnerHTML: { __html: htmlContent },
+      },
+    );
+  }
 
   return React.createElement(
     getSafeTag(props.tag),
-    {
-      style: {
-        ...styles,
-        ...getTypographyStyle(props as Record<string, unknown>),
-      },
-      dangerouslySetInnerHTML: { __html: (props.content as string) || '' },
-    },
+    tagProps,
+    textContent,
   );
 }
 
@@ -1164,6 +1182,7 @@ function HeadingElement({ element }: ElementRendererProps) {
       ? props.level
       : `h${Number(props.level || 1) || 1}`) || 'h1';
   const Tag = level as keyof JSX.IntrinsicElements;
+  const headingText = getNameClass(props.content) || getSlateText(props.content) || getNameClass(props.text);
 
   return (
     <Tag
@@ -1173,7 +1192,7 @@ function HeadingElement({ element }: ElementRendererProps) {
         ...getTypographyStyle(props as Record<string, unknown>),
       }}
     >
-      {props.content as string}
+      {headingText}
     </Tag>
   );
 }

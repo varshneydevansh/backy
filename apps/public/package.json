@@ -13,6 +13,7 @@
         "test:preview-contract": "node scripts/preview-contract-smoke.mjs",
         "test:admin-auth": "node scripts/admin-auth-smoke.mjs",
         "test:media-quota": "node scripts/media-quota-smoke.mjs",
+        "test:page-renderer": "tsx scripts/page-renderer-rich-text-smoke.tsx",
         "test:admin-contract": "node scripts/admin-contract-smoke.mjs"
     },
     "dependencies": {
@@ -30,6 +31,7 @@
         "@types/react": "^18.2.0",
         "@types/react-dom": "^18.2.0",
         "ajv": "^8.20.0",
+        "tsx": "^4.21.0",
         "typescript": "^5.3.0"
     }
 }
