@@ -2874,7 +2874,7 @@ function SelectElement({ element }: ElementRendererProps) {
 /**
  * Render checkbox list and single checkbox/radio inputs
  */
-function CheckboxOrRadioElement({ element, isPreview }: ElementRendererProps) {
+function CheckboxOrRadioElement({ element, isPreview, siteId, pageId, postId }: ElementRendererProps) {
   const { props, styles, children } = element;
   const inputType = element.type === 'checkbox' ? 'checkbox' : 'radio';
   const name = getNameClass(props.name) || `field-${element.id}`;
@@ -2952,6 +2952,9 @@ function CheckboxOrRadioElement({ element, isPreview }: ElementRendererProps) {
             key={child.id}
             element={child}
             isPreview={Boolean(isPreview)}
+            siteId={siteId}
+            pageId={pageId}
+            postId={postId}
           />
         ))}
       </div>
@@ -3002,6 +3005,9 @@ function CheckboxOrRadioElement({ element, isPreview }: ElementRendererProps) {
             key={child.id}
             element={child}
             isPreview={Boolean(isPreview)}
+            siteId={siteId}
+            pageId={pageId}
+            postId={postId}
           />
         ))}
       </div>
