@@ -67,6 +67,8 @@ export type ElementType =
   | 'map'
   | 'box'      // For containers/divs
   | 'embed'    // For iframes/embeds
+  | 'html'     // For raw HTML blocks
+  | 'table'    // For HTML table/raw markup blocks
   | 'list'     // For bullet/numbered lists
   | 'link'     // For hyperlinks
   | 'quote'    // For blockquotes

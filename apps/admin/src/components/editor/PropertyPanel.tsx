@@ -264,6 +264,8 @@ const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
     'map',
     'box',
     'embed',
+    'html',
+    'table',
     'list',
     'link',
     'quote',
@@ -715,6 +717,7 @@ function ContentProperties({
   const hasLinkContent = normalizedType === 'link';
   const hasButtonContent = normalizedType === 'button';
   const hasNavContent = normalizedType === 'nav';
+  const hasHtmlContent = normalizedType === 'html' || normalizedType === 'table';
   const hasQuoteContent = normalizedType === 'quote';
   const hasInputContent = normalizedType === 'input';
   const hasFormFieldContent = ['input', 'textarea', 'select', 'checkbox', 'radio'].includes(normalizedType);
@@ -784,6 +787,47 @@ function ContentProperties({
               onChange={(value) => onChange({ quoteBorderWidth: value })}
               suffix="px"
               testId="editor-quote-border-width"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* HTML/Table Properties */}
+      {hasHtmlContent && (
+        <div className="space-y-2">
+          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+            HTML previews in the admin editor use a sandboxed frame. Public output renders the saved markup.
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Markup
+            </label>
+            <textarea
+              value={(element.props.html as string) || (element.props.content as string) || ''}
+              onChange={(e) => onChange({ html: e.target.value })}
+              data-testid="editor-html-markup"
+              rows={8}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background font-mono resize-y',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder={'<div>Custom HTML</div>'}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Iframe title
+            </label>
+            <input
+              type="text"
+              value={element.props.title || ''}
+              onChange={(e) => onChange({ title: e.target.value })}
+              data-testid="editor-html-title"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="HTML preview"
             />
           </div>
         </div>
@@ -3499,6 +3543,11 @@ const getTargetPathOptions = (elementType: CanvasElement['type']) => {
   if (elementType === 'video') {
     return [
       { value: 'props.src', label: 'Video URL' },
+    ];
+  }
+  if (elementType === 'html' || elementType === 'table') {
+    return [
+      { value: 'props.html', label: 'HTML content' },
     ];
   }
   return [

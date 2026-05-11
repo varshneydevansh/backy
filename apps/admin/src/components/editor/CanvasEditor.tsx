@@ -104,6 +104,8 @@ const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
   'map',
   'box',
   'embed',
+  'html',
+  'table',
   'list',
   'link',
   'quote',

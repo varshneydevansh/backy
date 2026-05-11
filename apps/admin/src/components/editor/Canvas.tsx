@@ -2489,6 +2489,51 @@ function CanvasElementComponent({
           />
         );
 
+      case 'html':
+      case 'table': {
+        const htmlMarkup = sanitizeText(p.html) || sanitizeText(p.content);
+        if (!htmlMarkup) {
+          return (
+            <div
+              style={{
+                ...sharedStyle,
+                width: '100%',
+                height: '100%',
+                backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#f8fafc',
+                border: sharedStyle.border ?? '1px dashed #cbd5e1',
+                borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 6),
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#64748b',
+                fontSize: 13,
+                padding: 12,
+                textAlign: 'center',
+              }}
+            >
+              Add HTML markup in properties
+            </div>
+          );
+        }
+
+        return (
+          <iframe
+            title={sanitizeText(p.title) || `${resolvedType} preview`}
+            sandbox=""
+            srcDoc={htmlMarkup}
+            style={{
+              ...sharedStyle,
+              width: '100%',
+              height: '100%',
+              border: sharedStyle.border ?? 'none',
+              borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 0),
+              backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#ffffff',
+              pointerEvents: isPreview ? 'auto' : 'none',
+            }}
+          />
+        );
+      }
+
       case 'divider':
         const dividerThickness = toCssLength(p.thickness ?? '1px') ?? '1px';
         const dividerColor = p.borderColor || p.color || '#e5e7eb';
