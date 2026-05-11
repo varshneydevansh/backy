@@ -189,6 +189,26 @@ const content: PageContent = {
       },
     },
     {
+      id: 'styled-icon',
+      type: 'icon',
+      x: 444,
+      y: 400,
+      width: 72,
+      height: 72,
+      props: {
+        icon: '🚀',
+        size: 40,
+        color: '#0e7490',
+        title: 'Styled icon title',
+        ariaLabel: 'Launch icon',
+        backgroundColor: '#ecfeff',
+        borderRadius: 16,
+        borderWidth: 2,
+        borderStyle: 'solid',
+        borderColor: '#0891b2',
+      },
+    },
+    {
       id: 'styled-nav',
       type: 'nav',
       x: 444,
@@ -555,6 +575,17 @@ assert(html.includes('poster="https://cdn.backy.test/poster.jpg"'), `Video poste
 assert(html.includes('border-radius:18px'), `Video border radius was not rendered: ${html}`);
 assert(html.includes('border-style:dotted'), `Video border style was not rendered: ${html}`);
 assert(html.includes('border-color:#2563eb'), `Video border color was not rendered: ${html}`);
+const styledVideo = html.match(/<video[^>]*src="https:\/\/cdn\.backy\.test\/clip\.mp4"[^>]*>/)?.[0] || '';
+assert(styledVideo.includes('autoplay=""'), `Video autoplay was not rendered: ${styledVideo}`);
+assert(styledVideo.includes('loop=""'), `Video loop was not rendered: ${styledVideo}`);
+assert(styledVideo.includes('muted=""'), `Video muted was not rendered: ${styledVideo}`);
+assert(styledVideo.includes('controls=""'), `Video controls were not rendered: ${styledVideo}`);
+assert(styledVideo.includes('playsinline=""'), `Video playsInline was not rendered: ${styledVideo}`);
+assert(html.includes('aria-label="Launch icon"'), `Icon aria label was not rendered: ${html}`);
+assert(html.includes('title="Styled icon title"'), `Icon title was not rendered: ${html}`);
+assert(html.includes('🚀'), `Icon symbol was not rendered: ${html}`);
+assert(html.includes('font-size:40px'), `Icon size was not rendered: ${html}`);
+assert(html.includes('color:#0e7490'), `Icon color was not rendered: ${html}`);
 assert(html.includes('aria-label="Styled nav"'), `Nav aria label was not rendered: ${html}`);
 assert(html.includes('href="/docs"'), `Nav item href was not rendered: ${html}`);
 assert(html.includes('gap:22px'), `Nav gap was not rendered: ${html}`);
@@ -648,6 +679,7 @@ console.log(JSON.stringify({
     styledButton: true,
     styledImage: true,
     styledVideo: true,
+    styledIcon: true,
     styledNav: true,
     styledEmbed: true,
     styledMap: true,

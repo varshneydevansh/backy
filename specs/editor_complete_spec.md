@@ -45,12 +45,12 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | paragraph | ✅ | ✅ | ✅ | Same text parity issues as heading | ⚠️ |
 | quote | ✅ | ✅ | ⚠️ | Public and editor quote styles can diverge under custom styles | ⚠️ |
 | image | ✅ source/fit/alt/upload picker | ✅ | ✅ | Broader transform/version-management UX still pending in media route | ✅ |
-| video | ✅ source/controls | ✅ | ✅ | autoplay/loop persistence still inconsistent in public render options | ⚠️ |
+| video | ✅ source/controls | ✅ | ✅ | autoplay/loop/muted/playsInline public output is now covered; broader media-version UX remains in media route | ✅ |
 | button | ✅ label/link-like styling | ✅ | ✅ | Link action config still needs action presets in property panel | ⚠️ |
 | link | ✅ href/content/underline | ✅ | ✅ | Keyboard interaction semantics for target/rel | ⚠️ |
 | divider | ✅ style controls | ✅ | ✅ | minor spacing parity | ⚠️ |
 | spacer | ✅ layout-only | ✅ | ✅ | no visual handle difference in preview | ✅ |
-| icon | ✅ symbol/size/color | ✅ | ⚠️ placeholder in public | ⚠️ |
+| icon | ✅ symbol/size/color | ✅ | ✅ | Public renderer now preserves icon/symbol fallback, size, color, title, and aria label | ✅ |
 | box/container | ✅ style/appearance | ✅ | ✅ | Not yet true child nesting | ⚠️ |
 | columns | ✅ column count/gap | ✅ | ⚠️ placeholder columns | ⚠️ |
 | map | ✅ address/url/zoom controls | ✅ (iframe support added) | ✅ (iframe support added) | Zoom/marker state not persisted; no geocode fallback | ⚠️ |
@@ -334,6 +334,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Current development stance:** This document is now the canonical execution contract for canvas parity work. Any change must be recorded here before moving to the next implementation pass.
 
 ### ✅ Completed in this pass
+- Tightened public renderer parity for video boolean playback attributes and icon symbol/size/color/accessibility output via `npm run test:page-renderer --workspace @backy/public`.
 - Added form container field schema JSON authoring, editor canvas schema rendering, public renderer schema fields/submit UI, backend form definition generation from stored schema, and focused smoke coverage in the existing form component smoke.
 - Added focused editor media upload coverage for image upload modal open state, real file upload, library selection, image preview/source update, manual save, and persisted page-scoped media metadata via `BACKY_EDITOR_MEDIA_UPLOAD_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added focused alignment guide coverage for visible vertical/horizontal guides during drag, smart snap to peer edges, and guide cleanup after release via `BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.

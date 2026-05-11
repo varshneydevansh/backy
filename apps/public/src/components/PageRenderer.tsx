@@ -1415,6 +1415,7 @@ function IconElement({ element }: ElementRendererProps) {
   const { props, styles } = element;
   const label = getNameClass(props.ariaLabel);
   const title = getNameClass(props.title);
+  const icon = getNameClass(props.icon) || getNameClass(props.symbol) || '★';
 
   return (
     <span
@@ -1423,6 +1424,7 @@ function IconElement({ element }: ElementRendererProps) {
       aria-hidden={label ? undefined : true}
       title={title || undefined}
       style={{
+        ...getTypographyStyle(props as Record<string, unknown>),
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -1433,10 +1435,9 @@ function IconElement({ element }: ElementRendererProps) {
         color: getNameClass(props.color) || '#374151',
         ...getAppearanceStyle(props as Record<string, unknown>),
         ...styles,
-        ...getTypographyStyle(props as Record<string, unknown>),
       }}
     >
-      {getNameClass(props.icon) || '*'}
+      {icon}
     </span>
   );
 }
