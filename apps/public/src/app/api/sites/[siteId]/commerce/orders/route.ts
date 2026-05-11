@@ -440,13 +440,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         notes: input.notes || '',
       };
 
-      for (const reservation of inventoryReservations.values()) {
-        await repositories.collections.updateRecord(site.id, productsCollection.id, reservation.record.id, {
-          status: reservation.record.status,
-          values: toJsonRecord(reservation.values),
-        });
-      }
-
       const order = (await repositories.collections.createRecord({
         siteId: site.id,
         collectionId: ordersCollection.id,
@@ -454,6 +447,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         status: 'published',
         values: toJsonRecord(values),
       })).item;
+
+      for (const reservation of inventoryReservations.values()) {
+        await repositories.collections.updateRecord(site.id, productsCollection.id, reservation.record.id, {
+          status: reservation.record.status,
+          values: toJsonRecord(reservation.values),
+        });
+      }
 
       return publicContractJson({
         success: true,
@@ -545,16 +545,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const currency = lineItems[0]?.currency || 'USD';
     const subtotal = moneyValue(lineItems.reduce((sum, item) => sum + item.lineTotal, 0));
     const orderNumber = buildOrderNumber();
-
-    for (const reservation of inventoryReservations.values()) {
-      updateAdminCollectionRecord(site.id, productsCollection.id, reservation.record.id, {
-        status: reservation.record.status,
-        values: reservation.values,
-      });
+    let slug = orderNumber.toLowerCase();
+    let suffix = 2;
+    while (getCollectionRecordByIdOrSlug(site.id, ordersCollection.id, slug, { includeUnpublished: true })) {
+      slug = `${orderNumber.toLowerCase()}-${suffix}`;
+      suffix += 1;
     }
 
     const order = createAdminCollectionRecord(site.id, ordersCollection.id, {
-      slug: orderNumber.toLowerCase(),
+      slug,
       status: 'published',
       values: {
         ordernumber: orderNumber,
@@ -584,6 +583,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!order) {
       return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
+    }
+
+    for (const reservation of inventoryReservations.values()) {
+      updateAdminCollectionRecord(site.id, productsCollection.id, reservation.record.id, {
+        status: reservation.record.status,
+        values: reservation.values,
+      });
     }
 
     return publicContractJson({
