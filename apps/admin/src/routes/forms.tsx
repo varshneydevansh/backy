@@ -24,6 +24,7 @@ import {
   getAdminApiBase,
   getSiteFrontendDesign,
   getFormWithSubmissions,
+  applyFormConsentRetention,
   listFormDeliveryEvents,
   listCollections,
   listForms,
@@ -474,6 +475,7 @@ function FormsRoute() {
   const [isLoading, setIsLoading] = useState(false);
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
   const [isRetryingDeliveryId, setIsRetryingDeliveryId] = useState<string | null>(null);
+  const [isApplyingConsentRetention, setIsApplyingConsentRetention] = useState(false);
   const [isCreatingTemplateId, setIsCreatingTemplateId] = useState<string | null>(null);
   const [isSavingForm, setIsSavingForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -481,7 +483,7 @@ function FormsRoute() {
   const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
   const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
   const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
-  const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || Boolean(isCreatingTemplateId) || isSavingForm;
+  const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isSavingForm;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -1597,6 +1599,45 @@ function FormsRoute() {
     URL.revokeObjectURL(url);
     setError(null);
     setNotice(`Consent CSV exported with ${selectedConsentRecords.length} consent record${selectedConsentRecords.length === 1 ? '' : 's'}.`);
+  };
+
+  const handleApplyConsentRetention = async () => {
+    if (isFormsBusy || !selectedForm) return;
+
+    setIsApplyingConsentRetention(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const result = await applyFormConsentRetention(activeSiteId, selectedForm.id, {
+        actor: 'admin',
+      });
+      if (result.submissions.length > 0) {
+        const updatedById = new Map(result.submissions.map((submission) => [submission.id, submission]));
+        setInboxByForm((current) => {
+          const inbox = current[selectedForm.id];
+          if (!inbox) return current;
+
+          return {
+            ...current,
+            [selectedForm.id]: {
+              ...inbox,
+              submissions: inbox.submissions.map((submission) => updatedById.get(submission.id) || submission),
+            },
+          };
+        });
+      }
+
+      setNotice(
+        result.anonymized > 0
+          ? `Consent evidence anonymized for ${result.anonymized} due submission${result.anonymized === 1 ? '' : 's'}.`
+          : 'No due consent evidence needed anonymization.',
+      );
+    } catch (retentionError) {
+      setError(retentionError instanceof Error ? retentionError.message : 'Unable to apply consent retention policy');
+    } finally {
+      setIsApplyingConsentRetention(false);
+    }
   };
 
   const handleExportFormsCatalog = () => {
@@ -3297,15 +3338,27 @@ function FormsRoute() {
                           Export consent field values with submission status, request ID, timestamp, and source metadata for privacy audits.
                         </p>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={isFormsBusy || selectedConsentFields.length === 0 || filteredSubmissions.length === 0}
-                        onClick={handleExportConsentRecords}
-                        iconStart={<Download className="size-4" />}
-                      >
-                        Export consent CSV
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isFormsBusy || selectedConsentFields.length === 0 || selectedConsentRetentionMetrics.deleteDue === 0}
+                          onClick={() => void handleApplyConsentRetention()}
+                          data-testid="forms-consent-anonymize-due-button"
+                          iconStart={<ShieldCheck className="size-4" />}
+                        >
+                          Anonymize due
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isFormsBusy || selectedConsentFields.length === 0 || filteredSubmissions.length === 0}
+                          onClick={handleExportConsentRecords}
+                          iconStart={<Download className="size-4" />}
+                        >
+                          Export consent CSV
+                        </Button>
+                      </div>
                     </div>
                     <div className="mt-4 grid gap-3 md:grid-cols-4">
                       <MetaTile label="Consent fields" value={String(selectedConsentMetrics.fields)} />

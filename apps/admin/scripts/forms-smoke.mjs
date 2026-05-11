@@ -1175,6 +1175,7 @@ const assertConsentExportInUi = async (client, submissionId) => {
         (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Export consent CSV'
       ))
       : null;
+    const anonymizeButton = panel?.querySelector('[data-testid="forms-consent-anonymize-due-button"]') || null;
 
     if (button instanceof HTMLButtonElement && !button.disabled) {
       button.click();
@@ -1191,9 +1192,12 @@ const assertConsentExportInUi = async (client, submissionId) => {
         text.includes('Exports omit IP hash and user-agent') &&
         text.includes('Registration consent policy') &&
         button instanceof HTMLButtonElement &&
+        anonymizeButton instanceof HTMLButtonElement &&
+        anonymizeButton.disabled &&
         !button.disabled,
       text: text.slice(0, 800),
       buttonDisabled: button instanceof HTMLButtonElement ? button.disabled : null,
+      anonymizeDisabled: anonymizeButton instanceof HTMLButtonElement ? anonymizeButton.disabled : null,
       hasSubmission: document.body?.innerText?.includes(submissionId) || false,
     };
   })()`);
@@ -1206,6 +1210,30 @@ const assertConsentExportInUi = async (client, submissionId) => {
   }
 
   throw new Error('Consent export action did not show the expected notice');
+};
+
+const assertConsentRetentionApi = async (formId, submissionId) => {
+  const futureNow = new Date(Date.now() + 400 * 24 * 60 * 60 * 1000).toISOString();
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/consent-retention`, {
+    method: 'POST',
+    body: JSON.stringify({ now: futureNow, actor: 'forms-smoke' }),
+  });
+  const result = payload.data || {};
+  assert(result.scanned >= 1, `Consent retention did not scan submissions: ${JSON.stringify(result)}`);
+  assert(result.due >= 1, `Consent retention did not find due submissions: ${JSON.stringify(result)}`);
+  assert(result.anonymized >= 1, `Consent retention did not anonymize submissions: ${JSON.stringify(result)}`);
+
+  const detail = await getFormWithSubmissions(formId);
+  const updated = detail.submissions.find((submission) => submission.id === submissionId);
+  assert(updated, `Anonymized submission was not returned by form detail: ${submissionId}`);
+  assert(updated.values?.consent === null, `Consent field was not anonymized: ${JSON.stringify(updated.values)}`);
+  assert(updated.ipHash === null || updated.ipHash === undefined, `Submission ipHash was not scrubbed: ${JSON.stringify(updated)}`);
+  assert(updated.userAgent === null || updated.userAgent === undefined, `Submission userAgent was not scrubbed: ${JSON.stringify(updated)}`);
+  assert(
+    typeof updated.adminNotes === 'string' && updated.adminNotes.includes('Consent evidence anonymized by forms-smoke'),
+    `Anonymization audit note missing: ${JSON.stringify(updated.adminNotes)}`,
+  );
+  return { ...result, submission: updated };
 };
 
 const retryWebhookDeliveryInUi = async (client, formId, submission) => {
@@ -1487,6 +1515,7 @@ const main = async () => {
     const createdRecord = records.find((record) => record.values?.source_submission_id === submitted.id);
     assert(createdRecord, `Collection record was not created for submission ${submitted.id}: ${JSON.stringify(records.slice(0, 5))}`);
     assert(createdRecord.values?.company === 'Backy Smoke Co', `Collection record did not persist company value: ${JSON.stringify(createdRecord)}`);
+    const consentRetention = await assertConsentRetentionApi(createdFormId, submitted.id);
     await refreshForms(client);
     const approved = await approveSubmissionInUi(client, createdFormId, submitted.id);
     const layout = await assertLayout(client);
@@ -1545,6 +1574,11 @@ const main = async () => {
         statusCode: emailDelivery.delivery.statusCode,
         eventStatuses: emailDelivery.events.map((event) => event.status),
         retryStatusCode: emailRetry?.delivery?.statusCode || null,
+      },
+      consentRetention: {
+        scanned: consentRetention.scanned,
+        due: consentRetention.due,
+        anonymized: consentRetention.anonymized,
       },
       collectionRecord: {
         id: createdRecord.id,

@@ -628,6 +628,14 @@ interface ApiFormSubmissionResponse {
   };
 }
 
+interface ApiFormConsentRetentionResponse {
+  success: boolean;
+  data?: FormConsentRetentionResult;
+  error?: {
+    message?: string;
+  };
+}
+
 interface ApiListFormDeliveryEventsResponse {
   success: boolean;
   data?: {
@@ -1434,6 +1442,20 @@ export interface FormWebhookRetryDelivery {
   status: 'queued' | 'succeeded' | 'failed' | string;
   statusCode?: number;
   error?: string;
+}
+
+export interface FormConsentRetentionResult {
+  formId: string;
+  dryRun: boolean;
+  policy: {
+    deleteAfterDays: number;
+    now: string;
+  };
+  consentFieldKeys: string[];
+  scanned: number;
+  due: number;
+  anonymized: number;
+  submissions: FormSubmission[];
 }
 
 export type ContactStatus = Contact['status'];
@@ -3129,6 +3151,28 @@ export async function updateFormSubmission(
   }
 
   return submission;
+}
+
+export async function applyFormConsentRetention(
+  siteId: string,
+  formId: string,
+  input: { dryRun?: boolean; now?: string; actor?: string } = {},
+): Promise<FormConsentRetentionResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/consent-retention`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiFormConsentRetentionResponse>(response);
+  const result = payload.data;
+
+  if (!response.ok || !payload.success || !result) {
+    throw new Error(payload.error?.message || 'Unable to apply consent retention policy');
+  }
+
+  return result as FormConsentRetentionResult;
 }
 
 export async function listFormDeliveryEvents(

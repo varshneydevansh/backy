@@ -7446,6 +7446,36 @@ export function updateFormSubmissionStatus(
   return clone(submission);
 }
 
+export function anonymizeFormSubmissionConsentEvidence(
+  formId: string,
+  submissionId: string,
+  consentFieldKeys: string[],
+  actor = 'admin',
+): FormSubmission | undefined {
+  refreshPersistedInteractionStore();
+
+  const submission = formSubmissions.find((item) => item.id === submissionId && item.formId === formId);
+  if (!submission) return undefined;
+
+  const consentKeys = new Set(consentFieldKeys);
+  const nextValues = Object.fromEntries(
+    Object.entries(submission.values || {}).map(([key, value]) => (
+      consentKeys.has(key) ? [key, null] : [key, value]
+    )),
+  );
+  const marker = `Consent evidence anonymized by ${actor} at ${new Date().toISOString()}.`;
+
+  submission.values = nextValues;
+  submission.ipHash = null;
+  submission.userAgent = null;
+  submission.adminNotes = [submission.adminNotes, marker].filter(Boolean).join('\n');
+  submission.updatedAt = new Date().toISOString();
+
+  setFormSubmissions(formSubmissions.map((item) => (item.id === submission.id ? submission : item)));
+  persistInteractionStore();
+  return clone(submission);
+}
+
 export function updateContactStatus(
   contactId: string,
   updates: {

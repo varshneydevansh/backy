@@ -324,6 +324,8 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
             if (input.collectionRecord !== undefined) updates.collectionRecord = input.collectionRecord;
             if (input.collectionRecordErrors !== undefined) updates.collectionRecordErrors = input.collectionRecordErrors;
             if (input.values !== undefined) updates.values = input.values;
+            if (input.ipHash !== undefined) updates.ipHash = input.ipHash;
+            if (input.userAgent !== undefined) updates.userAgent = input.userAgent;
 
             const [row] = await database.update(formSubmissions).set(updates).where(and(eq(formSubmissions.siteId, siteId), eq(formSubmissions.id, submissionId))).returning() as SubmissionRow[];
             return { item: toSubmission(row) };
