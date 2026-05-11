@@ -82,13 +82,27 @@ const restoreSettings = async (settings) => {
   });
 };
 
-const createFolder = async (name) => {
+const createFolder = async (name, input = {}) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/media/folders`, {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({
+      name,
+      ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),
+      ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+    }),
   });
   const folder = payload.data?.folder || payload.folder;
   assert(folder?.id, `Create folder did not return a folder: ${JSON.stringify(payload).slice(0, 500)}`);
+  return folder;
+};
+
+const updateFolder = async (folderId, input) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/media/folders/${folderId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  const folder = payload.data?.folder || payload.folder;
+  assert(folder?.id, `Update folder did not return a folder: ${JSON.stringify(payload).slice(0, 500)}`);
   return folder;
 };
 
@@ -731,7 +745,7 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, mediaIds, folderId, tempFiles }) => {
+const cleanup = async ({ client, childProcess, userDataDir, mediaIds, folderIds, tempFiles }) => {
   if (client) {
     try {
       await client.send('Browser.close');
@@ -760,11 +774,13 @@ const cleanup = async ({ client, childProcess, userDataDir, mediaIds, folderId, 
     }
   }
 
-  if (folderId) {
-    try {
-      await deleteFolder(folderId);
-    } catch {
-      // The UI flow or cleanup may already have removed the folder.
+  for (const folderId of folderIds || []) {
+    if (folderId) {
+      try {
+        await deleteFolder(folderId);
+      } catch {
+        // The UI flow or cleanup may already have removed the folder.
+      }
     }
   }
 
@@ -780,6 +796,7 @@ const main = async () => {
   let childProcess;
   let userDataDir;
   let folderId;
+  let childFolderId;
   let originalSettings;
   let restoredSettings = false;
   const mediaIds = [];
@@ -801,6 +818,13 @@ const main = async () => {
 
     const folder = await createFolder(folderName);
     folderId = folder.id;
+    const childFolder = await createFolder(`${folderName} Child`, { parentId: folderId });
+    childFolderId = childFolder.id;
+    assert(childFolder.parentId === folderId, 'Nested media folder did not preserve its parent id.');
+    const movedChildFolder = await updateFolder(childFolderId, { name: `${folderName} Child Root`, parentId: null });
+    assert(movedChildFolder.parentId === null, 'Media folder parent update did not move the child folder to Root.');
+    const nestedAgainFolder = await updateFolder(childFolderId, { parentId: folderId });
+    assert(nestedAgainFolder.parentId === folderId, 'Media folder parent update did not move the child folder under the parent.');
     const publicImage = await uploadMedia({
       filename: imageName,
       mimeType: 'image/png',
@@ -894,6 +918,8 @@ const main = async () => {
 
     await deleteMedia(publicImage.id);
     mediaIds.splice(mediaIds.indexOf(publicImage.id), 1);
+    await deleteFolder(childFolderId);
+    childFolderId = null;
     await deleteFolder(folderId);
     folderId = null;
     await waitForMediaMissing(marker);
@@ -914,7 +940,14 @@ const main = async () => {
         console.warn('Unable to restore original settings:', error instanceof Error ? error.message : error);
       });
     }
-    await cleanup({ client, childProcess, userDataDir, mediaIds, folderId, tempFiles });
+    await cleanup({
+      client,
+      childProcess,
+      userDataDir,
+      mediaIds,
+      folderIds: [childFolderId, folderId],
+      tempFiles,
+    });
   }
 };
 

@@ -221,6 +221,11 @@ export interface MediaFolder {
   sortOrder: number;
 }
 
+export interface MediaFolderCreateInput {
+  parentId?: string | null;
+  sortOrder?: number;
+}
+
 export interface MediaQuota {
   limitBytes: number;
   usedBytes: number;
@@ -421,13 +426,21 @@ export async function listMediaFolders(siteId = getDefaultMediaSiteId()): Promis
   return payload.data.folders.map(toMediaFolder);
 }
 
-export async function createMediaFolder(name: string, siteId = getDefaultMediaSiteId()): Promise<MediaFolder> {
+export async function createMediaFolder(
+  name: string,
+  siteId = getDefaultMediaSiteId(),
+  input: MediaFolderCreateInput = {},
+): Promise<MediaFolder> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/media/folders`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({
+      name,
+      ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),
+      ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+    }),
   });
   const payload = await response.json() as ApiMediaFolderResponse;
 

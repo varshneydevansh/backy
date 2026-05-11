@@ -229,6 +229,75 @@ interface MediaUploadSummary {
   completedAt: string;
 }
 
+type MediaFolderTreeOption = MediaFolder & {
+  depth: number;
+  label: string;
+  path: string;
+};
+
+const buildMediaFolderOptions = (folders: MediaFolder[]): MediaFolderTreeOption[] => {
+  const folderById = new Map(folders.map((folder) => [folder.id, folder]));
+  const childrenByParent = new Map<string | null, MediaFolder[]>();
+  const sortedFolders = [...folders].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+
+  sortedFolders.forEach((folder) => {
+    const parentId = folder.parentId && folderById.has(folder.parentId) ? folder.parentId : null;
+    const siblings = childrenByParent.get(parentId) || [];
+    siblings.push(folder);
+    childrenByParent.set(parentId, siblings);
+  });
+
+  const options: MediaFolderTreeOption[] = [];
+  const visited = new Set<string>();
+
+  const walk = (folder: MediaFolder, depth: number, parentPath: string[], ancestors: Set<string>) => {
+    if (visited.has(folder.id) || ancestors.has(folder.id)) {
+      return;
+    }
+
+    visited.add(folder.id);
+    const pathParts = [...parentPath, folder.name];
+    options.push({
+      ...folder,
+      depth,
+      label: `${'-- '.repeat(depth)}${folder.name}`,
+      path: pathParts.join(' / '),
+    });
+
+    const nextAncestors = new Set(ancestors);
+    nextAncestors.add(folder.id);
+    (childrenByParent.get(folder.id) || []).forEach((child) => walk(child, depth + 1, pathParts, nextAncestors));
+  };
+
+  (childrenByParent.get(null) || []).forEach((folder) => walk(folder, 0, [], new Set()));
+  sortedFolders
+    .filter((folder) => !visited.has(folder.id))
+    .forEach((folder) => walk(folder, 0, [], new Set()));
+
+  return options;
+};
+
+const getMediaFolderDescendantIds = (folders: MediaFolder[], folderId: string): Set<string> => {
+  const descendants = new Set<string>();
+  const pending = folders
+    .filter((folder) => folder.parentId === folderId)
+    .map((folder) => folder.id);
+
+  while (pending.length > 0) {
+    const currentId = pending.pop();
+    if (!currentId || descendants.has(currentId)) {
+      continue;
+    }
+
+    descendants.add(currentId);
+    folders
+      .filter((folder) => folder.parentId === currentId)
+      .forEach((folder) => pending.push(folder.id));
+  }
+
+  return descendants;
+};
+
 const getUploadFileExtension = (file: File): string => file.name.split('.').pop()?.toLowerCase() || '';
 
 const isUploadFontFile = (file: File): boolean => (
@@ -322,6 +391,7 @@ function MediaPage() {
   const [folders, setFolders] = useState<MediaFolder[]>([]);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState('');
+  const [editingFolderParentId, setEditingFolderParentId] = useState<'root' | string>('root');
   const [isUpdatingFolder, setIsUpdatingFolder] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null | undefined>(() => folderSelectionFromRoute(routeSearch.folderId));
   const [uploadVisibility, setUploadVisibility] = useState<'public' | 'private'>('public');
@@ -329,6 +399,7 @@ function MediaPage() {
   const [uploadTags, setUploadTags] = useState('');
   const [recentUploadSummary, setRecentUploadSummary] = useState<MediaUploadSummary | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
+  const [newFolderParentId, setNewFolderParentId] = useState<'root' | string>('root');
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [isDeletingFolder, setIsDeletingFolder] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MediaAsset | null>(null);
@@ -462,11 +533,30 @@ function MediaPage() {
     (asset: MediaAsset) => getPublicMediaFileUrl(asset.id, siteId),
     [siteId],
   );
+  const folderOptions = useMemo(() => buildMediaFolderOptions(folders), [folders]);
+  const folderOptionById = useMemo(() => new Map(folderOptions.map((folder) => [folder.id, folder])), [folderOptions]);
+  const folderAssetCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    files.forEach((file) => {
+      if (file.folderId) {
+        counts.set(file.folderId, (counts.get(file.folderId) || 0) + 1);
+      }
+    });
+    return counts;
+  }, [files]);
+  const getFolderPath = useCallback((folderId: string) => (
+    folderOptionById.get(folderId)?.path || folders.find((folder) => folder.id === folderId)?.name || 'Folder'
+  ), [folderOptionById, folders]);
+  const getFolderParentOptions = useCallback((folderId: string) => {
+    const blockedIds = getMediaFolderDescendantIds(folders, folderId);
+    blockedIds.add(folderId);
+    return folderOptions.filter((folder) => !blockedIds.has(folder.id));
+  }, [folderOptions, folders]);
   const uploadTargetFolderId = uploadFolderId === 'current'
     ? selectedFolderId === undefined ? null : selectedFolderId
     : uploadFolderId === 'root' ? null : uploadFolderId;
   const uploadTargetFolderLabel = uploadTargetFolderId
-    ? folders.find((folder) => folder.id === uploadTargetFolderId)?.name || 'Selected folder'
+    ? getFolderPath(uploadTargetFolderId)
     : 'Root';
   const uploadTagList = useMemo(() => parseTagInput(uploadTags), [uploadTags]);
   const setUploadTagList = useCallback((nextTags: string[]) => {
@@ -775,11 +865,12 @@ function MediaPage() {
       referenced: mediaAnalytics.referencedAssets,
       unused: mediaAnalytics.unusedAssets,
     },
-    folders: folders.map((folder) => ({
+    folders: folderOptions.map((folder) => ({
       id: folder.id,
       name: folder.name,
       parentId: folder.parentId,
-      assetCount: files.filter((asset) => asset.folderId === folder.id).length,
+      path: folder.path,
+      assetCount: folderAssetCounts.get(folder.id) || 0,
     })),
     fonts: fontGroups.map((group) => ({
       family: group.family,
@@ -827,6 +918,8 @@ function MediaPage() {
     adminMediaFoldersUrl,
     displayedFiles.length,
     files,
+    folderAssetCounts,
+    folderOptions,
     folders,
     fontGroups,
     mediaAnalytics.privateAssets,
@@ -1636,13 +1729,16 @@ function MediaPage() {
     setError(null);
 
     try {
-      const folder = await createMediaFolder(name, siteId);
+      const parentId = newFolderParentId === 'root' ? null : newFolderParentId;
+      const folder = await createMediaFolder(name, siteId, { parentId });
       setFolders((current) => [...current, folder].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)));
       setSelectedFolderId(folder.id);
       updateMediaRouteSearch({ folderId: folder.id });
       setEditingFolderId(null);
       setEditingFolderName('');
+      setEditingFolderParentId('root');
       setNewFolderName('');
+      setNewFolderParentId(parentId || 'root');
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to create folder.');
     } finally {
@@ -1655,12 +1751,14 @@ function MediaPage() {
 
     setEditingFolderId(folder.id);
     setEditingFolderName(folder.name);
+    setEditingFolderParentId(folder.parentId || 'root');
     setError(null);
   };
 
   const cancelEditingFolder = () => {
     setEditingFolderId(null);
     setEditingFolderName('');
+    setEditingFolderParentId('root');
   };
 
   const handleRenameFolder = async (folderId: string) => {
@@ -1672,11 +1770,14 @@ function MediaPage() {
       return;
     }
 
+    const parentId = editingFolderParentId === 'root' ? null : editingFolderParentId;
     const duplicateFolder = folders.find((folder) => (
-      folder.id !== folderId && folder.name.trim().toLowerCase() === name.toLowerCase()
+      folder.id !== folderId &&
+      folder.parentId === parentId &&
+      folder.name.trim().toLowerCase() === name.toLowerCase()
     ));
     if (duplicateFolder) {
-      setError(`A folder named ${name} already exists.`);
+      setError(`A sibling folder named ${name} already exists.`);
       return;
     }
 
@@ -1684,14 +1785,14 @@ function MediaPage() {
     setError(null);
 
     try {
-      const folder = await updateMediaFolder(folderId, { name }, siteId);
+      const folder = await updateMediaFolder(folderId, { name, parentId }, siteId);
       setFolders((current) => current
         .map((item) => item.id === folder.id ? folder : item)
         .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)));
-      setBulkNotice(`Folder renamed to ${folder.name}.`);
+      setBulkNotice(`Folder saved as ${folder.name}.`);
       cancelEditingFolder();
     } catch (renameError) {
-      setError(renameError instanceof Error ? renameError.message : 'Unable to rename folder.');
+      setError(renameError instanceof Error ? renameError.message : 'Unable to update folder.');
     } finally {
       setIsUpdatingFolder(false);
     }
@@ -1710,7 +1811,9 @@ function MediaPage() {
 
     try {
       await deleteMediaFolder(folderId, siteId);
-      setFolders((current) => current.filter((item) => item.id !== folderId));
+      setFolders((current) => current
+        .filter((item) => item.id !== folderId)
+        .map((item) => item.parentId === folderId ? { ...item, parentId: null } : item));
       setMedia(files.map((file) => file.folderId === folderId ? { ...file, folderId: null } : file));
       if (selectedFolderId === folderId) {
         setSelectedFolderId(undefined);
@@ -1718,6 +1821,12 @@ function MediaPage() {
       }
       if (editingFolderId === folderId) {
         cancelEditingFolder();
+      }
+      if (newFolderParentId === folderId) {
+        setNewFolderParentId('root');
+      }
+      if (editingFolderParentId === folderId) {
+        setEditingFolderParentId('root');
       }
       setPendingDeleteFolder(null);
     } catch (deleteError) {
@@ -2118,8 +2227,8 @@ function MediaPage() {
               >
                 <option value="current">Current folder filter</option>
                 <option value="root">Root</option>
-                {folders.map((folder) => (
-                  <option key={folder.id} value={folder.id}>{folder.name}</option>
+                {folderOptions.map((folder) => (
+                  <option key={folder.id} value={folder.id}>{folder.label}</option>
                 ))}
               </select>
             </label>
@@ -2861,7 +2970,19 @@ function MediaPage() {
             <Folder className="h-4 w-4" />
             <span>Folders</span>
           </div>
-          <div className="flex min-w-0 flex-1 justify-end gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-2">
+            <select
+              value={newFolderParentId}
+              disabled={isMediaLibraryBusy}
+              onChange={(event) => setNewFolderParentId(event.target.value)}
+              className="w-full max-w-[180px] rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label="New folder parent"
+            >
+              <option value="root">Root</option>
+              {folderOptions.map((folder) => (
+                <option key={folder.id} value={folder.id}>{folder.label}</option>
+              ))}
+            </select>
             <input
               type="text"
               value={newFolderName}
@@ -2921,10 +3042,10 @@ function MediaPage() {
           >
             Root
           </button>
-          {folders.map((folder) => (
+          {folderOptions.map((folder) => (
             <div key={folder.id} className="inline-flex min-h-10 overflow-hidden rounded-lg border border-border bg-background">
               {editingFolderId === folder.id ? (
-                <div className="flex min-w-[260px] items-center gap-1 px-1.5 py-1">
+                <div className="flex min-w-[360px] flex-wrap items-center gap-1 px-1.5 py-1">
                   <input
                     type="text"
                     value={editingFolderName}
@@ -2940,10 +3061,22 @@ function MediaPage() {
                         cancelEditingFolder();
                       }
                     }}
-                    className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm"
+                    className="h-8 min-w-[150px] flex-1 rounded-md border bg-background px-2 text-sm"
                     aria-label={`Rename folder ${folder.name}`}
                     autoFocus
                   />
+                  <select
+                    value={editingFolderParentId}
+                    disabled={isMediaLibraryBusy}
+                    onChange={(event) => setEditingFolderParentId(event.target.value)}
+                    className="h-8 min-w-[140px] rounded-md border bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                    aria-label={`Parent folder for ${folder.name}`}
+                  >
+                    <option value="root">Root</option>
+                    {getFolderParentOptions(folder.id).map((parentFolder) => (
+                      <option key={parentFolder.id} value={parentFolder.id}>{parentFolder.label}</option>
+                    ))}
+                  </select>
                   <button
                     type="button"
                     disabled={isMediaLibraryBusy || !editingFolderName.trim()}
@@ -2980,9 +3113,9 @@ function MediaPage() {
                       selectedFolderId === folder.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
                     )}
                   >
-                    <span className="font-medium">{folder.name}</span>
+                    <span className="font-medium">{folder.label}</span>
                     <span className="ml-2 font-mono text-xs text-muted-foreground">
-                      {files.filter((file) => file.folderId === folder.id).length}
+                      {folderAssetCounts.get(folder.id) || 0}
                     </span>
                   </button>
                   <button
@@ -3078,8 +3211,8 @@ function MediaPage() {
                   >
                     <option value="keep">No change</option>
                     <option value="root">Root</option>
-                    {folders.map((folder) => (
-                      <option key={folder.id} value={folder.id}>{folder.name}</option>
+                    {folderOptions.map((folder) => (
+                      <option key={folder.id} value={folder.id}>{folder.label}</option>
                     ))}
                   </select>
                 </label>
@@ -3339,7 +3472,7 @@ function MediaPage() {
                 </div>
                 {file.folderId && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {folders.find((folder) => folder.id === file.folderId)?.name || 'Folder'}
+                    {getFolderPath(file.folderId)}
                   </p>
                 )}
               </div>
@@ -3538,8 +3671,8 @@ function MediaPage() {
                     className="w-full rounded-lg border bg-background px-3 py-2"
                   >
                     <option value="">Root</option>
-                    {folders.map((folder) => (
-                      <option key={folder.id} value={folder.id}>{folder.name}</option>
+                    {folderOptions.map((folder) => (
+                      <option key={folder.id} value={folder.id}>{folder.label}</option>
                     ))}
                   </select>
                 </div>
