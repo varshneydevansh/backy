@@ -2034,6 +2034,7 @@ function ContentProperties({
               type="text"
               value={element.props.commentTitle || ''}
               onChange={(e) => onChange({ commentTitle: e.target.value })}
+              data-testid="editor-comment-title"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -2048,6 +2049,7 @@ function ContentProperties({
             <select
               value={element.props.commentModerationMode || 'manual'}
               onChange={(e) => onChange({ commentModerationMode: e.target.value as 'manual' | 'auto-approve' })}
+              data-testid="editor-comment-moderation-mode"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -2062,6 +2064,7 @@ function ContentProperties({
               type="checkbox"
               checked={parseBooleanSetting(element.props.commentRequireName, true)}
               onChange={(e) => onChange({ commentRequireName: e.target.checked })}
+              data-testid="editor-comment-require-name"
             />
             Require comment author name
           </label>
@@ -2070,6 +2073,7 @@ function ContentProperties({
               type="checkbox"
               checked={parseBooleanSetting(element.props.commentRequireEmail, false)}
               onChange={(e) => onChange({ commentRequireEmail: e.target.checked })}
+              data-testid="editor-comment-require-email"
             />
             Require author email
           </label>
@@ -2078,6 +2082,7 @@ function ContentProperties({
               type="checkbox"
               checked={parseBooleanSetting(element.props.commentAllowGuests, true)}
               onChange={(e) => onChange({ commentAllowGuests: e.target.checked })}
+              data-testid="editor-comment-allow-guests"
             />
             Allow guests
           </label>
@@ -2086,6 +2091,7 @@ function ContentProperties({
               type="checkbox"
               checked={parseBooleanSetting(element.props.commentAllowReplies, true)}
               onChange={(e) => onChange({ commentAllowReplies: e.target.checked })}
+              data-testid="editor-comment-allow-replies"
             />
             Allow replies
           </label>
@@ -2096,6 +2102,7 @@ function ContentProperties({
             <select
               value={element.props.commentSortOrder || 'newest'}
               onChange={(e) => onChange({ commentSortOrder: e.target.value as 'newest' | 'oldest' })}
+              data-testid="editor-comment-sort-order"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'

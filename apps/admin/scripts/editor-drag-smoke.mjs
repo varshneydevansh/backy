@@ -390,6 +390,24 @@ const createSmokePage = async () => {
             },
           },
           {
+            id: 'smoke-comment',
+            type: 'comment',
+            x: 1180,
+            y: 880,
+            width: 360,
+            height: 320,
+            zIndex: 5,
+            props: {
+              commentTitle: 'Initial comments',
+              commentAllowGuests: true,
+              commentRequireName: true,
+              commentRequireEmail: false,
+              commentAllowReplies: true,
+              commentModerationMode: 'manual',
+              commentSortOrder: 'newest',
+            },
+          },
+          {
             id: 'smoke-input',
             type: 'input',
             x: 520,
@@ -4177,6 +4195,63 @@ const assertPersistedFormBehavior = async (pageId, collectionId) => {
   return props;
 };
 
+const testCommentBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-comment');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-comment-title', 'Smoke discussion');
+  await setFormControlByTestId(client, 'editor-comment-moderation-mode', 'auto-approve');
+  await setCheckboxByTestId(client, 'editor-comment-require-name', false);
+  await setCheckboxByTestId(client, 'editor-comment-require-email', true);
+  await setCheckboxByTestId(client, 'editor-comment-allow-guests', false);
+  await setCheckboxByTestId(client, 'editor-comment-allow-replies', false);
+  await setFormControlByTestId(client, 'editor-comment-sort-order', 'oldest');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const checked = (testId) => Boolean(document.querySelector('[data-testid="' + testId + '"]')?.checked);
+    const comment = document.querySelector('[data-element-id="smoke-comment"]');
+    return {
+      title: value('editor-comment-title'),
+      moderationMode: value('editor-comment-moderation-mode'),
+      requireName: checked('editor-comment-require-name'),
+      requireEmail: checked('editor-comment-require-email'),
+      allowGuests: checked('editor-comment-allow-guests'),
+      allowReplies: checked('editor-comment-allow-replies'),
+      sortOrder: value('editor-comment-sort-order'),
+      previewText: comment?.textContent || '',
+    };
+  })()`);
+
+  assert(state.title === 'Smoke discussion' && state.previewText.includes('Smoke discussion'), `Comment title mismatch: ${JSON.stringify(state)}`);
+  assert(state.moderationMode === 'auto-approve' && state.previewText.includes('Moderation: auto-approve'), `Comment moderation mismatch: ${JSON.stringify(state)}`);
+  assert(state.requireName === false && state.previewText.includes('Name required: off'), `Comment require-name mismatch: ${JSON.stringify(state)}`);
+  assert(state.requireEmail === true && state.previewText.includes('Email required: on'), `Comment require-email mismatch: ${JSON.stringify(state)}`);
+  assert(state.allowGuests === false && state.previewText.includes('Guests: off'), `Comment guest toggle mismatch: ${JSON.stringify(state)}`);
+  assert(state.allowReplies === false && state.previewText.includes('Replies: off'), `Comment replies toggle mismatch: ${JSON.stringify(state)}`);
+  assert(state.sortOrder === 'oldest' && state.previewText.includes('Sort: Oldest first'), `Comment sort mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedCommentBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const comment = findCanvasElement(elements, 'smoke-comment');
+  const props = comment?.props || {};
+
+  assert(comment?.type === 'comment', `Persisted smoke-comment missing: ${JSON.stringify(comment)}`);
+  assert(props.commentTitle === 'Smoke discussion', `Persisted comment title mismatch: ${JSON.stringify(props)}`);
+  assert(props.commentModerationMode === 'auto-approve', `Persisted comment moderation mismatch: ${JSON.stringify(props)}`);
+  assert(props.commentRequireName === false, `Persisted comment require-name mismatch: ${JSON.stringify(props)}`);
+  assert(props.commentRequireEmail === true, `Persisted comment require-email mismatch: ${JSON.stringify(props)}`);
+  assert(props.commentAllowGuests === false, `Persisted comment allow-guests mismatch: ${JSON.stringify(props)}`);
+  assert(props.commentAllowReplies === false, `Persisted comment allow-replies mismatch: ${JSON.stringify(props)}`);
+  assert(props.commentSortOrder === 'oldest', `Persisted comment sort order mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const testVideoBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-video');
   await switchToPropertiesPanel(client);
@@ -4632,9 +4707,9 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
-    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav' || COMPONENT_SMOKE === 'spacer' || COMPONENT_SMOKE === 'quote' || COMPONENT_SMOKE === 'link' || COMPONENT_SMOKE === 'form') {
+    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav' || COMPONENT_SMOKE === 'spacer' || COMPONENT_SMOKE === 'quote' || COMPONENT_SMOKE === 'link' || COMPONENT_SMOKE === 'form' || COMPONENT_SMOKE === 'comment') {
       assert(tempPageId, `${COMPONENT_SMOKE} component smoke requires an internally created smoke page`);
       const targetElementId = COMPONENT_SMOKE === 'divider'
         ? 'smoke-divider'
@@ -4650,6 +4725,8 @@ const main = async () => {
                   ? 'smoke-link'
                   : COMPONENT_SMOKE === 'form'
                     ? 'smoke-form'
+                    : COMPONENT_SMOKE === 'comment'
+                      ? 'smoke-comment'
                   : 'smoke-list';
       const behaviorControls = COMPONENT_SMOKE === 'divider'
         ? await testDividerBehaviorControls(client)
@@ -4665,6 +4742,8 @@ const main = async () => {
                   ? await testLinkBehaviorControls(client)
                   : COMPONENT_SMOKE === 'form'
                     ? await testFormBehaviorControls(client, tempCollection?.id)
+                    : COMPONENT_SMOKE === 'comment'
+                      ? await testCommentBehaviorControls(client)
                   : await testListBehaviorControls(client);
       await clickSave(client);
       const savedStatus = await waitForEditorMutationReady(client, `after ${COMPONENT_SMOKE} component smoke save`);
@@ -4682,6 +4761,8 @@ const main = async () => {
                   ? await assertPersistedLinkBehavior(tempPageId)
                   : COMPONENT_SMOKE === 'form'
                     ? await assertPersistedFormBehavior(tempPageId, tempCollection?.id)
+                    : COMPONENT_SMOKE === 'comment'
+                      ? await assertPersistedCommentBehavior(tempPageId)
                   : await assertPersistedListBehavior(tempPageId);
       let reloadedState = null;
       let reloadClient = null;
@@ -4885,6 +4966,9 @@ const main = async () => {
     const formBehaviorControls = EDITOR_PATH
       ? null
       : await testFormBehaviorControls(client, tempCollection?.id);
+    const commentBehaviorControls = EDITOR_PATH
+      ? null
+      : await testCommentBehaviorControls(client);
     const videoBehaviorControls = EDITOR_PATH
       ? null
       : await testVideoBehaviorControls(client);
@@ -4920,11 +5004,12 @@ const main = async () => {
     let persistedButtonLinkBehavior = null;
     let persistedLinkBehavior = null;
     let persistedFormBehavior = null;
+    let persistedCommentBehavior = null;
     let persistedVideoBehavior = null;
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-comment', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -5025,6 +5110,9 @@ const main = async () => {
       persistedFormBehavior = formBehaviorControls
         ? await assertPersistedFormBehavior(tempPageId, tempCollection?.id)
         : null;
+      persistedCommentBehavior = commentBehaviorControls
+        ? await assertPersistedCommentBehavior(tempPageId)
+        : null;
       persistedVideoBehavior = videoBehaviorControls
         ? await assertPersistedVideoBehavior(tempPageId)
         : null;
@@ -5038,7 +5126,7 @@ const main = async () => {
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -5157,6 +5245,7 @@ const main = async () => {
       buttonLinkBehaviorControls,
       linkBehaviorControls,
       formBehaviorControls,
+      commentBehaviorControls,
       videoBehaviorControls,
       embedBehaviorControls,
       mapBehaviorControls,
@@ -5184,6 +5273,7 @@ const main = async () => {
       persistedButtonLinkBehavior,
       persistedLinkBehavior,
       persistedFormBehavior,
+      persistedCommentBehavior,
       persistedVideoBehavior,
       persistedEmbedBehavior,
       persistedMapBehavior,
