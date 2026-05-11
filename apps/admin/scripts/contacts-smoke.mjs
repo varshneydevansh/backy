@@ -194,6 +194,22 @@ const deleteUser = async (userId) => {
   await requestApi(`/api/admin/users/${userId}`, { method: 'DELETE' });
 };
 
+const findCollectionBySlug = async (slug) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections?includeUnpublished=true&limit=100`);
+  const collections = payload.data?.collections || payload.collections || [];
+  return collections.find((collection) => collection.slug === slug) || null;
+};
+
+const deleteCollection = async (collectionId) => {
+  if (!collectionId) return;
+  await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}`, { method: 'DELETE' });
+};
+
+const deleteCollectionRecord = async (collectionId, recordId) => {
+  if (!collectionId || !recordId) return;
+  await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}/records/${recordId}`, { method: 'DELETE' });
+};
+
 const createContactDirectly = async (formId) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/contacts`, {
     method: 'POST',
@@ -640,6 +656,47 @@ const promoteContactInUi = async (client, formId, contact) => {
   throw new Error(`Contact was not promoted to user: ${contact.email}`);
 };
 
+const promoteContactToCustomerInUi = async (client, formId, contact) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const cards = Array.from(document.querySelectorAll('article'));
+      const card = cards.find((item) => (item.innerText || '').includes(${JSON.stringify(contact.email)}));
+      if (!card) return { ok: false, reason: 'missing-card' };
+      const button = Array.from(card.querySelectorAll('button')).find((item) => item.textContent?.includes('Promote customer'));
+      if (!(button instanceof HTMLButtonElement)) return { ok: false, reason: 'missing-button', text: card.innerText.slice(0, 500) };
+      if (button.disabled) return { ok: false, reason: 'disabled-button', text: card.innerText.slice(0, 500) };
+      button.click();
+      return { ok: true };
+    })()`);
+
+    if (result.ok) break;
+
+    if (attempt === 79) {
+      throw new Error(`Unable to promote contact to customer in UI: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const contacts = await listContacts(formId);
+    const promoted = contacts.find((item) => item.id === contact.id);
+    const promotion = promoted?.sourceValues?.__backyCustomerPromotion;
+
+    if (promotion?.collectionId && promotion?.recordId && (promoted.notes || '').includes('customer record')) {
+      const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${promotion.collectionId}/records/${promotion.recordId}`);
+      const record = payload.data?.record || payload.record;
+      if (record?.id === promotion.recordId && record.values?.email === contact.email) {
+        return { contact: promoted, record, promotion };
+      }
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Contact was not promoted to customer: ${contact.email}`);
+};
+
 const assertLayout = async (client) => {
   const layout = await evaluate(client, `(() => ({
     width: window.innerWidth,
@@ -663,6 +720,9 @@ const assertLayout = async (client) => {
       hasPromoteUser: Boolean(document.querySelector('[data-testid="contacts-promote-user"]')) &&
         document.body?.innerText?.includes('/contacts/{contactId}/promote') &&
         document.body?.innerText?.includes('Promoted user'),
+      hasPromoteCustomer: Boolean(document.querySelector('[data-testid="contacts-promote-customer"]')) &&
+        document.body?.innerText?.includes('/contacts/{contactId}/promote-customer') &&
+        document.body?.innerText?.includes('Promoted customer'),
       hasInbox: document.body?.innerText?.includes('Lead Inbox') || false,
       hasApi: document.body?.innerText?.includes('Contact pipeline API') || false,
       hasLead: document.body?.innerText?.includes('contacts-smoke@example.com') || false,
@@ -679,6 +739,7 @@ const assertLayout = async (client) => {
     && layout.hasSegmentAnalytics
     && layout.hasSavedLists
     && layout.hasPromoteUser
+    && layout.hasPromoteCustomer
     && layout.hasInbox
     && layout.hasApi
     && layout.hasLead,
@@ -732,6 +793,7 @@ const main = async () => {
   const form = await createLeadForm();
   let savedListId;
   let promotedUserId;
+  let promotedCustomerCleanup = null;
   let cleaned = false;
   let client;
   const { childProcess, userDataDir } = launchChrome();
@@ -772,8 +834,13 @@ const main = async () => {
     });
 
     await navigateToContacts(client, form.id);
+    const existingCustomerCollection = await findCollectionBySlug('customers');
     const promotedContact = await promoteContactInUi(client, form.id, importedContact);
     promotedUserId = promotedContact.promotion.existingUser ? null : promotedContact.user.id;
+    const promotedCustomer = await promoteContactToCustomerInUi(client, form.id, promotedContact.contact);
+    promotedCustomerCleanup = promotedCustomer.promotion.createdCollection && !existingCustomerCollection
+      ? { collectionId: promotedCustomer.promotion.collectionId, recordId: null }
+      : { collectionId: promotedCustomer.promotion.collectionId, recordId: promotedCustomer.promotion.recordId };
     const mergedDuplicateContacts = await mergeDuplicateContactsInUi(client, form.id, duplicateContacts);
     await updateContactInUi(client, { id: contact.id, formId: form.id });
     const updatedContact = await archiveContactWithBulkAction(client, { id: contact.id, formId: form.id });
@@ -795,6 +862,12 @@ const main = async () => {
     savedListId = null;
     await deleteUser(promotedUserId);
     promotedUserId = null;
+    if (promotedCustomerCleanup?.recordId) {
+      await deleteCollectionRecord(promotedCustomerCleanup.collectionId, promotedCustomerCleanup.recordId);
+    } else if (promotedCustomerCleanup?.collectionId) {
+      await deleteCollection(promotedCustomerCleanup.collectionId);
+    }
+    promotedCustomerCleanup = null;
     await deleteForm(form.id);
     cleaned = true;
 
@@ -828,6 +901,12 @@ const main = async () => {
         userId: promotedContact.user.id,
         email: promotedContact.user.email,
       },
+      promotedCustomer: {
+        contactId: promotedCustomer.contact.id,
+        collectionId: promotedCustomer.promotion.collectionId,
+        recordId: promotedCustomer.record.id,
+        email: promotedCustomer.record.values.email,
+      },
       mergedDuplicateContacts: {
         primaryId: mergedDuplicateContacts.primary.id,
         archivedId: mergedDuplicateContacts.archived.id,
@@ -854,6 +933,15 @@ const main = async () => {
     if (promotedUserId) {
       await deleteUser(promotedUserId).catch((error) => {
         console.warn('Unable to delete promoted smoke user:', error instanceof Error ? error.message : error);
+      });
+    }
+    if (promotedCustomerCleanup?.recordId) {
+      await deleteCollectionRecord(promotedCustomerCleanup.collectionId, promotedCustomerCleanup.recordId).catch((error) => {
+        console.warn('Unable to delete promoted smoke customer record:', error instanceof Error ? error.message : error);
+      });
+    } else if (promotedCustomerCleanup?.collectionId) {
+      await deleteCollection(promotedCustomerCleanup.collectionId).catch((error) => {
+        console.warn('Unable to delete promoted smoke customer collection:', error instanceof Error ? error.message : error);
       });
     }
 

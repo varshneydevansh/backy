@@ -766,6 +766,24 @@ interface ApiContactPromotionResponse {
   };
 }
 
+interface ApiContactCustomerPromotionResponse {
+  success: boolean;
+  data?: {
+    contact: Contact;
+    collection: ApiCollection;
+    record: ApiCollectionRecord;
+    existingRecord: boolean;
+    createdCollection?: boolean;
+  };
+  contact?: Contact;
+  collection?: ApiCollection;
+  record?: ApiCollectionRecord;
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
 interface ApiImportContactsResponse {
   success: boolean;
   data?: {
@@ -1665,6 +1683,14 @@ export interface ContactPromotionResult {
     inviteUrl: string;
     expiresAt: string;
   } | null;
+}
+
+export interface ContactCustomerPromotionResult {
+  contact: AdminContact;
+  collection: Collection;
+  record: CollectionRecord;
+  existingRecord: boolean;
+  createdCollection: boolean;
 }
 
 export interface ContactImportResult {
@@ -3638,6 +3664,37 @@ export async function promoteContactToUser(
     user: toStoreUser(user),
     existingUser: Boolean(payload.data?.existingUser),
     invite: payload.data?.invite ?? payload.invite ?? null,
+  };
+}
+
+export async function promoteContactToCustomer(
+  siteId: string,
+  formId: string,
+  contactId: string,
+  input: { customerStatus?: 'lead' | 'customer' | 'vip' | 'inactive'; notes?: string } = {},
+): Promise<ContactCustomerPromotionResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/contacts/${contactId}/promote-customer`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiContactCustomerPromotionResponse>(response);
+  const contact = payload.data?.contact || payload.contact;
+  const collection = payload.data?.collection || payload.collection;
+  const record = payload.data?.record || payload.record;
+
+  if (!response.ok || !payload.success || !contact || !collection || !record) {
+    throw new Error(payload.error?.message || 'Unable to promote contact to customer');
+  }
+
+  return {
+    contact,
+    collection: toCollection(collection),
+    record: toCollectionRecord(record),
+    existingRecord: Boolean(payload.data?.existingRecord),
+    createdCollection: Boolean(payload.data?.createdCollection),
   };
 }
 
