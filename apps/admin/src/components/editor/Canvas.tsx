@@ -2450,6 +2450,8 @@ function CanvasElementComponent({
           const helpText = formatHelpText(p.helpText);
           const required = getBoolean(p.required);
           const disabled = getBoolean(p.disabled);
+          const placeholder = sanitizeText(p.placeholder);
+          const selectedValue = p.value ?? p.defaultValue ?? (placeholder ? '' : selectOptions[0] ?? '');
           return (
             <div style={{
               display: 'flex',
@@ -2471,7 +2473,7 @@ function CanvasElementComponent({
                 </label>
               ) : null}
               <select
-                value={p.value ?? p.defaultValue ?? selectOptions[0] ?? ''}
+                value={selectedValue}
                 disabled={!isPreview || disabled}
                 required={required}
                 name={typeof p.name === 'string' ? p.name : undefined}
@@ -2488,15 +2490,18 @@ function CanvasElementComponent({
                   pointerEvents: isPreview ? 'auto' : 'none',
                 }}
               >
+                {placeholder || selectOptions.length === 0 ? (
+                  <option value="" disabled={selectOptions.length > 0}>
+                    {placeholder || 'Select'}
+                  </option>
+                ) : null}
                 {selectOptions.length ? (
                   selectOptions.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>
                   ))
-                ) : (
-                  <option value="">No options</option>
-                )}
+                ) : null}
               </select>
               {helpText ? (
                 <p style={{
