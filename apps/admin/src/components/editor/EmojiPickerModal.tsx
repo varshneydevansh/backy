@@ -76,7 +76,12 @@ export function EmojiPickerModal({
   };
 
   const modal = (
-    <div className="fixed inset-0 z-[10000]">
+    <div
+      className="fixed inset-0 z-[10000]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Emoji picker"
+    >
       <div
         className="absolute inset-0 bg-black/20 backdrop-blur-[1px] pointer-events-auto"
         onMouseDown={(event) => {

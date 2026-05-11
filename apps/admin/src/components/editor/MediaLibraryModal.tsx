@@ -373,12 +373,17 @@ export function MediaLibraryModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-foreground/45 p-4 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-foreground/45 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="media-library-dialog-title"
+    >
       <div className="flex max-h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-semibold text-foreground">Media library</h2>
+              <h2 id="media-library-dialog-title" className="text-lg font-semibold text-foreground">Media library</h2>
               <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
                 {media.length} assets
               </span>

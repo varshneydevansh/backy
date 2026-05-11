@@ -135,6 +135,32 @@ const RULER_MAJOR_STEP = 100;
 const RULER_MINOR_STEP = 50;
 const MIN_CANVAS_DIMENSION = 320;
 const MAX_CANVAS_DIMENSION = 3840;
+const EDITOR_SHORTCUT_BLOCK_SELECTOR = [
+  '[contenteditable="true"]',
+  '[role="textbox"]',
+  '[role="dialog"]',
+  '[role="menu"]',
+  '[role="menuitem"]',
+  '[data-editor-shortcuts="disabled"]',
+].join(', ');
+
+const shouldIgnoreEditorShortcut = (target: EventTarget | null): boolean => {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target instanceof HTMLButtonElement ||
+    target instanceof HTMLAnchorElement
+  ) {
+    return true;
+  }
+
+  return target.isContentEditable || Boolean(target.closest(EDITOR_SHORTCUT_BLOCK_SELECTOR));
+};
 
 const formatSavedTime = (value: Date | null) => {
   if (!value) {
@@ -3138,12 +3164,7 @@ export function CanvasEditor({
       }
 
       const key = e.key.toLowerCase();
-      // Ignore if typing in an input or textarea
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement ||
-        (e.target as HTMLElement).isContentEditable
-      ) {
+      if (shouldIgnoreEditorShortcut(e.target)) {
         return;
       }
 
@@ -4400,7 +4421,12 @@ export function CanvasEditor({
         )}
 
         {reusableSectionDraft && (
-          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reusable-section-dialog-title"
+          >
             <form
               className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-xl"
               onSubmit={(event) => {
@@ -4413,7 +4439,7 @@ export function CanvasEditor({
                   <Layers className="h-5 w-5" />
                 </span>
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-950">
+                  <h2 id="reusable-section-dialog-title" className="text-lg font-semibold text-slate-950">
                     {reusableSectionDraft.mode === 'save' ? 'Save reusable section' : 'Rename reusable section'}
                   </h2>
                   <p className="mt-1 text-sm text-slate-600">
@@ -4459,14 +4485,19 @@ export function CanvasEditor({
         )}
 
         {pendingDeleteReusableSection && (
-          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-reusable-section-dialog-title"
+          >
             <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
               <div className="flex items-start gap-3">
                 <span className="rounded-lg bg-red-50 p-2 text-red-600">
                   <Trash2 className="h-5 w-5" />
                 </span>
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-950">Delete {pendingDeleteReusableSection.name}?</h2>
+                  <h2 id="delete-reusable-section-dialog-title" className="text-lg font-semibold text-slate-950">Delete {pendingDeleteReusableSection.name}?</h2>
                   <p className="mt-1 text-sm text-slate-600">
                     This removes the saved section from the component library. Existing canvas layers will stay where they are.
                   </p>
@@ -4493,14 +4524,19 @@ export function CanvasEditor({
         )}
 
         {showReloadConfirm && (
-          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reload-editor-dialog-title"
+          >
             <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
               <div className="flex items-start gap-3">
                 <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
                   <RefreshCw className="h-5 w-5" />
                 </span>
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-950">Reload editor?</h2>
+                  <h2 id="reload-editor-dialog-title" className="text-lg font-semibold text-slate-950">Reload editor?</h2>
                   <p className="mt-1 text-sm text-slate-600">
                     Reloading will discard your current unsaved edits and reset the canvas to the last loaded version.
                   </p>
