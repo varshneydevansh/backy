@@ -814,6 +814,26 @@ const formatHelpText = (value: unknown): string => {
   return typeof value === 'string' ? value.trim() : '';
 };
 
+const getFormFieldGap = (props: Record<string, any>, fallback: number): string | number => (
+  toCssLength(props.fieldGap) ?? fallback
+);
+
+const getFormLabelStyle = (
+  props: Record<string, any>,
+  sharedStyle: CSSProperties,
+): CSSProperties => ({
+  color: sanitizeText(props.labelColor) || sanitizeText(props.color) || sharedStyle.color || '#374151',
+  fontWeight: sanitizeText(props.labelFontWeight) || 500,
+  fontSize: toCssLength(props.labelFontSize) ?? 14,
+});
+
+const getFormHelpStyle = (props: Record<string, any>): CSSProperties => ({
+  margin: 0,
+  fontSize: toCssLength(props.helpTextFontSize) ?? 11,
+  lineHeight: 1.4,
+  color: sanitizeText(props.helpTextColor) || '#6b7280',
+});
+
 const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
   const normalized = typeof value === 'string' ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
 
@@ -2397,17 +2417,14 @@ function CanvasElementComponent({
             <div style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: 6,
+              gap: getFormFieldGap(p, 6),
               width: '100%',
               height: '100%',
             }}
             >
               {fieldLabel ? (
                 <label
-                  style={{
-                    color: p.color ?? sharedStyle.color ?? '#374151',
-                    fontWeight: 500,
-                  }}
+                  style={getFormLabelStyle(p, sharedStyle)}
                 >
                   {fieldLabel}
                   {required ? ' *' : ''}
@@ -2440,13 +2457,7 @@ function CanvasElementComponent({
                 readOnly
               />
               {helpText ? (
-                <p style={{
-                  margin: 0,
-                  fontSize: 11,
-                  lineHeight: 1.4,
-                  color: p.color ? `${p.color}cc` : '#6b7280',
-                }}
-                >
+                <p style={getFormHelpStyle(p)}>
                   {helpText}
                 </p>
               ) : null}
@@ -2467,17 +2478,14 @@ function CanvasElementComponent({
             <div style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: 6,
+              gap: getFormFieldGap(p, 6),
               width: '100%',
               height: '100%',
             }}
             >
               {fieldLabel ? (
                 <label
-                  style={{
-                    color: p.color ?? sharedStyle.color ?? '#374151',
-                    fontWeight: 500,
-                  }}
+                  style={getFormLabelStyle(p, sharedStyle)}
                 >
                   {fieldLabel}
                   {required ? ' *' : ''}
@@ -2507,13 +2515,7 @@ function CanvasElementComponent({
                 readOnly
               />
               {helpText ? (
-                <p style={{
-                  margin: 0,
-                  fontSize: 11,
-                  lineHeight: 1.4,
-                  color: p.color ? `${p.color}cc` : '#6b7280',
-                }}
-                >
+                <p style={getFormHelpStyle(p)}>
                   {helpText}
                 </p>
               ) : null}
@@ -2534,17 +2536,14 @@ function CanvasElementComponent({
             <div style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: 6,
+              gap: getFormFieldGap(p, 6),
               width: '100%',
               height: '100%',
             }}
             >
               {fieldLabel ? (
                 <label
-                  style={{
-                    color: p.color ?? sharedStyle.color ?? '#374151',
-                    fontWeight: 500,
-                  }}
+                  style={getFormLabelStyle(p, sharedStyle)}
                 >
                   {fieldLabel}
                   {required ? ' *' : ''}
@@ -2582,13 +2581,7 @@ function CanvasElementComponent({
                 ) : null}
               </select>
               {helpText ? (
-                <p style={{
-                  margin: 0,
-                  fontSize: 11,
-                  lineHeight: 1.4,
-                  color: p.color ? `${p.color}cc` : '#6b7280',
-                }}
-                >
+                <p style={getFormHelpStyle(p)}>
                   {helpText}
                 </p>
               ) : null}
@@ -2615,15 +2608,13 @@ function CanvasElementComponent({
                 height: '100%',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 8,
+                gap: getFormFieldGap(p, 8),
                 boxSizing: 'border-box',
               }}
             >
               {fieldLabel ? (
-                <label style={{
-                  color: p.color ?? sharedStyle.color ?? '#374151',
-                  fontWeight: 500,
-                }}
+                <label
+                  style={getFormLabelStyle(p, sharedStyle)}
                 >
                   {fieldLabel}
                   {required ? ' *' : ''}
@@ -2671,11 +2662,8 @@ function CanvasElementComponent({
                 })}
                 {helpText ? (
                   <p style={{
-                    margin: 0,
+                    ...getFormHelpStyle(p),
                     marginTop: 6,
-                    fontSize: 11,
-                    lineHeight: 1.4,
-                    color: p.color ? `${p.color}cc` : '#6b7280',
                   }}
                   >
                     {helpText}

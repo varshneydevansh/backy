@@ -1327,6 +1327,84 @@ function ContentProperties({
               placeholder="Optional helper text"
             />
           </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Field Gap
+              </label>
+              <NumberInput
+                value={element.props.fieldGap ?? 6}
+                onChange={(value) => onChange({ fieldGap: value })}
+                suffix="px"
+                testId="editor-field-gap"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Label Size
+              </label>
+              <NumberInput
+                value={element.props.labelFontSize ?? 14}
+                onChange={(value) => onChange({ labelFontSize: value })}
+                suffix="px"
+                testId="editor-field-label-font-size"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Label Color
+              </label>
+              <ColorInput
+                value={(element.props.labelColor as string) || (element.props.color as string) || '#374151'}
+                onChange={(value) => onChange({ labelColor: value })}
+                testId="editor-field-label-color"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Help Color
+              </label>
+              <ColorInput
+                value={(element.props.helpTextColor as string) || '#6b7280'}
+                onChange={(value) => onChange({ helpTextColor: value })}
+                testId="editor-field-help-color"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Label Weight
+              </label>
+              <select
+                value={(element.props.labelFontWeight as string) || '500'}
+                onChange={(e) => onChange({ labelFontWeight: e.target.value })}
+                data-testid="editor-field-label-font-weight"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+              >
+                <option value="400">Regular</option>
+                <option value="500">Medium</option>
+                <option value="600">Semibold</option>
+                <option value="700">Bold</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Help Size
+              </label>
+              <NumberInput
+                value={element.props.helpTextFontSize ?? 12}
+                onChange={(value) => onChange({ helpTextFontSize: value })}
+                suffix="px"
+                testId="editor-field-help-font-size"
+              />
+            </div>
+          </div>
 
           {normalizedType === 'input' && (
             <>
