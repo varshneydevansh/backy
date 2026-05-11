@@ -601,6 +601,10 @@ function FormsRoute() {
   );
   const selectedInbox = selectedForm ? inboxByForm[selectedForm.id] : null;
   const selectedSubmissions = selectedInbox?.submissions || [];
+  const selectedConsentFields = useMemo(
+    () => selectedForm?.fields.filter(isConsentField) || [],
+    [selectedForm],
+  );
   const selectedDeliveryEvents = useMemo(
     () => selectedForm ? deliveryEventsByForm[selectedForm.id] || [] : [],
     [deliveryEventsByForm, selectedForm],
@@ -636,6 +640,21 @@ function FormsRoute() {
     }),
     [selectedSubmissions, statusFilter, submissionQuery],
   );
+  const selectedConsentRecords = useMemo(
+    () => filteredSubmissions.flatMap((submission) => selectedConsentFields.map((field) => ({
+      submission,
+      field,
+      value: submission.values[field.key],
+      granted: isConsentGranted(submission.values[field.key]),
+    }))),
+    [filteredSubmissions, selectedConsentFields],
+  );
+  const selectedConsentMetrics = useMemo(() => ({
+    fields: selectedConsentFields.length,
+    records: selectedConsentRecords.length,
+    granted: selectedConsentRecords.filter((record) => record.granted).length,
+    missing: selectedConsentRecords.filter((record) => !record.granted).length,
+  }), [selectedConsentFields.length, selectedConsentRecords]);
   const metrics = useMemo(() => {
     const submissions = Object.values(inboxByForm).flatMap((item) => item.submissions);
     return {
@@ -1390,6 +1409,66 @@ function FormsRoute() {
     URL.revokeObjectURL(url);
     setError(null);
     setNotice(`Submission CSV exported with ${filteredSubmissions.length} visible submission${filteredSubmissions.length === 1 ? '' : 's'}.`);
+  };
+
+  const handleExportConsentRecords = () => {
+    if (isFormsBusy) return;
+    if (!selectedForm) return;
+
+    if (selectedConsentFields.length === 0) {
+      setError('This form does not have a consent checkbox field to export.');
+      setNotice(null);
+      return;
+    }
+
+    const header = [
+      'site_id',
+      'form_id',
+      'form_name',
+      'submission_id',
+      'status',
+      'submitted_at',
+      'request_id',
+      'field_key',
+      'field_label',
+      'consent_value',
+      'consent_granted',
+      'ip_hash',
+      'user_agent',
+      'page_id',
+      'post_id',
+    ];
+    const rows = selectedConsentRecords.map(({ submission, field, value, granted }) => [
+      activeSiteId,
+      selectedForm.id,
+      selectedForm.name,
+      submission.id,
+      submission.status,
+      submission.submittedAt,
+      submission.requestId || '',
+      field.key,
+      field.label,
+      formatSubmissionValue(value),
+      granted ? 'true' : 'false',
+      submission.ipHash || '',
+      submission.userAgent || '',
+      submission.pageId || '',
+      submission.postId || '',
+    ]);
+    const csv = [header, ...rows]
+      .map((row) => row.map(csvEscape).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${selectedForm.name || selectedForm.id}-consent-export.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setNotice(`Consent CSV exported with ${selectedConsentRecords.length} consent record${selectedConsentRecords.length === 1 ? '' : 's'}.`);
   };
 
   const handleExportFormsCatalog = () => {
@@ -2927,6 +3006,49 @@ function FormsRoute() {
                       </div>
                     ))}
                   </div>
+
+                  <div data-testid="forms-consent-export-panel" className="mt-5 rounded-lg border border-border bg-muted/30 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 text-sm font-semibold">
+                          <ShieldCheck className="size-4" />
+                          Consent export
+                        </div>
+                        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                          Export consent field values with submission status, request ID, timestamp, and source metadata for privacy audits.
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isFormsBusy || selectedConsentFields.length === 0 || filteredSubmissions.length === 0}
+                        onClick={handleExportConsentRecords}
+                        iconStart={<Download className="size-4" />}
+                      >
+                        Export consent CSV
+                      </Button>
+                    </div>
+                    <div className="mt-4 grid gap-3 md:grid-cols-4">
+                      <MetaTile label="Consent fields" value={String(selectedConsentMetrics.fields)} />
+                      <MetaTile label="Consent records" value={String(selectedConsentMetrics.records)} />
+                      <MetaTile label="Granted" value={String(selectedConsentMetrics.granted)} />
+                      <MetaTile label="Missing/false" value={String(selectedConsentMetrics.missing)} />
+                    </div>
+                    {selectedConsentFields.length === 0 ? (
+                      <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
+                        No consent-like checkbox fields detected on this form.
+                      </div>
+                    ) : (
+                      <div className="mt-4 grid gap-2 md:grid-cols-2">
+                        {selectedConsentFields.map((field) => (
+                          <div key={field.key} className="rounded-lg border border-border bg-background px-3 py-2">
+                            <div className="text-xs font-semibold text-foreground">{field.label}</div>
+                            <div className="mt-1 font-mono text-xs text-muted-foreground">{field.key}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </PanelContent>
               </Panel>
             )}
@@ -3597,6 +3719,18 @@ const formatSubmissionValue = (value: unknown): string => {
   if (Array.isArray(value)) return value.map(formatSubmissionValue).join(', ');
   return JSON.stringify(value);
 };
+
+const CONSENT_FIELD_PATTERN = /\b(consent|agree|agreement|terms|privacy|permission|subscribe|opt[-_ ]?in)\b/i;
+
+const isConsentField = (field: FormFieldDefinition): boolean => (
+  field.type === 'checkbox' && CONSENT_FIELD_PATTERN.test([field.key, field.label, field.helpText].filter(Boolean).join(' '))
+);
+
+const isConsentGranted = (value: unknown): boolean => (
+  value === true ||
+  value === 1 ||
+  (typeof value === 'string' && ['true', '1', 'yes', 'on', 'accepted', 'agree', 'agreed'].includes(value.trim().toLowerCase()))
+);
 
 const buildSampleSubmissionPayload = (form: FormDefinition) => ({
   values: Object.fromEntries(form.fields.map((field) => [field.key, sampleFormFieldValue(field)])),

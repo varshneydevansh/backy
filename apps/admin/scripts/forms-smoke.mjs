@@ -999,6 +999,45 @@ const assertDeliveryPanelShowsEmail = async (client, submissionId) => {
   assert(result.ok, `Delivery panel did not render email notification event: ${JSON.stringify(result)}`);
 };
 
+const assertConsentExportInUi = async (client, submissionId) => {
+  const result = await evaluate(client, `(() => {
+    const submissionId = ${JSON.stringify(submissionId)};
+    const panel = document.querySelector('[data-testid="forms-consent-export-panel"]');
+    const text = panel?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+    const button = panel
+      ? Array.from(panel.querySelectorAll('button')).find((candidate) => (
+        (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Export consent CSV'
+      ))
+      : null;
+
+    if (button instanceof HTMLButtonElement && !button.disabled) {
+      button.click();
+    }
+
+    return {
+      ok: Boolean(panel) &&
+        text.includes('Consent export') &&
+        text.includes('Consent fields') &&
+        text.includes('Granted') &&
+        text.includes('1') &&
+        button instanceof HTMLButtonElement &&
+        !button.disabled,
+      text: text.slice(0, 800),
+      buttonDisabled: button instanceof HTMLButtonElement ? button.disabled : null,
+      hasSubmission: document.body?.innerText?.includes(submissionId) || false,
+    };
+  })()`);
+  assert(result.ok, `Consent export panel did not render enabled consent export: ${JSON.stringify(result)}`);
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const notice = await evaluate(client, `(() => document.body?.innerText?.includes('Consent CSV exported with') || false)()`);
+    if (notice) return;
+    await sleep(250);
+  }
+
+  throw new Error('Consent export action did not show the expected notice');
+};
+
 const retryWebhookDeliveryInUi = async (client, formId, submission) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
@@ -1265,6 +1304,7 @@ const main = async () => {
     emailDelivery = await waitForEmailNotification(createdFormId, submitted);
     await refreshForms(client);
     await assertDeliveryPanelShowsEmail(client, submitted.id);
+    await assertConsentExportInUi(client, submitted.id);
     webhookRetry = await retryWebhookDeliveryInUi(client, createdFormId, submitted);
     webhookDelivery = await waitForWebhookDelivery(webhookReceiver, createdFormId, submitted, 'succeeded', webhookRetry.delivery.requestId);
     const records = await listCollectionRecords(smokeCollection.id);
