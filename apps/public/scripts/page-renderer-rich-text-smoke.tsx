@@ -130,6 +130,114 @@ const content: PageContent = {
         boxShadow: '0 8px 16px rgba(22, 163, 74, 0.25)',
       },
     },
+    {
+      id: 'styled-image',
+      type: 'image',
+      x: 24,
+      y: 320,
+      width: 180,
+      height: 90,
+      props: {
+        src: 'https://cdn.backy.test/hero.png',
+        alt: 'Styled image alt',
+        title: 'Styled image title',
+        objectFit: 'contain',
+        objectPosition: '25% 75%',
+        borderRadius: 16,
+        borderWidth: 4,
+        borderStyle: 'solid',
+        borderColor: '#f97316',
+        padding: 3,
+        margin: 5,
+        boxShadow: '0 12px 24px rgba(249, 115, 22, 0.3)',
+      },
+    },
+    {
+      id: 'styled-video',
+      type: 'video',
+      x: 224,
+      y: 320,
+      width: 200,
+      height: 112,
+      props: {
+        src: 'https://cdn.backy.test/clip.mp4',
+        poster: 'https://cdn.backy.test/poster.jpg',
+        objectFit: 'contain',
+        controls: true,
+        autoplay: true,
+        loop: true,
+        muted: true,
+        playsInline: true,
+        borderRadius: 18,
+        borderWidth: 2,
+        borderStyle: 'dotted',
+        borderColor: '#2563eb',
+        boxShadow: '0 9px 18px rgba(37, 99, 235, 0.28)',
+      },
+    },
+    {
+      id: 'styled-nav',
+      type: 'nav',
+      x: 444,
+      y: 320,
+      width: 260,
+      height: 72,
+      props: {
+        navItems: [
+          { label: 'Docs', href: '/docs' },
+          { label: 'Pricing', href: '/pricing' },
+        ],
+        navDirection: 'horizontal',
+        gap: 22,
+        padding: 11,
+        backgroundColor: '#f8fafc',
+        color: '#0f172a',
+        borderRadius: 10,
+        borderWidth: 2,
+        borderStyle: 'solid',
+        borderColor: '#64748b',
+        boxShadow: '0 6px 14px rgba(100, 116, 139, 0.22)',
+        ariaLabel: 'Styled nav',
+      },
+    },
+    {
+      id: 'styled-embed',
+      type: 'embed',
+      x: 724,
+      y: 320,
+      width: 220,
+      height: 120,
+      props: {
+        src: 'https://example.com/embed',
+        title: 'Styled embed',
+        loading: 'eager',
+        borderRadius: 9,
+        borderWidth: 3,
+        borderStyle: 'double',
+        borderColor: '#7c3aed',
+        boxShadow: '0 7px 16px rgba(124, 58, 237, 0.25)',
+      },
+    },
+    {
+      id: 'styled-map',
+      type: 'map',
+      x: 24,
+      y: 440,
+      width: 220,
+      height: 120,
+      props: {
+        address: 'Mumbai India',
+        zoom: 17,
+        title: 'Styled map',
+        loading: 'eager',
+        referrerPolicy: 'origin',
+        borderRadius: 13,
+        borderWidth: 2,
+        borderStyle: 'solid',
+        borderColor: '#0e7490',
+        boxShadow: '0 11px 22px rgba(14, 116, 144, 0.25)',
+      },
+    },
   ],
 };
 
@@ -165,6 +273,32 @@ assert(html.includes('background-color:#16a34a'), `Button background was not ren
 assert(html.includes('font-size:18px'), `Button font size was not rendered: ${html}`);
 assert(html.includes('border-radius:12px'), `Button border radius was not rendered: ${html}`);
 assert(html.includes('box-shadow:0 8px 16px rgba(22, 163, 74, 0.25)'), `Button shadow was not rendered: ${html}`);
+assert(html.includes('src="https://cdn.backy.test/hero.png"'), `Image src was not rendered: ${html}`);
+assert(html.includes('alt="Styled image alt"'), `Image alt was not rendered: ${html}`);
+assert(html.includes('object-fit:contain'), `Image object fit was not rendered: ${html}`);
+assert(html.includes('object-position:25% 75%'), `Image object position was not rendered: ${html}`);
+assert(html.includes('border-radius:16px'), `Image border radius was not rendered: ${html}`);
+assert(html.includes('border-width:4px'), `Image border width was not rendered: ${html}`);
+assert(html.includes('border-color:#f97316'), `Image border color was not rendered: ${html}`);
+assert(html.includes('box-shadow:0 12px 24px rgba(249, 115, 22, 0.3)'), `Image shadow was not rendered: ${html}`);
+assert(html.includes('src="https://cdn.backy.test/clip.mp4"'), `Video src was not rendered: ${html}`);
+assert(html.includes('poster="https://cdn.backy.test/poster.jpg"'), `Video poster was not rendered: ${html}`);
+assert(html.includes('border-radius:18px'), `Video border radius was not rendered: ${html}`);
+assert(html.includes('border-style:dotted'), `Video border style was not rendered: ${html}`);
+assert(html.includes('border-color:#2563eb'), `Video border color was not rendered: ${html}`);
+assert(html.includes('aria-label="Styled nav"'), `Nav aria label was not rendered: ${html}`);
+assert(html.includes('href="/docs"'), `Nav item href was not rendered: ${html}`);
+assert(html.includes('gap:22px'), `Nav gap was not rendered: ${html}`);
+assert(html.includes('border-color:#64748b'), `Nav border color was not rendered: ${html}`);
+assert(html.includes('box-shadow:0 6px 14px rgba(100, 116, 139, 0.22)'), `Nav shadow was not rendered: ${html}`);
+assert(html.includes('title="Styled embed"'), `Embed title was not rendered: ${html}`);
+assert(html.includes('src="https://example.com/embed"'), `Embed src was not rendered: ${html}`);
+assert(html.includes('border-style:double'), `Embed border style was not rendered: ${html}`);
+assert(html.includes('border-color:#7c3aed'), `Embed border color was not rendered: ${html}`);
+assert(html.includes('title="Styled map"'), `Map title was not rendered: ${html}`);
+assert(html.includes('q=Mumbai+India'), `Map address was not rendered: ${html}`);
+assert(html.includes('z=17'), `Map zoom was not rendered: ${html}`);
+assert(html.includes('border-color:#0e7490'), `Map border color was not rendered: ${html}`);
 
 console.log(JSON.stringify({
   ok: true,
@@ -176,5 +310,10 @@ console.log(JSON.stringify({
     citation: true,
     styledBox: true,
     styledButton: true,
+    styledImage: true,
+    styledVideo: true,
+    styledNav: true,
+    styledEmbed: true,
+    styledMap: true,
   },
 }, null, 2));

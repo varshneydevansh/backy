@@ -694,6 +694,19 @@ function getTypographyStyle(props: Record<string, unknown>): React.CSSProperties
   };
 }
 
+function getAppearanceStyle(props: Record<string, unknown>): React.CSSProperties {
+  return {
+    padding: getLength(props.padding),
+    margin: getLength(props.margin),
+    backgroundColor: getNameClass(props.backgroundColor),
+    borderRadius: getLength(props.borderRadius),
+    borderWidth: getLength(props.borderWidth),
+    borderStyle: getNameClass(props.borderStyle) || undefined,
+    borderColor: getNameClass(props.borderColor) || undefined,
+    boxShadow: getNameClass(props.boxShadow) || undefined,
+  };
+}
+
 function parseOptionValues(raw: unknown): string[] {
   const values = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(/\r?\n/) : [];
   const parsed = values
@@ -1171,6 +1184,7 @@ function IconElement({ element }: ElementRendererProps) {
         fontSize: getLength(props.size, '24px'),
         lineHeight: 1,
         color: getNameClass(props.color) || '#374151',
+        ...getAppearanceStyle(props as Record<string, unknown>),
         ...styles,
         ...getTypographyStyle(props as Record<string, unknown>),
       }}
@@ -1222,7 +1236,7 @@ function ImageElement({ element }: ElementRendererProps) {
       style={{
         objectFit: (props.objectFit as React.CSSProperties['objectFit']) || 'cover',
         objectPosition: getNameClass(props.objectPosition) || 'center center',
-        borderRadius: getNameClass(props.borderRadius),
+        ...getAppearanceStyle(props as Record<string, unknown>),
         ...styles,
       }}
       loading={normalizeIframeLoading(props.loading)}
@@ -1252,6 +1266,7 @@ function VideoElement({ element }: ElementRendererProps) {
       controls={getBooleanWithFallback(props.controls, true)}
       style={{
         objectFit: (props.objectFit as React.CSSProperties['objectFit']) || 'cover',
+        ...getAppearanceStyle(props as Record<string, unknown>),
         ...styles,
       }}
       playsInline={getBooleanWithFallback(props.playsInline, true)}
@@ -1383,6 +1398,7 @@ function NavElement({ element, isPreview, siteId, pageId, postId }: ElementRende
         backgroundColor: getNameClass(props.backgroundColor),
         color: getNameClass(props.color) || '#111827',
         borderRadius: getLength(props.borderRadius),
+        ...getAppearanceStyle(props as Record<string, unknown>),
         ...styles,
       }}
     >
@@ -1435,6 +1451,7 @@ function ColumnsElement({ element, isPreview, siteId, pageId, postId }: ElementR
         padding: getLength(props.padding),
         backgroundColor: getNameClass(props.backgroundColor),
         borderRadius: getLength(props.borderRadius),
+        ...getAppearanceStyle(props as Record<string, unknown>),
         ...styles,
       }}
       aria-label={getNameClass(props.ariaLabel)}
@@ -1467,6 +1484,7 @@ function SpacerElement({ element }: ElementRendererProps) {
         height: '100%',
         backgroundColor: getNameClass(props.backgroundColor),
         borderRadius: getLength(props.borderRadius),
+        ...getAppearanceStyle(props as Record<string, unknown>),
         ...styles,
       }}
     />
@@ -1514,6 +1532,7 @@ function EmbedElement({ element }: ElementRendererProps) {
       style={{
         border: 'none',
         width: '100%',
+        ...getAppearanceStyle(props as Record<string, unknown>),
         ...styles,
       }}
       allow={normalizeIframeAllow(props.allow)}
@@ -1883,6 +1902,7 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
           display: 'flex',
           flexDirection: 'column',
           gap: getLength(props.gap, '16px'),
+          ...getAppearanceStyle(props as Record<string, unknown>),
           ...styles,
         }}
         onSubmit={handleSubmit}
@@ -2819,6 +2839,7 @@ function MapElement({ element }: ElementRendererProps) {
       style={{
         border: 'none',
         borderRadius: getLength(props.borderRadius, '8px'),
+        ...getAppearanceStyle(props as Record<string, unknown>),
         ...styles,
       }}
       loading={normalizeIframeLoading(props.loading)}
