@@ -814,6 +814,26 @@ const formatHelpText = (value: unknown): string => {
   return typeof value === 'string' ? value.trim() : '';
 };
 
+const formatFormPreviewText = (value: unknown): string => {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${value}`;
+  }
+
+  return '';
+};
+
+const getFormPreviewValue = (props: Record<string, any>): string => {
+  if (props.value !== undefined && props.value !== null) {
+    return formatFormPreviewText(props.value);
+  }
+
+  return formatFormPreviewText(props.defaultValue);
+};
+
 const getFormFieldGap = (props: Record<string, any>, fallback: number): string | number => (
   toCssLength(props.fieldGap) ?? fallback
 );
@@ -2412,7 +2432,8 @@ function CanvasElementComponent({
           const minLength = toNumericAttribute(p.minLength);
           const maxLength = toNumericAttribute(p.maxLength);
           const inputType = normalizeInputType(p.inputType ?? p.type);
-          const inputValue = p.value ?? p.defaultValue ?? '';
+          const placeholder = sanitizeText(p.placeholder);
+          const inputValue = getFormPreviewValue(p);
           return (
             <div style={{
               display: 'flex',
@@ -2432,7 +2453,7 @@ function CanvasElementComponent({
               ) : null}
               <input
                 type={inputType}
-                placeholder={p.placeholder ?? 'Enter text...'}
+                placeholder={placeholder || 'Enter text...'}
                 {...(inputType === 'file' ? {} : { value: inputValue })}
                 disabled={!isPreview || disabled}
                 required={required}
@@ -2474,6 +2495,8 @@ function CanvasElementComponent({
           const rows = toNumericAttribute(p.rows);
           const minLength = toNumericAttribute(p.minLength);
           const maxLength = toNumericAttribute(p.maxLength);
+          const placeholder = sanitizeText(p.placeholder);
+          const textareaValue = getFormPreviewValue(p);
           return (
             <div style={{
               display: 'flex',
@@ -2493,8 +2516,8 @@ function CanvasElementComponent({
               ) : null}
               <textarea
                 rows={rows || 4}
-                placeholder={p.placeholder ?? 'Enter text...'}
-                value={p.value ?? p.defaultValue ?? ''}
+                placeholder={placeholder || 'Enter text...'}
+                value={textareaValue}
                 disabled={!isPreview || disabled}
                 required={required}
                 name={typeof p.name === 'string' ? p.name : undefined}
