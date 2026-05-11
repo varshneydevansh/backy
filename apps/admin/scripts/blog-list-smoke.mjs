@@ -112,6 +112,16 @@ const createBlogTag = async ({ name, slug }) => {
   return tag;
 };
 
+const listBlogCategories = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/blog/categories`);
+  return payload.data?.categories || payload.categories || [];
+};
+
+const listBlogTags = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/blog/tags`);
+  return payload.data?.tags || payload.tags || [];
+};
+
 const listAuthors = async () => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/blog/authors`);
   return payload.data?.authors || payload.authors || [];
@@ -319,11 +329,13 @@ const navigateToBlog = async (client, title) => {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const state = await evaluate(client, `(() => ({
       ready: Boolean(document.querySelector('[data-testid="blog-command-center"]')) &&
+        Boolean(document.querySelector('[data-testid="blog-taxonomy-manager"]')) &&
         Boolean(document.querySelector('#blog-bulk')) &&
         Boolean(document.querySelector('#blog-filters')) &&
         Boolean(document.querySelector('#blog-posts')) &&
         document.body?.innerText?.includes(${JSON.stringify(title)}),
       command: Boolean(document.querySelector('[data-testid="blog-command-center"]')),
+      taxonomy: Boolean(document.querySelector('[data-testid="blog-taxonomy-manager"]')),
       bulk: Boolean(document.querySelector('#blog-bulk')),
       filters: Boolean(document.querySelector('#blog-filters')),
       posts: Boolean(document.querySelector('#blog-posts')),
@@ -351,6 +363,7 @@ const assertBlogListLayout = async (client, { title, categoryName, tagName, auth
     commandCreate: Boolean(document.querySelector('[data-testid="blog-command-create"]')),
     apiContract: document.body?.innerText?.includes('Blog API contract') || false,
     publicPostsApi: document.body?.innerText?.includes('/api/sites/${SITE_ID}/blog') || false,
+    taxonomyManager: Boolean(document.querySelector('[data-testid="blog-taxonomy-manager"]')),
     previewEndpoint: document.body?.innerText?.includes('/preview') || false,
     bulkControl: Boolean(document.querySelector('#blog-bulk select')),
     filters: Boolean(document.querySelector('#blog-filters input[placeholder="Search posts..."]')),
@@ -436,6 +449,108 @@ const exerciseFilters = async (client, { title, categoryId, tagId, authorId }) =
   })()`);
   assert(cleared, 'Unable to clear blog filters');
   await assertPostVisible(client, title, 'Smoke post disappeared after clearing filters');
+};
+
+const waitForTaxonomy = async ({ kind, slug, exists = true }) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const items = kind === 'category' ? await listBlogCategories() : await listBlogTags();
+    const item = items.find((candidate) => candidate.slug === slug);
+    if (exists && item) {
+      return item;
+    }
+    if (!exists && !item) {
+      return null;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Blog ${kind} ${slug} ${exists ? 'was not created' : 'was not deleted'}`);
+};
+
+const clickButtonByTestId = async (client, testId) => {
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector(${JSON.stringify(`[data-testid="${testId}"]`)});
+    if (!(button instanceof HTMLButtonElement) || button.disabled) {
+      return { ok: false, found: Boolean(button), disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+    }
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clicked.ok, `Unable to click ${testId}: ${JSON.stringify(clicked)}`);
+};
+
+const clickButtonByLabel = async (client, label) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const clicked = await evaluate(client, `(() => {
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => candidate.getAttribute('aria-label') === ${JSON.stringify(label)});
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return { ok: false, found: Boolean(button), disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+      }
+      button.click();
+      return { ok: true };
+    })()`);
+    if (clicked.ok) {
+      return;
+    }
+    if (attempt === 79) {
+      throw new Error(`Unable to click ${label}: ${JSON.stringify(clicked)}`);
+    }
+    await sleep(200);
+  }
+};
+
+const manageTaxonomyInUi = async (client, suffix) => {
+  const categoryName = `Smoke UI Category ${suffix}`;
+  const categorySlug = `smoke-ui-category-${suffix}`;
+  const updatedCategoryName = `${categoryName} Updated`;
+  const updatedCategorySlug = `${categorySlug}-updated`;
+  const tagName = `Smoke UI Tag ${suffix}`;
+  const tagSlug = `smoke-ui-tag-${suffix}`;
+  const updatedTagName = `${tagName} Updated`;
+  const updatedTagSlug = `${tagSlug}-updated`;
+
+  assert(await setInputValue(client, '[data-testid="blog-category-name"]', categoryName), 'Unable to set category name');
+  assert(await setInputValue(client, '[data-testid="blog-category-slug"]', categorySlug), 'Unable to set category slug');
+  assert(await setInputValue(client, '[data-testid="blog-category-description"]', 'Created from the rendered taxonomy manager.'), 'Unable to set category description');
+  assert(await setInputValue(client, '[data-testid="blog-category-color"]', '#7c3aed'), 'Unable to set category color');
+  await clickButtonByTestId(client, 'blog-category-save');
+  const createdCategory = await waitForTaxonomy({ kind: 'category', slug: categorySlug });
+  assert(createdCategory.color === '#7c3aed', `Category color did not persist: ${JSON.stringify(createdCategory)}`);
+
+  await clickButtonByLabel(client, `Edit category ${categoryName}`);
+  assert(await setInputValue(client, '[data-testid="blog-category-name"]', updatedCategoryName), 'Unable to update category name');
+  assert(await setInputValue(client, '[data-testid="blog-category-slug"]', updatedCategorySlug), 'Unable to update category slug');
+  assert(await setInputValue(client, '[data-testid="blog-category-description"]', 'Updated from the rendered taxonomy manager.'), 'Unable to update category description');
+  await clickButtonByTestId(client, 'blog-category-save');
+  const updatedCategory = await waitForTaxonomy({ kind: 'category', slug: updatedCategorySlug });
+  assert(updatedCategory.name === updatedCategoryName, `Category edit did not persist: ${JSON.stringify(updatedCategory)}`);
+
+  assert(await setInputValue(client, '[data-testid="blog-tag-name"]', tagName), 'Unable to set tag name');
+  assert(await setInputValue(client, '[data-testid="blog-tag-slug"]', tagSlug), 'Unable to set tag slug');
+  assert(await setInputValue(client, '[data-testid="blog-tag-description"]', 'Created from the rendered taxonomy manager.'), 'Unable to set tag description');
+  await clickButtonByTestId(client, 'blog-tag-save');
+  await waitForTaxonomy({ kind: 'tag', slug: tagSlug });
+
+  await clickButtonByLabel(client, `Edit tag ${tagName}`);
+  assert(await setInputValue(client, '[data-testid="blog-tag-name"]', updatedTagName), 'Unable to update tag name');
+  assert(await setInputValue(client, '[data-testid="blog-tag-slug"]', updatedTagSlug), 'Unable to update tag slug');
+  assert(await setInputValue(client, '[data-testid="blog-tag-description"]', 'Updated from the rendered taxonomy manager.'), 'Unable to update tag description');
+  await clickButtonByTestId(client, 'blog-tag-save');
+  const updatedTag = await waitForTaxonomy({ kind: 'tag', slug: updatedTagSlug });
+  assert(updatedTag.name === updatedTagName, `Tag edit did not persist: ${JSON.stringify(updatedTag)}`);
+
+  await clickButtonByLabel(client, `Delete category ${updatedCategoryName}`);
+  await clickButtonByTestId(client, 'blog-taxonomy-confirm-delete');
+  await waitForTaxonomy({ kind: 'category', slug: updatedCategorySlug, exists: false });
+
+  await clickButtonByLabel(client, `Delete tag ${updatedTagName}`);
+  await clickButtonByTestId(client, 'blog-taxonomy-confirm-delete');
+  await waitForTaxonomy({ kind: 'tag', slug: updatedTagSlug, exists: false });
+
+  return {
+    categorySlug: updatedCategorySlug,
+    tagSlug: updatedTagSlug,
+  };
 };
 
 const clickPreview = async (client, title) => {
@@ -629,6 +744,7 @@ const main = async () => {
 
     await navigateToBlog(client, title);
     await assertBlogListLayout(client, { title, categoryName, tagName, authorName: author?.name || null });
+    const taxonomyUi = await manageTaxonomyInUi(client, suffix);
     await exerciseFilters(client, { title, categoryId, tagId, authorId });
     const previewUrls = await clickPreview(client, title);
     await bulkPublishPost(client, title);
@@ -653,6 +769,7 @@ const main = async () => {
       slug,
       categorySlug,
       tagSlug,
+      taxonomyUi,
       previewUrl: previewUrls[previewUrls.length - 1],
       screenshot: SCREENSHOT_PATH,
     }, null, 2));

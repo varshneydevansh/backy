@@ -6,17 +6,23 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { AlertTriangle, Archive, CheckCircle2, Copy, Download, ExternalLink, Eye, Filter, Plus, FileText, Edit, Trash2 } from 'lucide-react';
+import { AlertTriangle, Archive, CheckCircle2, Copy, Download, ExternalLink, Eye, Filter, Plus, FileText, Edit, Trash2, Save, Tag, X } from 'lucide-react';
 import {
   archiveBlogPost,
+  createBlogCategory,
+  createBlogTag,
   createBlogPostPreview,
+  deleteBlogCategory,
   deleteBlogPost,
+  deleteBlogTag,
   getAdminApiBase,
   listBlogAuthors,
   listBlogCategories,
   listBlogPosts,
   listBlogTags,
   publishBlogPost,
+  updateBlogCategory,
+  updateBlogTag,
   type BlogAuthor,
   type BlogCategory,
   type BlogTag,
@@ -49,6 +55,11 @@ const BLOG_CONTROL_AREAS = [
     title: 'Filters',
     detail: 'Search by title and filter by status, category, tag, or author.',
     href: '#blog-filters',
+  },
+  {
+    title: 'Taxonomy manager',
+    detail: 'Create, edit, color, describe, and delete categories and tags.',
+    href: '#blog-taxonomy',
   },
   {
     title: 'Post table',
@@ -171,6 +182,10 @@ function BlogListView() {
   const [categories, setCategories] = useState<BlogCategory[]>([]);
   const [tags, setTags] = useState<BlogTag[]>([]);
   const [authors, setAuthors] = useState<BlogAuthor[]>([]);
+  const [categoryDraft, setCategoryDraft] = useState<TaxonomyDraft>(() => emptyTaxonomyDraft('#2563eb'));
+  const [tagDraft, setTagDraft] = useState<TaxonomyDraft>(() => emptyTaxonomyDraft());
+  const [editingCategoryId, setEditingCategoryId] = useState('');
+  const [editingTagId, setEditingTagId] = useState('');
   const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
   const [statusFilter, setStatusFilter] = useState<'all' | BlogPost['status']>('all');
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
@@ -181,11 +196,14 @@ function BlogListView() {
   const [isBulkBusy, setIsBulkBusy] = useState(false);
   const [mutatingPostId, setMutatingPostId] = useState<string | null>(null);
   const [previewingPostId, setPreviewingPostId] = useState<string | null>(null);
+  const [mutatingTaxonomyKey, setMutatingTaxonomyKey] = useState('');
   const [pendingDeletePost, setPendingDeletePost] = useState<BlogPost | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
+  const [pendingTaxonomyDelete, setPendingTaxonomyDelete] = useState<TaxonomyDeleteTarget | null>(null);
   const isPostMutationBusy = mutatingPostId !== null;
   const isPostPreviewBusy = previewingPostId !== null;
-  const isBlogWorkflowBusy = isLoading || isBulkBusy || isPostMutationBusy || isPostPreviewBusy;
+  const isTaxonomyBusy = Boolean(mutatingTaxonomyKey);
+  const isBlogWorkflowBusy = isLoading || isBulkBusy || isPostMutationBusy || isPostPreviewBusy || isTaxonomyBusy;
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
@@ -323,6 +341,151 @@ function BlogListView() {
     () => new Map(authors.map((author) => [author.id, author])),
     [authors],
   );
+  const selectedCategory = editingCategoryId ? categoryById.get(editingCategoryId) : null;
+  const selectedTag = editingTagId ? tagById.get(editingTagId) : null;
+
+  const patchCategoryDraft = (patch: Partial<TaxonomyDraft>) => {
+    setCategoryDraft((current) => ({
+      ...current,
+      ...patch,
+      slug: patch.name && (!current.slug || current.slug === slugifyTaxonomyName(current.name)) ? slugifyTaxonomyName(patch.name) : patch.slug ?? current.slug,
+    }));
+  };
+
+  const patchTagDraft = (patch: Partial<TaxonomyDraft>) => {
+    setTagDraft((current) => ({
+      ...current,
+      ...patch,
+      slug: patch.name && (!current.slug || current.slug === slugifyTaxonomyName(current.name)) ? slugifyTaxonomyName(patch.name) : patch.slug ?? current.slug,
+    }));
+  };
+
+  const startEditCategory = (category: BlogCategory) => {
+    if (isBlogWorkflowBusy) return;
+
+    setEditingCategoryId(category.id);
+    setCategoryDraft({
+      name: category.name,
+      slug: category.slug,
+      description: category.description || '',
+      color: category.color || '#2563eb',
+    });
+  };
+
+  const startEditTag = (tag: BlogTag) => {
+    if (isBlogWorkflowBusy) return;
+
+    setEditingTagId(tag.id);
+    setTagDraft({
+      name: tag.name,
+      slug: tag.slug,
+      description: tag.description || '',
+      color: '',
+    });
+  };
+
+  const resetCategoryDraft = () => {
+    setEditingCategoryId('');
+    setCategoryDraft(emptyTaxonomyDraft('#2563eb'));
+  };
+
+  const resetTagDraft = () => {
+    setEditingTagId('');
+    setTagDraft(emptyTaxonomyDraft());
+  };
+
+  const saveCategoryDraft = async () => {
+    if (isBlogWorkflowBusy || !categoryDraft.name.trim()) return;
+
+    const payload = {
+      name: categoryDraft.name.trim(),
+      slug: slugifyTaxonomyName(categoryDraft.slug || categoryDraft.name),
+      description: categoryDraft.description.trim() || null,
+      color: categoryDraft.color.trim() || null,
+    };
+    const mutationKey = editingCategoryId ? `category:${editingCategoryId}` : 'category:new';
+    setMutatingTaxonomyKey(mutationKey);
+    setError(null);
+    setNotice(null);
+
+    try {
+      if (editingCategoryId) {
+        const updated = await updateBlogCategory(activeSiteId, editingCategoryId, payload);
+        setCategories((current) => current.map((category) => (category.id === updated.id ? updated : category)));
+        setNotice(`${updated.name} category updated.`);
+      } else {
+        const created = await createBlogCategory(activeSiteId, payload);
+        setCategories((current) => [created, ...current.filter((category) => category.id !== created.id)]);
+        setNotice(`${created.name} category created.`);
+      }
+      resetCategoryDraft();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save blog category');
+    } finally {
+      setMutatingTaxonomyKey('');
+    }
+  };
+
+  const saveTagDraft = async () => {
+    if (isBlogWorkflowBusy || !tagDraft.name.trim()) return;
+
+    const payload = {
+      name: tagDraft.name.trim(),
+      slug: slugifyTaxonomyName(tagDraft.slug || tagDraft.name),
+      description: tagDraft.description.trim() || null,
+    };
+    const mutationKey = editingTagId ? `tag:${editingTagId}` : 'tag:new';
+    setMutatingTaxonomyKey(mutationKey);
+    setError(null);
+    setNotice(null);
+
+    try {
+      if (editingTagId) {
+        const updated = await updateBlogTag(activeSiteId, editingTagId, payload);
+        setTags((current) => current.map((tag) => (tag.id === updated.id ? updated : tag)));
+        setNotice(`${updated.name} tag updated.`);
+      } else {
+        const created = await createBlogTag(activeSiteId, payload);
+        setTags((current) => [created, ...current.filter((tag) => tag.id !== created.id)]);
+        setNotice(`${created.name} tag created.`);
+      }
+      resetTagDraft();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save blog tag');
+    } finally {
+      setMutatingTaxonomyKey('');
+    }
+  };
+
+  const deleteTaxonomyTarget = async () => {
+    if (!pendingTaxonomyDelete || isBlogWorkflowBusy) return;
+
+    const target = pendingTaxonomyDelete;
+    setMutatingTaxonomyKey(`${target.type}:${target.id}:delete`);
+    setError(null);
+    setNotice(null);
+
+    try {
+      if (target.type === 'category') {
+        await deleteBlogCategory(activeSiteId, target.id);
+        setCategories((current) => current.filter((category) => category.id !== target.id));
+        if (selectedCategoryId === target.id) setSelectedCategoryId('');
+        if (editingCategoryId === target.id) resetCategoryDraft();
+      } else {
+        await deleteBlogTag(activeSiteId, target.id);
+        setTags((current) => current.filter((tag) => tag.id !== target.id));
+        if (selectedTagId === target.id) setSelectedTagId('');
+        if (editingTagId === target.id) resetTagDraft();
+      }
+      setPendingTaxonomyDelete(null);
+      setNotice(`${target.name} ${target.type} deleted.`);
+      await refreshPosts(activeSiteId);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : `Unable to delete blog ${target.type}`);
+    } finally {
+      setMutatingTaxonomyKey('');
+    }
+  };
 
   const setPostStatusFilter = (nextStatus: 'all' | BlogPost['status']) => {
     if (isBlogWorkflowBusy) return;
@@ -1065,7 +1228,7 @@ function BlogListView() {
         <div className="mt-4 rounded-lg border border-border bg-background p-4">
           <h3 className="text-sm font-semibold">Blog control map</h3>
           <p className="mt-1 text-sm text-muted-foreground">Jump to post status, bulk actions, filters, and the editorial table.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
             {BLOG_CONTROL_AREAS.map((area) => (
               <a
                 key={area.title}
@@ -1252,6 +1415,140 @@ function BlogListView() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="blog-taxonomy" className="mb-6 scroll-mt-24 rounded-lg border border-border bg-card p-4" data-testid="blog-taxonomy-manager">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Tag className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold">Taxonomy manager</h2>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Manage the category and tag vocabulary that custom frontends use for blog indexes, archive filters, related posts, and feed chips.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <span className="rounded-full bg-muted px-2.5 py-1">{categories.length} categories</span>
+            <span className="rounded-full bg-muted px-2.5 py-1">{tags.length} tags</span>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+          <div className="rounded-lg border border-border bg-background p-4">
+            <TaxonomyDraftForm
+              kind="category"
+              draft={categoryDraft}
+              editingName={selectedCategory?.name || ''}
+              busy={isBlogWorkflowBusy}
+              colorEnabled
+              onDraftChange={patchCategoryDraft}
+              onSave={() => void saveCategoryDraft()}
+              onCancel={resetCategoryDraft}
+            />
+
+            <div className="mt-4 space-y-2">
+              {categories.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                  No categories yet.
+                </div>
+              ) : categories.map((category) => (
+                <div key={category.id} className="rounded-lg border border-border bg-card px-3 py-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className="h-3 w-3 rounded-full border border-border"
+                          style={{ backgroundColor: category.color || '#2563eb' }}
+                          aria-hidden="true"
+                        />
+                        <span className="font-medium text-foreground">{category.name}</span>
+                        <span className="font-mono text-xs text-muted-foreground">/{category.slug}</span>
+                      </div>
+                      <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                        {category.description || 'No description'} · {category.postCount} post{category.postCount === 1 ? '' : 's'}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => startEditCategory(category)}
+                        disabled={isBlogWorkflowBusy}
+                        aria-label={`Edit category ${category.name}`}
+                        className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingTaxonomyDelete({ type: 'category', id: category.id, name: category.name, postCount: category.postCount })}
+                        disabled={isBlogWorkflowBusy}
+                        aria-label={`Delete category ${category.name}`}
+                        className="rounded-lg p-2 text-muted-foreground transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-4">
+            <TaxonomyDraftForm
+              kind="tag"
+              draft={tagDraft}
+              editingName={selectedTag?.name || ''}
+              busy={isBlogWorkflowBusy}
+              onDraftChange={patchTagDraft}
+              onSave={() => void saveTagDraft()}
+              onCancel={resetTagDraft}
+            />
+
+            <div className="mt-4 space-y-2">
+              {tags.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                  No tags yet.
+                </div>
+              ) : tags.map((tag) => (
+                <div key={tag.id} className="rounded-lg border border-border bg-card px-3 py-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-foreground">{tag.name}</span>
+                        <span className="font-mono text-xs text-muted-foreground">/{tag.slug}</span>
+                      </div>
+                      <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                        {tag.description || 'No description'} · {tag.postCount} post{tag.postCount === 1 ? '' : 's'}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => startEditTag(tag)}
+                        disabled={isBlogWorkflowBusy}
+                        aria-label={`Edit tag ${tag.name}`}
+                        className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingTaxonomyDelete({ type: 'tag', id: tag.id, name: tag.name, postCount: tag.postCount })}
+                        disabled={isBlogWorkflowBusy}
+                        aria-label={`Delete tag ${tag.name}`}
+                        className="rounded-lg p-2 text-muted-foreground transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -1512,6 +1809,46 @@ function BlogListView() {
         />
       </div>
 
+      {pendingTaxonomyDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-red-50 p-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Delete {pendingTaxonomyDelete.name}?</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This removes the {pendingTaxonomyDelete.type} from the blog taxonomy API and detaches it from matching posts.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Assigned posts: <span className="font-medium text-foreground">{pendingTaxonomyDelete.postCount}</span>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingTaxonomyDelete(null)}
+                disabled={isTaxonomyBusy}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void deleteTaxonomyTarget()}
+                disabled={isTaxonomyBusy}
+                data-testid="blog-taxonomy-confirm-delete"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isTaxonomyBusy ? 'Deleting...' : `Delete ${pendingTaxonomyDelete.type}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pendingDeletePost && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
@@ -1631,6 +1968,37 @@ const getBulkBusyLabel = (action: 'publish' | 'archive' | 'delete' | ''): string
   return 'Applying...';
 };
 
+interface TaxonomyDraft {
+  name: string;
+  slug: string;
+  description: string;
+  color: string;
+}
+
+interface TaxonomyDeleteTarget {
+  type: 'category' | 'tag';
+  id: string;
+  name: string;
+  postCount: number;
+}
+
+const emptyTaxonomyDraft = (color = ''): TaxonomyDraft => ({
+  name: '',
+  slug: '',
+  description: '',
+  color,
+});
+
+const slugifyTaxonomyName = (value: string): string => {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return slug || 'taxonomy';
+};
+
 function BlogApiSnippet({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -1638,6 +2006,124 @@ function BlogApiSnippet({ label, value }: { label: string; value: string }) {
       <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
         {value}
       </code>
+    </div>
+  );
+}
+
+function TaxonomyDraftForm({
+  kind,
+  draft,
+  editingName,
+  busy,
+  colorEnabled = false,
+  onDraftChange,
+  onSave,
+  onCancel,
+}: {
+  kind: 'category' | 'tag';
+  draft: TaxonomyDraft;
+  editingName: string;
+  busy: boolean;
+  colorEnabled?: boolean;
+  onDraftChange: (patch: Partial<TaxonomyDraft>) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const isEditing = Boolean(editingName);
+  const title = isEditing ? `Edit ${editingName}` : `Create ${kind}`;
+  const nameId = `blog-${kind}-name`;
+  const slugId = `blog-${kind}-slug`;
+  const descriptionId = `blog-${kind}-description`;
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {kind === 'category'
+              ? 'Categories can carry color and archive grouping for frontend feeds.'
+              : 'Tags support cross-category filters, chips, and related-post rules.'}
+          </p>
+        </div>
+        {isEditing && (
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <X className="h-3.5 w-3.5" />
+            Cancel edit
+          </button>
+        )}
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <label className="text-xs font-medium text-muted-foreground" htmlFor={nameId}>
+          Name
+          <input
+            id={nameId}
+            data-testid={`blog-${kind}-name`}
+            value={draft.name}
+            disabled={busy}
+            onChange={(event) => onDraftChange({ name: event.target.value })}
+            placeholder={kind === 'category' ? 'Engineering' : 'Launch notes'}
+            className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+          />
+        </label>
+        <label className="text-xs font-medium text-muted-foreground" htmlFor={slugId}>
+          Slug
+          <input
+            id={slugId}
+            data-testid={`blog-${kind}-slug`}
+            value={draft.slug}
+            disabled={busy}
+            onChange={(event) => onDraftChange({ slug: slugifyTaxonomyName(event.target.value) })}
+            placeholder={kind === 'category' ? 'engineering' : 'launch-notes'}
+            className="mt-1 w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+          />
+        </label>
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+        <label className="text-xs font-medium text-muted-foreground" htmlFor={descriptionId}>
+          Description
+          <input
+            id={descriptionId}
+            data-testid={`blog-${kind}-description`}
+            value={draft.description}
+            disabled={busy}
+            onChange={(event) => onDraftChange({ description: event.target.value })}
+            placeholder="Frontend archive description"
+            className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+          />
+        </label>
+        {colorEnabled && (
+          <label className="text-xs font-medium text-muted-foreground">
+            Color
+            <input
+              type="color"
+              data-testid="blog-category-color"
+              value={draft.color || '#2563eb'}
+              disabled={busy}
+              onChange={(event) => onDraftChange({ color: event.target.value })}
+              className="mt-1 h-10 w-14 rounded-lg border border-border bg-background p-1 disabled:cursor-not-allowed disabled:opacity-60"
+            />
+          </label>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={busy || !draft.name.trim()}
+        data-testid={`blog-${kind}-save`}
+        className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <Save className="h-4 w-4" />
+        {isEditing ? `Save ${kind}` : `Create ${kind}`}
+      </button>
     </div>
   );
 }
