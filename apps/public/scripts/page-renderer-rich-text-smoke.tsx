@@ -378,6 +378,10 @@ const content: PageContent = {
         method: 'POST',
         enableHoneypot: true,
         enableCaptcha: true,
+        contactShareEnabled: true,
+        collectionWriteEnabled: true,
+        collectionWriteCollectionId: 'leads_collection',
+        collectionWriteSlugField: 'name',
         gap: 12,
         borderWidth: 2,
         borderStyle: 'solid',
@@ -565,6 +569,10 @@ assert(html.includes('data-backy-form-id="contact_form"'), `Form id contract att
 assert(html.includes('data-backy-form-active="true"'), `Form active contract attribute was not rendered: ${html}`);
 assert(html.includes('data-backy-form-audience="authenticated"'), `Form audience contract attribute was not rendered: ${html}`);
 assert(html.includes('data-backy-captcha-required="true"'), `Form captcha contract attribute was not rendered: ${html}`);
+assert(html.includes('data-backy-contact-share="true"'), `Form contact-share contract attribute was not rendered: ${html}`);
+assert(html.includes('data-backy-collection-write="true"'), `Form collection-write contract attribute was not rendered: ${html}`);
+assert(html.includes('data-backy-collection-id="leads_collection"'), `Form collection id contract attribute was not rendered: ${html}`);
+assert(html.includes('data-backy-collection-slug-field="name"'), `Form collection slug field contract attribute was not rendered: ${html}`);
 assert(html.includes('name="captchaToken"'), `Form captcha token transport field was not rendered: ${html}`);
 assert(html.includes('action="/api/custom-lead-submit"'), `Custom form action was not rendered: ${html}`);
 assert(html.includes('Custom Action Form'), `Custom form title was not rendered: ${html}`);

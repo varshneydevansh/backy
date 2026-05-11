@@ -1867,6 +1867,10 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
   const formAudience = rawAudience === 'authenticated' || rawAudience === 'adminOnly' ? rawAudience : 'public';
   const enableHoneypot = parseBooleanSetting(props.enableHoneypot, false);
   const enableCaptcha = parseBooleanSetting(props.enableCaptcha, false);
+  const contactShareEnabled = parseBooleanSetting(props.contactShareEnabled, false);
+  const collectionWriteEnabled = parseBooleanSetting(props.collectionWriteEnabled, false);
+  const collectionWriteCollectionId = getNameClass(props.collectionWriteCollectionId || props.collectionId);
+  const collectionWriteSlugField = getNameClass(props.collectionWriteSlugField);
   const successRedirectUrl = getNameClass(props.successRedirectUrl || props.redirectUrl);
   const successMessage =
     getNameClass((props as { successMessage?: unknown }).successMessage) ||
@@ -2013,6 +2017,10 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
         data-backy-form-active={formActive ? 'true' : 'false'}
         data-backy-form-audience={formAudience}
         data-backy-captcha-required={enableCaptcha ? 'true' : 'false'}
+        data-backy-contact-share={contactShareEnabled ? 'true' : 'false'}
+        data-backy-collection-write={collectionWriteEnabled ? 'true' : 'false'}
+        data-backy-collection-id={collectionWriteEnabled && collectionWriteCollectionId ? collectionWriteCollectionId : undefined}
+        data-backy-collection-slug-field={collectionWriteEnabled && collectionWriteSlugField ? collectionWriteSlugField : undefined}
         style={{
           display: 'flex',
           flexDirection: 'column',
