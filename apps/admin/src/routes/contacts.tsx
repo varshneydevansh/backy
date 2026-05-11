@@ -24,13 +24,17 @@ import {
 } from 'lucide-react';
 import {
   createFormContact,
+  deleteContactSavedList,
   getAdminApiBase,
   importFormContactsCsv,
+  listContactSavedLists,
   listContactSegments,
   listFormContacts,
+  saveContactSavedList,
   listForms,
   updateContact,
   type AdminContact,
+  type ContactSavedList,
   type ContactSegmentAnalytics,
   type ContactStatus,
   type FormDefinition,
@@ -186,6 +190,7 @@ function ContactsRoute() {
   const [forms, setForms] = useState<FormDefinition[]>([]);
   const [contactsByForm, setContactsByForm] = useState<Record<string, ContactInbox>>({});
   const [contactSegments, setContactSegments] = useState<ContactSegmentAnalytics | null>(null);
+  const [contactSavedLists, setContactSavedLists] = useState<ContactSavedList[]>([]);
   const [selectedFormId, setSelectedFormId] = useState<string>(routeSearch.formId || 'all');
   const [statusFilter, setStatusFilter] = useState<ContactStatusFilter>(routeSearch.status || 'all');
   const [qualityFilter, setQualityFilter] = useState<ContactQualityFilter>(routeSearch.quality || 'all');
@@ -198,6 +203,7 @@ function ContactsRoute() {
     status: 'new' as ContactStatus,
     notes: '',
   });
+  const [savedListName, setSavedListName] = useState('');
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -232,6 +238,7 @@ function ContactsRoute() {
     ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts/import?upsertByEmail=true`
     : '';
   const contactSegmentsUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/contact-segments${apiForm ? `?formId=${encodeURIComponent(apiForm.id)}` : ''}`;
+  const contactListsUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/contact-lists`;
   const allContacts = useMemo(
     () => Object.values(contactsByForm).flatMap((inbox) => inbox.contacts),
     [contactsByForm],
@@ -484,6 +491,7 @@ function ContactsRoute() {
         import: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/import?upsertByEmail=true`,
       })),
       segments: contactSegmentsUrl,
+      savedLists: contactListsUrl,
     },
     controlRoutes: {
       forms: `/forms?siteId=${encodeURIComponent(activeSiteId)}`,
@@ -519,6 +527,13 @@ function ContactsRoute() {
         formIds: segment.formIds,
       })),
     } : null,
+    savedLists: contactSavedLists.map((list) => ({
+      id: list.id,
+      name: list.name,
+      filters: list.filters,
+      matchedCount: list.matchedCount,
+      formIds: list.formIds,
+    })),
     lifecycleStates: ['new', 'contacted', 'qualified', 'archived'],
     filters: {
       formId: selectedFormId,
@@ -608,6 +623,8 @@ function ContactsRoute() {
     canMergeSelectedContacts,
     contactCreateUrl,
     contactImportUrl,
+    contactListsUrl,
+    contactSavedLists,
     contactSegments,
     contactSegmentsUrl,
     commandReadiness.checks,
@@ -663,9 +680,10 @@ function ContactsRoute() {
     setNotice(null);
 
     try {
-      const [loadedForms, loadedSegments] = await Promise.all([
+      const [loadedForms, loadedSegments, loadedSavedLists] = await Promise.all([
         listForms(activeSiteId),
         listContactSegments(activeSiteId),
+        listContactSavedLists(activeSiteId),
       ]);
       const inboxPairs = await Promise.all(
         loadedForms.map(async (form) => {
@@ -681,6 +699,7 @@ function ContactsRoute() {
       setForms(loadedForms);
       setContactsByForm(Object.fromEntries(inboxPairs));
       setContactSegments(loadedSegments);
+      setContactSavedLists(loadedSavedLists);
       const loadedContactIds = new Set(inboxPairs.flatMap(([, inbox]) => inbox.contacts.map((contact) => contact.id)));
       setSelectedContactIds((current) => current.filter((id) => loadedContactIds.has(id)));
       setSelectedFormId((current) => (
@@ -1105,6 +1124,80 @@ function ContactsRoute() {
     }
   };
 
+  const currentSavedListFilters = () => ({
+    formId: selectedFormId,
+    status: statusFilter,
+    quality: qualityFilter,
+    ...(searchQuery.trim() ? { query: searchQuery.trim() } : {}),
+  });
+
+  const handleSaveContactList = async () => {
+    if (isContactsBusy) return;
+
+    const name = savedListName.trim();
+    if (!name) {
+      setNotice(null);
+      setError('Saved list requires a name.');
+      return;
+    }
+
+    setUpdatingId('save-contact-list');
+    setError(null);
+    setNotice(null);
+
+    try {
+      const result = await saveContactSavedList(activeSiteId, {
+        name,
+        filters: currentSavedListFilters(),
+      });
+      setContactSavedLists(result.lists);
+      setSavedListName('');
+      setNotice(`Saved list "${result.list.name}" for ${filteredContacts.length} visible contact${filteredContacts.length === 1 ? '' : 's'}.`);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save contact list');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const applyContactSavedList = (list: ContactSavedList) => {
+    if (isContactsBusy) return;
+
+    const formId = list.filters.formId || 'all';
+    const status = list.filters.status || 'all';
+    const quality = list.filters.quality || 'all';
+    const query = list.filters.query || '';
+    setSelectedFormId(formId);
+    setStatusFilter(status);
+    setQualityFilter(quality);
+    setSearchQuery(query);
+    setSelectedContactIds([]);
+    updateContactsRouteSearch({
+      formId,
+      status,
+      quality,
+      q: query || undefined,
+    });
+  };
+
+  const handleDeleteContactSavedList = async (list: ContactSavedList) => {
+    if (isContactsBusy) return;
+
+    setUpdatingId(`delete-contact-list-${list.id}`);
+    setError(null);
+    setNotice(null);
+
+    try {
+      await deleteContactSavedList(activeSiteId, list.id);
+      setContactSavedLists((current) => current.filter((item) => item.id !== list.id));
+      setNotice(`Deleted saved list "${list.name}".`);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete saved contact list');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const clearContactFilters = () => {
     if (isContactsBusy) return;
 
@@ -1461,6 +1554,82 @@ function ContactsRoute() {
         </div>
         <code className="mt-4 block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
           {contactSegmentsUrl}
+        </code>
+      </div>
+
+      <div className="mb-6 rounded-lg border border-border bg-card p-4" data-testid="contacts-saved-lists">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Filter className="size-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Saved lead lists</h2>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Save the current form, lifecycle, lead quality, and search filters as a backend-managed list for custom CRM views.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => void copyContactApiText(contactListsUrl, 'Contact lists URL')}
+            disabled={isContactsBusy}
+            iconStart={<Copy className="size-4" />}
+          >
+            Copy endpoint
+          </Button>
+        </div>
+        <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
+          <label className="text-xs font-medium text-muted-foreground">
+            List name
+            <input
+              value={savedListName}
+              disabled={isContactsBusy}
+              onChange={(event) => setSavedListName(event.target.value)}
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+              placeholder="Qualified leads with source values"
+            />
+          </label>
+          <div className="flex items-end">
+            <Button
+              type="button"
+              disabled={isContactsBusy || !savedListName.trim()}
+              onClick={() => void handleSaveContactList()}
+              iconStart={<Save className="size-4" />}
+            >
+              Save current view
+            </Button>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {contactSavedLists.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
+              No saved lists yet.
+            </div>
+          ) : contactSavedLists.map((list) => (
+            <div key={list.id} className="rounded-lg border border-border bg-background p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-foreground">{list.name}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {list.matchedCount} match{list.matchedCount === 1 ? '' : 'es'} | {list.filters.status || 'all'} | {list.filters.quality || 'all'}
+                  </div>
+                </div>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                  {list.formIds.length || 'All'} form{list.formIds.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="outline" disabled={isContactsBusy} onClick={() => applyContactSavedList(list)}>
+                  Apply
+                </Button>
+                <Button size="sm" variant="ghost" disabled={isContactsBusy} onClick={() => void handleDeleteContactSavedList(list)}>
+                  Delete
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <code className="mt-4 block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+          {contactListsUrl}
         </code>
       </div>
 

@@ -220,6 +220,14 @@ const normalizeSettings = (value: unknown): SiteSettings => ({
     redirectRules: normalizeSiteRedirectRules(isRecord(value) ? value.redirectRules : undefined),
     navigation: normalizeNavigation(isRecord(value) ? value.navigation : undefined),
     frontendDesign: normalizeFrontendDesign(isRecord(value) ? value.frontendDesign : undefined),
+    contacts: isRecord(value) && isRecord(value.contacts)
+        ? {
+            ...value.contacts,
+            savedLists: Array.isArray(value.contacts.savedLists)
+                ? value.contacts.savedLists as NonNullable<SiteSettings['contacts']>['savedLists']
+                : [],
+        }
+        : { savedLists: [] },
 });
 
 const normalizeMeta = (value: unknown): PageMeta => (

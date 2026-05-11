@@ -156,6 +156,33 @@ const listContactSegments = async (formId) => {
   };
 };
 
+const createContactSavedList = async (formId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/contact-lists`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Smoke Qualified Leads',
+      filters: {
+        formId,
+        status: 'qualified',
+        quality: 'ready-to-promote',
+      },
+    }),
+  });
+  const list = payload.data?.list || payload.list;
+  const savedLists = payload.data?.lists || payload.lists || [];
+  assert(list?.id, `Contact saved list create did not return a list: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(savedLists.some((item) => item.id === list.id && item.matchedCount >= 3), `Contact saved list did not include qualified contacts: ${JSON.stringify(payload).slice(0, 500)}`);
+  return list;
+};
+
+const deleteContactSavedList = async (listId) => {
+  if (!listId) return;
+  await requestApi(`/api/admin/sites/${SITE_ID}/forms/contact-lists`, {
+    method: 'DELETE',
+    body: JSON.stringify({ listId }),
+  });
+};
+
 const createContactDirectly = async (formId) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/contacts`, {
     method: 'POST',
@@ -579,6 +606,10 @@ const assertLayout = async (client) => {
       hasSegmentAnalytics: Boolean(document.querySelector('[data-testid="contacts-segment-analytics"]')) &&
         document.body?.innerText?.includes('Backend contact segments') &&
         document.body?.innerText?.includes('/forms/contact-segments'),
+      hasSavedLists: Boolean(document.querySelector('[data-testid="contacts-saved-lists"]')) &&
+        document.body?.innerText?.includes('Saved lead lists') &&
+        document.body?.innerText?.includes('Smoke Qualified Leads') &&
+        document.body?.innerText?.includes('/forms/contact-lists'),
       hasInbox: document.body?.innerText?.includes('Lead Inbox') || false,
       hasApi: document.body?.innerText?.includes('Contact pipeline API') || false,
       hasLead: document.body?.innerText?.includes('contacts-smoke@example.com') || false,
@@ -593,6 +624,7 @@ const assertLayout = async (client) => {
     && layout.hasImportTemplate
     && layout.hasMergeDuplicates
     && layout.hasSegmentAnalytics
+    && layout.hasSavedLists
     && layout.hasInbox
     && layout.hasApi
     && layout.hasLead,
@@ -644,6 +676,7 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const form = await createLeadForm();
+  let savedListId;
   let cleaned = false;
   let client;
   const { childProcess, userDataDir } = launchChrome();
@@ -666,6 +699,8 @@ const main = async () => {
     assert(contactSegments.summary?.contacts >= contacts.length, `Contact segments did not include current contacts: ${JSON.stringify(contactSegments).slice(0, 500)}`);
     assert(duplicateSegment?.count >= 2, `Duplicate contact segment did not report duplicate contacts: ${JSON.stringify(contactSegments).slice(0, 500)}`);
     assert(readySegment?.count >= 3, `Ready-to-promote segment did not include qualified contacts: ${JSON.stringify(contactSegments).slice(0, 500)}`);
+    const savedList = await createContactSavedList(form.id);
+    savedListId = savedList.id;
 
     await waitForCdp();
     const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
@@ -699,6 +734,8 @@ const main = async () => {
 
     assert(browserErrors.length === 0, `Browser emitted errors: ${JSON.stringify(browserErrors.slice(0, 3))}`);
 
+    await deleteContactSavedList(savedListId);
+    savedListId = null;
     await deleteForm(form.id);
     cleaned = true;
 
@@ -736,11 +773,21 @@ const main = async () => {
         duplicateEmail: duplicateSegment?.count,
         readyToPromote: readySegment?.count,
       },
+      savedList: {
+        id: savedList.id,
+        name: savedList.name,
+      },
       layout,
       cleaned,
       screenshotPath: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
+    if (savedListId) {
+      await deleteContactSavedList(savedListId).catch((error) => {
+        console.warn('Unable to delete smoke saved list:', error instanceof Error ? error.message : error);
+      });
+    }
+
     if (!cleaned && form?.id) {
       await deleteForm(form.id).catch((error) => {
         console.warn('Unable to delete smoke form:', error instanceof Error ? error.message : error);

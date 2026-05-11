@@ -306,6 +306,38 @@ export interface SiteSettings {
 
   /** Captured custom frontend design contract used to seed new Backy pages, posts, forms, products, and reusable sections */
   frontendDesign?: SiteFrontendDesignContract;
+
+  /** Contact pipeline configuration for saved lead views and custom CRM handoff */
+  contacts?: SiteContactPipelineSettings;
+}
+
+export type SiteContactSavedListQuality =
+  | 'all'
+  | 'missing-email'
+  | 'missing-phone'
+  | 'needs-notes'
+  | 'has-source-values'
+  | 'ready-to-promote'
+  | 'duplicate-email';
+
+export interface SiteContactSavedListFilters {
+  formId?: string | 'all';
+  status?: 'all' | 'new' | 'contacted' | 'qualified' | 'archived';
+  quality?: SiteContactSavedListQuality;
+  query?: string;
+}
+
+export interface SiteContactSavedList {
+  id: string;
+  name: string;
+  description?: string | null;
+  filters: SiteContactSavedListFilters;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SiteContactPipelineSettings {
+  savedLists?: SiteContactSavedList[];
 }
 
 export interface SiteFrontendDesignContract {

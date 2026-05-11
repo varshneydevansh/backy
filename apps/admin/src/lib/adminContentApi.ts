@@ -5,6 +5,8 @@ import type {
   CommentStatus,
   CommentTargetType,
   Contact,
+  SiteContactSavedList,
+  SiteContactSavedListFilters,
   SiteNavigationConfig,
   SiteNavigationLayoutConfig,
   SiteRedirectRule,
@@ -701,6 +703,25 @@ interface ApiContactSegmentsResponse {
   summary?: ContactSegmentSummary;
   error?: {
     message?: string;
+  };
+}
+
+interface ApiContactSavedListsResponse {
+  success: boolean;
+  data?: {
+    lists: ContactSavedList[];
+    count?: number;
+    list?: SiteContactSavedList;
+    created?: boolean;
+    updated?: boolean;
+    deleted?: boolean;
+    listId?: string;
+  };
+  lists?: ContactSavedList[];
+  list?: SiteContactSavedList;
+  error?: {
+    message?: string;
+    details?: unknown;
   };
 }
 
@@ -1586,6 +1607,12 @@ export interface ContactSegmentAnalytics {
       dedupeByEmail: boolean;
     };
   }>;
+}
+
+export interface ContactSavedList extends SiteContactSavedList {
+  matchedCount: number;
+  contactIds: string[];
+  formIds: string[];
 }
 
 export interface ContactInput {
@@ -3467,6 +3494,60 @@ export async function listContactSegments(
   }
 
   return analytics;
+}
+
+export async function listContactSavedLists(siteId: string): Promise<ContactSavedList[]> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/contact-lists`);
+  const payload = await readJson<ApiContactSavedListsResponse>(response);
+  const lists = payload.data?.lists || payload.lists;
+
+  if (!response.ok || !payload.success || !lists) {
+    throw new Error(payload.error?.message || 'Unable to load saved contact lists');
+  }
+
+  return lists;
+}
+
+export async function saveContactSavedList(
+  siteId: string,
+  input: {
+    id?: string;
+    name: string;
+    description?: string | null;
+    filters: SiteContactSavedListFilters;
+  },
+): Promise<{ list: SiteContactSavedList; lists: ContactSavedList[] }> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/contact-lists`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiContactSavedListsResponse>(response);
+  const list = payload.data?.list || payload.list;
+  const lists = payload.data?.lists || payload.lists || [];
+
+  if (!response.ok || !payload.success || !list) {
+    throw new AdminContentApiError(payload.error?.message || 'Unable to save contact list', payload.error?.details);
+  }
+
+  return { list, lists };
+}
+
+export async function deleteContactSavedList(siteId: string, listId: string): Promise<void> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/contact-lists`, {
+    method: 'DELETE',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ listId }),
+  });
+  const payload = await readJson<ApiContactSavedListsResponse>(response);
+
+  if (!response.ok || !payload.success) {
+    throw new AdminContentApiError(payload.error?.message || 'Unable to delete contact list', payload.error?.details);
+  }
 }
 
 export async function updateContact(

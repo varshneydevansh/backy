@@ -474,6 +474,7 @@ const createDefaultSiteSettings = (): SiteSettings => ({
     footer: [],
   },
   frontendDesign: emptyFrontendDesignContract(),
+  contacts: { savedLists: [] },
 });
 
 const SITE_LIST: StoreSite[] = [
@@ -3836,6 +3837,15 @@ function normalizeSiteSettingsInput(input: unknown, current?: SiteSettings): Sit
           fallback: base.frontendDesign,
           updatedAt: new Date().toISOString(),
         }),
+    contacts: settingsInput.contacts === undefined
+      ? { ...(base.contacts || {}), savedLists: [...(base.contacts?.savedLists || [])] }
+      : {
+          ...(base.contacts || {}),
+          ...toRecord(settingsInput.contacts),
+          savedLists: Array.isArray(toRecord(settingsInput.contacts).savedLists)
+            ? toRecord(settingsInput.contacts).savedLists as NonNullable<SiteSettings['contacts']>['savedLists']
+            : base.contacts?.savedLists || [],
+        },
   };
 }
 

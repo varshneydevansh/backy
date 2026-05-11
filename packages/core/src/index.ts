@@ -109,6 +109,9 @@ export const DEFAULT_SITE_SETTINGS = {
       },
     },
   },
+  contacts: {
+    savedLists: [],
+  },
   frontendDesign: {
     schemaVersion: 'backy.frontend-design.v1',
     status: 'unconfigured',
