@@ -52,7 +52,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | spacer | ✅ layout-only | ✅ | ✅ | no visual handle difference in preview | ✅ |
 | icon | ✅ symbol/size/color | ✅ | ✅ | Public renderer now preserves icon/symbol fallback, size, color, title, and aria label | ✅ |
 | box/container | ✅ style/appearance | ✅ | ✅ | Not yet true child nesting | ⚠️ |
-| columns | ✅ column count/gap | ✅ | ⚠️ placeholder columns | ⚠️ |
+| columns | ✅ column count/gap | ✅ | ✅ | Public renderer now emits real column slots and places children by column index | ✅ |
 | map | ✅ address/url/zoom controls | ✅ (iframe support added) | ✅ (iframe support added) | Zoom/marker state not persisted; no geocode fallback | ⚠️ |
 | embed | ✅ URL/source | ✅ (iframe support added) | ✅ (iframe support added) | Sanitization and allowlist policy not finished | ⚠️ |
 | list | ✅ list type + items | ✅ | ✅ | Type resolution now prioritizes stored `listType` when present; mixed content/edge empty-item cases still need nested-depth parity | ⚠️ |
@@ -334,6 +334,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Current development stance:** This document is now the canonical execution contract for canvas parity work. Any change must be recorded here before moving to the next implementation pass.
 
 ### ✅ Completed in this pass
+- Replaced public columns placeholder behavior with real column slots, child placement, and renderer smoke coverage.
 - Brought public quote rendering into parity for appearance, typography, border, and citation styles with renderer smoke coverage.
 - Tightened public renderer parity for video boolean playback attributes and icon symbol/size/color/accessibility output via `npm run test:page-renderer --workspace @backy/public`.
 - Added form container field schema JSON authoring, editor canvas schema rendering, public renderer schema fields/submit UI, backend form definition generation from stored schema, and focused smoke coverage in the existing form component smoke.

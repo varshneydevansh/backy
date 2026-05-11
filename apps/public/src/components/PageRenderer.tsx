@@ -1689,9 +1689,23 @@ function NavElement({ element, isPreview, siteId, pageId, postId }: ElementRende
 function ColumnsElement({ element, isPreview, siteId, pageId, postId }: ElementRendererProps) {
   const { props, styles, children } = element;
   const columnCount = Math.max(1, Math.min(6, Number(props.columns) || 2));
+  const columns = Array.from({ length: columnCount }, () => [] as CanvasElement[]);
+  (children || []).forEach((child, index) => {
+    const explicitColumn = Number(
+      child.props?.columnIndex
+        ?? child.props?.column
+        ?? (child as CanvasElement & { columnIndex?: unknown; column?: unknown }).columnIndex
+        ?? (child as CanvasElement & { columnIndex?: unknown; column?: unknown }).column,
+    );
+    const columnIndex = Number.isFinite(explicitColumn)
+      ? Math.max(0, Math.min(columnCount - 1, Math.floor(explicitColumn) - (explicitColumn >= 1 ? 1 : 0)))
+      : index % columnCount;
+    columns[columnIndex].push(child);
+  });
 
   return (
     <div
+      data-backy-columns={columnCount}
       style={{
         display: 'grid',
         gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
@@ -1708,15 +1722,27 @@ function ColumnsElement({ element, isPreview, siteId, pageId, postId }: ElementR
       }}
       aria-label={getNameClass(props.ariaLabel)}
     >
-      {children?.map((child) => (
-        <ElementRenderer
-          key={child.id}
-          element={child}
-          isPreview={isPreview}
-          siteId={siteId}
-          pageId={pageId}
-          postId={postId}
-        />
+      {columns.map((columnChildren, columnIndex) => (
+        <div
+          key={`${element.id}-column-${columnIndex}`}
+          data-backy-column-index={columnIndex}
+          style={{
+            position: 'relative',
+            minWidth: 0,
+            minHeight: '100%',
+          }}
+        >
+          {columnChildren.map((child) => (
+            <ElementRenderer
+              key={child.id}
+              element={child}
+              isPreview={isPreview}
+              siteId={siteId}
+              pageId={pageId}
+              postId={postId}
+            />
+          ))}
+        </div>
       ))}
     </div>
   );

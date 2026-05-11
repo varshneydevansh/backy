@@ -221,6 +221,63 @@ const content: PageContent = {
       },
     },
     {
+      id: 'styled-columns',
+      type: 'columns',
+      x: 524,
+      y: 400,
+      width: 360,
+      height: 120,
+      props: {
+        columns: 3,
+        gap: 24,
+        padding: 10,
+        backgroundColor: '#f8fafc',
+        borderRadius: 12,
+        borderWidth: 2,
+        borderStyle: 'solid',
+        borderColor: '#94a3b8',
+        ariaLabel: 'Three feature columns',
+      },
+      children: [
+        {
+          id: 'styled-column-a',
+          type: 'text',
+          x: 4,
+          y: 6,
+          width: 90,
+          height: 24,
+          props: {
+            columnIndex: 1,
+            content: 'Column one',
+          },
+        },
+        {
+          id: 'styled-column-b',
+          type: 'text',
+          x: 4,
+          y: 6,
+          width: 90,
+          height: 24,
+          props: {
+            columnIndex: 2,
+            content: 'Column two',
+          },
+        },
+        {
+          id: 'styled-column-c',
+          type: 'text',
+          x: 4,
+          y: 6,
+          width: 90,
+          height: 24,
+          props: {
+            columnIndex: 3,
+            content: 'Column three',
+          },
+        },
+      ],
+    },
+    {
       id: 'styled-nav',
       type: 'nav',
       x: 444,
@@ -609,6 +666,16 @@ assert(html.includes('title="Styled icon title"'), `Icon title was not rendered:
 assert(html.includes('🚀'), `Icon symbol was not rendered: ${html}`);
 assert(html.includes('font-size:40px'), `Icon size was not rendered: ${html}`);
 assert(html.includes('color:#0e7490'), `Icon color was not rendered: ${html}`);
+assert(html.includes('data-backy-columns="3"'), `Columns count contract was not rendered: ${html}`);
+assert(html.includes('data-backy-column-index="0"'), `First column slot was not rendered: ${html}`);
+assert(html.includes('data-backy-column-index="1"'), `Second column slot was not rendered: ${html}`);
+assert(html.includes('data-backy-column-index="2"'), `Third column slot was not rendered: ${html}`);
+assert(html.includes('grid-template-columns:repeat(3, minmax(0, 1fr))'), `Columns grid template was not rendered: ${html}`);
+assert(html.includes('gap:24px'), `Columns gap was not rendered: ${html}`);
+assert(html.includes('aria-label="Three feature columns"'), `Columns aria label was not rendered: ${html}`);
+assert(html.includes('Column one'), `First column child was not rendered: ${html}`);
+assert(html.includes('Column two'), `Second column child was not rendered: ${html}`);
+assert(html.includes('Column three'), `Third column child was not rendered: ${html}`);
 assert(html.includes('aria-label="Styled nav"'), `Nav aria label was not rendered: ${html}`);
 assert(html.includes('href="/docs"'), `Nav item href was not rendered: ${html}`);
 assert(html.includes('gap:22px'), `Nav gap was not rendered: ${html}`);
@@ -703,6 +770,7 @@ console.log(JSON.stringify({
     styledImage: true,
     styledVideo: true,
     styledIcon: true,
+    styledColumns: true,
     styledNav: true,
     styledEmbed: true,
     styledMap: true,
