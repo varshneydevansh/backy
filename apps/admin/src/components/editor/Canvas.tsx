@@ -12,7 +12,7 @@
  * @license MIT
  */
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
 import type { CanvasElement, CanvasSize, ComponentLibraryItem } from '@/types/editor';
@@ -2615,6 +2615,33 @@ function CanvasElementComponent({
               : undefined;
         const listType = listTypeFromProps || listTypeFromSelection;
         const listStyleType = p.listMarker ?? (listType === 'number' ? 'decimal' : 'disc');
+        const listItems = extractListItemsFromSlate(listValue);
+        if (!isEditingEnabled) {
+          return React.createElement(
+            listType === 'number' ? 'ol' : 'ul',
+            {
+              style: {
+                ...sharedStyle,
+                fontFamily: p.fontFamily || sharedStyle.fontFamily || 'inherit',
+                fontSize: p.fontSize ?? sharedStyle.fontSize ?? 14,
+                textTransform: p.textTransform || sharedStyle.textTransform || 'none',
+                color: p.color ?? sharedStyle.color ?? '#000000',
+                textAlign: p.textAlign || sharedStyle.textAlign || 'left',
+                lineHeight: p.lineHeight ?? sharedStyle.lineHeight,
+                listStyleType,
+                listStylePosition: 'inside',
+                margin: 0,
+                marginLeft: toCssLength(p.listIndent ?? p.padding ?? 0),
+                paddingLeft: toCssLength(p.padding ?? sharedStyle.padding ?? 0),
+                width: '100%',
+                height: '100%',
+              },
+            },
+            ...(listItems.length > 0
+              ? listItems.map((item, index) => <li key={`${element.id}-item-${index}`}>{item}</li>)
+              : [<li key={`${element.id}-item-empty`}>List item</li>]),
+          );
+        }
         return (
           <div
             style={{ ...sharedStyle, width: '100%', height: '100%' }}

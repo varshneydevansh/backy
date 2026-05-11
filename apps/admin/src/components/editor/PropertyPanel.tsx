@@ -1484,6 +1484,7 @@ function ContentProperties({
                       'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                       'focus:outline-none focus:ring-2 focus:ring-ring'
                     )}
+                    data-testid="editor-list-type"
                   >
                     <option value="bullet">Bullet</option>
                     <option value="number">Numbered</option>
@@ -1512,6 +1513,7 @@ function ContentProperties({
                       'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                       'focus:outline-none focus:ring-2 focus:ring-ring'
                     )}
+                    data-testid="editor-list-marker"
                   >
                     <option value="disc">Disc (•)</option>
                     <option value="circle">Circle (◦)</option>
@@ -1537,6 +1539,7 @@ function ContentProperties({
               min={0}
               value={toNumber(element.props.listIndent, 0)}
               onChange={(e) => onChange({ listIndent: e.target.value === '' ? 0 : Number(e.target.value) })}
+              data-testid="editor-list-indent"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1566,6 +1569,7 @@ function ContentProperties({
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring resize-none'
               )}
+              data-testid="editor-list-items"
               rows={4}
             />
           </div>

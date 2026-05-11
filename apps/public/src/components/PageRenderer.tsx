@@ -1377,6 +1377,7 @@ function ListElement({ element }: ElementRendererProps) {
   const listTypeFromType = getNameClass(props.listType);
   const listType = listTypeFromType === 'number' || listTypeFromType === 'ordered' ? 'ol' : 'ul';
   const listIndent = getLength(props.listIndent, '0');
+  const listMarker = getNameClass(props.listMarker) || (listType === 'ol' ? 'decimal' : 'disc');
 
   return React.createElement(
     listType,
@@ -1385,6 +1386,8 @@ function ListElement({ element }: ElementRendererProps) {
         margin: 0,
         marginLeft: listIndent,
         paddingLeft: '20px',
+        listStyleType: listMarker,
+        listStylePosition: 'inside',
         ...styles,
         ...getTypographyStyle(props as Record<string, unknown>),
       },

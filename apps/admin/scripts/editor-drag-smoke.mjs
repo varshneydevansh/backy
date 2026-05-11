@@ -9,6 +9,7 @@ const ADMIN_BASE_URL = process.env.BACKY_ADMIN_BASE_URL || 'http://localhost:517
 const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 const SITE_ID = process.env.BACKY_EDITOR_SMOKE_SITE_ID || 'site-demo';
 const EDITOR_PATH = process.env.BACKY_EDITOR_SMOKE_PATH || '';
+const COMPONENT_SMOKE = process.env.BACKY_EDITOR_COMPONENT_SMOKE || '';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
@@ -213,6 +214,32 @@ const createSmokePage = async () => {
               content: 'Top edge handle check',
               fontSize: 18,
               color: '#0f172a',
+            },
+          },
+          {
+            id: 'smoke-list',
+            type: 'list',
+            x: 980,
+            y: 110,
+            width: 280,
+            height: 150,
+            zIndex: 5,
+            props: {
+              listType: 'bullet',
+              listMarker: 'disc',
+              listIndent: 0,
+              items: ['Initial item A', 'Initial item B'],
+              content: [
+                {
+                  type: 'ul',
+                  children: [
+                    { type: 'li', children: [{ text: 'Initial item A' }] },
+                    { type: 'li', children: [{ text: 'Initial item B' }] },
+                  ],
+                },
+              ],
+              fontSize: 16,
+              color: '#111827',
             },
           },
           {
@@ -3124,6 +3151,62 @@ const assertPersistedIconBehavior = async (pageId) => {
   return props;
 };
 
+const testListBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-list');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-list-type', 'number');
+  await setFormControlByTestId(client, 'editor-list-marker', 'upper-alpha');
+  await setFormControlByTestId(client, 'editor-list-indent', '24');
+  await setFormControlByTestId(client, 'editor-list-items', 'Discovery\nDesign\nLaunch');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const node = document.querySelector('[data-element-id="smoke-list"]');
+    const list = node?.querySelector('ol, ul');
+    const items = Array.from(node?.querySelectorAll('li') || []).map((item) => item.textContent?.trim() || '');
+    const style = list ? getComputedStyle(list) : null;
+    return {
+      listType: value('editor-list-type'),
+      listMarker: value('editor-list-marker'),
+      listIndent: value('editor-list-indent'),
+      itemsText: value('editor-list-items'),
+      previewTag: list?.tagName?.toLowerCase?.() || '',
+      previewItems: items,
+      previewListStyleType: style?.listStyleType || '',
+      previewMarginLeft: style?.marginLeft || '',
+    };
+  })()`);
+
+  assert(state.listType === 'number' && state.previewTag === 'ol', `List type mismatch: ${JSON.stringify(state)}`);
+  assert(state.listMarker === 'upper-alpha' && state.previewListStyleType === 'upper-alpha', `List marker mismatch: ${JSON.stringify(state)}`);
+  assert(state.listIndent === '24' && state.previewMarginLeft === '24px', `List indent mismatch: ${JSON.stringify(state)}`);
+  assert(
+    state.itemsText === 'Discovery\nDesign\nLaunch' &&
+      JSON.stringify(state.previewItems) === JSON.stringify(['Discovery', 'Design', 'Launch']),
+    `List items mismatch: ${JSON.stringify(state)}`,
+  );
+
+  return state;
+};
+
+const assertPersistedListBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const list = findCanvasElement(elements, 'smoke-list');
+  const props = list?.props || {};
+
+  assert(list?.type === 'list', `Persisted smoke-list missing: ${JSON.stringify(list)}`);
+  assert(props.listType === 'number', `Persisted list type mismatch: ${JSON.stringify(props)}`);
+  assert(props.listMarker === 'upper-alpha', `Persisted list marker mismatch: ${JSON.stringify(props)}`);
+  assert(props.listIndent === 24, `Persisted list indent mismatch: ${JSON.stringify(props)}`);
+  assert(JSON.stringify(props.items) === JSON.stringify(['Discovery', 'Design', 'Launch']), `Persisted list items mismatch: ${JSON.stringify(props)}`);
+  assert(Array.isArray(props.content), `Persisted list content missing: ${JSON.stringify(props)}`);
+  assert(props.content?.[0]?.type === 'ol', `Persisted list content type mismatch: ${JSON.stringify(props.content)}`);
+
+  return props;
+};
+
 const testInputFieldBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-input');
   await switchToPropertiesPanel(client);
@@ -3935,7 +4018,42 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+
+    if (COMPONENT_SMOKE === 'list') {
+      assert(tempPageId, 'List component smoke requires an internally created smoke page');
+      const listBehaviorControls = await testListBehaviorControls(client);
+      await clickSave(client);
+      const savedStatus = await waitForEditorMutationReady(client, 'after list component smoke save');
+      const persistedListBehavior = await assertPersistedListBehavior(tempPageId);
+      let reloadedState = null;
+      let reloadClient = null;
+      try {
+        reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
+        await waitForEditorElements(reloadClient, ['smoke-list']);
+        reloadedState = await readEditorElementState(reloadClient, ['smoke-list']);
+      } finally {
+        if (reloadClient) {
+          try {
+            await reloadClient.send('Page.close');
+          } catch {
+            // The target may already be closed by Chrome during cleanup.
+          }
+          reloadClient.close();
+        }
+      }
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: COMPONENT_SMOKE,
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        listBehaviorControls,
+        savedStatus,
+        persistedListBehavior,
+        reloadedState,
+      }, null, 2));
+      return;
+    }
 
     const clickAdd = await testComponentClickAdd(client, 'divider');
 
@@ -4052,6 +4170,9 @@ const main = async () => {
     const iconBehaviorControls = EDITOR_PATH
       ? null
       : await testIconBehaviorControls(client);
+    const listBehaviorControls = EDITOR_PATH
+      ? null
+      : await testListBehaviorControls(client);
     const inputFieldBehaviorControls = EDITOR_PATH
       ? null
       : await testInputFieldBehaviorControls(client);
@@ -4107,6 +4228,7 @@ const main = async () => {
     let persistedRepeater = null;
     let persistedImageBehavior = null;
     let persistedIconBehavior = null;
+    let persistedListBehavior = null;
     let persistedInputFieldBehavior = null;
     let persistedTextareaFieldBehavior = null;
     let persistedSelectFieldBehavior = null;
@@ -4117,7 +4239,7 @@ const main = async () => {
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-list', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -4176,6 +4298,9 @@ const main = async () => {
       persistedIconBehavior = iconBehaviorControls
         ? await assertPersistedIconBehavior(tempPageId)
         : null;
+      persistedListBehavior = listBehaviorControls
+        ? await assertPersistedListBehavior(tempPageId)
+        : null;
       persistedInputFieldBehavior = inputFieldBehaviorControls
         ? await assertPersistedInputFieldBehavior(tempPageId)
         : null;
@@ -4207,7 +4332,7 @@ const main = async () => {
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-list', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -4312,6 +4437,7 @@ const main = async () => {
       repeaterControls,
       imageBehaviorControls,
       iconBehaviorControls,
+      listBehaviorControls,
       inputFieldBehaviorControls,
       textareaFieldBehaviorControls,
       selectFieldBehaviorControls,
@@ -4331,6 +4457,7 @@ const main = async () => {
       persistedRepeater,
       persistedImageBehavior,
       persistedIconBehavior,
+      persistedListBehavior,
       persistedInputFieldBehavior,
       persistedTextareaFieldBehavior,
       persistedSelectFieldBehavior,
