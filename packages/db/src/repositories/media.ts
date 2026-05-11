@@ -124,6 +124,26 @@ const searchText = (value: string | null | undefined, search: string): boolean =
     (value || '').toLowerCase().includes(search.toLowerCase())
 );
 
+const metadataText = (metadata: MediaMetadata, key: string): string => (
+    typeof metadata[key] === 'string' ? metadata[key] : ''
+);
+
+const mediaSearchText = (item: MediaItem): string => [
+    item.filename,
+    item.originalName,
+    item.mimeType,
+    item.type,
+    item.visibility,
+    item.altText || '',
+    item.caption || '',
+    ...item.tags,
+    metadataText(item.metadata, 'fontFamily'),
+    metadataText(item.metadata, 'fontWeight'),
+    metadataText(item.metadata, 'fontStyle'),
+    metadataText(item.metadata, 'storageProvider'),
+    metadataText(item.metadata, 'extension'),
+].join(' ');
+
 const toMediaItem = (row: MediaRow): MediaItem => {
     const metadata = normalizeMetadata(row.metadata);
 
@@ -187,7 +207,7 @@ export function createMediaRepository(db: DatabaseInstance): BackyMediaRepositor
                 .filter((item) => input.type && input.type !== 'all' ? item.type === input.type : true)
                 .filter((item) => input.folderId !== undefined ? item.folderId === input.folderId : true)
                 .filter((item) => input.visibility && input.visibility !== 'all' ? item.visibility === input.visibility : true)
-                .filter((item) => input.search ? searchText(`${item.filename} ${item.originalName} ${item.altText || ''} ${item.caption || ''}`, input.search) : true);
+                .filter((item) => input.search ? searchText(mediaSearchText(item), input.search) : true);
             return paginate(filtered, input.limit, input.offset);
         },
 

@@ -204,6 +204,19 @@ const mediaQuotaPayload = (limitBytes: number, usedBytes: number) => ({
   remainingBytes: Math.max(0, limitBytes - usedBytes),
 });
 
+const mediaTagMatches = (tags: string[], tag: string | null) => {
+  if (!tag) {
+    return true;
+  }
+
+  const normalizedTag = tag.trim().toLowerCase();
+  if (!normalizedTag) {
+    return true;
+  }
+
+  return tags.some((item) => item.trim().toLowerCase() === normalizedTag);
+};
+
 const errorResponse = (status: number, code: string, message: string, requestId: string, details?: Record<string, unknown>) => (
   NextResponse.json(
     {
@@ -255,7 +268,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       });
       const filtered = result.items
         .filter((item) => mediaMatchesScopeFilters(item, { scope, pageId, postId, globalOnly }))
-        .filter((item) => tag ? item.tags.includes(tag) : true);
+        .filter((item) => mediaTagMatches(item.tags, tag));
       const payload = paginateMedia(filtered, limit, offset);
       const allMedia = (await repositories.media.list({
         siteId: site.id,
