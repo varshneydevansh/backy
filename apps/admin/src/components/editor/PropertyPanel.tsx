@@ -128,6 +128,36 @@ const formatNavigationItems = (value: unknown): string => {
     .join('\n');
 };
 
+const formatOptionValue = (value: unknown): string => {
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${value}`;
+  }
+
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    return formatOptionValue(record.value) || formatOptionValue(record.label);
+  }
+
+  return '';
+};
+
+const formatOptionValues = (value: unknown): string => {
+  const options = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(/\r?\n/)
+      : [];
+
+  return options
+    .map(formatOptionValue)
+    .filter(Boolean)
+    .join('\n');
+};
+
 const parseNavigationItems = (value: string): Array<string | { label: string; href: string }> => (
   value
     .split(/\r?\n/)
@@ -679,9 +709,7 @@ function ContentProperties({
   const hasFormContent = normalizedType === 'form';
   const hasCommentContent = normalizedType === 'comment';
   const hasListContent = normalizedType === 'list';
-  const fieldOptionsText = Array.isArray(element.props.options)
-    ? element.props.options.join('\n')
-    : '';
+  const fieldOptionsText = formatOptionValues(element.props.options);
   const listItems = getListItemsFromProps(element.props);
   const updateTextContent = useCallback((content: unknown) => {
     onChange({
