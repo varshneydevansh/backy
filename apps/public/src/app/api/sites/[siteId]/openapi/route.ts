@@ -367,6 +367,57 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
           },
         },
+        [`/api/sites/${site.id}/blog/categories`]: {
+          get: {
+            tags: ['Content'],
+            summary: 'List public blog categories',
+            operationId: 'listBackyBlogCategories',
+            responses: {
+              '200': {
+                description: 'Public blog categories',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/BlogCategoryListEnvelope' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        [`/api/sites/${site.id}/blog/tags`]: {
+          get: {
+            tags: ['Content'],
+            summary: 'List public blog tags',
+            operationId: 'listBackyBlogTags',
+            responses: {
+              '200': {
+                description: 'Public blog tags',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/BlogTagListEnvelope' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        [`/api/sites/${site.id}/blog/authors`]: {
+          get: {
+            tags: ['Content'],
+            summary: 'List public blog authors',
+            operationId: 'listBackyBlogAuthors',
+            responses: {
+              '200': {
+                description: 'Public blog authors',
+                content: {
+                  'application/json': {
+                    schema: { $ref: '#/components/schemas/BlogAuthorListEnvelope' },
+                  },
+                },
+              },
+            },
+          },
+        },
         [`/api/sites/${site.id}/media`]: {
           get: {
             tags: ['Media'],
@@ -1908,6 +1959,74 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               publishedAt: { type: ['string', 'null'], format: 'date-time' },
               createdAt: { type: 'string', format: 'date-time' },
               updatedAt: { type: 'string', format: 'date-time' },
+            },
+          },
+          BlogCategoryListEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['categories'],
+            properties: {
+              categories: { type: 'array', items: { $ref: '#/components/schemas/BlogCategoryResource' } },
+            },
+          }),
+          BlogCategoryResource: {
+            type: 'object',
+            additionalProperties: true,
+            required: ['id', 'name', 'slug'],
+            properties: {
+              id: { type: 'string' },
+              siteId: { type: 'string' },
+              name: { type: 'string' },
+              slug: { type: 'string' },
+              description: { type: ['string', 'null'] },
+              color: { type: ['string', 'null'] },
+              sortOrder: { type: 'integer' },
+              postCount: { type: 'integer' },
+              createdAt: { type: 'string', format: 'date-time' },
+              updatedAt: { type: 'string', format: 'date-time' },
+            },
+          },
+          BlogTagListEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['tags'],
+            properties: {
+              tags: { type: 'array', items: { $ref: '#/components/schemas/BlogTagResource' } },
+            },
+          }),
+          BlogTagResource: {
+            type: 'object',
+            additionalProperties: true,
+            required: ['id', 'name', 'slug'],
+            properties: {
+              id: { type: 'string' },
+              siteId: { type: 'string' },
+              name: { type: 'string' },
+              slug: { type: 'string' },
+              description: { type: ['string', 'null'] },
+              postCount: { type: 'integer' },
+              createdAt: { type: 'string', format: 'date-time' },
+              updatedAt: { type: 'string', format: 'date-time' },
+            },
+          },
+          BlogAuthorListEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['authors'],
+            properties: {
+              authors: { type: 'array', items: { $ref: '#/components/schemas/BlogAuthorResource' } },
+            },
+          }),
+          BlogAuthorResource: {
+            type: 'object',
+            additionalProperties: true,
+            required: ['id', 'name', 'slug'],
+            properties: {
+              id: { type: 'string' },
+              siteId: { type: 'string' },
+              name: { type: 'string' },
+              slug: { type: 'string' },
+              role: { type: 'string' },
+              status: { type: 'string' },
+              avatarUrl: { type: ['string', 'null'] },
+              postCount: { type: 'integer' },
             },
           },
           ReusableSectionFrontendDesign: {

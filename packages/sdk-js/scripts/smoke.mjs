@@ -375,6 +375,9 @@ assert(revalidatedFrontendDesign.notModified === true, 'frontendDesignCached() d
 const openapi = await client.openapi();
 assert(openapi.openapi === '3.1.0', 'openapi() did not return an OpenAPI 3.1 document');
 assert(openapi.paths?.[manifest.data.endpoints.openapi]?.get, 'openapi() missing manifest-advertised OpenAPI path');
+assert(openapi.paths?.[manifest.data.endpoints.blogCategories]?.get, 'openapi() missing manifest-advertised blog categories path');
+assert(openapi.paths?.[manifest.data.endpoints.blogTags]?.get, 'openapi() missing manifest-advertised blog tags path');
+assert(openapi.paths?.[manifest.data.endpoints.blogAuthors]?.get, 'openapi() missing manifest-advertised blog authors path');
 assert(openapi.components?.schemas?.RedirectRoute, 'openapi() missing redirect route schema');
 assert(openapi.components?.schemas?.GoneRoute, 'openapi() missing gone route schema');
 
@@ -426,6 +429,33 @@ if (firstBlogPost) {
   const revalidatedBlogDetail = await client.blogCached({ slug: firstBlogPost.slug, etag: cachedBlogDetail.meta.etag });
   assert(revalidatedBlogDetail.notModified === true, 'blogCached() slug lookup did not return notModified for matching ETag');
 }
+
+const blogCategories = await client.blogCategories();
+assert(Array.isArray(blogCategories.data.categories), 'blogCategories() missing categories array');
+const cachedBlogCategories = await client.blogCategoriesCached();
+assert(cachedBlogCategories.notModified === false, 'blogCategoriesCached() first request should return a body');
+assert(Array.isArray(cachedBlogCategories.body.data.categories), 'blogCategoriesCached() missing categories array');
+assert(cachedBlogCategories.meta.etag, 'blogCategoriesCached() missing response ETag');
+const revalidatedBlogCategories = await client.blogCategoriesCached({ etag: cachedBlogCategories.meta.etag });
+assert(revalidatedBlogCategories.notModified === true, 'blogCategoriesCached() did not return notModified for matching ETag');
+
+const blogTags = await client.blogTags();
+assert(Array.isArray(blogTags.data.tags), 'blogTags() missing tags array');
+const cachedBlogTags = await client.blogTagsCached();
+assert(cachedBlogTags.notModified === false, 'blogTagsCached() first request should return a body');
+assert(Array.isArray(cachedBlogTags.body.data.tags), 'blogTagsCached() missing tags array');
+assert(cachedBlogTags.meta.etag, 'blogTagsCached() missing response ETag');
+const revalidatedBlogTags = await client.blogTagsCached({ etag: cachedBlogTags.meta.etag });
+assert(revalidatedBlogTags.notModified === true, 'blogTagsCached() did not return notModified for matching ETag');
+
+const blogAuthors = await client.blogAuthors();
+assert(Array.isArray(blogAuthors.data.authors), 'blogAuthors() missing authors array');
+const cachedBlogAuthors = await client.blogAuthorsCached();
+assert(cachedBlogAuthors.notModified === false, 'blogAuthorsCached() first request should return a body');
+assert(Array.isArray(cachedBlogAuthors.body.data.authors), 'blogAuthorsCached() missing authors array');
+assert(cachedBlogAuthors.meta.etag, 'blogAuthorsCached() missing response ETag');
+const revalidatedBlogAuthors = await client.blogAuthorsCached({ etag: cachedBlogAuthors.meta.etag });
+assert(revalidatedBlogAuthors.notModified === true, 'blogAuthorsCached() did not return notModified for matching ETag');
 
 const navigation = await client.navigation();
 assert(navigation.data.navigation, 'navigation() missing navigation data');
@@ -809,6 +839,12 @@ console.log(JSON.stringify({
     'pagesCached',
     'blog',
     'blogCached',
+    'blogCategories',
+    'blogCategoriesCached',
+    'blogTags',
+    'blogTagsCached',
+    'blogAuthors',
+    'blogAuthorsCached',
     'navigation',
     'navigationCached',
     'seo',

@@ -81,6 +81,13 @@ if (blogSecond.notModified) {
   console.log('Reuse your cached blog index.');
 }
 
+const categoriesFirst = await backy.blogCategoriesCached();
+const categoriesSecond = await backy.blogCategoriesCached({ etag: categoriesFirst.meta.etag });
+
+if (categoriesSecond.notModified) {
+  console.log('Reuse your cached blog category archive metadata.');
+}
+
 const seoFirst = await backy.seoCached();
 const seoSecond = await backy.seoCached({ etag: seoFirst.meta.etag });
 
@@ -117,8 +124,8 @@ if (fontsSecond.notModified) {
 }
 ```
 
-The SDK intentionally does not import admin/editor code. It wraps the public site bootstrap, manifest/OpenAPI discovery, frontend-design contract, route resolution, render payload, SEO discovery, media, collection, commerce, reusable-section, form, comment, report, and event endpoints documented in `specs/backy-api-contracts.md`.
-The default return types expose Backy contract shapes such as `BackyFrontendDesignContract`, `BackyRenderPayload`, `BackyContentDocument`, `BackySeoDiscovery`, `BackyMediaAsset`, `BackyFontManifest`, `BackyCollectionRecord`, `BackyCommerceProduct`, `BackyCommerceOrderSummary`, `BackyReusableSection`, `BackyFormSubmission`, `BackyComment`, `BackyInteractionEvent`, `BackyResponseMeta`, and `BackyConditionalResult`. Collection record reads/writes are generic, so a frontend can pass its own value shape: `backy.records<{ title: string }>(collectionId)`.
+The SDK intentionally does not import admin/editor code. It wraps the public site bootstrap, manifest/OpenAPI discovery, frontend-design contract, route resolution, render payload, SEO discovery, media, collection, commerce, reusable-section, blog taxonomy, form, comment, report, and event endpoints documented in `specs/backy-api-contracts.md`.
+The default return types expose Backy contract shapes such as `BackyFrontendDesignContract`, `BackyRenderPayload`, `BackyContentDocument`, `BackySeoDiscovery`, `BackyMediaAsset`, `BackyFontManifest`, `BackyCollectionRecord`, `BackyBlogCategory`, `BackyBlogTag`, `BackyBlogAuthor`, `BackyCommerceProduct`, `BackyCommerceOrderSummary`, `BackyReusableSection`, `BackyFormSubmission`, `BackyComment`, `BackyInteractionEvent`, `BackyResponseMeta`, and `BackyConditionalResult`. Collection record reads/writes are generic, so a frontend can pass its own value shape: `backy.records<{ title: string }>(collectionId)`.
 
 ## Local validation
 
