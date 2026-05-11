@@ -387,6 +387,7 @@ function LayerItem({
                 </button>
 
                 <button
+                    type="button"
                     onClick={(e) => {
                         e.stopPropagation();
                         if (disabled || isLocked) {
@@ -395,6 +396,9 @@ function LayerItem({
                         onDuplicate(element.id);
                     }}
                     disabled={disabled || isLocked}
+                    data-layer-action="duplicate"
+                    data-layer-action-id={element.id}
+                    aria-label={`Duplicate ${layerName}`}
                     style={iconButtonStyle(!disabled && !isLocked)}
                     title={isLocked ? 'Unlock to duplicate' : 'Duplicate'}
                 >
@@ -402,6 +406,7 @@ function LayerItem({
                 </button>
 
                 <button
+                    type="button"
                     onClick={(e) => {
                         e.stopPropagation();
                         if (disabled || isLocked) {
@@ -410,6 +415,9 @@ function LayerItem({
                         onDelete(element.id);
                     }}
                     disabled={disabled || isLocked}
+                    data-layer-action="delete"
+                    data-layer-action-id={element.id}
+                    aria-label={`Delete ${layerName}`}
                     style={iconButtonStyle(!disabled && !isLocked, true)}
                     title={isLocked ? 'Unlock to delete' : 'Delete'}
                 >

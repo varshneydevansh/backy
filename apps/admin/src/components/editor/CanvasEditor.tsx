@@ -2268,12 +2268,13 @@ export function CanvasEditor({
   }, [breakpoint, displayedElements, elements, findElementById, selectedId, updateElementsWithHistory]);
 
   const handleLayerDelete = useCallback((elementId: string) => {
-    const element = findElementById(elements, elementId);
+    const currentElements = elementsRef.current;
+    const element = findElementById(currentElements, elementId);
     if (element?.locked) {
       return;
     }
 
-    const result = removeElementById(elements, elementId);
+    const result = removeElementById(currentElements, elementId);
     if (!result.updated) return;
 
     const parentSelection = result.removedParentId || null;
@@ -2292,20 +2293,21 @@ export function CanvasEditor({
     setSelectedId(nextSelectedId);
     setSelectedIds(nextSelectedIds);
     updateElementsWithHistory(result.elements, nextSelectedId, nextSelectedIds);
-  }, [elements, findElementById, selectedId, selectedIds, updateElementsWithHistory]);
+  }, [findElementById, selectedId, selectedIds, updateElementsWithHistory]);
 
   const handleLayerDuplicate = useCallback((elementId: string) => {
-    const selectedEntry = findElementEntry(elements, elementId);
+    const currentElements = elementsRef.current;
+    const selectedEntry = findElementEntry(currentElements, elementId);
     if (!selectedEntry || selectedEntry.element.locked) return;
 
     const duplicate = cloneElementTreeWithFreshIds(selectedEntry.element, 20, 20, selectedEntry.parentId);
-    const duplicated = insertElementAsSibling(elements, selectedEntry.element.id, duplicate);
+    const duplicated = insertElementAsSibling(currentElements, selectedEntry.element.id, duplicate);
     if (!duplicated.updated) return;
 
     setSelectedId(duplicate.id);
     setSelectedIds([duplicate.id]);
     updateElementsWithHistory(duplicated.elements, duplicate.id, [duplicate.id]);
-  }, [cloneElementTreeWithFreshIds, elements, findElementEntry, updateElementsWithHistory]);
+  }, [cloneElementTreeWithFreshIds, findElementEntry, updateElementsWithHistory]);
 
   const handleGroupSelected = useCallback(() => {
     const selectedSet = new Set(selectedIds);

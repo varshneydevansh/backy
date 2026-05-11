@@ -31,7 +31,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 17 | Animation Controls | ✅ | Animation panel is connected in PropertyPanel and persisted on element payloads; animation contract now uses `fadeIn/slideIn/scaleIn/rotate/bounce/custom` to match renderer payload |
 | 18 | Emoji Picker | ❌ | Not implemented |
 | 19 | Grid/Snap | ✅ | 10px grid snap |
-| 20 | Layers Panel | ❌ | Not implemented |
+| 20 | Layers Panel | ✅ | Hierarchical rows support select/multi-select, drag reorder, visibility, lock, duplicate/delete, nesting/outdent, save persistence |
 | 21 | Copy/Paste | ✅ | Copy, cut, paste, duplicate, undo, and redo are covered by editor smoke |
 | 22 | Keyboard Shortcuts | ⚠️ | Core editor shortcuts are implemented; broader shortcut map still needs parity review |
 | 23 | Markdown Shortcuts | ✅ | `#`, `-`, `*`, `1.` conversions implemented in shared editor |
@@ -267,13 +267,13 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
     - Show alignment guides
 
 ### 19. Layers Panel
-**Current State:** ❌ Not Implemented
-- **Required Implementation:**
-    - New panel (collapsible) showing all elements as list
-    - Drag to reorder z-index
-    - Eye icon to hide/show
-    - Lock icon to prevent editing
-    - Click to select element
+**Current State:** ✅ Working
+- Right inspector Layers tab renders a hierarchical tree with nested layer depth.
+- Layer rows support click selection and Ctrl/Cmd multi-select.
+- Dragging layer rows reorders sibling layers and updates sibling z-index ordering.
+- Row actions support move up/down, outdent, nest selected layers into container-like parents, hide/show, lock/unlock, duplicate, and delete.
+- Hidden and locked layer state saves into the page canvas payload.
+- `BACKY_EDITOR_LAYERS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers panel opening, nested depth, multi-select, drag reorder, hide, lock, duplicate, delete, manual save, and persisted layer state.
 
 ### 20. Copy/Paste
 **Current State:** ✅ Working
@@ -373,7 +373,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ✅ Z-Index quick controls (bring/send forward/back)
 - ❌ Keyboard shortcuts
 - ❌ Emoji picker for icons
-- ❌ Layers panel
+- ✅ Layers panel
 
 **Nice to Have**
 - ❌ Multi-select elements
@@ -412,7 +412,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Phase 3: Usability**
 - Keyboard shortcuts
 - Emoji picker
-- Layers panel
+- Layers panel ✅
 - Multi-select
 
 **Phase 4: Polish**

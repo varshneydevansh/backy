@@ -15,6 +15,7 @@ const Z_ORDER_SMOKE = process.env.BACKY_EDITOR_Z_ORDER_SMOKE === '1';
 const SAVE_SMOKE = process.env.BACKY_EDITOR_SAVE_SMOKE === '1';
 const PAGE_SETTINGS_SMOKE = process.env.BACKY_EDITOR_PAGE_SETTINGS_SMOKE === '1';
 const DELETE_SMOKE = process.env.BACKY_EDITOR_DELETE_SMOKE === '1';
+const LAYERS_SMOKE = process.env.BACKY_EDITOR_LAYERS_SMOKE === '1';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
@@ -1644,6 +1645,115 @@ const readLayerTreeState = async (client, elementIds) => {
   );
 
   return state;
+};
+
+const dragLayerRow = async (client, fromId, toId) => {
+  const before = await readLayerTreeState(client, [fromId, toId]);
+  const startResult = await evaluate(client, `(() => {
+    const from = document.querySelector('[data-layer-id="${fromId}"]');
+    if (!(from instanceof HTMLElement)) {
+      return {
+        ok: false,
+        reason: 'missing-from-layer-row',
+        availableLayerIds: Array.from(document.querySelectorAll('[data-layer-id]')).map((node) => node.getAttribute('data-layer-id')),
+      };
+    }
+
+    const dataTransfer = new DataTransfer();
+    const dragStart = new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer });
+    const started = from.dispatchEvent(dragStart);
+    return { ok: true, started };
+  })()`);
+  assert(startResult?.ok, `Unable to start dragging layer ${fromId}: ${JSON.stringify(startResult)}`);
+  await sleep(150);
+
+  const overResult = await evaluate(client, `(() => {
+    const to = document.querySelector('[data-layer-id="${toId}"]');
+    if (!(to instanceof HTMLElement)) {
+      return {
+        ok: false,
+        reason: 'missing-to-layer-row',
+        availableLayerIds: Array.from(document.querySelectorAll('[data-layer-id]')).map((node) => node.getAttribute('data-layer-id')),
+      };
+    }
+
+    const dataTransfer = new DataTransfer();
+    const dragOver = new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer });
+    const overed = to.dispatchEvent(dragOver);
+    return { ok: true, overed };
+  })()`);
+  assert(overResult?.ok, `Unable to drag layer ${fromId} over ${toId}: ${JSON.stringify(overResult)}`);
+  await sleep(300);
+
+  const endResult = await evaluate(client, `(() => {
+    const from = document.querySelector('[data-layer-id="${fromId}"]');
+    if (!(from instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-from-layer-row' };
+    }
+
+    const dataTransfer = new DataTransfer();
+    const dragEnd = new DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer });
+    const ended = from.dispatchEvent(dragEnd);
+    return { ok: true, ended };
+  })()`);
+  assert(endResult?.ok, `Unable to end dragging layer ${fromId}: ${JSON.stringify(endResult)}`);
+  await sleep(300);
+
+  const after = await readLayerTreeState(client, [fromId, toId]);
+  assert(
+    after.byId[fromId].index !== before.byId[fromId].index ||
+      after.byId[toId].index !== before.byId[toId].index,
+    `Layer drag did not reorder rows: ${JSON.stringify({ before, after, startResult, overResult, endResult })}`,
+  );
+
+  return {
+    fromId,
+    toId,
+    startResult,
+    overResult,
+    endResult,
+    before,
+    after,
+  };
+};
+
+const waitForPersistedLayerState = async (pageId, expected) => {
+  let lastState = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+    const elements = payload.data?.page?.content?.elements || [];
+    lastState = Object.fromEntries(Object.entries(expected).map(([elementId]) => {
+      const element = findCanvasElement(elements, elementId);
+      return [
+        elementId,
+        element
+          ? {
+              exists: true,
+              hidden: element.visible === false,
+              locked: element.locked === true,
+              zIndex: element.zIndex,
+            }
+          : { exists: false, hidden: false, locked: false, zIndex: null },
+      ];
+    }));
+
+    const complete = Object.entries(expected).every(([elementId, expectedState]) => {
+      const actual = lastState[elementId];
+      if (!actual?.exists) {
+        return false;
+      }
+
+      return Object.entries(expectedState).every(([key, value]) => actual[key] === value);
+    });
+
+    if (complete) {
+      return lastState;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Persisted layer state did not match. Expected ${JSON.stringify(expected)}, got ${JSON.stringify(lastState)}`);
 };
 
 const readBreakpointOverrideControls = async (client) => {
@@ -3724,6 +3834,90 @@ const testLayerHierarchyControls = async (client) => {
     afterNestTree,
     afterOutdentState,
     afterOutdentTree,
+  };
+};
+
+const readSelectedLayerIds = async (client) => (
+  evaluate(client, `(() => (
+    Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
+      .map((node) => node.getAttribute('data-layer-id'))
+      .filter(Boolean)
+  ))()`)
+);
+
+const testLayersPanelControls = async (client, pageId) => {
+  const initialTree = await readLayerTreeState(client, [
+    'smoke-heading',
+    'smoke-image',
+    'smoke-box',
+    'smoke-child-button',
+    'smoke-form',
+    'smoke-icon',
+    'smoke-link',
+  ]);
+  assert(initialTree.rows.length >= 7, `Layers panel did not render expected layer rows: ${JSON.stringify(initialTree)}`);
+  assert(
+    initialTree.byId['smoke-child-button'].depth > initialTree.byId['smoke-box'].depth,
+    `Layers panel did not show nested child depth: ${JSON.stringify(initialTree)}`,
+  );
+
+  const multiSelected = await selectLayerIds(client, ['smoke-heading', 'smoke-image']);
+  assert(
+    ['smoke-heading', 'smoke-image'].every((id) => multiSelected.selectedLayers?.includes(id)),
+    `Layers panel multi-select did not retain selected rows: ${JSON.stringify(multiSelected)}`,
+  );
+
+  const reorder = await dragLayerRow(client, 'smoke-heading', 'smoke-image');
+
+  await setLayerHiddenState(client, 'smoke-form', true);
+  const hiddenState = await readLayerActionState(client, 'smoke-form');
+  assert(hiddenState.hidden === true, `Layer visibility action did not hide smoke-form: ${JSON.stringify(hiddenState)}`);
+
+  await setLayerLockedState(client, 'smoke-icon', true);
+  const lockedState = await readLayerActionState(client, 'smoke-icon');
+  assert(lockedState.locked === true, `Layer lock action did not lock smoke-icon: ${JSON.stringify(lockedState)}`);
+
+  const duplicateClick = await clickLayerAction(client, 'duplicate', 'smoke-link');
+  const selectedAfterDuplicate = await readSelectedLayerIds(client);
+  const duplicateId = selectedAfterDuplicate.find((id) => id && id !== 'smoke-link');
+  assert(
+    duplicateId && duplicateId !== 'smoke-link',
+    `Layer duplicate did not select a fresh duplicate row: ${JSON.stringify({ duplicateClick, selectedAfterDuplicate })}`,
+  );
+  const duplicateTree = await readLayerTreeState(client, ['smoke-link', duplicateId]);
+
+  const deleteClick = await clickLayerAction(client, 'delete', duplicateId);
+  const deletedDuplicate = await waitForElementPresence(client, duplicateId, false, 'after layer duplicate delete');
+
+  await clickSave(client);
+  const savedStatus = await waitForEditorSaveStatus(
+    client,
+    (status) => (
+      status.saveState === 'saved' &&
+      status.saveMode === 'manual' &&
+      status.pendingChanges === 0 &&
+      Boolean(status.lastSavedAt)
+    ),
+    'manual status after layers smoke save',
+  );
+  const persisted = await waitForPersistedLayerState(pageId, {
+    'smoke-form': { hidden: true },
+    'smoke-icon': { locked: true },
+  });
+
+  return {
+    initialTree,
+    multiSelected,
+    reorder,
+    hiddenState,
+    lockedState,
+    duplicateClick,
+    duplicateId,
+    duplicateTree,
+    deleteClick,
+    deletedDuplicate,
+    savedStatus,
+    persisted,
   };
 };
 
@@ -5942,8 +6136,8 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const tempReusableSectionId = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE ? null : await createSmokeReusableSection();
-  const tempCollection = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE ? null : await createSmokeCollection();
+  const tempReusableSectionId = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE ? null : await createSmokeReusableSection();
+  const tempCollection = EDITOR_PATH || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || PAGE_SETTINGS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
   const { childProcess, userDataDir } = launchChrome();
   let client;
@@ -6024,6 +6218,19 @@ const main = async () => {
         mode: 'delete',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         deleteEditing,
+      }, null, 2));
+      return;
+    }
+
+    if (LAYERS_SMOKE) {
+      assert(!EDITOR_PATH, 'Layers smoke currently requires an internally created smoke page');
+      const layersPanel = await testLayersPanelControls(client, tempPageId);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'layers',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        layersPanel,
       }, null, 2));
       return;
     }
