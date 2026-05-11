@@ -1332,6 +1332,7 @@ function ContentProperties({
                     onChange={(e) =>
                       onChange({ rows: e.target.value ? Number(e.target.value) : 4 })
                     }
+                    data-testid="editor-textarea-rows"
                     className={cn(
                       'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                       'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1346,7 +1347,8 @@ function ContentProperties({
                     type="number"
                     min={0}
                     value={(element.props.maxLength as number) || ''}
-                    onChange={(e) => onChange({ maxLength: e.target.value ? Number(e.target.value) : 0 })}
+                    onChange={(e) => onChange({ maxLength: e.target.value ? Number(e.target.value) : undefined })}
+                    data-testid="editor-textarea-max-length"
                     className={cn(
                       'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                       'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1361,7 +1363,8 @@ function ContentProperties({
                     type="number"
                     min={0}
                     value={(element.props.minLength as number) || ''}
-                    onChange={(e) => onChange({ minLength: e.target.value ? Number(e.target.value) : 0 })}
+                    onChange={(e) => onChange({ minLength: e.target.value ? Number(e.target.value) : undefined })}
+                    data-testid="editor-textarea-min-length"
                     className={cn(
                       'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                       'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1377,6 +1380,7 @@ function ContentProperties({
                   type="text"
                   value={element.props.defaultValue || ''}
                   onChange={(e) => onChange({ defaultValue: e.target.value })}
+                  data-testid="editor-textarea-default-value"
                   className={cn(
                     'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                     'focus:outline-none focus:ring-2 focus:ring-ring'

@@ -267,6 +267,24 @@ const createSmokePage = async () => {
             },
           },
           {
+            id: 'smoke-textarea',
+            type: 'textarea',
+            x: 860,
+            y: 760,
+            width: 300,
+            height: 130,
+            zIndex: 5,
+            props: {
+              label: 'Initial textarea',
+              name: 'initial_message',
+              placeholder: 'Initial message',
+              rows: 4,
+              required: false,
+              borderRadius: 4,
+              borderColor: '#d1d5db',
+            },
+          },
+          {
             id: 'smoke-repeater',
             type: 'repeater',
             x: 520,
@@ -2575,6 +2593,36 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
   })()`);
   assert(refreshedList, 'Unable to refresh saved section library after source update');
   await sleep(600);
+  await selectLayerById(client, inserted.selectedElementId);
+  await switchToPropertiesPanel(client);
+
+  let reusableRefreshState = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    reusableRefreshState = await evaluate(client, `(() => {
+      const selectedElement = Array.from(document.querySelectorAll('[data-element-id]')).find((node) => (
+        node.querySelector('[data-role="canvas-move-handle"]')
+      ));
+      const panel = document.querySelector('[data-testid="editor-reusable-instance"]');
+      const button = document.querySelector('[data-testid="editor-refresh-reusable-instance"]');
+      return {
+        selectedElementId: selectedElement?.getAttribute('data-element-id') || null,
+        hasPanel: Boolean(panel),
+        panelText: panel?.textContent || '',
+        hasButton: button instanceof HTMLButtonElement,
+        disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent?.slice(0, 500) || '',
+      };
+    })()`);
+    if (
+      reusableRefreshState?.selectedElementId === inserted.selectedElementId &&
+      reusableRefreshState.hasPanel &&
+      reusableRefreshState.hasButton &&
+      reusableRefreshState.disabled === false
+    ) {
+      break;
+    }
+    await sleep(150);
+  }
 
   const refreshClicked = await evaluate(client, `(() => {
     const button = document.querySelector('[data-testid="editor-refresh-reusable-instance"]');
@@ -2584,7 +2632,7 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
     button.click();
     return true;
   })()`);
-  assert(refreshClicked, 'Unable to refresh selected synced reusable instance');
+  assert(refreshClicked, `Unable to refresh selected synced reusable instance: ${JSON.stringify(reusableRefreshState)}`);
   await sleep(350);
 
   const afterRefresh = await readEditorElementState(client, [inserted.selectedElementId]);
@@ -3041,6 +3089,85 @@ const assertPersistedInputFieldBehavior = async (pageId) => {
   assert(props.minLength === 6, `Persisted input minLength mismatch: ${JSON.stringify(props)}`);
   assert(props.maxLength === 64, `Persisted input maxLength mismatch: ${JSON.stringify(props)}`);
   assert(props.defaultValue === 'test@example.com', `Persisted input default value mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
+const testTextareaFieldBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-textarea');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-field-label', 'Smoke textarea label');
+  await setFormControlByTestId(client, 'editor-field-name', 'smoke_message');
+  await setCheckboxByTestId(client, 'editor-field-required', true);
+  await setFormControlByTestId(client, 'editor-field-placeholder', 'Write a detailed message');
+  await setFormControlByTestId(client, 'editor-field-help-text', 'Minimum ten characters.');
+  await setFormControlByTestId(client, 'editor-textarea-rows', '6');
+  await setFormControlByTestId(client, 'editor-textarea-min-length', '10');
+  await setFormControlByTestId(client, 'editor-textarea-max-length', '240');
+  await setFormControlByTestId(client, 'editor-textarea-default-value', 'Textarea default body');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const checked = (testId) => {
+      const input = document.querySelector('[data-testid="' + testId + '"]');
+      return input instanceof HTMLInputElement ? input.checked : null;
+    };
+    const node = document.querySelector('[data-element-id="smoke-textarea"]');
+    const label = node?.querySelector('label');
+    const textarea = node?.querySelector('textarea');
+    const help = node?.querySelector('p');
+    return {
+      label: value('editor-field-label'),
+      name: value('editor-field-name'),
+      required: checked('editor-field-required'),
+      placeholder: value('editor-field-placeholder'),
+      helpText: value('editor-field-help-text'),
+      rows: value('editor-textarea-rows'),
+      minLength: value('editor-textarea-min-length'),
+      maxLength: value('editor-textarea-max-length'),
+      defaultValue: value('editor-textarea-default-value'),
+      previewLabel: label?.textContent || '',
+      previewName: textarea?.getAttribute('name') || '',
+      previewRequired: textarea instanceof HTMLTextAreaElement ? textarea.required : null,
+      previewPlaceholder: textarea?.getAttribute('placeholder') || '',
+      previewRows: textarea?.getAttribute('rows') || '',
+      previewMinLength: textarea?.getAttribute('minlength') || '',
+      previewMaxLength: textarea?.getAttribute('maxlength') || '',
+      previewValue: textarea instanceof HTMLTextAreaElement ? textarea.value : '',
+      previewHelpText: help?.textContent || '',
+    };
+  })()`);
+
+  assert(state.label === 'Smoke textarea label' && state.previewLabel.includes('Smoke textarea label'), `Textarea label mismatch: ${JSON.stringify(state)}`);
+  assert(state.name === 'smoke_message' && state.previewName === 'smoke_message', `Textarea name mismatch: ${JSON.stringify(state)}`);
+  assert(state.required === true && state.previewRequired === true && state.previewLabel.includes('*'), `Textarea required mismatch: ${JSON.stringify(state)}`);
+  assert(state.placeholder === 'Write a detailed message' && state.previewPlaceholder === 'Write a detailed message', `Textarea placeholder mismatch: ${JSON.stringify(state)}`);
+  assert(state.helpText === 'Minimum ten characters.' && state.previewHelpText === 'Minimum ten characters.', `Textarea help text mismatch: ${JSON.stringify(state)}`);
+  assert(state.rows === '6' && state.previewRows === '6', `Textarea rows mismatch: ${JSON.stringify(state)}`);
+  assert(state.minLength === '10' && state.previewMinLength === '10', `Textarea minLength mismatch: ${JSON.stringify(state)}`);
+  assert(state.maxLength === '240' && state.previewMaxLength === '240', `Textarea maxLength mismatch: ${JSON.stringify(state)}`);
+  assert(state.defaultValue === 'Textarea default body' && state.previewValue === 'Textarea default body', `Textarea default value mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedTextareaFieldBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const textarea = findCanvasElement(elements, 'smoke-textarea');
+  const props = textarea?.props || {};
+
+  assert(textarea?.type === 'textarea', `Persisted smoke-textarea missing: ${JSON.stringify(textarea)}`);
+  assert(props.label === 'Smoke textarea label', `Persisted textarea label mismatch: ${JSON.stringify(props)}`);
+  assert(props.name === 'smoke_message', `Persisted textarea name mismatch: ${JSON.stringify(props)}`);
+  assert(props.required === true, `Persisted textarea required mismatch: ${JSON.stringify(props)}`);
+  assert(props.placeholder === 'Write a detailed message', `Persisted textarea placeholder mismatch: ${JSON.stringify(props)}`);
+  assert(props.helpText === 'Minimum ten characters.', `Persisted textarea help text mismatch: ${JSON.stringify(props)}`);
+  assert(props.rows === 6, `Persisted textarea rows mismatch: ${JSON.stringify(props)}`);
+  assert(props.minLength === 10, `Persisted textarea minLength mismatch: ${JSON.stringify(props)}`);
+  assert(props.maxLength === 240, `Persisted textarea maxLength mismatch: ${JSON.stringify(props)}`);
+  assert(props.defaultValue === 'Textarea default body', `Persisted textarea default value mismatch: ${JSON.stringify(props)}`);
 
   return props;
 };
@@ -3552,7 +3679,7 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-repeater']);
 
     const clickAdd = await testComponentClickAdd(client, 'divider');
 
@@ -3669,6 +3796,9 @@ const main = async () => {
     const inputFieldBehaviorControls = EDITOR_PATH
       ? null
       : await testInputFieldBehaviorControls(client);
+    const textareaFieldBehaviorControls = EDITOR_PATH
+      ? null
+      : await testTextareaFieldBehaviorControls(client);
     const buttonLinkBehaviorControls = EDITOR_PATH
       ? null
       : await testButtonLinkBehaviorControls(client);
@@ -3693,12 +3823,13 @@ const main = async () => {
     let persistedRepeater = null;
     let persistedImageBehavior = null;
     let persistedInputFieldBehavior = null;
+    let persistedTextareaFieldBehavior = null;
     let persistedButtonLinkBehavior = null;
     let persistedVideoBehavior = null;
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -3757,6 +3888,9 @@ const main = async () => {
       persistedInputFieldBehavior = inputFieldBehaviorControls
         ? await assertPersistedInputFieldBehavior(tempPageId)
         : null;
+      persistedTextareaFieldBehavior = textareaFieldBehaviorControls
+        ? await assertPersistedTextareaFieldBehavior(tempPageId)
+        : null;
       persistedButtonLinkBehavior = buttonLinkBehaviorControls
         ? await assertPersistedButtonLinkBehavior(tempPageId)
         : null;
@@ -3773,7 +3907,7 @@ const main = async () => {
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-form', 'smoke-input', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -3878,6 +4012,7 @@ const main = async () => {
       repeaterControls,
       imageBehaviorControls,
       inputFieldBehaviorControls,
+      textareaFieldBehaviorControls,
       buttonLinkBehaviorControls,
       videoBehaviorControls,
       embedBehaviorControls,
@@ -3892,6 +4027,7 @@ const main = async () => {
       persistedRepeater,
       persistedImageBehavior,
       persistedInputFieldBehavior,
+      persistedTextareaFieldBehavior,
       persistedButtonLinkBehavior,
       persistedVideoBehavior,
       persistedEmbedBehavior,

@@ -661,6 +661,13 @@ function getSafeTag(value: unknown): keyof JSX.IntrinsicElements {
   return (allowedTags.includes(candidate) ? candidate : 'span') as keyof JSX.IntrinsicElements;
 }
 
+function getSafeResize(value: unknown): React.CSSProperties['resize'] {
+  const candidate = typeof value === 'string' ? value.trim() : '';
+  return ['none', 'both', 'horizontal', 'vertical', 'block', 'inline'].includes(candidate)
+    ? candidate as React.CSSProperties['resize']
+    : 'vertical';
+}
+
 function getTypographyStyle(props: Record<string, unknown>): React.CSSProperties {
   return {
     fontFamily: getNameClass(props.fontFamily),
@@ -2307,26 +2314,65 @@ function TextareaElement({ element }: ElementRendererProps) {
   const minLength = parseNumericAttribute(props.minLength);
   const maxLength = parseNumericAttribute(props.maxLength);
   const fieldName = getNameClass(props.name) || `field-${element.id}`;
+  const label = getNameClass(props.label);
+  const helpText = getNameClass(props.helpText);
 
   return (
-    <textarea
-      name={fieldName}
-      placeholder={getNameClass(props.placeholder)}
-      required={getBoolean(props.required)}
-      rows={Number.isFinite(rows) ? rows : 5}
-      defaultValue={getNameClass(props.defaultValue)}
-      minLength={Number.isFinite(minLength) ? minLength : undefined}
-      maxLength={maxLength}
+    <div
       style={{
-        padding: '12px 16px',
-        border: getNameClass(props.border) || '1px solid #d1d5db',
-        borderRadius: getLength(props.borderRadius, '8px'),
-        fontSize: getLength(props.fontSize, '16px'),
+        display: 'flex',
+        flexDirection: 'column',
+        gap: getLength(props.fieldGap, '6px'),
         width: '100%',
-        resize: 'vertical',
-        ...styles,
+        height: '100%',
       }}
-    />
+    >
+      {label ? (
+        <label
+          htmlFor={`field-${element.id}`}
+          style={{
+            color: getNameClass(props.labelColor) || getNameClass(props.color) || '#374151',
+            fontWeight: getNameClass(props.labelFontWeight) || 500,
+            fontSize: getLength(props.labelFontSize, '14px'),
+          }}
+        >
+          {label}
+          {getBoolean(props.required) ? ' *' : ''}
+        </label>
+      ) : null}
+      <textarea
+        id={`field-${element.id}`}
+        name={fieldName}
+        placeholder={getNameClass(props.placeholder)}
+        required={getBoolean(props.required)}
+        rows={Number.isFinite(rows) ? rows : 5}
+        defaultValue={getNameClass(props.defaultValue)}
+        disabled={getBoolean(props.disabled)}
+        minLength={Number.isFinite(minLength) ? minLength : undefined}
+        maxLength={maxLength}
+        style={{
+          padding: '12px 16px',
+          border: getNameClass(props.border) || '1px solid #d1d5db',
+          borderRadius: getLength(props.borderRadius, '8px'),
+          fontSize: getLength(props.fontSize, '16px'),
+          width: '100%',
+          resize: getSafeResize(props.resize),
+          ...styles,
+        }}
+      />
+      {helpText ? (
+        <p
+          style={{
+            margin: 0,
+            color: getNameClass(props.helpTextColor) || '#6b7280',
+            fontSize: getLength(props.helpTextFontSize, '12px'),
+            lineHeight: 1.4,
+          }}
+        >
+          {helpText}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
