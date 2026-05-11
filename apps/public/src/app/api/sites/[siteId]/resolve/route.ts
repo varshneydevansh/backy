@@ -11,6 +11,7 @@ import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRoutePath, resolveSiteRoute } from '@/lib/routeResolver';
 import { matchCollectionItemRoute, matchCollectionListRoute } from '@/lib/collectionRoutes';
+import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import { buildSiteNavigation } from '@/lib/navigation';
 import { resolveRedirectRoute, type ResolvedRedirectRoute } from '@/lib/redirectRules';
 
@@ -133,6 +134,7 @@ const dynamicListResource = (
   recordsUrl: `/api/sites/${siteId}/collections/${collection.id}/records`,
   renderUrl: `/api/sites/${siteId}/render?path=${encodeURIComponent(canonical)}`,
   hostedPath: canonical,
+  frontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
   ...(typeof recordCount === 'number' ? { recordCount } : {}),
 });
 
@@ -342,6 +344,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 apiUrl: `/api/sites/${site.id}/collections/${collection.id}/records?slug=${encodeURIComponent(record.slug)}`,
                 renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(canonical)}`,
                 hostedPath: canonical,
+                frontendDesign: frontendDesignProvenanceFromMetadata(record.values),
+                collectionFrontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
               },
             },
             navigation: await repositoryNavigation(repositories, site),

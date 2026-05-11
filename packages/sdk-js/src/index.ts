@@ -673,7 +673,33 @@ export interface BackyResolvedRouteBase<TRouteType extends BackyResolvedRouteTyp
   [key: string]: unknown;
 }
 
-export type BackyRenderableRoute = BackyResolvedRouteBase<'page' | 'post' | 'dynamicList' | 'dynamicItem' | 'notFound'>;
+export interface BackyDynamicListRoute extends BackyResolvedRouteBase<'dynamicList'> {
+  resource?: Record<string, unknown> & {
+    collectionId?: string;
+    collectionSlug?: string;
+    collectionName?: string;
+    recordsUrl?: string;
+    renderUrl?: string;
+    frontendDesign?: BackyFrontendDesignProvenance;
+  };
+}
+
+export interface BackyDynamicItemRoute extends BackyResolvedRouteBase<'dynamicItem'> {
+  resource?: Record<string, unknown> & {
+    collectionId?: string;
+    collectionSlug?: string;
+    collectionName?: string;
+    apiUrl?: string;
+    renderUrl?: string;
+    frontendDesign?: BackyFrontendDesignProvenance;
+    collectionFrontendDesign?: BackyFrontendDesignProvenance;
+  };
+}
+
+export type BackyRenderableRoute =
+  | BackyResolvedRouteBase<'page' | 'post' | 'notFound'>
+  | BackyDynamicListRoute
+  | BackyDynamicItemRoute;
 
 export interface BackyRedirectRoute extends BackyResolvedRouteBase<'redirect'> {
   type: 'redirect';

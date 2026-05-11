@@ -13,6 +13,7 @@ import {
   type StoreSite,
 } from './backyStore';
 import { matchCollectionItemRoute, matchCollectionListRoute } from './collectionRoutes';
+import { frontendDesignProvenanceFromMetadata } from './frontendDesignContract';
 import { resolveRedirectRoute, type ResolvedRedirectRoute } from './redirectRules';
 
 type ResolvedPageRoute = {
@@ -64,6 +65,8 @@ type ResolvedDynamicItemRoute = {
     apiUrl: string;
     renderUrl: string;
     hostedPath: string;
+    frontendDesign?: ReturnType<typeof frontendDesignProvenanceFromMetadata>;
+    collectionFrontendDesign?: ReturnType<typeof frontendDesignProvenanceFromMetadata>;
   };
 };
 
@@ -85,6 +88,7 @@ type ResolvedDynamicListRoute = {
     renderUrl: string;
     hostedPath: string;
     recordCount: number;
+    frontendDesign?: ReturnType<typeof frontendDesignProvenanceFromMetadata>;
   };
 };
 
@@ -192,6 +196,7 @@ export function resolveSiteRoute(
           renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(canonical)}`,
           hostedPath: canonical,
           recordCount: records.length,
+          frontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
         },
       };
     }
@@ -233,6 +238,8 @@ export function resolveSiteRoute(
         apiUrl: `/api/sites/${site.id}/collections/${collection.id}/records?slug=${encodeURIComponent(record.slug)}`,
         renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(canonical)}`,
         hostedPath: canonical,
+        frontendDesign: frontendDesignProvenanceFromMetadata(record.values),
+        collectionFrontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
       },
     };
   }

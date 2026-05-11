@@ -2890,6 +2890,9 @@ try {
       routePattern.collectionId === capturedTemplateCollectionId &&
       routePattern.frontendDesign?.templateId === 'captured-collection-template'
     )), `${publicManifestWithCapturedCollection.url} missing manifest dynamic collection frontend design`);
+    const publicCapturedTemplateCollectionResolve = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(`/directory-captured-${unique}`)}`);
+    assert(publicCapturedTemplateCollectionResolve.response.status === 200, `${publicCapturedTemplateCollectionResolve.url} expected captured collection resolve`);
+    assert(publicCapturedTemplateCollectionResolve.json?.data?.route?.resource?.frontendDesign?.templateId === 'captured-collection-template', `${publicCapturedTemplateCollectionResolve.url} missing resolved collection frontend design`);
     const createRecordFromCollectionTemplate = await request(`/api/admin/sites/${createdSiteId}/collections/${capturedTemplateCollectionId}/records`, {
       method: 'POST',
       headers: {
@@ -2912,6 +2915,10 @@ try {
     assert(publicCapturedTemplateRecords.response.status === 200, `${publicCapturedTemplateRecords.url} expected public captured template record`);
     assert(publicCapturedTemplateRecords.json?.data?.collection?.frontendDesign?.templateId === 'captured-collection-template', `${publicCapturedTemplateRecords.url} missing normalized record collection frontend design`);
     assert(publicCapturedTemplateRecords.json?.data?.records?.[0]?.frontendDesign?.templateId === 'captured-collection-template', `${publicCapturedTemplateRecords.url} missing normalized collection record frontend design`);
+    const publicCapturedTemplateRecordResolve = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(`/directory-captured-${unique}/captured-template-record-${unique}`)}`);
+    assert(publicCapturedTemplateRecordResolve.response.status === 200, `${publicCapturedTemplateRecordResolve.url} expected captured collection record resolve`);
+    assert(publicCapturedTemplateRecordResolve.json?.data?.route?.resource?.frontendDesign?.templateId === 'captured-collection-template', `${publicCapturedTemplateRecordResolve.url} missing resolved collection record frontend design`);
+    assert(publicCapturedTemplateRecordResolve.json?.data?.route?.resource?.collectionFrontendDesign?.templateId === 'captured-collection-template', `${publicCapturedTemplateRecordResolve.url} missing resolved collection record schema frontend design`);
     const capturedTemplateCollectionRender = await request(`/api/sites/${createdSiteId}/render?path=${encodeURIComponent(`/directory-captured-${unique}`)}`);
     assert(capturedTemplateCollectionRender.response.status === 200, `${capturedTemplateCollectionRender.url} expected captured collection render`);
     validateAiRenderPayload(capturedTemplateCollectionRender.json, 'captured collection render payload');
