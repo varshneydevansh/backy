@@ -144,6 +144,47 @@ const loginAdminApi = async () => {
   return payload.data;
 };
 
+const assertFormsPermissionOverridesAreEnforced = async () => {
+  await requestApi('/api/admin/users/user-admin/permissions', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      overrides: {
+        'forms.create': 'deny',
+      },
+    }),
+  });
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/sites/${SITE_ID}/forms`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiAdminSessionToken}`,
+      },
+      body: JSON.stringify({
+        name: `denied-form-${Date.now().toString(36)}`,
+        title: 'Denied form smoke',
+        fields: [
+          { key: 'email', label: 'Email', type: 'email', required: true },
+        ],
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    assert(response.status === 403, `Denied forms.create override should reject form creation, got ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`);
+    assert(payload?.error?.code === 'FORBIDDEN_PERMISSION', `Denied forms.create override should return FORBIDDEN_PERMISSION: ${JSON.stringify(payload).slice(0, 500)}`);
+  } finally {
+    await requestApi('/api/admin/users/user-admin/permissions', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        overrides: {
+          'forms.create': null,
+        },
+      }),
+    });
+  }
+};
+
 const getFrontendDesign = async () => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`);
   const frontendDesign = payload.data?.frontendDesign;
@@ -1584,6 +1625,7 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 
 const main = async () => {
   await loginAdminApi();
+  await assertFormsPermissionOverridesAreEnforced();
   const originalFrontendDesign = await getFrontendDesign();
   await patchFrontendDesign(smokeFrontendDesignContract());
   const beforeIds = new Set((await listForms()).map((form) => form.id));

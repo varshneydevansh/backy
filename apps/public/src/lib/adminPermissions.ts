@@ -105,6 +105,12 @@ const PERMISSION_GROUPS: PermissionGroupDefinition[] = [
       { key: 'collections.edit', label: 'Edit schemas, records, and forms', capability: 'edit', roles: contentRoles },
       { key: 'collections.export', label: 'Export records, contacts, and submissions', capability: 'export', roles: adminRoles },
       { key: 'collections.delete', label: 'Delete schemas or submissions', capability: 'delete', roles: adminRoles },
+      { key: 'forms.view', label: 'View forms, submissions, and contacts', capability: 'view', roles: allRoles },
+      { key: 'forms.create', label: 'Create forms', capability: 'create', roles: contentRoles },
+      { key: 'forms.edit', label: 'Edit forms and delivery settings', capability: 'edit', roles: contentRoles },
+      { key: 'forms.manage', label: 'Review submissions and manage form contacts', capability: 'manage', roles: contentRoles },
+      { key: 'forms.export', label: 'Export form submissions and contacts', capability: 'export', roles: adminRoles },
+      { key: 'forms.delete', label: 'Delete forms', capability: 'delete', roles: adminRoles },
     ],
   },
   {

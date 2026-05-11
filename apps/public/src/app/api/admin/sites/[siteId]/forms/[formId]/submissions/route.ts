@@ -36,7 +36,7 @@ const parseStatus = (value: string | null) => (
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
-  const access = requireAdminAccess(request, requestId, { permission: 'collections.view' });
+  const access = requireAdminAccess(request, requestId, { permission: 'forms.view' });
   if (access instanceof NextResponse) {
     return access;
   }
