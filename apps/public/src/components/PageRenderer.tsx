@@ -584,6 +584,36 @@ interface FormValidationDetail {
   message: string;
 }
 
+type FormSchemaFieldType =
+  | 'text'
+  | 'email'
+  | 'number'
+  | 'textarea'
+  | 'select'
+  | 'checkbox'
+  | 'radio'
+  | 'date'
+  | 'tel'
+  | 'url'
+  | 'file';
+
+interface FormSchemaField {
+  key: string;
+  label: string;
+  type: FormSchemaFieldType;
+  placeholder?: string;
+  helpText?: string;
+  defaultValue?: string;
+  options?: unknown;
+  required?: boolean;
+  disabled?: boolean;
+  validation?: Array<{
+    type: string;
+    value?: string | number;
+    message?: string;
+  }>;
+}
+
 const FORM_CAPTCHA_TOKEN_FIELDS = [
   'captchaToken',
   'captchaResponse',
@@ -592,6 +622,20 @@ const FORM_CAPTCHA_TOKEN_FIELDS = [
   'recaptchaToken',
   'g-recaptcha-response',
   'cf-turnstile-response',
+];
+
+const FORM_SCHEMA_FIELD_TYPES: FormSchemaFieldType[] = [
+  'text',
+  'email',
+  'number',
+  'textarea',
+  'select',
+  'checkbox',
+  'radio',
+  'date',
+  'tel',
+  'url',
+  'file',
 ];
 
 interface ElementRendererContext {
@@ -768,6 +812,79 @@ function parseOptionValues(raw: unknown): string[] {
     .map((item) => item.trim());
 
   return Array.from(new Set(parsed.filter((item) => item.length > 0)));
+}
+
+function normalizeFormSchemaFieldType(raw: unknown): FormSchemaFieldType {
+  const type = getNameClass(raw).toLowerCase();
+  return FORM_SCHEMA_FIELD_TYPES.includes(type as FormSchemaFieldType)
+    ? type as FormSchemaFieldType
+    : 'text';
+}
+
+function normalizeFormSchemaFields(raw: unknown): FormSchemaField[] {
+  const values = Array.isArray(raw)
+    ? raw
+    : isRecord(raw)
+      ? Object.entries(raw).map(([key, value]) => (
+        isRecord(value) ? { key, ...value } : { key, label: key, type: value }
+      ))
+      : [];
+  const usedKeys = new Set<string>();
+
+  return values
+    .map((value, index): FormSchemaField | null => {
+      if (!isRecord(value)) {
+        return null;
+      }
+
+      const requestedKey = getNameClass(value.key)
+        || getNameClass(value.name)
+        || getNameClass(value.id)
+        || `field_${index + 1}`;
+      let key = requestedKey.replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+      if (!key) {
+        key = `field_${index + 1}`;
+      }
+      const baseKey = key;
+      let counter = 2;
+      while (usedKeys.has(key)) {
+        key = `${baseKey}_${counter}`;
+        counter += 1;
+      }
+      usedKeys.add(key);
+
+      const validation = Array.isArray(value.validation)
+        ? value.validation
+          .filter(isRecord)
+          .map((rule) => ({
+            type: getNameClass(rule.type),
+            value: typeof rule.value === 'number' || typeof rule.value === 'string' ? rule.value : undefined,
+            message: getNameClass(rule.message),
+          }))
+          .filter((rule) => rule.type.length > 0)
+        : [];
+
+      return {
+        key,
+        label: getNameClass(value.label) || key,
+        type: normalizeFormSchemaFieldType(value.type || value.inputType),
+        placeholder: getNameClass(value.placeholder),
+        helpText: getNameClass(value.helpText),
+        defaultValue: getNameClass(value.defaultValue ?? value.value),
+        options: value.options,
+        required: getBoolean(value.required) || validation.some((rule) => rule.type === 'required'),
+        disabled: getBoolean(value.disabled),
+        validation,
+      };
+    })
+    .filter((field): field is FormSchemaField => Boolean(field));
+}
+
+function getFormSchemaValidationValue(
+  field: FormSchemaField,
+  type: string,
+): string | number | undefined {
+  return field.validation?.find((rule) => rule.type === type)?.value;
 }
 
 function parseFormValidationDetails(raw: unknown): FormValidationDetail[] {
@@ -1922,6 +2039,158 @@ function LinkElement({ element, siteId, pageId, postId }: ElementRendererProps) 
   );
 }
 
+function FormSchemaFieldElement({
+  field,
+  index,
+  formProps,
+}: {
+  field: FormSchemaField;
+  index: number;
+  formProps: Record<string, unknown>;
+}) {
+  const fieldId = `schema-field-${field.key}-${index}`;
+  const options = parseOptionValues(field.options);
+  const minLength = parseNumericAttribute(getFormSchemaValidationValue(field, 'minLength'));
+  const maxLength = parseNumericAttribute(getFormSchemaValidationValue(field, 'maxLength'));
+  const min = parseAttributeString(getFormSchemaValidationValue(field, 'min'));
+  const max = parseAttributeString(getFormSchemaValidationValue(field, 'max'));
+  const pattern = parseAttributeString(getFormSchemaValidationValue(field, 'pattern'));
+  const controlStyle = {
+    ...getFieldControlStyle(formProps),
+    width: '100%',
+    minHeight: getLength(formProps.inputHeight, '40px'),
+  };
+  const labelStyle: React.CSSProperties = {
+    color: getNameClass(formProps.labelColor) || getNameClass(formProps.color) || '#374151',
+    fontWeight: getNameClass(formProps.labelFontWeight) || 500,
+    fontSize: getLength(formProps.labelFontSize, '14px'),
+  };
+  const helpStyle: React.CSSProperties = {
+    margin: 0,
+    color: getNameClass(formProps.helpTextColor) || '#6b7280',
+    fontSize: getLength(formProps.helpTextFontSize, '12px'),
+    lineHeight: 1.4,
+  };
+
+  let control: React.ReactNode;
+  if (field.type === 'textarea') {
+    control = (
+      <textarea
+        id={fieldId}
+        name={field.key}
+        placeholder={field.placeholder}
+        required={field.required}
+        disabled={field.disabled}
+        minLength={minLength}
+        maxLength={maxLength}
+        defaultValue={field.defaultValue}
+        rows={5}
+        style={{
+          ...controlStyle,
+          resize: getSafeResize(formProps.resize),
+        }}
+      />
+    );
+  } else if (field.type === 'select') {
+    control = (
+      <select
+        id={fieldId}
+        name={field.key}
+        required={field.required}
+        disabled={field.disabled}
+        defaultValue={field.defaultValue || ''}
+        style={controlStyle}
+      >
+        {field.placeholder || options.length === 0 ? (
+          <option value="" disabled={options.length > 0}>
+            {field.placeholder || 'Select'}
+          </option>
+        ) : null}
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    );
+  } else if (field.type === 'checkbox' || field.type === 'radio') {
+    const inputType = field.type;
+    const defaultValues = toFormInputValueList(field.defaultValue);
+    const defaultSet = new Set(defaultValues);
+    const choices = options.length > 0 ? options : [field.defaultValue || 'on'];
+
+    control = (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          padding: '8px 10px',
+          border: controlStyle.border,
+          borderRadius: controlStyle.borderRadius,
+          backgroundColor: controlStyle.backgroundColor,
+        }}
+      >
+        {choices.map((option, optionIndex) => (
+          <label
+            key={`${field.key}-${option}-${optionIndex}`}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+          >
+            <input
+              type={inputType}
+              name={field.key}
+              value={option}
+              required={inputType === 'checkbox' ? optionIndex === 0 && field.required : field.required}
+              disabled={field.disabled}
+              defaultChecked={inputType === 'radio' ? defaultValues[0] === option : defaultSet.has(option)}
+            />
+            <span>{option}</span>
+          </label>
+        ))}
+      </div>
+    );
+  } else {
+    control = (
+      <input
+        id={fieldId}
+        type={normalizeInputType(field.type)}
+        name={field.key}
+        placeholder={field.placeholder}
+        required={field.required}
+        disabled={field.disabled}
+        min={min}
+        max={max}
+        pattern={pattern}
+        minLength={minLength}
+        maxLength={maxLength}
+        defaultValue={field.type === 'file' ? undefined : field.defaultValue}
+        style={controlStyle}
+      />
+    );
+  }
+
+  return (
+    <div
+      data-backy-form-schema-field={field.key}
+      data-backy-form-schema-field-type={field.type}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: getLength(formProps.fieldGap, '6px'),
+      }}
+    >
+      {field.label ? (
+        <label htmlFor={fieldId} style={labelStyle}>
+          {field.label}
+          {field.required ? ' *' : ''}
+        </label>
+      ) : null}
+      {control}
+      {field.helpText ? <p style={helpStyle}>{field.helpText}</p> : null}
+    </div>
+  );
+}
+
 /**
  * Render a form element
  */
@@ -1971,6 +2240,8 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
     getNameClass((props as { successMessage?: unknown }).successMessage) ||
     'Thanks. Your message was sent.';
   const formTitle = getNameClass(props.formTitle);
+  const schemaFields = normalizeFormSchemaFields(props.fields || props.formFields || props.schema);
+  const submitLabel = getNameClass(props.submitLabel) || 'Submit';
   const contactShareOverride = buildContactShareOverride(props as Record<string, unknown>);
   const requestId = useRef<string>(`f-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`);
 
@@ -2123,6 +2394,7 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
         data-backy-collection-id={collectionWriteEnabled && collectionWriteCollectionId ? collectionWriteCollectionId : undefined}
         data-backy-collection-slug-field={collectionWriteEnabled && collectionWriteSlugField ? collectionWriteSlugField : undefined}
         data-backy-collection-field-map={collectionWriteEnabled ? collectionWriteFieldMap : undefined}
+        data-backy-form-schema-count={schemaFields.length}
         style={{
           display: 'flex',
           flexDirection: 'column',
@@ -2161,6 +2433,37 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
             value=""
             readOnly
           />
+        ) : null}
+
+        {schemaFields.map((field, index) => (
+          <FormSchemaFieldElement
+            key={`${field.key}-${index}`}
+            field={field}
+            index={index}
+            formProps={props as Record<string, unknown>}
+          />
+        ))}
+
+        {schemaFields.length > 0 ? (
+          <button
+            type="submit"
+            data-backy-form-schema-submit=""
+            disabled={!formActive}
+            style={{
+              width: 'fit-content',
+              minHeight: getLength(props.submitHeight, '40px'),
+              padding: getLength(props.submitPadding, '8px 16px'),
+              border: getNameClass(props.submitBorder) || 'none',
+              borderRadius: getLength(props.submitBorderRadius || props.borderRadius, '8px'),
+              backgroundColor: getNameClass(props.submitBackgroundColor) || '#111827',
+              color: getNameClass(props.submitColor) || '#ffffff',
+              fontSize: getLength(props.submitFontSize || props.fontSize, '14px'),
+              fontWeight: getNameClass(props.submitFontWeight) || '600',
+              cursor: formActive ? 'pointer' : 'default',
+            }}
+          >
+            {submitLabel}
+          </button>
         ) : null}
 
         {children?.map((child) => (

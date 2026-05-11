@@ -2744,6 +2744,104 @@ function buildDynamicFieldFromElement(
   };
 }
 
+function normalizeFormSchemaFieldType(value: unknown): FormFieldDefinition['type'] {
+  const raw = sanitizeString(value).toLowerCase();
+  if (raw === 'email') return 'email';
+  if (raw === 'number') return 'number';
+  if (raw === 'textarea') return 'textarea';
+  if (raw === 'select') return 'select';
+  if (raw === 'checkbox') return 'checkbox';
+  if (raw === 'radio') return 'radio';
+  if (raw === 'date') return 'date';
+  if (raw === 'tel') return 'tel';
+  if (raw === 'url') return 'url';
+  if (raw === 'file') return 'file';
+  return 'text';
+}
+
+function normalizeFormSchemaValidation(value: unknown): FormFieldDefinition['validation'] {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const rules = value
+    .filter((rule): rule is Record<string, unknown> => Boolean(rule) && typeof rule === 'object' && !Array.isArray(rule))
+    .map((rule): NonNullable<FormFieldDefinition['validation']>[number] | null => {
+      const type = sanitizeString(rule.type);
+      if (!['required', 'minLength', 'maxLength', 'pattern', 'min', 'max'].includes(type)) {
+        return null;
+      }
+
+      const normalizedRule: NonNullable<FormFieldDefinition['validation']>[number] = {
+        type: type as NonNullable<FormFieldDefinition['validation']>[number]['type'],
+        message: sanitizeString(rule.message) || `${type} validation failed`,
+      };
+      if (typeof rule.value === 'number' || typeof rule.value === 'string') {
+        normalizedRule.value = rule.value;
+      }
+
+      return {
+        ...normalizedRule,
+      };
+    })
+    .filter((rule): rule is NonNullable<FormFieldDefinition['validation']>[number] => Boolean(rule));
+
+  return rules.length > 0 ? rules : undefined;
+}
+
+function normalizeFormSchemaField(
+  input: unknown,
+  usedKeys: Set<string>,
+  index: number,
+): FormFieldDefinition | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return null;
+  }
+
+  const record = input as Record<string, unknown>;
+  const requestedKey = sanitizeString(record.key)
+    || sanitizeString(record.name)
+    || sanitizeString(record.id)
+    || `field_${index}`;
+  const key = ensureUniqueFieldKey(requestedKey, usedKeys);
+  const validation = normalizeFormSchemaValidation(record.validation);
+
+  return {
+    key,
+    label: sanitizeString(record.label) || key,
+    type: normalizeFormSchemaFieldType(record.type || record.inputType),
+    placeholder: sanitizeString(record.placeholder),
+    helpText: sanitizeString(record.helpText),
+    defaultValue: record.defaultValue !== undefined
+      ? sanitizeString(record.defaultValue)
+      : sanitizeString(record.value),
+    options: ['select', 'checkbox', 'radio'].includes(sanitizeString(record.type || record.inputType).toLowerCase())
+      ? parseFieldOptions(record.options)
+      : undefined,
+    required: record.required === true
+      || sanitizeString(record.required).toLowerCase() === 'true'
+      || validation?.some((rule) => rule.type === 'required')
+      || false,
+    validation,
+  };
+}
+
+function collectFormFieldsFromSchema(value: unknown, usedKeys: Set<string>): FormFieldDefinition[] {
+  const entries = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? Object.entries(value as Record<string, unknown>).map(([key, field]) => (
+        field && typeof field === 'object' && !Array.isArray(field)
+          ? { key, ...(field as Record<string, unknown>) }
+          : { key, label: key, type: field }
+      ))
+      : [];
+
+  return entries
+    .map((entry, index) => normalizeFormSchemaField(entry, usedKeys, index + 1))
+    .filter((field): field is FormFieldDefinition => Boolean(field));
+}
+
 function collectFormFieldsFromChildren(nodes: CanvasElement[], usedKeys: Set<string>): FormFieldDefinition[] {
   const fields: FormFieldDefinition[] = [];
 
@@ -2776,7 +2874,11 @@ function buildFormDefinitionFromCanvas(
   },
 ): FormDefinition | null {
   const props = formElement.props as Record<string, unknown>;
-  const fields = collectFormFieldsFromChildren(formElement.children || [], new Set<string>());
+  const usedFieldKeys = new Set<string>();
+  const fields = [
+    ...collectFormFieldsFromSchema(props.fields || props.formFields || props.schema, usedFieldKeys),
+    ...collectFormFieldsFromChildren(formElement.children || [], usedFieldKeys),
+  ];
   const resolvedFormId = sanitizeString(props.formId).length > 0 ? sanitizeString(props.formId) : formElement.id;
   if (!resolvedFormId.length) {
     return null;

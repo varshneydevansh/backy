@@ -56,7 +56,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | map | ✅ address/url/zoom controls | ✅ (iframe support added) | ✅ (iframe support added) | Zoom/marker state not persisted; no geocode fallback | ⚠️ |
 | embed | ✅ URL/source | ✅ (iframe support added) | ✅ (iframe support added) | Sanitization and allowlist policy not finished | ⚠️ |
 | list | ✅ list type + items | ✅ | ✅ | Type resolution now prioritizes stored `listType` when present; mixed content/edge empty-item cases still need nested-depth parity | ⚠️ |
-| form | ✅ title/action metadata | ⚠️ container placeholder | ⚠️ container-only placeholder | field-level schema, validation, submission UI | ❌ |
+| form | ✅ title/action metadata + field schema JSON | ✅ schema fields + submit UI + nested children | ✅ schema fields submit through public form runtime | live captcha widget and richer field builder UI | ⚠️ |
 | input | ✅ placeholder/type | ✅ (public) | ✅ (public) | action wiring to form submit path | ⚠️ |
 
 ## Canvas-to-Backend/Frontend Contract
@@ -329,11 +329,12 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Remaining in this path: list depth/indent behavior and full multi-column responsive canvas parity.
 
 ## Pass Log - What is done vs remaining
-**Last Updated:** 2026-02-23
+**Last Updated:** 2026-05-12
 
 **Current development stance:** This document is now the canonical execution contract for canvas parity work. Any change must be recorded here before moving to the next implementation pass.
 
 ### ✅ Completed in this pass
+- Added form container field schema JSON authoring, editor canvas schema rendering, public renderer schema fields/submit UI, backend form definition generation from stored schema, and focused smoke coverage in the existing form component smoke.
 - Added focused editor media upload coverage for image upload modal open state, real file upload, library selection, image preview/source update, manual save, and persisted page-scoped media metadata via `BACKY_EDITOR_MEDIA_UPLOAD_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added focused alignment guide coverage for visible vertical/horizontal guides during drag, smart snap to peer edges, and guide cleanup after release via `BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added zoom control test hooks plus focused coverage for zoom out, zoom in, fit-to-canvas, auto-fit state, and visual canvas scale via `BACKY_EDITOR_ZOOM_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.

@@ -32,6 +32,38 @@ const SMOKE_EMBED_ALLOW = 'fullscreen; geolocation';
 const SMOKE_EMBED_SANDBOX = 'allow-forms allow-popups';
 const SMOKE_MAP_ADDRESS = 'Mumbai India';
 const SMOKE_ICON_PICKER_EMOJI = '\u{1F680}';
+const FORM_SCHEMA_FIELDS = [
+  {
+    key: 'full_name',
+    label: 'Full name',
+    type: 'text',
+    placeholder: 'Ada Lovelace',
+    required: true,
+    validation: [{ type: 'minLength', value: 2, message: 'Name is too short' }],
+  },
+  {
+    key: 'email',
+    label: 'Email',
+    type: 'email',
+    placeholder: 'ada@example.com',
+    required: true,
+  },
+  {
+    key: 'message',
+    label: 'Message',
+    type: 'textarea',
+    helpText: 'Tell us what you need.',
+    validation: [{ type: 'maxLength', value: 240, message: 'Keep it concise' }],
+  },
+  {
+    key: 'plan',
+    label: 'Plan',
+    type: 'select',
+    placeholder: 'Choose a plan',
+    options: ['Starter', 'Growth'],
+    required: true,
+  },
+];
 const createSmokeUploadImageFile = () => {
   const filename = `backy-editor-upload-smoke-${Date.now().toString(36)}.png`;
   const filePath = path.join(os.tmpdir(), filename);
@@ -1316,34 +1348,55 @@ const setLayoutNumberInput = async (client, label, value) => {
 };
 
 const setFormControlByTestId = async (client, testId, value) => {
-  const changed = await evaluate(client, `(() => {
-    const control = document.querySelector('[data-testid="${testId}"]');
-    if (!(control instanceof HTMLInputElement) && !(control instanceof HTMLSelectElement) && !(control instanceof HTMLTextAreaElement)) {
+  let changed = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    changed = await evaluate(client, `(() => {
+      const control = document.querySelector('[data-testid="${testId}"]');
+      if (!(control instanceof HTMLInputElement) && !(control instanceof HTMLSelectElement) && !(control instanceof HTMLTextAreaElement)) {
+        return {
+          ok: false,
+          testId: ${JSON.stringify(testId)},
+          reason: 'missing-control',
+          inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+        };
+      }
+
+      if (control instanceof HTMLSelectElement && !Array.from(control.options).some((option) => option.value === ${JSON.stringify(String(value))})) {
+        return {
+          ok: false,
+          testId: ${JSON.stringify(testId)},
+          reason: 'missing-option',
+          value: control.value,
+          options: Array.from(control.options).map((option) => option.value),
+        };
+      }
+
+      const prototype = control instanceof HTMLSelectElement
+        ? window.HTMLSelectElement.prototype
+        : control instanceof HTMLTextAreaElement
+          ? window.HTMLTextAreaElement.prototype
+          : window.HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+      setter?.call(control, ${JSON.stringify(String(value))});
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+      control.dispatchEvent(new Event('change', { bubbles: true }));
       return {
-        ok: false,
+        ok: control.value === ${JSON.stringify(String(value))},
+        value: control.value,
         testId: ${JSON.stringify(testId)},
-        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+        options: control instanceof HTMLSelectElement ? Array.from(control.options).map((option) => option.value) : undefined,
       };
+    })()`);
+
+    if (changed?.ok) {
+      await sleep(250);
+      return changed;
     }
 
-    const prototype = control instanceof HTMLSelectElement
-      ? window.HTMLSelectElement.prototype
-      : control instanceof HTMLTextAreaElement
-        ? window.HTMLTextAreaElement.prototype
-        : window.HTMLInputElement.prototype;
-    const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
-    setter?.call(control, ${JSON.stringify(String(value))});
-    control.dispatchEvent(new Event('input', { bubbles: true }));
-    control.dispatchEvent(new Event('change', { bubbles: true }));
-    return {
-      ok: control.value === ${JSON.stringify(String(value))},
-      value: control.value,
-      testId: ${JSON.stringify(testId)},
-    };
-  })()`);
+    await sleep(250);
+  }
 
   assert(changed?.ok, `Unable to set ${testId} to ${value}: ${JSON.stringify(changed)}`);
-  await sleep(250);
   return changed;
 };
 
@@ -1472,16 +1525,51 @@ const scrollEditorToolbarIntoView = async (client, ariaLabel = 'Undo') => {
 };
 
 const switchToPropertiesPanel = async (client) => {
-  const clicked = await evaluate(client, `(() => {
-    const button = document.querySelector('[data-testid="editor-tab-properties"]');
-    if (!(button instanceof HTMLButtonElement)) {
-      return false;
-    }
-    button.click();
-    return true;
-  })()`);
+  let state = null;
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const propertiesTab = document.querySelector('[data-testid="editor-tab-properties"]');
+      if (propertiesTab instanceof HTMLButtonElement) {
+        propertiesTab.click();
+        return {
+          ok: true,
+          action: 'clicked-properties-tab',
+          hasInspector: Boolean(document.querySelector('[data-testid="editor-inspector"]')),
+        };
+      }
 
-  assert(clicked, 'Unable to switch editor inspector to Properties panel');
+      const focusButton = document.querySelector('button[aria-label="Exit wide canvas focus"]');
+      if (focusButton instanceof HTMLButtonElement) {
+        focusButton.click();
+        return { ok: false, action: 'exit-focus-mode' };
+      }
+
+      const inspectorButton = document.querySelector('button[aria-label="Show inspector panel"]');
+      if (inspectorButton instanceof HTMLButtonElement) {
+        inspectorButton.click();
+        return { ok: false, action: 'show-inspector-panel' };
+      }
+
+      return {
+        ok: false,
+        action: 'missing-properties-tab',
+        hasInspector: Boolean(document.querySelector('[data-testid="editor-inspector"]')),
+        hasCanvas: Boolean(document.querySelector('[data-testid="editor-canvas"]')),
+        selectedText: document.querySelector('[data-testid="editor-inspector-selection"]')?.textContent || '',
+        toolbarText: Array.from(document.querySelectorAll('button')).map((button) => button.textContent?.trim()).filter(Boolean).slice(0, 20),
+        bodyText: document.body?.textContent?.slice(0, 500) || '',
+      };
+    })()`);
+
+    if (state?.ok) {
+      await sleep(250);
+      return state;
+    }
+
+    await sleep(250);
+  }
+
+  assert(false, `Unable to switch editor inspector to Properties panel: ${JSON.stringify(state)}`);
   await sleep(250);
 };
 
@@ -5976,6 +6064,8 @@ const testFormBehaviorControls = async (client, collectionId) => {
 
   await setFormControlByTestId(client, 'editor-form-title', 'Smoke lead capture');
   await setFormControlByTestId(client, 'editor-form-id', 'smoke-lead-capture');
+  await setFormControlByTestId(client, 'editor-form-fields', JSON.stringify(FORM_SCHEMA_FIELDS, null, 2));
+  await setFormControlByTestId(client, 'editor-form-submit-label', 'Send lead');
   await setCheckboxByTestId(client, 'editor-form-active', true);
   await setFormControlByTestId(client, 'editor-form-audience', 'authenticated');
   await setFormControlByTestId(client, 'editor-form-action-url', '/api/custom-lead-submit');
@@ -6032,12 +6122,31 @@ const testFormBehaviorControls = async (client, collectionId) => {
       collectionWriteCollectionId: value('editor-form-collection-write-collection'),
       collectionWriteSlugField: value('editor-form-collection-write-slug-field'),
       collectionWriteFieldMap: value('editor-form-collection-write-field-map'),
+      fieldsJson: value('editor-form-fields'),
+      submitLabel: value('editor-form-submit-label'),
       previewText: form?.textContent || '',
+      schemaCount: Number(document.querySelector('[data-testid="editor-form-schema"]')?.getAttribute('data-form-field-count') || '0'),
+      schemaKeys: Array.from(document.querySelectorAll('[data-testid="editor-form-schema-field"]')).map((node) => node.getAttribute('data-field-key')),
+      fullNameRequired: document.querySelector('[data-testid="editor-form-schema-field-full_name"]')?.hasAttribute('required') || false,
+      fullNameMinLength: document.querySelector('[data-testid="editor-form-schema-field-full_name"]')?.getAttribute('minlength') || '',
+      emailType: document.querySelector('[data-testid="editor-form-schema-field-email"]')?.getAttribute('type') || '',
+      messageMaxLength: document.querySelector('[data-testid="editor-form-schema-field-message"]')?.getAttribute('maxlength') || '',
+      planOptions: Array.from(document.querySelectorAll('[data-testid="editor-form-schema-field-plan"] option')).map((option) => option.value),
+      schemaSubmitLabel: document.querySelector('[data-testid="editor-form-schema-submit"]')?.textContent?.trim() || '',
+      hasHoneypot: Boolean(document.querySelector('[data-testid="editor-form-schema-honeypot"]')),
     };
   })()`);
 
   assert(state.title === 'Smoke lead capture' && state.previewText.includes('Smoke lead capture'), `Form title mismatch: ${JSON.stringify(state)}`);
   assert(state.formId === 'smoke-lead-capture', `Form id mismatch: ${JSON.stringify(state)}`);
+  assert(state.submitLabel === 'Send lead' && state.schemaSubmitLabel === 'Send lead', `Form submit label mismatch: ${JSON.stringify(state)}`);
+  assert(state.schemaCount === FORM_SCHEMA_FIELDS.length, `Form schema count mismatch: ${JSON.stringify(state)}`);
+  assert(JSON.stringify(state.schemaKeys) === JSON.stringify(FORM_SCHEMA_FIELDS.map((field) => field.key)), `Form schema keys mismatch: ${JSON.stringify(state)}`);
+  assert(state.fullNameRequired === true && state.fullNameMinLength === '2', `Form name validation mismatch: ${JSON.stringify(state)}`);
+  assert(state.emailType === 'email', `Form email field mismatch: ${JSON.stringify(state)}`);
+  assert(state.messageMaxLength === '240', `Form message validation mismatch: ${JSON.stringify(state)}`);
+  assert(JSON.stringify(state.planOptions) === JSON.stringify(['', 'Starter', 'Growth']), `Form select options mismatch: ${JSON.stringify(state)}`);
+  assert(state.hasHoneypot === true, `Form schema honeypot mismatch: ${JSON.stringify(state)}`);
   assert(state.active === true, `Form active mismatch: ${JSON.stringify(state)}`);
   assert(state.audience === 'authenticated', `Form audience mismatch: ${JSON.stringify(state)}`);
   assert(state.actionUrl === '/api/custom-lead-submit', `Form action URL mismatch: ${JSON.stringify(state)}`);
@@ -6079,6 +6188,8 @@ const assertPersistedFormBehavior = async (pageId, collectionId) => {
   assert(form?.type === 'form', `Persisted smoke-form missing: ${JSON.stringify(form)}`);
   assert(props.formTitle === 'Smoke lead capture', `Persisted form title mismatch: ${JSON.stringify(props)}`);
   assert(props.formId === 'smoke-lead-capture', `Persisted form id mismatch: ${JSON.stringify(props)}`);
+  assert(JSON.stringify(props.fields) === JSON.stringify(FORM_SCHEMA_FIELDS), `Persisted form fields mismatch: ${JSON.stringify(props)}`);
+  assert(props.submitLabel === 'Send lead', `Persisted form submit label mismatch: ${JSON.stringify(props)}`);
   assert(props.formActive !== false, `Persisted form active mismatch: ${JSON.stringify(props)}`);
   assert(props.formAudience === 'authenticated', `Persisted form audience mismatch: ${JSON.stringify(props)}`);
   assert(props.actionUrl === '/api/custom-lead-submit', `Persisted form action URL mismatch: ${JSON.stringify(props)}`);

@@ -939,6 +939,125 @@ const getFormHelpStyle = (props: Record<string, any>): CSSProperties => ({
   color: sanitizeText(props.helpTextColor) || '#6b7280',
 });
 
+type FormSchemaFieldType =
+  | 'text'
+  | 'email'
+  | 'number'
+  | 'textarea'
+  | 'select'
+  | 'checkbox'
+  | 'radio'
+  | 'date'
+  | 'tel'
+  | 'url'
+  | 'file';
+
+interface FormSchemaValidationRule {
+  type: string;
+  value?: string | number;
+  message?: string;
+}
+
+interface FormSchemaField {
+  key: string;
+  label: string;
+  type: FormSchemaFieldType;
+  placeholder?: string;
+  helpText?: string;
+  defaultValue?: string;
+  options?: unknown;
+  required?: boolean;
+  disabled?: boolean;
+  validation?: FormSchemaValidationRule[];
+}
+
+const FORM_SCHEMA_FIELD_TYPES: FormSchemaFieldType[] = [
+  'text',
+  'email',
+  'number',
+  'textarea',
+  'select',
+  'checkbox',
+  'radio',
+  'date',
+  'tel',
+  'url',
+  'file',
+];
+
+const normalizeFormSchemaFieldType = (value: unknown): FormSchemaFieldType => {
+  const normalized = sanitizeText(value).toLowerCase();
+  return FORM_SCHEMA_FIELD_TYPES.includes(normalized as FormSchemaFieldType)
+    ? normalized as FormSchemaFieldType
+    : 'text';
+};
+
+const normalizeFormSchemaFields = (value: unknown): FormSchemaField[] => {
+  const entries = Array.isArray(value)
+    ? value
+    : isRecord(value)
+      ? Object.entries(value).map(([key, field]) => (
+        isRecord(field) ? { key, ...field } : { key, label: key, type: field }
+      ))
+      : [];
+
+  const usedKeys = new Set<string>();
+
+  return entries
+    .map((field, index): FormSchemaField | null => {
+      if (!isRecord(field)) {
+        return null;
+      }
+
+      const requestedKey = sanitizeText(field.key)
+        || sanitizeText(field.name)
+        || sanitizeText(field.id)
+        || `field_${index + 1}`;
+      let key = requestedKey.replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+      if (!key) {
+        key = `field_${index + 1}`;
+      }
+
+      const baseKey = key;
+      let counter = 2;
+      while (usedKeys.has(key)) {
+        key = `${baseKey}_${counter}`;
+        counter += 1;
+      }
+      usedKeys.add(key);
+
+      const validation = Array.isArray(field.validation)
+        ? field.validation.filter(isRecord).map((rule) => ({
+          type: sanitizeText(rule.type),
+          value: typeof rule.value === 'number' || typeof rule.value === 'string' ? rule.value : undefined,
+          message: sanitizeText(rule.message),
+        })).filter((rule) => rule.type)
+        : [];
+
+      return {
+        key,
+        label: sanitizeText(field.label) || key,
+        type: normalizeFormSchemaFieldType(field.type || field.inputType),
+        placeholder: sanitizeText(field.placeholder),
+        helpText: sanitizeText(field.helpText),
+        defaultValue: formatFormPreviewText(field.defaultValue ?? field.value),
+        options: field.options,
+        required: getBoolean(field.required) || validation.some((rule) => rule.type === 'required'),
+        disabled: getBoolean(field.disabled),
+        validation,
+      };
+    })
+    .filter((field): field is FormSchemaField => Boolean(field));
+};
+
+const getFormSchemaValidationValue = (
+  field: FormSchemaField,
+  type: string,
+): string | number | undefined => {
+  const rule = field.validation?.find((item) => item.type === type);
+  return rule?.value;
+};
+
 const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
   const normalized = typeof value === 'string' ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
 
@@ -3033,6 +3152,7 @@ function CanvasElementComponent({
 
       case 'form': {
         const formTitle = sanitizeText(p.formTitle) || 'Form Container';
+        const formId = sanitizeText(p.formId) || element.id;
         const formActive = getBooleanWithFallback(p.formActive, true);
         const rawAudience = sanitizeText(p.formAudience);
         const formAudience = rawAudience === 'authenticated'
@@ -3044,6 +3164,8 @@ function CanvasElementComponent({
         const enableCaptcha = getBoolean(p.enableCaptcha);
         const method = (sanitizeText(p.method) || 'POST').toUpperCase();
         const actionUrl = sanitizeText(p.actionUrl) || sanitizeText(p.action);
+        const schemaFields = normalizeFormSchemaFields(p.fields ?? p.formFields ?? p.schema);
+        const submitLabel = sanitizeText(p.submitLabel) || 'Submit';
         const formBadges = [
           formActive ? 'Active' : 'Paused',
           formAudience,
@@ -3052,6 +3174,161 @@ function CanvasElementComponent({
           ...(enableCaptcha ? ['Captcha'] : []),
           ...(actionUrl ? ['Action set'] : []),
         ];
+        const fieldLabelStyle = getFormLabelStyle(p, sharedStyle);
+        const fieldHelpStyle = getFormHelpStyle(p);
+        const fieldControlStyle: CSSProperties = {
+          width: '100%',
+          minHeight: 40,
+          padding: '8px 12px',
+          fontSize: p.fontSize ?? sharedStyle.fontSize ?? 14,
+          color: p.color ?? sharedStyle.color ?? '#374151',
+          backgroundColor: p.fieldBackgroundColor ?? '#ffffff',
+          border: `1px solid ${p.fieldBorderColor ?? '#d1d5db'}`,
+          borderRadius: toCssLength(p.fieldBorderRadius ?? 6),
+          boxSizing: 'border-box',
+          pointerEvents: isPreview ? 'auto' : 'none',
+        };
+        const renderSchemaField = (field: FormSchemaField, fieldIndex: number) => {
+          const fieldId = `${element.id}-${field.key}`;
+          const fieldOptions = parseFormOptions(field.options);
+          const minLength = toNumericAttribute(getFormSchemaValidationValue(field, 'minLength'));
+          const maxLength = toNumericAttribute(getFormSchemaValidationValue(field, 'maxLength'));
+          const min = getFormSchemaValidationValue(field, 'min');
+          const max = getFormSchemaValidationValue(field, 'max');
+          const pattern = getFormSchemaValidationValue(field, 'pattern');
+          const disabled = !isPreview || field.disabled;
+          const fieldWrapperStyle: CSSProperties = {
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+          };
+
+          const labelNode = field.label ? (
+            <label htmlFor={fieldId} style={fieldLabelStyle}>
+              {field.label}
+              {field.required ? ' *' : ''}
+            </label>
+          ) : null;
+          const helpNode = field.helpText ? (
+            <p style={fieldHelpStyle}>{field.helpText}</p>
+          ) : null;
+
+          let control: React.ReactNode;
+          if (field.type === 'textarea') {
+            control = (
+              <textarea
+                id={fieldId}
+                name={field.key}
+                placeholder={field.placeholder}
+                defaultValue={field.defaultValue}
+                required={field.required}
+                disabled={disabled}
+                minLength={minLength}
+                maxLength={maxLength}
+                rows={4}
+                data-testid={`editor-form-schema-field-${field.key}`}
+                style={{
+                  ...fieldControlStyle,
+                  minHeight: 92,
+                  resize: 'vertical',
+                }}
+              />
+            );
+          } else if (field.type === 'select') {
+            control = (
+              <select
+                id={fieldId}
+                name={field.key}
+                defaultValue={field.defaultValue || ''}
+                required={field.required}
+                disabled={disabled}
+                data-testid={`editor-form-schema-field-${field.key}`}
+                style={fieldControlStyle}
+              >
+                {field.placeholder || fieldOptions.length === 0 ? (
+                  <option value="" disabled={fieldOptions.length > 0}>
+                    {field.placeholder || 'Select'}
+                  </option>
+                ) : null}
+                {fieldOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            );
+          } else if (field.type === 'checkbox' || field.type === 'radio') {
+            const choiceType = field.type;
+            const choices = fieldOptions.length > 0 ? fieldOptions : [field.defaultValue || 'on'];
+            const selectedValues = parseFormInputValues(field.defaultValue);
+            const selectedSet = new Set(selectedValues);
+            control = (
+              <div
+                data-testid={`editor-form-schema-field-${field.key}`}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: fieldControlStyle.border,
+                  borderRadius: fieldControlStyle.borderRadius,
+                  backgroundColor: fieldControlStyle.backgroundColor,
+                }}
+              >
+                {choices.map((option, optionIndex) => (
+                  <label
+                    key={`${field.key}-${option}-${optionIndex}`}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: p.fontSize ?? 14 }}
+                  >
+                    <input
+                      type={choiceType}
+                      name={field.key}
+                      value={option}
+                      required={choiceType === 'checkbox' ? optionIndex === 0 && field.required : field.required}
+                      disabled={disabled}
+                      defaultChecked={choiceType === 'radio' ? selectedValues[0] === option : selectedSet.has(option)}
+                      style={{ pointerEvents: isPreview ? 'auto' : 'none' }}
+                    />
+                    <span>{option}</span>
+                  </label>
+                ))}
+              </div>
+            );
+          } else {
+            control = (
+              <input
+                id={fieldId}
+                type={normalizeInputType(field.type)}
+                name={field.key}
+                placeholder={field.placeholder}
+                defaultValue={field.type === 'file' ? undefined : field.defaultValue}
+                required={field.required}
+                disabled={disabled}
+                minLength={minLength}
+                maxLength={maxLength}
+                min={min === undefined ? undefined : String(min)}
+                max={max === undefined ? undefined : String(max)}
+                pattern={typeof pattern === 'string' ? pattern : undefined}
+                data-testid={`editor-form-schema-field-${field.key}`}
+                style={fieldControlStyle}
+              />
+            );
+          }
+
+          return (
+            <div
+              key={`${field.key}-${fieldIndex}`}
+              data-testid="editor-form-schema-field"
+              data-field-key={field.key}
+              data-field-type={field.type}
+              style={fieldWrapperStyle}
+            >
+              {labelNode}
+              {control}
+              {helpNode}
+            </div>
+          );
+        };
 
         return (
           <div
@@ -3111,11 +3388,79 @@ function CanvasElementComponent({
             <div style={{ ...sharedStyle, fontSize: 12, color: sharedStyle.color ?? '#6b7280' }}>
               Drag form elements here (inputs, buttons)
             </div>
-            <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-              {renderChildren()}
-            </div>
+            <form
+              action={actionUrl || undefined}
+              method={method}
+              data-testid="editor-form-schema"
+              data-form-id={formId}
+              data-form-active={formActive ? 'true' : 'false'}
+              data-form-field-count={schemaFields.length}
+              onSubmit={(event) => event.preventDefault()}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: toCssLength(p.gap ?? 12),
+                minHeight: 0,
+                flex: 1,
+              }}
+            >
+              {enableHoneypot ? (
+                <input
+                  type="text"
+                  name="honeypot"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  data-testid="editor-form-schema-honeypot"
+                  style={{ display: 'none' }}
+                  disabled={!isPreview}
+                />
+              ) : null}
+              {enableCaptcha ? (
+                <input
+                  type="hidden"
+                  name="captchaToken"
+                  data-testid="editor-form-schema-captcha-token"
+                  value=""
+                  readOnly
+                />
+              ) : null}
+              {schemaFields.length > 0 ? (
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr)',
+                    gap: 12,
+                  }}
+                >
+                  {schemaFields.map(renderSchemaField)}
+                  <button
+                    type="submit"
+                    data-testid="editor-form-schema-submit"
+                    disabled={!isPreview || !formActive}
+                    style={{
+                      width: 'fit-content',
+                      minHeight: 40,
+                      padding: '8px 16px',
+                      border: 'none',
+                      borderRadius: toCssLength(p.submitBorderRadius ?? p.borderRadius ?? 8),
+                      backgroundColor: p.submitBackgroundColor ?? '#111827',
+                      color: p.submitColor ?? '#ffffff',
+                      fontSize: p.fontSize ?? 14,
+                      fontWeight: 600,
+                      cursor: isPreview && formActive ? 'pointer' : 'default',
+                      pointerEvents: isPreview ? 'auto' : 'none',
+                    }}
+                  >
+                    {submitLabel}
+                  </button>
+                </div>
+              ) : null}
+              <div style={{ width: '100%', minHeight: 0, flex: 1, position: 'relative' }}>
+                {renderChildren()}
+              </div>
+            </form>
 
-            {!isPreview && (
+            {schemaFields.length === 0 && childElements.length === 0 && !isPreview ? (
               <div style={{
                 flex: 1,
                 border: sharedStyle.border ?? '2px dashed #d1d5db',
@@ -3128,7 +3473,7 @@ function CanvasElementComponent({
               }}>
                 Drop Zone
               </div>
-            )}
+            ) : null}
           </div>
         );
       }

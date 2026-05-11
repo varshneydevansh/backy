@@ -104,6 +104,36 @@ const parseFieldMapInput = (value: string): Record<string, string> => (
     }, {})
 );
 
+const formatFormSchemaFields = (value: unknown): string => {
+  if (!Array.isArray(value) && (!value || typeof value !== 'object')) {
+    return '';
+  }
+
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return '';
+  }
+};
+
+const parseFormSchemaFieldsInput = (value: string): unknown[] | Record<string, unknown> | undefined => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed) || (parsed && typeof parsed === 'object')) {
+      return parsed as unknown[] | Record<string, unknown>;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+};
+
 const formatNavigationItems = (value: unknown): string => {
   if (!Array.isArray(value)) {
     return '';
@@ -726,6 +756,8 @@ function ContentProperties({
   const hasListContent = normalizedType === 'list';
   const fieldOptionsText = formatOptionValues(element.props.options);
   const listItems = getListItemsFromProps(element.props);
+  const [formFieldsDraft, setFormFieldsDraft] = useState('');
+  const [formFieldsError, setFormFieldsError] = useState('');
   const updateTextContent = useCallback((content: unknown) => {
     onChange({
       props: {
@@ -737,6 +769,10 @@ function ContentProperties({
   useEffect(() => {
     // BackyTextProperties diagnostics disabled.
   }, [element.id, element.type, elementId, hasTextContent, hasImageContent, hasVideoContent, hasLinkContent, hasButtonContent, onChange]);
+  useEffect(() => {
+    setFormFieldsDraft(formatFormSchemaFields(element.props.fields));
+    setFormFieldsError('');
+  }, [element.id, element.props.fields]);
 
   return (
       <div className="space-y-3">
@@ -1959,6 +1995,54 @@ function ContentProperties({
                 'focus:outline-none focus:ring-2 focus:ring-ring'
               )}
               placeholder="form-contact"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Field schema JSON
+            </label>
+            <textarea
+              value={formFieldsDraft}
+              onChange={(e) => {
+                setFormFieldsDraft(e.target.value);
+                const parsed = parseFormSchemaFieldsInput(e.target.value);
+                if (parsed !== undefined) {
+                  setFormFieldsError('');
+                  onChange({ fields: parsed });
+                } else {
+                  setFormFieldsError('Enter a valid JSON array or object.');
+                }
+              }}
+              data-testid="editor-form-fields"
+              className={cn(
+                'min-h-[156px] w-full px-2 py-1.5 text-sm rounded-md border bg-background font-mono',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder={'[\n  { "key": "email", "label": "Email", "type": "email", "required": true }\n]'}
+            />
+            {formFieldsError ? (
+              <p className="mt-1 text-xs text-destructive" data-testid="editor-form-fields-error">
+                {formFieldsError}
+              </p>
+            ) : null}
+            <p className="mt-1 text-xs text-muted-foreground">
+              Supports key, label, type, placeholder, helpText, options, required, defaultValue, and validation.
+            </p>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Submit button label
+            </label>
+            <input
+              type="text"
+              value={element.props.submitLabel || ''}
+              onChange={(e) => onChange({ submitLabel: e.target.value })}
+              data-testid="editor-form-submit-label"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Submit"
             />
           </div>
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
