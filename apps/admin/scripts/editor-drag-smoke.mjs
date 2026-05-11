@@ -4986,12 +4986,18 @@ const main = async () => {
       ? ['home-heading', 'home-cta']
       : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
-    if (COMPONENT_SMOKE === 'image' || COMPONENT_SMOKE === 'icon' || COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav' || COMPONENT_SMOKE === 'spacer' || COMPONENT_SMOKE === 'quote' || COMPONENT_SMOKE === 'link' || COMPONENT_SMOKE === 'form' || COMPONENT_SMOKE === 'comment' || COMPONENT_SMOKE === 'box' || COMPONENT_SMOKE === 'heading') {
+    if (COMPONENT_SMOKE === 'image' || COMPONENT_SMOKE === 'icon' || COMPONENT_SMOKE === 'video' || COMPONENT_SMOKE === 'embed' || COMPONENT_SMOKE === 'map' || COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav' || COMPONENT_SMOKE === 'spacer' || COMPONENT_SMOKE === 'quote' || COMPONENT_SMOKE === 'link' || COMPONENT_SMOKE === 'form' || COMPONENT_SMOKE === 'comment' || COMPONENT_SMOKE === 'box' || COMPONENT_SMOKE === 'heading') {
       assert(tempPageId, `${COMPONENT_SMOKE} component smoke requires an internally created smoke page`);
       const targetElementId = COMPONENT_SMOKE === 'image'
         ? 'smoke-image'
         : COMPONENT_SMOKE === 'icon'
           ? 'smoke-icon'
+          : COMPONENT_SMOKE === 'video'
+            ? 'smoke-video'
+            : COMPONENT_SMOKE === 'embed'
+              ? 'smoke-embed'
+              : COMPONENT_SMOKE === 'map'
+                ? 'smoke-map'
           : COMPONENT_SMOKE === 'divider'
         ? 'smoke-divider'
         : COMPONENT_SMOKE === 'columns'
@@ -5017,6 +5023,12 @@ const main = async () => {
         ? await testImageBehaviorControls(client)
         : COMPONENT_SMOKE === 'icon'
           ? await testIconBehaviorControls(client)
+          : COMPONENT_SMOKE === 'video'
+            ? await testVideoBehaviorControls(client)
+            : COMPONENT_SMOKE === 'embed'
+              ? await testEmbedBehaviorControls(client)
+              : COMPONENT_SMOKE === 'map'
+                ? await testMapBehaviorControls(client)
           : COMPONENT_SMOKE === 'divider'
         ? await testDividerBehaviorControls(client)
         : COMPONENT_SMOKE === 'columns'
@@ -5044,6 +5056,12 @@ const main = async () => {
         ? await assertPersistedImageBehavior(tempPageId)
         : COMPONENT_SMOKE === 'icon'
           ? await assertPersistedIconBehavior(tempPageId)
+          : COMPONENT_SMOKE === 'video'
+            ? await assertPersistedVideoBehavior(tempPageId)
+            : COMPONENT_SMOKE === 'embed'
+              ? await assertPersistedEmbedBehavior(tempPageId)
+              : COMPONENT_SMOKE === 'map'
+                ? await assertPersistedMapBehavior(tempPageId)
           : COMPONENT_SMOKE === 'divider'
         ? await assertPersistedDividerBehavior(tempPageId)
         : COMPONENT_SMOKE === 'columns'
