@@ -3036,6 +3036,7 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
         <ColorInput
           value={element.props.backgroundColor || '#ffffff'}
           onChange={(value) => onChange({ backgroundColor: value })}
+          testId="editor-style-background-color"
         />
       </div>
 
@@ -3099,6 +3100,7 @@ function AppearanceProperties({ element, onChange }: StylePropertiesProps) {
           value={element.props.borderRadius || 0}
           onChange={(value) => onChange({ borderRadius: value })}
           suffix="px"
+          testId="editor-appearance-border-radius"
         />
       </div>
 
@@ -3114,6 +3116,7 @@ function AppearanceProperties({ element, onChange }: StylePropertiesProps) {
           step={0.1}
           value={element.props.opacity ?? 1}
           onChange={(e) => onChange({ opacity: parseFloat(e.target.value) })}
+          data-testid="editor-appearance-opacity"
           className="w-full"
         />
         <div className="text-right text-xs text-muted-foreground">
@@ -3129,6 +3132,7 @@ function AppearanceProperties({ element, onChange }: StylePropertiesProps) {
           value={parseFloat((element.props.borderWidth || '0').toString()) || 0}
           onChange={(value) => onChange({ borderWidth: value })}
           suffix="px"
+          testId="editor-appearance-border-width"
         />
       </div>
 
@@ -3139,6 +3143,7 @@ function AppearanceProperties({ element, onChange }: StylePropertiesProps) {
         <select
           value={element.props.borderStyle || 'solid'}
           onChange={(e) => onChange({ borderStyle: e.target.value })}
+          data-testid="editor-appearance-border-style"
           className={cn(
             'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
             'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -3159,6 +3164,7 @@ function AppearanceProperties({ element, onChange }: StylePropertiesProps) {
         <ColorInput
           value={element.props.borderColor || '#e5e7eb'}
           onChange={(value) => onChange({ borderColor: value })}
+          testId="editor-appearance-border-color"
         />
       </div>
 
@@ -3169,6 +3175,7 @@ function AppearanceProperties({ element, onChange }: StylePropertiesProps) {
         <NumberInput
           value={parseFloat((element.props.padding || '0').toString()) || 0}
           onChange={(value) => onChange({ padding: value })}
+          testId="editor-appearance-padding"
         />
       </div>
 
@@ -3179,6 +3186,7 @@ function AppearanceProperties({ element, onChange }: StylePropertiesProps) {
         <NumberInput
           value={parseFloat((element.props.margin || '0').toString()) || 0}
           onChange={(value) => onChange({ margin: value })}
+          testId="editor-appearance-margin"
         />
       </div>
 
@@ -3190,6 +3198,7 @@ function AppearanceProperties({ element, onChange }: StylePropertiesProps) {
           type="text"
           value={element.props.boxShadow || ''}
           onChange={(e) => onChange({ boxShadow: e.target.value })}
+          data-testid="editor-appearance-box-shadow"
           placeholder="0 2px 10px rgba(0,0,0,0.15)"
           className={cn(
             'w-full px-2 py-1.5 text-sm rounded-md border bg-background',

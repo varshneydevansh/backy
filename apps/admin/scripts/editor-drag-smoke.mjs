@@ -1262,6 +1262,35 @@ const switchToPropertiesPanel = async (client) => {
   await sleep(250);
 };
 
+const ensurePropertySectionExpanded = async (client, sectionTitle) => {
+  const expanded = await evaluate(client, `(() => {
+    const buttons = Array.from(document.querySelectorAll('[data-testid="editor-inspector"] button'));
+    const button = buttons.find((candidate) => (candidate.textContent || '').trim().includes(${JSON.stringify(sectionTitle)}));
+    if (!(button instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        reason: 'missing-section-button',
+        sectionTitle: ${JSON.stringify(sectionTitle)},
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    }
+    const parent = button.parentElement;
+    const wasExpanded = Boolean(parent && parent.children.length > 1);
+    if (!wasExpanded) {
+      button.click();
+    }
+    return {
+      ok: true,
+      wasExpanded,
+      sectionTitle: ${JSON.stringify(sectionTitle)},
+    };
+  })()`);
+
+  assert(expanded?.ok, `Unable to expand ${sectionTitle} section: ${JSON.stringify(expanded)}`);
+  await sleep(250);
+  return expanded;
+};
+
 const selectLayerById = async (client, elementId) => {
   const layerSelector = `[data-layer-id="${elementId}"]`;
   const layersReady = await evaluate(client, `(() => {
@@ -4252,6 +4281,87 @@ const assertPersistedCommentBehavior = async (pageId) => {
   return props;
 };
 
+const testBoxBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-box');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-style-background-color', '#ecfeff');
+  await ensurePropertySectionExpanded(client, 'Appearance');
+  await setFormControlByTestId(client, 'editor-appearance-border-radius', '14');
+  await setFormControlByTestId(client, 'editor-appearance-opacity', '0.8');
+  await setFormControlByTestId(client, 'editor-appearance-border-width', '3');
+  await setFormControlByTestId(client, 'editor-appearance-border-style', 'dashed');
+  await setFormControlByTestId(client, 'editor-appearance-border-color', '#0891b2');
+  await setFormControlByTestId(client, 'editor-appearance-padding', '18');
+  await setFormControlByTestId(client, 'editor-appearance-margin', '4');
+  await setFormControlByTestId(client, 'editor-appearance-box-shadow', '0 10px 20px rgba(8, 145, 178, 0.25)');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const root = document.querySelector('[data-element-id="smoke-box"]');
+    const box = root?.firstElementChild;
+    const style = box ? getComputedStyle(box) : null;
+    const rootStyle = root ? getComputedStyle(root) : null;
+    return {
+      backgroundColor: value('editor-style-background-color'),
+      borderRadius: value('editor-appearance-border-radius'),
+      opacity: value('editor-appearance-opacity'),
+      borderWidth: value('editor-appearance-border-width'),
+      borderStyle: value('editor-appearance-border-style'),
+      borderColor: value('editor-appearance-border-color'),
+      padding: value('editor-appearance-padding'),
+      margin: value('editor-appearance-margin'),
+      boxShadow: value('editor-appearance-box-shadow'),
+      previewBackgroundColor: style?.backgroundColor || '',
+      previewBorderRadius: style?.borderRadius || '',
+      previewBorderWidth: style?.borderWidth || '',
+      previewBorderStyle: style?.borderStyle || '',
+      previewBorderColor: style?.borderColor || '',
+      previewPadding: style?.padding || '',
+      previewMargin: style?.margin || '',
+      previewBoxShadow: style?.boxShadow || '',
+      previewOpacity: rootStyle?.opacity || '',
+    };
+  })()`);
+
+  assert(state.backgroundColor === '#ecfeff' && /236,\s*254,\s*255/.test(state.previewBackgroundColor), `Box background mismatch: ${JSON.stringify(state)}`);
+  assert(state.borderRadius === '14' && state.previewBorderRadius === '14px', `Box border radius mismatch: ${JSON.stringify(state)}`);
+  assert(state.opacity === '0.8' && state.previewOpacity === '0.8', `Box opacity mismatch: ${JSON.stringify(state)}`);
+  assert(state.borderWidth === '3' && state.previewBorderWidth === '3px', `Box border width mismatch: ${JSON.stringify(state)}`);
+  assert(state.borderStyle === 'dashed' && state.previewBorderStyle === 'dashed', `Box border style mismatch: ${JSON.stringify(state)}`);
+  assert(state.borderColor === '#0891b2' && /8,\s*145,\s*178/.test(state.previewBorderColor), `Box border color mismatch: ${JSON.stringify(state)}`);
+  assert(state.padding === '18' && state.previewPadding === '18px', `Box padding mismatch: ${JSON.stringify(state)}`);
+  assert(state.margin === '4' && state.previewMargin === '4px', `Box margin mismatch: ${JSON.stringify(state)}`);
+  assert(
+    state.boxShadow === '0 10px 20px rgba(8, 145, 178, 0.25)' &&
+      /rgba\(8,\s*145,\s*178,\s*0\.25\)/.test(state.previewBoxShadow) &&
+      /0px\s+10px\s+20px/.test(state.previewBoxShadow),
+    `Box shadow mismatch: ${JSON.stringify(state)}`,
+  );
+
+  return state;
+};
+
+const assertPersistedBoxBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const box = findCanvasElement(elements, 'smoke-box');
+  const props = box?.props || {};
+
+  assert(box?.type === 'box', `Persisted smoke-box missing: ${JSON.stringify(box)}`);
+  assert(props.backgroundColor === '#ecfeff', `Persisted box background mismatch: ${JSON.stringify(props)}`);
+  assert(props.borderRadius === 14, `Persisted box border radius mismatch: ${JSON.stringify(props)}`);
+  assert(props.opacity === 0.8, `Persisted box opacity mismatch: ${JSON.stringify(props)}`);
+  assert(props.borderWidth === 3, `Persisted box border width mismatch: ${JSON.stringify(props)}`);
+  assert(props.borderStyle === 'dashed', `Persisted box border style mismatch: ${JSON.stringify(props)}`);
+  assert(props.borderColor === '#0891b2', `Persisted box border color mismatch: ${JSON.stringify(props)}`);
+  assert(props.padding === 18, `Persisted box padding mismatch: ${JSON.stringify(props)}`);
+  assert(props.margin === 4, `Persisted box margin mismatch: ${JSON.stringify(props)}`);
+  assert(props.boxShadow === '0 10px 20px rgba(8, 145, 178, 0.25)', `Persisted box shadow mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const testVideoBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-video');
   await switchToPropertiesPanel(client);
@@ -4709,7 +4819,7 @@ const main = async () => {
       ? ['home-heading', 'home-cta']
       : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
-    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav' || COMPONENT_SMOKE === 'spacer' || COMPONENT_SMOKE === 'quote' || COMPONENT_SMOKE === 'link' || COMPONENT_SMOKE === 'form' || COMPONENT_SMOKE === 'comment') {
+    if (COMPONENT_SMOKE === 'list' || COMPONENT_SMOKE === 'divider' || COMPONENT_SMOKE === 'columns' || COMPONENT_SMOKE === 'nav' || COMPONENT_SMOKE === 'spacer' || COMPONENT_SMOKE === 'quote' || COMPONENT_SMOKE === 'link' || COMPONENT_SMOKE === 'form' || COMPONENT_SMOKE === 'comment' || COMPONENT_SMOKE === 'box') {
       assert(tempPageId, `${COMPONENT_SMOKE} component smoke requires an internally created smoke page`);
       const targetElementId = COMPONENT_SMOKE === 'divider'
         ? 'smoke-divider'
@@ -4727,6 +4837,8 @@ const main = async () => {
                     ? 'smoke-form'
                     : COMPONENT_SMOKE === 'comment'
                       ? 'smoke-comment'
+                      : COMPONENT_SMOKE === 'box'
+                        ? 'smoke-box'
                   : 'smoke-list';
       const behaviorControls = COMPONENT_SMOKE === 'divider'
         ? await testDividerBehaviorControls(client)
@@ -4744,6 +4856,8 @@ const main = async () => {
                     ? await testFormBehaviorControls(client, tempCollection?.id)
                     : COMPONENT_SMOKE === 'comment'
                       ? await testCommentBehaviorControls(client)
+                      : COMPONENT_SMOKE === 'box'
+                        ? await testBoxBehaviorControls(client)
                   : await testListBehaviorControls(client);
       await clickSave(client);
       const savedStatus = await waitForEditorMutationReady(client, `after ${COMPONENT_SMOKE} component smoke save`);
@@ -4763,6 +4877,8 @@ const main = async () => {
                     ? await assertPersistedFormBehavior(tempPageId, tempCollection?.id)
                     : COMPONENT_SMOKE === 'comment'
                       ? await assertPersistedCommentBehavior(tempPageId)
+                      : COMPONENT_SMOKE === 'box'
+                        ? await assertPersistedBoxBehavior(tempPageId)
                   : await assertPersistedListBehavior(tempPageId);
       let reloadedState = null;
       let reloadClient = null;
@@ -4969,6 +5085,9 @@ const main = async () => {
     const commentBehaviorControls = EDITOR_PATH
       ? null
       : await testCommentBehaviorControls(client);
+    const boxBehaviorControls = EDITOR_PATH
+      ? null
+      : await testBoxBehaviorControls(client);
     const videoBehaviorControls = EDITOR_PATH
       ? null
       : await testVideoBehaviorControls(client);
@@ -5005,6 +5124,7 @@ const main = async () => {
     let persistedLinkBehavior = null;
     let persistedFormBehavior = null;
     let persistedCommentBehavior = null;
+    let persistedBoxBehavior = null;
     let persistedVideoBehavior = null;
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
@@ -5112,6 +5232,9 @@ const main = async () => {
         : null;
       persistedCommentBehavior = commentBehaviorControls
         ? await assertPersistedCommentBehavior(tempPageId)
+        : null;
+      persistedBoxBehavior = boxBehaviorControls
+        ? await assertPersistedBoxBehavior(tempPageId)
         : null;
       persistedVideoBehavior = videoBehaviorControls
         ? await assertPersistedVideoBehavior(tempPageId)
@@ -5246,6 +5369,7 @@ const main = async () => {
       linkBehaviorControls,
       formBehaviorControls,
       commentBehaviorControls,
+      boxBehaviorControls,
       videoBehaviorControls,
       embedBehaviorControls,
       mapBehaviorControls,
@@ -5274,6 +5398,7 @@ const main = async () => {
       persistedLinkBehavior,
       persistedFormBehavior,
       persistedCommentBehavior,
+      persistedBoxBehavior,
       persistedVideoBehavior,
       persistedEmbedBehavior,
       persistedMapBehavior,

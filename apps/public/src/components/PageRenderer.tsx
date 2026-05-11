@@ -1329,6 +1329,11 @@ function ContainerElement({ element, isPreview, siteId, pageId, postId }: Elemen
         backgroundSize: (props.backgroundSize as string) || 'cover',
         backgroundPosition: (props.backgroundPosition as string) || 'center',
         borderRadius: getLength(props.borderRadius),
+        borderWidth: getLength(props.borderWidth),
+        borderStyle: getNameClass(props.borderStyle) || undefined,
+        borderColor: getNameClass(props.borderColor) || undefined,
+        boxShadow: getNameClass(props.boxShadow) || undefined,
+        margin: getLength(props.margin),
         ...styles,
       }}
       aria-label={getNameClass(props.ariaLabel)}
