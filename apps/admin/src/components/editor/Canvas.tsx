@@ -2890,7 +2890,28 @@ function CanvasElementComponent({
           </div>
         );
 
-      case 'form':
+      case 'form': {
+        const formTitle = sanitizeText(p.formTitle) || 'Form Container';
+        const formActive = getBooleanWithFallback(p.formActive, true);
+        const rawAudience = sanitizeText(p.formAudience);
+        const formAudience = rawAudience === 'authenticated'
+          ? 'Authenticated'
+          : rawAudience === 'adminOnly'
+            ? 'Admin only'
+            : 'Public';
+        const enableHoneypot = getBoolean(p.enableHoneypot);
+        const enableCaptcha = getBoolean(p.enableCaptcha);
+        const method = (sanitizeText(p.method) || 'POST').toUpperCase();
+        const actionUrl = sanitizeText(p.actionUrl) || sanitizeText(p.action);
+        const formBadges = [
+          formActive ? 'Active' : 'Paused',
+          formAudience,
+          method,
+          ...(enableHoneypot ? ['Honeypot'] : []),
+          ...(enableCaptcha ? ['Captcha'] : []),
+          ...(actionUrl ? ['Action set'] : []),
+        ];
+
         return (
           <div
             onDragOver={(e) => {
@@ -2922,7 +2943,29 @@ function CanvasElementComponent({
               fontSize: p.fontSize || 14,
               fontWeight: p.fontWeight || 500,
             }}>
-              {p.formTitle ?? 'Form Container'}
+              {formTitle}
+            </div>
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 6,
+              fontSize: 11,
+              color: sharedStyle.color ?? '#374151',
+            }}>
+              {formBadges.map((badge) => (
+                <span
+                  key={badge}
+                  style={{
+                    border: `1px solid ${p.borderColor ?? '#d1d5db'}`,
+                    borderRadius: 999,
+                    padding: '2px 7px',
+                    background: badge === 'Paused' ? '#fef2f2' : '#f9fafb',
+                    color: badge === 'Paused' ? '#991b1b' : 'inherit',
+                  }}
+                >
+                  {badge}
+                </span>
+              ))}
             </div>
             <div style={{ ...sharedStyle, fontSize: 12, color: sharedStyle.color ?? '#6b7280' }}>
               Drag form elements here (inputs, buttons)
@@ -2947,6 +2990,7 @@ function CanvasElementComponent({
             )}
           </div>
         );
+      }
 
       case 'comment': {
         const commentRequireName = parseBooleanSetting(p.commentRequireName, true);
