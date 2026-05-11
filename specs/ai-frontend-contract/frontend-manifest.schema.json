@@ -161,7 +161,22 @@
               "type": { "type": "string", "minLength": 1 },
               "pattern": { "type": "string", "minLength": 1 },
               "resolveUrl": { "type": "string", "minLength": 1 },
-              "renderUrl": { "type": "string", "minLength": 1 }
+              "renderUrl": { "type": "string", "minLength": 1 },
+              "frontendDesign": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "templateId": { "type": "string", "minLength": 1 },
+                  "templateName": { "type": "string" },
+                  "routePattern": { "type": "string" },
+                  "source": { "type": "object", "additionalProperties": true },
+                  "chrome": { "type": "object", "additionalProperties": true },
+                  "tokens": { "type": "object", "additionalProperties": true },
+                  "customCss": { "type": "string" },
+                  "bindingHints": { "type": "array" }
+                },
+                "required": ["templateId"]
+              }
             },
             "required": ["type", "pattern", "resolveUrl", "renderUrl"]
           }
@@ -302,7 +317,22 @@
                   "routePattern": { "type": "string", "minLength": 1 },
                   "dynamicRoutePattern": { "type": "string", "minLength": 1 },
                   "dynamicRouteResolveUrl": { "type": "string", "minLength": 1 },
-                  "dynamicRouteRenderUrl": { "type": "string", "minLength": 1 }
+                  "dynamicRouteRenderUrl": { "type": "string", "minLength": 1 },
+                  "frontendDesign": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "templateId": { "type": "string", "minLength": 1 },
+                      "templateName": { "type": "string" },
+                      "routePattern": { "type": "string" },
+                      "source": { "type": "object", "additionalProperties": true },
+                      "chrome": { "type": "object", "additionalProperties": true },
+                      "tokens": { "type": "object", "additionalProperties": true },
+                      "customCss": { "type": "string" },
+                      "bindingHints": { "type": "array" }
+                    },
+                    "required": ["templateId"]
+                  }
                 },
                 "required": ["id", "slug", "name", "fields", "recordsUrl", "dynamicListRoutePattern", "dynamicRoutePattern"]
               }

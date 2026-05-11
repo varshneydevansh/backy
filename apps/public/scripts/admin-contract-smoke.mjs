@@ -2879,6 +2879,17 @@ try {
       collection.id === capturedTemplateCollectionId &&
       collection.frontendDesign?.templateId === 'captured-collection-template'
     )), `${publicCollectionsWithCapturedTemplate.url} missing normalized collection frontend design in list`);
+    const publicManifestWithCapturedCollection = await request(`/api/sites/${createdSiteId}/manifest`);
+    assert(publicManifestWithCapturedCollection.response.status === 200, `${publicManifestWithCapturedCollection.url} expected manifest with captured collection`);
+    assert(publicManifestWithCapturedCollection.json?.data?.modules?.collections?.some((collection) => (
+      collection.id === capturedTemplateCollectionId &&
+      collection.frontendDesign?.templateId === 'captured-collection-template'
+    )), `${publicManifestWithCapturedCollection.url} missing manifest collection frontend design`);
+    assert(publicManifestWithCapturedCollection.json?.data?.routePatterns?.some((routePattern) => (
+      routePattern.type === 'dynamicCollectionList' &&
+      routePattern.collectionId === capturedTemplateCollectionId &&
+      routePattern.frontendDesign?.templateId === 'captured-collection-template'
+    )), `${publicManifestWithCapturedCollection.url} missing manifest dynamic collection frontend design`);
     const createRecordFromCollectionTemplate = await request(`/api/admin/sites/${createdSiteId}/collections/${capturedTemplateCollectionId}/records`, {
       method: 'POST',
       headers: {
