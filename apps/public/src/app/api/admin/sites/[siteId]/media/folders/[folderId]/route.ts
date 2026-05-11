@@ -4,6 +4,7 @@ import { recordAdminAudit } from '@/lib/adminAudit';
 import { deleteMediaFolder, getSiteByIdOrSlug, listMediaFolders, updateMediaFolder } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import type { MediaFolder } from '@backy-cms/core';
 
 export const runtime = 'nodejs';
 
@@ -48,6 +49,26 @@ const listDemoMediaFolder = (siteId: string, folderId: string) => (
   listMediaFolders(siteId).find((folder) => folder.id === folderId)
 );
 
+const wouldCreateFolderCycle = (
+  folders: Array<Pick<MediaFolder, 'id' | 'parentId'>>,
+  folderId: string,
+  parentId: string | null | undefined,
+) => {
+  let currentParentId = parentId;
+  const seen = new Set<string>();
+
+  while (currentParentId) {
+    if (currentParentId === folderId || seen.has(currentParentId)) {
+      return true;
+    }
+
+    seen.add(currentParentId);
+    currentParentId = folders.find((folder) => folder.id === currentParentId)?.parentId ?? null;
+  }
+
+  return false;
+};
+
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = requireAdminAccess(request, requestId, { permission: 'media.create' });
@@ -78,8 +99,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, 'VALIDATION_ERROR', 'A media folder cannot be its own parent', requestId);
       }
 
-      if (parentId && !await repositories.media.getFolderById(site.id, parentId)) {
-        return errorResponse(404, 'PARENT_FOLDER_NOT_FOUND', 'Parent media folder not found', requestId);
+      if (parentId) {
+        const folders = await repositories.media.listFolders(site.id);
+        if (!folders.some((folder) => folder.id === parentId)) {
+          return errorResponse(404, 'PARENT_FOLDER_NOT_FOUND', 'Parent media folder not found', requestId);
+        }
+
+        if (wouldCreateFolderCycle(folders, folderId, parentId)) {
+          return errorResponse(400, 'VALIDATION_ERROR', 'A media folder cannot be moved inside one of its descendants', requestId);
+        }
       }
 
       const folder = (await repositories.media.updateFolder(site.id, folderId, {
@@ -113,6 +141,25 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const beforeFolder = listDemoMediaFolder(site.id, folderId);
+    if (!beforeFolder) {
+      return errorResponse(404, 'FOLDER_NOT_FOUND', 'Media folder not found', requestId);
+    }
+
+    if (parentId === folderId) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'A media folder cannot be its own parent', requestId);
+    }
+
+    if (parentId) {
+      const folders = listMediaFolders(site.id);
+      if (!folders.some((item) => item.id === parentId)) {
+        return errorResponse(404, 'PARENT_FOLDER_NOT_FOUND', 'Parent media folder not found', requestId);
+      }
+
+      if (wouldCreateFolderCycle(folders, folderId, parentId)) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'A media folder cannot be moved inside one of its descendants', requestId);
+      }
+    }
+
     const folder = updateMediaFolder(site.id, folderId, body);
 
     if (!folder) {
