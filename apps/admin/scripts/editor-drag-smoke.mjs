@@ -14,6 +14,9 @@ const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
 const SMOKE_VIDEO_SRC = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
 const SMOKE_VIDEO_POSTER = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22320%22%20height%3D%22180%22%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22%230f172a%22%2F%3E%3C%2Fsvg%3E';
+const SMOKE_EMBED_SRC = `${API_BASE_URL}/api/sites`;
+const SMOKE_EMBED_ALLOW = 'fullscreen; geolocation';
+const SMOKE_EMBED_SANDBOX = 'allow-forms allow-popups';
 let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -147,6 +150,22 @@ const createSmokePage = async () => {
               muted: false,
               playsInline: true,
               objectFit: 'cover',
+            },
+          },
+          {
+            id: 'smoke-embed',
+            type: 'embed',
+            x: 820,
+            y: 325,
+            width: 320,
+            height: 150,
+            zIndex: 8,
+            props: {
+              src: SMOKE_EMBED_SRC,
+              title: 'Initial embed',
+              allow: '',
+              loading: 'lazy',
+              allowFullScreen: true,
             },
           },
           {
@@ -2946,6 +2965,73 @@ const assertPersistedVideoBehavior = async (pageId) => {
   return props;
 };
 
+const testEmbedBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-embed');
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-embed-src', SMOKE_EMBED_SRC);
+  await setFormControlByTestId(client, 'editor-embed-title', 'Smoke embed frame');
+  await setFormControlByTestId(client, 'editor-embed-allow', SMOKE_EMBED_ALLOW);
+  await setFormControlByTestId(client, 'editor-embed-sandbox', SMOKE_EMBED_SANDBOX);
+  await setFormControlByTestId(client, 'editor-embed-loading', 'eager');
+  await setFormControlByTestId(client, 'editor-embed-referrer-policy', 'no-referrer');
+  await setCheckboxByTestId(client, 'editor-embed-allow-fullscreen', false);
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const checked = (testId) => {
+      const input = document.querySelector('[data-testid="' + testId + '"]');
+      return input instanceof HTMLInputElement ? input.checked : null;
+    };
+    const node = document.querySelector('[data-element-id="smoke-embed"]');
+    const iframe = node?.querySelector('iframe');
+    return {
+      src: value('editor-embed-src'),
+      title: value('editor-embed-title'),
+      allow: value('editor-embed-allow'),
+      sandbox: value('editor-embed-sandbox'),
+      loading: value('editor-embed-loading'),
+      referrerPolicy: value('editor-embed-referrer-policy'),
+      allowFullScreen: checked('editor-embed-allow-fullscreen'),
+      previewSrc: iframe?.getAttribute('src') || '',
+      previewTitle: iframe?.getAttribute('title') || '',
+      previewAllow: iframe?.getAttribute('allow') || '',
+      previewSandbox: iframe?.getAttribute('sandbox') || '',
+      previewLoading: iframe?.getAttribute('loading') || '',
+      previewReferrerPolicy: iframe?.getAttribute('referrerpolicy') || '',
+      previewAllowFullScreen: iframe instanceof HTMLIFrameElement ? iframe.allowFullscreen : null,
+    };
+  })()`);
+
+  assert(state.src === SMOKE_EMBED_SRC && state.previewSrc === SMOKE_EMBED_SRC, `Embed src control mismatch: ${JSON.stringify(state)}`);
+  assert(state.title === 'Smoke embed frame' && state.previewTitle === 'Smoke embed frame', `Embed title control mismatch: ${JSON.stringify(state)}`);
+  assert(state.allow === SMOKE_EMBED_ALLOW && state.previewAllow === SMOKE_EMBED_ALLOW, `Embed allow control mismatch: ${JSON.stringify(state)}`);
+  assert(state.sandbox === SMOKE_EMBED_SANDBOX && state.previewSandbox === SMOKE_EMBED_SANDBOX, `Embed sandbox control mismatch: ${JSON.stringify(state)}`);
+  assert(state.loading === 'eager' && state.previewLoading === 'eager', `Embed loading control mismatch: ${JSON.stringify(state)}`);
+  assert(state.referrerPolicy === 'no-referrer' && state.previewReferrerPolicy === 'no-referrer', `Embed referrer policy mismatch: ${JSON.stringify(state)}`);
+  assert(state.allowFullScreen === false && state.previewAllowFullScreen === false, `Embed fullscreen control mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedEmbedBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const embed = findCanvasElement(elements, 'smoke-embed');
+  const props = embed?.props || {};
+
+  assert(embed?.type === 'embed', `Persisted smoke-embed missing: ${JSON.stringify(embed)}`);
+  assert(props.src === SMOKE_EMBED_SRC, `Persisted embed src mismatch: ${JSON.stringify(props)}`);
+  assert(props.title === 'Smoke embed frame', `Persisted embed title mismatch: ${JSON.stringify(props)}`);
+  assert(props.allow === SMOKE_EMBED_ALLOW, `Persisted embed allow mismatch: ${JSON.stringify(props)}`);
+  assert(props.sandbox === SMOKE_EMBED_SANDBOX, `Persisted embed sandbox mismatch: ${JSON.stringify(props)}`);
+  assert(props.loading === 'eager', `Persisted embed loading mismatch: ${JSON.stringify(props)}`);
+  assert(props.referrerPolicy === 'no-referrer', `Persisted embed referrer policy mismatch: ${JSON.stringify(props)}`);
+  assert(props.allowFullScreen === false, `Persisted embed fullscreen mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const dragSelectionHandle = async (client, elementId, deltaX, deltaY, options = {}) => {
   await scrollElementIntoView(client, elementId);
   if (options.selectFirst !== false) {
@@ -3209,7 +3295,7 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-video', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-video', 'smoke-embed', 'smoke-repeater']);
 
     const clickAdd = await testComponentClickAdd(client, 'divider');
 
@@ -3326,6 +3412,9 @@ const main = async () => {
     const videoBehaviorControls = EDITOR_PATH
       ? null
       : await testVideoBehaviorControls(client);
+    const embedBehaviorControls = EDITOR_PATH
+      ? null
+      : await testEmbedBehaviorControls(client);
 
     let persistedState = null;
     let reloadedState = null;
@@ -3338,8 +3427,9 @@ const main = async () => {
     let persistedRepeater = null;
     let persistedButtonLinkBehavior = null;
     let persistedVideoBehavior = null;
+    let persistedEmbedBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-embed', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -3398,11 +3488,14 @@ const main = async () => {
       persistedVideoBehavior = videoBehaviorControls
         ? await assertPersistedVideoBehavior(tempPageId)
         : null;
+      persistedEmbedBehavior = embedBehaviorControls
+        ? await assertPersistedEmbedBehavior(tempPageId)
+        : null;
 
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-form', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-embed', 'smoke-form', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -3507,6 +3600,7 @@ const main = async () => {
       repeaterControls,
       buttonLinkBehaviorControls,
       videoBehaviorControls,
+      embedBehaviorControls,
       responsiveEditing,
       reloadedResponsiveEditing,
       postSaveInspector,
@@ -3517,6 +3611,7 @@ const main = async () => {
       persistedRepeater,
       persistedButtonLinkBehavior,
       persistedVideoBehavior,
+      persistedEmbedBehavior,
       reloadedState,
       invalidInputWarnings: invalidInputWarnings.length,
       screenshotPath: SCREENSHOT_PATH,

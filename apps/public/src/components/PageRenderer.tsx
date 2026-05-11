@@ -843,6 +843,40 @@ const sanitizeText = (value: unknown): string => {
   return '';
 };
 
+const DEFAULT_IFRAME_ALLOW = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+const IFRAME_LOADING_VALUES = ['lazy', 'eager'] as const;
+const IFRAME_REFERRER_POLICIES = [
+  'no-referrer',
+  'no-referrer-when-downgrade',
+  'origin',
+  'origin-when-cross-origin',
+  'same-origin',
+  'strict-origin',
+  'strict-origin-when-cross-origin',
+  'unsafe-url',
+] as const;
+
+type IframeLoading = (typeof IFRAME_LOADING_VALUES)[number];
+type IframeReferrerPolicy = (typeof IFRAME_REFERRER_POLICIES)[number];
+
+const normalizeIframeAllow = (value: unknown): string => sanitizeText(value) || DEFAULT_IFRAME_ALLOW;
+
+const normalizeIframeSandbox = (value: unknown): string | undefined => sanitizeText(value) || undefined;
+
+const normalizeIframeLoading = (value: unknown): IframeLoading => {
+  const normalized = sanitizeText(value).toLowerCase();
+  return IFRAME_LOADING_VALUES.includes(normalized as IframeLoading)
+    ? normalized as IframeLoading
+    : 'lazy';
+};
+
+const normalizeIframeReferrerPolicy = (value: unknown): IframeReferrerPolicy | undefined => {
+  const normalized = sanitizeText(value).toLowerCase();
+  return IFRAME_REFERRER_POLICIES.includes(normalized as IframeReferrerPolicy)
+    ? normalized as IframeReferrerPolicy
+    : undefined;
+};
+
 const buildContactShareOverride = (props: Record<string, unknown>) => {
   const hasAnySetting =
     typeof props.contactShareEnabled === 'boolean' ||
@@ -1228,6 +1262,7 @@ function EmbedElement({ element }: ElementRendererProps) {
 
   return (
     <iframe
+      title={getNameClass(props.title) || 'Embedded content'}
       src={src}
       width={typeof width === 'number' ? width : undefined}
       height={typeof height === 'number' ? height : undefined}
@@ -1236,9 +1271,11 @@ function EmbedElement({ element }: ElementRendererProps) {
         width: '100%',
         ...styles,
       }}
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-      allowFullScreen
-      loading="lazy"
+      allow={normalizeIframeAllow(props.allow)}
+      allowFullScreen={getBooleanWithFallback(props.allowFullScreen, true)}
+      loading={normalizeIframeLoading(props.loading)}
+      referrerPolicy={normalizeIframeReferrerPolicy(props.referrerPolicy)}
+      sandbox={normalizeIframeSandbox(props.sandbox)}
     />
   );
 }

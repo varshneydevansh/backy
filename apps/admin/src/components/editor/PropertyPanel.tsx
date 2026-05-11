@@ -1908,6 +1908,7 @@ function ContentProperties({
                 type="text"
                 value={element.props.src || ''}
                 onChange={(e) => onChange({ src: e.target.value })}
+                data-testid="editor-embed-src"
                 className={cn(
                   'flex-1 px-2 py-1.5 text-sm rounded-md border bg-background',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -1947,8 +1948,108 @@ function ContentProperties({
               )}
               placeholder="Alternative src field"
             />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Iframe Title
+            </label>
+            <input
+              type="text"
+              value={element.props.title || ''}
+              onChange={(e) => onChange({ title: e.target.value })}
+              data-testid="editor-embed-title"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Embedded content"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Allowed Features
+            </label>
+            <textarea
+              value={element.props.allow || ''}
+              onChange={(e) => onChange({ allow: e.target.value })}
+              data-testid="editor-embed-allow"
+              rows={2}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Sandbox Tokens
+            </label>
+            <input
+              type="text"
+              value={element.props.sandbox || ''}
+              onChange={(e) => onChange({ sandbox: e.target.value })}
+              data-testid="editor-embed-sandbox"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="allow-scripts allow-same-origin"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Loading
+              </label>
+              <select
+                value={element.props.loading || 'lazy'}
+                onChange={(e) => onChange({ loading: e.target.value })}
+                data-testid="editor-embed-loading"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+              >
+                <option value="lazy">Lazy</option>
+                <option value="eager">Eager</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Referrer Policy
+              </label>
+              <select
+                value={element.props.referrerPolicy || ''}
+                onChange={(e) => onChange({ referrerPolicy: e.target.value })}
+                data-testid="editor-embed-referrer-policy"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+              >
+                <option value="">Browser default</option>
+                <option value="no-referrer">No referrer</option>
+                <option value="origin">Origin</option>
+                <option value="strict-origin">Strict origin</option>
+                <option value="strict-origin-when-cross-origin">Strict origin when cross-origin</option>
+                <option value="same-origin">Same origin</option>
+                <option value="no-referrer-when-downgrade">No referrer when downgrade</option>
+                <option value="unsafe-url">Unsafe URL</option>
+              </select>
             </div>
           </div>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={parseBooleanSetting(element.props.allowFullScreen, true)}
+              onChange={(e) => onChange({ allowFullScreen: e.target.checked })}
+              data-testid="editor-embed-allow-fullscreen"
+              className="rounded"
+            />
+            Allow fullscreen
+          </label>
+        </div>
       )}
 
       {/* Columns Properties */}

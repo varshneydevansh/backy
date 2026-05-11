@@ -63,6 +63,40 @@ const sanitizeText = (value: unknown): string => {
   return '';
 };
 
+const DEFAULT_IFRAME_ALLOW = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+const IFRAME_LOADING_VALUES = ['lazy', 'eager'] as const;
+const IFRAME_REFERRER_POLICIES = [
+  'no-referrer',
+  'no-referrer-when-downgrade',
+  'origin',
+  'origin-when-cross-origin',
+  'same-origin',
+  'strict-origin',
+  'strict-origin-when-cross-origin',
+  'unsafe-url',
+] as const;
+
+type IframeLoading = (typeof IFRAME_LOADING_VALUES)[number];
+type IframeReferrerPolicy = (typeof IFRAME_REFERRER_POLICIES)[number];
+
+const normalizeIframeAllow = (value: unknown): string => sanitizeText(value) || DEFAULT_IFRAME_ALLOW;
+
+const normalizeIframeSandbox = (value: unknown): string | undefined => sanitizeText(value) || undefined;
+
+const normalizeIframeLoading = (value: unknown): IframeLoading => {
+  const normalized = sanitizeText(value).toLowerCase();
+  return IFRAME_LOADING_VALUES.includes(normalized as IframeLoading)
+    ? normalized as IframeLoading
+    : 'lazy';
+};
+
+const normalizeIframeReferrerPolicy = (value: unknown): IframeReferrerPolicy | undefined => {
+  const normalized = sanitizeText(value).toLowerCase();
+  return IFRAME_REFERRER_POLICIES.includes(normalized as IframeReferrerPolicy)
+    ? normalized as IframeReferrerPolicy
+    : undefined;
+};
+
 const GRID_SIZE = 10;
 const SMART_GUIDE_THRESHOLD = 6;
 
@@ -2169,7 +2203,13 @@ function CanvasElementComponent({
         }
         return (
           <iframe
+            title={sanitizeText(p.title) || 'Embedded content'}
             src={embedSrc}
+            allow={normalizeIframeAllow(p.allow)}
+            allowFullScreen={parseBooleanSetting(p.allowFullScreen, true)}
+            loading={normalizeIframeLoading(p.loading)}
+            referrerPolicy={normalizeIframeReferrerPolicy(p.referrerPolicy)}
+            sandbox={normalizeIframeSandbox(p.sandbox)}
             style={{
               ...sharedStyle,
               width: '100%',
@@ -2177,7 +2217,6 @@ function CanvasElementComponent({
               border: sharedStyle.border ?? 'none',
               pointerEvents: isPreview ? 'auto' : 'none',
             }}
-            allowFullScreen
           />
         );
 
