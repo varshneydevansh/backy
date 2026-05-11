@@ -1818,12 +1818,15 @@ function FormElement({ element, isPreview, siteId, pageId, postId }: ElementRend
   const formId = typeof props.formId === 'string' ? props.formId : undefined;
   const fallbackFormId = getNameClass(formId || element.id).trim();
   const resolvedFormId = fallbackFormId.length > 0 ? fallbackFormId : `form-${Math.random().toString(36).slice(2, 8)}`;
+  const backyAction = siteId && resolvedFormId
+    ? `/api/sites/${siteId}/forms/${resolvedFormId}/submissions`
+    : undefined;
   const configuredAction =
     getNameClass(props.action) ||
     getNameClass(props.actionUrl) ||
-    (siteId && resolvedFormId ? `/api/sites/${siteId}/forms/${resolvedFormId}/submissions` : undefined);
+    backyAction;
 
-  const isBackyAction = Boolean(siteId && configuredAction?.startsWith('/api/'));
+  const isBackyAction = Boolean(backyAction && configuredAction === backyAction);
   const method = ((props.method as string) || 'POST').toUpperCase();
   const enableHoneypot = Boolean(props.enableHoneypot);
   const successRedirectUrl = getNameClass(props.successRedirectUrl || props.redirectUrl);

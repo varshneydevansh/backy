@@ -412,6 +412,36 @@ const content: PageContent = {
         ],
       },
     },
+    {
+      id: 'custom-action-form',
+      type: 'form',
+      x: 24,
+      y: 840,
+      width: 260,
+      height: 120,
+      props: {
+        formId: 'custom_action_form',
+        formTitle: 'Custom Action Form',
+        actionUrl: '/api/custom-lead-submit',
+        method: 'POST',
+        enableHoneypot: true,
+      },
+      children: [
+        {
+          id: 'custom-action-input',
+          type: 'input',
+          x: 0,
+          y: 0,
+          width: 220,
+          height: 64,
+          props: {
+            label: 'Email',
+            name: 'custom_email',
+            inputType: 'email',
+          },
+        },
+      ],
+    },
   ],
 };
 
@@ -508,6 +538,11 @@ assert(html.includes('name="honeypot"'), `Form honeypot was not rendered: ${html
 assert(html.includes('name="pageId"'), `Form page hidden input was not rendered: ${html}`);
 assert(html.includes('value="page_renderer_smoke"'), `Form page hidden value was not rendered: ${html}`);
 assert(html.includes('Contact Form'), `Form title was not rendered: ${html}`);
+assert(html.includes('action="/api/custom-lead-submit"'), `Custom form action was not rendered: ${html}`);
+assert(html.includes('Custom Action Form'), `Custom form title was not rendered: ${html}`);
+assert(html.includes('name="custom_email"'), `Custom form child input was not rendered: ${html}`);
+assert((html.match(/name="pageId"/g) || []).length === 1, `Custom form should not receive Backy page hidden inputs: ${html}`);
+assert(!html.includes('/api/sites/site_renderer_smoke/forms/custom_action_form/submissions'), `Custom form was converted to Backy action: ${html}`);
 assert(html.includes('data-backy-repeater="renderer_smoke_repeater"'), `Repeater dataset id was not rendered: ${html}`);
 assert(html.includes('href="/records/repeater-record"'), `Repeater record href was not rendered: ${html}`);
 assert(html.includes('src="https://cdn.backy.test/repeater-record.jpg"'), `Repeater image src was not rendered: ${html}`);
