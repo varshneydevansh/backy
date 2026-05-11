@@ -30,6 +30,7 @@ import {
   listContactSavedLists,
   listContactSegments,
   listFormContacts,
+  promoteContactToUser,
   saveContactSavedList,
   listForms,
   updateContact,
@@ -62,8 +63,29 @@ interface ContactsSearch {
 const CONTACT_STATUS_FILTERS: ContactStatusFilter[] = ['all', 'new', 'contacted', 'qualified', 'archived'];
 const CONTACT_QUALITY_FILTERS: ContactQualityFilter[] = ['all', 'missing-email', 'missing-phone', 'needs-notes', 'has-source-values', 'ready-to-promote', 'duplicate-email'];
 const CONTACT_IMPORT_COLUMNS = ['name', 'email', 'phone', 'status', 'notes', 'sourceValues'] as const;
+const CONTACT_PROMOTION_SOURCE_KEY = '__backyPromotion';
 
 const normalizeContactEmail = (value?: string | null) => value?.trim().toLowerCase() || '';
+
+type ContactPromotionMetadata = {
+  target?: string;
+  userId?: string;
+  email?: string;
+  role?: string;
+  status?: string;
+  existingUser?: boolean;
+  promotedAt?: string;
+  inviteUrl?: string;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  Boolean(value && typeof value === 'object' && !Array.isArray(value))
+);
+
+const getContactPromotion = (contact: AdminContact): ContactPromotionMetadata | null => {
+  const promotion = contact.sourceValues?.[CONTACT_PROMOTION_SOURCE_KEY];
+  return isRecord(promotion) ? promotion as ContactPromotionMetadata : null;
+};
 
 const isContactStatusFilter = (value: unknown): value is ContactStatusFilter => (
   typeof value === 'string' && CONTACT_STATUS_FILTERS.includes(value as ContactStatusFilter)
@@ -230,6 +252,9 @@ function ContactsRoute() {
     : '';
   const contactUpdateUrl = apiForm
     ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts/{contactId}`
+    : '';
+  const contactPromoteUserUrl = apiForm
+    ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts/{contactId}/promote`
     : '';
   const contactCreateUrl = apiForm
     ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts`
@@ -487,6 +512,7 @@ function ContactsRoute() {
         label: form.title || form.name || form.id,
         list: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts?limit=100`,
         update: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/{contactId}`,
+        promoteUser: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/{contactId}/promote`,
         create: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts`,
         import: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/contacts/import?upsertByEmail=true`,
       })),
@@ -504,6 +530,7 @@ function ContactsRoute() {
       model: 'Contacts are the review layer between public registration/contact forms and private users, CRM follow-up, or member profile collections.',
       requirements: CONTACT_PROMOTION_REQUIREMENTS,
       readyToPromote: allContacts.filter((contact) => contact.status === 'qualified' && Boolean(normalizeContactEmail(contact.email))).length,
+      promotedUsers: allContacts.filter((contact) => Boolean(getContactPromotion(contact)?.userId)).length,
       duplicateEmailGroups: duplicateEmailGroups.length,
       nextActions: [
         'Mark high-intent contacts as qualified.',
@@ -922,6 +949,30 @@ function ContactsRoute() {
       setNotice(`Notes saved for ${updated.name || updated.email || 'contact'}.`);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'Unable to save contact notes');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handlePromoteContactToUser = async (contact: AdminContact) => {
+    if (isContactsBusy) return;
+
+    setUpdatingId(`promote-user-${contact.id}`);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const result = await promoteContactToUser(activeSiteId, contact.formId, contact.id, {
+        role: 'viewer',
+        status: 'invited',
+        createInvite: true,
+      });
+      updateContactInState(result.contact);
+      setNotice(result.invite?.inviteUrl
+        ? `Promoted ${result.user.email} to an invited user. Invite link is ready in the contact metadata.`
+        : `Promoted ${result.user.email} to ${result.existingUser ? 'an existing' : 'a new'} user account.`);
+    } catch (promotionError) {
+      setError(promotionError instanceof Error ? promotionError.message : 'Unable to promote contact to user');
     } finally {
       setUpdatingId(null);
     }
@@ -1757,9 +1808,10 @@ function ContactsRoute() {
                 <MetaTile label="Selected" value={`${selectedContactIds.length} contact${selectedContactIds.length === 1 ? '' : 's'}`} />
               </div>
 
-              <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
+              <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-5">
                 <ApiSnippet label="List contacts" value={contactsUrl} />
                 <ApiSnippet label="Update contact" value={contactUpdateUrl} />
+                <ApiSnippet label="Promote user" value={contactPromoteUserUrl} />
                 <ApiSnippet label="Create contact" value={contactCreateUrl} />
                 <ApiSnippet label="Import contacts" value={contactImportUrl} />
               </div>
@@ -2084,6 +2136,7 @@ function ContactsRoute() {
                   onSelect={(selected) => toggleContactSelection(contact.id, selected)}
                   onStatus={(status) => void handleStatus(contact, status)}
                   onNotes={(notes) => void handleNotes(contact, notes)}
+                  onPromoteUser={() => void handlePromoteContactToUser(contact)}
                 />
               ))}
             </div>
@@ -2165,6 +2218,7 @@ function ContactCard({
   onSelect,
   onStatus,
   onNotes,
+  onPromoteUser,
 }: {
   contact: AdminContact;
   form?: FormDefinition;
@@ -2173,6 +2227,7 @@ function ContactCard({
   onSelect: (selected: boolean) => void;
   onStatus: (status: ContactStatus) => void;
   onNotes: (notes: string) => void;
+  onPromoteUser: () => void;
 }) {
   const [notesDraft, setNotesDraft] = useState(contact.notes || '');
 
@@ -2181,6 +2236,10 @@ function ContactCard({
   }, [contact.notes]);
 
   const notesChanged = notesDraft.trim() !== (contact.notes || '').trim();
+  const promotion = getContactPromotion(contact);
+  const submittedValues = Object.entries(contact.sourceValues || {})
+    .filter(([key]) => key !== CONTACT_PROMOTION_SOURCE_KEY);
+  const canPromoteToUser = Boolean(contact.email && contact.status === 'qualified' && !promotion?.userId);
 
   return (
     <article className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')}>
@@ -2254,11 +2313,25 @@ function ContactCard({
         </div>
       </div>
 
-      {contact.sourceValues && Object.keys(contact.sourceValues).length > 0 ? (
+      {promotion?.userId ? (
+        <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+          <div className="font-semibold">Promoted user</div>
+          <div className="mt-1 truncate">
+            {promotion.email || contact.email} | {promotion.role || 'viewer'} | {promotion.status || 'invited'}
+          </div>
+          {promotion.inviteUrl ? (
+            <code className="mt-2 block min-w-0 overflow-x-auto rounded border border-emerald-200 bg-white/70 px-2 py-1 font-mono text-[11px] text-emerald-900">
+              {promotion.inviteUrl}
+            </code>
+          ) : null}
+        </div>
+      ) : null}
+
+      {submittedValues.length > 0 ? (
         <div className="mt-4 rounded-md border border-border bg-muted px-3 py-2">
           <div className="mb-2 text-xs font-medium text-muted-foreground">Submitted values</div>
           <dl className="grid gap-1 text-xs">
-            {Object.entries(contact.sourceValues).slice(0, 4).map(([key, value]) => (
+            {submittedValues.slice(0, 4).map(([key, value]) => (
               <div key={key} className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
                 <dt className="truncate font-medium text-muted-foreground">{key}</dt>
                 <dd className="truncate">{String(value || '-')}</dd>
@@ -2287,6 +2360,17 @@ function ContactCard({
           aria-label={`Mark ${contact.name || contact.email || contact.id} as qualified`}
         >
           Qualified
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onPromoteUser}
+          disabled={disabled || !canPromoteToUser}
+          iconStart={<UserPlus className="size-4" />}
+          aria-label={`Promote ${contact.name || contact.email || contact.id} to user`}
+          data-testid="contacts-promote-user"
+        >
+          Promote user
         </Button>
         <Button
           size="sm"

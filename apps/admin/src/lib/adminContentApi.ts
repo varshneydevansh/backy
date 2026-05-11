@@ -739,6 +739,33 @@ interface ApiContactResponse {
   };
 }
 
+interface ApiContactPromotionResponse {
+  success: boolean;
+  data?: {
+    contact: Contact;
+    user: ApiUser;
+    existingUser: boolean;
+    invite?: {
+      id: string;
+      token: string;
+      inviteUrl: string;
+      expiresAt: string;
+    } | null;
+  };
+  contact?: Contact;
+  user?: ApiUser;
+  invite?: {
+    id: string;
+    token: string;
+    inviteUrl: string;
+    expiresAt: string;
+  } | null;
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
 interface ApiImportContactsResponse {
   success: boolean;
   data?: {
@@ -1626,6 +1653,18 @@ export interface ContactInput {
   requestId?: string | null;
   sourceValues?: Record<string, unknown>;
   upsertByEmail?: boolean;
+}
+
+export interface ContactPromotionResult {
+  contact: AdminContact;
+  user: User;
+  existingUser: boolean;
+  invite?: {
+    id: string;
+    token: string;
+    inviteUrl: string;
+    expiresAt: string;
+  } | null;
 }
 
 export interface ContactImportResult {
@@ -3571,6 +3610,35 @@ export async function updateContact(
   }
 
   return contact;
+}
+
+export async function promoteContactToUser(
+  siteId: string,
+  formId: string,
+  contactId: string,
+  input: { role?: 'viewer' | 'editor'; status?: 'invited' | 'active'; createInvite?: boolean } = {},
+): Promise<ContactPromotionResult> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/contacts/${contactId}/promote`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiContactPromotionResponse>(response);
+  const contact = payload.data?.contact || payload.contact;
+  const user = payload.data?.user || payload.user;
+
+  if (!response.ok || !payload.success || !contact || !user) {
+    throw new Error(payload.error?.message || 'Unable to promote contact');
+  }
+
+  return {
+    contact,
+    user: toStoreUser(user),
+    existingUser: Boolean(payload.data?.existingUser),
+    invite: payload.data?.invite ?? payload.invite ?? null,
+  };
 }
 
 export async function createFormContact(

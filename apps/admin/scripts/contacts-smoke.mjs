@@ -183,6 +183,17 @@ const deleteContactSavedList = async (listId) => {
   });
 };
 
+const findUserByEmail = async (email) => {
+  const payload = await requestApi(`/api/admin/users?search=${encodeURIComponent(email)}`);
+  const users = payload.data?.users || payload.users || [];
+  return users.find((user) => user.email === email);
+};
+
+const deleteUser = async (userId) => {
+  if (!userId) return;
+  await requestApi(`/api/admin/users/${userId}`, { method: 'DELETE' });
+};
+
 const createContactDirectly = async (formId) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/contacts`, {
     method: 'POST',
@@ -227,9 +238,10 @@ const createDuplicateContacts = async (formId) => {
 };
 
 const importContactsCsv = async (formId) => {
+  const email = `contacts-import-${Date.now().toString(36)}@example.com`;
   const csv = [
     ['name', 'email', 'phone', 'status', 'notes', 'sourceValues'],
-    ['Contacts Imported User', 'contacts-import@example.com', '+1 555 0192', 'qualified', 'Imported by contacts smoke.', '{"source":"csv-smoke"}'],
+    ['Contacts Imported User', email, '+1 555 0192', 'qualified', 'Imported by contacts smoke.', '{"source":"csv-smoke"}'],
   ].map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
   const response = await fetch(`${API_BASE_URL}/api/admin/sites/${SITE_ID}/forms/${formId}/contacts/import?upsertByEmail=true`, {
     method: 'POST',
@@ -590,6 +602,44 @@ const mergeDuplicateContactsInUi = async (client, formId, duplicateContacts) => 
   throw new Error(`Duplicate contacts did not merge for ${duplicateEmail}`);
 };
 
+const promoteContactInUi = async (client, formId, contact) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const cards = Array.from(document.querySelectorAll('article'));
+      const card = cards.find((item) => (item.innerText || '').includes(${JSON.stringify(contact.email)}));
+      if (!card) return { ok: false, reason: 'missing-card' };
+      const button = Array.from(card.querySelectorAll('button')).find((item) => item.textContent?.includes('Promote user'));
+      if (!(button instanceof HTMLButtonElement)) return { ok: false, reason: 'missing-button', text: card.innerText.slice(0, 500) };
+      if (button.disabled) return { ok: false, reason: 'disabled-button', text: card.innerText.slice(0, 500) };
+      button.click();
+      return { ok: true };
+    })()`);
+
+    if (result.ok) break;
+
+    if (attempt === 79) {
+      throw new Error(`Unable to promote contact in UI: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const contacts = await listContacts(formId);
+    const promoted = contacts.find((item) => item.id === contact.id);
+    const promotion = promoted?.sourceValues?.__backyPromotion;
+    const user = await findUserByEmail(contact.email);
+
+    if (promotion?.userId && user?.id === promotion.userId && (promoted.notes || '').includes('Promoted to')) {
+      return { contact: promoted, user, promotion };
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Contact was not promoted to user: ${contact.email}`);
+};
+
 const assertLayout = async (client) => {
   const layout = await evaluate(client, `(() => ({
     width: window.innerWidth,
@@ -610,6 +660,9 @@ const assertLayout = async (client) => {
         document.body?.innerText?.includes('Saved lead lists') &&
         document.body?.innerText?.includes('Smoke Qualified Leads') &&
         document.body?.innerText?.includes('/forms/contact-lists'),
+      hasPromoteUser: Boolean(document.querySelector('[data-testid="contacts-promote-user"]')) &&
+        document.body?.innerText?.includes('/contacts/{contactId}/promote') &&
+        document.body?.innerText?.includes('Promoted user'),
       hasInbox: document.body?.innerText?.includes('Lead Inbox') || false,
       hasApi: document.body?.innerText?.includes('Contact pipeline API') || false,
       hasLead: document.body?.innerText?.includes('contacts-smoke@example.com') || false,
@@ -625,6 +678,7 @@ const assertLayout = async (client) => {
     && layout.hasMergeDuplicates
     && layout.hasSegmentAnalytics
     && layout.hasSavedLists
+    && layout.hasPromoteUser
     && layout.hasInbox
     && layout.hasApi
     && layout.hasLead,
@@ -677,6 +731,7 @@ const main = async () => {
   await loginAdminApi();
   const form = await createLeadForm();
   let savedListId;
+  let promotedUserId;
   let cleaned = false;
   let client;
   const { childProcess, userDataDir } = launchChrome();
@@ -717,6 +772,8 @@ const main = async () => {
     });
 
     await navigateToContacts(client, form.id);
+    const promotedContact = await promoteContactInUi(client, form.id, importedContact);
+    promotedUserId = promotedContact.promotion.existingUser ? null : promotedContact.user.id;
     const mergedDuplicateContacts = await mergeDuplicateContactsInUi(client, form.id, duplicateContacts);
     await updateContactInUi(client, { id: contact.id, formId: form.id });
     const updatedContact = await archiveContactWithBulkAction(client, { id: contact.id, formId: form.id });
@@ -736,6 +793,8 @@ const main = async () => {
 
     await deleteContactSavedList(savedListId);
     savedListId = null;
+    await deleteUser(promotedUserId);
+    promotedUserId = null;
     await deleteForm(form.id);
     cleaned = true;
 
@@ -764,6 +823,11 @@ const main = async () => {
         id: importedContact.id,
         status: importedContact.status,
       },
+      promotedContact: {
+        contactId: promotedContact.contact.id,
+        userId: promotedContact.user.id,
+        email: promotedContact.user.email,
+      },
       mergedDuplicateContacts: {
         primaryId: mergedDuplicateContacts.primary.id,
         archivedId: mergedDuplicateContacts.archived.id,
@@ -785,6 +849,11 @@ const main = async () => {
     if (savedListId) {
       await deleteContactSavedList(savedListId).catch((error) => {
         console.warn('Unable to delete smoke saved list:', error instanceof Error ? error.message : error);
+      });
+    }
+    if (promotedUserId) {
+      await deleteUser(promotedUserId).catch((error) => {
+        console.warn('Unable to delete promoted smoke user:', error instanceof Error ? error.message : error);
       });
     }
 
