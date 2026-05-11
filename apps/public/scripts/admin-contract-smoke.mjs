@@ -3838,6 +3838,10 @@ try {
       assert(publicOpenApi.json?.components?.schemas?.FrontendDesignEnvelope?.properties?.data?.properties?.frontendDesign?.$ref === '#/components/schemas/FrontendDesignContract', `${publicOpenApi.url} missing frontend design envelope schema`);
       assert(publicOpenApi.json?.components?.schemas?.FrontendDesignTemplate?.properties?.bindingHints, `${publicOpenApi.url} missing frontend design template binding schema`);
       assert(publicOpenApi.json?.components?.schemas?.SeoDiscoveryEnvelope, `${publicOpenApi.url} missing SEO discovery schema`);
+      assert(publicOpenApi.json?.components?.schemas?.SeoDiscoveryEnvelope?.properties?.data?.properties?.routes?.items?.$ref === '#/components/schemas/SeoRoute', `${publicOpenApi.url} missing SEO route schema reference`);
+      assert(publicOpenApi.json?.components?.schemas?.SeoRoute?.properties?.type?.enum?.includes('dynamicList'), `${publicOpenApi.url} missing SEO dynamic list route type schema`);
+      assert(publicOpenApi.json?.components?.schemas?.SeoRoute?.properties?.frontendDesign?.$ref === '#/components/schemas/ReusableSectionFrontendDesign', `${publicOpenApi.url} missing SEO route frontend design schema`);
+      assert(publicOpenApi.json?.components?.schemas?.SeoRoute?.properties?.collectionFrontendDesign?.$ref === '#/components/schemas/ReusableSectionFrontendDesign', `${publicOpenApi.url} missing SEO route collection frontend design schema`);
       assert(publicOpenApi.json?.components?.schemas?.MediaDetailEnvelope, `${publicOpenApi.url} missing media detail schema`);
       assert(publicOpenApi.json?.components?.schemas?.ReusableSectionListEnvelope, `${publicOpenApi.url} missing reusable section list schema`);
       assert(publicOpenApi.json?.components?.schemas?.ReusableSection?.properties?.metadata, `${publicOpenApi.url} missing reusable section metadata schema`);

@@ -188,10 +188,11 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Hosted Backy sites also expose crawlable `GET /sites/:siteSlug/sitemap.xml` and `GET /sites/:siteSlug/robots.txt` routes.
   - Public SEO discovery contract for custom frontends and default generated frontends.
   - JSON response uses `{ success, requestId, data: { site, defaults, routes, sitemap, robots } }`; `defaults.jsonLd` carries site-level structured data objects for frontend head rendering, and legacy top-level `routes` remains for compatibility.
-  - Routes include publishable pages, blog posts, and dynamic collection item records with canonical path, title, description, robots flags, Open Graph basics, route-specific JSON-LD objects, keywords, priority, change frequency, and update timestamps.
+  - Routes include publishable pages, blog posts, dynamic collection lists, and dynamic collection item records with canonical path, title, description, robots flags, Open Graph basics, route-specific JSON-LD objects, keywords, priority, change frequency, and update timestamps.
+  - Dynamic collection list routes expose normalized `frontendDesign` provenance from the collection schema; dynamic item routes expose record-level `frontendDesign` plus `collectionFrontendDesign`, so generated/custom frontends can keep SEO head output aligned with the captured frontend template.
   - `format=sitemap` emits XML built from indexable routes.
   - `format=robots` emits a minimal robots text response that points to the sitemap mode; hosted robots points to the hosted sitemap URL.
-  - The frontend manifest advertises `capabilities.seoDiscovery`, `endpoints.seo`, `endpoints.sitemap`, and `endpoints.robots`; the site-scoped OpenAPI export includes the SEO operation and schema.
+  - The frontend manifest advertises `capabilities.seoDiscovery`, `endpoints.seo`, `endpoints.sitemap`, and `endpoints.robots`; the site-scoped OpenAPI export includes the SEO operation and an explicit route schema for these provenance fields.
 
 - `GET /api/sites/:siteId/collections`
 - `GET /api/sites/:siteId/collections/:collectionId`
