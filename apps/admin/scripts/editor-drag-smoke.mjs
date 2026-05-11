@@ -303,6 +303,36 @@ const createSmokePage = async () => {
             },
           },
           {
+            id: 'smoke-checkbox',
+            type: 'checkbox',
+            x: 120,
+            y: 720,
+            width: 280,
+            height: 120,
+            zIndex: 5,
+            props: {
+              label: 'Initial checkbox',
+              name: 'initial_checkbox',
+              options: ['Option A', 'Option B'],
+              required: false,
+            },
+          },
+          {
+            id: 'smoke-radio',
+            type: 'radio',
+            x: 420,
+            y: 720,
+            width: 280,
+            height: 120,
+            zIndex: 5,
+            props: {
+              label: 'Initial radio',
+              name: 'initial_radio',
+              options: ['Option A', 'Option B'],
+              required: false,
+            },
+          },
+          {
             id: 'smoke-repeater',
             type: 'repeater',
             x: 520,
@@ -3259,6 +3289,78 @@ const assertPersistedSelectFieldBehavior = async (pageId) => {
   return props;
 };
 
+const testChoiceFieldBehaviorControls = async (client, elementId, fieldType, expected) => {
+  await selectLayerById(client, elementId);
+  await switchToPropertiesPanel(client);
+
+  await setFormControlByTestId(client, 'editor-field-label', expected.label);
+  await setFormControlByTestId(client, 'editor-field-name', expected.name);
+  await setCheckboxByTestId(client, 'editor-field-required', true);
+  await setFormControlByTestId(client, 'editor-field-placeholder', expected.placeholder);
+  await setFormControlByTestId(client, 'editor-field-help-text', expected.helpText);
+  await setFormControlByTestId(client, 'editor-field-options', expected.options.join('\n'));
+  await setFormControlByTestId(client, 'editor-choice-value', expected.value);
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const checked = (testId) => {
+      const input = document.querySelector('[data-testid="' + testId + '"]');
+      return input instanceof HTMLInputElement ? input.checked : null;
+    };
+    const node = document.querySelector('[data-element-id="${elementId}"]');
+    const groupLabel = node?.querySelector('label, div');
+    const inputs = Array.from(node?.querySelectorAll('input[type="${fieldType}"]') || []);
+    const help = node?.querySelector('p');
+    return {
+      label: value('editor-field-label'),
+      name: value('editor-field-name'),
+      required: checked('editor-field-required'),
+      placeholder: value('editor-field-placeholder'),
+      helpText: value('editor-field-help-text'),
+      optionsText: value('editor-field-options'),
+      selectedValue: value('editor-choice-value'),
+      previewLabel: groupLabel?.textContent || '',
+      previewInputs: inputs.map((input) => ({
+        name: input.getAttribute('name') || '',
+        value: input.getAttribute('value') || '',
+        required: input.required,
+        checked: input.checked,
+      })),
+      previewHelpText: help?.textContent || '',
+    };
+  })()`);
+
+  assert(state.label === expected.label && state.previewLabel.includes(expected.label), `${fieldType} label mismatch: ${JSON.stringify(state)}`);
+  assert(state.name === expected.name, `${fieldType} name control mismatch: ${JSON.stringify(state)}`);
+  assert(state.required === true && state.previewInputs.some((input) => input.required), `${fieldType} required mismatch: ${JSON.stringify(state)}`);
+  assert(state.placeholder === expected.placeholder, `${fieldType} placeholder control mismatch: ${JSON.stringify(state)}`);
+  assert(state.helpText === expected.helpText && state.previewHelpText === expected.helpText, `${fieldType} help text mismatch: ${JSON.stringify(state)}`);
+  assert(state.optionsText === expected.options.join('\n'), `${fieldType} options control mismatch: ${JSON.stringify(state)}`);
+  assert(JSON.stringify(state.previewInputs.map((input) => input.value)) === JSON.stringify(expected.options), `${fieldType} preview options mismatch: ${JSON.stringify(state)}`);
+  assert(state.previewInputs.every((input) => input.name === expected.name), `${fieldType} preview names mismatch: ${JSON.stringify(state)}`);
+  assert(state.selectedValue === expected.value && state.previewInputs.some((input) => input.value === expected.value && input.checked), `${fieldType} selected value mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedChoiceFieldBehavior = async (pageId, elementId, fieldType, expected) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const field = findCanvasElement(elements, elementId);
+  const props = field?.props || {};
+
+  assert(field?.type === fieldType, `Persisted ${elementId} missing: ${JSON.stringify(field)}`);
+  assert(props.label === expected.label, `Persisted ${fieldType} label mismatch: ${JSON.stringify(props)}`);
+  assert(props.name === expected.name, `Persisted ${fieldType} name mismatch: ${JSON.stringify(props)}`);
+  assert(props.required === true, `Persisted ${fieldType} required mismatch: ${JSON.stringify(props)}`);
+  assert(props.placeholder === expected.placeholder, `Persisted ${fieldType} placeholder mismatch: ${JSON.stringify(props)}`);
+  assert(props.helpText === expected.helpText, `Persisted ${fieldType} help text mismatch: ${JSON.stringify(props)}`);
+  assert(Array.isArray(props.options) && JSON.stringify(props.options) === JSON.stringify(expected.options), `Persisted ${fieldType} options mismatch: ${JSON.stringify(props)}`);
+  assert(props.value === expected.value && props.defaultValue === expected.value, `Persisted ${fieldType} selected value mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const testButtonLinkBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-child-button');
   await switchToPropertiesPanel(client);
@@ -3766,7 +3868,7 @@ const main = async () => {
 
     await waitForEditorElements(client, EDITOR_PATH
       ? ['home-heading', 'home-cta']
-      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-repeater']);
+      : ['smoke-heading', 'smoke-child-button', 'smoke-top-edge', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
     const clickAdd = await testComponentClickAdd(client, 'divider');
 
@@ -3889,6 +3991,28 @@ const main = async () => {
     const selectFieldBehaviorControls = EDITOR_PATH
       ? null
       : await testSelectFieldBehaviorControls(client);
+    const checkboxBehaviorSpec = {
+      label: 'Smoke checkbox label',
+      name: 'smoke_channels',
+      placeholder: 'Choose channels',
+      helpText: 'Pick at least one channel.',
+      options: ['Email', 'SMS', 'Phone'],
+      value: 'SMS',
+    };
+    const radioBehaviorSpec = {
+      label: 'Smoke radio label',
+      name: 'smoke_frequency',
+      placeholder: 'Choose frequency',
+      helpText: 'Pick one frequency.',
+      options: ['Daily', 'Weekly', 'Monthly'],
+      value: 'Weekly',
+    };
+    const checkboxFieldBehaviorControls = EDITOR_PATH
+      ? null
+      : await testChoiceFieldBehaviorControls(client, 'smoke-checkbox', 'checkbox', checkboxBehaviorSpec);
+    const radioFieldBehaviorControls = EDITOR_PATH
+      ? null
+      : await testChoiceFieldBehaviorControls(client, 'smoke-radio', 'radio', radioBehaviorSpec);
     const buttonLinkBehaviorControls = EDITOR_PATH
       ? null
       : await testButtonLinkBehaviorControls(client);
@@ -3915,12 +4039,14 @@ const main = async () => {
     let persistedInputFieldBehavior = null;
     let persistedTextareaFieldBehavior = null;
     let persistedSelectFieldBehavior = null;
+    let persistedCheckboxFieldBehavior = null;
+    let persistedRadioFieldBehavior = null;
     let persistedButtonLinkBehavior = null;
     let persistedVideoBehavior = null;
     let persistedEmbedBehavior = null;
     let persistedMapBehavior = null;
     if (tempPageId) {
-      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-repeater'];
+      const elementIds = ['smoke-heading', 'smoke-image', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater'];
       responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -3985,6 +4111,12 @@ const main = async () => {
       persistedSelectFieldBehavior = selectFieldBehaviorControls
         ? await assertPersistedSelectFieldBehavior(tempPageId)
         : null;
+      persistedCheckboxFieldBehavior = checkboxFieldBehaviorControls
+        ? await assertPersistedChoiceFieldBehavior(tempPageId, 'smoke-checkbox', 'checkbox', checkboxBehaviorSpec)
+        : null;
+      persistedRadioFieldBehavior = radioFieldBehaviorControls
+        ? await assertPersistedChoiceFieldBehavior(tempPageId, 'smoke-radio', 'radio', radioBehaviorSpec)
+        : null;
       persistedButtonLinkBehavior = buttonLinkBehaviorControls
         ? await assertPersistedButtonLinkBehavior(tempPageId)
         : null;
@@ -4001,7 +4133,7 @@ const main = async () => {
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
-        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-repeater']);
+        await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-video', 'smoke-embed', 'smoke-map', 'smoke-form', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
         reloadedState = await readEditorElementState(reloadClient, elementIds);
         reloadedResponsiveEditing = {
           mobile: await assertResponsiveBreakpointEditing(
@@ -4108,6 +4240,8 @@ const main = async () => {
       inputFieldBehaviorControls,
       textareaFieldBehaviorControls,
       selectFieldBehaviorControls,
+      checkboxFieldBehaviorControls,
+      radioFieldBehaviorControls,
       buttonLinkBehaviorControls,
       videoBehaviorControls,
       embedBehaviorControls,
@@ -4124,6 +4258,8 @@ const main = async () => {
       persistedInputFieldBehavior,
       persistedTextareaFieldBehavior,
       persistedSelectFieldBehavior,
+      persistedCheckboxFieldBehavior,
+      persistedRadioFieldBehavior,
       persistedButtonLinkBehavior,
       persistedVideoBehavior,
       persistedEmbedBehavior,

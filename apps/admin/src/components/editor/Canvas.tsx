@@ -2510,11 +2510,12 @@ function CanvasElementComponent({
               }}
               >
                 {(optionItems.length ? optionItems : ['Option A']).map((option, optionIndex) => {
+                  const selectedValue = p.value ?? p.defaultValue;
                   const isChecked = element.type === 'radio'
-                    ? p.value === option
-                    : Array.isArray(p.value)
-                      ? p.value.includes(option)
-                      : p.value === option;
+                    ? selectedValue === option
+                    : Array.isArray(selectedValue)
+                      ? selectedValue.includes(option)
+                      : selectedValue === option;
 
                   return (
                     <label
@@ -2523,8 +2524,9 @@ function CanvasElementComponent({
                     >
                       <input
                         type={element.type}
-                        name={element.type === 'radio' ? `${element.id}-group` : undefined}
+                        name={typeof p.name === 'string' ? p.name : element.type === 'radio' ? `${element.id}-group` : undefined}
                         value={option}
+                        required={Boolean(p.required)}
                         checked={Boolean(isChecked)}
                         readOnly
                         onChange={() => {}}

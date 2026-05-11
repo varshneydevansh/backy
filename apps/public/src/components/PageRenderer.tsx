@@ -2461,11 +2461,36 @@ function CheckboxOrRadioElement({ element, isPreview }: ElementRendererProps) {
   );
   const defaultSet = new Set(defaultValues);
   const required = getBoolean(props.required);
+  const label = getNameClass(props.label);
+  const helpText = getNameClass(props.helpText);
+  const wrapperStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: getLength(props.fieldGap, '8px'),
+    ...styles,
+  };
+  const legendStyle: React.CSSProperties = {
+    color: getNameClass(props.labelColor) || getNameClass(props.color) || '#374151',
+    fontWeight: getNameClass(props.labelFontWeight) || 500,
+    fontSize: getLength(props.labelFontSize, '14px'),
+  };
+  const helpStyle: React.CSSProperties = {
+    margin: 0,
+    color: getNameClass(props.helpTextColor) || '#6b7280',
+    fontSize: getLength(props.helpTextFontSize, '12px'),
+    lineHeight: 1.4,
+  };
 
   if (inputType === 'radio') {
     const defaultValue = defaultValues[0] || getNameClass(props.value) || '';
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', ...styles }}>
+      <div style={wrapperStyle}>
+        {label ? (
+          <div style={legendStyle}>
+            {label}
+            {required ? ' *' : ''}
+          </div>
+        ) : null}
         {options.length === 0 ? (
           <label style={{ display: 'inline-flex', gap: '10px', alignItems: 'center' }}>
             <input
@@ -2494,6 +2519,7 @@ function CheckboxOrRadioElement({ element, isPreview }: ElementRendererProps) {
             </label>
           ))
         )}
+        {helpText ? <p style={helpStyle}>{helpText}</p> : null}
         {children?.map((child) => (
           <ElementRenderer
             key={child.id}
@@ -2506,7 +2532,13 @@ function CheckboxOrRadioElement({ element, isPreview }: ElementRendererProps) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', ...styles }}>
+    <div style={wrapperStyle}>
+        {label ? (
+          <div style={legendStyle}>
+            {label}
+            {required ? ' *' : ''}
+          </div>
+        ) : null}
         {options.length === 0 ? (
           <label style={{ display: 'inline-flex', gap: '10px', alignItems: 'center' }}>
             <input
@@ -2535,6 +2567,7 @@ function CheckboxOrRadioElement({ element, isPreview }: ElementRendererProps) {
             </label>
           ))
         )}
+        {helpText ? <p style={helpStyle}>{helpText}</p> : null}
         {children?.map((child) => (
           <ElementRenderer
             key={child.id}

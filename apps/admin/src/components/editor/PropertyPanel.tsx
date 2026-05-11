@@ -1439,7 +1439,8 @@ function ContentProperties({
               <input
                 type="text"
                 value={(element.props.value || element.props.defaultValue || '') as string}
-                onChange={(e) => onChange({ value: e.target.value })}
+                onChange={(e) => onChange({ value: e.target.value, defaultValue: e.target.value })}
+                data-testid="editor-choice-value"
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
