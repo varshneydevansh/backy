@@ -463,7 +463,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         repositories.collections.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
         repositories.reusableSections.list({ siteId: site.id, status: 'active', limit: 100, offset: 0 }),
         repositories.forms.list({ siteId: site.id, isActive: true, limit: 100, offset: 0 }),
-        repositories.media.list({ siteId: site.id, visibility: 'public', limit: 1000, offset: 0 }),
+        repositories.media.list({ siteId: site.id, visibility: 'public', limit: 10000, offset: 0 }),
         repositories.settings.get(),
       ]);
       const manifest = buildRepositoryManifest({
@@ -501,7 +501,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const collections = listCollections(site.id);
     const forms = listFormsBySite(site.id);
     const reusableSections = listReusableSections(site.id, { status: 'active' });
-    const media = getMediaList(site.id, { visibility: 'public', limit: 1000 });
+    const media = getMediaList(site.id, { visibility: 'public', limit: 10000 });
     const categories = listBlogCategories(site.id);
     const tags = listBlogTags(site.id);
     const authors = listBlogAuthors(site.id);
