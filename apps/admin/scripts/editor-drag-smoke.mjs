@@ -285,6 +285,65 @@ const deleteSmokeReusableSection = async (sectionId) => {
   }
 };
 
+const createSmokeCollection = async () => {
+  const slug = `editor-smoke-dataset-${Date.now().toString(36)}`;
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Editor Smoke Dataset',
+      slug,
+      description: 'Temporary collection for editor dataset query controls.',
+      status: 'published',
+      routePattern: `/${slug}/:recordSlug`,
+      listRoutePattern: `/${slug}`,
+      permissions: {
+        publicRead: true,
+        publicCreate: false,
+        publicUpdate: false,
+        publicDelete: false,
+      },
+      fields: [
+        { key: 'title', label: 'Title', type: 'text', required: true, unique: true, sortOrder: 10 },
+        { key: 'category', label: 'Category', type: 'select', required: false, unique: false, sortOrder: 20, options: ['Featured', 'Reference'] },
+        { key: 'summary', label: 'Summary', type: 'richText', required: false, unique: false, sortOrder: 30 },
+        { key: 'rank', label: 'Rank', type: 'number', required: false, unique: false, sortOrder: 40 },
+      ],
+    }),
+  });
+  const collection = payload.data?.collection || payload.collection;
+  assert(collection?.id, `Unable to create smoke collection: ${JSON.stringify(payload).slice(0, 500)}`);
+
+  for (const [index, title] of ['Alpha item', 'Beta featured item'].entries()) {
+    await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collection.id}/records`, {
+      method: 'POST',
+      body: JSON.stringify({
+        slug: `${slug}-${index + 1}`,
+        status: 'published',
+        values: {
+          title,
+          category: index === 1 ? 'Featured' : 'Reference',
+          summary: `${title} summary`,
+          rank: index + 1,
+        },
+      }),
+    });
+  }
+
+  return collection;
+};
+
+const deleteSmokeCollection = async (collectionId) => {
+  if (!collectionId) {
+    return;
+  }
+
+  try {
+    await requestApi(`/api/admin/sites/${SITE_ID}/collections/${collectionId}`, { method: 'DELETE' });
+  } catch (error) {
+    console.warn(`Unable to delete smoke collection ${collectionId}:`, error instanceof Error ? error.message : error);
+  }
+};
+
 const fetchJson = async (endpoint) => {
   const response = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
   if (!response.ok) {
@@ -348,7 +407,20 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const AUTH_STORAGE_SCRIPT = `localStorage.setItem('backy-auth-storage', JSON.stringify({ state: { user: { id: '1', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' } }, version: 0 }));`;
+const authStorageScript = () => `
+localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
+  state: {
+    user: { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
+    session: {
+      token: apiAdminSessionToken,
+      issuedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      authMode: 'local-demo',
+    },
+  },
+  version: 0,
+}))});
+`;
 
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
@@ -376,7 +448,7 @@ const openAuthenticatedEditorTab = async (parentClient, url) => {
   await client.send('DOM.enable');
   await client.send('Log.enable');
   await client.send('Page.addScriptToEvaluateOnNewDocument', {
-    source: AUTH_STORAGE_SCRIPT,
+    source: authStorageScript(),
   });
   await client.send('Page.navigate', { url });
   return client;
@@ -759,6 +831,38 @@ const setLayoutNumberInput = async (client, label, value) => {
 
   assert(changed, `Unable to change ${label} layout input to ${value}`);
   await sleep(250);
+};
+
+const setFormControlByTestId = async (client, testId, value) => {
+  const changed = await evaluate(client, `(() => {
+    const control = document.querySelector('[data-testid="${testId}"]');
+    if (!(control instanceof HTMLInputElement) && !(control instanceof HTMLSelectElement) && !(control instanceof HTMLTextAreaElement)) {
+      return {
+        ok: false,
+        testId: ${JSON.stringify(testId)},
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    }
+
+    const prototype = control instanceof HTMLSelectElement
+      ? window.HTMLSelectElement.prototype
+      : control instanceof HTMLTextAreaElement
+        ? window.HTMLTextAreaElement.prototype
+        : window.HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+    setter?.call(control, ${JSON.stringify(String(value))});
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+    return {
+      ok: control.value === ${JSON.stringify(String(value))},
+      value: control.value,
+      testId: ${JSON.stringify(testId)},
+    };
+  })()`);
+
+  assert(changed?.ok, `Unable to set ${testId} to ${value}: ${JSON.stringify(changed)}`);
+  await sleep(250);
+  return changed;
 };
 
 const switchToPropertiesPanel = async (client) => {
@@ -2251,6 +2355,130 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
   };
 };
 
+const testCollectionDataBindingControls = async (client, collectionId) => {
+  await selectLayerById(client, 'smoke-heading');
+
+  let dataPanel = null;
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    dataPanel = await evaluate(client, `(() => {
+      const collection = document.querySelector('[data-testid="editor-data-collection"]');
+      if (!collection) {
+        const dataButton = Array.from(document.querySelectorAll('button')).find((button) => (
+          (button.textContent || '').trim() === 'Data'
+        ));
+        if (dataButton instanceof HTMLButtonElement) {
+          dataButton.click();
+        }
+      }
+      const select = document.querySelector('[data-testid="editor-data-collection"]');
+      return {
+        hasCollectionSelect: select instanceof HTMLSelectElement,
+        hasTargetCollection: select instanceof HTMLSelectElement
+          ? Array.from(select.options).some((option) => option.value === ${JSON.stringify(collectionId)})
+          : false,
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
+    })()`);
+
+    if (dataPanel.hasCollectionSelect && dataPanel.hasTargetCollection) {
+      break;
+    }
+
+    await sleep(200);
+  }
+
+  assert(dataPanel?.hasCollectionSelect && dataPanel?.hasTargetCollection, `Collection binding controls did not load target collection: ${JSON.stringify(dataPanel)}`);
+
+  await setFormControlByTestId(client, 'editor-data-collection', collectionId);
+  let queryControlsReady = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    queryControlsReady = await evaluate(client, `(() => {
+      const optionValues = (testId) => {
+        const select = document.querySelector('[data-testid="' + testId + '"]');
+        return select instanceof HTMLSelectElement
+          ? Array.from(select.options).map((option) => option.value)
+          : [];
+      };
+      return {
+        fields: optionValues('editor-data-field'),
+        filterFields: optionValues('editor-data-query-filter-field'),
+        sortFields: optionValues('editor-data-query-sort-by'),
+      };
+    })()`);
+    if (
+      queryControlsReady.fields.includes('title') &&
+      queryControlsReady.filterFields.includes('category') &&
+      queryControlsReady.sortFields.includes('rank')
+    ) {
+      break;
+    }
+    await sleep(200);
+  }
+  assert(
+    queryControlsReady?.fields?.includes('title') &&
+      queryControlsReady?.filterFields?.includes('category') &&
+      queryControlsReady?.sortFields?.includes('rank'),
+    `Collection binding field/query options did not render: ${JSON.stringify(queryControlsReady)}`,
+  );
+  await setFormControlByTestId(client, 'editor-data-field', 'title');
+  await setFormControlByTestId(client, 'editor-data-target', 'props.content');
+  await setFormControlByTestId(client, 'editor-data-query-search', 'featured');
+  await setFormControlByTestId(client, 'editor-data-query-filter-field', 'category');
+  await setFormControlByTestId(client, 'editor-data-query-filter-value', 'Featured');
+  await setFormControlByTestId(client, 'editor-data-query-sort-by', 'rank');
+  await setFormControlByTestId(client, 'editor-data-query-sort-direction', 'desc');
+  await setFormControlByTestId(client, 'editor-data-query-limit', '1');
+  await setFormControlByTestId(client, 'editor-data-query-offset', '0');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const summary = Array.from(document.querySelectorAll('[data-testid="editor-data-query-controls"] ~ div, [data-testid="editor-data-query-controls"]'))
+      .map((node) => node.textContent || '')
+      .join(' ');
+    return {
+      collectionId: value('editor-data-collection'),
+      field: value('editor-data-field'),
+      target: value('editor-data-target'),
+      search: value('editor-data-query-search'),
+      filterField: value('editor-data-query-filter-field'),
+      filterValue: value('editor-data-query-filter-value'),
+      sortBy: value('editor-data-query-sort-by'),
+      sortDirection: value('editor-data-query-sort-direction'),
+      limit: value('editor-data-query-limit'),
+      offset: value('editor-data-query-offset'),
+      summary,
+    };
+  })()`);
+
+  assert(state.collectionId === collectionId, `Collection binding did not select collection: ${JSON.stringify(state)}`);
+  assert(state.field === 'title' && state.target === 'props.content', `Collection binding field/target mismatch: ${JSON.stringify(state)}`);
+  assert(state.search === 'featured' && state.filterField === 'category' && state.filterValue === 'Featured', `Collection query filter mismatch: ${JSON.stringify(state)}`);
+  assert(state.sortBy === 'rank' && state.sortDirection === 'desc' && state.limit === '1' && state.offset === '0', `Collection query sort/page mismatch: ${JSON.stringify(state)}`);
+  assert(/sort rank desc/i.test(state.summary) && /limit 1/i.test(state.summary), `Collection query summary missing: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedDataBinding = async (pageId, collectionId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const heading = findCanvasElement(elements, 'smoke-heading');
+  const binding = Array.isArray(heading?.dataBindings)
+    ? heading.dataBindings.find((candidate) => candidate?.source?.kind === 'collection')
+    : null;
+
+  assert(binding, `Persisted data binding missing from smoke-heading: ${JSON.stringify(heading)}`);
+  assert(binding.datasetId === `dataset_${collectionId}`, `Persisted dataset id mismatch: ${JSON.stringify(binding)}`);
+  assert(binding.targetPath === 'props.content', `Persisted binding target mismatch: ${JSON.stringify(binding)}`);
+  assert(binding.source?.collectionId === collectionId && binding.source?.field === 'title', `Persisted binding source mismatch: ${JSON.stringify(binding)}`);
+  assert(binding.query?.q === 'featured', `Persisted binding search query mismatch: ${JSON.stringify(binding)}`);
+  assert(binding.query?.fieldKey === 'category' && binding.query?.fieldValue === 'Featured', `Persisted binding filter mismatch: ${JSON.stringify(binding)}`);
+  assert(binding.query?.sortBy === 'rank' && binding.query?.sortDirection === 'desc', `Persisted binding sort mismatch: ${JSON.stringify(binding)}`);
+  assert(binding.pagination?.limit === 1 && binding.pagination?.offset === 0, `Persisted binding pagination mismatch: ${JSON.stringify(binding)}`);
+
+  return binding;
+};
+
 const dragSelectionHandle = async (client, elementId, deltaX, deltaY, options = {}) => {
   await scrollElementIntoView(client, elementId);
   if (options.selectFirst !== false) {
@@ -2491,6 +2719,7 @@ const main = async () => {
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
   const tempReusableSectionId = EDITOR_PATH ? null : await createSmokeReusableSection();
+  const tempCollection = EDITOR_PATH ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
   const { childProcess, userDataDir } = launchChrome();
   let client;
@@ -2507,7 +2736,7 @@ const main = async () => {
     await client.send('DOM.enable');
     await client.send('Log.enable');
     await client.send('Page.addScriptToEvaluateOnNewDocument', {
-      source: AUTH_STORAGE_SCRIPT,
+      source: authStorageScript(),
     });
     await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}${editorPath}` });
 
@@ -2600,6 +2829,9 @@ const main = async () => {
     const afterReusableMutationReady = tempReusableSectionId
       ? await waitForEditorMutationReady(client, 'after synced reusable section actions')
       : null;
+    const dataBindingQueryControls = tempCollection
+      ? await testCollectionDataBindingControls(client, tempCollection.id)
+      : null;
 
     let persistedState = null;
     let reloadedState = null;
@@ -2607,6 +2839,7 @@ const main = async () => {
     let reloadedResponsiveEditing = null;
     let postSaveInspector = null;
     let savedStatus = null;
+    let persistedDataBinding = null;
     if (tempPageId) {
       const elementIds = ['smoke-heading', 'smoke-image', 'smoke-top-edge', 'smoke-box', 'smoke-child-button', 'smoke-form'];
       responsiveEditing = {
@@ -2639,6 +2872,9 @@ const main = async () => {
         `Workflow panel overlaps editor inspector after save: ${JSON.stringify(postSaveInspector)}`,
       );
       persistedState = await waitForPersistedCanvasState(tempPageId, expectedState);
+      persistedDataBinding = tempCollection
+        ? await assertPersistedDataBinding(tempPageId, tempCollection.id)
+        : null;
 
       let reloadClient = null;
       try {
@@ -2743,11 +2979,13 @@ const main = async () => {
       layerHierarchy,
       syncedReusableSection,
       afterReusableMutationReady,
+      dataBindingQueryControls,
       responsiveEditing,
       reloadedResponsiveEditing,
       postSaveInspector,
       savedStatus,
       persistedState,
+      persistedDataBinding,
       reloadedState,
       invalidInputWarnings: invalidInputWarnings.length,
       screenshotPath: SCREENSHOT_PATH,
@@ -2758,6 +2996,7 @@ const main = async () => {
     await cleanup({ client, childProcess, userDataDir });
     await deleteSmokePage(tempPageId);
     await deleteSmokeReusableSection(tempReusableSectionId);
+    await deleteSmokeCollection(tempCollection?.id);
   }
 };
 

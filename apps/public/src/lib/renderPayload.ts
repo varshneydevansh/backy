@@ -269,6 +269,33 @@ const normalizeBindingPagination = (value: unknown): JsonObject | null => {
   return Object.keys(pagination).length > 0 ? pagination : null;
 };
 
+const normalizeBindingQuery = (value: unknown): JsonObject | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const query: JsonObject = {};
+  for (const key of ['recordId', 'slug', 'q', 'search', 'fieldKey', 'sortBy']) {
+    if (typeof value[key] === 'string' && value[key].length > 0) {
+      query[key] = value[key];
+    }
+  }
+  if ('fieldValue' in value && value.fieldValue !== undefined && value.fieldValue !== null && !isRecord(value.fieldValue) && !Array.isArray(value.fieldValue)) {
+    query.fieldValue = value.fieldValue;
+  }
+  if (value.sortDirection === 'asc' || value.sortDirection === 'desc') {
+    query.sortDirection = value.sortDirection;
+  }
+  if (typeof value.limit === 'number' && Number.isInteger(value.limit) && value.limit > 0) {
+    query.limit = Math.min(value.limit, 100);
+  }
+  if (typeof value.offset === 'number' && Number.isInteger(value.offset) && value.offset >= 0) {
+    query.offset = value.offset;
+  }
+
+  return Object.keys(query).length > 0 ? query : null;
+};
+
 const normalizeSchemaBinding = (binding: JsonObject, element: RenderElement, index: number): JsonObject | null => {
   const source = normalizeBindingSource(binding.source);
   if (!source) {
@@ -292,6 +319,16 @@ const normalizeSchemaBinding = (binding: JsonObject, element: RenderElement, ind
   }
   if (isRecord(binding.format)) {
     normalized.format = binding.format;
+  }
+
+  const query = normalizeBindingQuery(binding.query);
+  if (query) {
+    normalized.query = query;
+  }
+
+  const pagination = normalizeBindingPagination(binding.pagination);
+  if (pagination) {
+    normalized.pagination = pagination;
   }
 
   const writeBack = normalizeBindingWriteBack(binding.writeBack);
@@ -348,6 +385,16 @@ const normalizeCollectionBinding = (binding: JsonObject, element: RenderElement,
     normalized.format = binding.format;
   }
 
+  const query = normalizeBindingQuery(binding.query);
+  if (query) {
+    normalized.query = query;
+  }
+
+  const pagination = normalizeBindingPagination(binding.pagination);
+  if (pagination) {
+    normalized.pagination = pagination;
+  }
+
   const writeBack = normalizeBindingWriteBack(binding.writeBack);
   if (writeBack) {
     normalized.writeBack = writeBack;
@@ -381,6 +428,15 @@ const getBoundCollectionRecord = (
       ? query.recordId
       : null;
   const slug = typeof query.slug === 'string' && query.slug.length > 0 ? query.slug : null;
+  const search = typeof query.q === 'string' && query.q.length > 0
+    ? query.q
+    : typeof query.search === 'string' && query.search.length > 0
+      ? query.search
+      : null;
+  const fieldKey = typeof query.fieldKey === 'string' && query.fieldKey.length > 0 ? query.fieldKey : null;
+  const fieldValue = query.fieldValue;
+  const sortBy = typeof query.sortBy === 'string' && query.sortBy.length > 0 ? query.sortBy : null;
+  const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
 
   if (recordId) {
     return getCollectionRecordByIdOrSlug(siteId, collectionId, recordId);
@@ -388,6 +444,11 @@ const getBoundCollectionRecord = (
 
   return listCollectionRecords(siteId, collectionId, {
     slug: slug || undefined,
+    search: search || undefined,
+    fieldKey: fieldKey || undefined,
+    fieldValue,
+    sortBy: sortBy || undefined,
+    sortDirection,
     limit: 1,
   }).records[0];
 };

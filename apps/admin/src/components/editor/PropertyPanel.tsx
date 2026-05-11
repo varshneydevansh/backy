@@ -2565,6 +2565,18 @@ const getBindingSource = (binding: unknown): Record<string, unknown> | null => (
     : null
 );
 
+const getBindingQuery = (binding: unknown): Record<string, unknown> => (
+  binding && typeof binding === 'object' && !Array.isArray(binding)
+    ? (((binding as Record<string, unknown>).query as Record<string, unknown> | undefined) || {})
+    : {}
+);
+
+const getBindingPagination = (binding: unknown): Record<string, unknown> => (
+  binding && typeof binding === 'object' && !Array.isArray(binding)
+    ? (((binding as Record<string, unknown>).pagination as Record<string, unknown> | undefined) || {})
+    : {}
+);
+
 const getCollectionBinding = (element: CanvasElement): Record<string, unknown> | null => {
   const bindings = Array.isArray(element.dataBindings) ? element.dataBindings : [];
   return bindings.find((binding) => getBindingSource(binding)?.kind === 'collection') || null;
@@ -2618,9 +2630,32 @@ function DataBindingProperties({
 }: DataBindingPropertiesProps) {
   const currentBinding = getCollectionBinding(element);
   const currentSource = getBindingSource(currentBinding);
+  const currentQuery = getBindingQuery(currentBinding);
+  const currentPagination = getBindingPagination(currentBinding);
   const selectedCollectionId = typeof currentSource?.collectionId === 'string' ? currentSource.collectionId : '';
   const selectedFieldKey = typeof currentSource?.field === 'string' ? currentSource.field : '';
   const selectedRecordId = typeof currentSource?.recordId === 'string' ? currentSource.recordId : '';
+  const selectedSearch = typeof currentQuery.q === 'string'
+    ? currentQuery.q
+    : typeof currentQuery.search === 'string'
+      ? currentQuery.search
+      : '';
+  const selectedFilterField = typeof currentQuery.fieldKey === 'string' ? currentQuery.fieldKey : '';
+  const selectedFilterValue = typeof currentQuery.fieldValue === 'string' || typeof currentQuery.fieldValue === 'number' || typeof currentQuery.fieldValue === 'boolean'
+    ? String(currentQuery.fieldValue)
+    : '';
+  const selectedSortBy = typeof currentQuery.sortBy === 'string' ? currentQuery.sortBy : '';
+  const selectedSortDirection = currentQuery.sortDirection === 'desc' ? 'desc' : 'asc';
+  const selectedLimit = typeof currentPagination.limit === 'number'
+    ? String(currentPagination.limit)
+    : typeof currentQuery.limit === 'number'
+      ? String(currentQuery.limit)
+      : '';
+  const selectedOffset = typeof currentPagination.offset === 'number'
+    ? String(currentPagination.offset)
+    : typeof currentQuery.offset === 'number'
+      ? String(currentQuery.offset)
+      : '';
   const selectedTargetPath = typeof currentBinding?.targetPath === 'string'
     ? currentBinding.targetPath
     : getTargetPathOptions(element.type)[0].value;
@@ -2633,6 +2668,13 @@ function DataBindingProperties({
     fieldKey?: string;
     recordId?: string;
     targetPath?: string;
+    search?: string;
+    filterField?: string;
+    filterValue?: string;
+    sortBy?: string;
+    sortDirection?: 'asc' | 'desc';
+    limit?: string;
+    offset?: string;
   }) => {
     const collectionId = updates.collectionId ?? selectedCollectionId;
     const collection = collections.find((item) => item.id === collectionId) || null;
@@ -2642,12 +2684,43 @@ function DataBindingProperties({
     const field = collection?.fields.find((item) => item.key === fieldKey) || null;
     const targetPath = updates.targetPath ?? selectedTargetPath;
     const recordId = updates.recordId ?? selectedRecordId;
+    const search = updates.search ?? selectedSearch;
+    const filterField = updates.filterField ?? selectedFilterField;
+    const filterValue = updates.filterValue ?? selectedFilterValue;
+    const sortBy = updates.sortBy ?? selectedSortBy;
+    const sortDirection = updates.sortDirection ?? selectedSortDirection;
+    const limit = updates.limit ?? selectedLimit;
+    const offset = updates.offset ?? selectedOffset;
     const otherBindings = (Array.isArray(element.dataBindings) ? element.dataBindings : [])
       .filter((binding) => getBindingSource(binding)?.kind !== 'collection');
 
     if (!collection || !fieldKey) {
       onChange({ dataBindings: otherBindings });
       return;
+    }
+
+    const query: Record<string, unknown> = {};
+    if (recordId.trim()) query.recordId = recordId.trim();
+    if (search.trim()) query.q = search.trim();
+    if (filterField.trim()) {
+      query.fieldKey = filterField.trim();
+    }
+    if (filterValue.trim()) {
+      query.fieldValue = filterValue.trim();
+    }
+    if (sortBy.trim()) {
+      query.sortBy = sortBy.trim();
+      query.sortDirection = sortDirection;
+    }
+
+    const pagination: Record<string, unknown> = {};
+    const parsedLimit = Number.parseInt(limit, 10);
+    const parsedOffset = Number.parseInt(offset, 10);
+    if (Number.isInteger(parsedLimit) && parsedLimit > 0) {
+      pagination.limit = Math.min(parsedLimit, 100);
+    }
+    if (Number.isInteger(parsedOffset) && parsedOffset >= 0) {
+      pagination.offset = parsedOffset;
     }
 
     onChange({
@@ -2664,7 +2737,8 @@ function DataBindingProperties({
             ...(recordId.trim() ? { recordId: recordId.trim() } : {}),
           },
           mode: getBindingModeForField(field, targetPath),
-          ...(recordId.trim() ? { query: { recordId: recordId.trim() } } : {}),
+          ...(Object.keys(query).length > 0 ? { query } : {}),
+          ...(Object.keys(pagination).length > 0 ? { pagination } : {}),
         },
       ],
     });
@@ -2702,6 +2776,7 @@ function DataBindingProperties({
         <select
           value={selectedCollectionId}
           onChange={(event) => updateBinding({ collectionId: event.target.value, fieldKey: undefined, recordId: '' })}
+          data-testid="editor-data-collection"
           className={cn(
             'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
             'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -2725,6 +2800,7 @@ function DataBindingProperties({
             <select
               value={selectedFieldKey}
               onChange={(event) => updateBinding({ fieldKey: event.target.value })}
+              data-testid="editor-data-field"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -2745,6 +2821,7 @@ function DataBindingProperties({
             <select
               value={targetPathOptions.some((option) => option.value === selectedTargetPath) ? selectedTargetPath : targetPathOptions[0].value}
               onChange={(event) => updateBinding({ targetPath: event.target.value })}
+              data-testid="editor-data-target"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -2766,6 +2843,7 @@ function DataBindingProperties({
               type="text"
               value={selectedRecordId}
               onChange={(event) => updateBinding({ recordId: event.target.value })}
+              data-testid="editor-data-record-id"
               className={cn(
                 'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring'
@@ -2774,9 +2852,155 @@ function DataBindingProperties({
             />
           </div>
 
+          <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-data-query-controls">
+            <div className="mb-2 text-xs font-medium text-foreground">Dataset query</div>
+            <div className="space-y-2">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Search
+                </label>
+                <input
+                  type="text"
+                  value={selectedSearch}
+                  onChange={(event) => updateBinding({ search: event.target.value })}
+                  data-testid="editor-data-query-search"
+                  className={cn(
+                    'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                  placeholder="Optional text search"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Filter field
+                  </label>
+                  <select
+                    value={selectedFilterField}
+                    onChange={(event) => updateBinding({ filterField: event.target.value })}
+                    data-testid="editor-data-query-filter-field"
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
+                    )}
+                  >
+                    <option value="">None</option>
+                    {selectedCollection.fields.map((field) => (
+                      <option key={field.key} value={field.key}>
+                        {field.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Filter value
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedFilterValue}
+                    onChange={(event) => updateBinding({ filterValue: event.target.value })}
+                    data-testid="editor-data-query-filter-value"
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
+                    )}
+                    placeholder="Exact value"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Sort by
+                  </label>
+                  <select
+                    value={selectedSortBy}
+                    onChange={(event) => updateBinding({ sortBy: event.target.value })}
+                    data-testid="editor-data-query-sort-by"
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
+                    )}
+                  >
+                    <option value="">Default</option>
+                    {selectedCollection.fields.map((field) => (
+                      <option key={field.key} value={field.key}>
+                        {field.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Direction
+                  </label>
+                  <select
+                    value={selectedSortDirection}
+                    onChange={(event) => updateBinding({ sortDirection: event.target.value === 'desc' ? 'desc' : 'asc' })}
+                    data-testid="editor-data-query-sort-direction"
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
+                    )}
+                  >
+                    <option value="asc">Ascending</option>
+                    <option value="desc">Descending</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Limit
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={selectedLimit}
+                    onChange={(event) => updateBinding({ limit: event.target.value })}
+                    data-testid="editor-data-query-limit"
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
+                    )}
+                    placeholder="50"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Offset
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={selectedOffset}
+                    onChange={(event) => updateBinding({ offset: event.target.value })}
+                    data-testid="editor-data-query-offset"
+                    className={cn(
+                      'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                      'focus:outline-none focus:ring-2 focus:ring-ring'
+                    )}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
             Dataset: dataset_{selectedCollection.id}
             {selectedField ? ` • ${selectedField.key}` : ''}
+            {selectedSortBy ? ` • sort ${selectedSortBy} ${selectedSortDirection}` : ''}
+            {selectedLimit ? ` • limit ${selectedLimit}` : ''}
           </div>
 
           <button
