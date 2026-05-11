@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { recordMediaDelivery } from '@/lib/mediaDeliveryAnalytics';
+import { isMediaQuarantined } from '@/lib/mediaSafety';
 import { publicMediaFilePath } from '@/lib/mediaResponsive';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       ? await repositories.media.getById(site.id, mediaId)
       : getMediaById(site.id, mediaId);
 
-    if (!media || media.visibility !== 'public') {
+    if (!media || media.visibility !== 'public' || isMediaQuarantined(media)) {
       return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media not found', requestId);
     }
 

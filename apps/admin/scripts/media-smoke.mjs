@@ -170,6 +170,19 @@ const deleteMedia = async (mediaId) => {
   await requestApi(`/api/admin/sites/${SITE_ID}/media/${mediaId}`, { method: 'DELETE' });
 };
 
+const expectApiError = async (endpoint, options, expectedStatus, expectedCode) => {
+  try {
+    await requestApi(endpoint, options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    assert(message.includes(`returned ${expectedStatus}`), `Expected ${endpoint} to return ${expectedStatus}, got ${message}`);
+    assert(message.includes(expectedCode), `Expected ${endpoint} error code ${expectedCode}, got ${message}`);
+    return;
+  }
+
+  throw new Error(`Expected ${endpoint} to fail with ${expectedStatus} ${expectedCode}`);
+};
+
 const listMedia = async (search) => {
   const query = new URLSearchParams({ limit: '100' });
   if (search) query.set('search', search);
@@ -717,6 +730,48 @@ const prepareVariantsThroughDetails = async (client) => {
   return null;
 };
 
+const quarantineAssetThroughDetails = async (client) => {
+  await clickDetailsButton(client, 'Quarantine asset');
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      quarantined: document.body?.innerText?.includes('Quarantined') &&
+        document.body?.innerText?.includes('Release quarantine'),
+      body: document.body?.innerText?.slice(0, 1400) || '',
+    }))()`);
+    if (state.quarantined) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Media quarantine did not finish: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
+const releaseQuarantineThroughDetails = async (client) => {
+  await clickDetailsButton(client, 'Release quarantine');
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => ({
+      released: document.body?.innerText?.includes('Quarantine asset') &&
+        !document.body?.innerText?.includes('Release quarantine'),
+      body: document.body?.innerText?.slice(0, 1400) || '',
+    }))()`);
+    if (state.released) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Media quarantine release did not finish: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
 const closeMediaDetails = async (client) => {
   const result = await evaluate(client, `(() => {
     const button = document.querySelector('button[aria-label="Close media details"]');
@@ -947,6 +1002,25 @@ const main = async () => {
     assert(updatedImage.metadata?.imagePresentation?.focalPoint?.y === 72, 'Media metadata save did not persist focal Y.');
     assert(updatedImage.metadata?.imagePresentation?.objectFit === 'contain', 'Media metadata save did not persist crop fit.');
     assert(updatedImage.metadata?.imagePresentation?.aspectRatio === '16:9', 'Media metadata save did not persist aspect ratio.');
+    await quarantineAssetThroughDetails(client);
+    const quarantinedImage = await waitForMedia(marker, (item) => (
+      item.id === publicImage.id &&
+      item.visibility === 'private' &&
+      item.metadata?.mediaSecurity?.status === 'quarantined' &&
+      item.metadata?.mediaSecurity?.previousVisibility === 'private'
+    ));
+    assert(quarantinedImage.metadata.mediaSecurity.reason.includes('Manual quarantine'), 'Media quarantine did not persist a review reason.');
+    await expectApiError(`/api/admin/sites/${SITE_ID}/media/${publicImage.id}/signed-url`, {
+      method: 'POST',
+      body: JSON.stringify({ expiresInSeconds: 900 }),
+    }, 423, 'MEDIA_QUARANTINED');
+    await releaseQuarantineThroughDetails(client);
+    const releasedImage = await waitForMedia(marker, (item) => (
+      item.id === publicImage.id &&
+      item.visibility === 'private' &&
+      item.metadata?.mediaSecurity?.status === 'clear'
+    ));
+    assert(releasedImage.metadata.mediaSecurity.previousStatus === 'quarantined', 'Media quarantine release did not preserve previous security status.');
     await closeMediaDetails(client);
 
     await openMediaDetails(client, privateName);

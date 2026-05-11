@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { recordMediaDelivery } from '@/lib/mediaDeliveryAnalytics';
-import { requiresAttachmentDelivery } from '@/lib/mediaSafety';
+import { isMediaQuarantined, requiresAttachmentDelivery } from '@/lib/mediaSafety';
 import { getMediaStorageAdapter, getMediaStoragePathFromMedia } from '@/lib/mediaStorage';
 import { verifySignedMediaAccess } from '@/lib/mediaSigning';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -65,6 +65,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     if (!media) {
       return jsonError(404, 'MEDIA_NOT_FOUND', 'Media not found', requestId);
+    }
+
+    if (isMediaQuarantined(media)) {
+      return jsonError(423, 'MEDIA_QUARANTINED', 'This media asset is quarantined and cannot be delivered.', requestId);
     }
 
     const requestedDisposition = searchParams.get('disposition') === 'attachment' ? 'attachment' : 'inline';

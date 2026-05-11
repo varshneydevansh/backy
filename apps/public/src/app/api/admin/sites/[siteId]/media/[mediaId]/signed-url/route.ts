@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { isMediaQuarantined } from '@/lib/mediaSafety';
 import { buildSignedMediaPath, createSignedMediaAccess } from '@/lib/mediaSigning';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -64,6 +65,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     if (!media) {
       return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media not found', requestId);
+    }
+
+    if (isMediaQuarantined(media)) {
+      return errorResponse(423, 'MEDIA_QUARANTINED', 'Quarantined media cannot generate signed delivery URLs.', requestId);
     }
 
     const signedAccess = createSignedMediaAccess({

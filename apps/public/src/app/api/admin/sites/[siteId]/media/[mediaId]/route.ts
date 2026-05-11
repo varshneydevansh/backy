@@ -12,7 +12,7 @@ import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { deleteMediaItem, getMediaById, getMediaList, getSiteByIdOrSlug, listMediaFolders, updateMediaItem } from '@/lib/backyStore';
 import { recordSiteCacheInvalidation } from '@/lib/cacheInvalidation';
-import { MediaSafetyError, scanMediaUpload } from '@/lib/mediaSafety';
+import { getMediaSecurityPolicy, MediaSafetyError, scanMediaUpload } from '@/lib/mediaSafety';
 import { getMediaStorageAdapter, getMediaStoragePath, getMediaStoragePathFromMedia } from '@/lib/mediaStorage';
 import {
   deleteGeneratedTransformFiles,
@@ -304,6 +304,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       const body = await parseJsonBody(request);
       const folderId = nullableStringFromBody(body.folderId);
+      const inputMetadata = metadataFromInput(body.metadata);
+      const requestedVisibility = visibilityFromInput(body.visibility);
+      const nextMetadata = inputMetadata
+        ? { ...(beforeMedia.metadata || {}), ...inputMetadata }
+        : beforeMedia.metadata;
+      const nextSecurity = getMediaSecurityPolicy(nextMetadata);
+      const nextVisibility = nextSecurity.status === 'quarantined' ? 'private' : requestedVisibility;
       if (folderId) {
         const folder = await repositories.media.getFolderById(site.id, folderId);
         if (!folder) {
@@ -316,8 +323,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         folderId,
         altText: typeof body.altText === 'string' || body.altText === null ? body.altText : undefined,
         caption: typeof body.caption === 'string' || body.caption === null ? body.caption : undefined,
-        visibility: visibilityFromInput(body.visibility),
-        metadata: metadataFromInput(body.metadata),
+        visibility: nextVisibility,
+        metadata: inputMetadata,
         tags: stringArrayFromInput(body.tags),
       });
       await recordAdminAudit({
@@ -358,6 +365,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const body = await parseJsonBody(request);
     const folderId = nullableStringFromBody(body.folderId);
+    const inputMetadata = metadataFromInput(body.metadata);
+    const requestedVisibility = visibilityFromInput(body.visibility);
+    const nextMetadata = inputMetadata
+      ? { ...(beforeMedia.metadata || {}), ...inputMetadata }
+      : beforeMedia.metadata;
+    const nextSecurity = getMediaSecurityPolicy(nextMetadata);
+    const nextVisibility = nextSecurity.status === 'quarantined' ? 'private' : requestedVisibility;
     if (folderId) {
       const folder = listMediaFolders(site.id).find((item) => item.id === folderId);
       if (!folder) {
@@ -365,7 +379,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    const media = updateMediaItem(site.id, mediaId, body);
+    const media = updateMediaItem(site.id, mediaId, {
+      ...body,
+      ...(nextVisibility ? { visibility: nextVisibility } : {}),
+      ...(inputMetadata ? { metadata: inputMetadata } : {}),
+    });
 
     if (!media) {
       return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media item not found', requestId);

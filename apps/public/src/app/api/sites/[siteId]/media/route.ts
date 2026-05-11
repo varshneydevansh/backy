@@ -9,6 +9,7 @@
 import { NextRequest } from 'next/server';
 import type { MediaItem } from '@backy-cms/core';
 import { getMediaList, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { isMediaQuarantined } from '@/lib/mediaSafety';
 import { withResponsiveMediaManifest } from '@/lib/mediaResponsive';
 import { booleanQueryFlag, mediaMatchesScopeFilters } from '@/lib/mediaScope';
 import { publicContractJson } from '@/lib/publicContractResponse';
@@ -110,7 +111,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             });
             const filtered = result.items
                 .filter((item) => mediaMatchesScopeFilters(item, { scope, pageId, postId, globalOnly }))
-                .filter((item) => mediaTagMatches(item.tags, tag));
+                .filter((item) => mediaTagMatches(item.tags, tag))
+                .filter((item) => !isMediaQuarantined(item));
             const mediaPayload = paginateMedia(site.id, filtered, limit, offset);
             const cacheRevision = await repositories.cacheInvalidations.latestRevision({
                 siteId: site.id,
@@ -151,7 +153,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         });
         const mediaWithVariants = {
             ...mediaPayload,
-            media: mediaPayload.media.map((item) => withResponsiveMediaManifest(site.id, item)),
+            media: mediaPayload.media
+                .filter((item) => !isMediaQuarantined(item))
+                .map((item) => withResponsiveMediaManifest(site.id, item)),
         };
 
         return publicContractJson({

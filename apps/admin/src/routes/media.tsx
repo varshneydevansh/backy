@@ -403,6 +403,7 @@ function MediaPage() {
   const [isUpdatingBinding, setIsUpdatingBinding] = useState(false);
   const [isReplacingAsset, setIsReplacingAsset] = useState(false);
   const [isPreparingTransforms, setIsPreparingTransforms] = useState(false);
+  const [isUpdatingSafety, setIsUpdatingSafety] = useState(false);
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
   const [isDeletingAsset, setIsDeletingAsset] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -496,6 +497,7 @@ function MediaPage() {
     isUpdatingBinding ||
     isReplacingAsset ||
     isPreparingTransforms ||
+    isUpdatingSafety ||
     isBulkUpdating ||
     isDeletingAsset ||
     isCreatingFolder ||
@@ -649,6 +651,10 @@ function MediaPage() {
   );
   const selectedDeliveryAnalytics = useMemo(
     () => getMediaDeliveryAnalytics(selectedAsset?.metadata),
+    [selectedAsset?.metadata],
+  );
+  const selectedMediaSecurity = useMemo(
+    () => getMediaSecurityPolicy(selectedAsset?.metadata),
     [selectedAsset?.metadata],
   );
   const mediaAnalytics = useMemo(() => getMediaAnalytics(files), [files]);
@@ -1340,6 +1346,11 @@ function MediaPage() {
       return;
     }
 
+    if (selectedMediaSecurity.status === 'quarantined') {
+      setAssetDeliveryError('Quarantined media cannot generate signed delivery URLs.');
+      return;
+    }
+
     setIsCreatingSignedUrl(true);
     setAssetDeliveryError(null);
 
@@ -1363,6 +1374,11 @@ function MediaPage() {
       return;
     }
 
+    if (selectedMediaSecurity.status === 'quarantined') {
+      setAssetDeliveryError('Quarantined media cannot prepare image transforms.');
+      return;
+    }
+
     setIsPreparingTransforms(true);
     setAssetDeliveryError(null);
 
@@ -1380,6 +1396,72 @@ function MediaPage() {
       setAssetDeliveryError(prepareError instanceof Error ? prepareError.message : 'Unable to prepare responsive variants.');
     } finally {
       setIsPreparingTransforms(false);
+    }
+  };
+
+  const handleQuarantineAsset = async () => {
+    if (isMediaMutationBusy || !selectedAsset) return;
+
+    setIsUpdatingSafety(true);
+    setAssetDeliveryError(null);
+    setError(null);
+
+    try {
+      const updated = await updateMedia(selectedAsset.id, {
+        visibility: 'private',
+        metadata: {
+          ...selectedAsset.metadata,
+          mediaSecurity: {
+            status: 'quarantined',
+            quarantinedAt: new Date().toISOString(),
+            quarantinedBy: 'admin',
+            reason: 'Manual quarantine from media safety review',
+            previousVisibility: selectedAsset.visibility || 'public',
+          },
+        },
+      }, siteId);
+      applyUpdatedAsset(updated);
+      setMetadataForm((current) => ({ ...current, visibility: 'private' }));
+      setSignedUrl(null);
+      void loadLibrary();
+      void loadAssetAuditLogs(updated.id);
+    } catch (quarantineError) {
+      setError(quarantineError instanceof Error ? quarantineError.message : 'Unable to quarantine media.');
+    } finally {
+      setIsUpdatingSafety(false);
+    }
+  };
+
+  const handleReleaseQuarantine = async () => {
+    if (isMediaMutationBusy || !selectedAsset) return;
+
+    const previousVisibility = selectedMediaSecurity.previousVisibility === 'private' ? 'private' : 'public';
+    setIsUpdatingSafety(true);
+    setAssetDeliveryError(null);
+    setError(null);
+
+    try {
+      const updated = await updateMedia(selectedAsset.id, {
+        visibility: previousVisibility,
+        metadata: {
+          ...selectedAsset.metadata,
+          mediaSecurity: {
+            status: 'clear',
+            clearedAt: new Date().toISOString(),
+            clearedBy: 'admin',
+            previousStatus: 'quarantined',
+          },
+        },
+      }, siteId);
+      applyUpdatedAsset(updated);
+      setMetadataForm((current) => ({ ...current, visibility: updated.visibility || previousVisibility }));
+      setSignedUrl(null);
+      void loadLibrary();
+      void loadAssetAuditLogs(updated.id);
+    } catch (releaseError) {
+      setError(releaseError instanceof Error ? releaseError.message : 'Unable to release media quarantine.');
+    } finally {
+      setIsUpdatingSafety(false);
     }
   };
 
@@ -4022,17 +4104,52 @@ function MediaPage() {
                       Static upload checks for accepted file type, dangerous SVG content, and scanner metadata.
                     </div>
                   </div>
-                  <span
-                    className={cn(
-                      'rounded px-2 py-1 text-xs font-medium',
-                      getSafetyScan(selectedAsset.metadata)?.status === 'clean'
-                        ? 'bg-success/10 text-success'
-                        : 'bg-warning/10 text-warning',
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <span
+                      className={cn(
+                        'rounded px-2 py-1 text-xs font-medium',
+                        selectedMediaSecurity.status === 'quarantined'
+                          ? 'bg-destructive/10 text-destructive'
+                          : getSafetyScan(selectedAsset.metadata)?.status === 'clean'
+                            ? 'bg-success/10 text-success'
+                            : 'bg-warning/10 text-warning',
+                      )}
+                    >
+                      {selectedMediaSecurity.status === 'quarantined'
+                        ? 'Quarantined'
+                        : getSafetyScan(selectedAsset.metadata)?.status === 'clean' ? 'Clean' : 'Not scanned'}
+                    </span>
+                    {selectedMediaSecurity.status === 'quarantined' ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={isMediaMutationBusy}
+                        onClick={() => void handleReleaseQuarantine()}
+                      >
+                        {isUpdatingSafety ? 'Releasing...' : 'Release quarantine'}
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={isMediaMutationBusy}
+                        onClick={() => void handleQuarantineAsset()}
+                      >
+                        {isUpdatingSafety ? 'Quarantining...' : 'Quarantine asset'}
+                      </Button>
                     )}
-                  >
-                    {getSafetyScan(selectedAsset.metadata)?.status === 'clean' ? 'Clean' : 'Not scanned'}
-                  </span>
+                  </div>
                 </div>
+
+                {selectedMediaSecurity.status === 'quarantined' && (
+                  <Notice tone="warning" className="mb-3">
+                    Delivery is blocked for this asset. It was quarantined
+                    {selectedMediaSecurity.quarantinedAt ? ` ${formatAuditDate(selectedMediaSecurity.quarantinedAt)}` : ''}
+                    {selectedMediaSecurity.reason ? `: ${selectedMediaSecurity.reason}` : '.'}
+                  </Notice>
+                )}
 
                 {getSafetyScan(selectedAsset.metadata) ? (
                   <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -4077,7 +4194,11 @@ function MediaPage() {
                       URLs custom frontends can use for this asset without reading admin internals.
                     </div>
                   </div>
-                  {selectedAsset.visibility === 'private' ? (
+                  {selectedMediaSecurity.status === 'quarantined' ? (
+                    <span className="rounded bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive">
+                      Quarantined
+                    </span>
+                  ) : selectedAsset.visibility === 'private' ? (
                     <span className="rounded bg-warning/10 px-2 py-1 text-xs font-medium text-warning">
                       Private asset
                     </span>
@@ -4093,6 +4214,11 @@ function MediaPage() {
                     {assetDeliveryError}
                   </Notice>
                 )}
+                {selectedMediaSecurity.status === 'quarantined' && (
+                  <Notice tone="warning" className="mb-3">
+                    Public files, transforms, and signed URLs are disabled until quarantine is released.
+                  </Notice>
+                )}
 
                 <div className="grid gap-4 lg:grid-cols-2">
                   <div className="rounded-lg border border-border bg-background p-3">
@@ -4103,7 +4229,7 @@ function MediaPage() {
                           Available only when visibility is public.
                         </div>
                       </div>
-                      {selectedAsset.visibility !== 'private' && (
+                      {selectedAsset.visibility !== 'private' && selectedMediaSecurity.status !== 'quarantined' && (
                         <a
                           href={publicFileUrl}
                           target="_blank"
@@ -4120,7 +4246,11 @@ function MediaPage() {
                       value={publicFileUrl}
                       className="min-h-16 w-full resize-none rounded-lg border bg-muted/50 px-3 py-2 font-mono text-xs text-muted-foreground"
                     />
-                    {selectedAsset.visibility === 'private' && (
+                    {selectedMediaSecurity.status === 'quarantined' ? (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Public reads are blocked because this asset is quarantined.
+                      </p>
+                    ) : selectedAsset.visibility === 'private' && (
                       <p className="mt-2 text-xs text-muted-foreground">
                         Public reads are blocked for private files. Generate a temporary signed URL below.
                       </p>
@@ -4162,7 +4292,7 @@ function MediaPage() {
                           type="button"
                           size="sm"
                           variant="outline"
-                          disabled={isMediaMutationBusy}
+                          disabled={isMediaMutationBusy || selectedMediaSecurity.status === 'quarantined'}
                           onClick={() => void handleCreateSignedUrl()}
                           iconStart={<KeyRound className="size-4" />}
                           className="w-full whitespace-nowrap"
@@ -4194,7 +4324,7 @@ function MediaPage() {
                             Public image redirect into the Next image optimizer for generated frontends.
                           </div>
                         </div>
-                        {selectedAsset.visibility !== 'private' && (
+                        {selectedAsset.visibility !== 'private' && selectedMediaSecurity.status !== 'quarantined' && (
                           <a
                             href={publicTransformUrl}
                             target="_blank"
@@ -4235,7 +4365,11 @@ function MediaPage() {
                         value={publicTransformUrl}
                         className="min-h-16 w-full resize-none rounded-lg border bg-muted/50 px-3 py-2 font-mono text-xs text-muted-foreground"
                       />
-                      {selectedAsset.visibility === 'private' && (
+                      {selectedMediaSecurity.status === 'quarantined' ? (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Image transforms are disabled while this asset is quarantined.
+                        </p>
+                      ) : selectedAsset.visibility === 'private' && (
                         <p className="mt-2 text-xs text-muted-foreground">
                           Image transforms only run for public image assets.
                         </p>
@@ -4267,7 +4401,7 @@ function MediaPage() {
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                disabled={isMediaMutationBusy || selectedAsset.visibility === 'private'}
+                                disabled={isMediaMutationBusy || selectedAsset.visibility === 'private' || selectedMediaSecurity.status === 'quarantined'}
                                 onClick={() => void handlePrepareTransforms()}
                               >
                                 {isPreparingTransforms ? 'Preparing...' : 'Prepare variants'}
@@ -4933,6 +5067,14 @@ type MediaSafetyScan = {
   warnings: string[];
 };
 
+type MediaSecurityPolicy = {
+  status: 'clear' | 'quarantined';
+  quarantinedAt?: string;
+  quarantinedBy?: string;
+  reason?: string;
+  previousVisibility?: 'public' | 'private';
+};
+
 const getSafetyScan = (metadata: Record<string, unknown> | undefined): MediaSafetyScan | undefined => {
   const scan = metadata?.safetyScan;
   if (!scan || typeof scan !== 'object' || Array.isArray(scan)) {
@@ -4950,6 +5092,26 @@ const getSafetyScan = (metadata: Record<string, unknown> | undefined): MediaSafe
     scanner: record.scanner,
     checks: Array.isArray(record.checks) ? record.checks.filter((check): check is string => typeof check === 'string') : [],
     warnings: Array.isArray(record.warnings) ? record.warnings.filter((warning): warning is string => typeof warning === 'string') : [],
+  };
+};
+
+const getMediaSecurityPolicy = (metadata: Record<string, unknown> | undefined): MediaSecurityPolicy => {
+  const security = metadata?.mediaSecurity;
+  if (!security || typeof security !== 'object' || Array.isArray(security)) {
+    return { status: 'clear' };
+  }
+
+  const record = security as Record<string, unknown>;
+  if (record.status !== 'quarantined') {
+    return { status: 'clear' };
+  }
+
+  return {
+    status: 'quarantined',
+    previousVisibility: record.previousVisibility === 'private' ? 'private' : 'public',
+    ...(typeof record.quarantinedAt === 'string' ? { quarantinedAt: record.quarantinedAt } : {}),
+    ...(typeof record.quarantinedBy === 'string' ? { quarantinedBy: record.quarantinedBy } : {}),
+    ...(typeof record.reason === 'string' ? { reason: record.reason } : {}),
   };
 };
 

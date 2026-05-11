@@ -10,6 +10,14 @@ export type MediaSafetyScan = {
   deliveryPolicy: 'inline-ok' | 'attachment-only';
 };
 
+export type MediaSecurityPolicy = {
+  status: 'clear' | 'quarantined';
+  quarantinedAt?: string;
+  quarantinedBy?: string;
+  reason?: string;
+  previousVisibility?: MediaItem['visibility'];
+};
+
 export class MediaSafetyError extends Error {
   code = 'MEDIA_SAFETY_SCAN_FAILED';
   details: Record<string, unknown>;
@@ -67,6 +75,35 @@ export const requiresAttachmentDelivery = (input: {
   const extension = extname(input.originalName || input.filename || '').toLowerCase();
   const mimeType = (input.mimeType || '').trim().toLowerCase().split(';')[0];
   return ACTIVE_WEB_CONTENT_EXTENSIONS.has(extension) || ACTIVE_WEB_CONTENT_MIME_TYPES.has(mimeType);
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+export const getMediaSecurityPolicy = (metadata: unknown): MediaSecurityPolicy => {
+  if (!isRecord(metadata) || !isRecord(metadata.mediaSecurity)) {
+    return { status: 'clear' };
+  }
+
+  const record = metadata.mediaSecurity;
+  if (record.status !== 'quarantined') {
+    return { status: 'clear' };
+  }
+
+  const previousVisibility = record.previousVisibility === 'private' ? 'private' : 'public';
+  return {
+    status: 'quarantined',
+    previousVisibility,
+    ...(typeof record.quarantinedAt === 'string' ? { quarantinedAt: record.quarantinedAt } : {}),
+    ...(typeof record.quarantinedBy === 'string' ? { quarantinedBy: record.quarantinedBy } : {}),
+    ...(typeof record.reason === 'string' ? { reason: record.reason } : {}),
+  };
+};
+
+export const isMediaQuarantined = (input: { metadata?: unknown } | unknown): boolean => {
+  const metadata = isRecord(input) && 'metadata' in input ? input.metadata : input;
+  return getMediaSecurityPolicy(metadata).status === 'quarantined';
 };
 
 export const scanMediaUpload = (input: {

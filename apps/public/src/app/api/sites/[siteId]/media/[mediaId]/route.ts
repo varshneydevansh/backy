@@ -6,6 +6,7 @@
 
 import { NextRequest } from 'next/server';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { isMediaQuarantined } from '@/lib/mediaSafety';
 import { withResponsiveMediaManifest } from '@/lib/mediaResponsive';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
       const media = await repositories.media.getById(site.id, mediaId);
 
-      if (!media || media.visibility !== 'public') {
+      if (!media || media.visibility !== 'public' || isMediaQuarantined(media)) {
         return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media not found', requestId);
       }
       const cacheRevision = await repositories.cacheInvalidations.latestRevision({
@@ -83,7 +84,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const media = getMediaById(site.id, mediaId);
 
-    if (!media || media.visibility !== 'public') {
+    if (!media || media.visibility !== 'public' || isMediaQuarantined(media)) {
       return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media not found', requestId);
     }
 
