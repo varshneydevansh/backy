@@ -248,6 +248,7 @@ Public page payload should include:
   - Validation/spam rejection returns `422` with `{ success: false, requestId, error: { code: "VALIDATION_ERROR", message }, validation: [{ field, code, message, label? }], spamFlags, status, message }`. Field validation codes include required/min/max length, pattern, email/URL, option, collection-write, and record-create failures.
   - Canvas-derived form definitions may include `collectionTarget: { enabled, collectionId, fieldMap, slugField }`.
   - When enabled, accepted non-spam submissions also create a `draft` collection record after `permissions.publicCreate` and collection schema validation pass. The response includes `collectionRecord` and `collectionRecordErrors`, and listed submissions retain a lightweight `collectionRecord` link for admin moderation shortcuts.
+  - When `notificationEmail` is configured and Settings notifications allow form submissions, accepted non-spam submissions record email delivery events under `GET /api/sites/:siteId/events?kind=form-submission&formId=:formId`. If `BACKY_EMAIL_DELIVERY_ENDPOINT` or `BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL` is configured, Backy posts the transactional email payload to that endpoint; otherwise it records a `local-outbox` handoff event with `metadata.channel: "email"` and status code `202`.
 
 - `POST /api/sites/:siteId/pages/:pageId/comments`
 - `POST /api/public/sites/:siteId/pages/:pageId/comments` (optional alias)
@@ -471,6 +472,7 @@ Current reusable-section endpoints persist to `data/backy/admin-content.json` in
 - `POST /api/admin/sites/:siteId/forms/:formId/submissions/:submissionId/webhook-retry`
   - status transitions `pending|approved|rejected|spam`
   - Webhook retry replays the configured form submission webhook for non-spam/non-rejected submissions, returns `{ success, requestId, data: { delivery, submission } }`, and records retry queued/succeeded/failed interaction events with `x-backy-webhook-retry`.
+  - Form notification email events use the same interaction-event feed with `metadata.channel: "email"` and are displayed in the Forms delivery panel; failed email-provider delivery is not replayed by the webhook retry endpoint.
   - Form creation accepts `frontendDesignTemplateId` or `designTemplateId`; when it points to a captured `form` template, Backy seeds fields/settings and stores design provenance in `settings.frontendDesign*`.
 
 ### 3.6 Comments

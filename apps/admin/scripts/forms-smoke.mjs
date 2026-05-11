@@ -930,8 +930,9 @@ const waitForWebhookDelivery = async (receiver, formId, submission, expectedStat
     }
     const payload = await requestApi(`/api/sites/${SITE_ID}/events?${query.toString()}`);
     const events = payload.data?.events || payload.events || [];
-    const queued = events.find((event) => event.status === 'queued' && event.submissionId === submission.id);
-    const completed = events.find((event) => event.status === expectedStatus && event.submissionId === submission.id);
+    const webhookEvents = events.filter((event) => event.metadata?.channel !== 'email');
+    const queued = webhookEvents.find((event) => event.status === 'queued' && event.submissionId === submission.id);
+    const completed = webhookEvents.find((event) => event.status === expectedStatus && event.submissionId === submission.id);
 
     if (delivery && queued && completed) {
       assert(
@@ -948,7 +949,7 @@ const waitForWebhookDelivery = async (receiver, formId, submission, expectedStat
       }
       return {
         delivery,
-        events,
+        events: webhookEvents,
       };
     }
 
@@ -958,6 +959,46 @@ const waitForWebhookDelivery = async (receiver, formId, submission, expectedStat
   throw new Error(`Webhook delivery did not complete for ${submission.id}: ${JSON.stringify(receiver.deliveries.slice(-5))}`);
 };
 
+const waitForEmailNotification = async (formId, submission) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const payload = await requestApi(`/api/sites/${SITE_ID}/events?kind=form-submission&formId=${encodeURIComponent(formId)}&requestId=${encodeURIComponent(submission.requestId)}&limit=50`);
+    const events = payload.data?.events || payload.events || [];
+    const emailEvents = events.filter((event) => event.submissionId === submission.id && event.metadata?.channel === 'email');
+    const queued = emailEvents.find((event) => event.status === 'queued');
+    const completed = emailEvents.find((event) => event.status === 'succeeded');
+
+    if (queued && completed) {
+      assert(completed.target === 'mailto:forms-smoke-leads@example.com', `Email notification target mismatch: ${JSON.stringify(completed)}`);
+      assert(completed.metadata?.provider === 'local-outbox', `Email notification provider mismatch: ${JSON.stringify(completed)}`);
+      assert(completed.metadata?.outboxOnly === true, `Email notification did not record local outbox handoff: ${JSON.stringify(completed)}`);
+      assert(Number(completed.statusCode) === 202, `Email notification did not record accepted status: ${JSON.stringify(completed)}`);
+      return {
+        delivery: completed,
+        events: emailEvents,
+      };
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Email notification events did not complete for ${submission.id}`);
+};
+
+const assertDeliveryPanelShowsEmail = async (client, submissionId) => {
+  const result = await evaluate(client, `(() => {
+    const panel = document.querySelector('[data-testid="forms-webhook-delivery-panel"]');
+    const text = panel?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+    return {
+      ok: Boolean(panel) &&
+        text.includes(${JSON.stringify(submissionId)}) &&
+        text.includes('email') &&
+        text.includes('mailto:forms-smoke-leads@example.com'),
+      text: text.slice(0, 800),
+    };
+  })()`);
+  assert(result.ok, `Delivery panel did not render email notification event: ${JSON.stringify(result)}`);
+};
+
 const retryWebhookDeliveryInUi = async (client, formId, submission) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
@@ -965,7 +1006,9 @@ const retryWebhookDeliveryInUi = async (client, formId, submission) => {
       const panel = document.querySelector('[data-testid="forms-webhook-delivery-panel"]');
       const button = panel
         ? Array.from(panel.querySelectorAll('button')).find((candidate) => (
-          (candidate.getAttribute('aria-label') || '') === 'Retry webhook delivery ' + submissionId
+          (candidate.getAttribute('aria-label') || '') === 'Retry webhook delivery ' + submissionId &&
+          candidate instanceof HTMLButtonElement &&
+          !candidate.disabled
         ))
         : null;
       if (button instanceof HTMLButtonElement && !button.disabled) {
@@ -1152,6 +1195,7 @@ const main = async () => {
   let webhookFailure = null;
   let webhookRetry = null;
   let webhookDelivery = null;
+  let emailDelivery = null;
 
   try {
     await waitForCdp();
@@ -1218,7 +1262,9 @@ const main = async () => {
     const invalidSubmission = await submitInvalidRegistration(createdFormId);
     const submitted = await submitRegistration(createdFormId);
     webhookFailure = await waitForWebhookDelivery(webhookReceiver, createdFormId, submitted, 'failed');
+    emailDelivery = await waitForEmailNotification(createdFormId, submitted);
     await refreshForms(client);
+    await assertDeliveryPanelShowsEmail(client, submitted.id);
     webhookRetry = await retryWebhookDeliveryInUi(client, createdFormId, submitted);
     webhookDelivery = await waitForWebhookDelivery(webhookReceiver, createdFormId, submitted, 'succeeded', webhookRetry.delivery.requestId);
     const records = await listCollectionRecords(smokeCollection.id);
@@ -1275,6 +1321,12 @@ const main = async () => {
         initialEventStatuses: webhookFailure.events.map((event) => event.status),
         retryEventStatuses: webhookDelivery.events.map((event) => event.status),
         retryStatusCode: webhookRetry.delivery.statusCode,
+      },
+      email: {
+        target: emailDelivery.delivery.target,
+        provider: emailDelivery.delivery.metadata?.provider,
+        statusCode: emailDelivery.delivery.statusCode,
+        eventStatuses: emailDelivery.events.map((event) => event.status),
       },
       collectionRecord: {
         id: createdRecord.id,

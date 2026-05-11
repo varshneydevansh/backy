@@ -2858,7 +2858,7 @@ function FormsRoute() {
                           Webhook delivery
                         </div>
                         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                          Review queued, failed, and retried form webhook deliveries without leaving the form workspace.
+                          Review queued, failed, retried, and email notification deliveries without leaving the form workspace.
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -3099,8 +3099,10 @@ function FormDeliveryEventCard({
   isRetrying: boolean;
   onRetry: () => void;
 }) {
-  const retryable = event.status === 'failed' && Boolean(event.submissionId);
+  const channel = typeof event.metadata?.channel === 'string' ? event.metadata.channel : 'webhook';
+  const retryable = event.status === 'failed' && channel !== 'email' && Boolean(event.submissionId);
   const isRetryEvent = event.metadata?.retry === true;
+  const actionLabel = channel === 'email' ? 'Email' : isRetrying ? 'Retrying' : 'Retry';
   const statusClass = event.status === 'succeeded'
     ? 'bg-success/10 text-success'
     : event.status === 'failed'
@@ -3118,6 +3120,11 @@ function FormDeliveryEventCard({
             {isRetryEvent && (
               <span className="rounded-md bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary">
                 retry
+              </span>
+            )}
+            {channel === 'email' && (
+              <span className="rounded-md bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+                email
               </span>
             )}
             {typeof event.statusCode === 'number' && (
@@ -3152,10 +3159,12 @@ function FormDeliveryEventCard({
           disabled={!retryable || isRetrying}
           onClick={onRetry}
           iconStart={<RefreshCw className={cn('size-4', isRetrying && 'animate-spin')} />}
-          aria-label={`Retry webhook delivery ${event.submissionId || event.id}`}
+          aria-label={channel === 'email'
+            ? `Email notification delivery ${event.submissionId || event.id}`
+            : `Retry webhook delivery ${event.submissionId || event.id}`}
           data-testid="forms-webhook-retry-button"
         >
-          {isRetrying ? 'Retrying' : 'Retry'}
+          {actionLabel}
         </Button>
       </div>
     </div>

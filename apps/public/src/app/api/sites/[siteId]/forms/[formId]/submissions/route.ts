@@ -5,6 +5,7 @@ import {
   buildContactShareFromSubmission,
   createCollectionRecordFromFormSubmission,
   createFormSubmission,
+  getAdminSettings,
   listFormSubmissions,
   getFormById,
   getSiteByIdOrSlug,
@@ -39,6 +40,7 @@ const SUBMISSION_STATUSES = ['pending', 'approved', 'rejected', 'spam'] as const
 type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
 type FormRepositories = Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>;
 type WebhookEventKind = 'form-submission' | 'contact-shared' | 'contact-status';
+type NotificationDeliveryStatus = 'queued' | 'succeeded' | 'failed';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -208,6 +210,18 @@ const toJsonRecord = (value: Record<string, unknown>): Record<string, BackyJsonV
   value as Record<string, BackyJsonValue>
 );
 
+const isObjectRecord = (value: unknown): value is Record<string, unknown> => (
+  Boolean(value && typeof value === 'object' && !Array.isArray(value))
+);
+
+const readObject = (value: unknown): Record<string, unknown> => (
+  isObjectRecord(value) ? value : {}
+);
+
+const readString = (value: unknown): string => (
+  typeof value === 'string' ? value.trim() : ''
+);
+
 async function recordWebhookDeliveryEvent(params: {
   repositories?: FormRepositories | null;
   kind: WebhookEventKind;
@@ -246,6 +260,189 @@ async function recordWebhookDeliveryEvent(params: {
   }
 
   trackWebhookEvent(event);
+}
+
+async function getNotificationSettings(repositories?: FormRepositories | null): Promise<Record<string, unknown>> {
+  if (repositories) {
+    const settings = await repositories.settings.get();
+    return readObject(readObject(settings.integrations).notifications);
+  }
+
+  return readObject(readObject(getAdminSettings().integrations).notifications);
+}
+
+const formSubmissionEmailEnabled = (notifications: Record<string, unknown>): boolean => {
+  const email = readObject(notifications.email);
+  const digestFrequency = readString(notifications.digestFrequency);
+  return email.formSubmission !== false && digestFrequency !== 'off';
+};
+
+const getEmailDeliveryEndpoint = () => (
+  process.env.BACKY_EMAIL_DELIVERY_ENDPOINT ||
+  process.env.BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL ||
+  ''
+).trim();
+
+const summarizeValuesForEmail = (values: Record<string, unknown>): string => (
+  Object.entries(values)
+    .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : String(value ?? '')}`)
+    .join('\n')
+);
+
+async function recordEmailDeliveryEvent(params: {
+  repositories?: FormRepositories | null;
+  siteId: string;
+  formId: string;
+  submissionId: string;
+  target: string;
+  status: NotificationDeliveryStatus;
+  requestId: string;
+  statusCode?: number;
+  error?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  await recordWebhookDeliveryEvent({
+    repositories: params.repositories,
+    kind: 'form-submission',
+    siteId: params.siteId,
+    formId: params.formId,
+    target: params.target,
+    status: params.status,
+    requestId: params.requestId,
+    submissionId: params.submissionId,
+    statusCode: params.statusCode,
+    error: params.error,
+    metadata: {
+      channel: 'email',
+      ...(params.metadata || {}),
+    },
+  });
+}
+
+async function notifyFormSubmissionEmail(params: {
+  repositories?: FormRepositories | null;
+  siteId: string;
+  form: FormDefinition;
+  submission: FormSubmission;
+  values: Record<string, unknown>;
+  requestId: string;
+}) {
+  const to = readString(params.form.notificationEmail);
+  if (!to || params.submission.status === 'spam' || params.submission.status === 'rejected') {
+    return;
+  }
+
+  const notifications = await getNotificationSettings(params.repositories);
+  if (!formSubmissionEmailEnabled(notifications)) {
+    return;
+  }
+
+  const target = `mailto:${to}`;
+  const endpoint = getEmailDeliveryEndpoint();
+  const provider = endpoint ? 'http-endpoint' : 'local-outbox';
+  const subject = `New ${params.form.title || params.form.name || 'form'} submission`;
+  const text = [
+    `Backy received a new form submission for ${params.form.title || params.form.name || params.form.id}.`,
+    '',
+    `Site: ${params.siteId}`,
+    `Form: ${params.form.id}`,
+    `Submission: ${params.submission.id}`,
+    `Status: ${params.submission.status}`,
+    `Request: ${params.requestId}`,
+    '',
+    summarizeValuesForEmail(params.values),
+  ].join('\n');
+
+  await recordEmailDeliveryEvent({
+    repositories: params.repositories,
+    siteId: params.siteId,
+    formId: params.form.id,
+    submissionId: params.submission.id,
+    target,
+    status: 'queued',
+    requestId: params.requestId,
+    metadata: {
+      provider,
+      submissionStatus: params.submission.status,
+    },
+  });
+
+  if (!endpoint) {
+    await recordEmailDeliveryEvent({
+      repositories: params.repositories,
+      siteId: params.siteId,
+      formId: params.form.id,
+      submissionId: params.submission.id,
+      target,
+      status: 'succeeded',
+      statusCode: 202,
+      requestId: params.requestId,
+      metadata: {
+        provider,
+        subject,
+        outboxOnly: true,
+        submissionStatus: params.submission.status,
+      },
+    });
+    return;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-backy-site-id': params.siteId,
+        'x-backy-form-id': params.form.id,
+        'x-backy-submission-id': params.submission.id,
+        'x-backy-notification-channel': 'email',
+      },
+      body: JSON.stringify({
+        to,
+        subject,
+        text,
+        siteId: params.siteId,
+        formId: params.form.id,
+        submissionId: params.submission.id,
+        status: params.submission.status,
+        requestId: params.requestId,
+        values: params.submission.values || params.values,
+      }),
+    });
+
+    await recordEmailDeliveryEvent({
+      repositories: params.repositories,
+      siteId: params.siteId,
+      formId: params.form.id,
+      submissionId: params.submission.id,
+      target,
+      status: response.ok ? 'succeeded' : 'failed',
+      statusCode: response.status,
+      requestId: params.requestId,
+      error: response.ok ? undefined : `Email endpoint returned ${response.status}`,
+      metadata: {
+        provider,
+        subject,
+        submissionStatus: params.submission.status,
+      },
+    });
+  } catch (error) {
+    await recordEmailDeliveryEvent({
+      repositories: params.repositories,
+      siteId: params.siteId,
+      formId: params.form.id,
+      submissionId: params.submission.id,
+      target,
+      status: 'failed',
+      requestId: params.requestId,
+      error: error instanceof Error ? error.message : 'Unknown email delivery error',
+      metadata: {
+        provider,
+        subject,
+        submissionStatus: params.submission.status,
+      },
+    });
+  }
 }
 
 const parseShareValue = (values: Record<string, unknown>, field?: string): string | null => {
@@ -786,6 +983,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
         contact,
       });
+      await notifyFormSubmissionEmail({
+        repositories,
+        siteId: site.id,
+        form,
+        submission,
+        values: parsed.values,
+        requestId,
+      });
 
       return privateResponse(
         {
@@ -913,6 +1118,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       postId: parsed.postId,
       requestId,
       contact,
+    });
+    await notifyFormSubmissionEmail({
+      siteId: site.id,
+      form,
+      submission,
+      values: parsed.values,
+      requestId,
     });
 
     return privateResponse(
