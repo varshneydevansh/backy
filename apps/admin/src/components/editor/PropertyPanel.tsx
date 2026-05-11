@@ -557,14 +557,31 @@ export function PropertyPanel({
         isOpen={isMediaLibraryOpen}
         onClose={() => setIsMediaLibraryOpen(false)}
         onSelect={(media) => {
+          const nextProps = {
+            ...element.props,
+            [mediaField]: media.url,
+            mediaId: media.id,
+            mediaScope: media.scope || mediaContext?.scope || 'global',
+            mediaScopeTargetId: media.scopeTargetId || mediaContext?.targetId || null,
+          };
+
+          if (mediaField === 'src' && element.type === 'image') {
+            const currentAlt = typeof element.props.alt === 'string' ? element.props.alt.trim() : '';
+            const currentTitle = typeof element.props.title === 'string' ? element.props.title.trim() : '';
+            const mediaAlt = typeof media.altText === 'string' ? media.altText.trim() : '';
+            const mediaCaption = typeof media.caption === 'string' ? media.caption.trim() : '';
+
+            if (!currentAlt && mediaAlt) {
+              nextProps.alt = mediaAlt;
+            }
+
+            if (!currentTitle && mediaCaption) {
+              nextProps.title = mediaCaption;
+            }
+          }
+
           guardedOnChange({
-            props: {
-              ...element.props,
-              [mediaField]: media.url,
-              mediaId: media.id,
-              mediaScope: media.scope || mediaContext?.scope || 'global',
-              mediaScopeTargetId: media.scopeTargetId || mediaContext?.targetId || null,
-            },
+            props: nextProps,
           });
         }}
         initialTab={mediaOpenTab}
