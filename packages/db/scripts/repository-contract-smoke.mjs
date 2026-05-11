@@ -480,10 +480,51 @@ const createFakeDb = () => {
     };
   };
 
+  const camelCaseColumnName = (name) => name.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+
+  const readEqualities = (condition, equalities = []) => {
+    const chunks = condition?.queryChunks;
+    if (!Array.isArray(chunks)) {
+      return equalities;
+    }
+
+    for (let index = 0; index < chunks.length; index += 1) {
+      const chunk = chunks[index];
+      if (Array.isArray(chunk?.queryChunks)) {
+        readEqualities(chunk, equalities);
+        continue;
+      }
+
+      const operator = chunks[index + 1];
+      const param = chunks[index + 2];
+      if (
+        typeof chunk?.name === 'string'
+        && Array.isArray(operator?.value)
+        && operator.value.join('') === ' = '
+        && param?.constructor?.name === 'Param'
+      ) {
+        equalities.push([camelCaseColumnName(chunk.name), param.value]);
+      }
+    }
+
+    return equalities;
+  };
+
+  const matchesCondition = (row, condition) => {
+    const equalities = readEqualities(condition);
+    if (!equalities.length) {
+      return true;
+    }
+    return equalities.every(([key, value]) => row[key] === value);
+  };
+
   const queryFor = (name) => {
     let rows = [...state[name]];
     const query = {
-      where: () => query,
+      where: (condition) => {
+        rows = rows.filter((row) => matchesCondition(row, condition));
+        return query;
+      },
       orderBy: () => query,
       limit: (limit) => {
         rows = rows.slice(0, limit);
@@ -515,26 +556,30 @@ const createFakeDb = () => {
     }),
     update: (table) => ({
       set: (values) => ({
-        where: () => ({
+        where: (condition) => ({
           returning: async () => {
             const name = tableName(table);
-            const current = state[name][0];
-            if (!current) {
-              return [];
-            }
-            const updated = {
-              ...current,
-              ...values,
-            };
-            state[name][0] = updated;
-            return [updated];
+            const updatedRows = [];
+            state[name] = state[name].map((row) => {
+              if (!matchesCondition(row, condition)) {
+                return row;
+              }
+              const updated = {
+                ...row,
+                ...values,
+              };
+              updatedRows.push(updated);
+              return updated;
+            });
+            return updatedRows;
           },
         }),
       }),
     }),
     delete: (table) => ({
-      where: async () => {
-        state[tableName(table)].shift();
+      where: async (condition) => {
+        const name = tableName(table);
+        state[name] = state[name].filter((row) => !matchesCondition(row, condition));
       },
     }),
   };
@@ -976,6 +1021,94 @@ assert((await formRepository.listContacts({ siteId: site.id, formId: form.id, re
 const qualifiedContact = (await formRepository.updateContact(site.id, contact.id, { status: 'qualified' })).item;
 assert(qualifiedContact.status === 'qualified', 'Expected contact update');
 assert((await formRepository.getContactById(site.id, form.id, contact.id))?.status === 'qualified', 'Expected contact getById');
+
+const duplicateContact = (await formRepository.createContact({
+  siteId: site.id,
+  formId: form.id,
+  pageId: publishedPage.id,
+  postId: null,
+  name: 'Reader Duplicate',
+  email: 'reader@example.com',
+  phone: '+15555550123',
+  notes: 'Second lead from same person',
+  sourceValues: {
+    email: 'reader@example.com',
+    message: 'Follow-up from duplicate lead',
+    consent: true,
+    segment: 'qualified',
+  },
+  status: 'contacted',
+  sourceSubmissionId: approvedSubmission.id,
+  requestId: 'req_contact_duplicate',
+  sourceIpHash: 'duplicate_ip_hash',
+})).item;
+const unrelatedContact = (await formRepository.createContact({
+  siteId: site.id,
+  formId: form.id,
+  pageId: publishedPage.id,
+  postId: null,
+  name: 'Other Reader',
+  email: 'other.reader@example.com',
+  phone: null,
+  notes: 'Separate lead',
+  sourceValues: {
+    email: 'other.reader@example.com',
+    consent: true,
+  },
+  status: 'new',
+  sourceSubmissionId: null,
+  requestId: 'req_contact_other',
+  sourceIpHash: 'other_ip_hash',
+})).item;
+assert((await formRepository.listContacts({ siteId: site.id, formId: form.id, status: 'contacted' })).items.map((item) => item.id).includes(duplicateContact.id), 'Expected contact status filter');
+assert((await formRepository.listContacts({ siteId: site.id, formId: form.id, search: 'duplicate' })).items.map((item) => item.id).includes(duplicateContact.id), 'Expected contact search filter');
+assert((await formRepository.getContactById(site.id, form.id, unrelatedContact.id))?.email === 'other.reader@example.com', 'Expected contact getById to honor contact id');
+
+const promotedContact = (await formRepository.updateContact(site.id, duplicateContact.id, {
+  status: 'qualified',
+  notes: 'Merged duplicate into primary contact',
+  sourceValues: {
+    ...duplicateContact.sourceValues,
+    __backyMerge: {
+      primaryContactId: duplicateContact.id,
+      mergedDuplicateIds: [contact.id],
+      mergedAt: '2030-01-02T03:04:05.000Z',
+    },
+    __backyPromotion: {
+      userId: 'user_promoted_reader',
+      email: 'reader@example.com',
+      status: 'invited',
+      promotedAt: '2030-01-02T03:04:05.000Z',
+    },
+    __backyCustomerPromotion: {
+      collectionId: 'collection_customers',
+      recordId: 'record_reader',
+      promotedAt: '2030-01-02T03:04:05.000Z',
+    },
+  },
+})).item;
+const archivedMergedContact = (await formRepository.updateContact(site.id, contact.id, {
+  status: 'archived',
+  notes: 'Merged into reader@example.com primary contact',
+})).item;
+assert(promotedContact.id === duplicateContact.id && promotedContact.sourceValues?.__backyPromotion?.userId === 'user_promoted_reader', 'Expected promotion metadata to persist on exact contact');
+assert(archivedMergedContact.id === contact.id && archivedMergedContact.status === 'archived', 'Expected duplicate merge to archive exact contact');
+assert((await formRepository.getContactById(site.id, form.id, contact.id))?.notes?.includes('Merged into'), 'Expected archived duplicate notes to persist');
+
+const retainedContact = (await formRepository.updateContact(site.id, unrelatedContact.id, {
+  sourceIpHash: null,
+  sourceValues: {
+    ...unrelatedContact.sourceValues,
+    consent: null,
+    __backyConsentRetention: {
+      appliedAt: '2030-01-03T04:05:06.000Z',
+      retentionDays: 30,
+      deleteAfterDays: 365,
+    },
+  },
+})).item;
+assert(retainedContact.id === unrelatedContact.id && retainedContact.sourceIpHash === null, 'Expected contact consent retention to clear source IP hash');
+assert(retainedContact.sourceValues?.consent === null && retainedContact.sourceValues?.__backyConsentRetention?.retentionDays === 30, 'Expected contact consent retention metadata to persist');
 assert(await formRepository.delete(site.id, form.id), 'Expected form delete');
 
 const rootComment = (await commentRepository.create({
@@ -1064,6 +1197,57 @@ assert((await auditLogRepository.list({
   action: 'comment-status',
   requestId: 'req_audit_contract',
 })).items.length === 1, 'Expected audit log filters');
+const contactPromotionAuditEntry = await auditLogRepository.record({
+  siteId: site.id,
+  teamId: site.teamId,
+  actorId: 'user_admin',
+  entity: 'contact',
+  entityId: promotedContact.id,
+  action: 'contact.promote.user',
+  before: {
+    status: 'contacted',
+  },
+  after: {
+    status: promotedContact.status,
+    userId: promotedContact.sourceValues.__backyPromotion.userId,
+  },
+  metadata: {
+    requestId: 'req_contact_promotion_audit',
+  },
+  requestId: 'req_contact_promotion_audit',
+});
+assert(contactPromotionAuditEntry.entity === 'contact' && contactPromotionAuditEntry.action === 'contact.promote.user', 'Expected contact promotion audit mapping');
+assert((await auditLogRepository.list({
+  siteId: site.id,
+  entity: 'contact',
+  entityId: promotedContact.id,
+  action: 'contact.promote.user',
+  requestId: 'req_contact_promotion_audit',
+})).items.length === 1, 'Expected contact promotion audit filters');
+const contactRetentionAuditEntry = await auditLogRepository.record({
+  siteId: site.id,
+  teamId: site.teamId,
+  actorId: 'user_admin',
+  entity: 'contact',
+  entityId: retainedContact.id,
+  action: 'contact.consentRetention',
+  after: {
+    sourceIpHash: retainedContact.sourceIpHash,
+    retentionDays: retainedContact.sourceValues.__backyConsentRetention.retentionDays,
+  },
+  metadata: {
+    requestId: 'req_contact_retention_audit',
+  },
+  requestId: 'req_contact_retention_audit',
+});
+assert(contactRetentionAuditEntry.entity === 'contact' && contactRetentionAuditEntry.action === 'contact.consentRetention', 'Expected contact retention audit mapping');
+assert((await auditLogRepository.list({
+  siteId: site.id,
+  entity: 'contact',
+  entityId: retainedContact.id,
+  action: 'contact.consentRetention',
+  requestId: 'req_contact_retention_audit',
+})).items.length === 1, 'Expected contact retention audit filters');
 
 const cacheInvalidation = await cacheInvalidationRepository.record({
   siteId: site.id,
