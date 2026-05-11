@@ -3729,6 +3729,8 @@ try {
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/frontend-design`]?.get, `${publicOpenApi.url} missing frontend design operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/render`]?.get, `${publicOpenApi.url} missing render operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/seo`]?.get, `${publicOpenApi.url} missing SEO discovery operation`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/pages`]?.get, `${publicOpenApi.url} missing public pages operation`);
+      assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/blog`]?.get, `${publicOpenApi.url} missing public blog operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/media/{mediaId}`]?.get, `${publicOpenApi.url} missing media detail operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/media/{mediaId}/file`]?.get, `${publicOpenApi.url} missing media file operation`);
       assert(publicOpenApi.json?.paths?.[`/api/sites/${createdSiteId}/media/{mediaId}/transform`]?.get, `${publicOpenApi.url} missing media transform operation`);
@@ -3751,6 +3753,10 @@ try {
       assert(publicOpenApi.json?.components?.schemas?.FormSubmissionEnvelope, `${publicOpenApi.url} missing form submission schema`);
       assert(publicOpenApi.json?.components?.schemas?.FormDefinitionEnvelope, `${publicOpenApi.url} missing form definition schema`);
       assert(publicOpenApi.json?.components?.schemas?.FormDefinition?.properties?.frontendDesign?.$ref === '#/components/schemas/ReusableSectionFrontendDesign', `${publicOpenApi.url} missing form frontend design schema`);
+      assert(publicOpenApi.json?.components?.schemas?.PageResource?.properties?.frontendDesign?.$ref === '#/components/schemas/ReusableSectionFrontendDesign', `${publicOpenApi.url} missing page frontend design schema`);
+      assert(publicOpenApi.json?.components?.schemas?.BlogPostResource?.properties?.frontendDesign?.$ref === '#/components/schemas/ReusableSectionFrontendDesign', `${publicOpenApi.url} missing blog post frontend design schema`);
+      assert(publicOpenApi.json?.components?.schemas?.PageListEnvelope?.properties?.data?.properties?.pages?.items?.$ref === '#/components/schemas/PageResource', `${publicOpenApi.url} missing page list resource schema`);
+      assert(publicOpenApi.json?.components?.schemas?.BlogPostListEnvelope?.properties?.data?.properties?.posts?.items?.$ref === '#/components/schemas/BlogPostResource', `${publicOpenApi.url} missing blog list resource schema`);
       assert(publicOpenApi.json?.components?.schemas?.FrontendDesignEnvelope?.properties?.data?.properties?.frontendDesign?.$ref === '#/components/schemas/FrontendDesignContract', `${publicOpenApi.url} missing frontend design envelope schema`);
       assert(publicOpenApi.json?.components?.schemas?.FrontendDesignTemplate?.properties?.bindingHints, `${publicOpenApi.url} missing frontend design template binding schema`);
       assert(publicOpenApi.json?.components?.schemas?.SeoDiscoveryEnvelope, `${publicOpenApi.url} missing SEO discovery schema`);

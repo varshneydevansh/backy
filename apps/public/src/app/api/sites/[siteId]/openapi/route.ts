@@ -298,6 +298,75 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
           },
         },
+        [`/api/sites/${site.id}/pages`]: {
+          get: {
+            tags: ['Content'],
+            summary: 'List public pages or fetch one page by slug/path',
+            operationId: 'listBackyPages',
+            parameters: [
+              queryParameter('slug', { type: 'string' }, 'Return one public page by slug'),
+              queryParameter('path', { type: 'string' }, 'Return one public page by path'),
+              queryParameter('previewToken', { type: 'string' }, 'Preview an unpublished page when the token is valid'),
+              queryParameter('limit', { type: 'integer', minimum: 1, maximum: 100 }, 'Page size'),
+              queryParameter('offset', { type: 'integer', minimum: 0 }, 'Page offset'),
+            ],
+            responses: {
+              '200': {
+                description: 'Public page list or page detail',
+                content: {
+                  'application/json': {
+                    schema: {
+                      oneOf: [
+                        { $ref: '#/components/schemas/PageListEnvelope' },
+                        { $ref: '#/components/schemas/PageEnvelope' },
+                      ],
+                    },
+                  },
+                },
+              },
+              '404': {
+                description: 'Page not found',
+              },
+            },
+          },
+        },
+        [`/api/sites/${site.id}/blog`]: {
+          get: {
+            tags: ['Content'],
+            summary: 'List public blog posts or fetch one post by slug',
+            operationId: 'listBackyBlogPosts',
+            parameters: [
+              queryParameter('slug', { type: 'string' }, 'Return one public blog post by slug'),
+              queryParameter('previewToken', { type: 'string' }, 'Preview an unpublished post when the token is valid'),
+              queryParameter('categoryId', { type: 'string' }, 'Filter posts by category id'),
+              queryParameter('categorySlug', { type: 'string' }, 'Filter posts by category slug'),
+              queryParameter('tagId', { type: 'string' }, 'Filter posts by tag id'),
+              queryParameter('tagSlug', { type: 'string' }, 'Filter posts by tag slug'),
+              queryParameter('authorId', { type: 'string' }, 'Filter posts by author id'),
+              queryParameter('authorSlug', { type: 'string' }, 'Filter posts by author slug'),
+              queryParameter('limit', { type: 'integer', minimum: 1, maximum: 100 }, 'Page size'),
+              queryParameter('offset', { type: 'integer', minimum: 0 }, 'Page offset'),
+            ],
+            responses: {
+              '200': {
+                description: 'Public blog list or post detail',
+                content: {
+                  'application/json': {
+                    schema: {
+                      oneOf: [
+                        { $ref: '#/components/schemas/BlogPostListEnvelope' },
+                        { $ref: '#/components/schemas/BlogPostEnvelope' },
+                      ],
+                    },
+                  },
+                },
+              },
+              '404': {
+                description: 'Post not found',
+              },
+            },
+          },
+        },
         [`/api/sites/${site.id}/media`]: {
           get: {
             tags: ['Media'],
@@ -1684,6 +1753,79 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               section: { $ref: '#/components/schemas/ReusableSection' },
             },
           }),
+          PageListEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['pages', 'pagination'],
+            properties: {
+              pages: { type: 'array', items: { $ref: '#/components/schemas/PageResource' } },
+              pagination: { type: 'object', additionalProperties: true },
+            },
+          }),
+          PageEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['page'],
+            properties: {
+              page: { $ref: '#/components/schemas/PageResource' },
+            },
+          }),
+          PageResource: {
+            type: 'object',
+            additionalProperties: true,
+            required: ['id', 'title', 'slug'],
+            properties: {
+              id: { type: 'string' },
+              siteId: { type: 'string' },
+              title: { type: 'string' },
+              slug: { type: 'string' },
+              description: { type: ['string', 'null'] },
+              status: { type: 'string' },
+              path: { type: 'string' },
+              isHomepage: { type: 'boolean' },
+              parentId: { type: ['string', 'null'] },
+              meta: { type: 'object', additionalProperties: true },
+              content: { type: 'object', additionalProperties: true },
+              frontendDesign: { $ref: '#/components/schemas/ReusableSectionFrontendDesign' },
+              createdAt: { type: 'string', format: 'date-time' },
+              updatedAt: { type: 'string', format: 'date-time' },
+            },
+          },
+          BlogPostListEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['posts', 'pagination'],
+            properties: {
+              posts: { type: 'array', items: { $ref: '#/components/schemas/BlogPostResource' } },
+              pagination: { type: 'object', additionalProperties: true },
+            },
+          }),
+          BlogPostEnvelope: envelopeSchema({
+            type: 'object',
+            required: ['post'],
+            properties: {
+              post: { $ref: '#/components/schemas/BlogPostResource' },
+            },
+          }),
+          BlogPostResource: {
+            type: 'object',
+            additionalProperties: true,
+            required: ['id', 'title', 'slug'],
+            properties: {
+              id: { type: 'string' },
+              siteId: { type: 'string' },
+              title: { type: 'string' },
+              slug: { type: 'string' },
+              excerpt: { type: ['string', 'null'] },
+              status: { type: 'string' },
+              authorId: { type: ['string', 'null'] },
+              categoryIds: { type: 'array', items: { type: 'string' } },
+              tagIds: { type: 'array', items: { type: 'string' } },
+              meta: { type: 'object', additionalProperties: true },
+              content: { type: 'object', additionalProperties: true },
+              frontendDesign: { $ref: '#/components/schemas/ReusableSectionFrontendDesign' },
+              publishedAt: { type: ['string', 'null'], format: 'date-time' },
+              createdAt: { type: 'string', format: 'date-time' },
+              updatedAt: { type: 'string', format: 'date-time' },
+            },
+          },
           ReusableSectionFrontendDesign: {
             type: 'object',
             additionalProperties: true,
