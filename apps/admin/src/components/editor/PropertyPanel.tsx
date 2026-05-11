@@ -211,11 +211,23 @@ const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
     return 'textarea';
   }
 
-  if (normalized === 'radio' || normalized === 'radiobutton' || normalized === 'radioinput' || normalized === 'radioinputs') {
+  if (
+    normalized === 'radio'
+    || normalized === 'radiobutton'
+    || normalized === 'radiobuttons'
+    || normalized === 'radioinput'
+    || normalized === 'radioinputs'
+  ) {
     return 'radio';
   }
 
-  if (normalized === 'checkbox' || normalized === 'checkboxes' || normalized === 'checkboxinput' || normalized === 'checkboxinputs') {
+  if (
+    normalized === 'checkbox'
+    || normalized === 'checkboxes'
+    || normalized === 'checkboxinput'
+    || normalized === 'checkboxinputs'
+    || normalized === 'checkinput'
+  ) {
     return 'checkbox';
   }
 

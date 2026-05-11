@@ -578,6 +578,7 @@ const normalizeElementType = (value: string): CanvasElement['type'] => {
     || normalized === 'radiobutton'
     || normalized === 'radiobuttons'
     || normalized === 'radioinput'
+    || normalized === 'radioinputs'
   ) {
     return 'radio';
   }

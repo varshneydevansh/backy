@@ -963,7 +963,13 @@ const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
     return 'textarea';
   }
 
-  if (normalized === 'radio' || normalized === 'radiobutton' || normalized === 'radiobuttons' || normalized === 'radioinput') {
+  if (
+    normalized === 'radio'
+    || normalized === 'radiobutton'
+    || normalized === 'radiobuttons'
+    || normalized === 'radioinput'
+    || normalized === 'radioinputs'
+  ) {
     return 'radio';
   }
 
@@ -972,6 +978,7 @@ const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
     || normalized === 'checkboxes'
     || normalized === 'checkboxinput'
     || normalized === 'checkboxinputs'
+    || normalized === 'checkinput'
   ) {
     return 'checkbox';
   }
@@ -2690,6 +2697,7 @@ function CanvasElementComponent({
       case 'checkbox':
       case 'radio':
         {
+          const choiceType = resolvedType === 'checkbox' ? 'checkbox' : 'radio';
           const fieldLabel = formatFieldLabel(p.label);
           const helpText = formatHelpText(p.helpText);
           const optionItems = parseFormOptions(p.options);
@@ -2699,7 +2707,7 @@ function CanvasElementComponent({
             p.defaultValue !== undefined ? p.defaultValue : p.value
           );
           const selectedSet = new Set(selectedValues);
-          const fallbackOptionValue = element.type === 'radio'
+          const fallbackOptionValue = choiceType === 'radio'
             ? selectedValues[0] || sanitizeText(p.value) || 'on'
             : sanitizeText(p.value) || 'on';
           const choiceItems = optionItems.length > 0 ? optionItems : [fallbackOptionValue];
@@ -2739,7 +2747,7 @@ function CanvasElementComponent({
               }}
               >
                 {choiceItems.map((option, optionIndex) => {
-                  const isChecked = element.type === 'radio'
+                  const isChecked = choiceType === 'radio'
                     ? selectedValues[0] === option
                     : selectedSet.has(option);
                   const optionLabel = optionItems.length > 0 ? option : fieldLabel || 'Option';
@@ -2750,10 +2758,10 @@ function CanvasElementComponent({
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: p.fontSize ?? 14 }}
                     >
                       <input
-                        type={element.type}
-                        name={typeof p.name === 'string' ? p.name : element.type === 'radio' ? `${element.id}-group` : undefined}
+                        type={choiceType}
+                        name={typeof p.name === 'string' ? p.name : choiceType === 'radio' ? `${element.id}-group` : undefined}
                         value={option}
-                        required={element.type === 'checkbox' ? optionIndex === 0 && required : required}
+                        required={choiceType === 'checkbox' ? optionIndex === 0 && required : required}
                         disabled={!isPreview || disabled}
                         checked={Boolean(isChecked)}
                         readOnly
