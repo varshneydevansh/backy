@@ -349,6 +349,21 @@ const content: PageContent = {
       },
     },
     {
+      id: 'string-false-input',
+      type: 'input',
+      x: 824,
+      y: 560,
+      width: 220,
+      height: 72,
+      props: {
+        label: 'Optional field',
+        name: 'string_false',
+        required: 'false',
+        disabled: 'false',
+        placeholder: 'Optional',
+      },
+    },
+    {
       id: 'styled-checkbox',
       type: 'checkbox',
       x: 24,
@@ -573,6 +588,10 @@ assert(html.includes('<option value="" disabled="">Choose a plan</option>'), `Se
 assert(html.includes('<option value="Growth" selected="">Growth</option>'), `Select default value was not rendered: ${html}`);
 assert(html.includes('border:2px double #4f46e5'), `Select border was not rendered: ${html}`);
 assert(html.includes('box-shadow:0 4px 10px rgba(79, 70, 229, 0.2)'), `Select shadow was not rendered: ${html}`);
+const stringFalseInput = html.match(/<input[^>]*name="string_false"[^>]*>/)?.[0] || '';
+assert(stringFalseInput.length > 0, `String false input was not rendered: ${html}`);
+assert(!stringFalseInput.includes('required'), `String false required was treated as true: ${stringFalseInput}`);
+assert(!stringFalseInput.includes('disabled'), `String false disabled was treated as true: ${stringFalseInput}`);
 assert(html.includes('name="styled_channels"'), `Checkbox name was not rendered: ${html}`);
 assert(html.includes('checked="" value="SMS"') || html.includes('value="SMS" checked=""'), `Checkbox default value was not rendered: ${html}`);
 assert(html.includes('border-color:#7c2d12'), `Checkbox wrapper border was not rendered: ${html}`);

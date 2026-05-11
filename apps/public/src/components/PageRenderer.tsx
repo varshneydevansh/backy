@@ -620,7 +620,7 @@ function getLineHeight(value: unknown, fallback: React.CSSProperties['lineHeight
 }
 
 function getBoolean(value: unknown): boolean {
-  return Boolean(value);
+  return parseBooleanSetting(value, false);
 }
 
 function getBooleanWithFallback(value: unknown, fallback: boolean): boolean {
